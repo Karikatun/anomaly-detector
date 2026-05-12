@@ -1,15 +1,27 @@
 # Testing
 
-The goal of this template's tests is to show future agents where behavior should be verified and where E2E should stay intentionally small.
+The goal of this template's tests is to show future agents where behavior should be verified and how to keep E2E broad enough to protect valuable behavior without turning it into exhaustive matrices.
 
 ## Pyramid
 
 - Contracts/unit: shared Zod schema matrices, env parsing, JWTs, password hashing, client API refresh/retry behavior, and token cleanup.
 - Backend integration: refresh-token rotation, auth guards, duplicate registration, concurrency, and stable error shapes through real routes and PostgreSQL.
-- Web Playwright: short happy-path E2E through a real backend and Vite UI.
-- Mobile Maestro: short happy-path smoke flows against an installed Expo development build.
+- Web Playwright: valuable browser flows through a real backend and Vite UI.
+- Mobile Maestro: valuable mobile smoke and regression flows against an installed Expo development build.
 
-Negative validation matrices, edge cases, and pure rules belong in unit/integration tests. Client E2E should cover the main user journeys: perform a real API flow, interact with the UI, and observe a stable end state.
+Client E2E should cover valuable user journeys, including non-happy-path states that protect real product behavior, when they can stay stable. Important edge cases must be covered at some automated level; choosing integration, contract, or unit coverage instead of E2E is not permission to skip them. Negative validation matrices, combinatorial edge cases, concurrency, and pure rules belong in unit/integration tests.
+
+## Choosing Test Level
+
+Default to the highest useful behavioral boundary:
+
+- Use E2E when the risk is user-visible and crosses client/backend boundaries: critical journeys, auth/session restore, persistence, navigation, high-risk regressions, and important empty/error states.
+- Use backend integration for API/auth/persistence/contracts, stable error shapes, validation behavior, concurrency, and database-backed domain rules.
+- Use contract/unit tests selectively for shared schema matrices, pure rules with many branches, env parsing, security/token helpers, password hashing, and client retry/cache/token cleanup behavior that would be brittle or expensive in E2E.
+
+For TDD-first work, list the expected behavior and important edge cases before implementation, then write the first failing test at the boundary that best catches the regression. Important edge cases include validation boundaries, permission failures, expired sessions, empty data, duplicate or conflicting writes, retry/recovery paths, and persistence after refresh or restart.
+
+Do not add E2E coverage just because a branch exists. Add it when it prevents a plausible product regression and can stay stable through explicit setup, stable selectors/test IDs, isolated test data, and deterministic assertions. Do not skip important edge cases just because they are not E2E-worthy; cover them through integration, contract, or unit tests. Keep exhaustive validation matrices and combinatorial edge cases out of E2E.
 
 ## Backend
 

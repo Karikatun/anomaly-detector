@@ -36,7 +36,7 @@
 - Before implementing with a new library, inspect the relevant `package.json` first. Prefer established libraries already installed in this template, especially Zod, TanStack Query, TanStack Form, Hono, Prisma, Expo, and the shared `@web-app-demo/contracts` package.
 - If a missing dependency would clearly improve the product outcome, explain the user-visible reason and ask before installing it.
 - Before using framework-specific APIs, check the current official documentation or local installed package types/examples, then write code to match the current API rather than memory.
-- For E2E, use Playwright for web and Maestro for mobile. Read `docs/TESTING.md` before adding flows, keep client E2E happy-path focused, and put validation/error matrices in unit or integration tests.
+- For E2E, use Playwright for web and Maestro for mobile. Read `docs/TESTING.md` before adding flows. Prefer valuable user-visible coverage over narrow happy-path-only smoke tests: cover critical journeys, high-risk regressions, auth/session behavior, persistence, navigation, and important empty/error/edge states when the test can stay stable and maintainable. Keep exhaustive validation matrices, combinatorial edge cases, concurrency, and pure business rules in integration/contract/unit tests.
 - For mobile E2E selectors, prefer stable React Native `testID` constants from `mobile/src/constants/testIds.ts`; do not rely on coordinates or fragile text when an action selector can have an id.
 
 ## Project Focus
@@ -79,7 +79,7 @@ For `Direct` tasks, inspect the affected file and nearby usage, make the smalles
 
 For `Investigation` tasks, reproduce or trace the observed failure path when possible, use vertical and horizontal research before patching, identify the owning layer, and stop to reframe if two attempts fail to move the primary signal.
 
-For `TDD-first` tasks, prefer the highest-value failing test already supported by the repo. Start from user-visible or contract-level behavior when possible, add narrow unit tests for isolated high-branching pure rules, and keep the loop strict: failing case, minimal implementation, green, next case. If no suitable automated test exists and adding one is disproportionate, say so and use the fastest reliable validation path.
+For `TDD-first` tasks, choose the highest-value failing test boundary already supported by the repo. Before implementation, identify the important success, failure, boundary, permission, persistence, and recovery edge cases; cover every important edge case with an automated test at the cheapest boundary that still catches the failure. Prefer E2E when the risk is user-visible and spans client/backend behavior, integration tests when behavior belongs to API/auth/persistence/contracts, and unit tests only when they provide clear extra signal for pure rules, schema matrices, security/token helpers, env parsing, or client retry/cache behavior. Keep the loop strict: failing case, minimal implementation, green, next case. If no suitable automated test exists and adding one is disproportionate, say so and use the fastest reliable validation path.
 
 ## Acceptance Contract
 
@@ -159,6 +159,8 @@ When touching a boundary, inspect and align directly coupled code.
 - Run the smallest meaningful validation that covers the changed surface.
 - Prefer cheap gates first: targeted tests, typecheck, lint, build, focused scripts, then wider suites only when needed.
 - Use test infrastructure already present in the repository. Do not invent a heavier test layer unless clearly justified.
+- For non-trivial behavior, explicitly account for important edge cases in the test plan or acceptance contract; if an important edge case is not automated, explain why.
+- Before adding or expanding E2E, apply an ROI check: the test should prevent a plausible user-visible regression, use stable selectors and isolated test data, avoid brittle timing or text coupling, and earn its maintenance cost.
 - Validate after implementation and before closing the task.
 - If contracts or shared schemas change, validate both producer and consumer sides.
 - Treat non-zero exits, runtime errors, unhandled promise rejections, failed assertions, type errors, lint errors, build failures, and timeouts as failed validation.
