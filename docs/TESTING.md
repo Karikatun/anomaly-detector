@@ -61,7 +61,7 @@ The web E2E flow:
 - generates the Prisma client and applies migrations;
 - starts the backend on `E2E_BACKEND_PORT`, which defaults to a repository-derived port;
 - starts Vite on `E2E_WEB_PORT`, which defaults to a repository-derived port;
-- runs the auth smoke path: register -> cookie refresh after reload -> protected route -> logout.
+- runs the auth smoke path: client validation visibility -> register/login mode switching -> register -> cookie refresh after reload -> protected route -> logout -> invalid login error -> successful login.
 
 Useful env:
 

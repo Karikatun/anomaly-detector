@@ -11,10 +11,14 @@ This section may be updated during first-run bootstrap. If `AGENTS.md` marks web
 - React
 - TypeScript
 - Vite
+- Tailwind CSS
+- shadcn/ui
+- Radix UI
 - TanStack Query
 - TanStack Form
 - TanStack Router
 - Zod contracts from `@web-app-demo/contracts`
+- shadcn CLI
 - Playwright
 - ESLint
 
@@ -28,6 +32,7 @@ bun run lint
 bun run test
 bun run e2e
 bun run e2e:ui
+bun run ui:info
 ```
 
 From the repository root, use `bun run dev:web`, `bun run build:web`, `bun run typecheck:web`, `bun run test:web`, and `bun run e2e:web`.
@@ -46,9 +51,22 @@ Use TanStack Query for server state, TanStack Form for forms, and shared Zod sch
 
 Keep the API client responsible for base URLs, auth headers, refresh/retry, and error parsing. Do not duplicate API shapes or auth state in page components.
 
+Use shadcn/ui for web interface primitives. Treat `src/components/ui` as shadcn registry output only and import those primitives through `@/components/ui/*`. Put app-specific wrappers and composed product components in `src/components` so normal lint rules keep applying. Avoid adding new one-off global CSS classes for product UI; compose screens with Tailwind utilities and shadcn theme tokens from `src/index.css`.
+
+The current shadcn configuration is `radix-maia` with the `hugeicons` icon library and CSS variables, as recorded in `components.json`. This template intentionally includes the full official shadcn component registry from `bunx shadcn@latest add --all -c web` so future projects can start from a complete local UI foundation. Do not add community registries, blocks, or custom UI generator output unless the product asks for them.
+
+When adding or refreshing shadcn components:
+
+```bash
+bun run --cwd web ui:info
+bun run --cwd web ui:add -- <component>
+```
+
+Use the local `shadcn` devDependency pinned in `web/package.json` and `bun.lock`; do not use `shadcn@latest` for routine refreshes because it can produce registry output that no longer matches this template. If generated files need compatibility fixes for current package versions, keep the edits small and leave app-specific composition outside `src/components/ui`.
+
 ## E2E
 
-The Playwright smoke test lives in `e2e/specs/auth.spec.ts` and verifies `register -> refresh after reload -> protected UI -> logout`.
+The Playwright smoke test lives in `e2e/specs/auth.spec.ts` and verifies client-side auth validation visibility, register/login mode switching, register, refresh after reload, protected UI, logout, invalid login error rendering, and a successful login after logout.
 
 First run:
 
@@ -65,6 +83,9 @@ For browser framework, routing, forms, server-state, build, lint, or E2E questio
 
 - [React docs](https://react.dev/reference/react)
 - [Vite guide](https://vite.dev/guide/)
+- [Tailwind CSS docs](https://tailwindcss.com/docs)
+- [shadcn/ui docs](https://ui.shadcn.com/docs)
+- [Radix UI docs](https://www.radix-ui.com/primitives/docs/overview/introduction)
 - [TanStack Query React docs](https://tanstack.com/query/latest/docs/framework/react/overview)
 - [TanStack Form React docs](https://tanstack.com/form/latest/docs/framework/react/quick-start)
 - [TanStack Router docs](https://tanstack.com/router/latest/docs/overview)

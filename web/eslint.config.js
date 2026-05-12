@@ -28,4 +28,29 @@ export default defineConfig([
       },
     },
   },
+  {
+    // shadcn registry output intentionally exports variants/helpers next to components.
+    // Keep app-specific wrappers outside src/components/ui so regular lint rules still apply.
+    files: [
+      'src/components/ui/badge.tsx',
+      'src/components/ui/button-group.tsx',
+      'src/components/ui/button.tsx',
+      'src/components/ui/carousel.tsx',
+      'src/components/ui/combobox.tsx',
+      'src/components/ui/direction.tsx',
+      'src/components/ui/navigation-menu.tsx',
+      'src/components/ui/sidebar.tsx',
+      'src/components/ui/tabs.tsx',
+      'src/components/ui/toggle.tsx',
+    ],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    files: ['src/components/ui/carousel.tsx', 'src/hooks/use-mobile.ts'],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
 ])

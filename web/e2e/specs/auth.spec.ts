@@ -7,6 +7,18 @@ test('registers, restores the session, opens protected UI, and logs out', async 
   await page.goto('/')
 
   await expect(page.getByRole('heading', { name: /auth, validation/i })).toBeVisible()
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await expect(page.getByText('Invalid email address')).toBeVisible()
+  await expect(page.getByText('Password must be at least 8 characters')).toBeVisible()
+
+  await page.getByLabel('Name').fill('A')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(e2ePassword)
+  await page.getByRole('tab', { name: 'Login' }).click()
+  await expect(page.getByLabel('Name')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Login' })).toBeEnabled()
+
+  await page.getByRole('tab', { name: 'Register' }).click()
   await page.getByLabel('Name').fill(displayName)
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(e2ePassword)
@@ -45,4 +57,14 @@ test('registers, restores the session, opens protected UI, and logs out', async 
 
   await page.getByRole('link', { name: 'Go to auth' }).click()
   await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible()
+
+  await page.getByRole('tab', { name: 'Login' }).click()
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill('wrong-password')
+  await page.getByRole('button', { name: 'Login' }).click()
+  await expect(page.getByText('Invalid email or password')).toBeVisible()
+
+  await page.getByLabel('Password').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Login' }).click()
+  await expect(page.getByRole('heading', { name: 'Session is active' })).toBeVisible()
 })
