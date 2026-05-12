@@ -16,7 +16,7 @@ Local development does not require DigitalOcean or Yandex Cloud. Cloud tokens, `
 
 - `backend` - Bun + Hono + Prisma + PostgreSQL, custom JWT auth, Zod validation, OpenAPI.
 - `web` - React + Vite + TanStack Query/Form/Router, готовый auth-flow.
-- `Landing` - отдельный Astro-проект для статической landing-страницы.
+- `landing` - отдельный Astro-проект для статической landing-страницы.
 - `mobile` - Expo + React Native + Expo Router + TanStack Query/Form, auth-flow с SecureStore.
 - `packages/contracts` - общие Zod-схемы и TypeScript-типы API.
 - `docker-compose.yml` - локальный PostgreSQL на порту `54329`; test DB по умолчанию использует repo-derived port в тестовых runner-ах, либо `POSTGRES_TEST_PORT`.

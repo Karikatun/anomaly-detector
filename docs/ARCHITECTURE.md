@@ -47,7 +47,7 @@ Web и mobile используют одинаковые принципы:
 
 Не создавайте новый form/query/auth abstraction, пока существующий паттерн не перестал решать задачу.
 
-`Landing` - отдельный Astro workspace для статической landing-страницы. Он не владеет auth-flow и не должен дублировать browser-клиент из `web`; если landing начинает читать API или общие DTO, подключайте `@web-app-demo/contracts` и проверяйте producer/consumer стороны так же, как для `web` и `mobile`.
+`landing` - отдельный Astro workspace для статической landing-страницы. Он не владеет auth-flow и не должен дублировать browser-клиент из `web`; если landing начинает читать API или общие DTO, подключайте `@web-app-demo/contracts` и проверяйте producer/consumer стороны так же, как для `web` и `mobile`.
 
 ## Testing
 

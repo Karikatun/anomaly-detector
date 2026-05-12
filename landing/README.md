@@ -1,4 +1,4 @@
-# Landing
+# landing
 
 Отдельный Astro-проект для статической landing-страницы.
 
@@ -12,7 +12,7 @@ bun run typecheck:landing
 bun run build:landing
 ```
 
-Запуск из папки `Landing`:
+Запуск из папки `landing`:
 
 ```bash
 bun run dev
