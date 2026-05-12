@@ -11,6 +11,12 @@
 - Prefer evidence over ceremony. Keep process proportional to the task.
 - The job is not to sound smart. The job is to leave the system clearer, more correct, and easier to trust.
 
+## Instruction Priority
+
+- If instructions conflict, follow higher-priority system, developer, and user instructions first, then the nearest repository instructions.
+- Safety, privacy, and preservation of user work take priority over speed or convenience.
+- When editing this file, keep equivalent agent files such as `CLAUDE.md` aligned unless the difference is intentional and documented.
+
 ## User Interaction
 
 - Assume repository users are Vibe coders without programming experience. Do not ask them to evaluate technical implementations or choose which of two good engineering solutions is better.
@@ -26,9 +32,9 @@
 - Do not treat `README.md` as a file inventory. Discover structure dynamically.
 - Use the repository's existing package manager, scripts, test runner, formatter, linter, build tools, and generators.
 - In Codex shell sessions, do not assume JS tooling is already on `PATH`. For `node`, `npm`, and `bun`, prefer `PATH="/opt/homebrew/bin:$HOME/.bun/bin:$PATH"`.
-- Do not add new production dependencies without explicit user approval. Prefer existing utilities, framework APIs, and the standard library.
+- Do not add new production dependencies without explicit user approval unless the user directly requested that dependency by name. Prefer existing utilities, framework APIs, and the standard library.
 - Before implementing with a new library, inspect the relevant `package.json` first. Prefer established libraries already installed in this template, especially Zod, TanStack Query, TanStack Form, Hono, Prisma, Expo, and the shared `@web-app-demo/contracts` package.
-- If a needed popular library is missing and the task clearly benefits from it, add it intentionally with the workspace package manager and document the reason in the final report.
+- If a missing dependency would clearly improve the product outcome, explain the user-visible reason and ask before installing it.
 - Before using framework-specific APIs, check the current official documentation or local installed package types/examples, then write code to match the current API rather than memory.
 - For E2E, use Playwright for web and Maestro for mobile. Read `docs/TESTING.md` before adding flows, keep client E2E happy-path focused, and put validation/error matrices in unit or integration tests.
 - For mobile E2E selectors, prefer stable React Native `testID` constants from `mobile/src/constants/testIds.ts`; do not rely on coordinates or fragile text when an action selector can have an id.
@@ -62,9 +68,12 @@ If the user later asks to work on a deferred surface, update this block and any 
 
 Classify the task before editing and scale the process to the task.
 
+- `Review`: read-only evaluation, explanation, architecture review, or recommendations when the user has not asked for changes.
 - `Direct`: cosmetic, copy, spacing, styling, comments, or obvious local edits that do not change runtime behavior.
 - `Investigation`: diagnosis or debugging when the root cause or failure path is not yet clear.
 - `TDD-first`: behavior, logic, contracts, auth, permissions, persistence, validation, query semantics, routing, state transitions, concurrency, or non-trivial user-facing changes.
+
+For `Review` tasks, inspect relevant evidence, cite concrete files or behavior, report risks and recommendations, and do not edit files unless the user asks for implementation.
 
 For `Direct` tasks, inspect the affected file and nearby usage, make the smallest coherent change, and run narrow validation when cheap and relevant.
 
@@ -104,12 +113,10 @@ Do enough research to find the owner layer. Do not turn research into wandering.
 
 ## Root Cause Discipline
 
-- Do not patch symptoms before understanding the failure path.
-- Fix the owner layer, not the nearest visible symptom.
+- Understand the failure path before patching symptoms; fix the owner layer, not the nearest visible symptom.
 - If a bug appears in a child component, hook, helper, or leaf function, inspect the parent or owning layer before adding local compensation.
-- Reject child-side fallbacks, defensive state repair, duplicated decision logic, and local branching that merely hides an upstream mistake.
-- One-file fixes for cross-layer behavior are suspicious until proven otherwise.
-- Do not preserve a broken decision with guards, flags, wrappers, or duplicated logic.
+- Reject child-side fallbacks, defensive state repair, duplicated decision logic, flags, or wrappers that hide an upstream mistake.
+- Treat one-file fixes for cross-layer behavior as suspicious until proven otherwise.
 - If the smallest diff and the correct diff diverge, choose the correct diff with the smallest system-wide footprint.
 - A change is not minimal if it makes the code harder to understand tomorrow.
 - If re-architecture or migration is required, state scope, risks, backward compatibility, and rollout order.
@@ -203,7 +210,7 @@ When touching a boundary, inspect and align directly coupled code.
 
 ## Completion Protocol
 
-At the end of every implementation or investigation, report:
+At the end of every implementation or investigation, report the items that matter for the task. For `Direct` or read-only `Review` tasks, compress this to the relevant fields only.
 
 - what changed and why;
 - root cause, when identified;
