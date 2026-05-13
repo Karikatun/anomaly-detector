@@ -66,12 +66,22 @@ bunx eas-cli build --profile development --platform ios
 
 ## Maestro E2E
 
-The Maestro smoke flow verifies `register -> current user -> logout` against an installed development build.
+The Maestro smoke flow verifies `register -> current user -> logout` against an installed development build. Run it against a backend that is using Docker Compose `postgres_test`, not the development database.
+
+Start the backend test database and API in a separate terminal:
+
+```bash
+docker compose version
+docker compose up -d postgres_test
+export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public"
+DATABASE_URL="$TEST_DATABASE_URL" bun run --cwd backend prisma:deploy
+PORT=3000 DATABASE_URL="$TEST_DATABASE_URL" JWT_SECRET="mobile-e2e-secret-at-least-thirty-two-characters" CORS_ORIGINS="http://localhost:8081,http://localhost:19006" COOKIE_SECURE=false bun run --cwd backend start:raw
+```
 
 ```bash
 bun run e2e:maestro:setup
 export PATH="$HOME/.maestro/bin:$PATH"
-bun run e2e:maestro
+E2E_API_HEALTH_URL=http://127.0.0.1:3000/health bun run e2e:maestro
 ```
 
 Before running the flow, the backend must be reachable at the `EXPO_PUBLIC_API_URL` used when the mobile bundle was built or started. For iOS Simulator, `http://127.0.0.1:3000` is usually valid. For Android Emulator, use `http://10.0.2.2:3000`.

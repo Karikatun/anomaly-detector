@@ -43,7 +43,7 @@ async function waitForComposePostgres(service: string, database: string, env: No
 }
 
 export default async function globalSetup() {
-  const databaseUrl = process.env.DATABASE_URL ?? defaultDatabaseUrl
+  const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? defaultDatabaseUrl
   const databaseName = new URL(databaseUrl).pathname.replace(/^\//, '')
 
   if (!databaseName.endsWith('_test') && process.env.E2E_ALLOW_NON_TEST_DATABASE !== '1') {
@@ -52,8 +52,12 @@ export default async function globalSetup() {
     )
   }
 
+  process.env.TEST_DATABASE_URL = databaseUrl
+  process.env.DATABASE_URL = databaseUrl
+
   const env = composeEnv({
     DATABASE_URL: databaseUrl,
+    TEST_DATABASE_URL: databaseUrl,
   })
 
   if (process.env.E2E_SKIP_DOCKER !== '1') {

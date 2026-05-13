@@ -44,6 +44,20 @@ Install this repository into the project. First read README.md, CLAUDE.md if pre
 
 ## Quick Start
 
+Check Docker first. Docker is the local app that runs PostgreSQL for this template:
+
+```bash
+docker compose version
+```
+
+If that command fails, install and start Docker before continuing:
+
+- Windows: install Docker Desktop, enable the WSL 2 backend, start Docker Desktop, then rerun `docker compose version`.
+- macOS: install and start Docker Desktop, or another Docker Engine with Compose v2, then rerun `docker compose version`.
+- Linux: install Docker Engine and the Docker Compose plugin, start the Docker service, then rerun `docker compose version`.
+
+Do not switch new users to native PostgreSQL during local setup. The repository's documented local path is Docker Compose.
+
 ```bash
 bun install
 docker compose pull postgres
@@ -85,6 +99,8 @@ EXPO_PUBLIC_API_URL=http://localhost:3000
 ```
 
 Android emulators usually need `http://10.0.2.2:3000` instead of `localhost`.
+
+Test runners use the separate Docker Compose `postgres_test` service and the `TEST_DATABASE_URL` shape from `.env.example`/`backend/.env.example`. Web Playwright E2E starts `postgres_test`, applies migrations to `web_app_demo_test`, runs the browser flow, and tears down its test database volume by default.
 
 ## Workspace Commands
 

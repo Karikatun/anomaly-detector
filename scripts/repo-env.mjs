@@ -13,6 +13,25 @@ export function defaultTestDatabaseUrl(port = defaultPostgresTestPort) {
   return `postgresql://postgres:postgres@localhost:${port}/web_app_demo_test?schema=public`
 }
 
+export function postgresPortFromDatabaseUrl(databaseUrl) {
+  const url = new URL(databaseUrl)
+  if (url.port) return url.port
+  return '5432'
+}
+
+export function assertTestDatabaseUrl(
+  databaseUrl,
+  { allowEnvName = 'TEST_ALLOW_NON_TEST_DATABASE' } = {},
+) {
+  const databaseName = new URL(databaseUrl).pathname.replace(/^\//, '')
+
+  if (!databaseName.endsWith('_test') && process.env[allowEnvName] !== '1') {
+    throw new Error(
+      `Refusing to run tests against non-test database "${databaseName}". Use a *_test database or set ${allowEnvName}=1 intentionally.`,
+    )
+  }
+}
+
 export function composeEnv(extra = {}) {
   return {
     ...process.env,

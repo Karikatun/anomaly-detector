@@ -18,6 +18,20 @@ docker compose version
 
 Run commands from the repository root.
 
+## If Docker Is Missing
+
+Agents should check `docker compose version` before database or E2E setup. If the command is missing or Docker is not running, do this:
+
+1. Tell the user that Docker is the local app this template uses to run PostgreSQL. Do not ask them to install native PostgreSQL.
+2. Ask them to install/start the right Docker option for their OS:
+   - Windows: Docker Desktop with the WSL 2 backend enabled.
+   - macOS: Docker Desktop, or another Docker Engine that includes Compose v2.
+   - Linux: Docker Engine plus the Docker Compose plugin, with the Docker service running.
+3. After installation, rerun `docker compose version`.
+4. Continue only after Compose prints a version. Then run `docker compose pull postgres` and `docker compose up -d postgres`.
+
+If Docker cannot be installed on the machine, local database-backed development and E2E are blocked. Do not silently fall back to a cloud database or a different local PostgreSQL setup.
+
 ## Start Development Database
 
 ```bash
@@ -88,10 +102,12 @@ port: 54330
 database: web_app_demo_test
 user: postgres
 password: postgres
-DATABASE_URL: postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public
+TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public
 ```
 
-Automated test runners normally set a repository-derived `POSTGRES_TEST_PORT` so multiple template checkouts can run in parallel. Set `POSTGRES_TEST_PORT` only when a fixed test database port is required.
+Automated test runners normally set a repository-derived `POSTGRES_TEST_PORT` and derive `TEST_DATABASE_URL` from it so multiple template checkouts can run in parallel. Set `POSTGRES_TEST_PORT` only when a fixed test database port is required.
+
+The test database name must end with `_test`. Backend integration, Docker smoke, and Playwright E2E refuse non-test database names by default so they do not write to development data.
 
 ## Reset Local Data
 

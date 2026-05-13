@@ -26,6 +26,7 @@ Do not add E2E coverage just because a branch exists. Add it when it prevents a 
 ## Backend
 
 ```bash
+docker compose version
 docker compose up -d postgres
 cp backend/.env.example backend/.env
 bun run test
@@ -40,7 +41,9 @@ bun run smoke:backend:docker
 
 Contract tests live in `packages/contracts/src/*.test.ts` and protect shared request/response/error schemas used by backend, web, and mobile. Web and mobile unit tests live in each client `tests/` directory and cover API refresh/retry behavior that would be too expensive and brittle to fully exercise in E2E.
 
-Backend tests live next to backend code and verify auth behavior through services and routes. The integration runner starts `postgres_test`, applies migrations, and runs register/login/refresh/logout/guard/error-shape scenarios. By default, the test database port is derived from the absolute repository path so parallel checkouts do not collide. Set `POSTGRES_TEST_PORT` when a fixed port is required. Local database startup, credentials, and reset behavior are documented in [LOCAL_DATABASE.md](LOCAL_DATABASE.md).
+Backend tests live next to backend code and verify auth behavior through services and routes. The integration runner starts `postgres_test`, applies migrations, and runs register/login/refresh/logout/guard/error-shape scenarios. By default, the test database port is derived from the absolute repository path so parallel checkouts do not collide, and `TEST_DATABASE_URL` is derived from that port. Set `POSTGRES_TEST_PORT` and `TEST_DATABASE_URL` only when a fixed test database is required. Local database startup, credentials, and reset behavior are documented in [LOCAL_DATABASE.md](LOCAL_DATABASE.md).
+
+The integration and Docker smoke runners refuse database names that do not end with `_test` unless an override is set intentionally. This protects `web_app_demo` development data from test writes.
 
 The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health`, and removes only the smoke container it created.
 
@@ -50,29 +53,40 @@ The Docker smoke test builds the backend image, starts it against `postgres_test
 
 Playwright is configured in `web/playwright.config.ts`.
 
+First-time setup:
+
 ```bash
+docker compose version
+cp backend/.env.example backend/.env
 bun run --cwd web e2e:install
 bun run e2e:web
 ```
 
+If `docker compose version` fails, install/start Docker first by following [LOCAL_DATABASE.md](LOCAL_DATABASE.md). Do not replace this with native PostgreSQL for new users.
+
 The web E2E flow:
 
 - starts `docker compose up -d postgres_test` unless `E2E_SKIP_DOCKER=1` is set;
+- chooses repository-derived ports by default, and automatically moves to the nearest free ports if those are already occupied;
 - generates the Prisma client and applies migrations;
+- uses `TEST_DATABASE_URL` as the primary database URL, then passes that value to the backend as `DATABASE_URL` inside the test run;
 - starts the backend on `E2E_BACKEND_PORT`, which defaults to a repository-derived port;
 - starts Vite on `E2E_WEB_PORT`, which defaults to a repository-derived port;
+- stops its `postgres_test` compose project and removes the test volume after the run unless `E2E_KEEP_DOCKER=1` is set;
 - runs the auth smoke path: client validation visibility -> register/login mode switching -> register -> cookie refresh after reload -> protected route -> logout -> invalid login error -> successful login.
 
 Useful env:
 
 ```bash
-DATABASE_URL="postgresql://postgres:postgres@localhost:<test-port>/web_app_demo_test?schema=public"
+TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:<test-port>/web_app_demo_test?schema=public"
+POSTGRES_TEST_PORT=<test-port>
 E2E_BACKEND_PORT=<backend-port>
 E2E_WEB_PORT=<web-port>
 E2E_SKIP_DOCKER=1
+E2E_KEEP_DOCKER=1
 ```
 
-By default, Playwright computes `POSTGRES_TEST_PORT` from the absolute repository path and refuses to run against a database that does not use the `_test` suffix. This prevents E2E from accidentally writing to development or production data.
+By default, Playwright computes `POSTGRES_TEST_PORT` from the absolute repository path and refuses to run against a database that does not use the `_test` suffix. This prevents E2E from accidentally writing to development or production data. Use `DATABASE_URL` only as a low-level override; `TEST_DATABASE_URL` is the documented test entry point.
 
 Playwright artifacts live in `web/e2e/.artifacts/` and are not committed. For interactive debugging:
 
@@ -97,8 +111,20 @@ Prerequisites:
 - Java 17+.
 - Xcode/iOS Simulator for iOS, or Android Studio/emulator for Android.
 - An installed Expo development build with `bundleIdentifier/package` set to `com.webappdemo.mobile`.
-- A backend reachable at the `EXPO_PUBLIC_API_URL` used when the bundle was built or started.
+- A backend started against Docker Compose `postgres_test`, reachable at the `EXPO_PUBLIC_API_URL` used when the bundle was built or started.
 - A host-reachable `E2E_API_HEALTH_URL` for runner preflight, for example `http://127.0.0.1:3000/health`.
+
+Start the mobile E2E backend on the test database in a separate terminal:
+
+```bash
+docker compose version
+docker compose up -d postgres_test
+export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public"
+DATABASE_URL="$TEST_DATABASE_URL" bun run --cwd backend prisma:deploy
+PORT=3000 DATABASE_URL="$TEST_DATABASE_URL" JWT_SECRET="mobile-e2e-secret-at-least-thirty-two-characters" CORS_ORIGINS="http://localhost:8081,http://localhost:19006" COOKIE_SECURE=false bun run --cwd backend start:raw
+```
+
+If you use a custom `POSTGRES_TEST_PORT`, use the same port in both `TEST_DATABASE_URL` and `DATABASE_URL`. The Maestro runner does not start the backend itself because the installed mobile build must already point at the correct API URL.
 
 Development build examples:
 

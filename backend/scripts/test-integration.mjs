@@ -2,15 +2,20 @@ import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  assertTestDatabaseUrl,
   composeEnv,
   composeProjectName,
   defaultTestDatabaseUrl,
+  postgresPortFromDatabaseUrl,
 } from '../../scripts/repo-env.mjs'
 
 const backendRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const repositoryRoot = resolve(backendRoot, '..')
 const databaseUrl = process.env.TEST_DATABASE_URL ?? defaultTestDatabaseUrl()
-const dockerEnv = composeEnv()
+assertTestDatabaseUrl(databaseUrl)
+const dockerEnv = composeEnv({
+  POSTGRES_TEST_PORT: postgresPortFromDatabaseUrl(databaseUrl),
+})
 const composeArgs = ['compose', '-p', composeProjectName]
 
 function run(command, args, options = {}) {

@@ -1,10 +1,12 @@
 import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:net'
 import {
+  assertTestDatabaseUrl,
   composeEnv,
   composeProjectName,
   defaultPostgresTestPort,
   defaultTestDatabaseUrl,
+  postgresPortFromDatabaseUrl,
   repositoryHash,
   repositoryRoot,
 } from '../../scripts/repo-env.mjs'
@@ -16,12 +18,18 @@ const containerName =
 const hostPort = process.env.BACKEND_DOCKER_SMOKE_PORT ?? String(await findOpenPort())
 const networkName = `${composeProjectName}_default`
 const composeArgs = ['compose', '-p', composeProjectName]
-const dockerEnv = composeEnv()
 const databaseUrlForHost =
   process.env.TEST_DATABASE_URL ?? defaultTestDatabaseUrl(defaultPostgresTestPort)
 const databaseUrlForContainer =
   process.env.BACKEND_DOCKER_SMOKE_DATABASE_URL ??
   'postgresql://postgres:postgres@postgres_test:5432/web_app_demo_test?schema=public'
+assertTestDatabaseUrl(databaseUrlForHost)
+assertTestDatabaseUrl(databaseUrlForContainer, {
+  allowEnvName: 'BACKEND_DOCKER_SMOKE_ALLOW_NON_TEST_DATABASE',
+})
+const dockerEnv = composeEnv({
+  POSTGRES_TEST_PORT: postgresPortFromDatabaseUrl(databaseUrlForHost),
+})
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
