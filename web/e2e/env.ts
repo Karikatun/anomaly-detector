@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { portFromUrl } from './url'
 
 export const repositoryRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 export const repositoryHash = createHash('sha256').update(repositoryRoot).digest('hex').slice(0, 12)
@@ -24,18 +25,5 @@ export function composeEnv(extra: NodeJS.ProcessEnv = {}) {
     ...extra,
     COMPOSE_PROJECT_NAME: composeProjectName,
     POSTGRES_TEST_PORT: postgresTestPort,
-  }
-}
-
-function portFromUrl(value: string | undefined) {
-  if (!value) return undefined
-
-  try {
-    const url = new URL(value)
-    if (url.port) return url.port
-    if (url.protocol === 'postgresql:') return '5432'
-    return url.port || undefined
-  } catch {
-    return undefined
   }
 }

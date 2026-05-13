@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { createServer } from 'node:net'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { portFromUrl } from './url'
 
 export const repositoryRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 export const repositoryHash = createHash('sha256').update(repositoryRoot).digest('hex').slice(0, 12)
@@ -25,9 +26,17 @@ export type PortPlan = {
 export async function resolveE2ePorts(): Promise<PortPlan> {
   const reservedPorts = new Set<number>()
   const explicitDatabaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL
-  const explicitPostgresPort = explicitDatabaseUrl ? portFromUrl(explicitDatabaseUrl) : undefined
-  const explicitBackendUrlPort = portFromUrl(process.env.E2E_BACKEND_URL)
-  const explicitWebUrlPort = portFromUrl(process.env.E2E_WEB_URL)
+  const explicitPostgresPort = explicitDatabaseUrl
+    ? parsePortValue(portFromUrl(explicitDatabaseUrl), explicitDatabaseUrl)
+    : undefined
+  const explicitBackendUrlPort = parsePortValue(
+    portFromUrl(process.env.E2E_BACKEND_URL),
+    process.env.E2E_BACKEND_URL ?? 'E2E_BACKEND_URL',
+  )
+  const explicitWebUrlPort = parsePortValue(
+    portFromUrl(process.env.E2E_WEB_URL),
+    process.env.E2E_WEB_URL ?? 'E2E_WEB_URL',
+  )
   const postgresTestPort = explicitPostgresPort
     ? reservePort(explicitPostgresPort, reservedPorts)
     : await resolvePort({
@@ -113,19 +122,9 @@ function parsePort(value: string, envName: string) {
   return port
 }
 
-function portFromUrl(value: string | undefined) {
-  if (!value) return undefined
-
-  try {
-    const url = new URL(value)
-    if (url.port) return parsePort(url.port, `${value} port`)
-    if (url.protocol === 'http:') return 80
-    if (url.protocol === 'https:') return 443
-    if (url.protocol === 'postgresql:') return 5432
-    return undefined
-  } catch {
-    return undefined
-  }
+function parsePortValue(value: string | undefined, envName: string) {
+  if (value === undefined) return undefined
+  return parsePort(value, envName)
 }
 
 function isPortAvailable(port: number) {
