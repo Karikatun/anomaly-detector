@@ -7,11 +7,13 @@ import type { AppEnv } from './env'
 import { createAuthRoutes } from './auth/routes'
 import { AuthService } from './auth/service'
 import { errorResponse, handleError } from './http/errors'
+import { createStorageServiceFromEnv, type StorageService } from './storage/service'
 
 type AppBindings = {
   Variables: {
     authService: AuthService
     env: AppEnv
+    storageService: StorageService | null
   }
 }
 
@@ -22,6 +24,7 @@ type CreateAppOptions = {
 
 export function createApp({ env, prisma }: CreateAppOptions) {
   const authService = new AuthService(prisma, env)
+  const storageService = createStorageServiceFromEnv(env)
   const app = new OpenAPIHono<AppBindings>({
     defaultHook: (result, c) => {
       if (!result.success) {
@@ -50,6 +53,7 @@ export function createApp({ env, prisma }: CreateAppOptions) {
   app.use('*', async (c, next) => {
     c.set('authService', authService)
     c.set('env', env)
+    c.set('storageService', storageService)
     await next()
   })
 

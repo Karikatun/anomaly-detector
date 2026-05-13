@@ -47,13 +47,14 @@ This section is intentionally mutable for each installed project. During first-r
 <!-- PROJECT_FOCUS_START -->
 Status: not selected yet.
 
+- Project slug/name: ask the user during first-run bootstrap and use it to rename package.json and other repository-specific identifiers before feature work.
 - Product goal: ask the user during first-run bootstrap.
 - Repository remote: new-project mode by default; remove the template `origin` unless the user explicitly says they are contributing to the template. Add the user's own GitHub remote as `origin` only when provided or requested.
 - Active surfaces: not selected yet.
 - Deferred surfaces: not selected yet.
 - Backend/API: decide after intake; include it when the active client surfaces need auth, persistence, or server-side business logic.
 - Local database: Docker Compose PostgreSQL from `docs/LOCAL_DATABASE.md` when backend/API is active.
-- Deployment/release: local-only until the user explicitly asks for deployment; selected provider and release targets not selected yet.
+- Deployment/release: local-only until the user explicitly asks for deployment; DigitalOcean is the supported provider when active, and release targets are not selected yet.
 - Validation: run only the smallest meaningful checks for active surfaces, plus shared contract/backend checks when those layers are touched.
 <!-- PROJECT_FOCUS_END -->
 
@@ -65,6 +66,24 @@ If the user later asks to work on a deferred surface, update this block and `AGE
 - This repository is normally used as a template for a new project, not as a source for pull requests back to the template. If `origin` points to the template repository and the user has not explicitly said they are contributing to the template, remove it with `git remote remove origin`.
 - Add the user's own GitHub repository as `origin` only when the user provides a URL or asks you to create/publish the project. If no destination is chosen, leave the project without `origin` and report that publishing is not configured.
 - Do not push, open PRs, or configure deployment from the template remote by accident.
+
+## Deployment Policy
+
+- The supported production infrastructure path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL.
+- During first-run bootstrap, ask whether deployment is needed now. If it is, ask for production domains/URLs and release targets, not for a cloud provider choice.
+- Do not propose other cloud, hosting, database, or deployment providers unless the user explicitly asks for a different provider.
+- For `web` and `landing`, use DigitalOcean App Platform Static Sites. They are served through DigitalOcean's global CDN by default; add an external CDN only when the product needs advanced bot, rate-limit, or geographic traffic controls.
+- For backend/API production persistence, use DigitalOcean Managed PostgreSQL. Do not use App Platform dev databases for production data.
+- Local development remains Docker Compose PostgreSQL and must not require DigitalOcean credentials unless deployment work is active.
+
+## Storage And Media Policy
+
+- Use DigitalOcean Spaces Standard Storage plus Spaces CDN for persistent files, uploads, public images, media, and downloads.
+- Do not store user uploads or durable generated assets on the App Platform container filesystem; it is only for small temporary files.
+- Before implementing file or image features, ask product-level questions: public/private access, uploader roles, max file size, allowed file types, thumbnail/optimized variant needs, moderation needs, retention/deletion rules, and whether filenames may expose user data.
+- For public images and media, prefer immutable object keys, `public-read` objects, long cache headers, and Spaces CDN URLs such as `images.example.com`.
+- For private files, use short-lived presigned URLs and do not expect CDN caching benefits.
+- DigitalOcean Spaces and Spaces CDN do not provide first-party dynamic image resizing or format conversion. If optimized images are required, generate variants in the backend or a dedicated App Platform worker/service and store those variants in Spaces. Add third-party image services only when the user explicitly chooses that product tradeoff.
 
 ## Task Mode
 

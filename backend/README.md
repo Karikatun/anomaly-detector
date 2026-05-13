@@ -18,6 +18,7 @@ Run these from the repository root:
 
 ```bash
 docker compose version
+docker info
 docker compose pull postgres
 docker compose up -d postgres
 cp backend/.env.example backend/.env
@@ -47,6 +48,12 @@ The example `TEST_DATABASE_URL` matches the Docker Compose `postgres_test` servi
 
 `JWT_SECRET` must be at least 32 characters. `COOKIE_SECURE=false` is appropriate for local HTTP; production should use `COOKIE_SECURE=true` with HTTPS origins in `CORS_ORIGINS`.
 
+DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete Spaces group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
+
+## Deployment
+
+Production deployment for the backend uses DigitalOcean App Platform with DigitalOcean Managed PostgreSQL. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) instead of duplicating provider-specific steps here.
+
 ## Auth API
 
 - `POST /api/auth/register`
@@ -62,6 +69,8 @@ Passwords are hashed through `Bun.password` with Argon2id. Access tokens are sho
 ## Architecture
 
 `src/index.ts` only loads env, creates the Prisma client, and starts the Bun server. The Hono app is created in `src/app.ts`. The auth feature lives in `src/auth`: routes validate and delegate, the service owns session/user logic, and token helpers isolate JWT and refresh-token mechanics.
+
+The storage service lives in `src/storage` and wraps DigitalOcean Spaces through S3-compatible SDK calls. Product-specific upload routes should validate ownership and permissions, then delegate object key generation, presigned upload/download URLs, public CDN URL construction, and deletion to that service.
 
 Prisma migration SQL is not written by hand. Change `prisma/schema.prisma`, then run `bun run prisma:migrate`.
 
@@ -79,3 +88,5 @@ For backend framework, ORM, auth, validation, and runtime questions, consult the
 - [jose documentation](https://github.com/panva/jose)
 - [Docker Compose docs](https://docs.docker.com/compose/)
 - [PostgreSQL Docker Official Image](https://hub.docker.com/_/postgres)
+- [DigitalOcean Spaces docs](https://docs.digitalocean.com/products/spaces/)
+- [DigitalOcean Spaces CDN docs](https://docs.digitalocean.com/products/spaces/how-to/enable-cdn/)

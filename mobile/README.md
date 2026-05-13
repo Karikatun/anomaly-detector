@@ -72,6 +72,7 @@ Start the backend test database and API in a separate terminal:
 
 ```bash
 docker compose version
+docker info
 docker compose up -d postgres_test
 export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public"
 DATABASE_URL="$TEST_DATABASE_URL" bun run --cwd backend prisma:deploy

@@ -10,25 +10,26 @@ This template currently uses the official `postgres:18-alpine` image. The major 
 - macOS: Docker Desktop or another Docker Engine with Compose v2.
 - Linux: Docker Engine and the Docker Compose plugin.
 
-Check that Compose is available:
+Check that Compose is available and the Docker daemon is running:
 
 ```bash
 docker compose version
+docker info
 ```
 
 Run commands from the repository root.
 
 ## If Docker Is Missing
 
-Agents should check `docker compose version` before database or E2E setup. If the command is missing or Docker is not running, do this:
+Agents should check `docker compose version` and `docker info` before database or E2E setup. If either command fails, do this:
 
 1. Tell the user that Docker is the local app this template uses to run PostgreSQL. Do not ask them to install native PostgreSQL.
 2. Ask them to install/start the right Docker option for their OS:
    - Windows: Docker Desktop with the WSL 2 backend enabled.
    - macOS: Docker Desktop, or another Docker Engine that includes Compose v2.
    - Linux: Docker Engine plus the Docker Compose plugin, with the Docker service running.
-3. After installation, rerun `docker compose version`.
-4. Continue only after Compose prints a version. Then run `docker compose pull postgres` and `docker compose up -d postgres`.
+3. After installation, rerun `docker compose version` and `docker info`.
+4. Continue only after both commands succeed. Then run `docker compose pull postgres` and `docker compose up -d postgres`.
 
 If Docker cannot be installed on the machine, local database-backed development and E2E are blocked. Do not silently fall back to a cloud database or a different local PostgreSQL setup.
 

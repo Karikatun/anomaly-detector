@@ -45,6 +45,10 @@ Create `web/.env` when needed:
 VITE_API_URL=http://localhost:3000
 ```
 
+## Deployment
+
+Production deployment for the browser app uses DigitalOcean App Platform Static Sites with `bun run build:web`, `web/dist`, and `index.html` as the SPA catch-all. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
+
 ## Practice
 
 Use TanStack Query for server state, TanStack Form for forms, and shared Zod schemas from `packages/contracts` for validation. The access token lives only in browser memory; refresh uses the HttpOnly cookie set by the backend.
@@ -74,6 +78,7 @@ First run:
 
 ```bash
 docker compose version
+docker info
 bun run e2e:install
 bun run e2e
 ```

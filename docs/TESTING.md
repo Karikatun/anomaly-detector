@@ -27,6 +27,7 @@ Do not add E2E coverage just because a branch exists. Add it when it prevents a 
 
 ```bash
 docker compose version
+docker info
 docker compose up -d postgres
 cp backend/.env.example backend/.env
 bun run test
@@ -57,12 +58,13 @@ First-time setup:
 
 ```bash
 docker compose version
+docker info
 cp backend/.env.example backend/.env
 bun run --cwd web e2e:install
 bun run e2e:web
 ```
 
-If `docker compose version` fails, install/start Docker first by following [LOCAL_DATABASE.md](LOCAL_DATABASE.md). Do not replace this with native PostgreSQL for new users.
+If `docker compose version` or `docker info` fails, install/start Docker first by following [LOCAL_DATABASE.md](LOCAL_DATABASE.md). Do not replace this with native PostgreSQL for new users.
 
 The web E2E flow:
 
@@ -118,6 +120,7 @@ Start the mobile E2E backend on the test database in a separate terminal:
 
 ```bash
 docker compose version
+docker info
 docker compose up -d postgres_test
 export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public"
 DATABASE_URL="$TEST_DATABASE_URL" bun run --cwd backend prisma:deploy

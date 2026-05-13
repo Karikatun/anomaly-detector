@@ -14,5 +14,42 @@ describe('loadEnv', () => {
     expect(env.ACCESS_TOKEN_TTL_SECONDS).toBe(900)
     expect(env.COOKIE_SECURE).toBe(false)
     expect(env.CORS_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:8081'])
+    expect(env.SPACES_REGION).toBeUndefined()
+    expect(env.SPACES_UPLOAD_MAX_BYTES).toBe(10 * 1024 * 1024)
+    expect(env.SPACES_UPLOAD_URL_TTL_SECONDS).toBe(900)
+    expect(env.SPACES_DOWNLOAD_URL_TTL_SECONDS).toBe(300)
+    expect(env.SPACES_PUBLIC_CACHE_CONTROL).toBe('public, max-age=31536000, immutable')
+  })
+
+  test('requires complete DigitalOcean Spaces configuration when storage is enabled', () => {
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgresql://postgres:postgres@localhost:54329/web_app_demo',
+        JWT_SECRET: '12345678901234567890123456789012',
+        SPACES_BUCKET: 'uploads',
+      }),
+    ).toThrow()
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgresql://postgres:postgres@localhost:54329/web_app_demo',
+        JWT_SECRET: '12345678901234567890123456789012',
+        SPACES_CDN_BASE_URL: 'https://images.example.com',
+      }),
+    ).toThrow()
+
+    const env = loadEnv({
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:54329/web_app_demo',
+      JWT_SECRET: '12345678901234567890123456789012',
+      SPACES_REGION: 'nyc3',
+      SPACES_BUCKET: 'uploads',
+      SPACES_ENDPOINT: 'https://nyc3.digitaloceanspaces.com',
+      SPACES_CDN_BASE_URL: 'https://images.example.com',
+      SPACES_ACCESS_KEY_ID: 'access-key',
+      SPACES_SECRET_ACCESS_KEY: 'secret-key',
+    })
+
+    expect(env.SPACES_REGION).toBe('nyc3')
+    expect(env.SPACES_BUCKET).toBe('uploads')
+    expect(env.SPACES_CDN_BASE_URL).toBe('https://images.example.com')
   })
 })

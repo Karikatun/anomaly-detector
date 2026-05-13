@@ -29,6 +29,10 @@ bun run preview
 
 Astro publishes pages from `src/pages`. Static assets live in `public`.
 
+## Deployment
+
+Production deployment for the landing site uses DigitalOcean App Platform Static Sites with `bun run build:landing` and `landing/dist`. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
+
 ## Practice
 
 Keep landing-specific UI and content in this workspace. Do not duplicate authenticated browser-app flows from `web`. If the landing project starts reading API data or shared DTOs, add `@web-app-demo/contracts` intentionally and validate the producer/consumer path.

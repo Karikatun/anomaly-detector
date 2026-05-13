@@ -75,6 +75,12 @@ Local PostgreSQL is provided by Docker Compose, not by a native database install
 
 Keep `docker-compose.yml`, `backend/.env.example`, `.env.example`, and [LOCAL_DATABASE.md](LOCAL_DATABASE.md) aligned when changing local database names, ports, credentials, image tags, or volume paths.
 
+## Storage
+
+Persistent files and media belong in DigitalOcean Spaces, not in the App Platform container filesystem. The backend owns storage access through `src/storage`, including safe object keys, presigned uploads/downloads, public CDN URL construction, and object deletion. Product features that use uploads should store ownership and retention metadata in PostgreSQL when permissions, deletion, audit, or private access matter.
+
+For image optimization, generate app-owned variants in the backend, a worker, or a dedicated App Platform service, then store those variants in Spaces and serve public variants through Spaces CDN. DigitalOcean Spaces and Spaces CDN do not provide first-party dynamic image resizing or format transformation.
+
 ## Current Upstream Documentation
 
 For framework and API questions, consult the current upstream documentation linked here first. This document describes repository conventions; upstream docs are authoritative for tool behavior.
@@ -85,6 +91,7 @@ For framework and API questions, consult the current upstream documentation link
 - [Prisma docs](https://www.prisma.io/docs)
 - [PostgreSQL docs](https://www.postgresql.org/docs/)
 - [PostgreSQL Docker Official Image](https://hub.docker.com/_/postgres)
+- [DigitalOcean Spaces docs](https://docs.digitalocean.com/products/spaces/)
 - [Zod docs](https://zod.dev/)
 - [jose documentation](https://github.com/panva/jose)
 - [TanStack Query React docs](https://tanstack.com/query/latest/docs/framework/react/overview)

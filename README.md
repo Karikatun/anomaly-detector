@@ -2,6 +2,19 @@
 
 A full-stack starter for web and mobile products: one repository with a Bun/Hono backend, a React browser client, an Expo mobile app, an Astro landing project, and shared API contracts. The goal is to give agents and developers clear architectural boundaries so new features keep following the same shape.
 
+## Agent Intake Checklist Before Installing
+
+Before cloning or installing this template for an end user, the agent should ask a short product-focused intake in the user's language and record the answers during setup:
+
+- Confirm whether this is a new project from the template or work on the template itself.
+- Ask for the project name/slug and the user's own GitHub destination, if they already have one.
+- Ask what product they want to build first and the first user journey that should work.
+- Ask which surfaces are active now: `web`, `mobile`, `backend/API`, `landing`, or full-stack. Mark the rest as deferred.
+- Ask whether the first version needs accounts/auth, persistence, file uploads, images/media, payments, admin tools, or external integrations.
+- For files/images/media, ask whether assets are public or private, what users upload, expected max file size, allowed file types, whether thumbnails/optimized variants are needed, and when files should be deleted.
+- Ask whether deployment is needed now. If yes, use DigitalOcean by default and ask for production domains/URLs and release targets, not for a cloud provider choice.
+- If backend/API, full-stack, uploads, or database-backed validation is active, verify Docker Compose and the Docker daemon before local setup.
+
 ## First-Run Bootstrap For Agents
 
 When installing this repository from a GitHub URL into a fresh Codex or agent session, treat setup as an onboarding task before feature work. This README is the source of truth for first-run setup because fresh installers may not read `AGENTS.md`.
@@ -9,7 +22,7 @@ When installing this repository from a GitHub URL into a fresh Codex or agent se
 Give the agent this initial prompt:
 
 ```text
-Install this repository into the project. First read README.md, CLAUDE.md if present, and relevant docs/*.md, including docs/LOCAL_DATABASE.md when backend/API or full-stack work is active. Before setup, ask me what product I want to build first, which surfaces I need now (web, mobile, backend/API, landing, or full-stack), and whether I need deployment now. If deployment is needed, ask whether to use DigitalOcean or Yandex Cloud. Treat this checkout as a new project by default, not as a pull request back to the template: detach the original template remote unless I explicitly say I am contributing to the template, and add my own GitHub remote only if I provide one or ask you to create/publish it. After I answer, record the chosen project focus in AGENTS.md and CLAUDE.md before feature work. Use Docker Compose for local PostgreSQL on Windows, macOS, and Linux; do not require native PostgreSQL or cloud credentials for local development.
+Install this repository into the project. First read README.md, CLAUDE.md if present, and relevant docs/*.md, including docs/LOCAL_DATABASE.md when backend/API or full-stack work is active and docs/STORAGE.md when uploads, files, images, or media are active. Before setup, ask me what project name/slug I want to use, what product I want to build first, which surfaces I need now (web, mobile, backend/API, landing, or full-stack), whether the first version needs auth/persistence/uploads/media/integrations, and whether I need deployment now. If deployment is needed, use DigitalOcean App Platform, DigitalOcean Managed PostgreSQL, and DigitalOcean Spaces by default; ask me for production domains/URLs and release targets, but do not ask me to choose a cloud provider unless I explicitly request another provider. If backend/API, full-stack, uploads, or any database-backed validation is active, verify Docker Compose with `docker compose version` and the Docker daemon with `docker info`; if Docker is missing or not running, explain how to install/start it for my OS before continuing. Treat this checkout as a new project by default, not as a pull request back to the template: detach the original template remote unless I explicitly say I am contributing to the template, and add my own GitHub remote only if I provide one or ask you to create/publish it. After I answer, record the chosen project focus in AGENTS.md and CLAUDE.md before feature work, and rename package.json and other repository-specific identifiers to the chosen project name where applicable. Use Docker Compose for local PostgreSQL on Windows, macOS, and Linux; do not require native PostgreSQL or cloud credentials for local development.
 ```
 
 - First read `README.md`, `CLAUDE.md` if present, and relevant `docs/*.md`, then inspect package scripts and `.env.example` files before running setup commands.
@@ -17,17 +30,21 @@ Install this repository into the project. First read README.md, CLAUDE.md if pre
 - If the user provides their own GitHub repository URL or asks to publish the new project, add that URL as the new `origin` after the template remote is removed. If the user has not chosen a destination yet, leave the repository with no `origin` and report that publishing is not configured.
 - Do not open pull requests against the template repository during first-run project setup. Ask only if the user explicitly says this checkout is for improving the template itself.
 - Ask the user a short intake in the user's language before making product or deployment choices:
+  - what project name/slug to use;
   - what product or app they want to build first;
   - which surfaces are active now: web, mobile, backend/API, landing, or full-stack;
-  - whether deployment is needed now, and if yes, whether to use DigitalOcean or Yandex Cloud.
+  - whether the first version needs accounts/auth, persistence, uploads/files/images/media, payments, admin tools, or external integrations;
+  - whether deployment is needed now, and if yes, the production domains/URLs and release targets.
 - After the user answers, update the `Project Focus` block in `AGENTS.md` and the matching block in `CLAUDE.md` before starting feature work. These files should say which surfaces are active, which are deferred, what validation to run, and what deployment/release work is in or out of scope.
 - If only the web app is active, keep mobile intact but deferred: do not run Expo/EAS/Maestro setup, do not add mobile features, and add or update a short deferred-surface note in `mobile/README.md`. When the user later asks for mobile, update `AGENTS.md` and `CLAUDE.md`, remove or rewrite that note, then set up and validate mobile normally.
 - If only the mobile app is active, keep web and landing intact but deferred: do not add browser-only features or Playwright flows unless they support the active mobile/backend work, and add or update a short deferred-surface note in `web/README.md` or `landing/README.md` as relevant. When the user later asks for web, update `AGENTS.md` and `CLAUDE.md`, remove or rewrite that note, then set up and validate web normally.
 - Prefer README-level deferred-surface notes over source-code comments. Add code comments only when a dormant code path would otherwise mislead future work.
-- Default to local-only setup when the user does not need deployment yet. Local development must not require DigitalOcean or Yandex Cloud credentials.
+- Default to local-only setup when the user does not need deployment yet. Local development must not require DigitalOcean credentials.
 - Use [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) and `docker-compose.yml` as the local PostgreSQL source of truth. The default local database path is Docker Compose, not a native PostgreSQL install.
-- If deployment is requested, make the cloud choice explicit. Use DigitalOcean as the international/default option and Yandex Cloud when the audience is in Russia or the user chooses it.
-- Explain manual prerequisites only for the chosen path: provider account, billing/project/folder setup, `doctl auth init` or `yc init`, registry access, managed PostgreSQL or compatible database, Expo/EAS/App Store/Google Play accounts when mobile release work is requested.
+- If deployment is requested, use DigitalOcean App Platform as the supported production path. Use DigitalOcean Managed PostgreSQL for production databases; do not use App Platform dev databases for production.
+- Deploy `web` and `landing` as DigitalOcean App Platform Static Sites. Static site assets are served through DigitalOcean's global CDN by default; use an external CDN only when the product needs advanced controls such as bot filtering, custom rate limiting, or geographic traffic rules.
+- Use DigitalOcean Spaces Standard Storage plus Spaces CDN for persistent files, uploads, and public media. Do not store uploads on the App Platform container filesystem.
+- Explain manual prerequisites only for the active release path: DigitalOcean account, billing/project setup, `doctl auth init`, registry access when using DigitalOcean Container Registry, DigitalOcean Managed PostgreSQL, production domains/DNS, and Expo/EAS/App Store/Google Play accounts when mobile release work is requested.
 - The agent may create uncommitted local `.env` files from `.env.example` and generate a local-only `JWT_SECRET`; never commit secrets or print raw secrets in the final report.
 - After setup, run the smallest meaningful validation for the chosen active surfaces and report local URLs, commands run, and anything the user still needs to authorize manually.
 
@@ -41,25 +58,36 @@ Install this repository into the project. First read README.md, CLAUDE.md if pre
 - `docker-compose.yml` - local PostgreSQL 18 through the official `postgres:18-alpine` image on port `54329`; test runners use a repository-derived port by default, or `POSTGRES_TEST_PORT` when set.
 - `docs/TESTING.md` - the backend, Playwright, and Maestro testing contract.
 - `docs/LOCAL_DATABASE.md` - cross-platform local PostgreSQL setup for Windows, macOS, and Linux.
+- `docs/STORAGE.md` - DigitalOcean Spaces, CDN, uploads, and image/media storage rules.
 
 ## Quick Start
 
-Check Docker first. Docker is the local app that runs PostgreSQL for this template:
-
-```bash
-docker compose version
-```
-
-If that command fails, install and start Docker before continuing:
-
-- Windows: install Docker Desktop, enable the WSL 2 backend, start Docker Desktop, then rerun `docker compose version`.
-- macOS: install and start Docker Desktop, or another Docker Engine with Compose v2, then rerun `docker compose version`.
-- Linux: install Docker Engine and the Docker Compose plugin, start the Docker service, then rerun `docker compose version`.
-
-Do not switch new users to native PostgreSQL during local setup. The repository's documented local path is Docker Compose.
+Install dependencies first:
 
 ```bash
 bun install
+```
+
+If backend/API, full-stack, or other database-backed work is active, check Docker first. Docker is the local app that runs PostgreSQL for this template:
+
+```bash
+docker compose version
+docker info
+```
+
+If either command fails, install and start Docker before continuing:
+
+- Windows: install Docker Desktop, enable the WSL 2 backend, start Docker Desktop, then rerun `docker compose version` and `docker info`.
+- macOS: install and start Docker Desktop, or another Docker Engine with Compose v2, then rerun `docker compose version` and `docker info`.
+- Linux: install Docker Engine and the Docker Compose plugin, start the Docker service, then rerun `docker compose version` and `docker info`.
+
+Do not switch new users to native PostgreSQL during local setup. The repository's documented local path is Docker Compose for backend/API work.
+
+### Backend/API Or Full-Stack
+
+Only run this block when backend/API, full-stack, or DB-backed validation is active.
+
+```bash
 docker compose pull postgres
 docker compose up -d postgres
 ```
@@ -76,15 +104,24 @@ cp backend/.env.example backend/.env
 Copy-Item backend/.env.example backend/.env
 ```
 
-Then apply migrations and start the app surfaces you need. Run long-lived dev servers in separate terminals:
+Then apply migrations:
 
 ```bash
 bun run --cwd backend prisma:migrate
+```
+
+### Run The Active Surfaces
+
+Start only the app surfaces you need in separate terminals:
+
+```bash
 bun run dev:backend
 bun run dev:web
 bun run dev:landing
 bun run dev:mobile
 ```
+
+Web-only or landing-only setups can skip the backend/PostgreSQL block until backend/API becomes active.
 
 Create `web/.env` when the browser client should use a non-default API URL:
 
@@ -126,6 +163,7 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 
 - [backend/README.md](backend/README.md) - API, auth, Prisma, and backend validation.
 - [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) - Docker Compose PostgreSQL setup and reset workflow.
+- [docs/STORAGE.md](docs/STORAGE.md) - DigitalOcean Spaces, CDN, uploads, and image/media storage rules.
 - [web/README.md](web/README.md) - browser client setup, env, and Playwright smoke.
 - [mobile/README.md](mobile/README.md) - Expo setup, development builds, and Maestro smoke.
 - [landing/README.md](landing/README.md) - Astro landing commands and publishing model.
@@ -153,4 +191,4 @@ For framework, API, deployment, or testing questions, consult the current upstre
 - Mobile: [Expo docs](https://docs.expo.dev/), [Expo Router docs](https://docs.expo.dev/router/introduction/), [EAS Build docs](https://docs.expo.dev/build/introduction/), and [React Native docs](https://reactnative.dev/docs/getting-started)
 - Landing: [Astro docs](https://docs.astro.build/en/getting-started/)
 - Local infrastructure: [Docker Compose docs](https://docs.docker.com/compose/) and [PostgreSQL Docker Official Image](https://hub.docker.com/_/postgres)
-- Deployment providers: [DigitalOcean App Platform](https://docs.digitalocean.com/products/app-platform/), [doctl](https://docs.digitalocean.com/reference/doctl/), [DigitalOcean Container Registry](https://docs.digitalocean.com/products/container-registry/), [Yandex Cloud CLI](https://yandex.cloud/en/docs/cli/), [Yandex Serverless Containers](https://yandex.cloud/en/docs/serverless-containers/), and [Yandex Container Registry](https://yandex.cloud/en/docs/container-registry/)
+- Deployment and storage: [DigitalOcean App Platform](https://docs.digitalocean.com/products/app-platform/), [DigitalOcean App specs](https://docs.digitalocean.com/products/app-platform/reference/app-spec/), [DigitalOcean Static Sites](https://docs.digitalocean.com/products/app-platform/how-to/manage-static-sites/), [DigitalOcean Managed Databases in App Platform](https://docs.digitalocean.com/products/app-platform/how-to/manage-databases/), [DigitalOcean Dockerfile builds](https://docs.digitalocean.com/products/app-platform/reference/dockerfile/), [DigitalOcean Bun buildpack](https://docs.digitalocean.com/products/app-platform/reference/buildpacks/bun/), [doctl](https://docs.digitalocean.com/reference/doctl/), [DigitalOcean Container Registry](https://docs.digitalocean.com/products/container-registry/), [DigitalOcean Spaces](https://docs.digitalocean.com/products/spaces/), [DigitalOcean Spaces CDN](https://docs.digitalocean.com/products/spaces/how-to/enable-cdn/), and [external CDN in front of App Platform](https://docs.digitalocean.com/products/app-platform/how-to/configure-external-cdn/)
