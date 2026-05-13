@@ -66,6 +66,7 @@ describe('StorageService', () => {
       'x-amz-acl': 'public-read',
       'Cache-Control': 'public, max-age=31536000, immutable',
     })
+    expect(upload.contentLength).toBe(128)
     expect(upload.publicUrl).toBe('https://demo-bucket.nyc3.digitaloceanspaces.com/uploads/avatar.png')
     expect(uploadUrl.hostname).toBe('demo-bucket.nyc3.digitaloceanspaces.com')
     expect(uploadUrl.pathname).toBe('/uploads/avatar.png')

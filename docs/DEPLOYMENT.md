@@ -2,7 +2,7 @@
 
 Use this document only after the user has asked for deployment. Read the `Project Focus` block in [AGENTS.md](../AGENTS.md) or [CLAUDE.md](../CLAUDE.md) first; it records the installed project's active surfaces, deferred surfaces, release targets, and validation scope.
 
-The supported production path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Ask for product-facing release details instead:
+The default production path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Ask for product-facing release details instead:
 
 - which active surfaces should be released now: backend/API, web, landing, mobile, or full-stack;
 - production domains/URLs for API, web, landing, and the mobile API endpoint;
@@ -10,7 +10,9 @@ The supported production path is DigitalOcean App Platform plus DigitalOcean Man
 - whether mobile work includes EAS builds only or App Store / Google Play submission;
 - whether an external CDN is required for advanced bot, rate-limit, or geographic traffic controls.
 
-Local setup from `README.md` and [LOCAL_DATABASE.md](LOCAL_DATABASE.md) does not require DigitalOcean credentials.
+Local setup from `README.md` and [LOCAL_DATABASE.md](LOCAL_DATABASE.md) does not require cloud credentials.
+
+If the user explicitly asks for Yandex Cloud, use [YANDEX_CLOUD.md](YANDEX_CLOUD.md) as the provider runbook. The supported Yandex Cloud alternative is Serverless Containers for backend/API, Managed Service for PostgreSQL for production data, Object Storage for files and static websites, and Cloud CDN for public static/media delivery.
 
 ## Secrets And Backend Env
 
@@ -232,6 +234,7 @@ For deployment questions, consult current upstream docs first. This document cap
 - DigitalOcean Spaces S3 compatibility: https://docs.digitalocean.com/products/spaces/reference/s3-compatibility/
 - Configure CORS on Spaces: https://docs.digitalocean.com/products/spaces/how-to/configure-cors/
 - External CDN in front of App Platform: https://docs.digitalocean.com/products/app-platform/how-to/configure-external-cdn/
+- Yandex Cloud alternative runbook: https://yandex.cloud/en/docs/
 - Docker Compose: https://docs.docker.com/compose/
 - Prisma migrations: https://www.prisma.io/docs/orm/prisma-migrate
 - Expo EAS: https://docs.expo.dev/eas/

@@ -76,12 +76,12 @@ Default direct-upload flow:
 
 1. Authenticated client asks the backend for an upload URL with intended file metadata.
 2. Backend validates role, size, content type, owner record, and target key.
-3. Backend returns a presigned PUT URL and required upload headers.
+3. Backend returns a presigned PUT URL, browser-settable upload headers, and a `contentLength` value when the upload size is part of the signature.
 4. Client uploads directly to Spaces.
 5. Client calls the app API to confirm the uploaded object key.
 6. Backend stores object metadata in PostgreSQL if the product needs ownership, deletion, audit, or private access rules.
 
-The presigned PUT URL validates the requested upload intent before signing. If the product must strictly enforce actual stored file size, content type, or image dimensions, verify the uploaded object before confirming it in the app database.
+The presigned PUT URL validates the requested upload intent before signing. If the product must strictly enforce actual stored file size, content type, or image dimensions, verify the uploaded object before confirming it in the app database. When the backend returns a `contentLength` value, the uploaded body must match that exact byte size even if the browser or HTTP client sets the request header automatically.
 
 For public media, the object should be uploaded with `public-read`, immutable object keys, and long cache headers. For private files, keep objects private and return short-lived presigned GET URLs only after permission checks.
 
@@ -125,6 +125,14 @@ Operational rules:
 - Do not include emails, names, customer IDs, or other sensitive data in object keys.
 - Delete or orphan-clean objects when the owning product record is deleted, according to the product retention policy.
 
+## Yandex Cloud Alternative
+
+Use Yandex Object Storage only when the user explicitly chooses Yandex Cloud. Follow [YANDEX_CLOUD.md](YANDEX_CLOUD.md) for the full provider runbook.
+
+Yandex Object Storage is S3-compatible and uses `https://storage.yandexcloud.net` as the standard endpoint. Public media should be served through Yandex Cloud CDN when production latency, cache controls, or custom domains matter. Private files should stay private and be exposed through short-lived presigned URLs after backend permission checks.
+
+For image optimization on Yandex Cloud, first consider Yandex Cloud Marketplace Image Resizer for simple fixed-size variants. For dynamic transformations, use a dedicated Thumbor/imgproxy-style service or app-owned image worker and put Cloud CDN in front of public variants.
+
 ## Current Upstream Documentation
 
 - DigitalOcean Spaces: https://docs.digitalocean.com/products/spaces/
@@ -136,3 +144,6 @@ Operational rules:
 - Configure CORS on Spaces: https://docs.digitalocean.com/products/spaces/how-to/configure-cors/
 - Spaces performance best practices: https://docs.digitalocean.com/products/spaces/concepts/best-practices/
 - App Platform limits: https://docs.digitalocean.com/products/app-platform/details/limits/
+- Yandex Object Storage: https://yandex.cloud/en/docs/storage/
+- Yandex Cloud CDN: https://yandex.cloud/en/docs/cdn/concepts/
+- Yandex Cloud Marketplace Image Resizer: https://yandex.cloud/en/marketplace/products/yc/image-resizer

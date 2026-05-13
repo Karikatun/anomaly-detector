@@ -52,7 +52,7 @@ DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product ne
 
 ## Deployment
 
-Production deployment for the backend uses DigitalOcean App Platform with DigitalOcean Managed PostgreSQL. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) instead of duplicating provider-specific steps here.
+Production deployment for the backend uses DigitalOcean App Platform with DigitalOcean Managed PostgreSQL by default. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) instead of duplicating provider-specific steps here. If the user explicitly chooses Yandex Cloud, use [../docs/YANDEX_CLOUD.md](../docs/YANDEX_CLOUD.md).
 
 ## Auth API
 

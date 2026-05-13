@@ -47,7 +47,7 @@ VITE_API_URL=http://localhost:3000
 
 ## Deployment
 
-Production deployment for the browser app uses DigitalOcean App Platform Static Sites with `bun run build:web`, `web/dist`, and `index.html` as the SPA catch-all. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
+Production deployment for the browser app uses DigitalOcean App Platform Static Sites with `bun run build:web`, `web/dist`, and `index.html` as the SPA catch-all by default. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md). If the user explicitly chooses Yandex Cloud, deploy the built `web/dist` output through Yandex Object Storage static website hosting plus Cloud CDN by following [../docs/YANDEX_CLOUD.md](../docs/YANDEX_CLOUD.md).
 
 ## Practice
 

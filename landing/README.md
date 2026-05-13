@@ -31,7 +31,7 @@ Astro publishes pages from `src/pages`. Static assets live in `public`.
 
 ## Deployment
 
-Production deployment for the landing site uses DigitalOcean App Platform Static Sites with `bun run build:landing` and `landing/dist`. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
+Production deployment for the landing site uses DigitalOcean App Platform Static Sites with `bun run build:landing` and `landing/dist` by default. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md). If the user explicitly chooses Yandex Cloud, deploy the built `landing/dist` output through Yandex Object Storage static website hosting plus Cloud CDN by following [../docs/YANDEX_CLOUD.md](../docs/YANDEX_CLOUD.md).
 
 ## Practice
 

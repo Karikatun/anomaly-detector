@@ -49,6 +49,7 @@ export type PresignedUpload = {
   uploadUrl: string
   method: 'PUT'
   headers: Record<string, string>
+  contentLength: number
   expiresAt: string
   publicUrl?: string
 }
@@ -109,6 +110,7 @@ export class StorageService {
       uploadUrl,
       method: 'PUT',
       headers,
+      contentLength: byteSize,
       expiresAt: expiresAt(expiresInSeconds).toISOString(),
       ...(visibility === 'public' ? { publicUrl: this.publicUrlForKey(key) } : {}),
     }

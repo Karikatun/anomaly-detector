@@ -69,12 +69,13 @@ If the user later asks to work on a deferred surface, update this block and any 
 
 ## Deployment Policy
 
-- The supported production infrastructure path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL.
+- The default production infrastructure path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL.
 - During first-run bootstrap, ask whether deployment is needed now. If it is, ask for production domains/URLs and release targets, not for a cloud provider choice.
 - Do not propose other cloud, hosting, database, or deployment providers unless the user explicitly asks for a different provider.
-- For `web` and `landing`, use DigitalOcean App Platform Static Sites. They are served through DigitalOcean's global CDN by default; add an external CDN only when the product needs advanced bot, rate-limit, or geographic traffic controls.
-- For backend/API production persistence, use DigitalOcean Managed PostgreSQL. Do not use App Platform dev databases for production data.
-- Local development remains Docker Compose PostgreSQL and must not require DigitalOcean credentials unless deployment work is active.
+- If the user explicitly asks for Yandex Cloud, follow `docs/YANDEX_CLOUD.md`: use Yandex Serverless Containers for backend/API, Yandex Managed Service for PostgreSQL for production data, Yandex Object Storage for static sites and files, and Yandex Cloud CDN for public static/media delivery.
+- For DigitalOcean `web` and `landing`, use DigitalOcean App Platform Static Sites. They are served through DigitalOcean's global CDN by default; add an external CDN only when the product needs advanced bot, rate-limit, or geographic traffic controls.
+- For DigitalOcean backend/API production persistence, use DigitalOcean Managed PostgreSQL. Do not use App Platform dev databases for production data.
+- Local development remains Docker Compose PostgreSQL and must not require cloud credentials unless deployment work is active.
 
 ## Storage And Media Policy
 
@@ -84,6 +85,7 @@ If the user later asks to work on a deferred surface, update this block and any 
 - For public images and media, prefer immutable object keys, `public-read` objects, long cache headers, and Spaces CDN URLs such as `images.example.com`.
 - For private files, use short-lived presigned URLs and do not expect CDN caching benefits.
 - DigitalOcean Spaces and Spaces CDN do not provide first-party dynamic image resizing or format conversion. If optimized images are required, generate variants in the backend or a dedicated App Platform worker/service and store those variants in Spaces. Add third-party image services only when the user explicitly chooses that product tradeoff.
+- If Yandex Cloud is explicitly selected, use Yandex Object Storage plus Cloud CDN for public media, short-lived presigned URLs for private files, and consider Yandex Cloud Marketplace Image Resizer for simple fixed-size image variants before introducing custom image infrastructure.
 
 ## Task Mode
 
