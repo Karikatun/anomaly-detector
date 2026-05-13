@@ -171,6 +171,7 @@ maybeDescribe('auth API integration', () => {
     expect(registerBody.refreshToken).toBeUndefined()
     expect(setCookie).toContain('web_app_demo_refresh=')
     expect(setCookie).toContain('HttpOnly')
+    expect(setCookie).toContain('SameSite=Lax')
 
     const refresh = await app.request('/api/auth/refresh', {
       method: 'POST',
@@ -186,6 +187,40 @@ maybeDescribe('auth API integration', () => {
     expect(refresh.status).toBe(200)
     expect(refreshBody.accessToken).toBeString()
     expect(refreshBody.refreshToken).toBeUndefined()
+  })
+
+  test('production web auth allows exact CORS origin and cross-site refresh cookie', async () => {
+    const productionApp = createApp({
+      env: {
+        ...env,
+        CORS_ORIGINS: ['https://web.example.com'],
+        COOKIE_SECURE: true,
+      },
+      prisma,
+    })
+    const register = await productionApp.request('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://web.example.com',
+        'X-Client-Platform': 'web',
+      },
+      body: JSON.stringify({
+        email: 'production-cookie@example.com',
+        password: 'password123',
+      }),
+    })
+    const registerBody = await register.json()
+    const setCookie = register.headers.get('set-cookie')
+
+    expect(register.status).toBe(201)
+    expect(register.headers.get('access-control-allow-origin')).toBe('https://web.example.com')
+    expect(register.headers.get('access-control-allow-credentials')).toBe('true')
+    expect(registerBody.refreshToken).toBeUndefined()
+    expect(setCookie).toContain('web_app_demo_refresh=')
+    expect(setCookie).toContain('HttpOnly')
+    expect(setCookie).toContain('Secure')
+    expect(setCookie).toContain('SameSite=None')
   })
 
   test('guards me and returns stable validation errors', async () => {

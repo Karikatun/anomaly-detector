@@ -52,4 +52,40 @@ describe('loadEnv', () => {
     expect(env.SPACES_BUCKET).toBe('uploads')
     expect(env.SPACES_CDN_BASE_URL).toBe('https://images.example.com')
   })
+
+  test('rejects unsafe production CORS origins', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:54329/web_app_demo',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        CORS_ORIGINS: '',
+      }),
+    ).toThrow('CORS_ORIGINS')
+
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        CORS_ORIGINS: '*',
+      }),
+    ).toThrow('CORS_ORIGINS')
+
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        CORS_ORIGINS: 'https://web.example.com/path',
+      }),
+    ).toThrow('CORS_ORIGINS')
+
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        COOKIE_SECURE: 'true',
+        CORS_ORIGINS: 'http://web.example.com',
+      }),
+    ).toThrow('CORS_ORIGINS')
+  })
 })

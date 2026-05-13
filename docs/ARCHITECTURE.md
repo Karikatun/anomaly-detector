@@ -28,9 +28,13 @@ Routes should stay thin. Do not put business logic into Hono handlers, UI client
 
 The default runtime shape is a modular monolith: one backend service, one database, shared contracts, and clear feature boundaries inside the repository. Do not introduce microservices, queues, workers, or extra infrastructure until the product has a concrete need that the monolith cannot meet clearly.
 
+On the default DigitalOcean production path, run the backend/API as three `apps-s-1vcpu-1gb` App Platform containers. This keeps the first production shape horizontally scaled and cost-conscious while avoiding a single large runtime container. `web` and `landing` remain App Platform Static Site components and do not have runtime container sizes.
+
 For real-time features such as chat, presence, collaboration, live notifications, or activity feeds, start with the same backend service. A single instance can keep an in-memory registry of its own WebSocket connections. Once the backend runs multiple instances, in-memory fanout is no longer enough: one user may be connected to instance A while another is connected to instance B. At that point, add a managed Redis-compatible Pub/Sub broker between backend instances so each instance can publish domain events and subscribe to events it must deliver to its local sockets.
 
-On the default DigitalOcean path, use DigitalOcean Managed Valkey for this broker. On the optional Yandex Cloud path, use Yandex Managed Service for Valkey. Add this infrastructure only when horizontal scaling or cross-instance WebSocket delivery is actually required; it is not part of the baseline local setup.
+On the default DigitalOcean path, use DigitalOcean Managed Valkey for this broker. On the optional Yandex Cloud path, use Yandex Managed Service for Valkey. Add this infrastructure only when horizontal scaling and cross-instance WebSocket/SSE delivery are actually required; it is not part of the baseline local setup.
+
+Valkey Pub/Sub is only a fanout mechanism. Keep durable chat messages, notifications, collaboration state, and audit-relevant events in PostgreSQL; publish compact event identifiers after commits; and make clients recover by reconnecting and refetching from the API after missed realtime messages.
 
 ## Auth
 
@@ -39,7 +43,7 @@ Auth v1 is custom JWT-based auth:
 - Passwords use `Bun.password.hash/verify` with Argon2id.
 - Access tokens are short-lived JWTs signed and verified with `jose`.
 - Refresh tokens are opaque random tokens; only their SHA-256 hash is stored in PostgreSQL.
-- Web keeps the refresh token in an HttpOnly `SameSite=Lax` cookie and keeps the access token in memory.
+- Web keeps the refresh token in an HttpOnly cookie and keeps the access token in memory. Local HTTP uses `SameSite=Lax`; HTTPS production uses `Secure` and `SameSite=None` so browser auth works across separate web/API origins.
 - Mobile keeps the refresh token in `expo-secure-store` and keeps the access token in memory.
 
 Refresh-token rotation creates a new session and revokes the previous one. `/api/auth/me` checks both the JWT and the active database session.

@@ -74,6 +74,9 @@ This block exists only for fresh installs from the template. If this repository 
 - If the user explicitly asks for Yandex Cloud, follow `docs/YANDEX_CLOUD.md`: use Yandex Serverless Containers for backend/API, Yandex Managed Service for PostgreSQL for production data, Yandex Object Storage for static sites and files, and Yandex Cloud CDN for public static/media delivery.
 - For DigitalOcean `web` and `landing`, use DigitalOcean App Platform Static Sites. They are served through DigitalOcean's global CDN by default; add an external CDN only when the product needs advanced bot, rate-limit, or geographic traffic controls.
 - For DigitalOcean backend/API production persistence, use DigitalOcean Managed PostgreSQL. Do not use App Platform dev databases for production data.
+- Before `doctl apps create`, verify that DigitalOcean App Platform is connected to the user's GitHub account/organization and has access to the full monorepo branch. Static Sites build from Git, not from a local `dist` folder.
+- Generate concrete DigitalOcean app specs only with `bun run deploy:do:specs`; keep committed templates in `.do/*.yaml.example` and generated specs under `.scratch/deploy`. Do not use manual `sed`, `perl`, or shell one-liners for secrets, CORS, or build-time URLs.
+- Production browser auth requires exact HTTPS `CORS_ORIGINS`, `COOKIE_SECURE=true`, `SameSite=None`, and `credentials: include`. Do not use wildcard, empty, or path-bearing CORS origins in production.
 - Local development remains Docker Compose PostgreSQL and must not require cloud credentials unless deployment work is active.
 
 ## Storage And Media Policy

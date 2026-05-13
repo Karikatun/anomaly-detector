@@ -6,6 +6,7 @@ dist/
 build/
 coverage/
 .vite/
+.scratch/
 playwright-report/
 test-results/
 web/e2e/.artifacts/

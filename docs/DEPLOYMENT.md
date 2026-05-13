@@ -28,7 +28,7 @@ REFRESH_TOKEN_TTL_DAYS=30
 COOKIE_SECURE=true
 ```
 
-`CORS_ORIGINS` must include every browser origin that calls the API with credentials. Native mobile apps do not need CORS, but Expo web previews or browser-based mobile previews do.
+`CORS_ORIGINS` must include every browser origin that calls the API with credentials. Use exact origins only, for example `https://web.example.com`; do not use wildcards, empty values, or paths. Native mobile apps do not need CORS, but Expo web previews or browser-based mobile previews do.
 
 If storage is active, also configure:
 
@@ -57,7 +57,7 @@ Prerequisites:
 doctl auth init
 ```
 
-4. A GitHub/GitLab/Bitbucket repository connected to App Platform, or a DigitalOcean Container Registry (DOCR) image source.
+4. DigitalOcean App Platform GitHub integration connected in the DigitalOcean Dashboard, with access to the user's repository before `doctl apps create`. Without this, `doctl apps create` can fail with `GitHub user not authenticated`.
 5. DigitalOcean Managed PostgreSQL for production. Do not use App Platform dev databases for production data.
 6. DigitalOcean Spaces Standard Storage with Spaces CDN when uploads, images, media, exports, or downloads are in scope.
 7. DigitalOcean Managed Valkey only when horizontally scaled real-time features need Pub/Sub between backend instances.
@@ -71,6 +71,55 @@ doctl apps update <app-id> --spec <path-to-spec.yaml>
 ```
 
 Consult the current App Spec docs before applying a generated spec because provider fields and limits can change.
+
+## Safe DigitalOcean App Spec Workflow
+
+Keep committed spec templates under `.do/*.yaml.example`. Generate concrete specs only into `.scratch/deploy` with:
+
+```bash
+bun run deploy:do:specs <backend-initial|backend-final|web|landing|all>
+```
+
+The generator rejects empty `value:` lines, unresolved `REPLACE_WITH_*` placeholders, wildcard/empty/path-bearing production CORS origins, short `JWT_SECRET`, and missing build-time static URLs. Do not replace secrets or URLs with manual `sed`, `perl`, or shell one-liners.
+
+Minimum environment for spec generation:
+
+```bash
+export DO_GITHUB_REPO=owner/repo
+export DO_PROJECT_SLUG=project-slug
+export DO_GIT_BRANCH=main
+export DO_APP_REGION=fra
+export JWT_SECRET="$(openssl rand -hex 32)"
+```
+
+Reuse the same `JWT_SECRET` for later `backend-final` updates unless the user intentionally wants to invalidate all existing sessions.
+
+Typical first deploy order:
+
+```bash
+# 1. Create backend with a temporary placeholder browser origin.
+bun run deploy:do:specs backend-initial
+doctl apps spec validate .scratch/deploy/backend-app.yaml
+doctl apps create --spec .scratch/deploy/backend-app.yaml
+
+# 2. After the backend URL exists, create the web static app.
+export DO_BACKEND_URL=https://<api-default-ingress>
+bun run deploy:do:specs web
+doctl apps spec validate .scratch/deploy/web-static-app.yaml
+doctl apps create --spec .scratch/deploy/web-static-app.yaml
+
+# 3. After the web URL exists, update backend CORS and create landing if active.
+export DO_WEB_URL=https://<web-default-ingress>
+bun run deploy:do:specs backend-final
+doctl apps spec validate .scratch/deploy/backend-app.yaml
+doctl apps update <backend-app-id> --spec .scratch/deploy/backend-app.yaml
+
+bun run deploy:do:specs landing
+doctl apps spec validate .scratch/deploy/landing-static-app.yaml
+doctl apps create --spec .scratch/deploy/landing-static-app.yaml
+```
+
+Static Sites build from the connected Git branch, not from local `dist` folders. The branch must contain the full monorepo: root `package.json`, `bun.lock`, `backend`, `web`, `landing`, `mobile`, and `packages/contracts`.
 
 ## Backend API
 
@@ -91,12 +140,15 @@ docker push registry.digitalocean.com/<registry>/<project>-backend:latest
 
 Backend service requirements:
 
-- Set the service HTTP port to `3000` or set `PORT` to the App Platform `http_port`.
+- Set both the service `http_port` and `PORT` env to `8080` unless the project has a reason to choose another port.
+- Use `instance_size_slug: apps-s-1vcpu-1gb` and `instance_count: 3` as the default production API shape. This is three shared 1 vCPU / 1 GiB App Platform containers, which is the low-cost horizontally scalable $12/month-per-container option as of May 2026.
 - Configure health checks to hit `/health`.
 - Set `COOKIE_SECURE=true` for HTTPS production traffic.
-- Set `CORS_ORIGINS` to the deployed browser origins.
+- Set `CORS_ORIGINS` to the exact deployed browser origins. Do not use `*`, empty values, or URLs with paths.
 - Attach DigitalOcean Managed PostgreSQL or provide its connection string as `DATABASE_URL`.
 - Add Spaces env only when the product uses storage. Leave Spaces env blank for projects without uploads.
+
+Use two `apps-s-1vcpu-1gb` containers only when the product deliberately chooses the lowest production HA floor. Use `apps-s-1vcpu-2gb` or larger shared containers when memory pressure is the primary limit. Move to dedicated CPU only after metrics show CPU-bound work, noisy shared-CPU performance, strict latency requirements, or a need for CPU-based autoscaling. `web` and `landing` are Static Site components and do not have App Platform runtime container sizes.
 
 Apply Prisma migrations from a protected one-off App Platform console/job with the same production env:
 
@@ -114,6 +166,10 @@ When the backend runs as a single instance, WebSocket connection state can stay 
 
 Use DigitalOcean Managed Valkey as the default Redis-compatible broker for cross-instance fanout. Each backend instance publishes domain events to Valkey and subscribes to the channels it needs to deliver events to its local WebSocket connections. Do not add Valkey for ordinary request/response APIs, static pages, or single-instance development.
 
+Valkey is a transient delivery layer, not the source of truth. Persist durable state in PostgreSQL first, publish small event messages after the write commits, and have each backend instance fan out only to its own local WebSocket or SSE clients. Clients should reconnect and refetch from the API because Pub/Sub messages can be missed during deploys, restarts, or network interruptions.
+
+When a real-time feature needs cross-instance delivery, create a DigitalOcean Managed Valkey cluster in the same region as the app and database, attach the connection string to the backend as a runtime secret such as `VALKEY_URL`, and keep it out of static-site build-time env. Do not enable Valkey in the baseline template until the product has a realtime feature that requires it.
+
 ## Web Static Site
 
 Deploy `web` as an App Platform Static Site component.
@@ -121,13 +177,15 @@ Deploy `web` as an App Platform Static Site component.
 Required component shape:
 
 - Source directory/build context: repository root.
-- Build command: `bun run build:web`.
+- Build command: `bun install --frozen-lockfile && bun run build:web`.
 - Output directory: `web/dist`.
 - Build-time env: `VITE_API_URL=https://api.example.com`.
 - Index document: `index.html`.
 - Catch-all document: `index.html`, because the React app uses client-side routing.
 
 App Platform Static Sites are served through DigitalOcean's global CDN by default. Do not disable the CDN cache unless the product needs a specific behavior that the built-in CDN cannot provide.
+
+`VITE_API_URL` is embedded at build time. If it is empty, the browser app can call its own static-site origin at `/api/*` instead of the backend. After changing `VITE_API_URL`, redeploy the static site; runtime env changes alone do not rewrite the already built bundle.
 
 ## Landing Static Site
 
@@ -136,12 +194,14 @@ Deploy `landing` as an App Platform Static Site component.
 Required component shape:
 
 - Source directory/build context: repository root.
-- Build command: `bun run build:landing`.
+- Build command: `bun install --frozen-lockfile && bun run build:landing`.
 - Output directory: `landing/dist`.
 - Index document: `index.html`.
-- Build-time env only when the landing page intentionally needs public config.
+- Build-time env only when the landing page intentionally needs public config, such as `PUBLIC_WEB_APP_URL=https://web.example.com`.
 
 Keep landing independent from authenticated browser-app flows unless the product explicitly needs shared API data.
+
+`PUBLIC_WEB_APP_URL` is also build-time public config. If landing links point to the web app, generate it as a concrete URL and redeploy landing after it changes.
 
 ## Managed PostgreSQL
 
@@ -153,6 +213,19 @@ Operational defaults:
 - Enable trusted sources for the App Platform app when using managed database network restrictions.
 - Use a connection pool if the app starts hitting connection limits.
 - Take backups before destructive schema or data operations.
+
+DigitalOcean Managed PostgreSQL uses TLS. The backend normalizes `sslmode=require` database URLs by adding `uselibpqcompat=true` for the Prisma PostgreSQL adapter unless the URL already sets that option explicitly.
+
+## Production Auth And CORS
+
+Production browser auth runs cross-origin when backend and web use different `*.ondigitalocean.app` domains or custom domains. The required shape is:
+
+- backend cookies: `HttpOnly`, `Secure`, `SameSite=None`, scoped to `/api/auth`;
+- backend CORS: exact HTTPS origins only, `credentials: true`, no wildcard fallback;
+- web API client: `credentials: include`;
+- web static build: concrete `VITE_API_URL` pointing at the backend origin.
+
+The backend env validator rejects empty/wildcard/path-bearing `CORS_ORIGINS` and rejects HTTP origins when `COOKIE_SECURE=true`.
 
 ## Spaces Storage
 
@@ -214,10 +287,11 @@ bun run test
 bun run build
 ```
 
-For narrow deployment-only documentation or App Platform config work, run the subset that matches the affected surfaces, for example `bun run build:web`, `bun run build:landing`, or `bun run --cwd backend smoke:docker`.
+For narrow deployment-only documentation or App Platform config work, run the subset that matches the affected surfaces, for example `bun run deploy:do:specs all`, `bun run build:web`, `bun run build:landing`, or `bun run --cwd backend smoke:docker`.
 
 After deployment:
 
+- verify `doctl apps spec validate <generated-spec.yaml>` passes for every generated spec before create/update;
 - verify `/health` on the backend public URL;
 - verify browser auth only from allowed `CORS_ORIGINS`;
 - verify `web` route refreshes hit the React catch-all instead of a static 404;
@@ -225,6 +299,21 @@ After deployment:
 - verify public media loads through the Spaces CDN domain when storage is active;
 - verify private file links expire and require backend authorization when private storage is active;
 - verify Prisma migrations were applied exactly once to the production database.
+
+## Failure Modes This Template Guards Against
+
+- `GitHub user not authenticated`: App Platform GitHub integration was not connected or did not have repository access before `doctl apps create`.
+- Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, `VITE_API_URL`, and `PUBLIC_WEB_APP_URL` must be concrete before deployment.
+- Backend crash on startup: empty `JWT_SECRET` is rejected by env validation, so the spec generator must fail before App Platform deploys it.
+- Broken browser auth CORS: production CORS must use exact HTTPS origins, not wildcard or empty values.
+- Web calling its own `/api/*`: missing `VITE_API_URL` at static build time makes the bundle use the wrong origin.
+- Empty landing links: missing `PUBLIC_WEB_APP_URL` at build time can bake invalid public links into landing output.
+- Stale remote build dependencies: static site build commands run `bun install --frozen-lockfile` before `bun run build:*`.
+- Frozen backend install failures: `backend/Dockerfile` copies all workspace manifests before `bun install --frozen-lockfile`.
+- Wrong App Platform port: backend specs set both `http_port: 8080` and `PORT=8080`.
+- Managed PostgreSQL TLS errors: `sslmode=require` URLs are normalized with `uselibpqcompat=true` for the Prisma PostgreSQL adapter.
+- Cross-origin cookie failures: production cookies use `Secure` and `SameSite=None`; web requests include credentials.
+- Missing monorepo files in Git: App Platform Static Sites build from the connected Git branch, not from local `dist`.
 
 ## Current Upstream Documentation
 
@@ -239,6 +328,7 @@ For deployment questions, consult current upstream docs first. This document cap
 - DigitalOcean Dockerfile builds: https://docs.digitalocean.com/products/app-platform/reference/dockerfile/
 - DigitalOcean Bun buildpack: https://docs.digitalocean.com/products/app-platform/reference/buildpacks/bun/
 - DigitalOcean doctl CLI: https://docs.digitalocean.com/reference/doctl/
+- DigitalOcean `doctl apps spec validate`: https://docs.digitalocean.com/reference/doctl/reference/apps/spec/validate/
 - DigitalOcean Container Registry: https://docs.digitalocean.com/products/container-registry/
 - DigitalOcean Spaces: https://docs.digitalocean.com/products/spaces/
 - DigitalOcean Spaces CDN: https://docs.digitalocean.com/products/spaces/how-to/enable-cdn/

@@ -51,6 +51,75 @@ const envSchema = z.object({
   SPACES_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 60 * 60).default(5 * 60),
   SPACES_PUBLIC_CACHE_CONTROL: stringWithDefault('public, max-age=31536000, immutable'),
 }).superRefine((env, ctx) => {
+  validateCorsOrigins(env, ctx)
+  validateStorageEnv(env, ctx)
+})
+
+export type AppEnv = z.infer<typeof envSchema>
+
+export function loadEnv(source: Record<string, string | undefined>) {
+  return envSchema.parse(source)
+}
+
+function validateCorsOrigins(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  if (env.CORS_ORIGINS.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['CORS_ORIGINS'],
+      message: 'CORS_ORIGINS must contain at least one allowed browser origin',
+    })
+    return
+  }
+
+  for (const origin of env.CORS_ORIGINS) {
+    if (origin === '*') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CORS_ORIGINS'],
+        message: 'CORS_ORIGINS must not use wildcard origins when credentials are enabled',
+      })
+      continue
+    }
+
+    let url: URL
+    try {
+      url = new URL(origin)
+    } catch {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CORS_ORIGINS'],
+        message: `CORS_ORIGINS contains an invalid URL: ${origin}`,
+      })
+      continue
+    }
+
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CORS_ORIGINS'],
+        message: `CORS_ORIGINS must use http or https origins: ${origin}`,
+      })
+    }
+
+    if (url.origin !== origin) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CORS_ORIGINS'],
+        message: `CORS_ORIGINS must contain origins only, not paths: ${origin}`,
+      })
+    }
+
+    if (env.COOKIE_SECURE && url.protocol !== 'https:') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CORS_ORIGINS'],
+        message: `CORS_ORIGINS must use HTTPS when COOKIE_SECURE=true: ${origin}`,
+      })
+    }
+  }
+}
+
+function validateStorageEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
   const requiredStorageKeys = [
     'SPACES_REGION',
     'SPACES_BUCKET',
@@ -72,10 +141,4 @@ const envSchema = z.object({
       })
     }
   }
-})
-
-export type AppEnv = z.infer<typeof envSchema>
-
-export function loadEnv(source: Record<string, string | undefined>) {
-  return envSchema.parse(source)
 }
