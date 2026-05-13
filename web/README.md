@@ -4,7 +4,7 @@ The browser client provides the baseline auth flow for future web features. It c
 
 ## Project Surface Status
 
-This section may be updated during first-run bootstrap. If `AGENTS.md` marks web as deferred, add a short note here explaining that browser work is intentionally paused. When the user activates web, remove or rewrite that note before starting browser development.
+This section may be updated during first-run bootstrap. If the root `README.md` marks web as deferred, add a short note here explaining that browser work is intentionally paused. When the user activates web, remove or rewrite that note before starting browser development.
 
 ## Stack
 

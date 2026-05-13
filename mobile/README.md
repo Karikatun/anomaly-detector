@@ -4,7 +4,7 @@ The mobile app is built with Expo and React Native. It provides the baseline aut
 
 ## Project Surface Status
 
-This section may be updated during first-run bootstrap. If `AGENTS.md` marks mobile as deferred, add a short note here explaining that mobile work is intentionally paused. When the user activates mobile, remove or rewrite that note before starting Expo or React Native development.
+This section may be updated during first-run bootstrap. If the root `README.md` marks mobile as deferred, add a short note here explaining that mobile work is intentionally paused. When the user activates mobile, remove or rewrite that note before starting Expo or React Native development.
 
 ## Stack
 

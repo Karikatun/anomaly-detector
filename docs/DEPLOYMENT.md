@@ -1,12 +1,13 @@
 # Deployment
 
-Use this document only after the user has asked for deployment. Read the `Project Focus` block in [AGENTS.md](../AGENTS.md) or [CLAUDE.md](../CLAUDE.md) first; it records the installed project's active surfaces, deferred surfaces, release targets, and validation scope.
+Use this document only after the user has asked for deployment. Read the root [README.md](../README.md) and active surface READMEs first; they record the installed project's active surfaces, deferred surfaces, release targets, and validation scope.
 
 The default production path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Ask for product-facing release details instead:
 
 - which active surfaces should be released now: backend/API, web, landing, mobile, or full-stack;
 - production domains/URLs for API, web, landing, and the mobile API endpoint;
 - whether uploads, images, media, exports, or downloads need DigitalOcean Spaces in this release;
+- whether real-time chat, presence, collaboration, live notifications, or WebSocket-style updates must work across multiple backend instances;
 - whether mobile work includes EAS builds only or App Store / Google Play submission;
 - whether an external CDN is required for advanced bot, rate-limit, or geographic traffic controls.
 
@@ -59,7 +60,8 @@ doctl auth init
 4. A GitHub/GitLab/Bitbucket repository connected to App Platform, or a DigitalOcean Container Registry (DOCR) image source.
 5. DigitalOcean Managed PostgreSQL for production. Do not use App Platform dev databases for production data.
 6. DigitalOcean Spaces Standard Storage with Spaces CDN when uploads, images, media, exports, or downloads are in scope.
-7. Production domains and DNS access when custom domains are in scope.
+7. DigitalOcean Managed Valkey only when horizontally scaled real-time features need Pub/Sub between backend instances.
+8. Production domains and DNS access when custom domains are in scope.
 
 Prefer an App Platform app spec so the backend service, static sites, env, domains, and database attachment stay reviewable. Create or update with:
 
@@ -103,6 +105,14 @@ bun run --cwd backend prisma:deploy
 ```
 
 Do not run `prisma migrate dev` in production and do not hand-write migration SQL.
+
+## Real-Time And Horizontal Scaling
+
+Keep production architecture monolithic by default: one backend service can own HTTP routes, auth, persistence, and any WebSocket endpoints. Do not split chat, notifications, or presence into separate services unless there is a proven operational need.
+
+When the backend runs as a single instance, WebSocket connection state can stay in that process. When App Platform is scaled to multiple containers, clients may connect to different backend instances. Any feature that must deliver the same event across those instances, such as chat messages, presence changes, or live notifications, needs a shared Pub/Sub broker.
+
+Use DigitalOcean Managed Valkey as the default Redis-compatible broker for cross-instance fanout. Each backend instance publishes domain events to Valkey and subscribes to the channels it needs to deliver events to its local WebSocket connections. Do not add Valkey for ordinary request/response APIs, static pages, or single-instance development.
 
 ## Web Static Site
 
@@ -225,6 +235,7 @@ For deployment questions, consult current upstream docs first. This document cap
 - DigitalOcean App specs: https://docs.digitalocean.com/products/app-platform/reference/app-spec/
 - DigitalOcean Static Sites: https://docs.digitalocean.com/products/app-platform/how-to/manage-static-sites/
 - DigitalOcean Managed Databases in App Platform: https://docs.digitalocean.com/products/app-platform/how-to/manage-databases/
+- DigitalOcean Valkey: https://docs.digitalocean.com/products/databases/valkey/
 - DigitalOcean Dockerfile builds: https://docs.digitalocean.com/products/app-platform/reference/dockerfile/
 - DigitalOcean Bun buildpack: https://docs.digitalocean.com/products/app-platform/reference/buildpacks/bun/
 - DigitalOcean doctl CLI: https://docs.digitalocean.com/reference/doctl/

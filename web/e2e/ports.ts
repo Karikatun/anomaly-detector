@@ -13,7 +13,7 @@ const preferredBackendPort =
 const preferredWebPort =
   55000 + (Number.parseInt(repositoryHash.slice(0, 6), 16) % 5000)
 
-type PortPlan = {
+export type PortPlan = {
   backendPort: number
   backendUrl: string
   databaseUrl: string
@@ -66,7 +66,7 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
 }
 
 export function applyE2ePortEnv(plan: PortPlan) {
-  process.env.POSTGRES_TEST_PORT ??= String(plan.postgresTestPort)
+  process.env.POSTGRES_TEST_PORT = String(plan.postgresTestPort)
   process.env.E2E_BACKEND_PORT ??= String(plan.backendPort)
   process.env.E2E_WEB_PORT ??= String(plan.webPort)
   process.env.E2E_BACKEND_URL ??= plan.backendUrl

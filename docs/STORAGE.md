@@ -24,7 +24,7 @@ Ask product-level questions before implementation:
 - Should filenames be user-visible, or should the app generate opaque object keys?
 - Are uploads required in the first version, or can media be deferred?
 
-Record the answer in the `Project Focus` block when storage affects the active product surface.
+Record the answer in the relevant README section when storage affects the active product surface.
 
 ## DigitalOcean Spaces Defaults
 
@@ -80,6 +80,20 @@ Default direct-upload flow:
 4. Client uploads directly to Spaces.
 5. Client calls the app API to confirm the uploaded object key.
 6. Backend stores object metadata in PostgreSQL if the product needs ownership, deletion, audit, or private access rules.
+
+Browser upload example:
+
+```ts
+if (file.size !== upload.contentLength) {
+  throw new Error('File size mismatch')
+}
+
+await fetch(upload.uploadUrl, {
+  method: upload.method,
+  headers: upload.headers,
+  body: file,
+})
+```
 
 The presigned PUT URL validates the requested upload intent before signing. If the product must strictly enforce actual stored file size, content type, or image dimensions, verify the uploaded object before confirming it in the app database. When the backend returns a `contentLength` value, the uploaded body must match that exact byte size even if the browser or HTTP client sets the request header automatically.
 

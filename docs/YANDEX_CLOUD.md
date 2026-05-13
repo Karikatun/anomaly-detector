@@ -11,6 +11,7 @@ DigitalOcean remains the default provider in this template. Do not ask the user 
 - Uploads and media: Yandex Object Storage.
 - Static `web` and `landing`: Yandex Object Storage static website hosting.
 - CDN: Yandex Cloud CDN in front of public static sites and public media when production performance, custom domains, or cache controls matter.
+- Real-time Pub/Sub: Yandex Managed Service for Valkey only when horizontally scaled WebSocket features need cross-instance fanout.
 - CLI: Yandex Cloud CLI, `yc`.
 
 ## Intake
@@ -21,6 +22,7 @@ Ask only product and release questions:
 - production domains for API, web, landing, media/CDN, and the mobile API endpoint;
 - whether backend/database traffic may stay private inside a Yandex Cloud network or must be reachable from the internet;
 - whether uploads/media are public, private, or mixed;
+- whether real-time chat, presence, collaboration, live notifications, or WebSocket-style updates must work across multiple backend instances;
 - whether images need fixed-size generated variants, dynamic transformations, compression, cropping, or moderation.
 
 ## Prerequisites
@@ -76,6 +78,8 @@ yc serverless container revision deploy \
   --service-account-id <service_account_ID>
 ```
 
+Before you deploy the revision, configure the full runtime environment for that revision. The container must receive `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`, and `COOKIE_SECURE` before it starts, either through the console or by passing `--environment` with the revision deploy command.
+
 Serverless Containers set `PORT` automatically. The backend must continue reading `PORT` from the environment and exposing `/health`.
 
 Production env must include:
@@ -112,6 +116,14 @@ bun run --cwd backend prisma:deploy
 
 Do not run `prisma migrate dev` in production and do not hand-write Prisma migration SQL.
 
+## Real-Time Pub/Sub
+
+Keep the Yandex deployment path monolithic by default: the backend container should own HTTP routes, auth, persistence, and any WebSocket endpoints. Do not split chat, notifications, or presence into microservices unless the product has a concrete operational reason.
+
+When the backend runs as one container instance, WebSocket connection state can stay inside that process. If the container is horizontally scaled and users connected to different instances must receive the same chat, presence, collaboration, or live-notification events, add Yandex Managed Service for Valkey as a Redis-compatible Pub/Sub broker.
+
+Each backend instance should publish domain events to Valkey and subscribe to the channels it needs to deliver events to its own local WebSocket connections. Keep Valkey out of baseline local setup and ordinary request/response APIs; add it only for cross-instance real-time fanout.
+
 ## Static Web And Landing
 
 Deploy `web` and `landing` as static websites in Yandex Object Storage.
@@ -121,6 +133,15 @@ Build locally or in CI:
 ```bash
 bun run build:web
 bun run build:landing
+```
+
+Before uploading, create a Yandex Object Storage static access key for a service account and configure the AWS CLI with it. Yandex's Object Storage docs recommend `aws configure` with the static key and `ru-central1` as the region.
+
+```bash
+aws configure
+# AWS Access Key ID: <static access key id>
+# AWS Secret Access Key: <static secret key>
+# Default region name: ru-central1
 ```
 
 Upload built assets to public website buckets:
@@ -212,6 +233,8 @@ After deployment:
 - Yandex Container Registry quickstart: https://yandex.cloud/en/docs/container-registry/quickstart
 - Yandex Managed Service for PostgreSQL: https://yandex.cloud/en/docs/managed-postgresql/
 - Managed PostgreSQL connection pre-configuration: https://yandex.cloud/en/docs/managed-postgresql/operations/connect/
+- Yandex Managed Service for Valkey: https://yandex.cloud/en/docs/managed-redis/
+- Connecting to a Yandex Valkey cluster: https://yandex.cloud/en/docs/managed-valkey/operations/connect/clients
 - Yandex Object Storage: https://yandex.cloud/en/docs/storage/
 - Object Storage static website hosting: https://yandex.cloud/en/docs/storage/operations/hosting/setup
 - Object Storage AWS CLI: https://yandex.cloud/en/docs/storage/tools/aws-cli

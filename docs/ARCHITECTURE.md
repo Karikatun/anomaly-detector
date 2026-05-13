@@ -24,6 +24,14 @@ Hono route -> Zod validation -> auth/session guard -> feature service -> Prisma 
 
 Routes should stay thin. Do not put business logic into Hono handlers, UI clients, or child components when the decision belongs in a backend service.
 
+## Runtime Shape And Real-Time
+
+The default runtime shape is a modular monolith: one backend service, one database, shared contracts, and clear feature boundaries inside the repository. Do not introduce microservices, queues, workers, or extra infrastructure until the product has a concrete need that the monolith cannot meet clearly.
+
+For real-time features such as chat, presence, collaboration, live notifications, or activity feeds, start with the same backend service. A single instance can keep an in-memory registry of its own WebSocket connections. Once the backend runs multiple instances, in-memory fanout is no longer enough: one user may be connected to instance A while another is connected to instance B. At that point, add a managed Redis-compatible Pub/Sub broker between backend instances so each instance can publish domain events and subscribe to events it must deliver to its local sockets.
+
+On the default DigitalOcean path, use DigitalOcean Managed Valkey for this broker. On the optional Yandex Cloud path, use Yandex Managed Service for Valkey. Add this infrastructure only when horizontal scaling or cross-instance WebSocket delivery is actually required; it is not part of the baseline local setup.
+
 ## Auth
 
 Auth v1 is custom JWT-based auth:
@@ -92,6 +100,8 @@ For framework and API questions, consult the current upstream documentation link
 - [PostgreSQL docs](https://www.postgresql.org/docs/)
 - [PostgreSQL Docker Official Image](https://hub.docker.com/_/postgres)
 - [DigitalOcean Spaces docs](https://docs.digitalocean.com/products/spaces/)
+- [DigitalOcean Valkey docs](https://docs.digitalocean.com/products/databases/valkey/)
+- [Yandex Managed Service for Valkey docs](https://yandex.cloud/en/docs/managed-redis/)
 - [Zod docs](https://zod.dev/)
 - [jose documentation](https://github.com/panva/jose)
 - [TanStack Query React docs](https://tanstack.com/query/latest/docs/framework/react/overview)

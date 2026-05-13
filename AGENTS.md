@@ -40,29 +40,28 @@
 - For E2E, use Playwright for web and Maestro for mobile. Read `docs/TESTING.md` before adding flows. Prefer valuable user-visible coverage over narrow happy-path-only smoke tests: cover critical journeys, high-risk regressions, auth/session behavior, persistence, navigation, and important empty/error/edge states when the test can stay stable and maintainable. Keep exhaustive validation matrices, combinatorial edge cases, concurrency, and pure business rules in integration/contract/unit tests.
 - For mobile E2E selectors, prefer stable React Native `testID` constants from `mobile/src/constants/testIds.ts`; do not rely on coordinates or fragile text when an action selector can have an id.
 
-## Project Focus
+## Project Context
 
-This section is intentionally mutable for each installed project. During first-run bootstrap, follow `README.md`, ask the user what product they want to build and which surfaces are active, then replace the block below with the chosen focus before feature work.
+- Use `README.md` as the source of truth for first-run repository download, bootstrap, and product intake instructions.
+- Keep durable project choices in README files and docs, not in this agent file.
+- When a surface is deferred, prefer a short note in that surface's README over extra agent instructions.
+- Prefer a monolithic backend architecture in this repository. Do not split into microservices unless the product has a concrete operational need.
+- For real-time features, keep WebSocket connection state in the backend instance only while the app runs as a single instance. If horizontal scaling is required and clients on different instances must receive the same chat/presence/events, add a managed Redis-compatible Pub/Sub broker such as DigitalOcean Managed Valkey or Yandex Managed Service for Valkey between instances.
 
-<!-- PROJECT_FOCUS_START -->
-Status: not selected yet.
+## Bootstrap-Only Instructions
 
-- Project slug/name: ask the user during first-run bootstrap and use it to rename package.json and other repository-specific identifiers before feature work.
-- Product goal: ask the user during first-run bootstrap.
-- Repository remote: new-project mode by default; remove the template `origin` unless the user explicitly says they are contributing to the template. Add the user's own GitHub remote as `origin` only when provided or requested.
-- Active surfaces: not selected yet.
-- Deferred surfaces: not selected yet.
-- Backend/API: decide after intake; include it when the active client surfaces need auth, persistence, or server-side business logic.
-- Local database: Docker Compose PostgreSQL from `docs/LOCAL_DATABASE.md` when backend/API is active.
-- Deployment/release: local-only until the user explicitly asks for deployment; DigitalOcean is the supported provider when active, and release targets are not selected yet.
-- Validation: run only the smallest meaningful checks for active surfaces, plus shared contract/backend checks when those layers are touched.
-<!-- PROJECT_FOCUS_END -->
+<!-- BOOTSTRAP_ONLY_START -->
+This block exists only for fresh installs from the template. If this repository has not been initialized for a real project yet:
 
-If the user later asks to work on a deferred surface, update this block and any equivalent agent file such as `CLAUDE.md` first, remove or rewrite the deferred note in that surface's README, then set up and validate that surface normally.
+- Read the root `README.md`, especially `Agent Repo Download Instructions`, before setup or feature work.
+- Follow that README section for product intake, active/deferred surfaces, repository remote handling, Docker/PostgreSQL setup, deployment scope, and Expo/EAS owner setup.
+- Record durable project choices in README files and docs, not in `AGENTS.md` or `CLAUDE.md`.
+- After first-run setup is complete, delete this entire `Bootstrap-Only Instructions` block from both `AGENTS.md` and `CLAUDE.md` so future agent context stays lean.
+<!-- BOOTSTRAP_ONLY_END -->
 
 ## Repository Remote Policy
 
-- During first-run bootstrap, inspect `git remote -v` before any branch, commit, push, or PR workflow.
+- Inspect `git remote -v` before any branch, commit, push, or PR workflow.
 - This repository is normally used as a template for a new project, not as a source for pull requests back to the template. If `origin` points to the template repository and the user has not explicitly said they are contributing to the template, remove it with `git remote remove origin`.
 - Add the user's own GitHub repository as `origin` only when the user provides a URL or asks you to create/publish the project. If no destination is chosen, leave the project without `origin` and report that publishing is not configured.
 - Do not push, open PRs, or configure deployment from the template remote by accident.
@@ -70,7 +69,7 @@ If the user later asks to work on a deferred surface, update this block and any 
 ## Deployment Policy
 
 - The default production infrastructure path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL.
-- During first-run bootstrap, ask whether deployment is needed now. If it is, ask for production domains/URLs and release targets, not for a cloud provider choice.
+- If deployment is needed, ask for production domains/URLs and release targets, not for a cloud provider choice.
 - Do not propose other cloud, hosting, database, or deployment providers unless the user explicitly asks for a different provider.
 - If the user explicitly asks for Yandex Cloud, follow `docs/YANDEX_CLOUD.md`: use Yandex Serverless Containers for backend/API, Yandex Managed Service for PostgreSQL for production data, Yandex Object Storage for static sites and files, and Yandex Cloud CDN for public static/media delivery.
 - For DigitalOcean `web` and `landing`, use DigitalOcean App Platform Static Sites. They are served through DigitalOcean's global CDN by default; add an external CDN only when the product needs advanced bot, rate-limit, or geographic traffic controls.

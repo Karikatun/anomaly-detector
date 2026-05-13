@@ -15,10 +15,27 @@ export const defaultWebPort =
 export const defaultDatabaseUrl = `postgresql://postgres:postgres@localhost:${defaultPostgresTestPort}/web_app_demo_test?schema=public`
 
 export function composeEnv(extra: NodeJS.ProcessEnv = {}) {
+  const explicitDatabaseUrl =
+    extra.TEST_DATABASE_URL ?? extra.DATABASE_URL ?? process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL
+  const postgresTestPort = portFromUrl(explicitDatabaseUrl) ?? extra.POSTGRES_TEST_PORT ?? defaultPostgresTestPort
+
   return {
     ...process.env,
-    POSTGRES_TEST_PORT: defaultPostgresTestPort,
-    COMPOSE_PROJECT_NAME: composeProjectName,
     ...extra,
+    COMPOSE_PROJECT_NAME: composeProjectName,
+    POSTGRES_TEST_PORT: postgresTestPort,
+  }
+}
+
+function portFromUrl(value: string | undefined) {
+  if (!value) return undefined
+
+  try {
+    const url = new URL(value)
+    if (url.port) return url.port
+    if (url.protocol === 'postgresql:') return '5432'
+    return url.port || undefined
+  } catch {
+    return undefined
   }
 }
