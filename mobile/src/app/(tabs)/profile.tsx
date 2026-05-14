@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { Button } from '@/components/ui/button';
-import { Surface, UiText } from '@/components/ui/primitives';
+import { Surface, Typography } from '@/components/ui/primitives';
 import { useAuth } from '@/lib/auth';
 
 export default function ProfileScreen() {
@@ -13,22 +13,22 @@ export default function ProfileScreen() {
   return (
     <Screen centered padded={false} contentStyle={styles.content}>
       <View style={styles.header}>
-        <UiText variant="xs" muted>
+        <Typography variant="caption" muted>
           Account
-        </UiText>
-        <UiText variant="title" weight="700">
+        </Typography>
+        <Typography variant="h4" weight="700">
           {auth.user.displayName ?? 'Profile'}
-        </UiText>
-        <UiText variant="sm" muted>
+        </Typography>
+        <Typography variant="bodySm" muted>
           {auth.user.email}
-        </UiText>
+        </Typography>
       </View>
 
       <Surface bordered padded style={styles.card}>
-        <UiText variant="xs" muted>
+        <Typography variant="caption" muted>
           User ID
-        </UiText>
-        <UiText variant="mono">{auth.user.id}</UiText>
+        </Typography>
+        <Typography variant="code">{auth.user.id}</Typography>
       </Surface>
 
       <Button variant="outline" onPress={() => void auth.logout()}>

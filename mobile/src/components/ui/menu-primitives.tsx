@@ -4,7 +4,7 @@ import { StyleSheet, View, type PressableProps, type StyleProp, type ViewProps, 
 import { Checkbox } from './checkbox';
 import { RadioGroupItem } from './radio-group';
 import { Separator } from './separator';
-import { renderTextChild, UiPressable, UiText } from './primitives';
+import { renderTextChild, UiPressable, Typography } from './primitives';
 import { useUiTheme } from './theme';
 import { createMinTouchTargetStyle } from './touch-target';
 
@@ -18,9 +18,9 @@ export function MenuGroup({ children, style, ...props }: ViewProps & { children?
 
 export function MenuLabel({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="xs" weight="700" muted style={[styles.label, style]}>
+    <Typography {...props} variant="caption" weight="700" muted style={[styles.label, style]}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
@@ -44,6 +44,7 @@ export function MenuItem({
 export function MenuCheckboxItem({
   children,
   checked,
+  disabled,
   onCheckedChange,
   ...props
 }: Omit<PressableProps, 'style'> & {
@@ -52,28 +53,36 @@ export function MenuCheckboxItem({
   onCheckedChange?: (checked: boolean) => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  const isDisabled = disabled === true;
+
   return (
     <MenuItem
       {...props}
+      disabled={isDisabled}
       onPress={(event) => {
         props.onPress?.(event);
-        onCheckedChange?.(!checked);
+        if (!isDisabled) {
+          onCheckedChange?.(!checked);
+        }
       }}>
-      <Checkbox checked={checked} onCheckedChange={onCheckedChange} />
-      <UiText variant="sm">{children}</UiText>
+      <Checkbox checked={checked} disabled={isDisabled} onCheckedChange={onCheckedChange} />
+      <Typography variant="bodySm">{children}</Typography>
     </MenuItem>
   );
 }
 
 export function MenuRadioItem({
   children,
+  disabled,
   value,
   ...props
 }: Omit<PressableProps, 'style'> & { children?: ReactNode; value: string; style?: StyleProp<ViewStyle> }) {
+  const isDisabled = disabled === true;
+
   return (
-    <MenuItem {...props}>
-      <RadioGroupItem value={value} />
-      <UiText variant="sm">{children}</UiText>
+    <MenuItem {...props} disabled={isDisabled}>
+      <RadioGroupItem value={value} disabled={isDisabled} />
+      <Typography variant="bodySm">{children}</Typography>
     </MenuItem>
   );
 }
@@ -84,9 +93,9 @@ export function MenuSeparator(props: ViewProps) {
 
 export function MenuShortcut({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="xs" muted style={[styles.shortcut, style]}>
+    <Typography {...props} variant="caption" muted style={[styles.shortcut, style]}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

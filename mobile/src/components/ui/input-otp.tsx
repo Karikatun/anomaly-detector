@@ -4,7 +4,7 @@ import { StyleSheet, TextInput, View, type TextInputProps, type ViewProps } from
 import { useControllableState } from './controllable-state';
 import { getOtpSlots, normalizeOtpValue } from './input-otp-utils';
 import { Separator } from './separator';
-import { UiText } from './primitives';
+import { Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 export function InputOTP({
@@ -75,9 +75,9 @@ export function InputOTPSlot({
         { borderColor: theme.colors.input, borderRadius: theme.radius.lg },
         style,
       ]}>
-      <UiText variant="lg" weight="700">
+      <Typography variant="bodyLg" weight="700">
         {resolvedChar}
-      </UiText>
+      </Typography>
     </View>
   );
 }

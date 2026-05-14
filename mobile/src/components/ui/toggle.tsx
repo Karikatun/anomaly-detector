@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { type PressableProps, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Button, type ButtonProps } from './button';
 import { useControllableState } from './controllable-state';
@@ -12,7 +12,7 @@ export type ToggleProps = Omit<PressableProps, 'style' | 'children'> & {
   variant?: ButtonProps['variant'];
   size?: ButtonProps['size'];
   style?: StyleProp<ViewStyle>;
-  textStyle?: StyleProp<TextStyle>;
+  textStyle?: ButtonProps['textStyle'];
 };
 
 export function toggleVariants(options?: { variant?: ToggleProps['variant']; size?: ToggleProps['size'] }) {

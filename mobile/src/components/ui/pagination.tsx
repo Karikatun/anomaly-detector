@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
 import { Button, type ButtonProps } from './button';
-import { UiText } from './primitives';
+import { Typography } from './primitives';
 
 export function Pagination({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return <View {...props} style={[styles.pagination, style]}>{children}</View>;
@@ -29,7 +29,7 @@ export function PaginationNext(props: ButtonProps) {
 }
 
 export function PaginationEllipsis({ style, ...props }: ViewProps) {
-  return <UiText {...props} muted style={style}>...</UiText>;
+  return <Typography {...props} muted style={style}>...</Typography>;
 }
 
 const styles = StyleSheet.create({

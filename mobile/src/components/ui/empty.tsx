@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
-import { UiText } from './primitives';
+import { Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 export function Empty({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
@@ -23,17 +23,17 @@ export function EmptyHeader({ children, style, ...props }: ViewProps & { childre
 
 export function EmptyTitle({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="lg" weight="700" style={style}>
+    <Typography {...props} variant="bodyLg" weight="700" style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
 export function EmptyDescription({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={style}>
+    <Typography {...props} variant="bodySm" muted style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

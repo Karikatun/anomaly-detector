@@ -15,7 +15,7 @@ import { Input } from './input';
 import { OverlayContent, OverlayRoot, OverlayTrigger } from './overlay';
 import { Separator } from './separator';
 import { Badge } from './badge';
-import { UiText } from './primitives';
+import { Typography } from './primitives';
 
 export const Combobox = OverlayRoot;
 export const ComboboxTrigger = OverlayTrigger;
@@ -32,9 +32,9 @@ export function ComboboxInput(props: TextInputProps) {
 
 export function ComboboxLabel({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="xs" weight="700" muted style={[styles.label, style]}>
+    <Typography {...props} variant="caption" weight="700" muted style={[styles.label, style]}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
@@ -63,9 +63,9 @@ export function ComboboxChipsInput(props: TextInputProps) {
 
 export function ComboboxValue({ children, placeholder = 'Select' }: { children?: ReactNode; placeholder?: ReactNode }) {
   return (
-    <UiText variant="sm" muted={!children}>
+    <Typography variant="bodySm" muted={!children}>
       {children ?? placeholder}
-    </UiText>
+    </Typography>
   );
 }
 

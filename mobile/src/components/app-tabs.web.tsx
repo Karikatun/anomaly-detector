@@ -10,7 +10,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
+import { Typography } from '@/components/ui/typography';
 import { TEST_IDS } from '@/constants/testIds';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -69,9 +69,9 @@ function TabButton({ children, icon, isFocused, ...props }: TabButtonProps) {
   return (
     <Pressable {...props} style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
       <SymbolView name={icon} size={22} tintColor={color} />
-      <ThemedText type="smallBold" themeColor={isFocused ? 'text' : 'textSecondary'}>
+      <Typography colorValue={color} variant="caption" weight="700">
         {children}
-      </ThemedText>
+      </Typography>
     </Pressable>
   );
 }

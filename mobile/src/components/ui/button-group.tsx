@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
 import { Separator } from './separator';
-import { UiText } from './primitives';
+import { Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 export function buttonGroupVariants(options?: { orientation?: 'horizontal' | 'vertical' }) {
@@ -33,9 +33,9 @@ export const ButtonGroupSeparator = Separator;
 
 export function ButtonGroupText({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={style}>
+    <Typography {...props} variant="bodySm" muted style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

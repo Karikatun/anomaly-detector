@@ -6,7 +6,7 @@ import { Button, type ButtonProps } from './button';
 import { useControllableState } from './controllable-state';
 import { OverlayNoop } from './overlay';
 import { Separator } from './separator';
-import { OverlayFrame, UiPressable, UiText } from './primitives';
+import { OverlayFrame, UiPressable, Typography } from './primitives';
 import { createMinTouchTargetStyle } from './touch-target';
 
 type SelectOption = {
@@ -91,9 +91,9 @@ export function SelectValue({ placeholder = 'Select' }: { placeholder?: ReactNod
   const context = useContext(SelectContext);
   const selected = context?.options.find((option) => option.value === context.value);
   return (
-    <UiText variant="sm" muted={!selected}>
+    <Typography variant="bodySm" muted={!selected}>
       {selected?.label ?? placeholder}
-    </UiText>
+    </Typography>
   );
 }
 
@@ -154,18 +154,18 @@ export function SelectItem({
         context?.setValue(value);
         context?.setOpen(false);
       }}>
-      <UiText variant="sm" weight={context?.value === value ? '700' : '500'}>
+      <Typography variant="bodySm" weight={context?.value === value ? '700' : '500'}>
         {children}
-      </UiText>
+      </Typography>
     </UiPressable>
   );
 }
 
 export function SelectLabel({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="xs" weight="700" muted style={[styles.label, style]}>
+    <Typography {...props} variant="caption" weight="700" muted style={[styles.label, style]}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

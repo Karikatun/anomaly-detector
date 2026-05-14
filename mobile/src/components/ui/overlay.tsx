@@ -4,7 +4,7 @@ import { StyleSheet, View, type PressableProps, type ViewProps } from 'react-nat
 
 import { Button } from './button';
 import { useControllableState } from './controllable-state';
-import { cloneWithPress, OverlayFrame, UiText } from './primitives';
+import { cloneWithPress, OverlayFrame, renderTextChild, Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 type OverlayContextValue = {
@@ -81,7 +81,7 @@ export function OverlayContent({
       scrollable={scrollable}
       onRequestClose={() => context?.setOpen(false)}>
       <View {...props} style={[styles.content, { gap: theme.spacing.lg }, style]}>
-        {children}
+        {renderTextChild(children)}
       </View>
     </OverlayFrame>
   );
@@ -90,7 +90,7 @@ export function OverlayContent({
 export function OverlayHeader({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
     <View {...props} style={[styles.header, style]}>
-      {children}
+      {renderTextChild(children)}
     </View>
   );
 }
@@ -98,24 +98,24 @@ export function OverlayHeader({ children, style, ...props }: ViewProps & { child
 export function OverlayFooter({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
     <View {...props} style={[styles.footer, style]}>
-      {children}
+      {renderTextChild(children)}
     </View>
   );
 }
 
 export function OverlayTitle({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="xl" weight="700" style={style}>
+    <Typography {...props} variant="h5" weight="700" style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
 export function OverlayDescription({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={style}>
+    <Typography {...props} variant="bodySm" muted style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

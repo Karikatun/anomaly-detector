@@ -2,7 +2,7 @@ import { Redirect, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, StyleSheet } from 'react-native';
 
 import { Screen } from '@/components/screen';
-import { Surface, UiText } from '@/components/ui/primitives';
+import { Surface, Typography } from '@/components/ui/primitives';
 import { TEST_IDS } from '@/constants/testIds';
 import { useAuth } from '@/lib/auth';
 
@@ -32,17 +32,17 @@ export default function DetailsScreen() {
       contentStyle={styles.content}
       padded={false}
       testID={TEST_IDS.details.screen}>
-      <UiText variant="xs" muted>
+      <Typography variant="caption" muted>
         Stack screen
-      </UiText>
-      <UiText variant="title" weight="700">
+      </Typography>
+      <Typography variant="h4" weight="700">
         Details
-      </UiText>
+      </Typography>
       <Surface bordered padded style={styles.card}>
-        <UiText variant="xs" muted>
+        <Typography variant="caption" muted>
           Route parameter
-        </UiText>
-        <UiText variant="mono">{detailsId ?? 'missing-id'}</UiText>
+        </Typography>
+        <Typography variant="code">{detailsId ?? 'missing-id'}</Typography>
       </Surface>
     </Screen>
   );

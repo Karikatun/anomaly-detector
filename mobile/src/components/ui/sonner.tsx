@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Surface, UiText } from './primitives';
+import { Surface, Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 type ToastType = 'success' | 'info' | 'warning' | 'error' | 'loading';
@@ -38,10 +38,10 @@ export function Toaster({ children }: { children?: ReactNode }) {
       <View pointerEvents="none" style={styles.host}>
         {toasts.map((toast) => (
           <Surface key={toast.id} tone="popover" bordered rounded="xl" style={styles.toast}>
-            <UiText variant="sm" weight="700" style={{ color: toastColor(toast.type, theme.colors.foreground, theme.colors.destructive) }}>
+            <Typography variant="bodySm" weight="700" style={{ color: toastColor(toast.type, theme.colors.foreground, theme.colors.destructive) }}>
               {toast.title}
-            </UiText>
-            {toast.description ? <UiText variant="xs" muted>{toast.description}</UiText> : null}
+            </Typography>
+            {toast.description ? <Typography variant="caption" muted>{toast.description}</Typography> : null}
           </Surface>
         ))}
       </View>

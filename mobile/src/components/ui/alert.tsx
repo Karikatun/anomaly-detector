@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
-import { Surface, UiText } from './primitives';
+import { Surface, Typography } from './primitives';
 import { useUiTheme, withAlpha } from './theme';
 
 export type AlertProps = ViewProps & {
@@ -35,17 +35,17 @@ export function Alert({ children, variant = 'default', style, ...props }: AlertP
 
 export function AlertTitle({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" weight="700" style={style}>
+    <Typography {...props} variant="bodySm" weight="700" style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
 export function AlertDescription({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={style}>
+    <Typography {...props} variant="bodySm" muted style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

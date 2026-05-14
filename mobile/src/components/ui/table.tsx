@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View, type ViewProps } from 'react-native';
 
-import { renderTextChild, UiText } from './primitives';
+import { renderTextChild, Typography } from './primitives';
 import { useUiTheme } from './theme';
 import { createMinTouchTargetStyle } from './touch-target';
 
@@ -42,9 +42,9 @@ export function TableFooter({ children, style, ...props }: ViewProps & { childre
 export function TableHead({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
     <TableCell {...props} style={style}>
-      <UiText variant="sm" weight="700" muted>
+      <Typography variant="bodySm" weight="700" muted>
         {children}
-      </UiText>
+      </Typography>
     </TableCell>
   );
 }
@@ -68,9 +68,9 @@ export function TableCell({ children, style, ...props }: ViewProps & { children?
 
 export function TableCaption({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={[styles.caption, style]}>
+    <Typography {...props} variant="bodySm" muted style={[styles.caption, style]}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

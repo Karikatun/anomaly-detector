@@ -161,7 +161,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Toggle } from '@/components/ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Toaster, useToast } from '@/components/ui/sonner';
-import { UiText } from '@/components/ui/primitives';
+import { Typography } from '@/components/ui/primitives';
 import { TEST_IDS } from '@/constants/testIds';
 import { useAuth } from '@/lib/auth';
 
@@ -205,15 +205,15 @@ function ComponentsCatalog() {
       testID={TEST_IDS.components.catalog}>
       <View testID={TEST_IDS.auth.dashboard} style={styles.hero}>
         <View style={styles.heroCopy}>
-          <UiText variant="xs" muted>
+          <Typography variant="caption" muted>
             Mobile UI foundation
-          </UiText>
-          <UiText variant="title" weight="700" testID={TEST_IDS.components.title}>
+          </Typography>
+          <Typography variant="h4" weight="700" testID={TEST_IDS.components.title}>
             ShadCN native components
-          </UiText>
-          <UiText variant="sm" muted testID={TEST_IDS.auth.userEmail}>
+          </Typography>
+          <Typography variant="bodySm" muted testID={TEST_IDS.auth.userEmail}>
             {auth.user.email}
-          </UiText>
+          </Typography>
         </View>
         <View style={styles.heroActions}>
           <Button
@@ -408,10 +408,10 @@ function ComponentsCatalog() {
               <TabsTrigger value="two">Two</TabsTrigger>
             </TabsList>
             <TabsContent value="one">
-              <UiText variant="sm">First tab content</UiText>
+              <Typography variant="bodySm">First tab content</Typography>
             </TabsContent>
             <TabsContent value="two">
-              <UiText variant="sm">Second tab content</UiText>
+              <Typography variant="bodySm">Second tab content</Typography>
             </TabsContent>
           </Tabs>
         </CatalogSection>
@@ -475,14 +475,14 @@ function ComponentsCatalog() {
               <Tooltip>
                 <TooltipTrigger fallback="Tooltip" />
                 <TooltipContent>
-                  <UiText>Tooltip content</UiText>
+                  <Typography>Tooltip content</Typography>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
             <HoverCard>
               <HoverCardTrigger fallback="Hover card" />
               <HoverCardContent>
-                <UiText>Touch-friendly hover card.</UiText>
+                <Typography>Touch-friendly hover card.</Typography>
               </HoverCardContent>
             </HoverCard>
           </View>
@@ -583,7 +583,7 @@ function ComponentsCatalog() {
             <SidebarTrigger />
             <Sidebar>
               <SidebarHeader>
-                <UiText weight="700">Sidebar</UiText>
+                <Typography weight="700">Sidebar</Typography>
               </SidebarHeader>
               <SidebarContent>
                 <SidebarGroup>
@@ -601,17 +601,17 @@ function ComponentsCatalog() {
           </SidebarProvider>
           <ResizablePanelGroup style={styles.resizable}>
             <ResizablePanel defaultSize={2}>
-              <Card><CardContent><UiText>Left</UiText></CardContent></Card>
+              <Card><CardContent><Typography>Left</Typography></CardContent></Card>
             </ResizablePanel>
             <ResizableHandle />
             <ResizablePanel>
-              <Card><CardContent><UiText>Right</UiText></CardContent></Card>
+              <Card><CardContent><Typography>Right</Typography></CardContent></Card>
             </ResizablePanel>
           </ResizablePanelGroup>
           <Carousel>
             <CarouselContent>
-              <CarouselItem><Card><CardContent><UiText>Slide one</UiText></CardContent></Card></CarouselItem>
-              <CarouselItem><Card><CardContent><UiText>Slide two</UiText></CardContent></Card></CarouselItem>
+              <CarouselItem><Card><CardContent><Typography>Slide one</Typography></CardContent></Card></CarouselItem>
+              <CarouselItem><Card><CardContent><Typography>Slide two</Typography></CardContent></Card></CarouselItem>
             </CarouselContent>
             <View style={styles.row}>
               <CarouselPrevious />
@@ -619,15 +619,15 @@ function ComponentsCatalog() {
             </View>
           </Carousel>
           <ScrollArea style={styles.scrollArea}>
-            <UiText variant="sm">Scrollable area</UiText>
+            <Typography variant="bodySm">Scrollable area</Typography>
             <Separator />
-            <UiText variant="sm">Direction: {themeDirection}</UiText>
+            <Typography variant="bodySm">Direction: {themeDirection}</Typography>
           </ScrollArea>
           <DirectionProvider dir="rtl">
             <DirectionProbe />
           </DirectionProvider>
           <AspectRatio ratio={16 / 9} style={styles.aspect}>
-            <UiText>Aspect ratio</UiText>
+            <Typography>Aspect ratio</Typography>
           </AspectRatio>
           <Button variant="outline" onPress={() => toast.toast({ title: 'Toast', description: 'Sonner native toast', type: 'success' })}>
             Show toast
@@ -639,15 +639,15 @@ function ComponentsCatalog() {
 
 function DirectionProbe() {
   const direction = useDirection();
-  return <UiText variant="sm" muted>Nested direction: {direction}</UiText>;
+  return <Typography variant="bodySm" muted>Nested direction: {direction}</Typography>;
 }
 
 function CatalogSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      <UiText variant="lg" weight="700">
+      <Typography variant="bodyLg" weight="700">
         {title}
-      </UiText>
+      </Typography>
       <View style={styles.sectionBody}>{children}</View>
     </View>
   );

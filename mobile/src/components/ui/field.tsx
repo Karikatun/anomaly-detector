@@ -3,7 +3,7 @@ import { StyleSheet, View, type ViewProps } from 'react-native';
 
 import { Label, type LabelProps } from './label';
 import { Separator } from './separator';
-import { UiText } from './primitives';
+import { Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 export function Field({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
@@ -21,9 +21,9 @@ export function FieldLabel({ children, ...props }: LabelProps) {
 
 export function FieldDescription({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={style}>
+    <Typography {...props} variant="bodySm" muted style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
@@ -33,9 +33,9 @@ export function FieldError({ children, errors, style, ...props }: ViewProps & { 
   if (!content) return null;
 
   return (
-    <UiText {...props} variant="sm" weight="700" style={[{ color: theme.colors.destructive }, style]}>
+    <Typography {...props} variant="bodySm" weight="700" style={[{ color: theme.colors.destructive }, style]}>
       {content}
-    </UiText>
+    </Typography>
   );
 }
 
@@ -50,9 +50,9 @@ export function FieldGroup({ children, style, ...props }: ViewProps & { children
 
 export function FieldLegend({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="base" weight="700" style={style}>
+    <Typography {...props} variant="body" weight="700" style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
@@ -78,9 +78,9 @@ export function FieldContent({ children, style, ...props }: ViewProps & { childr
 
 export function FieldTitle({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" weight="700" style={style}>
+    <Typography {...props} variant="bodySm" weight="700" style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

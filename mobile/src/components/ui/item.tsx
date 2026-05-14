@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
 import { Separator } from './separator';
-import { Surface, UiText } from './primitives';
+import { Surface, Typography } from './primitives';
 import { useUiTheme } from './theme';
 import { createMinTouchTargetStyle } from './touch-target';
 
@@ -58,17 +58,17 @@ export function ItemSeparator(props: ViewProps) {
 
 export function ItemTitle({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" weight="700" style={style}>
+    <Typography {...props} variant="bodySm" weight="700" style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
 export function ItemDescription({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={style}>
+    <Typography {...props} variant="bodySm" muted style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

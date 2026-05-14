@@ -14,7 +14,7 @@ import { Input, type InputProps } from './input';
 import { Separator } from './separator';
 import { Sheet, SheetContent, SheetTrigger } from './sheet';
 import { Skeleton } from './skeleton';
-import { Surface, UiPressable, UiText } from './primitives';
+import { Surface, UiPressable, Typography } from './primitives';
 import { useControllableState } from './controllable-state';
 import { useUiTheme } from './theme';
 
@@ -97,7 +97,7 @@ export function SidebarGroupContent({ children, style, ...props }: ViewProps & {
 }
 
 export function SidebarGroupLabel({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
-  return <UiText {...props} variant="xs" weight="700" muted style={style}>{children}</UiText>;
+  return <Typography {...props} variant="caption" weight="700" muted style={style}>{children}</Typography>;
 }
 
 export function SidebarInput(props: InputProps) {
@@ -121,7 +121,7 @@ export function SidebarMenuAction(props: ButtonProps) {
 }
 
 export function SidebarMenuBadge({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
-  return <UiText {...props} variant="xs" muted style={style}>{children}</UiText>;
+  return <Typography {...props} variant="caption" muted style={style}>{children}</Typography>;
 }
 
 export function SidebarMenuSkeleton(props: ViewProps) {

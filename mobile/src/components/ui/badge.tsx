@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, type TextStyle, type ViewProps, type StyleProp } from 'react-native';
+import { StyleSheet, type StyleProp, type TextStyle, type ViewProps } from 'react-native';
 
 import { getInteractiveColors, renderTextChild, Surface, type UiVariant } from './primitives';
 import { useUiTheme } from './theme';
@@ -31,7 +31,7 @@ export function Badge({ children, variant = 'default', style, textStyle, ...prop
         },
         style,
       ]}>
-      {renderTextChild(children, [styles.text, { color: colors.color }, textStyle])}
+      {renderTextChild(children, [{ color: colors.color }, textStyle], undefined, 'caption')}
     </Surface>
   );
 }
@@ -42,10 +42,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 4,
-  },
-  text: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 16,
   },
 });

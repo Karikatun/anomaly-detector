@@ -5,13 +5,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   type GestureResponderEvent,
   type PressableProps,
   type StyleProp,
-  type TextProps,
-  type TextStyle,
   type ViewProps,
   type ViewStyle,
 } from 'react-native';
@@ -19,49 +16,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { mapTextChildren } from './text-utils';
 import { useUiTheme, withAlpha, type UiTheme } from './theme';
+import {
+  Typography,
+  type TypographyColor,
+  type TypographyProps,
+  type TypographyTextStyle,
+  type TypographyVariant,
+} from './typography';
 import { MIN_TOUCH_TARGET } from './touch-target';
 
 export type UiColor = keyof UiTheme['colors'];
 export type UiSize = 'xs' | 'sm' | 'default' | 'lg';
 export type UiVariant = 'default' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'link';
 export type UiViewStyle = StyleProp<ViewStyle>;
-export type UiTextStyle = StyleProp<TextStyle>;
-
-export type UiTextProps = Omit<TextProps, 'style'> & {
-  children?: ReactNode;
-  color?: UiColor;
-  variant?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | 'title' | 'mono';
-  weight?: TextStyle['fontWeight'];
-  muted?: boolean;
-  style?: StyleProp<TextStyle | ViewStyle>;
-};
-
-export function UiText({
-  children,
-  color = 'foreground',
-  variant = 'base',
-  weight = '500',
-  muted,
-  style,
-  ...props
-}: UiTextProps) {
-  const theme = useUiTheme();
-  const textColor = muted ? theme.colors.mutedForeground : theme.colors[color];
-  const typography = theme.typography[variant === 'mono' ? 'base' : variant];
-
-  return (
-    <Text
-      {...props}
-      style={[
-        typography,
-        variant === 'mono' && theme.typography.mono,
-        { color: textColor, fontWeight: weight },
-        style as StyleProp<TextStyle>,
-      ]}>
-      {children}
-    </Text>
-  );
-}
+export type TypographyStyle = TypographyTextStyle;
+export { Typography };
+export type { TypographyColor, TypographyProps, TypographyVariant };
 
 export type SurfaceProps = ViewProps & {
   children?: ReactNode;
@@ -126,11 +96,16 @@ export function UiPressable({ disabled, style, children, ...props }: UiPressable
   );
 }
 
-export function renderTextChild(children: ReactNode, style?: UiTextStyle, color?: UiColor) {
+export function renderTextChild(
+  children: ReactNode,
+  style?: TypographyStyle,
+  color?: UiColor,
+  variant: TypographyVariant = 'bodySm',
+) {
   return mapTextChildren(children, (child) => (
-    <UiText color={color} variant="sm" style={style}>
+    <Typography color={color} variant={variant} style={style}>
       {child}
-    </UiText>
+    </Typography>
   ));
 }
 

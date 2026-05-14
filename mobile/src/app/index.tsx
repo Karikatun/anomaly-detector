@@ -11,8 +11,8 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
-import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Typography } from '@/components/ui/typography';
 import { TEST_IDS } from '@/constants/testIds';
 import { Spacing } from '@/constants/theme';
 import { ApiRequestError } from '@/lib/api';
@@ -83,12 +83,12 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator: false,
       }}>
       <View style={styles.header}>
-        <ThemedText type="small" themeColor="textSecondary">
+        <Typography variant="bodySm" muted>
           Golden path template
-        </ThemedText>
-        <ThemedText type="title" style={styles.title}>
+        </Typography>
+        <Typography variant="h1" style={styles.title}>
           Auth, Zod contracts, Query, and Form are ready.
-        </ThemedText>
+        </Typography>
       </View>
 
       <ThemedView type="backgroundElement" style={styles.card}>
@@ -99,9 +99,9 @@ export default function HomeScreen() {
             style={[styles.segment, isRegister && styles.segmentActive]}
             testID={TEST_IDS.auth.registerTab}
             onPress={() => setMode('register')}>
-            <ThemedText type="smallBold" themeColor={isRegister ? 'text' : 'textSecondary'}>
+            <Typography variant="label" color={isRegister ? 'foreground' : 'mutedForeground'}>
               Register
-            </ThemedText>
+            </Typography>
           </Pressable>
           <Pressable
             accessibilityLabel="Login"
@@ -109,9 +109,9 @@ export default function HomeScreen() {
             style={[styles.segment, !isRegister && styles.segmentActive]}
             testID={TEST_IDS.auth.loginTab}
             onPress={() => setMode('login')}>
-            <ThemedText type="smallBold" themeColor={!isRegister ? 'text' : 'textSecondary'}>
+            <Typography variant="label" color={!isRegister ? 'foreground' : 'mutedForeground'}>
               Login
-            </ThemedText>
+            </Typography>
           </Pressable>
         </View>
 
@@ -162,7 +162,11 @@ export default function HomeScreen() {
           )}
         </form.Field>
 
-        {error && <ThemedText style={styles.formError}>{error}</ThemedText>}
+        {error && (
+          <Typography color="destructive" variant="body" weight="700">
+            {error}
+          </Typography>
+        )}
 
         <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
           {([canSubmit, isSubmitting]) => (
@@ -173,9 +177,9 @@ export default function HomeScreen() {
               style={[styles.primaryButton, (!canSubmit || isSubmitting) && styles.disabled]}
               testID={TEST_IDS.auth.submitButton}
               onPress={() => void form.handleSubmit()}>
-              <ThemedText type="smallBold" style={styles.primaryButtonText}>
+              <Typography colorValue="#FFFFFF" variant="button">
                 {isSubmitting ? 'Working...' : isRegister ? 'Create account' : 'Login'}
-              </ThemedText>
+              </Typography>
             </Pressable>
           )}
         </form.Subscribe>
@@ -199,7 +203,7 @@ type FieldProps = {
 function Field({ label, testID, value, errors, onBlur, onChangeText, ...inputProps }: FieldProps) {
   return (
     <View style={styles.field}>
-      <ThemedText type="smallBold">{label}</ThemedText>
+      <Typography variant="label">{label}</Typography>
       <TextInput
         {...inputProps}
         accessibilityLabel={label}
@@ -217,7 +221,11 @@ function Field({ label, testID, value, errors, onBlur, onChangeText, ...inputPro
 
 function FieldErrors({ errors }: { errors: unknown[] }) {
   if (!errors.length) return null;
-  return <ThemedText style={styles.fieldError}>{errors.map(formatError).join(', ')}</ThemedText>;
+  return (
+    <Typography color="destructive" variant="bodyXs" weight="700">
+      {errors.map(formatError).join(', ')}
+    </Typography>
+  );
 }
 
 function formatError(error: unknown) {
@@ -272,15 +280,6 @@ const styles = StyleSheet.create({
     color: '#172018',
     backgroundColor: '#FFFFFF',
   },
-  fieldError: {
-    color: '#B42318',
-    fontSize: 13,
-    fontWeight: 700,
-  },
-  formError: {
-    color: '#B42318',
-    fontWeight: 700,
-  },
   primaryButton: {
     minHeight: 48,
     borderRadius: Spacing.two,
@@ -288,9 +287,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#2D5F35',
     paddingHorizontal: Spacing.three,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
   },
   disabled: {
     opacity: 0.55,

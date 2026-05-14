@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, type PressableProps, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import {
+  ActivityIndicator,
+  StyleSheet,
+  type PressableProps,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native';
 
 import {
   getControlHeight,
@@ -62,7 +69,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={colors.color} size="small" />
       ) : (
-        renderTextChild(children, [styles.buttonText, { color: colors.color }, textStyle], undefined)
+        renderTextChild(children, [styles.buttonText, { color: colors.color }, textStyle], undefined, 'button')
       )}
     </UiPressable>
   );
@@ -77,7 +84,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonText: {
-    fontWeight: '600',
     textAlign: 'center',
   },
   linkButton: {

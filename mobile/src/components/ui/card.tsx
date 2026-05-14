@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
-import { Surface, UiText } from './primitives';
+import { Surface, Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 export type CardProps = ViewProps & {
@@ -35,17 +35,17 @@ export function CardHeader({ children, style, ...props }: ViewProps & { children
 
 export function CardTitle({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="base" weight="600" style={style}>
+    <Typography {...props} variant="body" weight="600" style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
 export function CardDescription({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={style}>
+    <Typography {...props} variant="bodySm" muted style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

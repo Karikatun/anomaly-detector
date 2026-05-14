@@ -35,11 +35,16 @@ test('text child renderer wraps mixed raw strings for native containers', () => 
   const fragmentChildren = React.Children.toArray(
     (rendered[1] as React.ReactElement<{ children?: React.ReactNode }>).props.children,
   );
+  const nestedFragment = fragmentChildren[1] as React.ReactElement<{ children?: React.ReactNode }>;
+  const nestedFragmentChildren = React.Children.toArray(nestedFragment.props.children);
 
   expect(rendered).toHaveLength(2);
   expect(typeof rendered[0]).not.toBe('string');
   expect(typeof fragmentChildren[0]).not.toBe('string');
   expect(typeof fragmentChildren[1]).not.toBe('number');
+  expect(nestedFragmentChildren).toHaveLength(1);
+  expect(typeof nestedFragmentChildren[0]).not.toBe('number');
+  expect(React.isValidElement(nestedFragmentChildren[0])).toBe(true);
   expect(React.isValidElement(rendered[0])).toBe(true);
 });
 
@@ -67,6 +72,25 @@ test('interactive primitives use the shared touch target constant', () => {
   for (const file of interactiveFiles) {
     const source = readFileSync(resolve(uiRoot, file), 'utf8');
     expect(source).toMatch(/MIN_TOUCH_TARGET|createMinTouchTargetStyle|getControlHeight/);
+  }
+});
+
+test('content primitives wrap raw text children before native containers render them', () => {
+  const uiRoot = resolve(import.meta.dir, '../src/components/ui');
+  const contentFiles = ['aspect-ratio.tsx', 'overlay.tsx', 'scroll-area.tsx', 'tabs.tsx'];
+
+  for (const file of contentFiles) {
+    const source = readFileSync(resolve(uiRoot, file), 'utf8');
+    expect(source).toContain('renderTextChild(children');
+  }
+});
+
+test('button-like primitives keep textStyle customization in the native API', () => {
+  const uiRoot = resolve(import.meta.dir, '../src/components/ui');
+
+  for (const file of ['button.tsx', 'badge.tsx', 'toggle.tsx']) {
+    const source = readFileSync(resolve(uiRoot, file), 'utf8');
+    expect(source).toContain('textStyle');
   }
 });
 

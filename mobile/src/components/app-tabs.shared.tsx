@@ -3,6 +3,7 @@ import { SymbolView } from 'expo-symbols';
 import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Typography } from '@/components/ui/typography';
 import { TEST_IDS } from '@/constants/testIds';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -21,7 +22,6 @@ export default function AppTabs() {
         tabBarHideOnKeyboard: true,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarItemStyle: styles.tabBarItem,
-        tabBarLabelStyle: styles.tabBarLabel,
         tabBarStyle: [
           styles.tabBar,
           {
@@ -36,6 +36,11 @@ export default function AppTabs() {
         name="components"
         options={{
           title: 'Components',
+          tabBarLabel: ({ color }) => (
+            <Typography colorValue={color} variant="caption" weight="700">
+              Components
+            </Typography>
+          ),
           tabBarButtonTestID: TEST_IDS.tabs.componentsTab,
           tabBarIcon: ({ color, size }) => (
             <SymbolView
@@ -50,6 +55,11 @@ export default function AppTabs() {
         name="profile"
         options={{
           title: 'Profile',
+          tabBarLabel: ({ color }) => (
+            <Typography colorValue={color} variant="caption" weight="700">
+              Profile
+            </Typography>
+          ),
           tabBarButtonTestID: TEST_IDS.tabs.profileTab,
           tabBarIcon: ({ color, size }) => (
             <SymbolView
@@ -73,9 +83,5 @@ const styles = StyleSheet.create({
   },
   tabBarItem: {
     paddingVertical: Spacing.one,
-  },
-  tabBarLabel: {
-    fontSize: 12,
-    fontWeight: '700',
   },
 });

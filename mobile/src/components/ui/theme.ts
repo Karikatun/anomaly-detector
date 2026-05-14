@@ -1,8 +1,30 @@
-import { useColorScheme } from 'react-native';
+import { useColorScheme, type TextStyle } from 'react-native';
 
 import { Fonts } from '@/constants/theme';
 
 export type UiScheme = 'light' | 'dark';
+export type UiTypographyVariant =
+  | 'h1'
+  | 'h2'
+  | 'h3'
+  | 'h4'
+  | 'h5'
+  | 'h6'
+  | 'bodyXl'
+  | 'bodyLg'
+  | 'body'
+  | 'bodySm'
+  | 'bodyXs'
+  | 'caption'
+  | 'label'
+  | 'button'
+  | 'link'
+  | 'code';
+
+export type UiTypographyStyle = Pick<
+  TextStyle,
+  'fontFamily' | 'fontSize' | 'fontWeight' | 'letterSpacing' | 'lineHeight'
+>;
 
 export type UiTheme = {
   scheme: UiScheme;
@@ -44,15 +66,7 @@ export type UiTheme = {
     xl: number;
     xxl: number;
   };
-  typography: {
-    xs: { fontSize: number; lineHeight: number };
-    sm: { fontSize: number; lineHeight: number };
-    base: { fontSize: number; lineHeight: number };
-    lg: { fontSize: number; lineHeight: number };
-    xl: { fontSize: number; lineHeight: number };
-    title: { fontSize: number; lineHeight: number };
-    mono: { fontFamily: string };
-  };
+  typography: Record<UiTypographyVariant, UiTypographyStyle>;
   opacity: {
     pressed: number;
     disabled: number;
@@ -101,15 +115,7 @@ export const uiThemes: Record<UiScheme, UiTheme> = {
       xl: 24,
       xxl: 32,
     },
-    typography: {
-      xs: { fontSize: 12, lineHeight: 16 },
-      sm: { fontSize: 14, lineHeight: 20 },
-      base: { fontSize: 16, lineHeight: 24 },
-      lg: { fontSize: 18, lineHeight: 26 },
-      xl: { fontSize: 22, lineHeight: 30 },
-      title: { fontSize: 28, lineHeight: 34 },
-      mono: { fontFamily: Fonts.mono },
-    },
+    typography: createTypographyScale(),
     opacity: {
       pressed: 0.72,
       disabled: 0.5,
@@ -156,15 +162,7 @@ export const uiThemes: Record<UiScheme, UiTheme> = {
       xl: 24,
       xxl: 32,
     },
-    typography: {
-      xs: { fontSize: 12, lineHeight: 16 },
-      sm: { fontSize: 14, lineHeight: 20 },
-      base: { fontSize: 16, lineHeight: 24 },
-      lg: { fontSize: 18, lineHeight: 26 },
-      xl: { fontSize: 22, lineHeight: 30 },
-      title: { fontSize: 28, lineHeight: 34 },
-      mono: { fontFamily: Fonts.mono },
-    },
+    typography: createTypographyScale(),
     opacity: {
       pressed: 0.72,
       disabled: 0.5,
@@ -172,6 +170,33 @@ export const uiThemes: Record<UiScheme, UiTheme> = {
     },
   },
 };
+
+function createTypographyScale(): Record<UiTypographyVariant, UiTypographyStyle> {
+  return {
+    h1: { fontSize: 40, lineHeight: 48, fontWeight: '700', letterSpacing: 0 },
+    h2: { fontSize: 36, lineHeight: 42, fontWeight: '700', letterSpacing: 0 },
+    h3: { fontSize: 32, lineHeight: 38, fontWeight: '700', letterSpacing: 0 },
+    h4: { fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: 0 },
+    h5: { fontSize: 24, lineHeight: 30, fontWeight: '700', letterSpacing: 0 },
+    h6: { fontSize: 20, lineHeight: 26, fontWeight: '700', letterSpacing: 0 },
+    bodyXl: { fontSize: 20, lineHeight: 30, fontWeight: '500', letterSpacing: 0 },
+    bodyLg: { fontSize: 18, lineHeight: 26, fontWeight: '500', letterSpacing: 0 },
+    body: { fontSize: 16, lineHeight: 24, fontWeight: '500', letterSpacing: 0 },
+    bodySm: { fontSize: 14, lineHeight: 20, fontWeight: '500', letterSpacing: 0 },
+    bodyXs: { fontSize: 13, lineHeight: 18, fontWeight: '500', letterSpacing: 0 },
+    caption: { fontSize: 12, lineHeight: 16, fontWeight: '500', letterSpacing: 0 },
+    label: { fontSize: 14, lineHeight: 20, fontWeight: '600', letterSpacing: 0 },
+    button: { fontSize: 14, lineHeight: 20, fontWeight: '600', letterSpacing: 0 },
+    link: { fontSize: 14, lineHeight: 20, fontWeight: '600', letterSpacing: 0 },
+    code: {
+      fontFamily: Fonts.mono,
+      fontSize: 12,
+      fontWeight: '500',
+      letterSpacing: 0,
+      lineHeight: 16,
+    },
+  };
+}
 
 export function getUiTheme(scheme: UiScheme = 'light') {
   return uiThemes[scheme];

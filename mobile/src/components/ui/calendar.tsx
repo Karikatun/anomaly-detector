@@ -12,7 +12,7 @@ import {
   type CalendarSelectionMode,
 } from './calendar-utils';
 import { useControllableState } from './controllable-state';
-import { UiPressable, UiText } from './primitives';
+import { UiPressable, Typography } from './primitives';
 import { useUiTheme } from './theme';
 import { createMinTouchTargetStyle } from './touch-target';
 
@@ -53,18 +53,18 @@ export function Calendar({
         <Button size="icon-sm" variant="ghost" onPress={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>
           {'<'}
         </Button>
-        <UiText variant="sm" weight="700">
+        <Typography variant="bodySm" weight="700">
           {monthLabel}
-        </UiText>
+        </Typography>
         <Button size="icon-sm" variant="ghost" onPress={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>
           {'>'}
         </Button>
       </View>
       <View style={styles.weekdays}>
         {WEEKDAYS.map((day) => (
-          <UiText key={day} variant="xs" muted style={styles.weekday}>
+          <Typography key={day} variant="caption" muted style={styles.weekday}>
             {day}
-          </UiText>
+          </Typography>
         ))}
       </View>
       <View style={styles.grid}>
@@ -136,12 +136,12 @@ export function CalendarDayButton({
         },
         style,
       ]}>
-      <UiText
-        variant="sm"
+      <Typography
+        variant="bodySm"
         weight={isSelected ? '700' : '500'}
         style={{ color: isSelected ? theme.colors.primaryForeground : theme.colors.foreground }}>
         {date.getDate()}
-      </UiText>
+      </Typography>
     </UiPressable>
   );
 }

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import React, { createContext, useContext } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
-import { UiText } from './primitives';
+import { Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 export type ChartConfig = Record<string, { label?: ReactNode; color?: string; theme?: { light: string; dark: string } }>;
@@ -31,11 +31,11 @@ export function ChartTooltip({ children }: { children?: ReactNode }) {
 export function ChartTooltipContent({ label, payload }: { label?: ReactNode; payload?: { name?: string; value?: ReactNode; color?: string }[] }) {
   return (
     <View style={styles.tooltip}>
-      {label ? <UiText variant="sm" weight="700">{label}</UiText> : null}
+      {label ? <Typography variant="bodySm" weight="700">{label}</Typography> : null}
       {payload?.map((item, index) => (
-        <UiText key={`${item.name ?? index}`} variant="xs" muted>
+        <Typography key={`${item.name ?? index}`} variant="caption" muted>
           {item.name}: {item.value}
-        </UiText>
+        </Typography>
       ))}
     </View>
   );
@@ -58,9 +58,9 @@ export function ChartLegendContent() {
               { backgroundColor: item.theme?.[theme.scheme] ?? item.color ?? theme.colors.primary },
             ]}
           />
-          <UiText variant="xs" muted>
+          <Typography variant="caption" muted>
             {item.label ?? key}
-          </UiText>
+          </Typography>
         </View>
       ))}
     </View>

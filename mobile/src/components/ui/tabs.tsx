@@ -4,7 +4,7 @@ import { StyleSheet, View, type ViewProps } from 'react-native';
 
 import { Button, type ButtonProps } from './button';
 import { useControllableState } from './controllable-state';
-import { Surface } from './primitives';
+import { renderTextChild, Surface } from './primitives';
 import { useUiTheme } from './theme';
 
 type TabsContextValue = {
@@ -84,7 +84,7 @@ export function TabsContent({ value, children, style, ...props }: ViewProps & { 
 
   return (
     <View {...props} style={[styles.content, style]}>
-      {children}
+      {renderTextChild(children)}
     </View>
   );
 }

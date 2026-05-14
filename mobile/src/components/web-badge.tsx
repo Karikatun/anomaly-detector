@@ -3,8 +3,8 @@ import { Image } from 'expo-image';
 import React from 'react';
 import { useColorScheme, StyleSheet } from 'react-native';
 
-import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
+import { Typography } from './ui/typography';
 
 import { Spacing } from '@/constants/theme';
 
@@ -13,9 +13,9 @@ export function WebBadge() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="code" themeColor="textSecondary" style={styles.versionText}>
+      <Typography align="center" muted variant="code">
         v{version}
-      </ThemedText>
+      </Typography>
       <Image
         source={
           scheme === 'dark'
@@ -33,9 +33,6 @@ const styles = StyleSheet.create({
     padding: Spacing.five,
     alignItems: 'center',
     gap: Spacing.two,
-  },
-  versionText: {
-    textAlign: 'center',
   },
   badgeImage: {
     width: 123,

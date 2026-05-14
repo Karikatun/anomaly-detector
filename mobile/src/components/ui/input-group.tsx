@@ -4,7 +4,7 @@ import { StyleSheet, View, type ViewProps } from 'react-native';
 import { Button, type ButtonProps } from './button';
 import { Input, type InputProps } from './input';
 import { Textarea } from './textarea';
-import { renderTextChild, UiText } from './primitives';
+import { renderTextChild, Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 export function InputGroup({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
@@ -32,9 +32,9 @@ export function InputGroupButton(props: ButtonProps) {
 
 export function InputGroupText({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={style}>
+    <Typography {...props} variant="bodySm" muted style={style}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

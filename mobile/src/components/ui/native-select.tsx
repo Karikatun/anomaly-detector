@@ -4,7 +4,7 @@ import { StyleSheet, View, type PressableProps, type ViewProps } from 'react-nat
 
 import { Button } from './button';
 import { useControllableState } from './controllable-state';
-import { OverlayFrame, UiPressable, UiText } from './primitives';
+import { OverlayFrame, UiPressable, Typography } from './primitives';
 import { Separator } from './separator';
 
 type NativeSelectOptionValue = {
@@ -81,7 +81,7 @@ export function NativeSelect({
                   setValue(option.value);
                   setOpen(false);
                 }}>
-                <UiText weight={option.value === currentValue ? '700' : '500'}>{option.label}</UiText>
+                <Typography weight={option.value === currentValue ? '700' : '500'}>{option.label}</Typography>
               </UiPressable>
             ))}
           </View>
@@ -94,7 +94,7 @@ export function NativeSelect({
 export function NativeSelectOptGroup({ children, label, style, ...props }: ViewProps & { label?: ReactNode; children?: ReactNode }) {
   return (
     <View {...props} style={[styles.group, style]}>
-      {label ? <UiText variant="xs" muted weight="700">{label}</UiText> : null}
+      {label ? <Typography variant="caption" muted weight="700">{label}</Typography> : null}
       {children}
       <Separator />
     </View>

@@ -4,7 +4,7 @@ import { StyleSheet, View, type PressableProps, type StyleProp, type ViewProps, 
 import { Dialog, DialogContent } from './dialog';
 import { Input, type InputProps } from './input';
 import { Separator } from './separator';
-import { renderTextChild, UiPressable, UiText } from './primitives';
+import { renderTextChild, UiPressable, Typography } from './primitives';
 import { useUiTheme } from './theme';
 import { createMinTouchTargetStyle } from './touch-target';
 
@@ -39,16 +39,16 @@ export function CommandList({ children, style, ...props }: ViewProps & { childre
 
 export function CommandEmpty({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="sm" muted style={[styles.empty, style]}>
+    <Typography {...props} variant="bodySm" muted style={[styles.empty, style]}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 
 export function CommandGroup({ children, heading, style, ...props }: ViewProps & { children?: ReactNode; heading?: ReactNode }) {
   return (
     <View {...props} style={[styles.group, style]}>
-      {heading ? <UiText variant="xs" weight="700" muted>{heading}</UiText> : null}
+      {heading ? <Typography variant="caption" weight="700" muted>{heading}</Typography> : null}
       {children}
     </View>
   );
@@ -68,9 +68,9 @@ export function CommandItem({
 
 export function CommandShortcut({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
-    <UiText {...props} variant="xs" muted style={[styles.shortcut, style]}>
+    <Typography {...props} variant="caption" muted style={[styles.shortcut, style]}>
       {children}
-    </UiText>
+    </Typography>
   );
 }
 

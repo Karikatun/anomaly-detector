@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
-import { Surface, UiText } from './primitives';
+import { Surface, Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 export function Kbd({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
@@ -13,9 +13,9 @@ export function Kbd({ children, style, ...props }: ViewProps & { children?: Reac
       bordered
       rounded="sm"
       style={[styles.kbd, { paddingHorizontal: theme.spacing.sm }, style]}>
-      <UiText variant="mono" weight="700">
+      <Typography variant="code" weight="700">
         {children}
-      </UiText>
+      </Typography>
     </Surface>
   );
 }

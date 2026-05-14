@@ -2,7 +2,7 @@ import { Image, type ImageProps } from 'expo-image';
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
-import { Surface, UiText } from './primitives';
+import { Surface, Typography } from './primitives';
 import { useUiTheme } from './theme';
 
 export function Avatar({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
@@ -25,9 +25,9 @@ export function AvatarImage({ style, ...props }: ImageProps) {
 export function AvatarFallback({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
     <View {...props} style={[styles.fallback, style]}>
-      <UiText variant="sm" weight="700">
+      <Typography variant="bodySm" weight="700">
         {children}
-      </UiText>
+      </Typography>
     </View>
   );
 }
