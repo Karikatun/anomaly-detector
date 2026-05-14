@@ -5,20 +5,24 @@ import {
   type LoginRequest,
   type RegisterRequest,
 } from '@web-app-demo/contracts';
-import type { ComponentProps } from 'react';
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import {
+  AuthError,
+  AuthModeTabs,
+  AuthPanel,
+  AuthSubmitButton,
+  AuthTextField,
+  type AuthMode,
+} from '@/components/auth-components';
+import { PageHeader } from '@/components/page-header';
 import { Screen } from '@/components/screen';
-import { ThemedView } from '@/components/themed-view';
-import { Typography } from '@/components/ui/typography';
+import { ScreenLoader } from '@/components/screen-states';
 import { TEST_IDS } from '@/constants/testIds';
-import { Spacing } from '@/constants/theme';
 import { ApiRequestError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
-type AuthMode = 'register' | 'login';
 const isE2eMode = process.env.EXPO_PUBLIC_E2E === '1';
 
 export default function HomeScreen() {
@@ -59,11 +63,7 @@ export default function HomeScreen() {
   });
 
   if (auth.isBootstrapping) {
-    return (
-      <Screen centered padded={false}>
-        <ActivityIndicator />
-      </Screen>
-    );
+    return <ScreenLoader />;
   }
 
   if (auth.user) {
@@ -74,51 +74,30 @@ export default function HomeScreen() {
     <Screen
       centered
       keyboardAvoiding
-      padded={false}
       scroll
-      contentStyle={styles.scrollContent}
       scrollViewProps={{
         keyboardDismissMode: 'on-drag',
         keyboardShouldPersistTaps: 'handled',
         showsVerticalScrollIndicator: false,
       }}>
-      <View style={styles.header}>
-        <Typography variant="bodySm" muted>
-          Golden path template
-        </Typography>
-        <Typography variant="h1" style={styles.title}>
-          Auth, Zod contracts, Query, and Form are ready.
-        </Typography>
-      </View>
+      <PageHeader
+        eyebrow="Golden path template"
+        title="Auth, Zod contracts, Query, and Form are ready."
+        size="hero"
+      />
 
-      <ThemedView type="backgroundElement" style={styles.card}>
-        <View style={styles.segmented}>
-          <Pressable
-            accessibilityLabel="Register"
-            accessibilityRole="button"
-            style={[styles.segment, isRegister && styles.segmentActive]}
-            testID={TEST_IDS.auth.registerTab}
-            onPress={() => setMode('register')}>
-            <Typography variant="label" color={isRegister ? 'foreground' : 'mutedForeground'}>
-              Register
-            </Typography>
-          </Pressable>
-          <Pressable
-            accessibilityLabel="Login"
-            accessibilityRole="button"
-            style={[styles.segment, !isRegister && styles.segmentActive]}
-            testID={TEST_IDS.auth.loginTab}
-            onPress={() => setMode('login')}>
-            <Typography variant="label" color={!isRegister ? 'foreground' : 'mutedForeground'}>
-              Login
-            </Typography>
-          </Pressable>
-        </View>
+      <AuthPanel>
+        <AuthModeTabs
+          mode={mode}
+          loginTestID={TEST_IDS.auth.loginTab}
+          registerTestID={TEST_IDS.auth.registerTab}
+          onModeChange={setMode}
+        />
 
         {isRegister && (
           <form.Field name="displayName">
             {(field) => (
-              <Field
+              <AuthTextField
                 label="Name"
                 testID={TEST_IDS.auth.nameInput}
                 value={field.state.value ?? ''}
@@ -133,7 +112,7 @@ export default function HomeScreen() {
 
         <form.Field name="email">
           {(field) => (
-            <Field
+            <AuthTextField
               label="Email"
               testID={TEST_IDS.auth.emailInput}
               value={field.state.value}
@@ -149,7 +128,7 @@ export default function HomeScreen() {
 
         <form.Field name="password">
           {(field) => (
-            <Field
+            <AuthTextField
               label="Password"
               testID={TEST_IDS.auth.passwordInput}
               value={field.state.value}
@@ -162,133 +141,21 @@ export default function HomeScreen() {
           )}
         </form.Field>
 
-        {error && (
-          <Typography color="destructive" variant="body" weight="700">
-            {error}
-          </Typography>
-        )}
+        <AuthError message={error} />
 
         <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
           {([canSubmit, isSubmitting]) => (
-            <Pressable
+            <AuthSubmitButton
               accessibilityLabel={isRegister ? 'Create account' : 'Login'}
-              accessibilityRole="button"
               disabled={!canSubmit || isSubmitting}
-              style={[styles.primaryButton, (!canSubmit || isSubmitting) && styles.disabled]}
+              label={isSubmitting ? 'Working...' : isRegister ? 'Create account' : 'Login'}
+              loading={isSubmitting}
               testID={TEST_IDS.auth.submitButton}
-              onPress={() => void form.handleSubmit()}>
-              <Typography colorValue="#FFFFFF" variant="button">
-                {isSubmitting ? 'Working...' : isRegister ? 'Create account' : 'Login'}
-              </Typography>
-            </Pressable>
+              onPress={() => void form.handleSubmit()}
+            />
           )}
         </form.Subscribe>
-      </ThemedView>
+      </AuthPanel>
     </Screen>
   );
 }
-
-type FieldProps = {
-  label: string;
-  testID: string;
-  value: string;
-  errors: unknown[];
-  onBlur: () => void;
-  onChangeText: (value: string) => void;
-} & Pick<
-  ComponentProps<typeof TextInput>,
-  'autoCapitalize' | 'autoComplete' | 'keyboardType' | 'secureTextEntry'
->;
-
-function Field({ label, testID, value, errors, onBlur, onChangeText, ...inputProps }: FieldProps) {
-  return (
-    <View style={styles.field}>
-      <Typography variant="label">{label}</Typography>
-      <TextInput
-        {...inputProps}
-        accessibilityLabel={label}
-        value={value}
-        onBlur={onBlur}
-        onChangeText={onChangeText}
-        placeholderTextColor="#879182"
-        style={styles.input}
-        testID={testID}
-      />
-      <FieldErrors errors={errors} />
-    </View>
-  );
-}
-
-function FieldErrors({ errors }: { errors: unknown[] }) {
-  if (!errors.length) return null;
-  return (
-    <Typography color="destructive" variant="bodyXs" weight="700">
-      {errors.map(formatError).join(', ')}
-    </Typography>
-  );
-}
-
-function formatError(error: unknown) {
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String(error.message);
-  }
-  return 'Invalid value';
-}
-
-const styles = StyleSheet.create({
-  scrollContent: {
-    padding: Spacing.four,
-  },
-  header: {
-    gap: Spacing.two,
-  },
-  title: {
-    maxWidth: 520,
-  },
-  card: {
-    gap: Spacing.three,
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-  },
-  segmented: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    padding: Spacing.one,
-    borderRadius: Spacing.two,
-    backgroundColor: '#DCE5D7',
-  },
-  segment: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: Spacing.two,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segmentActive: {
-    backgroundColor: '#FFFFFF',
-  },
-  field: {
-    gap: Spacing.two,
-  },
-  input: {
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: '#C2CCBD',
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    color: '#172018',
-    backgroundColor: '#FFFFFF',
-  },
-  primaryButton: {
-    minHeight: 48,
-    borderRadius: Spacing.two,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2D5F35',
-    paddingHorizontal: Spacing.three,
-  },
-  disabled: {
-    opacity: 0.55,
-  },
-});

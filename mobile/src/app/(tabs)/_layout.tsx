@@ -1,19 +1,14 @@
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, StyleSheet } from 'react-native';
 
 import AppTabs from '@/components/app-tabs';
-import { ThemedView } from '@/components/themed-view';
+import { ScreenLoader } from '@/components/screen-states';
 import { useAuth } from '@/lib/auth';
 
 export default function TabsLayout() {
   const auth = useAuth();
 
   if (auth.isBootstrapping) {
-    return (
-      <ThemedView style={styles.centered}>
-        <ActivityIndicator />
-      </ThemedView>
-    );
+    return <ScreenLoader />;
   }
 
   if (!auth.user) {
@@ -22,11 +17,3 @@ export default function TabsLayout() {
 
   return <AppTabs />;
 }
-
-const styles = StyleSheet.create({
-  centered: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-});

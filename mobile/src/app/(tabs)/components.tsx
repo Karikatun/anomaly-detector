@@ -1,8 +1,12 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
+import { CatalogSection } from '@/components/catalog-section';
+import { InlineGroup } from '@/components/inline-group';
+import { PageHeader } from '@/components/page-header';
 import { Screen } from '@/components/screen';
+import { ScreenLoader } from '@/components/screen-states';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {
   AlertDialog,
@@ -161,7 +165,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Toggle } from '@/components/ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Toaster, useToast } from '@/components/ui/sonner';
-import { Typography } from '@/components/ui/primitives';
+import { Typography } from '@/components/ui/typography';
 import { TEST_IDS } from '@/constants/testIds';
 import { useAuth } from '@/lib/auth';
 
@@ -185,11 +189,7 @@ function ComponentsCatalog() {
   const [slider, setSlider] = useState([42]);
 
   if (auth.isBootstrapping) {
-    return (
-      <Screen centered padded={false}>
-        <Spinner />
-      </Screen>
-    );
+    return <ScreenLoader />;
   }
 
   if (!auth.user) {
@@ -203,30 +203,27 @@ function ComponentsCatalog() {
       contentStyle={styles.content}
       scrollViewProps={{ showsVerticalScrollIndicator: false }}
       testID={TEST_IDS.components.catalog}>
-      <View testID={TEST_IDS.auth.dashboard} style={styles.hero}>
-        <View style={styles.heroCopy}>
-          <Typography variant="caption" muted>
-            Mobile UI foundation
-          </Typography>
-          <Typography variant="h4" weight="700" testID={TEST_IDS.components.title}>
-            ShadCN native components
-          </Typography>
-          <Typography variant="bodySm" muted testID={TEST_IDS.auth.userEmail}>
-            {auth.user.email}
-          </Typography>
-        </View>
-        <View style={styles.heroActions}>
-          <Button
-            testID={TEST_IDS.details.openButton}
-            variant="outline"
-            onPress={() => router.push('/details/components')}>
-            Details
-          </Button>
-          <Button testID={TEST_IDS.auth.logoutButton} variant="outline" onPress={() => void auth.logout()}>
-            Logout
-          </Button>
-        </View>
-      </View>
+      <PageHeader
+        rootTestID={TEST_IDS.auth.dashboard}
+        eyebrow="Mobile UI foundation"
+        title="ShadCN native components"
+        titleTestID={TEST_IDS.components.title}
+        description={auth.user.email}
+        descriptionTestID={TEST_IDS.auth.userEmail}
+        actions={
+          <>
+            <Button
+              testID={TEST_IDS.details.openButton}
+              variant="outline"
+              onPress={() => router.push('/details/components')}>
+              Details
+            </Button>
+            <Button testID={TEST_IDS.auth.logoutButton} variant="outline" onPress={() => void auth.logout()}>
+              Logout
+            </Button>
+          </>
+        }
+      />
 
       <CatalogSection title="Actions">
           <ButtonGroup>
@@ -272,14 +269,14 @@ function ComponentsCatalog() {
             <InputGroupButton size="sm">Save</InputGroupButton>
           </InputGroup>
           <InputGroupText>Input group helper text</InputGroupText>
-          <View style={styles.row}>
+          <InlineGroup>
             <Checkbox checked={checked} onCheckedChange={setChecked} />
             <Switch checked={switchValue} onCheckedChange={setSwitchValue} />
-            <RadioGroup value={radio} onValueChange={setRadio} style={styles.row}>
+            <RadioGroup value={radio} onValueChange={setRadio}>
               <RadioGroupItem value="one" />
               <RadioGroupItem value="two" />
             </RadioGroup>
-          </View>
+          </InlineGroup>
           <InputOTP value={otp} onValueChange={setOtp} maxLength={6} />
           <InputOTPGroup>
             <InputOTPSlot value={otp} index={0} />
@@ -417,7 +414,7 @@ function ComponentsCatalog() {
         </CatalogSection>
 
         <CatalogSection title="Overlays">
-          <View style={styles.wrap}>
+          <InlineGroup>
             <Dialog>
               <DialogTrigger fallback="Dialog" />
               <DialogContent>
@@ -485,7 +482,7 @@ function ComponentsCatalog() {
                 <Typography>Touch-friendly hover card.</Typography>
               </HoverCardContent>
             </HoverCard>
-          </View>
+          </InlineGroup>
         </CatalogSection>
 
         <CatalogSection title="Menus">
@@ -613,10 +610,10 @@ function ComponentsCatalog() {
               <CarouselItem><Card><CardContent><Typography>Slide one</Typography></CardContent></Card></CarouselItem>
               <CarouselItem><Card><CardContent><Typography>Slide two</Typography></CardContent></Card></CarouselItem>
             </CarouselContent>
-            <View style={styles.row}>
+            <InlineGroup>
               <CarouselPrevious />
               <CarouselNext />
-            </View>
+            </InlineGroup>
           </Carousel>
           <ScrollArea style={styles.scrollArea}>
             <Typography variant="bodySm">Scrollable area</Typography>
@@ -642,17 +639,6 @@ function DirectionProbe() {
   return <Typography variant="bodySm" muted>Nested direction: {direction}</Typography>;
 }
 
-function CatalogSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Typography variant="bodyLg" weight="700">
-        {title}
-      </Typography>
-      <View style={styles.sectionBody}>{children}</View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   aspect: {
     alignItems: 'center',
@@ -663,45 +649,13 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 48,
   },
-  hero: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 16,
-    justifyContent: 'space-between',
-  },
-  heroCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  heroActions: {
-    alignItems: 'flex-end',
-    gap: 8,
-  },
   resizable: {
     minHeight: 120,
-  },
-  row: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
   },
   scrollArea: {
     maxHeight: 96,
   },
-  section: {
-    gap: 12,
-  },
-  sectionBody: {
-    gap: 12,
-  },
   skeleton: {
     width: '65%',
-  },
-  wrap: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
   },
 });
