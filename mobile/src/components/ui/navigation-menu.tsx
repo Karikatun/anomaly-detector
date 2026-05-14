@@ -11,7 +11,7 @@ import {
 import { Button, type ButtonProps } from './button';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 import { renderTextChild, Surface, UiPressable } from './primitives';
-import { MIN_TOUCH_TARGET } from './touch-target';
+import { createMinTouchTargetStyle } from './touch-target';
 
 export function navigationMenuTriggerStyle(options?: { active?: boolean }) {
   return options ?? {};
@@ -71,7 +71,7 @@ export function NavigationMenuViewport(props: ViewProps) {
 
 const styles = StyleSheet.create({
   link: {
-    minHeight: MIN_TOUCH_TARGET,
+    ...createMinTouchTargetStyle('height'),
     justifyContent: 'center',
     paddingHorizontal: 12,
   },

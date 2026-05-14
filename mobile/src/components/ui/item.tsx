@@ -4,7 +4,7 @@ import { StyleSheet, View, type ViewProps } from 'react-native';
 import { Separator } from './separator';
 import { Surface, UiText } from './primitives';
 import { useUiTheme } from './theme';
-import { MIN_TOUCH_TARGET } from './touch-target';
+import { createMinTouchTargetStyle } from './touch-target';
 
 export function Item({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   const theme = useUiTheme();
@@ -116,8 +116,7 @@ const styles = StyleSheet.create({
   },
   media: {
     alignItems: 'center',
-    height: MIN_TOUCH_TARGET,
+    ...createMinTouchTargetStyle(),
     justifyContent: 'center',
-    width: MIN_TOUCH_TARGET,
   },
 });

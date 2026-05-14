@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, View, type ViewProps } from 'react-native';
 
 import { renderTextChild, UiText } from './primitives';
 import { useUiTheme } from './theme';
-import { MIN_TOUCH_TARGET } from './touch-target';
+import { createMinTouchTargetStyle } from './touch-target';
 
 export function Table({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   },
   cell: {
     justifyContent: 'center',
-    minHeight: MIN_TOUCH_TARGET,
+    ...createMinTouchTargetStyle('height'),
     minWidth: 120,
     paddingHorizontal: 12,
   },

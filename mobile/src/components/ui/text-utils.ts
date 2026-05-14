@@ -6,13 +6,22 @@ export function mapTextChildren(
 ) {
   let textIndex = 0;
 
-  return React.Children.map(children, (child) => {
-    if (typeof child !== 'string' && typeof child !== 'number') {
-      return child;
-    }
+  function mapNode(node: ReactNode): ReactNode {
+    return React.Children.map(node, (child) => {
+      if (typeof child === 'string' || typeof child === 'number') {
+        const wrapped = wrapText(child, textIndex);
+        textIndex += 1;
+        return wrapped;
+      }
 
-    const wrapped = wrapText(child, textIndex);
-    textIndex += 1;
-    return wrapped;
-  });
+      if (React.isValidElement(child) && child.type === React.Fragment) {
+        const fragment = child as React.ReactElement<{ children?: ReactNode }>;
+        return React.cloneElement(fragment, undefined, mapNode(fragment.props.children));
+      }
+
+      return child;
+    });
+  }
+
+  return mapNode(children);
 }

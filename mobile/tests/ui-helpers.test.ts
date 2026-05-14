@@ -12,7 +12,7 @@ import { getControllableValue } from '../src/components/ui/controllable-state';
 import { getOtpSlots, normalizeOtpValue } from '../src/components/ui/input-otp-utils';
 import { clampSliderValue, normalizeSliderValues } from '../src/components/ui/slider-utils';
 import { mapTextChildren } from '../src/components/ui/text-utils';
-import { MIN_TOUCH_TARGET } from '../src/components/ui/touch-target';
+import { createMinTouchTargetStyle, MIN_TOUCH_TARGET } from '../src/components/ui/touch-target';
 
 test('controlled state prefers explicit values over defaults', () => {
   expect(getControllableValue('controlled', 'fallback')).toBe('controlled');
@@ -21,18 +21,33 @@ test('controlled state prefers explicit values over defaults', () => {
 
 test('text child renderer wraps mixed raw strings for native containers', () => {
   const rendered = React.Children.toArray(
-    mapTextChildren(['Profile', React.createElement(React.Fragment, { key: 'shortcut' })], (child) =>
-      React.createElement('Text', null, child),
+    mapTextChildren(
+      [
+        'Profile',
+        React.createElement(React.Fragment, { key: 'shortcut' }, [
+          'Shortcut',
+          React.createElement(React.Fragment, { key: 'nested' }, 7),
+        ]),
+      ],
+      (child) => React.createElement('Text', null, child),
     ),
+  );
+  const fragmentChildren = React.Children.toArray(
+    (rendered[1] as React.ReactElement<{ children?: React.ReactNode }>).props.children,
   );
 
   expect(rendered).toHaveLength(2);
   expect(typeof rendered[0]).not.toBe('string');
+  expect(typeof fragmentChildren[0]).not.toBe('string');
+  expect(typeof fragmentChildren[1]).not.toBe('number');
   expect(React.isValidElement(rendered[0])).toBe(true);
 });
 
 test('minimum touch target follows mobile accessibility baseline', () => {
   expect(MIN_TOUCH_TARGET).toBeGreaterThanOrEqual(44);
+  expect(createMinTouchTargetStyle()).toEqual({ minHeight: 44, minWidth: 44 });
+  expect(createMinTouchTargetStyle('height')).toEqual({ minHeight: 44 });
+  expect(createMinTouchTargetStyle('width')).toEqual({ minWidth: 44 });
 });
 
 test('interactive primitives use the shared touch target constant', () => {
@@ -50,7 +65,8 @@ test('interactive primitives use the shared touch target constant', () => {
   ];
 
   for (const file of interactiveFiles) {
-    expect(readFileSync(resolve(uiRoot, file), 'utf8')).toContain('MIN_TOUCH_TARGET');
+    const source = readFileSync(resolve(uiRoot, file), 'utf8');
+    expect(source).toMatch(/MIN_TOUCH_TARGET|createMinTouchTargetStyle|getControlHeight/);
   }
 });
 

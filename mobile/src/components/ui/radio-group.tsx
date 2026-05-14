@@ -5,7 +5,7 @@ import { StyleSheet, View, type PressableProps, type StyleProp, type ViewProps, 
 import { useControllableState } from './controllable-state';
 import { UiPressable } from './primitives';
 import { useUiTheme } from './theme';
-import { MIN_TOUCH_TARGET } from './touch-target';
+import { createMinTouchTargetStyle } from './touch-target';
 
 type RadioContextValue = {
   value?: string;
@@ -105,8 +105,7 @@ const styles = StyleSheet.create({
   },
   item: {
     alignItems: 'center',
-    height: MIN_TOUCH_TARGET,
+    ...createMinTouchTargetStyle(),
     justifyContent: 'center',
-    width: MIN_TOUCH_TARGET,
   },
 });

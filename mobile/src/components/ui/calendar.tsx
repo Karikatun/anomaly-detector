@@ -14,7 +14,7 @@ import {
 import { useControllableState } from './controllable-state';
 import { UiPressable, UiText } from './primitives';
 import { useUiTheme } from './theme';
-import { MIN_TOUCH_TARGET } from './touch-target';
+import { createMinTouchTargetStyle } from './touch-target';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
 
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   day: {
     alignItems: 'center',
     borderWidth: 1,
-    height: MIN_TOUCH_TARGET,
+    ...createMinTouchTargetStyle('height'),
     justifyContent: 'center',
     width: `${100 / 7}%`,
   },

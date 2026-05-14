@@ -7,7 +7,7 @@ import { useControllableState } from './controllable-state';
 import { OverlayNoop } from './overlay';
 import { Separator } from './separator';
 import { OverlayFrame, UiPressable, UiText } from './primitives';
-import { MIN_TOUCH_TARGET } from './touch-target';
+import { createMinTouchTargetStyle } from './touch-target';
 
 type SelectOption = {
   value: string;
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     display: 'none',
   },
   item: {
-    minHeight: MIN_TOUCH_TARGET,
+    ...createMinTouchTargetStyle('height'),
     justifyContent: 'center',
     paddingHorizontal: 10,
     paddingVertical: 8,
