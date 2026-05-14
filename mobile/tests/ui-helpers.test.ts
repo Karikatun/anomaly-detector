@@ -4,12 +4,28 @@ import { resolve } from 'node:path';
 import React from 'react';
 
 import {
+  addMonths,
   buildCalendarMonth,
   isDateInRange,
   selectCalendarDate,
 } from '../src/components/ui/calendar-utils';
 import { getControllableValue } from '../src/components/ui/controllable-state';
 import { getOtpSlots, normalizeOtpValue } from '../src/components/ui/input-otp-utils';
+import {
+  createOptionRegistryController,
+  getRegisteredOptions,
+  getValueAfterOptionRegistrySettles,
+  getValueAfterOptionUnregister,
+  hasRegisteredOption,
+  unregisterRegisteredOptionEntry,
+  unregisterRegisteredOption,
+  upsertRegisteredOptionEntry,
+  upsertRegisteredOption,
+} from '../src/components/ui/option-registry';
+import {
+  getRadioGroupItemState,
+  shouldHandleMenuRadioRowPress,
+} from '../src/components/ui/radio-utils';
 import { clampSliderValue, normalizeSliderValues } from '../src/components/ui/slider-utils';
 import { mapTextChildren } from '../src/components/ui/text-utils';
 import { createMinTouchTargetStyle, MIN_TOUCH_TARGET } from '../src/components/ui/touch-target';
@@ -94,6 +110,128 @@ test('button-like primitives keep textStyle customization in the native API', ()
   }
 });
 
+test('select option registry updates labels and removes unmounted values', () => {
+  const first = upsertRegisteredOption([], { value: 'a', label: 'Alpha', disabled: false });
+  const updated = upsertRegisteredOption(first, { value: 'a', label: 'Archived alpha', disabled: true });
+  const removed = unregisterRegisteredOption(updated, 'a');
+
+  expect(first).toEqual([{ value: 'a', label: 'Alpha', disabled: false }]);
+  expect(updated).toEqual([{ value: 'a', label: 'Archived alpha', disabled: true }]);
+  expect(removed).toEqual([]);
+  expect(hasRegisteredOption(updated, 'a')).toBe(true);
+  expect(hasRegisteredOption(removed, 'a')).toBe(false);
+  expect(getValueAfterOptionUnregister('b', 'a')).toBe('b');
+  expect(getValueAfterOptionUnregister('a', 'a')).toBe('');
+});
+
+test('select option entry registry preserves same-value replacements after settling', () => {
+  const initial = upsertRegisteredOptionEntry([], 'old-a', {
+    value: 'a',
+    label: 'Alpha',
+    disabled: false,
+  });
+  const afterCleanup = unregisterRegisteredOptionEntry(initial, 'old-a');
+  const afterReplacement = upsertRegisteredOptionEntry(afterCleanup, 'new-a', {
+    value: 'a',
+    label: 'Alpha reloaded',
+    disabled: true,
+  });
+  const afterInPlaceValueChange = upsertRegisteredOptionEntry(initial, 'old-a', {
+    value: 'b',
+    label: 'Beta',
+    disabled: false,
+  });
+
+  expect(getValueAfterOptionRegistrySettles('a', afterReplacement)).toBe('a');
+  expect(getValueAfterOptionRegistrySettles('a', afterCleanup)).toBe('');
+  expect(getValueAfterOptionRegistrySettles('a', afterInPlaceValueChange)).toBe('');
+  expect(getRegisteredOptions(afterReplacement)).toEqual([
+    { value: 'a', label: 'Alpha reloaded', disabled: true },
+  ]);
+});
+
+test('select option registry controller follows component lifecycle timers', async () => {
+  let currentValue = 'a';
+  const valueChanges: string[] = [];
+  const entrySnapshots: unknown[] = [];
+  const controller = createOptionRegistryController({
+    getCurrentValue: () => currentValue,
+    onEntriesChange: (entries) => entrySnapshots.push(entries),
+    setValue: (nextValue) => {
+      currentValue = nextValue;
+      valueChanges.push(nextValue);
+    },
+  });
+
+  controller.register('old-a', { value: 'a', label: 'Alpha' });
+  await waitForOptionRegistryTimer();
+  expect(valueChanges).toEqual([]);
+
+  controller.unregister('old-a');
+  controller.register('new-a', { value: 'a', label: 'Alpha reloaded' });
+  await waitForOptionRegistryTimer();
+  expect(currentValue).toBe('a');
+  expect(valueChanges).toEqual([]);
+
+  controller.register('new-a', { value: 'b', label: 'Beta' });
+  await waitForOptionRegistryTimer();
+  expect(currentValue).toBe('');
+  expect(valueChanges).toEqual(['']);
+  expect(entrySnapshots.length).toBeGreaterThanOrEqual(4);
+
+  controller.dispose();
+});
+
+test('select option registry controller ignores child cleanup after dispose', async () => {
+  let currentValue = 'a';
+  const valueChanges: string[] = [];
+  const controller = createOptionRegistryController({
+    getCurrentValue: () => currentValue,
+    onEntriesChange: () => undefined,
+    setValue: (nextValue) => {
+      currentValue = nextValue;
+      valueChanges.push(nextValue);
+    },
+  });
+
+  controller.register('option-a', { value: 'a', label: 'Alpha' });
+  await waitForOptionRegistryTimer();
+
+  controller.dispose();
+  controller.unregister('option-a');
+  await waitForOptionRegistryTimer();
+
+  expect(currentValue).toBe('a');
+  expect(valueChanges).toEqual([]);
+});
+
+test('menu radio row decisions preserve selection and disabled behavior', () => {
+  expect(
+    getRadioGroupItemState({
+      currentValue: 'compact',
+      value: 'compact',
+      disabled: false,
+      groupDisabled: false,
+    }),
+  ).toEqual({ isDisabled: false, isSelected: true });
+
+  expect(
+    getRadioGroupItemState({
+      currentValue: 'compact',
+      value: 'comfortable',
+      disabled: true,
+      groupDisabled: false,
+    }),
+  ).toEqual({ isDisabled: true, isSelected: false });
+
+  expect(shouldHandleMenuRadioRowPress(false)).toBe(true);
+  expect(shouldHandleMenuRadioRowPress(true)).toBe(false);
+});
+
+function waitForOptionRegistryTimer() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 test('OTP helper normalizes whitespace and caps slot count', () => {
   expect(normalizeOtpValue('12 34 56', 4)).toBe('1234');
   expect(getOtpSlots('12', 4)).toEqual(['1', '2', '', '']);
@@ -109,6 +247,7 @@ test('calendar helper builds a six-week grid and selects ranges', () => {
   const month = buildCalendarMonth(new Date(2026, 4, 1));
   expect(month).toHaveLength(42);
   expect(month[0]?.date.getDay()).toBe(0);
+  expect(addMonths(new Date(2026, 4, 14), 1)).toEqual(new Date(2026, 5, 1));
 
   const first = new Date(2026, 4, 14);
   const second = new Date(2026, 4, 18);

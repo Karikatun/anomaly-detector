@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View, type PressableProps, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 
 import { Checkbox } from './checkbox';
-import { RadioGroupItem } from './radio-group';
+import { RadioGroupIndicator, useRadioGroupItem } from './radio-group';
+import { shouldHandleMenuRadioRowPress } from './radio-utils';
 import { Separator } from './separator';
 import { renderTextChild, UiPressable, Typography } from './primitives';
 import { useUiTheme } from './theme';
@@ -25,6 +26,7 @@ export function MenuLabel({ children, style, ...props }: ViewProps & { children?
 }
 
 export function MenuItem({
+  accessibilityRole = 'menuitem',
   children,
   inset,
   style,
@@ -35,7 +37,7 @@ export function MenuItem({
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <UiPressable {...props} accessibilityRole="menuitem" style={[styles.item, inset && styles.inset, style]}>
+    <UiPressable {...props} accessibilityRole={accessibilityRole} style={[styles.item, inset && styles.inset, style]}>
       {renderTextChild(children)}
     </UiPressable>
   );
@@ -77,11 +79,21 @@ export function MenuRadioItem({
   value,
   ...props
 }: Omit<PressableProps, 'style'> & { children?: ReactNode; value: string; style?: StyleProp<ViewStyle> }) {
-  const isDisabled = disabled === true;
+  const { isDisabled, isSelected, select } = useRadioGroupItem(value, disabled === true);
 
   return (
-    <MenuItem {...props} disabled={isDisabled}>
-      <RadioGroupItem value={value} disabled={isDisabled} />
+    <MenuItem
+      {...props}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: isSelected, disabled: isDisabled }}
+      disabled={isDisabled}
+      onPress={(event) => {
+        props.onPress?.(event);
+        if (shouldHandleMenuRadioRowPress(isDisabled)) {
+          select();
+        }
+      }}>
+      <RadioGroupIndicator value={value} disabled={isDisabled} />
       <Typography variant="bodySm">{children}</Typography>
     </MenuItem>
   );

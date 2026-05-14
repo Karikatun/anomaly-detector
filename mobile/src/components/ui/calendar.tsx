@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { StyleSheet, View, type PressableProps, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 
 import { Button } from './button';
 import {
+  addMonths,
   buildCalendarMonth,
   isDateInRange,
   isRangeSelection,
@@ -24,6 +25,7 @@ export function Calendar({
   selected,
   mode = 'single',
   onSelect,
+  onMonthChange,
   disabled,
   showOutsideDays = true,
   style,
@@ -34,11 +36,16 @@ export function Calendar({
   selected?: CalendarSelection;
   mode?: CalendarSelectionMode;
   onSelect?: (selection: CalendarSelection) => void;
+  onMonthChange?: (month: Date) => void;
   disabled?: (date: Date) => boolean;
   showOutsideDays?: boolean;
 }) {
   const theme = useUiTheme();
-  const [visibleMonth, setVisibleMonth] = useState(month ?? defaultMonth);
+  const [visibleMonth, setVisibleMonth] = useControllableState<Date>({
+    value: month,
+    defaultValue: defaultMonth,
+    onChange: onMonthChange,
+  });
   const [selection, setSelection] = useControllableState<CalendarSelection>({
     value: selected,
     defaultValue: undefined,
@@ -50,13 +57,13 @@ export function Calendar({
   return (
     <View {...props} style={[styles.calendar, { gap: theme.spacing.md }, style]}>
       <View style={styles.header}>
-        <Button size="icon-sm" variant="ghost" onPress={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>
+        <Button size="icon-sm" variant="ghost" onPress={() => setVisibleMonth((current) => addMonths(current, -1))}>
           {'<'}
         </Button>
         <Typography variant="bodySm" weight="700">
           {monthLabel}
         </Typography>
-        <Button size="icon-sm" variant="ghost" onPress={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>
+        <Button size="icon-sm" variant="ghost" onPress={() => setVisibleMonth((current) => addMonths(current, 1))}>
           {'>'}
         </Button>
       </View>

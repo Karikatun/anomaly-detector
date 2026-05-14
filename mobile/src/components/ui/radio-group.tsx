@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useCallback, useContext } from 'react';
 import { StyleSheet, View, type PressableProps, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 
 import { useControllableState } from './controllable-state';
 import { UiPressable } from './primitives';
+import { getRadioGroupItemState } from './radio-utils';
 import { useUiTheme } from './theme';
 import { createMinTouchTargetStyle } from './touch-target';
 
@@ -58,9 +59,7 @@ export function RadioGroupItem({
   ...props
 }: Omit<PressableProps, 'style'> & { value: string; style?: StyleProp<ViewStyle> }) {
   const theme = useUiTheme();
-  const context = useContext(RadioContext);
-  const isSelected = context?.value === value;
-  const isDisabled = disabled === true || context?.disabled === true;
+  const { isSelected, isDisabled, select } = useRadioGroupItem(value, disabled);
 
   return (
     <UiPressable
@@ -72,18 +71,69 @@ export function RadioGroupItem({
         styles.item,
         style,
       ]}
-      onPress={() => context?.onValueChange(value)}>
-      <View
-        style={[
-          styles.circle,
-          {
-            borderColor: isSelected ? theme.colors.primary : theme.colors.input,
-            borderRadius: theme.radius.full,
-          },
-        ]}>
-        {isSelected && <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />}
-      </View>
+      onPress={(event) => {
+        props.onPress?.(event);
+        select();
+      }}>
+      <RadioCircle theme={theme} selected={isSelected} />
     </UiPressable>
+  );
+}
+
+export function RadioGroupIndicator({
+  value,
+  disabled,
+  style,
+}: {
+  value: string;
+  disabled?: boolean | null;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const theme = useUiTheme();
+  const { isSelected } = useRadioGroupItem(value, disabled);
+
+  return (
+    <View pointerEvents="none" style={[styles.item, style]}>
+      <RadioCircle theme={theme} selected={isSelected} />
+    </View>
+  );
+}
+
+export function useRadioGroupItem(value: string, disabled?: boolean | null) {
+  const context = useContext(RadioContext);
+  const { isDisabled, isSelected } = getRadioGroupItemState({
+    currentValue: context?.value,
+    disabled,
+    groupDisabled: context?.disabled,
+    value,
+  });
+  const select = useCallback(() => {
+    if (!isDisabled) {
+      context?.onValueChange(value);
+    }
+  }, [context, isDisabled, value]);
+
+  return { isSelected, isDisabled, select };
+}
+
+function RadioCircle({
+  selected,
+  theme,
+}: {
+  selected?: boolean;
+  theme: ReturnType<typeof useUiTheme>;
+}) {
+  return (
+    <View
+      style={[
+        styles.circle,
+        {
+          borderColor: selected ? theme.colors.primary : theme.colors.input,
+          borderRadius: theme.radius.full,
+        },
+      ]}>
+      {selected && <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />}
+    </View>
   );
 }
 

@@ -1,19 +1,22 @@
 import type { ReactNode } from 'react';
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, type PressableProps, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 
 import { Button, type ButtonProps } from './button';
 import { useControllableState } from './controllable-state';
 import { OverlayNoop } from './overlay';
+import {
+  createOptionRegistrationId,
+  createOptionRegistryController,
+  getRegisteredOptions,
+  type RegisteredOption,
+  type RegisteredOptionEntry,
+} from './option-registry';
 import { Separator } from './separator';
 import { OverlayFrame, UiPressable, Typography } from './primitives';
 import { createMinTouchTargetStyle } from './touch-target';
 
-type SelectOption = {
-  value: string;
-  label: ReactNode;
-  disabled?: boolean;
-};
+type SelectOption = RegisteredOption;
 
 type SelectContextValue = {
   open: boolean;
@@ -21,7 +24,8 @@ type SelectContextValue = {
   value?: string;
   setValue: (value: string) => void;
   options: SelectOption[];
-  registerOption: (option: SelectOption) => void;
+  registerOption: (id: string, option: SelectOption) => void;
+  unregisterOption: (id: string) => void;
 };
 
 const SelectContext = createContext<SelectContextValue | null>(null);
@@ -49,7 +53,33 @@ export function Select({
     onChange: onValueChange,
   });
   const [currentOpen, setOpen] = useControllableState({ value: open, defaultValue: defaultOpen, onChange: onOpenChange });
-  const [options, setOptions] = useState<SelectOption[]>([]);
+  const [optionEntries, setOptionEntries] = useState<RegisteredOptionEntry[]>([]);
+  const currentValueRef = useRef(currentValue);
+  const setValueRef = useRef(setValue);
+  const registryRef = useRef<ReturnType<typeof createOptionRegistryController> | null>(null);
+  currentValueRef.current = currentValue;
+  setValueRef.current = setValue;
+  const options = useMemo(() => getRegisteredOptions(optionEntries), [optionEntries]);
+
+  if (!registryRef.current) {
+    registryRef.current = createOptionRegistryController({
+      getCurrentValue: () => currentValueRef.current,
+      onEntriesChange: setOptionEntries,
+      setValue: (nextValue) => setValueRef.current(nextValue),
+    });
+  }
+
+  const registerOption = useCallback((id: string, option: SelectOption) => {
+    registryRef.current?.register(id, option);
+  }, []);
+  const unregisterOption = useCallback((id: string) => {
+    registryRef.current?.unregister(id);
+  }, []);
+
+  useEffect(() => {
+    return () => registryRef.current?.dispose();
+  }, []);
+
   const context = useMemo<SelectContextValue>(
     () => ({
       open: currentOpen,
@@ -57,16 +87,10 @@ export function Select({
       value: currentValue,
       setValue,
       options,
-      registerOption: (option) => {
-        setOptions((currentOptions) => {
-          if (currentOptions.some((currentOption) => currentOption.value === option.value)) {
-            return currentOptions;
-          }
-          return [...currentOptions, option];
-        });
-      },
+      registerOption,
+      unregisterOption,
     }),
-    [currentOpen, currentValue, options, setOpen, setValue],
+    [currentOpen, currentValue, options, registerOption, setOpen, setValue, unregisterOption],
   );
 
   return <SelectContext.Provider value={context}>{children}</SelectContext.Provider>;
@@ -108,9 +132,9 @@ export function SelectContent({ children, ...props }: ViewProps & { children?: R
         onRequestClose={() => context?.setOpen(false)}>
         <View {...props} style={[styles.list, props.style]}>
           {context?.options.map((option) => (
-            <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+            <SelectOptionRow key={option.value} value={option.value} disabled={option.disabled}>
               {option.label}
-            </SelectItem>
+            </SelectOptionRow>
           ))}
         </View>
       </OverlayFrame>
@@ -139,10 +163,39 @@ export function SelectItem({
 }) {
   const context = useContext(SelectContext);
   const isDisabled = disabled === true;
+  const optionIdRef = useRef(createOptionRegistrationId());
+  const registerOption = context?.registerOption;
+  const unregisterOption = context?.unregisterOption;
 
-  React.useEffect(() => {
-    context?.registerOption({ value, label: children ?? value, disabled: isDisabled });
-  }, [children, context, isDisabled, value]);
+  useEffect(() => {
+    registerOption?.(optionIdRef.current, { value, label: children ?? value, disabled: isDisabled });
+  }, [children, isDisabled, registerOption, value]);
+
+  useEffect(() => {
+    const optionId = optionIdRef.current;
+    return () => unregisterOption?.(optionId);
+  }, [unregisterOption]);
+
+  return (
+    <SelectOptionRow {...props} value={value} disabled={isDisabled} style={style}>
+      {children}
+    </SelectOptionRow>
+  );
+}
+
+function SelectOptionRow({
+  value,
+  children,
+  disabled,
+  style,
+  ...props
+}: Omit<PressableProps, 'style'> & {
+  value: string;
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const context = useContext(SelectContext);
+  const isDisabled = disabled === true;
 
   return (
     <UiPressable
@@ -151,8 +204,10 @@ export function SelectItem({
       style={[styles.item, style]}
       onPress={(event) => {
         props.onPress?.(event);
-        context?.setValue(value);
-        context?.setOpen(false);
+        if (!isDisabled) {
+          context?.setValue(value);
+          context?.setOpen(false);
+        }
       }}>
       <Typography variant="bodySm" weight={context?.value === value ? '700' : '500'}>
         {children}
