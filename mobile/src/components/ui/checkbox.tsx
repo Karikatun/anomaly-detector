@@ -3,6 +3,7 @@ import { StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle }
 import { useControllableState } from './controllable-state';
 import { UiPressable } from './primitives';
 import { useUiTheme } from './theme';
+import { MIN_TOUCH_TARGET } from './touch-target';
 
 export type CheckboxProps = Omit<PressableProps, 'onPress' | 'style'> & {
   checked?: boolean;
@@ -71,8 +72,8 @@ const styles = StyleSheet.create({
   },
   root: {
     alignItems: 'center',
-    height: 44,
+    height: MIN_TOUCH_TARGET,
     justifyContent: 'center',
-    width: 44,
+    width: MIN_TOUCH_TARGET,
   },
 });

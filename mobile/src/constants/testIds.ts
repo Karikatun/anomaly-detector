@@ -19,6 +19,9 @@ export const TEST_IDS = {
     openButton: 'details.open-button',
     screen: 'details.screen',
   },
+  screen: {
+    backButton: 'screen.back-button',
+  },
   tabs: {
     componentsTab: 'tabs.components',
     profileTab: 'tabs.profile',

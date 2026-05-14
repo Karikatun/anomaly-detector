@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { mapTextChildren } from './text-utils';
 import { useUiTheme, withAlpha, type UiTheme } from './theme';
+import { MIN_TOUCH_TARGET } from './touch-target';
 
 export type UiColor = keyof UiTheme['colors'];
 export type UiSize = 'xs' | 'sm' | 'default' | 'lg';
@@ -189,7 +190,7 @@ export function getInteractiveColors(theme: UiTheme, variant: UiVariant) {
 
 export function getControlHeight(size: UiSize) {
   if (size === 'lg') return 48;
-  return 44;
+  return MIN_TOUCH_TARGET;
 }
 
 export type OverlayRootProps = {

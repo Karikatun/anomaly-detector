@@ -8,18 +8,9 @@ import {
 import type { ComponentProps } from 'react';
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TEST_IDS } from '@/constants/testIds';
@@ -69,9 +60,9 @@ export default function HomeScreen() {
 
   if (auth.isBootstrapping) {
     return (
-      <ThemedView style={styles.centered}>
+      <Screen centered padded={false}>
         <ActivityIndicator />
-      </ThemedView>
+      </Screen>
     );
   }
 
@@ -80,118 +71,116 @@ export default function HomeScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.keyboardView}>
-          <ScrollView
-            keyboardDismissMode="on-drag"
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}>
-            <View style={styles.header}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Golden path template
+    <Screen
+      centered
+      keyboardAvoiding
+      padded={false}
+      scroll
+      contentStyle={styles.scrollContent}
+      scrollViewProps={{
+        keyboardDismissMode: 'on-drag',
+        keyboardShouldPersistTaps: 'handled',
+        showsVerticalScrollIndicator: false,
+      }}>
+      <View style={styles.header}>
+        <ThemedText type="small" themeColor="textSecondary">
+          Golden path template
+        </ThemedText>
+        <ThemedText type="title" style={styles.title}>
+          Auth, Zod contracts, Query, and Form are ready.
+        </ThemedText>
+      </View>
+
+      <ThemedView type="backgroundElement" style={styles.card}>
+        <View style={styles.segmented}>
+          <Pressable
+            accessibilityLabel="Register"
+            accessibilityRole="button"
+            style={[styles.segment, isRegister && styles.segmentActive]}
+            testID={TEST_IDS.auth.registerTab}
+            onPress={() => setMode('register')}>
+            <ThemedText type="smallBold" themeColor={isRegister ? 'text' : 'textSecondary'}>
+              Register
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Login"
+            accessibilityRole="button"
+            style={[styles.segment, !isRegister && styles.segmentActive]}
+            testID={TEST_IDS.auth.loginTab}
+            onPress={() => setMode('login')}>
+            <ThemedText type="smallBold" themeColor={!isRegister ? 'text' : 'textSecondary'}>
+              Login
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        {isRegister && (
+          <form.Field name="displayName">
+            {(field) => (
+              <Field
+                label="Name"
+                testID={TEST_IDS.auth.nameInput}
+                value={field.state.value ?? ''}
+                autoComplete="name"
+                onBlur={field.handleBlur}
+                onChangeText={field.handleChange}
+                errors={field.state.meta.errors}
+              />
+            )}
+          </form.Field>
+        )}
+
+        <form.Field name="email">
+          {(field) => (
+            <Field
+              label="Email"
+              testID={TEST_IDS.auth.emailInput}
+              value={field.state.value}
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              onBlur={field.handleBlur}
+              onChangeText={field.handleChange}
+              errors={field.state.meta.errors}
+            />
+          )}
+        </form.Field>
+
+        <form.Field name="password">
+          {(field) => (
+            <Field
+              label="Password"
+              testID={TEST_IDS.auth.passwordInput}
+              value={field.state.value}
+              autoComplete={isRegister ? 'new-password' : 'current-password'}
+              secureTextEntry={!isE2eMode}
+              onBlur={field.handleBlur}
+              onChangeText={field.handleChange}
+              errors={field.state.meta.errors}
+            />
+          )}
+        </form.Field>
+
+        {error && <ThemedText style={styles.formError}>{error}</ThemedText>}
+
+        <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
+          {([canSubmit, isSubmitting]) => (
+            <Pressable
+              accessibilityLabel={isRegister ? 'Create account' : 'Login'}
+              accessibilityRole="button"
+              disabled={!canSubmit || isSubmitting}
+              style={[styles.primaryButton, (!canSubmit || isSubmitting) && styles.disabled]}
+              testID={TEST_IDS.auth.submitButton}
+              onPress={() => void form.handleSubmit()}>
+              <ThemedText type="smallBold" style={styles.primaryButtonText}>
+                {isSubmitting ? 'Working...' : isRegister ? 'Create account' : 'Login'}
               </ThemedText>
-              <ThemedText type="title" style={styles.title}>
-                Auth, Zod contracts, Query, and Form are ready.
-              </ThemedText>
-            </View>
-
-            <ThemedView type="backgroundElement" style={styles.card}>
-              <View style={styles.segmented}>
-                <Pressable
-                  accessibilityLabel="Register"
-                  accessibilityRole="button"
-                  style={[styles.segment, isRegister && styles.segmentActive]}
-                  testID={TEST_IDS.auth.registerTab}
-                  onPress={() => setMode('register')}>
-                  <ThemedText type="smallBold" themeColor={isRegister ? 'text' : 'textSecondary'}>
-                    Register
-                  </ThemedText>
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Login"
-                  accessibilityRole="button"
-                  style={[styles.segment, !isRegister && styles.segmentActive]}
-                  testID={TEST_IDS.auth.loginTab}
-                  onPress={() => setMode('login')}>
-                  <ThemedText type="smallBold" themeColor={!isRegister ? 'text' : 'textSecondary'}>
-                    Login
-                  </ThemedText>
-                </Pressable>
-              </View>
-
-              {isRegister && (
-                <form.Field name="displayName">
-                  {(field) => (
-                    <Field
-                      label="Name"
-                      testID={TEST_IDS.auth.nameInput}
-                      value={field.state.value ?? ''}
-                      autoComplete="name"
-                      onBlur={field.handleBlur}
-                      onChangeText={field.handleChange}
-                      errors={field.state.meta.errors}
-                    />
-                  )}
-                </form.Field>
-              )}
-
-              <form.Field name="email">
-                {(field) => (
-                  <Field
-                    label="Email"
-                    testID={TEST_IDS.auth.emailInput}
-                    value={field.state.value}
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    onBlur={field.handleBlur}
-                    onChangeText={field.handleChange}
-                    errors={field.state.meta.errors}
-                  />
-                )}
-              </form.Field>
-
-              <form.Field name="password">
-                {(field) => (
-                  <Field
-                    label="Password"
-                    testID={TEST_IDS.auth.passwordInput}
-                    value={field.state.value}
-                    autoComplete={isRegister ? 'new-password' : 'current-password'}
-                    secureTextEntry={!isE2eMode}
-                    onBlur={field.handleBlur}
-                    onChangeText={field.handleChange}
-                    errors={field.state.meta.errors}
-                  />
-                )}
-              </form.Field>
-
-              {error && <ThemedText style={styles.formError}>{error}</ThemedText>}
-
-              <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
-                {([canSubmit, isSubmitting]) => (
-                  <Pressable
-                    accessibilityLabel={isRegister ? 'Create account' : 'Login'}
-                    accessibilityRole="button"
-                    disabled={!canSubmit || isSubmitting}
-                    style={[styles.primaryButton, (!canSubmit || isSubmitting) && styles.disabled]}
-                    testID={TEST_IDS.auth.submitButton}
-                    onPress={() => void form.handleSubmit()}>
-                    <ThemedText type="smallBold" style={styles.primaryButtonText}>
-                      {isSubmitting ? 'Working...' : isRegister ? 'Create account' : 'Login'}
-                    </ThemedText>
-                  </Pressable>
-                )}
-              </form.Subscribe>
-            </ThemedView>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </ThemedView>
+            </Pressable>
+          )}
+        </form.Subscribe>
+      </ThemedView>
+    </Screen>
   );
 }
 
@@ -240,25 +229,8 @@ function formatError(error: unknown) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
   scrollContent: {
     padding: Spacing.four,
-    gap: Spacing.four,
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   header: {
     gap: Spacing.two,

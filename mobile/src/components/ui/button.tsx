@@ -10,6 +10,7 @@ import {
   type UiVariant,
 } from './primitives';
 import { useUiTheme } from './theme';
+import { MIN_TOUCH_TARGET } from './touch-target';
 
 export type ButtonProps = Omit<PressableProps, 'style' | 'children'> & {
   children?: ReactNode;
@@ -36,7 +37,7 @@ export function Button({
 }: ButtonProps) {
   const theme = useUiTheme();
   const colors = getInteractiveColors(theme, variant);
-  const iconSize = size === 'icon-lg' ? 48 : 44;
+  const iconSize = size === 'icon-lg' ? 48 : MIN_TOUCH_TARGET;
   const isIcon = String(size).startsWith('icon');
   const height = isIcon ? iconSize : getControlHeight(size as UiSize);
 
@@ -81,7 +82,7 @@ const styles = StyleSheet.create({
   },
   linkButton: {
     borderWidth: 0,
-    minHeight: 44,
+    minHeight: MIN_TOUCH_TARGET,
     paddingHorizontal: 0,
   },
 });

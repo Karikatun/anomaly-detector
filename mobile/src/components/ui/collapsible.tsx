@@ -5,7 +5,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { Button } from './button';
 import { useControllableState } from './controllable-state';
-import { Surface, UiText } from './primitives';
+import { renderTextChild, Surface } from './primitives';
 import { useUiTheme } from './theme';
 
 type CollapsibleContextValue = {
@@ -79,7 +79,7 @@ export function CollapsibleContent({ children, style, ...props }: ViewProps & { 
   return (
     <Animated.View entering={FadeIn.duration(160)}>
       <Surface {...props} tone="muted" rounded="xl" style={[styles.content, { padding: theme.spacing.lg }, style]}>
-        {typeof children === 'string' ? <UiText>{children}</UiText> : children}
+        {renderTextChild(children)}
       </Surface>
     </Animated.View>
   );

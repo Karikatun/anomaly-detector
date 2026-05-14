@@ -6,7 +6,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { Button } from './button';
 import { useControllableState } from './controllable-state';
 import { Separator } from './separator';
-import { UiText } from './primitives';
+import { renderTextChild } from './primitives';
 import { useUiTheme } from './theme';
 
 type AccordionContextValue = {
@@ -106,7 +106,7 @@ export function AccordionContent({ children, style, ...props }: ViewProps & { ch
   return (
     <Animated.View entering={FadeIn.duration(160)}>
       <View {...props} style={[styles.content, { paddingBottom: theme.spacing.md }, style]}>
-        {typeof children === 'string' ? <UiText variant="sm" muted>{children}</UiText> : children}
+        {renderTextChild(children)}
       </View>
     </Animated.View>
   );

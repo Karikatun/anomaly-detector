@@ -6,6 +6,7 @@ import { RadioGroupItem } from './radio-group';
 import { Separator } from './separator';
 import { renderTextChild, UiPressable, UiText } from './primitives';
 import { useUiTheme } from './theme';
+import { MIN_TOUCH_TARGET } from './touch-target';
 
 export function MenuGroup({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
@@ -123,7 +124,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
-    minHeight: 40,
+    minHeight: MIN_TOUCH_TARGET,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },

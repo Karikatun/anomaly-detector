@@ -8,4 +8,5 @@ test('navigation test IDs cover tab and details flows', () => {
   expect(TEST_IDS.details.openButton).toBe('details.open-button');
   expect(TEST_IDS.details.backButton).toBe('details.back-button');
   expect(TEST_IDS.details.screen).toBe('details.screen');
+  expect(TEST_IDS.screen.backButton).toBe('screen.back-button');
 });

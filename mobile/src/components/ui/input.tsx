@@ -1,6 +1,7 @@
 import { StyleSheet, TextInput, type TextInputProps } from 'react-native';
 
 import { useUiTheme, withAlpha } from './theme';
+import { MIN_TOUCH_TARGET } from './touch-target';
 
 export type InputProps = TextInputProps & {
   invalid?: boolean;
@@ -32,7 +33,7 @@ export function Input({ style, invalid, placeholderTextColor, editable = true, .
 const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
-    minHeight: 40,
+    minHeight: MIN_TOUCH_TARGET,
     minWidth: 0,
     paddingHorizontal: 14,
     paddingVertical: 8,

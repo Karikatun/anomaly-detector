@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View, type ViewProps } from 'react-native';
 
-import { UiText } from './primitives';
+import { renderTextChild, UiText } from './primitives';
 import { useUiTheme } from './theme';
+import { MIN_TOUCH_TARGET } from './touch-target';
 
 export function Table({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
@@ -60,11 +61,7 @@ export function TableRow({ children, style, ...props }: ViewProps & { children?:
 export function TableCell({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   return (
     <View {...props} style={[styles.cell, style]}>
-      {typeof children === 'string' || typeof children === 'number' ? (
-        <UiText variant="sm">{children}</UiText>
-      ) : (
-        children
-      )}
+      {renderTextChild(children)}
     </View>
   );
 }
@@ -85,7 +82,7 @@ const styles = StyleSheet.create({
   },
   cell: {
     justifyContent: 'center',
-    minHeight: 40,
+    minHeight: MIN_TOUCH_TARGET,
     minWidth: 120,
     paddingHorizontal: 12,
   },

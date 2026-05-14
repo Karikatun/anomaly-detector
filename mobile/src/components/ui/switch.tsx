@@ -3,6 +3,7 @@ import { StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle }
 import { useControllableState } from './controllable-state';
 import { UiPressable } from './primitives';
 import { useUiTheme } from './theme';
+import { MIN_TOUCH_TARGET } from './touch-target';
 
 export type SwitchProps = Omit<PressableProps, 'onPress' | 'style'> & {
   checked?: boolean;
@@ -35,23 +36,28 @@ export function Switch({
       accessibilityState={{ checked: accessibilityChecked, disabled: accessibilityDisabled }}
       disabled={disabled}
       style={[
-        styles.track,
-        {
-          backgroundColor: accessibilityChecked ? theme.colors.primary : theme.colors.input,
-          borderRadius: theme.radius.full,
-        },
+        styles.root,
         style,
       ]}
       onPress={() => setChecked(!accessibilityChecked)}>
       <View
         style={[
-          styles.thumb,
+          styles.track,
           {
-            backgroundColor: accessibilityChecked ? theme.colors.primaryForeground : theme.colors.background,
-            transform: [{ translateX: accessibilityChecked ? 22 : 0 }],
+            backgroundColor: accessibilityChecked ? theme.colors.primary : theme.colors.input,
+            borderRadius: theme.radius.full,
           },
-        ]}
-      />
+        ]}>
+        <View
+          style={[
+            styles.thumb,
+            {
+              backgroundColor: accessibilityChecked ? theme.colors.primaryForeground : theme.colors.background,
+              transform: [{ translateX: accessibilityChecked ? 22 : 0 }],
+            },
+          ]}
+        />
+      </View>
     </UiPressable>
   );
 }
@@ -61,6 +67,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     height: 22,
     width: 22,
+  },
+  root: {
+    alignItems: 'center',
+    height: MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    width: 58,
   },
   track: {
     height: 26,

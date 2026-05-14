@@ -85,7 +85,7 @@ export function runMaestroPolicyAudit() {
     'password field must stay secure in production and become automatable only under EXPO_PUBLIC_E2E=1',
   )
   assert(
-    app.includes('keyboardDismissMode="on-drag"'),
+    app.includes('keyboardDismissMode="on-drag"') || app.includes("keyboardDismissMode: 'on-drag'"),
     'auth form ScrollView must use keyboardDismissMode="on-drag" for iOS Maestro stability',
   )
 }

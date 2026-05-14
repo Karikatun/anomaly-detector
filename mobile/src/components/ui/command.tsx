@@ -6,6 +6,7 @@ import { Input, type InputProps } from './input';
 import { Separator } from './separator';
 import { renderTextChild, UiPressable, UiText } from './primitives';
 import { useUiTheme } from './theme';
+import { MIN_TOUCH_TARGET } from './touch-target';
 
 export function Command({ children, style, ...props }: ViewProps & { children?: ReactNode }) {
   const theme = useUiTheme();
@@ -91,7 +92,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
-    minHeight: 40,
+    minHeight: MIN_TOUCH_TARGET,
     paddingHorizontal: 10,
   },
   list: {

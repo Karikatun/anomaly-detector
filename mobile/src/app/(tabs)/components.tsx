@@ -1,8 +1,8 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, View } from 'react-native';
 
+import { Screen } from '@/components/screen';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {
   AlertDialog,
@@ -186,9 +186,9 @@ function ComponentsCatalog() {
 
   if (auth.isBootstrapping) {
     return (
-      <View style={styles.centered}>
+      <Screen centered padded={false}>
         <Spinner />
-      </View>
+      </Screen>
     );
   }
 
@@ -197,34 +197,38 @@ function ComponentsCatalog() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} testID={TEST_IDS.components.catalog}>
-        <View testID={TEST_IDS.auth.dashboard} style={styles.hero}>
-          <View style={styles.heroCopy}>
-            <UiText variant="xs" muted>
-              Mobile UI foundation
-            </UiText>
-            <UiText variant="title" weight="700" testID={TEST_IDS.components.title}>
-              ShadCN native components
-            </UiText>
-            <UiText variant="sm" muted testID={TEST_IDS.auth.userEmail}>
-              {auth.user.email}
-            </UiText>
-          </View>
-          <View style={styles.heroActions}>
-            <Button
-              testID={TEST_IDS.details.openButton}
-              variant="outline"
-              onPress={() => router.push('/details/components')}>
-              Details
-            </Button>
-            <Button testID={TEST_IDS.auth.logoutButton} variant="outline" onPress={() => void auth.logout()}>
-              Logout
-            </Button>
-          </View>
+    <Screen
+      padded={false}
+      scroll
+      contentStyle={styles.content}
+      scrollViewProps={{ showsVerticalScrollIndicator: false }}
+      testID={TEST_IDS.components.catalog}>
+      <View testID={TEST_IDS.auth.dashboard} style={styles.hero}>
+        <View style={styles.heroCopy}>
+          <UiText variant="xs" muted>
+            Mobile UI foundation
+          </UiText>
+          <UiText variant="title" weight="700" testID={TEST_IDS.components.title}>
+            ShadCN native components
+          </UiText>
+          <UiText variant="sm" muted testID={TEST_IDS.auth.userEmail}>
+            {auth.user.email}
+          </UiText>
         </View>
+        <View style={styles.heroActions}>
+          <Button
+            testID={TEST_IDS.details.openButton}
+            variant="outline"
+            onPress={() => router.push('/details/components')}>
+            Details
+          </Button>
+          <Button testID={TEST_IDS.auth.logoutButton} variant="outline" onPress={() => void auth.logout()}>
+            Logout
+          </Button>
+        </View>
+      </View>
 
-        <CatalogSection title="Actions">
+      <CatalogSection title="Actions">
           <ButtonGroup>
             <Button>Default</Button>
             <Button variant="secondary">Secondary</Button>
@@ -628,9 +632,8 @@ function ComponentsCatalog() {
           <Button variant="outline" onPress={() => toast.toast({ title: 'Toast', description: 'Sonner native toast', type: 'success' })}>
             Show toast
           </Button>
-        </CatalogSection>
-      </ScrollView>
-    </SafeAreaView>
+      </CatalogSection>
+    </Screen>
   );
 }
 
@@ -653,11 +656,6 @@ function CatalogSection({ title, children }: { title: string; children: React.Re
 const styles = StyleSheet.create({
   aspect: {
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centered: {
-    alignItems: 'center',
-    flex: 1,
     justifyContent: 'center',
   },
   content: {
@@ -687,9 +685,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-  },
-  safeArea: {
-    flex: 1,
   },
   scrollArea: {
     maxHeight: 96,

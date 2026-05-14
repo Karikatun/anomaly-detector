@@ -6,6 +6,13 @@ The mobile app is built with Expo and React Native. It provides the baseline aut
 
 This section may be updated during first-run bootstrap. If the root `README.md` marks mobile as deferred, add a short note here explaining that mobile work is intentionally paused. When the user activates mobile, remove or rewrite that note before starting Expo or React Native development.
 
+## Current App Shape
+
+- `/` is the register/login screen and intentionally has no tabs.
+- Authenticated users land on `/components`, which lives in the bottom tab shell with `/profile`.
+- `/details/[id]` is a stack screen outside the tabs and uses an in-screen back button at the top left.
+- App screens should use `src/components/screen.tsx` for safe-area handling, standard spacing, scroll/non-scroll layout, keyboard avoidance, and consistent optional back navigation.
+
 ## Stack
 
 - Expo SDK 55

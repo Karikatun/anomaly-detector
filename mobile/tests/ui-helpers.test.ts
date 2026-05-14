@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import React from 'react';
 
 import {
@@ -10,6 +12,7 @@ import { getControllableValue } from '../src/components/ui/controllable-state';
 import { getOtpSlots, normalizeOtpValue } from '../src/components/ui/input-otp-utils';
 import { clampSliderValue, normalizeSliderValues } from '../src/components/ui/slider-utils';
 import { mapTextChildren } from '../src/components/ui/text-utils';
+import { MIN_TOUCH_TARGET } from '../src/components/ui/touch-target';
 
 test('controlled state prefers explicit values over defaults', () => {
   expect(getControllableValue('controlled', 'fallback')).toBe('controlled');
@@ -26,6 +29,29 @@ test('text child renderer wraps mixed raw strings for native containers', () => 
   expect(rendered).toHaveLength(2);
   expect(typeof rendered[0]).not.toBe('string');
   expect(React.isValidElement(rendered[0])).toBe(true);
+});
+
+test('minimum touch target follows mobile accessibility baseline', () => {
+  expect(MIN_TOUCH_TARGET).toBeGreaterThanOrEqual(44);
+});
+
+test('interactive primitives use the shared touch target constant', () => {
+  const uiRoot = resolve(import.meta.dir, '../src/components/ui');
+  const interactiveFiles = [
+    'button.tsx',
+    'calendar.tsx',
+    'checkbox.tsx',
+    'command.tsx',
+    'menu-primitives.tsx',
+    'navigation-menu.tsx',
+    'radio-group.tsx',
+    'select.tsx',
+    'switch.tsx',
+  ];
+
+  for (const file of interactiveFiles) {
+    expect(readFileSync(resolve(uiRoot, file), 'utf8')).toContain('MIN_TOUCH_TARGET');
+  }
 });
 
 test('OTP helper normalizes whitespace and caps slot count', () => {
