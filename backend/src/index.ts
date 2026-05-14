@@ -1,16 +1,31 @@
-import 'dotenv/config'
-
 import { createApp } from './app'
-import { createPrisma } from './db'
-import { loadEnv } from './env'
+import { createBackendRuntime } from './runtime'
 
-const env = loadEnv(Bun.env)
-const prisma = createPrisma(env.DATABASE_URL)
-const app = createApp({ env, prisma })
+const runtime = createBackendRuntime()
+const app = createApp({ env: runtime.env, prisma: runtime.prisma })
 
 const server = Bun.serve({
-  port: env.PORT,
+  port: runtime.env.PORT,
   fetch: app.fetch,
 })
 
 console.log(`Backend listening on ${server.url}`)
+
+let shuttingDown = false
+
+async function shutdown(signal: string) {
+  if (shuttingDown) return
+  shuttingDown = true
+
+  console.log(`Backend received ${signal}; shutting down`)
+  await server.stop(true)
+  await runtime.close()
+}
+
+process.on('SIGINT', () => {
+  void shutdown('SIGINT')
+})
+
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM')
+})

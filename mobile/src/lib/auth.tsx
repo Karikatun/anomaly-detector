@@ -98,6 +98,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     enabled: !isBootstrapping && Boolean(accessToken),
     queryFn: () => api.me(),
   });
+  const user = meQuery.data?.user ?? null;
+  const isResolvingUser = !isBootstrapping && Boolean(accessToken) && !user && meQuery.isPending;
+  const isAuthBootstrapping = isBootstrapping || isResolvingUser;
 
   const register = useCallback(
     async (input: RegisterRequest) => {
@@ -136,14 +139,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      user: meQuery.data?.user ?? null,
-      isBootstrapping,
-      isAuthenticated: Boolean(meQuery.data?.user),
+      user,
+      isBootstrapping: isAuthBootstrapping,
+      isAuthenticated: Boolean(user),
       register,
       login,
       logout,
     }),
-    [isBootstrapping, login, logout, meQuery.data?.user, register],
+    [isAuthBootstrapping, login, logout, register, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

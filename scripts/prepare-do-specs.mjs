@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { validateDigitalOceanCronSchedule } from './do-cron.mjs'
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const scratchDir = resolve(repoRoot, '.scratch/deploy')
 const targets = new Set(['backend-initial', 'backend-final', 'web', 'landing', 'all'])
@@ -35,6 +37,8 @@ if (target === 'backend-initial' || target === 'backend-final' || target === 'al
     ...commonReplacements(),
     REPLACE_WITH_AT_LEAST_32_RANDOM_CHARS: jwtSecret,
     'https://REPLACE_WITH_WEB_DEFAULT_INGRESS': webUrl,
+    REPLACE_WITH_OPTIONAL_BACKEND_WORKERS: optionalBackendWorkersBlock(),
+    REPLACE_WITH_OPTIONAL_BACKEND_CRON_JOBS: optionalBackendCronJobsBlock(),
   })
 }
 
@@ -92,6 +96,10 @@ function printUsage() {
   console.error('  web: DO_BACKEND_URL')
   console.error('  landing: DO_WEB_URL')
   console.error('  all: JWT_SECRET, DO_BACKEND_URL, DO_WEB_URL')
+  console.error('')
+  console.error('Optional backend components:')
+  console.error('  worker: DO_BACKEND_WORKER_ENABLED=true, DO_BACKEND_WORKER_RUN_COMMAND')
+  console.error('  cron: DO_BACKEND_CRON_NAME, DO_BACKEND_CRON_TASK, DO_BACKEND_CRON_SCHEDULE')
 }
 
 function requiredEnv(name) {
@@ -233,6 +241,162 @@ function assertBuildTimeHttpsUrl(outputName, key, value) {
   if (normalized !== new URL(normalized).origin) {
     throw new Error(`${outputName} ${key} must be an origin URL without a path: ${value}`)
   }
+}
+
+function optionalBackendWorkersBlock() {
+  const workerEnvNames = [
+    'DO_BACKEND_WORKER_ENABLED',
+    'DO_BACKEND_WORKER_NAME',
+    'DO_BACKEND_WORKER_RUN_COMMAND',
+    'DO_BACKEND_WORKER_INSTANCE_SIZE_SLUG',
+    'DO_BACKEND_WORKER_INSTANCE_COUNT',
+  ]
+  const enabled = optionalBooleanEnv('DO_BACKEND_WORKER_ENABLED')
+
+  if (!enabled) {
+    const configuredWithoutEnable = workerEnvNames
+      .filter((name) => name !== 'DO_BACKEND_WORKER_ENABLED')
+      .filter((name) => process.env[name]?.trim())
+
+    if (configuredWithoutEnable.length > 0) {
+      throw new Error(
+        `Set DO_BACKEND_WORKER_ENABLED=true to use worker env: ${configuredWithoutEnable.join(', ')}`,
+      )
+    }
+
+    return ''
+  }
+
+  const workerName = doName(process.env.DO_BACKEND_WORKER_NAME ?? 'worker', 32)
+  const runCommand = requiredWorkerRunCommand('DO_BACKEND_WORKER_RUN_COMMAND')
+  const instanceSizeSlug = process.env.DO_BACKEND_WORKER_INSTANCE_SIZE_SLUG?.trim() || 'apps-s-1vcpu-1gb'
+  const instanceCount = optionalPositiveIntegerEnv('DO_BACKEND_WORKER_INSTANCE_COUNT', 1)
+
+  return `
+workers:
+  - name: ${workerName}
+    github:
+      repo: ${githubRepo}
+      branch: ${gitBranch}
+      deploy_on_push: true
+    source_dir: /
+    dockerfile_path: backend/Dockerfile
+    run_command: ${yamlString(runCommand)}
+    instance_size_slug: ${instanceSizeSlug}
+    instance_count: ${instanceCount}
+    envs:
+      - key: DATABASE_URL
+        value: "\${${dbComponentName}.DATABASE_URL}"
+        scope: RUN_TIME
+        type: SECRET
+      - key: JWT_SECRET
+        value: ${yamlString(requiredEnv('JWT_SECRET'))}
+        scope: RUN_TIME
+        type: SECRET`
+}
+
+function requiredWorkerRunCommand(name) {
+  const value = requiredEnv(name)
+  assertSafeYamlString(name, value)
+
+  if (value === 'bun run start:worker') {
+    throw new Error(
+      `${name} must point at a real long-running worker command. The template placeholder 'bun run start:worker' exits immediately and must not be deployed as an App Platform worker.`,
+    )
+  }
+
+  return value
+}
+
+function optionalBackendCronJobsBlock() {
+  const cronEnvNames = [
+    'DO_BACKEND_CRON_NAME',
+    'DO_BACKEND_CRON_TASK',
+    'DO_BACKEND_CRON_SCHEDULE',
+    'DO_BACKEND_CRON_TIME_ZONE',
+  ]
+  const hasCronEnv = cronEnvNames.some((name) => process.env[name]?.trim())
+
+  if (!hasCronEnv) return ''
+
+  const name = doName(requiredEnv('DO_BACKEND_CRON_NAME'), 32)
+  const task = requiredSafeTaskName('DO_BACKEND_CRON_TASK')
+  const schedule = requiredCronSchedule('DO_BACKEND_CRON_SCHEDULE')
+  const timeZone = process.env.DO_BACKEND_CRON_TIME_ZONE?.trim() || 'UTC'
+
+  assertSafeYamlString('DO_BACKEND_CRON_TIME_ZONE', timeZone)
+
+  return `
+  - name: ${name}
+    kind: SCHEDULED
+    github:
+      repo: ${githubRepo}
+      branch: ${gitBranch}
+      deploy_on_push: true
+    source_dir: /
+    dockerfile_path: backend/Dockerfile
+    run_command: ${yamlString(`bun run start:cron -- ${task}`)}
+    instance_count: 1
+    schedule:
+      cron: ${yamlString(schedule)}
+      time_zone: ${yamlString(timeZone)}
+    envs:
+      - key: DATABASE_URL
+        value: "\${${dbComponentName}.DATABASE_URL}"
+        scope: RUN_TIME
+        type: SECRET
+      - key: JWT_SECRET
+        value: ${yamlString(requiredEnv('JWT_SECRET'))}
+        scope: RUN_TIME
+        type: SECRET`
+}
+
+function optionalBooleanEnv(name) {
+  const value = process.env[name]?.trim().toLowerCase()
+  if (!value) return false
+
+  if (['1', 'true', 'yes', 'on'].includes(value)) return true
+  if (['0', 'false', 'no', 'off'].includes(value)) return false
+
+  throw new Error(`${name} must be true or false`)
+}
+
+function optionalPositiveIntegerEnv(name, defaultValue) {
+  const value = process.env[name]?.trim()
+  if (!value) return defaultValue
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`)
+  }
+
+  return parsed
+}
+
+function requiredSafeTaskName(name) {
+  const value = requiredEnv(name)
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/.test(value)) {
+    throw new Error(`${name} must use only letters, numbers, dots, underscores, colons, or dashes`)
+  }
+
+  return value
+}
+
+function requiredCronSchedule(name) {
+  const value = requiredEnv(name)
+  assertSafeYamlString(name, value)
+  return validateDigitalOceanCronSchedule(value, { name })
+}
+
+function assertSafeYamlString(name, value) {
+  if (/[\r\n]/.test(value)) {
+    throw new Error(`${name} must be a single-line value`)
+  }
+}
+
+function yamlString(value) {
+  return JSON.stringify(value)
 }
 
 function doName(value, maxLength = 63) {

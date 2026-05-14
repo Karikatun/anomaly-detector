@@ -16,6 +16,7 @@ This section may be updated during first-run bootstrap. If the root `README.md` 
 - TanStack Form
 - Expo SecureStore
 - Zod contracts from `@web-app-demo/contracts`
+- Native ShadCN-style UI primitives in `src/components/ui`
 - Maestro E2E smoke flow
 
 ## Commands
@@ -47,6 +48,13 @@ Use this value on Android emulators:
 EXPO_PUBLIC_API_URL=http://10.0.2.2:3000
 ```
 
+For Maestro E2E against Expo dev client, prefer a LAN-reachable API URL and set `EXPO_PUBLIC_E2E=1` only for the E2E Metro session:
+
+```bash
+EXPO_PUBLIC_API_URL=http://<LAN_IP>:3000
+EXPO_PUBLIC_E2E=1
+```
+
 `EXPO_PUBLIC_*` variables are included in the client bundle, so never put secrets there.
 
 ## Development Build
@@ -66,7 +74,7 @@ bunx eas-cli build --profile development --platform ios
 
 ## Maestro E2E
 
-The Maestro smoke flow verifies `register -> current user -> logout` against an installed development build. Run it against a backend that is using Docker Compose `postgres_test`, not the development database.
+The Maestro smoke flow verifies `register -> current user -> logout` against an installed Expo development build. It is designed for Expo dev client, not Expo Go. Run it against a backend that is using Docker Compose `postgres_test`, not the development database.
 
 Start the backend test database and API in a separate terminal:
 
@@ -75,17 +83,35 @@ docker compose version
 docker info
 docker compose up -d postgres_test
 export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public"
+export LAN_IP=<your-machine-lan-ip>
+export BACKEND_PORT=3000
+export METRO_PORT=8081
 DATABASE_URL="$TEST_DATABASE_URL" bun run --cwd backend prisma:deploy
-PORT=3000 DATABASE_URL="$TEST_DATABASE_URL" JWT_SECRET="mobile-e2e-secret-at-least-thirty-two-characters" CORS_ORIGINS="http://localhost:8081,http://localhost:19006" COOKIE_SECURE=false bun run --cwd backend start:raw
+PORT="$BACKEND_PORT" DATABASE_URL="$TEST_DATABASE_URL" JWT_SECRET="mobile-e2e-secret-at-least-thirty-two-characters" CORS_ORIGINS="http://$LAN_IP:$METRO_PORT,http://localhost:$METRO_PORT" COOKIE_SECURE=false bun run --cwd backend start:raw
+```
+
+Start Metro for the installed dev build in another terminal:
+
+```bash
+export LAN_IP=<your-machine-lan-ip>
+export BACKEND_PORT=3000
+export METRO_PORT=8081
+EXPO_PUBLIC_E2E=1 EXPO_PUBLIC_API_URL="http://$LAN_IP:$BACKEND_PORT" bunx expo start --dev-client --host lan --port "$METRO_PORT"
 ```
 
 ```bash
 bun run e2e:maestro:setup
 export PATH="$HOME/.maestro/bin:$PATH"
-E2E_API_HEALTH_URL=http://127.0.0.1:3000/health bun run e2e:maestro
+EXPO_PUBLIC_E2E=1 MAESTRO_DEV_SERVER_URL=http://<LAN_IP>:8081 E2E_API_HEALTH_URL=http://<LAN_IP>:3000/health bun run e2e:maestro
 ```
 
-Before running the flow, the backend must be reachable at the `EXPO_PUBLIC_API_URL` used when the mobile bundle was built or started. For iOS Simulator, `http://127.0.0.1:3000` is usually valid. For Android Emulator, use `http://10.0.2.2:3000`.
+Run the local policy audit after changing Maestro flows or runner inputs:
+
+```bash
+bun run e2e:maestro:audit
+```
+
+Before running the flow, the backend must be reachable at the `EXPO_PUBLIC_API_URL` used when Metro serves the mobile bundle, and Metro must be reachable at `MAESTRO_DEV_SERVER_URL`. The runner opens `exp+mobile://expo-development-client/?url=<metro-url>` after state reset and after app relaunch so Maestro lands in the app bundle instead of the Expo launcher or simulator home screen. If you rename the Expo slug, set `MAESTRO_DEV_CLIENT_SCHEME=exp+<slug>`.
 
 Stable selectors live in `src/constants/testIds.ts`, the flow is `.maestro/flows/auth-smoke.yaml`, and the runner is `scripts/e2e/run-maestro.mjs`. Detailed runbook: [../docs/TESTING.md](../docs/TESTING.md).
 
@@ -94,6 +120,8 @@ Stable selectors live in `src/constants/testIds.ts`, the flow is `.maestro/flows
 Use TanStack Query for server state, TanStack Form for forms, and shared Zod schemas for validation. The refresh token is stored in `expo-secure-store` on native platforms; the access token lives only in app memory.
 
 Keep API URL handling, auth headers, refresh/retry, and error parsing centralized in the API client. Add stable `testID` constants for interactive controls that E2E needs to touch.
+
+Mobile UI primitives live in `src/components/ui` and mirror the local Web ShadCN registry by file name. They are React Native-first implementations using `style`, `textStyle`, controlled/uncontrolled values, and native touch patterns instead of DOM/Radix props such as `className` or `asChild`. The protected `/components` route is the local component catalog and the post-auth smoke surface.
 
 ## Current Upstream Documentation
 

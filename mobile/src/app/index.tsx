@@ -6,6 +6,7 @@ import {
   type RegisterRequest,
 } from '@web-app-demo/contracts';
 import type { ComponentProps } from 'react';
+import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,6 +28,7 @@ import { ApiRequestError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 type AuthMode = 'register' | 'login';
+const isE2eMode = process.env.EXPO_PUBLIC_E2E === '1';
 
 export default function HomeScreen() {
   const auth = useAuth();
@@ -74,37 +76,7 @@ export default function HomeScreen() {
   }
 
   if (auth.user) {
-    return (
-      <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.dashboard} testID={TEST_IDS.auth.dashboard}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Current user
-            </ThemedText>
-            <ThemedText type="title">{auth.user.displayName ?? auth.user.email}</ThemedText>
-            <ThemedText themeColor="textSecondary" testID={TEST_IDS.auth.userEmail}>
-              {auth.user.email}
-            </ThemedText>
-            <ThemedView type="backgroundElement" style={styles.factBox}>
-              <ThemedText type="smallBold">User ID</ThemedText>
-              <ThemedText type="code" themeColor="textSecondary">
-                {auth.user.id}
-              </ThemedText>
-            </ThemedView>
-            <Pressable
-              accessibilityLabel="Logout"
-              accessibilityRole="button"
-              style={styles.primaryButton}
-              testID={TEST_IDS.auth.logoutButton}
-              onPress={() => void auth.logout()}>
-              <ThemedText type="smallBold" style={styles.primaryButtonText}>
-                Logout
-              </ThemedText>
-            </Pressable>
-          </View>
-        </SafeAreaView>
-      </ThemedView>
-    );
+    return <Redirect href="/components" />;
   }
 
   return (
@@ -114,6 +86,7 @@ export default function HomeScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboardView}>
           <ScrollView
+            keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}>
@@ -189,7 +162,7 @@ export default function HomeScreen() {
                     testID={TEST_IDS.auth.passwordInput}
                     value={field.state.value}
                     autoComplete={isRegister ? 'new-password' : 'current-password'}
-                    secureTextEntry
+                    secureTextEntry={!isE2eMode}
                     onBlur={field.handleBlur}
                     onChangeText={field.handleChange}
                     errors={field.state.meta.errors}
@@ -307,7 +280,7 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 48,
     borderRadius: Spacing.two,
     alignItems: 'center',
     justifyContent: 'center',
@@ -349,16 +322,5 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.55,
-  },
-  dashboard: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: Spacing.four,
-    gap: Spacing.three,
-  },
-  factBox: {
-    gap: Spacing.one,
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
   },
 });

@@ -1,116 +1,110 @@
 import {
-  Tabs,
   TabList,
-  TabTrigger,
   TabSlot,
-  TabTriggerSlotProps,
-  TabListProps,
+  Tabs,
+  TabTrigger,
+  type TabListProps,
+  type TabTriggerSlotProps,
 } from 'expo-router/ui';
-import { SymbolView } from 'expo-symbols';
-import React from 'react';
-import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ExternalLink } from './external-link';
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
-
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { ThemedText } from '@/components/themed-text';
+import { TEST_IDS } from '@/constants/testIds';
+import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
+  const colors = useTheme();
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, Spacing.two);
+  const slotStyle = StyleSheet.flatten([styles.slot, { paddingBottom: 56 + bottomPadding }]);
+  const tabBarStyle = StyleSheet.flatten([
+    styles.tabBar,
+    {
+      backgroundColor: colors.background,
+      borderTopColor: colors.backgroundElement,
+      paddingBottom: bottomPadding,
+    },
+  ]);
+
   return (
-    <Tabs>
-      <TabSlot style={{ height: '100%' }} />
+    <Tabs style={styles.root}>
+      <TabSlot style={slotStyle} />
       <TabList asChild>
-        <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
-            <TabButton>Home</TabButton>
+        <BottomTabList style={tabBarStyle}>
+          <TabTrigger name="components" href="/components" asChild>
+            <TabButton
+              icon={{ ios: 'square.grid.2x2.fill', android: 'view_module', web: 'view_module' }}
+              testID={TEST_IDS.tabs.componentsTab}>
+              Components
+            </TabButton>
           </TabTrigger>
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explore</TabButton>
+          <TabTrigger name="profile" href="/profile" asChild>
+            <TabButton
+              icon={{ ios: 'person.crop.circle.fill', android: 'person', web: 'person' }}
+              testID={TEST_IDS.tabs.profileTab}>
+              Profile
+            </TabButton>
           </TabTrigger>
-        </CustomTabList>
+        </BottomTabList>
       </TabList>
     </Tabs>
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+function BottomTabList(props: TabListProps) {
+  return <View {...props} />;
+}
+
+type TabButtonProps = TabTriggerSlotProps & {
+  icon: SymbolViewProps['name'];
+};
+
+function TabButton({ children, icon, isFocused, ...props }: TabButtonProps) {
+  const colors = useTheme();
+  const color = isFocused ? colors.text : colors.textSecondary;
+
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
-          {children}
-        </ThemedText>
-      </ThemedView>
+    <Pressable {...props} style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
+      <SymbolView name={icon} size={22} tintColor={color} />
+      <ThemedText type="smallBold" themeColor={isFocused ? 'text' : 'textSecondary'}>
+        {children}
+      </ThemedText>
     </Pressable>
   );
 }
 
-export function CustomTabList(props: TabListProps) {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-
-  return (
-    <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          Expo Starter
-        </ThemedText>
-
-        {props.children}
-
-        <ExternalLink href="https://docs.expo.dev" asChild>
-          <Pressable style={styles.externalPressable}>
-            <ThemedText type="link">Docs</ThemedText>
-            <SymbolView
-              tintColor={colors.text}
-              name={{ ios: 'arrow.up.right.square', web: 'link' }}
-              size={12}
-            />
-          </Pressable>
-        </ExternalLink>
-      </ThemedView>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  tabListContainer: {
-    position: 'absolute',
-    width: '100%',
-    padding: Spacing.three,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  innerContainer: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
-    borderRadius: Spacing.five,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexGrow: 1,
-    gap: Spacing.two,
-    maxWidth: MaxContentWidth,
-  },
-  brandText: {
-    marginRight: 'auto',
-  },
+const styles = {
   pressed: {
-    opacity: 0.7,
+    opacity: 0.72,
   },
-  tabButtonView: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+  root: {
+    flex: 1,
+    minHeight: '100vh' as unknown as ViewStyle['minHeight'],
   },
-  externalPressable: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  slot: {
+    minHeight: '100vh' as unknown as ViewStyle['minHeight'],
+  },
+  tabBar: {
     alignItems: 'center',
-    gap: Spacing.one,
-    marginLeft: Spacing.three,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    bottom: 0,
+    flexDirection: 'row',
+    gap: Spacing.two,
+    justifyContent: 'center',
+    left: 0,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    position: 'fixed' as ViewStyle['position'],
+    right: 0,
   },
-});
+  tabButton: {
+    alignItems: 'center',
+    flex: 1,
+    gap: Spacing.one,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+} satisfies Record<string, ViewStyle>;

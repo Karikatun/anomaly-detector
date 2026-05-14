@@ -10,13 +10,16 @@ Do not hand-copy API shapes into clients. When a contract changes, validate prod
 
 ## Backend
 
-Backend code follows this flow:
+Backend API code follows this flow:
 
 ```text
 Hono route -> Zod validation -> auth/session guard -> feature service -> Prisma -> DTO
 ```
 
-- `src/index.ts` is only the runtime entrypoint.
+- `src/index.ts` is the API runtime entrypoint.
+- `src/worker.ts` is the long-running worker entrypoint. Keep it disabled in deployment specs until a real background handler is registered.
+- `src/cron.ts` is the one-shot scheduled-job entrypoint. Add concrete tasks to its registry and deploy scheduled jobs only for named product tasks.
+- `src/runtime.ts` owns shared env loading, Prisma creation, and runtime cleanup for all backend entrypoints.
 - `src/app.ts` owns the Hono app, CORS, secure headers, error handling, route mounting, and OpenAPI output.
 - `src/env.ts` validates environment variables with Zod.
 - `src/db.ts` creates the Prisma client.
@@ -26,9 +29,9 @@ Routes should stay thin. Do not put business logic into Hono handlers, UI client
 
 ## Runtime Shape And Real-Time
 
-The default runtime shape is a modular monolith: one backend service, one database, shared contracts, and clear feature boundaries inside the repository. Do not introduce microservices, queues, workers, or extra infrastructure until the product has a concrete need that the monolith cannot meet clearly.
+The default runtime shape is a modular monolith: one backend codebase, one database, shared contracts, and clear feature boundaries inside the repository. The backend can expose separate API, worker, and cron entrypoints while still sharing Prisma schema, env validation, services, and contracts. Do not add queues, brokers, or extra infrastructure until the product has a concrete need that the monolith cannot meet clearly.
 
-On the default DigitalOcean production path, run the backend/API as three `apps-s-1vcpu-1gb` App Platform containers. This keeps the first production shape horizontally scaled and cost-conscious while avoiding a single large runtime container. `web` and `landing` remain App Platform Static Site components and do not have runtime container sizes.
+On the default DigitalOcean production path, run the backend/API as three `apps-s-1vcpu-1gb` App Platform containers. Add App Platform worker or scheduled-job components from the same `backend/Dockerfile` only when the product has a concrete background or periodic task. `web` and `landing` remain App Platform Static Site components and do not have runtime container sizes.
 
 For real-time features such as chat, presence, collaboration, live notifications, or activity feeds, start with the same backend service. A single instance can keep an in-memory registry of its own WebSocket connections. Once the backend runs multiple instances, in-memory fanout is no longer enough: one user may be connected to instance A while another is connected to instance B. At that point, add a managed Redis-compatible Pub/Sub broker between backend instances so each instance can publish domain events and subscribe to events it must deliver to its local sockets.
 

@@ -10,4 +10,17 @@ export const TEST_IDS = {
     submitButton: 'auth.submit-button',
     userEmail: 'auth.user-email',
   },
+  components: {
+    catalog: 'components.catalog',
+    title: 'components.title',
+  },
+  details: {
+    backButton: 'details.back-button',
+    openButton: 'details.open-button',
+    screen: 'details.screen',
+  },
+  tabs: {
+    componentsTab: 'tabs.components',
+    profileTab: 'tabs.profile',
+  },
 } as const;

@@ -39,6 +39,9 @@
 - Before using framework-specific APIs, check the current official documentation or local installed package types/examples, then write code to match the current API rather than memory.
 - For E2E, use Playwright for web and Maestro for mobile. Read `docs/TESTING.md` before adding flows. Prefer valuable user-visible coverage over narrow happy-path-only smoke tests: cover critical journeys, high-risk regressions, auth/session behavior, persistence, navigation, and important empty/error/edge states when the test can stay stable and maintainable. Keep exhaustive validation matrices, combinatorial edge cases, concurrency, and pure business rules in integration/contract/unit tests.
 - For mobile E2E selectors, prefer stable React Native `testID` constants from `mobile/src/constants/testIds.ts`; do not rely on coordinates or fragile text when an action selector can have an id.
+- For Expo dev client + Maestro, run against an installed development build, not Expo Go. Open the app bundle with the dev-client `openLink` URL from `MAESTRO_DEV_SERVER_URL`, and preflight backend/Metro reachability before UI steps.
+- For mobile E2E input stability, use `EXPO_PUBLIC_E2E=1` only in E2E bundles, keep production password fields secure, avoid `hideKeyboard`, center important CTA targets before taps, and keep custom touch targets around `44-48pt` or larger.
+- After changing mobile Maestro flows, runner inputs, or E2E-only app behavior, run `bun run --cwd mobile e2e:maestro:audit` alongside the relevant typecheck/test/lint validation.
 
 ## Project Context
 
@@ -54,7 +57,7 @@
 This block exists only for fresh installs from the template. If this repository has not been initialized for a real project yet:
 
 - Read the root `README.md`, especially `Agent Repo Download Instructions`, before setup or feature work.
-- Follow that README section for product intake, active/deferred surfaces, repository remote handling, Docker/PostgreSQL setup, deployment scope, and Expo/EAS owner setup.
+- Follow that README section for product intake, active/deferred surfaces, repository remote handling, Docker/PostgreSQL setup, deployment scope, Expo/EAS owner setup, and mobile Maestro dev-client setup when mobile E2E is active.
 - Record durable project choices in README files and docs, not in `AGENTS.md` or `CLAUDE.md`.
 - After first-run setup is complete, delete this entire `Bootstrap-Only Instructions` block from both `AGENTS.md` and `CLAUDE.md` so future agent context stays lean.
 <!-- BOOTSTRAP_ONLY_END -->

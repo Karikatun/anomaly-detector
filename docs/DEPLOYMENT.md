@@ -158,6 +158,34 @@ bun run --cwd backend prisma:deploy
 
 Do not run `prisma migrate dev` in production and do not hand-write migration SQL.
 
+## Backend Worker And Cron
+
+The backend ships as one Docker image with separate entrypoints:
+
+- API service: `bun run start:api`
+- long-running worker: `bun run start:worker`
+- one-shot cron runner: `bun run start:cron -- <task>`
+
+Keep API, worker, and cron in the same backend workspace so they share Prisma schema, generated Prisma client, env validation, contracts, and feature services. Do not create a second backend package or repository just to run background code.
+
+DigitalOcean App Platform supports non-routable worker components and scheduled job components in the same app spec. The committed backend template always includes the API service and `migrate` pre-deploy job. Optional worker and scheduled jobs are inserted by the generator only when explicitly configured:
+
+```bash
+# Add one worker component only after adding a real long-running handler.
+export DO_BACKEND_WORKER_ENABLED=true
+export DO_BACKEND_WORKER_RUN_COMMAND="bun run start:worker:real-handler"
+
+# Add one scheduled job component.
+export DO_BACKEND_CRON_NAME=daily-maintenance
+export DO_BACKEND_CRON_TASK=noop
+export DO_BACKEND_CRON_SCHEDULE="0 3 * * *"
+export DO_BACKEND_CRON_TIME_ZONE=UTC
+
+bun run deploy:do:specs backend-final
+```
+
+Use worker components only after a real long-running handler exists. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND` and refuses the template placeholder `bun run start:worker`, because that placeholder exits immediately and should not be deployed as an App Platform worker. Use scheduled jobs only for concrete product tasks, and keep the schedule at DigitalOcean's supported cadence of at least 15 minutes. Both optional components use `backend/Dockerfile`, the repository-root build context, and the same managed PostgreSQL binding as the API. Add Spaces or other runtime secrets to those components when the specific background task needs them.
+
 ## Real-Time And Horizontal Scaling
 
 Keep production architecture monolithic by default: one backend service can own HTTP routes, auth, persistence, and any WebSocket endpoints. Do not split chat, notifications, or presence into separate services unless there is a proven operational need.
