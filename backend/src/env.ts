@@ -5,6 +5,8 @@ const booleanStringSchema = z
   .default('false')
   .transform((value) => value === 'true')
 
+const knownWeakJwtSecrets = new Set(['replace-with-at-least-32-random-characters'])
+
 const optionalStringSchema = z.preprocess((value) => {
   if (typeof value !== 'string') return value
   const trimmed = value.trim()
@@ -25,6 +27,7 @@ const stringWithDefault = (defaultValue: string) =>
   }, z.string().min(1).default(defaultValue))
 
 const envSchema = z.object({
+  NODE_ENV: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
@@ -51,6 +54,7 @@ const envSchema = z.object({
   SPACES_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 60 * 60).default(5 * 60),
   SPACES_PUBLIC_CACHE_CONTROL: stringWithDefault('public, max-age=31536000, immutable'),
 }).superRefine((env, ctx) => {
+  validateJwtSecret(env, ctx)
   validateCorsOrigins(env, ctx)
   validateStorageEnv(env, ctx)
 })
@@ -59,6 +63,31 @@ export type AppEnv = z.infer<typeof envSchema>
 
 export function loadEnv(source: Record<string, string | undefined>) {
   return envSchema.parse(source)
+}
+
+function validateJwtSecret(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  if (!isProductionLikeRuntime(env)) return
+
+  if (isWeakJwtSecret(env.JWT_SECRET)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['JWT_SECRET'],
+      message: 'JWT_SECRET must be a non-placeholder random secret in production',
+    })
+  }
+}
+
+function isProductionLikeRuntime(env: z.infer<typeof envSchema>) {
+  return env.NODE_ENV === 'production' || env.COOKIE_SECURE
+}
+
+function isWeakJwtSecret(secret: string) {
+  const normalized = secret.trim().toLowerCase()
+  return (
+    normalized.length === 0 ||
+    knownWeakJwtSecrets.has(normalized) ||
+    new Set(normalized).size === 1
+  )
 }
 
 function validateCorsOrigins(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {

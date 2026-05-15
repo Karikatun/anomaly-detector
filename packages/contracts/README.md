@@ -35,6 +35,8 @@ When a schema changes, validate both sides in the same pass:
 
 Do not add runtime-only business logic here. Contracts should stay focused on data validation, normalization, and shared TypeScript types.
 
+For user-provided or database-stored public media URLs, validate the scheme explicitly instead of relying on `.url()` alone. Public image, video, and file URL fields should require `https:` unless a product has a documented reason to accept another scheme.
+
 ## Current Upstream Documentation
 
 For schema, TypeScript, or consumer integration questions, consult the current upstream documentation linked here first. This README describes this package's conventions; upstream docs are authoritative for library behavior.

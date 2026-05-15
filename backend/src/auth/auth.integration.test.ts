@@ -223,6 +223,69 @@ maybeDescribe('auth API integration', () => {
     expect(setCookie).toContain('SameSite=None')
   })
 
+  test('production cookie auth rejects untrusted refresh and logout origins', async () => {
+    const productionApp = createApp({
+      env: {
+        ...env,
+        CORS_ORIGINS: ['https://web.example.com'],
+        COOKIE_SECURE: true,
+      },
+      prisma,
+    })
+    const register = await productionApp.request('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://web.example.com',
+        'X-Client-Platform': 'web',
+      },
+      body: JSON.stringify({
+        email: 'csrf-cookie@example.com',
+        password: 'password123',
+      }),
+    })
+    const cookie = register.headers.get('set-cookie')!.split(';')[0]
+
+    const noOriginRefresh = await productionApp.request('/api/auth/refresh', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookie,
+        'X-Client-Platform': 'web',
+      },
+      body: JSON.stringify({}),
+    })
+    const noOriginBody = await noOriginRefresh.json()
+    expect(noOriginRefresh.status).toBe(403)
+    expect(noOriginBody.error.code).toBe('FORBIDDEN')
+
+    const untrustedLogout = await productionApp.request('/api/auth/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookie,
+        Origin: 'https://attacker.example',
+        'X-Client-Platform': 'web',
+      },
+      body: JSON.stringify({}),
+    })
+    const untrustedLogoutBody = await untrustedLogout.json()
+    expect(untrustedLogout.status).toBe(403)
+    expect(untrustedLogoutBody.error.code).toBe('FORBIDDEN')
+
+    const allowedRefresh = await productionApp.request('/api/auth/refresh', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookie,
+        Origin: 'https://web.example.com',
+        'X-Client-Platform': 'web',
+      },
+      body: JSON.stringify({}),
+    })
+    expect(allowedRefresh.status).toBe(200)
+  })
+
   test('guards me and returns stable validation errors', async () => {
     const unauthorizedMe = await app.request('/api/auth/me')
     expect(unauthorizedMe.status).toBe(401)

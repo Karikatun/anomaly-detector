@@ -99,6 +99,8 @@ The presigned PUT URL validates the requested upload intent before signing. If t
 
 For public media, the object should be uploaded with `public-read`, immutable object keys, and long cache headers. For private files, keep objects private and return short-lived presigned GET URLs only after permission checks.
 
+If product records store public media URLs instead of only object keys, shared API contracts must reject non-HTTPS schemes such as `javascript:`, `data:`, and `ftp:`. Prefer storing app-owned object keys and deriving public CDN URLs on the backend.
+
 When browser clients upload directly to Spaces, configure Spaces CORS for the deployed origins and allowed upload headers such as `Content-Type`, `Cache-Control`, and `x-amz-acl`. If the Spaces CDN is enabled and CORS changed after files were cached, purge the CDN cache.
 
 ## Images And Optimization

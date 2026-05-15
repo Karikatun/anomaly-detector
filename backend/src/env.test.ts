@@ -53,6 +53,25 @@ describe('loadEnv', () => {
     expect(env.SPACES_CDN_BASE_URL).toBe('https://images.example.com')
   })
 
+  test('rejects known weak JWT secrets in production-like runtimes', () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgresql://postgres:postgres@localhost:54329/web_app_demo',
+        JWT_SECRET: 'replace-with-at-least-32-random-characters',
+      }),
+    ).toThrow('JWT_SECRET')
+
+    expect(() =>
+      loadEnv({
+        DATABASE_URL: 'postgresql://postgres:postgres@localhost:54329/web_app_demo',
+        JWT_SECRET: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        COOKIE_SECURE: 'true',
+        CORS_ORIGINS: 'https://web.example.com',
+      }),
+    ).toThrow('JWT_SECRET')
+  })
+
   test('rejects unsafe production CORS origins', () => {
     const baseEnv = {
       DATABASE_URL: 'postgresql://postgres:postgres@localhost:54329/web_app_demo',

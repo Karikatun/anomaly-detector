@@ -30,6 +30,8 @@ COOKIE_SECURE=true
 
 `CORS_ORIGINS` must include every browser origin that calls the API with credentials. Use exact origins only, for example `https://web.example.com`; do not use wildcards, empty values, or paths. Native mobile apps do not need CORS, but Expo web previews or browser-based mobile previews do.
 
+`JWT_SECRET` belongs in the production backend runtime env. Generate it with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
+
 If storage is active, also configure:
 
 ```bash
@@ -80,7 +82,7 @@ Keep committed spec templates under `.do/*.yaml.example`. Generate concrete spec
 bun run deploy:do:specs <backend-initial|backend-final|web|landing|all>
 ```
 
-The generator rejects empty `value:` lines, unresolved `REPLACE_WITH_*` placeholders, wildcard/empty/path-bearing production CORS origins, short `JWT_SECRET`, and missing build-time static URLs. Do not replace secrets or URLs with manual `sed`, `perl`, or shell one-liners.
+The generator rejects empty `value:` lines, unresolved `REPLACE_WITH_*` placeholders, wildcard/empty/path-bearing production CORS origins, short, placeholder, or obviously weak `JWT_SECRET`, and missing build-time static URLs. Do not replace secrets or URLs with manual `sed`, `perl`, or shell one-liners.
 
 Minimum environment for spec generation:
 
@@ -250,10 +252,11 @@ Production browser auth runs cross-origin when backend and web use different `*.
 
 - backend cookies: `HttpOnly`, `Secure`, `SameSite=None`, scoped to `/api/auth`;
 - backend CORS: exact HTTPS origins only, `credentials: true`, no wildcard fallback;
+- cookie-based `refresh` and `logout`: require an `Origin` header that exactly matches `CORS_ORIGINS`;
 - web API client: `credentials: include`;
 - web static build: concrete `VITE_API_URL` pointing at the backend origin.
 
-The backend env validator rejects empty/wildcard/path-bearing `CORS_ORIGINS` and rejects HTTP origins when `COOKIE_SECURE=true`.
+The backend env validator rejects empty/wildcard/path-bearing `CORS_ORIGINS`, rejects HTTP origins when `COOKIE_SECURE=true`, and rejects placeholder or obviously weak `JWT_SECRET` values in production-like runtimes.
 
 ## Spaces Storage
 
@@ -332,7 +335,7 @@ After deployment:
 
 - `GitHub user not authenticated`: App Platform GitHub integration was not connected or did not have repository access before `doctl apps create`.
 - Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, `VITE_API_URL`, and `PUBLIC_WEB_APP_URL` must be concrete before deployment.
-- Backend crash on startup: empty `JWT_SECRET` is rejected by env validation, so the spec generator must fail before App Platform deploys it.
+- Backend crash on startup: empty, placeholder, or obviously weak `JWT_SECRET` is rejected by env validation, so the spec generator must fail before App Platform deploys it.
 - Broken browser auth CORS: production CORS must use exact HTTPS origins, not wildcard or empty values.
 - Web calling its own `/api/*`: missing `VITE_API_URL` at static build time makes the bundle use the wrong origin.
 - Empty landing links: missing `PUBLIC_WEB_APP_URL` at build time can bake invalid public links into landing output.

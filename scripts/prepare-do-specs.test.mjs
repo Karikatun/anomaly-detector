@@ -7,6 +7,20 @@ const repoRoot = resolve(import.meta.dirname, '..');
 const backendSpecPath = resolve(repoRoot, '.scratch/deploy/backend-app.yaml');
 
 describe('prepare-do-specs', () => {
+  test('rejects placeholder and obviously weak production JWT secrets', () => {
+    for (const jwtSecret of [
+      'replace-with-at-least-32-random-characters',
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    ]) {
+      const result = runPrepareSpecs({ JWT_SECRET: jwtSecret });
+
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(
+        'JWT_SECRET must be a non-placeholder random secret',
+      );
+    }
+  });
+
   test('rejects the placeholder backend worker command', () => {
     const result = runPrepareSpecs({
       DO_BACKEND_WORKER_ENABLED: 'true',

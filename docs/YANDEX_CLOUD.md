@@ -95,6 +95,8 @@ COOKIE_SECURE=true
 
 Container environment variables are part of a revision. When deploying with `yc serverless container revision deploy --environment`, include the full required environment for that revision because changing environment variables creates a new revision. Prefer the console, Terraform, or Yandex Lockbox for sensitive values when shell quoting becomes risky.
 
+Generate `JWT_SECRET` with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
+
 ## Managed PostgreSQL
 
 Use Yandex Managed Service for PostgreSQL for production data.
@@ -217,6 +219,7 @@ After deployment:
 
 - verify `/health` on the Serverless Container public URL;
 - verify browser auth only from allowed `CORS_ORIGINS`;
+- verify cookie-backed refresh/logout reject missing or untrusted browser `Origin` headers;
 - verify Managed PostgreSQL connectivity and that Prisma migrations applied exactly once;
 - verify `web` route refreshes load the SPA fallback instead of a broken 404 page;
 - verify `landing` static assets load from the production domain;

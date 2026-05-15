@@ -10,6 +10,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const scratchDir = resolve(repoRoot, '.scratch/deploy')
 const targets = new Set(['backend-initial', 'backend-final', 'web', 'landing', 'all'])
 const target = process.argv[2]
+const knownWeakJwtSecrets = new Set(['replace-with-at-least-32-random-characters'])
 
 if (!targets.has(target)) {
   printUsage()
@@ -30,7 +31,7 @@ await mkdir(scratchDir, { recursive: true })
 
 if (target === 'backend-initial' || target === 'backend-final' || target === 'all') {
   const jwtSecret = requiredEnv('JWT_SECRET')
-  assertMinLength('JWT_SECRET', jwtSecret, 32)
+  assertStrongJwtSecret(jwtSecret)
   const webUrl = target === 'backend-initial' ? 'https://placeholder.invalid' : requiredUrlEnv('DO_WEB_URL')
 
   await writePreparedSpec('backend-app.yaml.example', 'backend-app.yaml', {
@@ -159,6 +160,19 @@ function assertMinLength(name, value, minimum) {
   }
 }
 
+function assertStrongJwtSecret(value) {
+  assertMinLength('JWT_SECRET', value, 32)
+
+  const normalized = value.trim().toLowerCase()
+  if (
+    normalized.length === 0 ||
+    knownWeakJwtSecrets.has(normalized) ||
+    new Set(normalized).size === 1
+  ) {
+    throw new Error('JWT_SECRET must be a non-placeholder random secret')
+  }
+}
+
 function assertNoPlaceholders(outputName, contents) {
   const placeholders = contents.match(/REPLACE_WITH_[A-Z0-9_]+/g)
 
@@ -180,7 +194,7 @@ function assertNoEmptyYamlValues(outputName, contents) {
 function assertSafeProductionEnv(outputName, contents) {
   const jwtSecret = findEnvValue(contents, 'JWT_SECRET')
   if (jwtSecret !== undefined) {
-    assertMinLength('JWT_SECRET', jwtSecret, 32)
+    assertStrongJwtSecret(jwtSecret)
   }
 
   const corsOrigins = findEnvValue(contents, 'CORS_ORIGINS')

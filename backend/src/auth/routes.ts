@@ -13,7 +13,7 @@ import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 
 import type { AppEnv } from '../env'
-import { errorResponse } from '../http/errors'
+import { AppError, errorResponse } from '../http/errors'
 import type { AuthService } from './service'
 
 const refreshCookieName = 'web_app_demo_refresh'
@@ -130,6 +130,10 @@ const refreshRoute = createRoute({
       content: errorResponseContent,
       description: 'Invalid refresh token',
     },
+    403: {
+      content: errorResponseContent,
+      description: 'Cookie auth request came from an untrusted browser origin',
+    },
   },
 })
 
@@ -168,6 +172,10 @@ const logoutRoute = createRoute({
       content: errorResponseContent,
       description: 'Invalid payload',
     },
+    403: {
+      content: errorResponseContent,
+      description: 'Cookie auth request came from an untrusted browser origin',
+    },
   },
 })
 
@@ -205,7 +213,9 @@ export function createAuthRoutes() {
     const auth = c.get('authService')
     const env = c.get('env')
     const body = c.req.valid('json')
-    const result = await auth.refresh(body.refreshToken ?? getRefreshCookie(c), requestMetadata(c))
+    const cookieRefreshToken = getRefreshCookie(c)
+    assertTrustedCookieRequest(c, env, body.refreshToken, cookieRefreshToken)
+    const result = await auth.refresh(body.refreshToken ?? cookieRefreshToken, requestMetadata(c))
     setRefreshCookie(c, result.refreshToken, env)
 
     return c.json(responseForClient(c, result), 200)
@@ -220,7 +230,9 @@ export function createAuthRoutes() {
     const auth = c.get('authService')
     const env = c.get('env')
     const body = c.req.valid('json')
-    await auth.logout(body.refreshToken ?? getRefreshCookie(c))
+    const cookieRefreshToken = getRefreshCookie(c)
+    assertTrustedCookieRequest(c, env, body.refreshToken, cookieRefreshToken)
+    await auth.logout(body.refreshToken ?? cookieRefreshToken)
     deleteCookie(c, refreshCookieName, {
       path: '/api/auth',
       secure: env.COOKIE_SECURE,
@@ -249,6 +261,24 @@ function bearerToken(c: Context) {
 
 function getRefreshCookie(c: Context) {
   return getCookie(c, refreshCookieName)
+}
+
+function assertTrustedCookieRequest(
+  c: Context,
+  env: AppEnv,
+  bodyRefreshToken: string | undefined,
+  cookieRefreshToken: string | undefined,
+) {
+  if (!env.COOKIE_SECURE || bodyRefreshToken !== undefined || !cookieRefreshToken) {
+    return
+  }
+
+  const origin = c.req.header('origin')
+  if (origin && env.CORS_ORIGINS.includes(origin)) {
+    return
+  }
+
+  throw new AppError(403, 'FORBIDDEN', 'Cookie auth requests require a trusted Origin')
 }
 
 function setRefreshCookie(c: Context, refreshToken: string, env: AppEnv) {
