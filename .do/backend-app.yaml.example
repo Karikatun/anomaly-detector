@@ -19,8 +19,8 @@ services:
     source_dir: /
     dockerfile_path: backend/Dockerfile
     http_port: 8080
-    instance_size_slug: apps-s-1vcpu-1gb
-    instance_count: 3
+    instance_size_slug: REPLACE_WITH_DO_API_INSTANCE_SIZE_SLUG
+    instance_count: REPLACE_WITH_DO_API_INSTANCE_COUNT
     health_check:
       http_path: /health
       initial_delay_seconds: 10

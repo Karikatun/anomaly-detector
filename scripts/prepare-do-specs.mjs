@@ -11,6 +11,29 @@ const scratchDir = resolve(repoRoot, '.scratch/deploy')
 const targets = new Set(['backend-initial', 'backend-final', 'web', 'landing', 'all'])
 const target = process.argv[2]
 const knownWeakJwtSecrets = new Set(['replace-with-at-least-32-random-characters'])
+const appPlatformInstanceSizeSlugs = new Set([
+  'apps-s-1vcpu-0.5gb',
+  'apps-s-1vcpu-1gb-fixed',
+  'apps-s-1vcpu-1gb',
+  'apps-s-1vcpu-2gb',
+  'apps-s-2vcpu-4gb',
+  'apps-d-1vcpu-0.5gb',
+  'apps-d-1vcpu-1gb',
+  'apps-d-1vcpu-2gb',
+  'apps-d-1vcpu-4gb',
+  'apps-d-2vcpu-4gb',
+  'apps-d-2vcpu-8gb',
+  'apps-d-4vcpu-8gb',
+  'apps-d-4vcpu-16gb',
+  'apps-d-8vcpu-32gb',
+])
+
+// Budget-bearing DigitalOcean defaults live here so generated specs, tests, and docs have one owner.
+// Web and landing use Static Site templates on purpose, so they do not get runtime machine sizing.
+const defaultApiServiceInstanceSizeSlug = 'apps-s-1vcpu-1gb'
+const defaultApiServiceInstanceCount = 1
+const defaultBackendWorkerInstanceSizeSlug = defaultApiServiceInstanceSizeSlug
+const defaultBackendWorkerInstanceCount = 1
 
 if (!targets.has(target)) {
   printUsage()
@@ -26,6 +49,14 @@ const dbComponentName = doName(process.env.DO_DB_COMPONENT_NAME ?? `${projectSlu
 const dbClusterName = doName(process.env.DO_DB_CLUSTER_NAME ?? `${projectSlug}-pg`)
 const dbName = process.env.DO_DB_NAME?.trim() || 'defaultdb'
 const dbUser = process.env.DO_DB_USER?.trim() || 'doadmin'
+const apiServiceInstanceSizeSlug = optionalAppPlatformInstanceSizeSlugEnv(
+  'DO_API_INSTANCE_SIZE_SLUG',
+  defaultApiServiceInstanceSizeSlug,
+)
+const apiServiceInstanceCount = optionalPositiveIntegerEnv(
+  'DO_API_INSTANCE_COUNT',
+  defaultApiServiceInstanceCount,
+)
 
 await mkdir(scratchDir, { recursive: true })
 
@@ -44,6 +75,7 @@ if (target === 'backend-initial' || target === 'backend-final' || target === 'al
 }
 
 if (target === 'web' || target === 'all') {
+  // Frontend builds are deployed as Static Site components; do not add service machine tiers here.
   await writePreparedSpec('web-static-app.yaml.example', 'web-static-app.yaml', {
     ...commonReplacements(),
     'https://REPLACE_WITH_BACKEND_DEFAULT_INGRESS': requiredUrlEnv('DO_BACKEND_URL'),
@@ -51,6 +83,7 @@ if (target === 'web' || target === 'all') {
 }
 
 if (target === 'landing' || target === 'all') {
+  // Landing is also a Static Site component until a product requirement needs a runtime process.
   await writePreparedSpec('landing-static-app.yaml.example', 'landing-static-app.yaml', {
     ...commonReplacements(),
     'https://REPLACE_WITH_WEB_DEFAULT_INGRESS': requiredUrlEnv('DO_WEB_URL'),
@@ -69,6 +102,8 @@ function commonReplacements() {
     REPLACE_WITH_DO_DB_CLUSTER_NAME: dbClusterName,
     REPLACE_WITH_DO_DB_NAME: dbName,
     REPLACE_WITH_DO_DB_USER: dbUser,
+    REPLACE_WITH_DO_API_INSTANCE_SIZE_SLUG: apiServiceInstanceSizeSlug,
+    REPLACE_WITH_DO_API_INSTANCE_COUNT: String(apiServiceInstanceCount),
   }
 }
 
@@ -98,7 +133,8 @@ function printUsage() {
   console.error('  landing: DO_WEB_URL')
   console.error('  all: JWT_SECRET, DO_BACKEND_URL, DO_WEB_URL')
   console.error('')
-  console.error('Optional backend components:')
+  console.error('Optional deployment settings:')
+  console.error('  API sizing: DO_API_INSTANCE_SIZE_SLUG, DO_API_INSTANCE_COUNT')
   console.error('  worker: DO_BACKEND_WORKER_ENABLED=true, DO_BACKEND_WORKER_RUN_COMMAND')
   console.error('  cron: DO_BACKEND_CRON_NAME, DO_BACKEND_CRON_TASK, DO_BACKEND_CRON_SCHEDULE')
 }
@@ -283,8 +319,14 @@ function optionalBackendWorkersBlock() {
 
   const workerName = doName(process.env.DO_BACKEND_WORKER_NAME ?? 'worker', 32)
   const runCommand = requiredWorkerRunCommand('DO_BACKEND_WORKER_RUN_COMMAND')
-  const instanceSizeSlug = process.env.DO_BACKEND_WORKER_INSTANCE_SIZE_SLUG?.trim() || 'apps-s-1vcpu-1gb'
-  const instanceCount = optionalPositiveIntegerEnv('DO_BACKEND_WORKER_INSTANCE_COUNT', 1)
+  const instanceSizeSlug = optionalAppPlatformInstanceSizeSlugEnv(
+    'DO_BACKEND_WORKER_INSTANCE_SIZE_SLUG',
+    defaultBackendWorkerInstanceSizeSlug,
+  )
+  const instanceCount = optionalPositiveIntegerEnv(
+    'DO_BACKEND_WORKER_INSTANCE_COUNT',
+    defaultBackendWorkerInstanceCount,
+  )
 
   return `
 workers:
@@ -385,6 +427,17 @@ function optionalPositiveIntegerEnv(name, defaultValue) {
   }
 
   return parsed
+}
+
+function optionalAppPlatformInstanceSizeSlugEnv(name, defaultValue) {
+  const value = process.env[name]?.trim() || defaultValue
+  assertSafeYamlString(name, value)
+
+  if (!appPlatformInstanceSizeSlugs.has(value)) {
+    throw new Error(`${name} must be one of: ${[...appPlatformInstanceSizeSlugs].join(', ')}`)
+  }
+
+  return value
 }
 
 function requiredSafeTaskName(name) {

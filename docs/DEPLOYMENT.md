@@ -84,6 +84,8 @@ bun run deploy:do:specs <backend-initial|backend-final|web|landing|all>
 
 The generator rejects empty `value:` lines, unresolved `REPLACE_WITH_*` placeholders, wildcard/empty/path-bearing production CORS origins, short, placeholder, or obviously weak `JWT_SECRET`, and missing build-time static URLs. Do not replace secrets or URLs with manual `sed`, `perl`, or shell one-liners.
 
+Concrete App Platform machine defaults live in [../scripts/prepare-do-specs.mjs](../scripts/prepare-do-specs.mjs), not in generated `.scratch` files. The `.do/*.yaml.example` templates intentionally keep budget-bearing values as placeholders so the generator can validate and test them. When changing default tiers, update the generator constants, generator tests, and this document in the same change.
+
 Minimum environment for spec generation:
 
 ```bash
@@ -92,6 +94,13 @@ export DO_PROJECT_SLUG=project-slug
 export DO_GIT_BRANCH=main
 export DO_APP_REGION=fra
 export JWT_SECRET="$(openssl rand -hex 32)"
+```
+
+Optional API sizing overrides for an installed project:
+
+```bash
+export DO_API_INSTANCE_SIZE_SLUG=apps-s-1vcpu-1gb
+export DO_API_INSTANCE_COUNT=1
 ```
 
 Reuse the same `JWT_SECRET` for later `backend-final` updates unless the user intentionally wants to invalidate all existing sessions.
@@ -143,14 +152,14 @@ docker push registry.digitalocean.com/<registry>/<project>-backend:latest
 Backend service requirements:
 
 - Set both the service `http_port` and `PORT` env to `8080` unless the project has a reason to choose another port.
-- Use `instance_size_slug: apps-s-1vcpu-1gb` and `instance_count: 3` as the default production API shape. This is three shared 1 vCPU / 1 GiB App Platform containers, which is the low-cost horizontally scalable $12/month-per-container option as of May 2026.
+- Use `instance_size_slug: apps-s-1vcpu-1gb` and `instance_count: 1` as the default production API starter shape. This is one shared 1 vCPU / 1 GiB App Platform container, which is the $12/month single-container option as of May 2026.
 - Configure health checks to hit `/health`.
 - Set `COOKIE_SECURE=true` for HTTPS production traffic.
 - Set `CORS_ORIGINS` to the exact deployed browser origins. Do not use `*`, empty values, or URLs with paths.
 - Attach DigitalOcean Managed PostgreSQL or provide its connection string as `DATABASE_URL`.
 - Add Spaces env only when the product uses storage. Leave Spaces env blank for projects without uploads.
 
-Use two `apps-s-1vcpu-1gb` containers only when the product deliberately chooses the lowest production HA floor. Use `apps-s-1vcpu-2gb` or larger shared containers when memory pressure is the primary limit. Move to dedicated CPU only after metrics show CPU-bound work, noisy shared-CPU performance, strict latency requirements, or a need for CPU-based autoscaling. `web` and `landing` are Static Site components and do not have App Platform runtime container sizes.
+The default one-container shape is not a high-availability floor; it is the budget starter that keeps backend plus the smallest Managed PostgreSQL cluster around $27/month before taxes, traffic overages, storage, and optional add-ons. Raise `instance_count` to two or three when availability or traffic justifies the extra monthly cost. Use `apps-s-1vcpu-2gb` or larger shared containers when memory pressure is the primary limit. Move to dedicated CPU only after metrics show CPU-bound work, noisy shared-CPU performance, strict latency requirements, or a need for CPU-based autoscaling. `web` and `landing` are Static Site components and do not have App Platform runtime container sizes.
 
 Apply Prisma migrations from a protected one-off App Platform console/job with the same production env:
 
@@ -204,6 +213,8 @@ When a real-time feature needs cross-instance delivery, create a DigitalOcean Ma
 
 Deploy `web` as an App Platform Static Site component.
 
+The minimum sufficient frontend tier is Static Site only. Do not add `instance_size_slug`, `instance_count`, or a service/container component for the browser app unless the product later needs server-side rendering or a frontend runtime process.
+
 Required component shape:
 
 - Source directory/build context: repository root.
@@ -221,6 +232,8 @@ App Platform Static Sites are served through DigitalOcean's global CDN by defaul
 
 Deploy `landing` as an App Platform Static Site component.
 
+The minimum sufficient landing tier is Static Site only. Do not add `instance_size_slug`, `instance_count`, or a service/container component unless the landing surface later needs server-side runtime behavior.
+
 Required component shape:
 
 - Source directory/build context: repository root.
@@ -235,7 +248,7 @@ Keep landing independent from authenticated browser-app flows unless the product
 
 ## Managed PostgreSQL
 
-Use DigitalOcean Managed PostgreSQL for production data. When attaching the database inside App Platform, prefer bindable variables such as the database component's `DATABASE_URL`/`DATABASE_PRIVATE_URL` rather than copying raw credentials into the spec.
+Use DigitalOcean Managed PostgreSQL for production data. For a new low-cost production launch, start with the Basic Regular 1 GiB / 1 vCPU cluster with no standby nodes; it is $15.15/month as of May 2026. When attaching the database inside App Platform, prefer bindable variables such as the database component's `DATABASE_URL`/`DATABASE_PRIVATE_URL` rather than copying raw credentials into the spec.
 
 Operational defaults:
 

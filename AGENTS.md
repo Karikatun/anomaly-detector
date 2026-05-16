@@ -47,9 +47,10 @@
 
 - Use `README.md` as the source of truth for first-run repository download, bootstrap, and product intake instructions.
 - Keep durable project choices in README files and docs, not in this agent file.
+- Infrastructure, deployment, storage, local database, testing runbooks, and provider-specific choices live in `README.md` and `docs/`. Keep this file focused on operating standards and pointers.
 - When a surface is deferred, prefer a short note in that surface's README over extra agent instructions.
 - Prefer a monolithic backend architecture in this repository. Do not split into microservices unless the product has a concrete operational need.
-- For real-time features, keep WebSocket connection state in the backend instance only while the app runs as a single instance. If horizontal scaling is required and clients on different instances must receive the same chat/presence/events, add a managed Redis-compatible Pub/Sub broker such as DigitalOcean Managed Valkey or Yandex Managed Service for Valkey between instances.
+- For real-time infrastructure decisions, follow `docs/ARCHITECTURE.md` and `docs/DEPLOYMENT.md`.
 
 ## Bootstrap-Only Instructions
 
@@ -71,26 +72,14 @@ This block exists only for fresh installs from the template. If this repository 
 
 ## Deployment Policy
 
-- The default production infrastructure path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL.
-- If deployment is needed, ask for production domains/URLs and release targets, not for a cloud provider choice.
-- Do not propose other cloud, hosting, database, or deployment providers unless the user explicitly asks for a different provider.
-- If the user explicitly asks for Yandex Cloud, follow `docs/YANDEX_CLOUD.md`: use Yandex Serverless Containers for backend/API, Yandex Managed Service for PostgreSQL for production data, Yandex Object Storage for static sites and files, and Yandex Cloud CDN for public static/media delivery.
-- For DigitalOcean `web` and `landing`, use DigitalOcean App Platform Static Sites. They are served through DigitalOcean's global CDN by default; add an external CDN only when the product needs advanced bot, rate-limit, or geographic traffic controls.
-- For DigitalOcean backend/API production persistence, use DigitalOcean Managed PostgreSQL. Do not use App Platform dev databases for production data.
-- Before `doctl apps create`, verify that DigitalOcean App Platform is connected to the user's GitHub account/organization and has access to the full monorepo branch. Static Sites build from Git, not from a local `dist` folder.
-- Generate concrete DigitalOcean app specs only with `bun run deploy:do:specs`; keep committed templates in `.do/*.yaml.example` and generated specs under `.scratch/deploy`. Do not use manual `sed`, `perl`, or shell one-liners for secrets, CORS, or build-time URLs.
-- Production browser auth requires exact HTTPS `CORS_ORIGINS`, `COOKIE_SECURE=true`, `SameSite=None`, and `credentials: include`. Do not use wildcard, empty, or path-bearing CORS origins in production.
-- Local development remains Docker Compose PostgreSQL and must not require cloud credentials unless deployment work is active.
+- Deployment and infrastructure policy belongs in `README.md` and `docs/`, especially `docs/DEPLOYMENT.md`, `docs/STORAGE.md`, `docs/LOCAL_DATABASE.md`, and `docs/YANDEX_CLOUD.md`.
+- Concrete DigitalOcean spec defaults belong in `scripts/prepare-do-specs.mjs` and `.do/*.yaml.example`; update README/docs alongside those scripts instead of duplicating tier choices in this file.
+- Before deployment work, read the relevant docs and use repository scripts/generators rather than provider details from memory.
 
 ## Storage And Media Policy
 
-- Use DigitalOcean Spaces Standard Storage plus Spaces CDN for persistent files, uploads, public images, media, and downloads.
-- Do not store user uploads or durable generated assets on the App Platform container filesystem; it is only for small temporary files.
-- Before implementing file or image features, ask product-level questions: public/private access, uploader roles, max file size, allowed file types, thumbnail/optimized variant needs, moderation needs, retention/deletion rules, and whether filenames may expose user data.
-- For public images and media, prefer immutable object keys, `public-read` objects, long cache headers, and Spaces CDN URLs such as `images.example.com`.
-- For private files, use short-lived presigned URLs and do not expect CDN caching benefits.
-- DigitalOcean Spaces and Spaces CDN do not provide first-party dynamic image resizing or format conversion. If optimized images are required, generate variants in the backend or a dedicated App Platform worker/service and store those variants in Spaces. Add third-party image services only when the user explicitly chooses that product tradeoff.
-- If Yandex Cloud is explicitly selected, use Yandex Object Storage plus Cloud CDN for public media, short-lived presigned URLs for private files, and consider Yandex Cloud Marketplace Image Resizer for simple fixed-size image variants before introducing custom image infrastructure.
+- Storage and media infrastructure policy belongs in `docs/STORAGE.md` and provider-specific deployment docs.
+- Keep durable storage decisions in README/docs, not in this agent file.
 
 ## Task Mode
 

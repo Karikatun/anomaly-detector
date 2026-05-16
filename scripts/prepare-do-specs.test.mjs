@@ -44,6 +44,17 @@ describe('prepare-do-specs', () => {
     expect(`${result.stdout}\n${result.stderr}`).toContain('day-of-month field');
   });
 
+  test('rejects unsupported App Platform instance size slugs', () => {
+    const result = runPrepareSpecs({
+      DO_API_INSTANCE_SIZE_SLUG: 'expensive-surprise',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(
+      'DO_API_INSTANCE_SIZE_SLUG must be one of:',
+    );
+  });
+
   test('generates explicit backend worker and cron job blocks', () => {
     const result = runPrepareSpecs({
       DO_BACKEND_WORKER_ENABLED: 'true',
@@ -65,6 +76,25 @@ describe('prepare-do-specs', () => {
     expect(spec).toContain('kind: SCHEDULED');
     expect(spec).toContain('run_command: "bun run start:cron -- db:ping"');
     expect(spec).toContain('time_zone: "Europe/Moscow"');
+    expect(spec).toContain(`    http_port: 8080
+    instance_size_slug: apps-s-1vcpu-1gb
+    instance_count: 1`);
+    expect(spec).not.toContain('REPLACE_WITH_');
+  });
+
+  test('generates explicit backend API instance sizing overrides', () => {
+    const result = runPrepareSpecs({
+      DO_API_INSTANCE_SIZE_SLUG: 'apps-s-1vcpu-2gb',
+      DO_API_INSTANCE_COUNT: '2',
+    });
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+
+    const spec = readFileSync(backendSpecPath, 'utf8');
+    expect(spec).toContain(`    http_port: 8080
+    instance_size_slug: apps-s-1vcpu-2gb
+    instance_count: 2`);
     expect(spec).not.toContain('REPLACE_WITH_');
   });
 });
