@@ -80,7 +80,7 @@ The web E2E flow:
 Useful env:
 
 ```bash
-TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:<test-port>/web_app_demo_test?schema=public"
+TEST_DATABASE_URL="postgresql://superuser:superpassword@localhost:<test-port>/web_app_demo_test?schema=public"
 POSTGRES_TEST_PORT=<test-port>
 E2E_BACKEND_PORT=<backend-port>
 E2E_WEB_PORT=<web-port>
@@ -126,7 +126,7 @@ Start the mobile E2E backend on the test database in a separate terminal. Prefer
 docker compose version
 docker info
 docker compose up -d postgres_test
-export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public"
+export TEST_DATABASE_URL="postgresql://superuser:superpassword@localhost:54330/web_app_demo_test?schema=public"
 export LAN_IP=<your-machine-lan-ip>
 export BACKEND_PORT=3000
 export METRO_PORT=8081

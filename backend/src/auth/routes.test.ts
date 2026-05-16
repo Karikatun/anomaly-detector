@@ -6,7 +6,7 @@ import type { AppEnv } from '../env'
 
 const env: AppEnv = {
   PORT: 3000,
-  DATABASE_URL: 'postgresql://postgres:postgres@localhost:54329/web_app_demo',
+  DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/web_app_demo',
   JWT_SECRET: 'test-route-secret-at-least-thirty-two-chars-123',
   CORS_ORIGINS: ['https://web.example.com'],
   ACCESS_TOKEN_TTL_SECONDS: 60,

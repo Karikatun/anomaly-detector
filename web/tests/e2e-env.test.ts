@@ -32,8 +32,8 @@ test('composeEnv derives the docker compose port from the resolved test database
   process.env.POSTGRES_TEST_PORT = '54331'
 
   const env = composeEnv({
-    DATABASE_URL: 'postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public',
-    TEST_DATABASE_URL: 'postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public',
+    DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54330/web_app_demo_test?schema=public',
+    TEST_DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54330/web_app_demo_test?schema=public',
     POSTGRES_TEST_PORT: '54331',
   })
 
@@ -42,10 +42,10 @@ test('composeEnv derives the docker compose port from the resolved test database
 
 test('portFromUrl handles postgres aliases and defaults', () => {
   expect(
-    portFromUrl('postgres://postgres:postgres@localhost/web_app_demo_test?schema=public'),
+    portFromUrl('postgres://superuser:superpassword@localhost/web_app_demo_test?schema=public'),
   ).toBe('5432')
   expect(
-    portFromUrl('postgresql://postgres:postgres@localhost/web_app_demo_test?schema=public'),
+    portFromUrl('postgresql://superuser:superpassword@localhost/web_app_demo_test?schema=public'),
   ).toBe('5432')
   expect(portFromUrl('https://example.com')).toBe('443')
 })
@@ -54,8 +54,8 @@ test('composeEnv defaults a portless postgres URL to the postgres default port',
   process.env.POSTGRES_TEST_PORT = '54331'
 
   const env = composeEnv({
-    DATABASE_URL: 'postgres://postgres:postgres@localhost/web_app_demo_test?schema=public',
-    TEST_DATABASE_URL: 'postgres://postgres:postgres@localhost/web_app_demo_test?schema=public',
+    DATABASE_URL: 'postgres://superuser:superpassword@localhost/web_app_demo_test?schema=public',
+    TEST_DATABASE_URL: 'postgres://superuser:superpassword@localhost/web_app_demo_test?schema=public',
     POSTGRES_TEST_PORT: '54331',
   })
 
@@ -66,8 +66,8 @@ test('composeEnv defaults a portless postgresql URL to the postgres default port
   process.env.POSTGRES_TEST_PORT = '54331'
 
   const env = composeEnv({
-    DATABASE_URL: 'postgresql://postgres:postgres@localhost/web_app_demo_test?schema=public',
-    TEST_DATABASE_URL: 'postgresql://postgres:postgres@localhost/web_app_demo_test?schema=public',
+    DATABASE_URL: 'postgresql://superuser:superpassword@localhost/web_app_demo_test?schema=public',
+    TEST_DATABASE_URL: 'postgresql://superuser:superpassword@localhost/web_app_demo_test?schema=public',
     POSTGRES_TEST_PORT: '54331',
   })
 
@@ -75,7 +75,7 @@ test('composeEnv defaults a portless postgresql URL to the postgres default port
 })
 
 test('resolveE2ePorts defaults a portless postgres URL alias to the postgres default port', async () => {
-  process.env.TEST_DATABASE_URL = 'postgres://postgres:postgres@localhost/web_app_demo_test?schema=public'
+  process.env.TEST_DATABASE_URL = 'postgres://superuser:superpassword@localhost/web_app_demo_test?schema=public'
   process.env.POSTGRES_TEST_PORT = '54331'
   process.env.E2E_BACKEND_PORT = '50001'
   process.env.E2E_WEB_PORT = '55001'
@@ -83,11 +83,11 @@ test('resolveE2ePorts defaults a portless postgres URL alias to the postgres def
   const plan = await resolveE2ePorts()
 
   expect(plan.postgresTestPort).toBe(5432)
-  expect(plan.databaseUrl).toBe('postgres://postgres:postgres@localhost/web_app_demo_test?schema=public')
+  expect(plan.databaseUrl).toBe('postgres://superuser:superpassword@localhost/web_app_demo_test?schema=public')
 })
 
 test('resolveE2ePorts defaults a portless postgresql URL to the postgres default port', async () => {
-  process.env.TEST_DATABASE_URL = 'postgresql://postgres:postgres@localhost/web_app_demo_test?schema=public'
+  process.env.TEST_DATABASE_URL = 'postgresql://superuser:superpassword@localhost/web_app_demo_test?schema=public'
   process.env.POSTGRES_TEST_PORT = '54331'
   process.env.E2E_BACKEND_PORT = '50001'
   process.env.E2E_WEB_PORT = '55001'
@@ -95,14 +95,14 @@ test('resolveE2ePorts defaults a portless postgresql URL to the postgres default
   const plan = await resolveE2ePorts()
 
   expect(plan.postgresTestPort).toBe(5432)
-  expect(plan.databaseUrl).toBe('postgresql://postgres:postgres@localhost/web_app_demo_test?schema=public')
+  expect(plan.databaseUrl).toBe('postgresql://superuser:superpassword@localhost/web_app_demo_test?schema=public')
 })
 
 test('applyE2ePortEnv overwrites a stale postgres test port with the planned port', () => {
   const plan: PortPlan = {
     backendPort: 50001,
     backendUrl: 'http://127.0.0.1:50001',
-    databaseUrl: 'postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public',
+    databaseUrl: 'postgresql://superuser:superpassword@localhost:54330/web_app_demo_test?schema=public',
     postgresTestPort: 54330,
     webPort: 55001,
     webUrl: 'http://127.0.0.1:55001',

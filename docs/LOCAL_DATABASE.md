@@ -2,7 +2,9 @@
 
 Use Docker Compose for local PostgreSQL on Windows, macOS, and Linux. Do not ask users to install PostgreSQL natively during first-run setup unless they explicitly choose to manage their own database.
 
-This template currently uses the official `postgres:18-alpine` image. The major version is pinned to PostgreSQL 18 instead of `postgres:latest` so patch updates are easy while unexpected major upgrades do not break local volumes.
+This template currently uses the official `postgres:18-alpine` image. The major version is pinned to PostgreSQL 18 instead of `postgres:latest` so patch updates are easy while unexpected major upgrades do not break local volumes. PostgreSQL 18 is also a schema requirement for this template because Prisma models use database-generated UUIDv7 defaults through the native `uuidv7()` function.
+
+Use explicit `postgresql://user:password@host:port/db?schema=public` URLs for Prisma commands, even on native local installs. Peer-auth style URLs without a user can make Prisma schema-engine commands fail with a generic error instead of a useful connection diagnostic.
 
 ## Prerequisites
 
@@ -39,7 +41,7 @@ If Docker cannot be installed on the machine, local database-backed development 
 docker compose pull postgres
 docker compose up -d postgres
 docker compose ps postgres
-docker compose exec postgres pg_isready -U postgres -d web_app_demo
+docker compose exec postgres pg_isready -U superuser -d web_app_demo
 ```
 
 The development database is:
@@ -48,9 +50,9 @@ The development database is:
 host: localhost
 port: 54329
 database: web_app_demo
-user: postgres
-password: postgres
-DATABASE_URL: postgresql://postgres:postgres@localhost:54329/web_app_demo?schema=public
+user: superuser
+password: superpassword
+DATABASE_URL: postgresql://superuser:superpassword@localhost:54329/web_app_demo?schema=public
 ```
 
 Create the backend env file:
@@ -101,9 +103,9 @@ Manual default connection:
 host: localhost
 port: 54330
 database: web_app_demo_test
-user: postgres
-password: postgres
-TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:54330/web_app_demo_test?schema=public
+user: superuser
+password: superpassword
+TEST_DATABASE_URL: postgresql://superuser:superpassword@localhost:54330/web_app_demo_test?schema=public
 ```
 
 Automated test runners normally set a repository-derived `POSTGRES_TEST_PORT` and derive `TEST_DATABASE_URL` from it so multiple template checkouts can run in parallel. Set `POSTGRES_TEST_PORT` only when a fixed test database port is required.

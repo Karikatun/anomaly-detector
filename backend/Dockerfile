@@ -16,7 +16,7 @@ COPY backend backend
 
 WORKDIR /app/backend
 
-RUN DATABASE_URL="postgresql://postgres:postgres@localhost:5432/web_app_demo?schema=public" bun run prisma:generate
+RUN DATABASE_URL="postgresql://superuser:superpassword@localhost:5432/web_app_demo?schema=public" bun run prisma:generate
 
 ENV NODE_ENV=production
 

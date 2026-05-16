@@ -5,7 +5,7 @@ import { signAccessToken, verifyAccessToken } from './access-tokens'
 
 const env: AppEnv = {
   PORT: 3000,
-  DATABASE_URL: 'postgresql://postgres:postgres@localhost:54329/web_app_demo',
+  DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/web_app_demo',
   JWT_SECRET: '12345678901234567890123456789012',
   CORS_ORIGINS: ['http://localhost:5173'],
   ACCESS_TOKEN_TTL_SECONDS: 60,

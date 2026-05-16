@@ -8,7 +8,7 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(cuid())
+  id           String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
   email        String        @unique
   passwordHash String        @map("password_hash")
   displayName  String?       @map("display_name")
@@ -20,8 +20,8 @@ model User {
 }
 
 model AuthSession {
-  id               String    @id @default(cuid())
-  userId           String    @map("user_id")
+  id               String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId           String    @db.Uuid @map("user_id")
   refreshTokenHash String    @unique(map: "auth_sessions_refresh_token_hash_key") @map("refresh_token_hash")
   expiresAt        DateTime  @map("expires_at")
   revokedAt        DateTime? @map("revoked_at")

@@ -4,14 +4,14 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: web_app_demo
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: superuser
+      POSTGRES_PASSWORD: superpassword
     ports:
       - "${POSTGRES_PORT:-54329}:5432"
     volumes:
       - postgres_18_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d web_app_demo"]
+      test: ["CMD-SHELL", "pg_isready -U superuser -d web_app_demo"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -21,14 +21,14 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: web_app_demo_test
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: superuser
+      POSTGRES_PASSWORD: superpassword
     ports:
       - "${POSTGRES_TEST_PORT:-54330}:5432"
     volumes:
       - postgres_18_test_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d web_app_demo_test"]
+      test: ["CMD-SHELL", "pg_isready -U superuser -d web_app_demo_test"]
       interval: 5s
       timeout: 5s
       retries: 10

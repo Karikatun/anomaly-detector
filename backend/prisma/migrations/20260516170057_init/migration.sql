@@ -1,9 +1,6 @@
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
-
 -- CreateTable
 CREATE TABLE "users" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL DEFAULT uuidv7(),
     "email" TEXT NOT NULL,
     "password_hash" TEXT NOT NULL,
     "display_name" TEXT,
@@ -15,8 +12,8 @@ CREATE TABLE "users" (
 
 -- CreateTable
 CREATE TABLE "auth_sessions" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
+    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "user_id" UUID NOT NULL,
     "refresh_token_hash" TEXT NOT NULL,
     "expires_at" TIMESTAMP(3) NOT NULL,
     "revoked_at" TIMESTAMP(3),
