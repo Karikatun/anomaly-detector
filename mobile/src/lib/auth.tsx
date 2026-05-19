@@ -3,6 +3,7 @@ import {
   type LoginRequest,
   type RefreshResponse,
   type RegisterRequest,
+  type SubscriptionSnapshot,
   type UserDto,
 } from '@web-app-demo/contracts';
 import {
@@ -25,11 +26,14 @@ import {
 
 type AuthContextValue = {
   user: UserDto | null;
+  api: ApiClient;
   isBootstrapping: boolean;
   isAuthenticated: boolean;
+  refreshUser: () => Promise<void>;
   register: (input: RegisterRequest) => Promise<void>;
   login: (input: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
+  setSubscription: (subscription: SubscriptionSnapshot) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -102,6 +106,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const isResolvingUser = !isBootstrapping && Boolean(accessToken) && !user && meQuery.isPending;
   const isAuthBootstrapping = isBootstrapping || isResolvingUser;
 
+  const refreshUser = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: meQueryKey });
+  }, [queryClient]);
+
+  const setSubscription = useCallback(
+    (subscription: SubscriptionSnapshot) => {
+      queryClient.setQueryData<{ user: UserDto } | undefined>(meQueryKey, (current) => {
+        if (!current?.user) return current;
+        return {
+          user: {
+            ...current.user,
+            subscription,
+          },
+        };
+      });
+    },
+    [queryClient],
+  );
+
   const register = useCallback(
     async (input: RegisterRequest) => {
       const response = await api.register(input);
@@ -139,14 +162,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
+      api,
       user,
       isBootstrapping: isAuthBootstrapping,
       isAuthenticated: Boolean(user),
+      refreshUser,
       register,
       login,
       logout,
+      setSubscription,
     }),
-    [isAuthBootstrapping, login, logout, register, user],
+    [api, isAuthBootstrapping, login, logout, refreshUser, register, setSubscription, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

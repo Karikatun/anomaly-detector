@@ -19,6 +19,8 @@ describe('loadEnv', () => {
     expect(env.SPACES_UPLOAD_URL_TTL_SECONDS).toBe(900)
     expect(env.SPACES_DOWNLOAD_URL_TTL_SECONDS).toBe(300)
     expect(env.SPACES_PUBLIC_CACHE_CONTROL).toBe('public, max-age=31536000, immutable')
+    expect(env.APPLE_IAP_ENVIRONMENT).toBe('Sandbox')
+    expect(env.APPLE_IAP_PRODUCT_IDS).toEqual([])
   })
 
   test('requires complete DigitalOcean Spaces configuration when storage is enabled', () => {
@@ -106,5 +108,41 @@ describe('loadEnv', () => {
         CORS_ORIGINS: 'http://web.example.com',
       }),
     ).toThrow('CORS_ORIGINS')
+  })
+
+  test('requires complete App Store IAP verification config when enabled', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/web_app_demo',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        APPLE_IAP_BUNDLE_ID: 'com.example.app',
+      }),
+    ).toThrow('APPLE_IAP_ISSUER_ID')
+
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        APPLE_IAP_BUNDLE_ID: 'com.example.app',
+        APPLE_IAP_ENVIRONMENT: 'Production',
+        APPLE_IAP_ISSUER_ID: 'issuer-id',
+        APPLE_IAP_KEY_ID: 'key-id',
+        APPLE_IAP_PRIVATE_KEY_BASE64: 'private-key',
+      }),
+    ).toThrow('APPLE_IAP_APP_APPLE_ID')
+
+    const env = loadEnv({
+      ...baseEnv,
+      APPLE_IAP_BUNDLE_ID: 'com.example.app',
+      APPLE_IAP_ISSUER_ID: 'issuer-id',
+      APPLE_IAP_KEY_ID: 'key-id',
+      APPLE_IAP_PRIVATE_KEY_BASE64: 'private-key',
+      APPLE_IAP_PRODUCT_IDS: 'premium_monthly, premium_yearly',
+    })
+
+    expect(env.APPLE_IAP_PRODUCT_IDS).toEqual(['premium_monthly', 'premium_yearly'])
   })
 })

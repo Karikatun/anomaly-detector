@@ -3,9 +3,11 @@ import { PageHeader } from '@/components/page-header';
 import { Screen } from '@/components/screen';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
+import { useSubscriptionIap } from '@/lib/iap';
 
 export default function ProfileScreen() {
   const auth = useAuth();
+  const iap = useSubscriptionIap();
 
   if (!auth.user) return null;
 
@@ -18,10 +20,21 @@ export default function ProfileScreen() {
       />
 
       <KeyValueCard label="User ID" value={auth.user.id} />
+      <KeyValueCard label="Subscription" value={subscriptionLabel(auth.user.subscription.state)} />
+
+      {auth.user.subscription.platform === 'ios' ? (
+        <Button variant="outline" onPress={() => void iap.manageSubscriptions()}>
+          Manage subscription
+        </Button>
+      ) : null}
 
       <Button variant="outline" onPress={() => void auth.logout()}>
         Logout
       </Button>
     </Screen>
   );
+}
+
+function subscriptionLabel(state: string) {
+  return state.replaceAll('_', ' ');
 }

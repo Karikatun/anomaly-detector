@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { useState } from 'react';
 
 import { AuthProvider } from '@/lib/auth';
+import { IapProvider } from '@/lib/iap';
 
 export default function RootLayout() {
   const [queryClient] = useState(
@@ -20,7 +21,9 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Stack screenOptions={{ headerShown: false }} />
+        <IapProvider>
+          <Stack screenOptions={{ headerShown: false }} />
+        </IapProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -7,6 +7,7 @@ import type {
 import type { DbClient } from '../db'
 import type { AppEnv } from '../env'
 import { AppError } from '../http/errors'
+import { inactiveSubscriptionSnapshot, toSubscriptionSnapshot, type EntitlementRecord } from '../iap/service'
 import { Prisma } from '../generated/prisma/client'
 import { signAccessToken, verifyAccessToken } from './access-tokens'
 import { hashPassword, verifyPassword } from './passwords'
@@ -22,6 +23,7 @@ type UserRecord = {
   email: string
   displayName: string | null
   createdAt: Date
+  subscriptionEntitlement?: EntitlementRecord | null
 }
 
 export class AuthService {
@@ -94,7 +96,11 @@ export class AuthService {
         },
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            subscriptionEntitlement: true,
+          },
+        },
       },
     })
 
@@ -167,7 +173,11 @@ export class AuthService {
         },
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            subscriptionEntitlement: true,
+          },
+        },
       },
     })
 
@@ -237,5 +247,8 @@ export function toUserDto(user: UserRecord): UserDto {
     email: user.email,
     displayName: user.displayName,
     createdAt: user.createdAt.toISOString(),
+    subscription: user.subscriptionEntitlement
+      ? toSubscriptionSnapshot(user.subscriptionEntitlement)
+      : inactiveSubscriptionSnapshot(),
   }
 }
