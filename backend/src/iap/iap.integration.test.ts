@@ -10,12 +10,13 @@ import { AppError } from '../http/errors'
 import type { AppStoreSubscriptionVerifier, AppStoreVerificationResult } from './apple-verifier'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
+const skippedDatabaseUrl = 'postgresql://skip:skip@localhost:5432/skip'
 const maybeDescribe = databaseUrl ? describe : describe.skip
 
 maybeDescribe('iap API integration', () => {
   const env: AppEnv = {
     PORT: 3000,
-    DATABASE_URL: databaseUrl!,
+    DATABASE_URL: databaseUrl ?? skippedDatabaseUrl,
     JWT_SECRET: '12345678901234567890123456789012',
     CORS_ORIGINS: ['http://localhost:5173'],
     ACCESS_TOKEN_TTL_SECONDS: 60,
@@ -28,9 +29,9 @@ maybeDescribe('iap API integration', () => {
     APPLE_IAP_ENVIRONMENT: 'Sandbox',
     APPLE_IAP_PRODUCT_IDS: ['premium_monthly', 'premium_yearly'],
   }
-  const prisma = createPrisma(databaseUrl!)
+  const prisma = createPrisma(databaseUrl ?? skippedDatabaseUrl)
   let verifier = new FakeAppStoreVerifier()
-  let app = createApp({ env, prisma, iapVerifier: verifier })
+  let app: ReturnType<typeof createApp>
 
   beforeEach(async () => {
     verifier = new FakeAppStoreVerifier()
@@ -76,6 +77,35 @@ maybeDescribe('iap API integration', () => {
     expect(meBody.user.subscription.transactionId).toBe('transaction-active')
   })
 
+  test('returns the active subscription in the login session response', async () => {
+    const session = await registerAndAuthorize('login-subscriber@example.com')
+    verifier.setTransaction('signed-login-active', activeTransaction(session.user.id))
+
+    const ingest = await postJson('/api/iap/app-store/transactions', session.accessToken, {
+      signedTransactionInfo: 'signed-login-active',
+    })
+    expect(ingest.status).toBe(200)
+
+    const login = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Client-Platform': 'mobile',
+      },
+      body: JSON.stringify({
+        email: 'login-subscriber@example.com',
+        password: 'password123',
+      }),
+    })
+    const body = await login.json()
+
+    expect(login.status).toBe(200)
+    expect(body.user.subscription).toMatchObject({
+      isActive: true,
+      transactionId: 'transaction-active',
+    })
+  })
+
   test('rejects invalid transactions without finishing ownership state', async () => {
     const session = await registerAndAuthorize('invalid@example.com')
 
@@ -101,6 +131,147 @@ maybeDescribe('iap API integration', () => {
     expect(ingest.status).toBe(403)
     expect(body.error.code).toBe('IAP_OWNERSHIP_MISMATCH')
     expect(await prisma.appStoreTransaction.count()).toBe(0)
+  })
+
+  test('rejects verified products when the backend allowlist is empty', async () => {
+    const session = await registerAndAuthorize('missing-products@example.com')
+    verifier.setTransaction('signed-no-products', activeTransaction(session.user.id))
+    app = createApp({
+      env: {
+        ...env,
+        APPLE_IAP_PRODUCT_IDS: [],
+      },
+      prisma,
+      iapVerifier: verifier,
+    })
+
+    const ingest = await postJson('/api/iap/app-store/transactions', session.accessToken, {
+      signedTransactionInfo: 'signed-no-products',
+    })
+    const body = await ingest.json()
+
+    expect(ingest.status).toBe(503)
+    expect(body.error.code).toBe('IAP_NOT_CONFIGURED')
+    expect(await prisma.subscriptionEntitlement.count()).toBe(0)
+  })
+
+  test('rejects first-time transactions without an app account token', async () => {
+    const session = await registerAndAuthorize('missing-token@example.com')
+    verifier.setTransaction('signed-no-token', {
+      ...activeTransaction(session.user.id),
+      appAccountToken: undefined,
+    })
+
+    const ingest = await postJson('/api/iap/app-store/transactions', session.accessToken, {
+      signedTransactionInfo: 'signed-no-token',
+    })
+    const body = await ingest.json()
+
+    expect(ingest.status).toBe(403)
+    expect(body.error.code).toBe('IAP_OWNERSHIP_MISMATCH')
+    expect(await prisma.appStoreTransaction.count()).toBe(0)
+  })
+
+  test('accepts app-account-less renewals for an already linked original transaction', async () => {
+    const session = await registerAndAuthorize('renewal-no-token@example.com')
+    verifier.setTransaction('signed-initial', activeTransaction(session.user.id))
+    verifier.setTransaction('signed-renewal-no-token', {
+      ...activeTransaction(session.user.id),
+      appAccountToken: undefined,
+      expiresDate: Date.now() + 60 * 24 * 60 * 60 * 1000,
+      purchaseDate: Date.now() + 30 * 24 * 60 * 60 * 1000,
+      transactionId: 'transaction-renewal-no-token',
+      webOrderLineItemId: 'web-order-renewal-no-token',
+    })
+    verifier.setStatuses('original-active', [
+      {
+        status: Status.ACTIVE,
+        signedTransactionInfo: 'signed-renewal-no-token',
+      },
+    ])
+
+    const initial = await postJson('/api/iap/app-store/transactions', session.accessToken, {
+      signedTransactionInfo: 'signed-initial',
+    })
+    expect(initial.status).toBe(200)
+
+    const reconcile = await postJson('/api/iap/app-store/reconcile', session.accessToken, {
+      originalTransactionIds: ['original-active'],
+    })
+    const body = await reconcile.json()
+
+    expect(reconcile.status).toBe(200)
+    expect(body.subscription).toMatchObject({
+      isActive: true,
+      transactionId: 'transaction-renewal-no-token',
+    })
+  })
+
+  test('continues original transaction reconciliation when one cached signed transaction is invalid', async () => {
+    const session = await registerAndAuthorize('mixed-reconcile@example.com')
+    verifier.setTransaction('signed-status-active', {
+      ...activeTransaction(session.user.id),
+      transactionId: 'transaction-status-active',
+    })
+    verifier.setStatuses('original-active', [
+      {
+        status: Status.ACTIVE,
+        signedTransactionInfo: 'signed-status-active',
+      },
+    ])
+
+    const reconcile = await postJson('/api/iap/app-store/reconcile', session.accessToken, {
+      signedTransactions: ['signed-missing'],
+      originalTransactionIds: ['original-active'],
+    })
+    const body = await reconcile.json()
+
+    expect(reconcile.status).toBe(200)
+    expect(body.subscription).toMatchObject({
+      isActive: true,
+      state: 'active',
+      transactionId: 'transaction-status-active',
+    })
+  })
+
+  test('updates entitlement state when App Store status changes without extending expiration', async () => {
+    const session = await registerAndAuthorize('status-transition@example.com')
+    const expiresDate = Date.now() + 30 * 24 * 60 * 60 * 1000
+    verifier.setTransaction('signed-status-initial', {
+      ...activeTransaction(session.user.id),
+      expiresDate,
+      transactionId: 'transaction-status-initial',
+    })
+    verifier.setTransaction('signed-status-retry', {
+      ...activeTransaction(session.user.id),
+      expiresDate,
+      purchaseDate: Date.now() + 60_000,
+      transactionId: 'transaction-status-retry',
+      webOrderLineItemId: 'web-order-status-retry',
+    })
+    verifier.setStatuses('original-active', [
+      {
+        status: Status.BILLING_RETRY,
+        signedTransactionInfo: 'signed-status-retry',
+      },
+    ])
+
+    const ingest = await postJson('/api/iap/app-store/transactions', session.accessToken, {
+      signedTransactionInfo: 'signed-status-initial',
+    })
+    expect(ingest.status).toBe(200)
+
+    const reconcile = await postJson('/api/iap/app-store/reconcile', session.accessToken, {
+      originalTransactionIds: ['original-active'],
+    })
+    const body = await reconcile.json()
+
+    expect(reconcile.status).toBe(200)
+    expect(body.subscription).toMatchObject({
+      isActive: false,
+      state: 'billing_retry',
+      transactionId: 'transaction-status-retry',
+    })
   })
 
   test('replays the same transaction idempotently', async () => {
@@ -147,6 +318,77 @@ maybeDescribe('iap API integration', () => {
     })
   })
 
+  test('does not let stale expired transactions overwrite a newer active entitlement', async () => {
+    const session = await registerAndAuthorize('stale@example.com')
+    verifier.setTransaction('signed-new-active', {
+      ...activeTransaction(session.user.id),
+      expiresDate: Date.now() + 60 * 24 * 60 * 60 * 1000,
+      purchaseDate: Date.now() + 30 * 24 * 60 * 60 * 1000,
+      transactionId: 'transaction-new-active',
+      webOrderLineItemId: 'web-order-new-active',
+    })
+    verifier.setTransaction('signed-old-expired', {
+      ...activeTransaction(session.user.id),
+      expiresDate: Date.now() - 24 * 60 * 60 * 1000,
+      purchaseDate: Date.now() - 60 * 24 * 60 * 60 * 1000,
+      transactionId: 'transaction-old-expired',
+      webOrderLineItemId: 'web-order-old-expired',
+    })
+    verifier.setStatuses('original-active', [
+      {
+        status: Status.EXPIRED,
+        signedTransactionInfo: 'signed-old-expired',
+      },
+    ])
+
+    const ingest = await postJson('/api/iap/app-store/transactions', session.accessToken, {
+      signedTransactionInfo: 'signed-new-active',
+    })
+    expect(ingest.status).toBe(200)
+
+    const reconcile = await postJson('/api/iap/app-store/reconcile', session.accessToken, {
+      originalTransactionIds: ['original-active'],
+    })
+    const body = await reconcile.json()
+
+    expect(reconcile.status).toBe(200)
+    expect(body.subscription).toMatchObject({
+      isActive: true,
+      state: 'active',
+      transactionId: 'transaction-new-active',
+    })
+  })
+
+  test('reports stored active entitlements with past expiration as expired', async () => {
+    const session = await registerAndAuthorize('missed-webhook@example.com')
+    await prisma.subscriptionEntitlement.create({
+      data: {
+        userId: session.user.id,
+        entitlementKey: 'premium',
+        platform: 'ios',
+        state: 'active',
+        productId: 'premium_monthly',
+        originalTransactionId: 'original-missed-webhook',
+        transactionId: 'transaction-missed-webhook',
+        expiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        willAutoRenew: false,
+        environment: 'sandbox',
+      },
+    })
+
+    const entitlement = await app.request('/api/iap/entitlement', {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    })
+    const body = await entitlement.json()
+
+    expect(entitlement.status).toBe(200)
+    expect(body.subscription).toMatchObject({
+      isActive: false,
+      state: 'expired',
+      transactionId: 'transaction-missed-webhook',
+    })
+  })
+
   test('records duplicate App Store webhooks once and processes the first payload', async () => {
     const session = await registerAndAuthorize('webhook@example.com')
     verifier.setTransaction('signed-webhook-active', {
@@ -180,6 +422,44 @@ maybeDescribe('iap API integration', () => {
     expect(firstBody.duplicate).toBe(false)
     expect(second.status).toBe(200)
     expect(secondBody.duplicate).toBe(true)
+    expect(await prisma.appStoreWebhook.count()).toBe(1)
+    expect(await prisma.appStoreTransaction.count()).toBe(1)
+  })
+
+  test('deduplicates concurrent App Store webhook deliveries before verification side effects', async () => {
+    const session = await registerAndAuthorize('webhook-concurrent@example.com')
+    verifier.setTransaction('signed-webhook-concurrent-active', {
+      ...activeTransaction(session.user.id),
+      transactionId: 'transaction-webhook-concurrent',
+    })
+    verifier.setNotification('signed-webhook-concurrent', {
+      notificationUUID: 'notification-concurrent-1',
+      notificationType: 'DID_RENEW',
+      data: {
+        environment: Environment.SANDBOX,
+        signedTransactionInfo: 'signed-webhook-concurrent-active',
+        status: Status.ACTIVE,
+      },
+    })
+
+    const [first, second] = await Promise.all([
+      app.request('/api/webhooks/app-store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signedPayload: 'signed-webhook-concurrent' }),
+      }),
+      app.request('/api/webhooks/app-store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signedPayload: 'signed-webhook-concurrent' }),
+      }),
+    ])
+    const bodies = [await first.json(), await second.json()]
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect(bodies.map((body) => body.duplicate).sort()).toEqual([false, true])
+    expect(verifier.notificationVerificationCount('signed-webhook-concurrent')).toBe(1)
     expect(await prisma.appStoreWebhook.count()).toBe(1)
     expect(await prisma.appStoreTransaction.count()).toBe(1)
   })
@@ -219,6 +499,7 @@ class FakeAppStoreVerifier implements AppStoreSubscriptionVerifier {
   private readonly transactions = new Map<string, JWSTransactionDecodedPayload>()
   private readonly renewals = new Map<string, JWSRenewalInfoDecodedPayload>()
   private readonly notifications = new Map<string, ResponseBodyV2DecodedPayload>()
+  private readonly notificationVerificationCounts = new Map<string, number>()
   private readonly statuses = new Map<string, Awaited<ReturnType<AppStoreSubscriptionVerifier['getSubscriptionStatuses']>>>()
 
   setTransaction(signedTransactionInfo: string, payload: JWSTransactionDecodedPayload) {
@@ -238,6 +519,10 @@ class FakeAppStoreVerifier implements AppStoreSubscriptionVerifier {
     statuses: Awaited<ReturnType<AppStoreSubscriptionVerifier['getSubscriptionStatuses']>>,
   ) {
     this.statuses.set(transactionId, statuses)
+  }
+
+  notificationVerificationCount(signedPayload: string) {
+    return this.notificationVerificationCounts.get(signedPayload) ?? 0
   }
 
   async verifyTransaction(
@@ -263,6 +548,10 @@ class FakeAppStoreVerifier implements AppStoreSubscriptionVerifier {
   async verifyNotification(
     signedPayload: string,
   ): Promise<AppStoreVerificationResult<ResponseBodyV2DecodedPayload>> {
+    this.notificationVerificationCounts.set(
+      signedPayload,
+      this.notificationVerificationCount(signedPayload) + 1,
+    )
     const payload = this.notifications.get(signedPayload)
     if (!payload) {
       throw new AppError(400, 'IAP_INVALID_TRANSACTION', 'Fake notification not found')

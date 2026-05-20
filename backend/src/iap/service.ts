@@ -5,6 +5,7 @@ import type { SubscriptionSnapshot } from '@web-app-demo/contracts'
 
 import type { DbClient } from '../db'
 import type { AppEnv } from '../env'
+import { Prisma } from '../generated/prisma/client'
 import { SubscriptionState } from '../generated/prisma/enums'
 import { AppError } from '../http/errors'
 import type {
@@ -31,6 +32,11 @@ type ApplyTransactionInput = {
   verifiedTransaction: AppStoreVerificationResult<JWSTransactionDecodedPayload>
   verifiedRenewal?: AppStoreVerificationResult<JWSRenewalInfoDecodedPayload> | null
   status?: Status | number | null
+}
+
+type ReconcileAttemptState = {
+  firstError: unknown
+  latestSnapshot: SubscriptionSnapshot | null
 }
 
 export function inactiveSubscriptionSnapshot(): SubscriptionSnapshot {
@@ -90,33 +96,42 @@ export async function reconcileAppStoreTransactions(input: {
   signedTransactions?: string[]
   originalTransactionIds?: string[]
 }): Promise<SubscriptionSnapshot> {
-  let latestSnapshot: SubscriptionSnapshot | null = null
+  const attemptState: ReconcileAttemptState = {
+    firstError: null,
+    latestSnapshot: null,
+  }
 
   for (const signedTransactionInfo of input.signedTransactions ?? []) {
-    latestSnapshot = await ingestAppStoreTransaction({
-      db: input.db,
-      env: input.env,
-      verifier: input.verifier,
-      userId: input.userId,
-      signedTransactionInfo,
-    })
+    await recordReconcileAttempt(attemptState, () =>
+      ingestAppStoreTransaction({
+        db: input.db,
+        env: input.env,
+        verifier: input.verifier,
+        userId: input.userId,
+        signedTransactionInfo,
+      }),
+    )
   }
 
   for (const originalTransactionId of input.originalTransactionIds ?? []) {
-    const statusItems = await input.verifier.getSubscriptionStatuses({
-      transactionId: originalTransactionId,
-    })
-    latestSnapshot =
-      (await applyStatusTransactions({
+    await recordReconcileAttempt(attemptState, async () => {
+      const statusItems = await input.verifier.getSubscriptionStatuses({
+        transactionId: originalTransactionId,
+      })
+      return applyStatusTransactions({
         db: input.db,
         env: input.env,
         verifier: input.verifier,
         userId: input.userId,
         statusItems,
-      })) ?? latestSnapshot
+      })
+    })
   }
 
-  return latestSnapshot ?? getSubscriptionSnapshot(input.db, input.userId)
+  if (attemptState.latestSnapshot) return attemptState.latestSnapshot
+  if (attemptState.firstError) throw attemptState.firstError
+
+  return getSubscriptionSnapshot(input.db, input.userId)
 }
 
 export async function recordAndProcessAppStoreWebhook(input: {
@@ -126,85 +141,69 @@ export async function recordAndProcessAppStoreWebhook(input: {
   signedPayload: string
 }): Promise<{ duplicate: boolean; subscription: SubscriptionSnapshot | null }> {
   const signedPayloadHash = hashToken(input.signedPayload)
-  const existing = await input.db.appStoreWebhook.findUnique({
-    where: { signedPayloadHash },
-  })
-
-  if (existing?.processedAt) {
+  const webhook = await claimAppStoreWebhook(input.db, signedPayloadHash)
+  if (!webhook) {
     return { duplicate: true, subscription: null }
   }
 
-  const verifiedNotification = await input.verifier.verifyNotification(input.signedPayload)
-  const notification = verifiedNotification.payload
-  const signedTransactionInfo = notification.data?.signedTransactionInfo
-  const signedRenewalInfo = notification.data?.signedRenewalInfo
-  const verifiedTransaction = signedTransactionInfo
-    ? await input.verifier.verifyTransaction(signedTransactionInfo)
-    : null
-  const verifiedRenewal = signedRenewalInfo ? await input.verifier.verifyRenewalInfo(signedRenewalInfo) : null
-  const transaction = verifiedTransaction?.payload
+  try {
+    const verifiedNotification = await input.verifier.verifyNotification(input.signedPayload)
+    const notification = verifiedNotification.payload
+    const signedTransactionInfo = notification.data?.signedTransactionInfo
+    const signedRenewalInfo = notification.data?.signedRenewalInfo
+    const verifiedTransaction = signedTransactionInfo
+      ? await input.verifier.verifyTransaction(signedTransactionInfo)
+      : null
+    const verifiedRenewal = signedRenewalInfo ? await input.verifier.verifyRenewalInfo(signedRenewalInfo) : null
+    const transaction = verifiedTransaction?.payload
 
-  const webhook = await input.db.appStoreWebhook.upsert({
-    where: { signedPayloadHash },
-    create: {
-      signedPayloadHash,
-      notificationUuid: notification.notificationUUID ?? null,
-      notificationType: notification.notificationType ? String(notification.notificationType) : null,
-      subtype: notification.subtype ? String(notification.subtype) : null,
-      environment: formatEnvironment(notification.data?.environment ?? verifiedNotification.environment),
-      originalTransactionId: transaction?.originalTransactionId ?? null,
-      transactionId: transaction?.transactionId ?? null,
-    },
-    update: {
-      notificationUuid: notification.notificationUUID ?? existing?.notificationUuid ?? null,
-      notificationType: notification.notificationType ? String(notification.notificationType) : existing?.notificationType,
-      subtype: notification.subtype ? String(notification.subtype) : existing?.subtype,
-      environment: formatEnvironment(notification.data?.environment ?? verifiedNotification.environment),
-      originalTransactionId: transaction?.originalTransactionId ?? existing?.originalTransactionId,
-      transactionId: transaction?.transactionId ?? existing?.transactionId,
-    },
-  })
-
-  if (!signedTransactionInfo || !verifiedTransaction) {
     await input.db.appStoreWebhook.update({
       where: { id: webhook.id },
-      data: { processedAt: new Date() },
+      data: {
+        notificationUuid: notification.notificationUUID ?? null,
+        notificationType: notification.notificationType ? String(notification.notificationType) : null,
+        subtype: notification.subtype ? String(notification.subtype) : null,
+        environment: formatEnvironment(notification.data?.environment ?? verifiedNotification.environment),
+        originalTransactionId: transaction?.originalTransactionId ?? null,
+        transactionId: transaction?.transactionId ?? null,
+      },
     })
-    return { duplicate: Boolean(existing), subscription: null }
-  }
 
-  const userId = await resolveWebhookUserId({
-    db: input.db,
-    transaction: verifiedTransaction.payload,
-  })
+    if (!signedTransactionInfo || !verifiedTransaction) {
+      await markAppStoreWebhookProcessed(input.db, webhook.id)
+      return { duplicate: false, subscription: null }
+    }
 
-  if (!userId) {
-    await input.db.appStoreWebhook.update({
-      where: { id: webhook.id },
-      data: { processedAt: new Date() },
+    const userId = await resolveWebhookUserId({
+      db: input.db,
+      transaction: verifiedTransaction.payload,
     })
-    return { duplicate: Boolean(existing), subscription: null }
+
+    if (!userId) {
+      await markAppStoreWebhookProcessed(input.db, webhook.id)
+      return { duplicate: false, subscription: null }
+    }
+
+    const subscription = await applyVerifiedAppStoreTransaction({
+      db: input.db,
+      env: input.env,
+      input: {
+        userId,
+        signedTransactionInfo,
+        signedRenewalInfo,
+        verifiedTransaction,
+        verifiedRenewal,
+        status: notification.data?.status,
+      },
+    })
+
+    await markAppStoreWebhookProcessed(input.db, webhook.id)
+
+    return { duplicate: false, subscription }
+  } catch (error) {
+    await releaseFailedAppStoreWebhookClaim(input.db, webhook.id)
+    throw error
   }
-
-  const subscription = await applyVerifiedAppStoreTransaction({
-    db: input.db,
-    env: input.env,
-    input: {
-      userId,
-      signedTransactionInfo,
-      signedRenewalInfo,
-      verifiedTransaction,
-      verifiedRenewal,
-      status: notification.data?.status,
-    },
-  })
-
-  await input.db.appStoreWebhook.update({
-    where: { id: webhook.id },
-    data: { processedAt: new Date() },
-  })
-
-  return { duplicate: Boolean(existing), subscription }
 }
 
 async function applyStatusTransactions(input: {
@@ -214,31 +213,66 @@ async function applyStatusTransactions(input: {
   userId: string
   statusItems: AppStoreStatusTransaction[]
 }): Promise<SubscriptionSnapshot | null> {
-  let latestSnapshot: SubscriptionSnapshot | null = null
+  const attemptState: ReconcileAttemptState = {
+    firstError: null,
+    latestSnapshot: null,
+  }
 
   for (const item of input.statusItems) {
     if (!item.signedTransactionInfo) continue
 
-    const verifiedTransaction = await input.verifier.verifyTransaction(item.signedTransactionInfo)
-    const verifiedRenewal = item.signedRenewalInfo
-      ? await input.verifier.verifyRenewalInfo(item.signedRenewalInfo)
-      : null
+    await recordReconcileAttempt(attemptState, async () => {
+      const verifiedTransaction = await input.verifier.verifyTransaction(item.signedTransactionInfo!)
+      const verifiedRenewal = item.signedRenewalInfo
+        ? await input.verifier.verifyRenewalInfo(item.signedRenewalInfo)
+        : null
 
-    latestSnapshot = await applyVerifiedAppStoreTransaction({
-      db: input.db,
-      env: input.env,
-      input: {
-        userId: input.userId,
-        signedTransactionInfo: item.signedTransactionInfo,
-        signedRenewalInfo: item.signedRenewalInfo,
-        verifiedTransaction,
-        verifiedRenewal,
-        status: item.status,
-      },
+      return applyVerifiedAppStoreTransaction({
+        db: input.db,
+        env: input.env,
+        input: {
+          userId: input.userId,
+          signedTransactionInfo: item.signedTransactionInfo!,
+          signedRenewalInfo: item.signedRenewalInfo,
+          verifiedTransaction,
+          verifiedRenewal,
+          status: item.status,
+        },
+      })
     })
   }
 
-  return latestSnapshot
+  if (attemptState.latestSnapshot) return attemptState.latestSnapshot
+  if (attemptState.firstError) throw attemptState.firstError
+
+  return null
+}
+
+async function claimAppStoreWebhook(db: DbClient, signedPayloadHash: string) {
+  try {
+    return await db.appStoreWebhook.create({
+      data: { signedPayloadHash },
+    })
+  } catch (error) {
+    if (isUniqueConstraintError(error)) return null
+    throw error
+  }
+}
+
+async function markAppStoreWebhookProcessed(db: DbClient, id: string) {
+  return db.appStoreWebhook.update({
+    where: { id },
+    data: { processedAt: new Date() },
+  })
+}
+
+async function releaseFailedAppStoreWebhookClaim(db: DbClient, id: string) {
+  await db.appStoreWebhook.deleteMany({
+    where: {
+      id,
+      processedAt: null,
+    },
+  })
 }
 
 async function applyVerifiedAppStoreTransaction({
@@ -260,20 +294,28 @@ async function applyVerifiedAppStoreTransaction({
     throw new AppError(400, 'IAP_INVALID_TRANSACTION', 'App Store transaction is missing required identifiers')
   }
 
-  if (env.APPLE_IAP_PRODUCT_IDS.length > 0 && !env.APPLE_IAP_PRODUCT_IDS.includes(productId)) {
-    throw new AppError(400, 'IAP_INVALID_TRANSACTION', 'App Store transaction product is not configured')
-  }
-
-  if (!transaction.appAccountToken || transaction.appAccountToken !== input.userId) {
+  if (env.APPLE_IAP_PRODUCT_IDS.length === 0) {
     throw new AppError(
-      403,
-      'IAP_OWNERSHIP_MISMATCH',
-      'This App Store purchase is linked to another account',
+      503,
+      'IAP_NOT_CONFIGURED',
+      'App Store subscription product IDs are not configured',
     )
   }
 
-  const state = resolveSubscriptionState(transaction, renewal, input.status)
+  if (!env.APPLE_IAP_PRODUCT_IDS.includes(productId)) {
+    throw new AppError(400, 'IAP_INVALID_TRANSACTION', 'App Store transaction product is not configured')
+  }
+
   const expiresAt = toDate(transaction.expiresDate ?? renewal?.renewalDate)
+  assertSubscriptionHasExpiration(transaction, renewal, expiresAt, input.status)
+  await assertTransactionOwnership({
+    db,
+    userId: input.userId,
+    originalTransactionId,
+    appAccountToken: transaction.appAccountToken,
+  })
+
+  const state = resolveSubscriptionState(transaction, renewal, input.status)
   const willAutoRenew =
     renewal?.autoRenewStatus == null ? null : renewal.autoRenewStatus === AutoRenewStatus.ON
   const environment = formatEnvironment(transaction.environment ?? renewal?.environment ?? input.verifiedTransaction.environment)
@@ -316,6 +358,26 @@ async function applyVerifiedAppStoreTransaction({
       },
     })
 
+    const existingEntitlement = await tx.subscriptionEntitlement.findUnique({
+      where: { userId: input.userId },
+    })
+
+    if (
+      existingEntitlement &&
+      !shouldUpdateEntitlement({
+        existing: existingEntitlement,
+        incoming: {
+          transactionId,
+          originalTransactionId,
+          purchaseDate: toDate(transaction.purchaseDate),
+          expiresAt,
+          revokedAt: toDate(transaction.revocationDate),
+        },
+      })
+    ) {
+      return existingEntitlement
+    }
+
     return tx.subscriptionEntitlement.upsert({
       where: { userId: input.userId },
       create: {
@@ -346,6 +408,96 @@ async function applyVerifiedAppStoreTransaction({
   })
 
   return toSubscriptionSnapshot(entitlement)
+}
+
+async function assertTransactionOwnership({
+  appAccountToken,
+  db,
+  originalTransactionId,
+  userId,
+}: {
+  appAccountToken: string | null | undefined
+  db: DbClient
+  originalTransactionId: string
+  userId: string
+}) {
+  if (appAccountToken) {
+    if (appAccountToken === userId) return
+    throw ownershipMismatchError()
+  }
+
+  const existingEntitlement = await db.subscriptionEntitlement.findUnique({
+    where: { originalTransactionId },
+    select: { userId: true },
+  })
+
+  if (existingEntitlement?.userId === userId) return
+
+  throw ownershipMismatchError()
+}
+
+function ownershipMismatchError() {
+  return new AppError(
+    403,
+    'IAP_OWNERSHIP_MISMATCH',
+    'This App Store purchase is linked to another account',
+  )
+}
+
+function assertSubscriptionHasExpiration(
+  transaction: JWSTransactionDecodedPayload,
+  renewal: JWSRenewalInfoDecodedPayload | null,
+  expiresAt: Date | null,
+  status?: Status | number | null,
+) {
+  if (expiresAt || transaction.revocationDate || status === Status.REVOKED) return
+
+  throw new AppError(
+    400,
+    'IAP_INVALID_TRANSACTION',
+    'App Store subscription transaction is missing an expiration date',
+    renewal ? undefined : { transactionId: transaction.transactionId },
+  )
+}
+
+function shouldUpdateEntitlement({
+  existing,
+  incoming,
+}: {
+  existing: EntitlementRecord & {
+    webOrderLineItemId?: string | null
+  }
+  incoming: {
+    transactionId: string
+    originalTransactionId: string
+    purchaseDate: Date | null
+    expiresAt: Date | null
+    revokedAt: Date | null
+  }
+}) {
+  if (!existing.transactionId) return true
+  if (existing.transactionId === incoming.transactionId) return true
+  if (!existing.originalTransactionId) return true
+  if (existing.originalTransactionId !== incoming.originalTransactionId) return true
+
+  const existingFreshness = existing.expiresAt?.getTime() ?? 0
+  const incomingFreshness = incoming.expiresAt?.getTime() ?? incoming.purchaseDate?.getTime() ?? 0
+
+  if (incomingFreshness > existingFreshness) return true
+  if (incomingFreshness < existingFreshness) return false
+
+  return true
+}
+
+async function recordReconcileAttempt(
+  state: ReconcileAttemptState,
+  attempt: () => Promise<SubscriptionSnapshot | null>,
+) {
+  try {
+    state.latestSnapshot = (await attempt()) ?? state.latestSnapshot
+  } catch (error) {
+    state.firstError ??= error
+  }
 }
 
 async function resolveWebhookUserId({
@@ -403,14 +555,15 @@ function resolveSubscriptionState(
 }
 
 export function toSubscriptionSnapshot(entitlement: EntitlementRecord): SubscriptionSnapshot {
+  const state = effectiveSubscriptionState(entitlement)
   const isActive =
-    entitlement.state === SubscriptionState.active ||
-    entitlement.state === SubscriptionState.billing_grace_period
+    state === SubscriptionState.active ||
+    state === SubscriptionState.billing_grace_period
 
   return {
     entitlement: 'premium',
     isActive,
-    state: entitlement.state,
+    state,
     platform: entitlement.platform,
     productId: entitlement.productId,
     originalTransactionId: entitlement.originalTransactionId,
@@ -419,6 +572,19 @@ export function toSubscriptionSnapshot(entitlement: EntitlementRecord): Subscrip
     willAutoRenew: entitlement.willAutoRenew,
     updatedAt: entitlement.updatedAt.toISOString(),
   }
+}
+
+function effectiveSubscriptionState(entitlement: EntitlementRecord): SubscriptionState {
+  if (
+    (entitlement.state === SubscriptionState.active ||
+      entitlement.state === SubscriptionState.billing_grace_period) &&
+    entitlement.expiresAt &&
+    entitlement.expiresAt.getTime() <= Date.now()
+  ) {
+    return SubscriptionState.expired
+  }
+
+  return entitlement.state
 }
 
 function toDate(value: number | null | undefined) {
@@ -433,4 +599,8 @@ function formatEnvironment(value: Environment | string | null | undefined) {
 
 function hashToken(value: string) {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
 }

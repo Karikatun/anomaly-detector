@@ -66,6 +66,9 @@ export class AuthService {
   async login(input: LoginRequest, metadata: SessionMetadata) {
     const user = await this.db.user.findUnique({
       where: { email: input.email },
+      include: {
+        subscriptionEntitlement: true,
+      },
     })
 
     if (!user) {

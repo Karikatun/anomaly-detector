@@ -134,6 +134,16 @@ describe('loadEnv', () => {
       }),
     ).toThrow('APPLE_IAP_APP_APPLE_ID')
 
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        APPLE_IAP_BUNDLE_ID: 'com.example.app',
+        APPLE_IAP_ISSUER_ID: 'issuer-id',
+        APPLE_IAP_KEY_ID: 'key-id',
+        APPLE_IAP_PRIVATE_KEY_BASE64: 'private-key',
+      }),
+    ).toThrow('APPLE_IAP_PRODUCT_IDS')
+
     const env = loadEnv({
       ...baseEnv,
       APPLE_IAP_BUNDLE_ID: 'com.example.app',

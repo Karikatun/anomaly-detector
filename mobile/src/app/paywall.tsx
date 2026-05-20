@@ -14,6 +14,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 import { useSubscriptionIap } from '@/lib/iap';
+import { introOfferLabel, purchaseButtonLabel } from '@/lib/iap-utils';
 
 export default function PaywallScreen() {
   const auth = useAuth();
@@ -53,9 +54,10 @@ export default function PaywallScreen() {
     );
   }
 
-  const selectedProduct = iap.products.find((product) => product.id === iap.selectedProductId) ?? iap.products[0];
+  const selectedProduct = iap.products.find((product) => product.id === iap.selectedProductId) ?? null;
   const isPrimaryLoading = iap.isPurchasing || iap.isSyncing;
-  const isProductListEmpty = !iap.isLoadingProducts && iap.products.length === 0;
+  const isConnecting = !iap.isConnected && !iap.error;
+  const isProductListEmpty = iap.isConnected && !iap.isLoadingProducts && iap.products.length === 0;
 
   return (
     <Screen
@@ -82,6 +84,13 @@ export default function PaywallScreen() {
             </View>
           ) : null}
 
+          {isConnecting ? (
+            <View style={styles.loadingRow} testID={TEST_IDS.paywall.loading}>
+              <Spinner />
+              <Typography muted>Connecting to the App Store...</Typography>
+            </View>
+          ) : null}
+
           {isProductListEmpty ? (
             <View
               style={[
@@ -93,7 +102,7 @@ export default function PaywallScreen() {
               testID={TEST_IDS.paywall.empty}>
               <Typography weight="600">Products are not available yet.</Typography>
               <Typography muted>
-                Check the iOS product IDs, App Store Connect status, sandbox account, and dev-client build.
+                Check the iOS product IDs, App Store Connect status, sandbox account, real-device build, and custom dev-client.
               </Typography>
             </View>
           ) : null}
@@ -129,10 +138,10 @@ export default function PaywallScreen() {
           loading={iap.isPurchasing}
           onPress={() => void iap.purchase()}
           testID={TEST_IDS.paywall.purchaseButton}>
-          {selectedProduct ? `Subscribe for ${selectedProduct.displayPrice}` : 'Subscribe'}
+          {selectedProduct ? purchaseButtonLabel(selectedProduct) : 'Subscribe'}
         </Button>
         <Button
-          disabled={iap.isRestoring || iap.isPurchasing}
+          disabled={!iap.isConnected || iap.isRestoring || iap.isPurchasing}
           loading={iap.isRestoring}
           onPress={() => void iap.restore()}
           testID={TEST_IDS.paywall.restoreButton}
@@ -180,6 +189,7 @@ function PlanOption({
       <View style={styles.planText}>
         <Typography weight="600">{product.displayName ?? product.title}</Typography>
         <Typography muted>{product.description || product.id}</Typography>
+        {introOfferLabel(product) ? <Typography muted>{introOfferLabel(product)}</Typography> : null}
       </View>
       <Typography weight="700">{product.displayPrice}</Typography>
     </Pressable>

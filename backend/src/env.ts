@@ -211,6 +211,14 @@ function validateAppleIapEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCt
     }
   }
 
+  if (env.APPLE_IAP_PRODUCT_IDS.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['APPLE_IAP_PRODUCT_IDS'],
+      message: 'APPLE_IAP_PRODUCT_IDS must list every App Store subscription product ID when App Store IAP verification is configured',
+    })
+  }
+
   if (env.APPLE_IAP_ENVIRONMENT === 'Production' && env.APPLE_IAP_APP_APPLE_ID === undefined) {
     ctx.addIssue({
       code: 'custom',
