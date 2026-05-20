@@ -2,6 +2,7 @@ import type { SubscriptionSnapshot } from '@web-app-demo/contracts';
 import {
   deepLinkToSubscriptions,
   getAvailablePurchases as getAvailablePurchasesFromStore,
+  presentCodeRedemptionSheetIOS,
   useIAP,
   type ProductSubscription,
   type Purchase,
@@ -32,12 +33,20 @@ const iosProductIds = [
 ]
   .map((productId) => productId?.trim())
   .filter((productId): productId is string => Boolean(productId));
+const offerCodeRedemptionClientTtlMs = 14 * 60 * 1000;
+
+type OfferCodeRedemptionSession = {
+  expiresAtMs: number;
+  token: string;
+};
 
 type SubscriptionContextValue = {
   error: string | null;
   isConnected: boolean;
   isLoadingProducts: boolean;
+  isManagingSubscriptions: boolean;
   isPurchasing: boolean;
+  isRedeemingOfferCode: boolean;
   isRestoring: boolean;
   isSupported: boolean;
   isSyncing: boolean;
@@ -45,6 +54,7 @@ type SubscriptionContextValue = {
   productIds: string[];
   products: ProductSubscription[];
   purchase: () => Promise<void>;
+  redeemOfferCode: () => Promise<void>;
   restore: () => Promise<void>;
   manageSubscriptions: () => Promise<void>;
   selectedProductId: string | null;
@@ -77,18 +87,26 @@ function IosIapProvider({ children }: PropsWithChildren) {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(iosProductIds[0] ?? null);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [isManagingSubscriptions, setIsManagingSubscriptions] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isRedeemingOfferCode, setIsRedeemingOfferCode] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const iapRef = useRef<ReturnType<typeof useIAP> | null>(null);
   const inFlightReconcileKeysRef = useRef(new Set<string>());
+  const purchaseRequestInFlightRef = useRef(false);
   const processingTransactionsRef = useRef(new Set<string>());
   const processedTransactionsRef = useRef(new Set<string>());
   const lastPurchaseSuccessAtRef = useRef<number | null>(null);
+  const offerCodeRedemptionTokenRef = useRef<OfferCodeRedemptionSession | null>(null);
 
   const handlePurchase = useCallback(
     async (purchase: Purchase) => {
-      if (!user) return;
+      if (!user) {
+        purchaseRequestInFlightRef.current = false;
+        setIsPurchasing(false);
+        return;
+      }
 
       const validation = validateAppStorePurchaseForIngest(purchase);
       if (!validation.ok) {
@@ -96,14 +114,18 @@ function IosIapProvider({ children }: PropsWithChildren) {
           reportIapDiagnostic('purchase-invalid', validation.message);
         }
         setError(validation.message);
+        purchaseRequestInFlightRef.current = false;
         setIsPurchasing(false);
         return;
       }
 
-      if (
-        processedTransactionsRef.current.has(validation.transactionKey) ||
-        processingTransactionsRef.current.has(validation.transactionKey)
-      ) {
+      if (processedTransactionsRef.current.has(validation.transactionKey)) {
+        purchaseRequestInFlightRef.current = false;
+        setIsPurchasing(false);
+        return;
+      }
+
+      if (processingTransactionsRef.current.has(validation.transactionKey)) {
         return;
       }
 
@@ -112,10 +134,18 @@ function IosIapProvider({ children }: PropsWithChildren) {
       setError(null);
 
       try {
-        const subscription = await ingestAndFinishPurchase({
+        const offerCodeRedemptionToken = currentOfferCodeRedemptionToken(offerCodeRedemptionTokenRef.current);
+        if (!offerCodeRedemptionToken) {
+          offerCodeRedemptionTokenRef.current = null;
+        }
+        const result = await ingestAndFinishPurchase({
           purchase,
           signedTransactionInfo: validation.signedTransactionInfo,
-          ingest: (request) => api.ingestAppStoreTransaction(request),
+          ingest: (request) =>
+            api.ingestAppStoreTransaction({
+              ...request,
+              ...(offerCodeRedemptionToken ? { offerCodeRedemptionToken } : {}),
+            }),
           finish: (nextPurchase) => {
             if (!iapRef.current) {
               throw new Error('Store connection is not ready.');
@@ -123,13 +153,19 @@ function IosIapProvider({ children }: PropsWithChildren) {
             return iapRef.current.finishTransaction({ purchase: nextPurchase, isConsumable: false });
           },
         });
-        processedTransactionsRef.current.add(validation.transactionKey);
+        offerCodeRedemptionTokenRef.current = null;
+        setSubscription(result.subscription);
+        if (result.finishError) {
+          reportIapDiagnostic('purchase-finish-error', result.finishError);
+        } else {
+          processedTransactionsRef.current.add(validation.transactionKey);
+        }
         lastPurchaseSuccessAtRef.current = Date.now();
-        setSubscription(subscription);
       } catch (caughtError) {
         reportIapDiagnostic('purchase-ingest-error', caughtError);
         setError(messageForIapError(caughtError));
       } finally {
+        purchaseRequestInFlightRef.current = false;
         processingTransactionsRef.current.delete(validation.transactionKey);
         setIsPurchasing(false);
       }
@@ -142,6 +178,7 @@ function IosIapProvider({ children }: PropsWithChildren) {
       void handlePurchase(purchase);
     },
     onPurchaseError: (purchaseError) => {
+      purchaseRequestInFlightRef.current = false;
       setIsPurchasing(false);
       if (!isUserCancelledPurchaseError(purchaseError)) {
         if (shouldSuppressPostSuccessError(purchaseError, lastPurchaseSuccessAtRef.current)) {
@@ -197,55 +234,91 @@ function IosIapProvider({ children }: PropsWithChildren) {
       originalTransactionIds?: string[];
       purchases: Purchase[];
     }) => {
-      const payload = buildReconcilePayloadFromPurchases(purchases, originalTransactionIds);
-      if (!payload) return null;
+      let firstError: unknown = null;
+      let latestSubscription: SubscriptionSnapshot | null = null;
 
-      const reconcileKey = [
-        ...(payload.signedTransactions ?? []).map((transaction) => `signed:${transaction}`),
-        ...(payload.originalTransactionIds ?? []).map((transactionId) => `original:${transactionId}`),
-      ].join('|');
-      const purchasesToFinish = finishPurchases
-        ? purchases.filter((purchase) => {
-            const validation = validateAppStorePurchaseForIngest(purchase);
-            return (
-              validation.ok &&
-              !processedTransactionsRef.current.has(validation.transactionKey) &&
-              !processingTransactionsRef.current.has(validation.transactionKey)
-            );
-          })
-        : [];
+      if (finishPurchases) {
+        for (const purchase of purchases) {
+          const validation = validateAppStorePurchaseForIngest(purchase);
+          if (
+            !validation.ok ||
+            processedTransactionsRef.current.has(validation.transactionKey) ||
+            processingTransactionsRef.current.has(validation.transactionKey)
+          ) {
+            continue;
+          }
 
-      if (inFlightReconcileKeysRef.current.has(reconcileKey)) {
+          const reconcileKey = `signed:${validation.signedTransactionInfo}`;
+          if (inFlightReconcileKeysRef.current.has(reconcileKey)) {
+            continue;
+          }
+
+          inFlightReconcileKeysRef.current.add(reconcileKey);
+          processingTransactionsRef.current.add(validation.transactionKey);
+
+          try {
+            const offerCodeRedemptionToken = currentOfferCodeRedemptionToken(offerCodeRedemptionTokenRef.current);
+            if (!offerCodeRedemptionToken) {
+              offerCodeRedemptionTokenRef.current = null;
+            }
+            const result = await ingestAndFinishPurchase({
+              purchase,
+              signedTransactionInfo: validation.signedTransactionInfo,
+              ingest: (request) =>
+                api.ingestAppStoreTransaction({
+                  ...request,
+                  ...(offerCodeRedemptionToken ? { offerCodeRedemptionToken } : {}),
+                }),
+              finish: (nextPurchase) => {
+                if (!iapRef.current) {
+                  throw new Error('Store connection is not ready.');
+                }
+                return iapRef.current.finishTransaction({ purchase: nextPurchase, isConsumable: false });
+              },
+            });
+            offerCodeRedemptionTokenRef.current = null;
+            setSubscription(result.subscription);
+            latestSubscription = result.subscription;
+
+            if (result.finishError) {
+              reportIapDiagnostic('available-purchase-finish-error', result.finishError);
+            } else {
+              processedTransactionsRef.current.add(validation.transactionKey);
+            }
+          } catch (caughtError) {
+            firstError ??= caughtError;
+            reportIapDiagnostic('available-purchase-ingest-error', caughtError);
+          } finally {
+            processingTransactionsRef.current.delete(validation.transactionKey);
+            inFlightReconcileKeysRef.current.delete(reconcileKey);
+          }
+        }
+      }
+
+      const originalPayload = buildReconcilePayloadFromPurchases([], originalTransactionIds);
+      if (!originalPayload) {
+        if (latestSubscription) return latestSubscription;
+        if (firstError) throw firstError;
         return null;
       }
 
-      inFlightReconcileKeysRef.current.add(reconcileKey);
+      const originalReconcileKey = (originalPayload.originalTransactionIds ?? [])
+        .map((transactionId) => `original:${transactionId}`)
+        .join('|');
 
+      if (inFlightReconcileKeysRef.current.has(originalReconcileKey)) {
+        if (latestSubscription) return latestSubscription;
+        if (firstError) throw firstError;
+        return null;
+      }
+
+      inFlightReconcileKeysRef.current.add(originalReconcileKey);
       try {
-        const response = await api.reconcileAppStoreTransactions(payload);
+        const response = await api.reconcileAppStoreTransactions(originalPayload);
         setSubscription(response.subscription);
-
-        if (finishPurchases) {
-          for (const purchase of purchasesToFinish) {
-            const validation = validateAppStorePurchaseForIngest(purchase);
-            if (!validation.ok) {
-              continue;
-            }
-
-            if (!iapRef.current) {
-              throw new Error('Store connection is not ready.');
-            }
-
-            await retryIapOperation(() =>
-              iapRef.current!.finishTransaction({ purchase, isConsumable: false }),
-            );
-            processedTransactionsRef.current.add(validation.transactionKey);
-          }
-        }
-
         return response.subscription;
       } finally {
-        inFlightReconcileKeysRef.current.delete(reconcileKey);
+        inFlightReconcileKeysRef.current.delete(originalReconcileKey);
       }
     },
     [api, setSubscription],
@@ -259,19 +332,33 @@ function IosIapProvider({ children }: PropsWithChildren) {
     try {
       const entitlement = await api.iapEntitlement();
       setSubscription(entitlement.subscription);
+      const originalTransactionIds = entitlement.subscription.originalTransactionId
+        ? [entitlement.subscription.originalTransactionId]
+        : undefined;
+      let purchases: Purchase[] = [];
+      let finishPurchases = false;
 
       if (connected) {
-        const purchases = await retryIapOperation(() =>
-          getAvailablePurchasesFromStore({
-            alsoPublishToEventListenerIOS: false,
-            onlyIncludeActiveItemsIOS: true,
-          }),
-        );
+        try {
+          purchases = await retryIapOperation(() =>
+            getAvailablePurchasesFromStore({
+              alsoPublishToEventListenerIOS: false,
+              onlyIncludeActiveItemsIOS: true,
+            }),
+          );
+          finishPurchases = true;
+        } catch (storeError) {
+          if (!originalTransactionIds) {
+            throw storeError;
+          }
+          reportIapDiagnostic('available-purchases-error', storeError);
+        }
+      }
+
+      if (finishPurchases || originalTransactionIds) {
         await reconcileAndFinishPurchases({
-          finishPurchases: true,
-          originalTransactionIds: entitlement.subscription.originalTransactionId
-            ? [entitlement.subscription.originalTransactionId]
-            : undefined,
+          finishPurchases,
+          originalTransactionIds,
           purchases,
         });
       }
@@ -285,6 +372,7 @@ function IosIapProvider({ children }: PropsWithChildren) {
 
   const purchase = useCallback(async () => {
     if (!user || !selectedProductId) return;
+    if (purchaseRequestInFlightRef.current) return;
 
     if (!connected) {
       setError('App Store connection is not ready yet. Please try again in a moment.');
@@ -298,14 +386,13 @@ function IosIapProvider({ children }: PropsWithChildren) {
     }
 
     setIsPurchasing(true);
+    purchaseRequestInFlightRef.current = true;
     setError(null);
 
     try {
       await requestPurchase(buildSubscriptionPurchaseRequest(selectedProduct.id, user.id));
-      if (processingTransactionsRef.current.size === 0) {
-        setIsPurchasing(false);
-      }
     } catch (caughtError) {
+      purchaseRequestInFlightRef.current = false;
       setIsPurchasing(false);
       if (!isUserCancelledPurchaseError(caughtError)) {
         reportIapDiagnostic('purchase-request-error', caughtError);
@@ -373,18 +460,64 @@ function IosIapProvider({ children }: PropsWithChildren) {
     }
   }, [connected, reconcileAndFinishPurchases, restorePurchases, user]);
 
+  const redeemOfferCode = useCallback(async () => {
+    if (!user) return;
+    if (!connected) {
+      setError('App Store connection is not ready yet. Please try again in a moment.');
+      return;
+    }
+
+    setIsRedeemingOfferCode(true);
+    setError(null);
+
+    try {
+      const response = await api.createAppStoreOfferCodeRedemption();
+      offerCodeRedemptionTokenRef.current = {
+        expiresAtMs: Date.now() + offerCodeRedemptionClientTtlMs,
+        token: response.token,
+      };
+      const presented = await presentCodeRedemptionSheetIOS();
+      if (presented === false) {
+        throw new Error('App Store offer code sheet could not be opened.');
+      }
+      await sync();
+    } catch (caughtError) {
+      offerCodeRedemptionTokenRef.current = null;
+      if (isUserCancelledPurchaseError(caughtError)) {
+        return;
+      }
+      reportIapDiagnostic('offer-code-redemption-error', caughtError);
+      setError(messageForIapError(caughtError));
+    } finally {
+      setIsRedeemingOfferCode(false);
+    }
+  }, [api, connected, sync, user]);
+
   const manageSubscriptions = useCallback(async () => {
+    if (!connected) {
+      setError('App Store connection is not ready yet. Please try again in a moment.');
+      return;
+    }
+
+    setIsManagingSubscriptions(true);
+    setError(null);
+
     try {
       await deepLinkToSubscriptions({});
     } catch (caughtError) {
+      if (isUserCancelledPurchaseError(caughtError)) {
+        return;
+      }
       setError(messageForIapError(caughtError));
+    } finally {
+      setIsManagingSubscriptions(false);
     }
-  }, []);
+  }, [connected]);
 
   useEffect(() => {
-    if (!connected) return;
-
-    void loadProducts();
+    if (connected) {
+      void loadProducts();
+    }
     void sync();
   }, [connected, loadProducts, sync]);
 
@@ -414,7 +547,9 @@ function IosIapProvider({ children }: PropsWithChildren) {
       error,
       isConnected: connected,
       isLoadingProducts,
+      isManagingSubscriptions,
       isPurchasing,
+      isRedeemingOfferCode,
       isRestoring,
       isSupported: true,
       isSyncing,
@@ -422,6 +557,7 @@ function IosIapProvider({ children }: PropsWithChildren) {
       productIds: iosProductIds,
       products: sortProductsByConfiguredOrder(subscriptions, iosProductIds),
       purchase,
+      redeemOfferCode,
       restore,
       manageSubscriptions,
       selectedProductId,
@@ -433,11 +569,14 @@ function IosIapProvider({ children }: PropsWithChildren) {
       error,
       connected,
       isLoadingProducts,
+      isManagingSubscriptions,
       isPurchasing,
+      isRedeemingOfferCode,
       isRestoring,
       isSyncing,
       manageSubscriptions,
       purchase,
+      redeemOfferCode,
       restore,
       selectedProductId,
       sync,
@@ -463,7 +602,9 @@ function unsupportedSubscriptionValue(subscription: SubscriptionSnapshot | null)
     error: null,
     isConnected: false,
     isLoadingProducts: false,
+    isManagingSubscriptions: false,
     isPurchasing: false,
+    isRedeemingOfferCode: false,
     isRestoring: false,
     isSupported: false,
     isSyncing: false,
@@ -471,6 +612,7 @@ function unsupportedSubscriptionValue(subscription: SubscriptionSnapshot | null)
     productIds: [],
     products: [],
     purchase: async () => undefined,
+    redeemOfferCode: async () => undefined,
     restore: async () => undefined,
     manageSubscriptions: async () => undefined,
     selectedProductId: null,
@@ -478,6 +620,11 @@ function unsupportedSubscriptionValue(subscription: SubscriptionSnapshot | null)
     subscription,
     sync: async () => undefined,
   };
+}
+
+function currentOfferCodeRedemptionToken(session: OfferCodeRedemptionSession | null) {
+  if (!session) return undefined;
+  return session.expiresAtMs > Date.now() ? session.token : undefined;
 }
 
 function messageForIapError(error: unknown) {

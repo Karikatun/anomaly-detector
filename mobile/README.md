@@ -12,7 +12,7 @@ This section may be updated during first-run bootstrap. If the root `README.md` 
 - Authenticated users without active premium land on `/paywall`.
 - Active premium users land on `/components`, which lives in the bottom tab shell with `/profile`.
 - `/details/[id]` is a stack screen outside the tabs and uses an in-screen back button at the top left. It is part of the premium surface.
-- Android shows a deferred billing placeholder for this MVP. iOS App Store subscriptions are the only active purchase path. Displaying App Store introductory offer metadata is supported, while offer-code redemption, signed promotional-offer purchase flows, alternative billing, and external purchase links are deferred.
+- Android shows a deferred billing placeholder for this MVP. iOS App Store subscriptions are the only active purchase path. Displaying App Store introductory offer metadata and App Store offer-code redemption are supported. Android billing, Google Play code redemption, Play Billing entitlement validation, signed promotional-offer purchase flows, alternative billing, and external purchase links are deferred.
 - App screens should use `src/components/screen.tsx` for safe-area handling, standard spacing, scroll/non-scroll layout, keyboard avoidance, and consistent optional back navigation.
 
 ## Stack

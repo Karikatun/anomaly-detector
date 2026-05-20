@@ -23,7 +23,11 @@ export default function ProfileScreen() {
       <KeyValueCard label="Subscription" value={subscriptionLabel(auth.user.subscription.state)} />
 
       {auth.user.subscription.platform === 'ios' ? (
-        <Button variant="outline" onPress={() => void iap.manageSubscriptions()}>
+        <Button
+          disabled={!iap.isConnected || iap.isManagingSubscriptions}
+          loading={iap.isManagingSubscriptions}
+          variant="outline"
+          onPress={() => void iap.manageSubscriptions()}>
           Manage subscription
         </Button>
       ) : null}

@@ -26,6 +26,7 @@ export const TEST_IDS = {
     planOption: 'paywall.plan-option',
     profileButton: 'paywall.profile-button',
     purchaseButton: 'paywall.purchase-button',
+    redeemOfferCodeButton: 'paywall.redeem-offer-code-button',
     restoreButton: 'paywall.restore-button',
     screen: 'paywall.screen',
   },

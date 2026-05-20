@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import { AutoRenewStatus, Environment, Status, type JWSRenewalInfoDecodedPayload, type JWSTransactionDecodedPayload } from '@apple/app-store-server-library'
+import { AutoRenewStatus, Environment, OfferType, Status, type JWSRenewalInfoDecodedPayload, type JWSTransactionDecodedPayload } from '@apple/app-store-server-library'
 import type { SubscriptionSnapshot } from '@web-app-demo/contracts'
 
 import type { DbClient } from '../db'
@@ -13,6 +13,7 @@ import type {
   AppStoreSubscriptionVerifier,
   AppStoreVerificationResult,
 } from './apple-verifier'
+import { signOfferCodeRedemptionToken, verifyOfferCodeRedemptionToken } from './offer-code-tokens'
 
 export type EntitlementRecord = {
   platform: 'ios' | null
@@ -29,9 +30,15 @@ type ApplyTransactionInput = {
   userId: string
   signedTransactionInfo: string
   signedRenewalInfo?: string | null
+  allowTokenlessFirstClaim?: boolean
   verifiedTransaction: AppStoreVerificationResult<JWSTransactionDecodedPayload>
   verifiedRenewal?: AppStoreVerificationResult<JWSRenewalInfoDecodedPayload> | null
   status?: Status | number | null
+}
+
+type OfferCodeRedemptionProof = {
+  issuedAt: Date
+  userId: string
 }
 
 type ReconcileAttemptState = {
@@ -69,15 +76,20 @@ export async function ingestAppStoreTransaction(input: {
   userId: string
   signedTransactionInfo: string
   signedRenewalInfo?: string | null
+  offerCodeRedemptionToken?: string | null
 }): Promise<SubscriptionSnapshot> {
   const verifiedTransaction = await input.verifier.verifyTransaction(input.signedTransactionInfo)
   const verifiedRenewal = input.signedRenewalInfo
     ? await input.verifier.verifyRenewalInfo(input.signedRenewalInfo)
     : null
+  const offerCodeRedemption = input.offerCodeRedemptionToken
+    ? await verifyOfferCodeRedemptionToken(input.offerCodeRedemptionToken, input.env)
+    : null
 
   return applyVerifiedAppStoreTransaction({
     db: input.db,
     env: input.env,
+    offerCodeRedemption,
     input: {
       userId: input.userId,
       signedTransactionInfo: input.signedTransactionInfo,
@@ -86,6 +98,13 @@ export async function ingestAppStoreTransaction(input: {
       verifiedRenewal,
     },
   })
+}
+
+export function createOfferCodeRedemptionToken(input: {
+  env: AppEnv
+  userId: string
+}) {
+  return signOfferCodeRedemptionToken(input.userId, input.env)
 }
 
 export async function reconcileAppStoreTransactions(input: {
@@ -308,10 +327,12 @@ async function releaseFailedAppStoreWebhookClaim(db: DbClient, id: string) {
 async function applyVerifiedAppStoreTransaction({
   db,
   env,
+  offerCodeRedemption,
   input,
 }: {
   db: DbClient
   env: AppEnv
+  offerCodeRedemption?: OfferCodeRedemptionProof | null
   input: ApplyTransactionInput
 }): Promise<SubscriptionSnapshot> {
   const transaction = input.verifiedTransaction.payload
@@ -336,13 +357,20 @@ async function applyVerifiedAppStoreTransaction({
     throw new AppError(400, 'IAP_INVALID_TRANSACTION', 'App Store transaction product is not configured')
   }
 
-  const expiresAt = toDate(transaction.expiresDate ?? renewal?.renewalDate)
+  const expiresAt = resolveSubscriptionExpiresAt(transaction, renewal, input.status)
   assertSubscriptionHasExpiration(transaction, renewal, expiresAt, input.status)
   await assertTransactionOwnership({
     db,
     userId: input.userId,
     originalTransactionId,
     appAccountToken: transaction.appAccountToken,
+    allowTokenlessFirstClaim:
+      input.allowTokenlessFirstClaim ||
+      isValidOfferCodeTokenlessFirstClaim({
+        offerCodeRedemption,
+        transaction,
+        userId: input.userId,
+      }),
   })
 
   const state = resolveSubscriptionState(transaction, renewal, input.status)
@@ -402,6 +430,7 @@ async function applyVerifiedAppStoreTransaction({
           purchaseDate: toDate(transaction.purchaseDate),
           expiresAt,
           revokedAt: toDate(transaction.revocationDate),
+          state,
         },
       })
     ) {
@@ -441,11 +470,13 @@ async function applyVerifiedAppStoreTransaction({
 }
 
 async function assertTransactionOwnership({
+  allowTokenlessFirstClaim,
   appAccountToken,
   db,
   originalTransactionId,
   userId,
 }: {
+  allowTokenlessFirstClaim?: boolean
   appAccountToken: string | null | undefined
   db: DbClient
   originalTransactionId: string
@@ -462,8 +493,30 @@ async function assertTransactionOwnership({
   })
 
   if (existingEntitlement?.userId === userId) return
+  if (!existingEntitlement && allowTokenlessFirstClaim) return
 
   throw ownershipMismatchError()
+}
+
+function isValidOfferCodeTokenlessFirstClaim({
+  offerCodeRedemption,
+  transaction,
+  userId,
+}: {
+  offerCodeRedemption?: OfferCodeRedemptionProof | null
+  transaction: JWSTransactionDecodedPayload
+  userId: string
+}) {
+  if (!offerCodeRedemption) return false
+  if (offerCodeRedemption.userId !== userId) return false
+  if (transaction.appAccountToken) return false
+  if (transaction.offerType !== OfferType.OFFER_CODE) return false
+  if (!transaction.offerIdentifier?.trim()) return false
+
+  const purchaseDate = toDate(transaction.purchaseDate)
+  if (!purchaseDate) return false
+
+  return purchaseDate.getTime() >= offerCodeRedemption.issuedAt.getTime() - 5 * 60 * 1000
 }
 
 function ownershipMismatchError() {
@@ -503,12 +556,14 @@ function shouldUpdateEntitlement({
     purchaseDate: Date | null
     expiresAt: Date | null
     revokedAt: Date | null
+    state: SubscriptionState
   }
 }) {
   if (!existing.transactionId) return true
   if (existing.transactionId === incoming.transactionId) return true
   if (!existing.originalTransactionId) return true
   if (existing.originalTransactionId !== incoming.originalTransactionId) return true
+  if (incoming.revokedAt || incoming.state === SubscriptionState.revoked) return true
 
   const existingFreshness = existing.expiresAt?.getTime() ?? 0
   const incomingFreshness = incoming.expiresAt?.getTime() ?? incoming.purchaseDate?.getTime() ?? 0
@@ -578,10 +633,29 @@ function resolveSubscriptionState(
 
   if (renewal?.isInBillingRetryPeriod) return SubscriptionState.billing_retry
 
-  const expiresAt = toDate(transaction.expiresDate ?? renewal?.renewalDate)
+  const expiresAt = resolveSubscriptionExpiresAt(transaction, renewal, status)
   if (!expiresAt || expiresAt.getTime() > Date.now()) return SubscriptionState.active
 
   return SubscriptionState.expired
+}
+
+function resolveSubscriptionExpiresAt(
+  transaction: JWSTransactionDecodedPayload,
+  renewal: JWSRenewalInfoDecodedPayload | null,
+  status?: Status | number | null,
+) {
+  const standardExpiresAt = toDate(transaction.expiresDate ?? renewal?.renewalDate)
+  const gracePeriodExpiresAt =
+    status === Status.BILLING_GRACE_PERIOD ? toDate(renewal?.gracePeriodExpiresDate) : null
+
+  if (
+    gracePeriodExpiresAt &&
+    (!standardExpiresAt || gracePeriodExpiresAt.getTime() > standardExpiresAt.getTime())
+  ) {
+    return gracePeriodExpiresAt
+  }
+
+  return standardExpiresAt
 }
 
 export function toSubscriptionSnapshot(entitlement: EntitlementRecord): SubscriptionSnapshot {

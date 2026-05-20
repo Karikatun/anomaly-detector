@@ -1,11 +1,16 @@
-import { Environment, Status, type ResponseBodyV2DecodedPayload } from '@apple/app-store-server-library'
+import { Environment, OfferType, Status, type JWSTransactionDecodedPayload, type ResponseBodyV2DecodedPayload } from '@apple/app-store-server-library'
 import { expect, mock, test } from 'bun:test'
 
 import type { DbClient } from '../db'
 import type { AppEnv } from '../env'
 import { SubscriptionState } from '../generated/prisma/enums'
 import type { AppStoreSubscriptionVerifier } from './apple-verifier'
-import { reconcileAppStoreTransactions, recordAndProcessAppStoreWebhook } from './service'
+import {
+  createOfferCodeRedemptionToken,
+  ingestAppStoreTransaction,
+  reconcileAppStoreTransactions,
+  recordAndProcessAppStoreWebhook,
+} from './service'
 
 const env: AppEnv = {
   PORT: 3000,
@@ -104,6 +109,254 @@ test('uses the configured production App Store environment for original transact
   })
 })
 
+test('keeps billing grace period entitlements active until Apple grace expiration', async () => {
+  const userId = '018fd4f2-1f3a-7c88-bc49-333333333333'
+  const transactionExpiresDate = Date.now() - 24 * 60 * 60 * 1000
+  const gracePeriodExpiresDate = Date.now() + 3 * 24 * 60 * 60 * 1000
+  const savedEntitlementExpiresAts: Date[] = []
+  const db = {
+    appStoreTransaction: {
+      upsert: mock(async () => ({ id: 'transaction-row-1' })),
+    },
+    subscriptionEntitlement: {
+      findUnique: mock(async () => null),
+      upsert: mock(async (args: { create: { expiresAt: Date | null } }) => {
+        if (args.create.expiresAt) {
+          savedEntitlementExpiresAts.push(args.create.expiresAt)
+        }
+        return {
+          platform: 'ios',
+          state: SubscriptionState.billing_grace_period,
+          productId: 'premium_monthly',
+          originalTransactionId: 'original-grace',
+          transactionId: 'transaction-grace',
+          expiresAt: args.create.expiresAt,
+          willAutoRenew: true,
+          updatedAt: new Date(),
+        }
+      }),
+    },
+    $transaction: async (callback: (tx: unknown) => unknown) => callback(db),
+  } as unknown as DbClient
+
+  const subscription = await reconcileAppStoreTransactions({
+    db,
+    env,
+    verifier: {
+      async verifyTransaction() {
+        return {
+          environment: Environment.SANDBOX,
+          payload: {
+            appAccountToken: userId,
+            environment: Environment.SANDBOX,
+            expiresDate: transactionExpiresDate,
+            originalTransactionId: 'original-grace',
+            productId: 'premium_monthly',
+            purchaseDate: Date.now() - 30 * 24 * 60 * 60 * 1000,
+            transactionId: 'transaction-grace',
+          },
+        }
+      },
+      async verifyRenewalInfo() {
+        return {
+          environment: Environment.SANDBOX,
+          payload: {
+            autoRenewProductId: 'premium_monthly',
+            autoRenewStatus: 1,
+            environment: Environment.SANDBOX,
+            gracePeriodExpiresDate,
+            originalTransactionId: 'original-grace',
+            productId: 'premium_monthly',
+          },
+        }
+      },
+      async verifyNotification() {
+        throw new Error('unexpected notification verification')
+      },
+      async getSubscriptionStatuses() {
+        return [
+          {
+            status: Status.BILLING_GRACE_PERIOD,
+            signedRenewalInfo: 'signed-renewal-grace',
+            signedTransactionInfo: 'signed-transaction-grace',
+          },
+        ]
+      },
+    },
+    userId,
+    originalTransactionIds: ['original-grace'],
+  })
+
+  expect(subscription).toMatchObject({
+    isActive: true,
+    state: 'billing_grace_period',
+    expiresAt: new Date(gracePeriodExpiresDate).toISOString(),
+  })
+  expect(savedEntitlementExpiresAts[0]?.toISOString()).toBe(new Date(gracePeriodExpiresDate).toISOString())
+})
+
+test('status-only revoked transactions override future active entitlements for the same original transaction', async () => {
+  const userId = '018fd4f2-1f3a-7c88-bc49-333333333333'
+  const entitlementUpsert = mock(async () => ({
+    platform: 'ios',
+    state: SubscriptionState.revoked,
+    productId: 'premium_monthly',
+    originalTransactionId: 'original-revoked',
+    transactionId: 'transaction-revoked',
+    expiresAt: null,
+    willAutoRenew: null,
+    updatedAt: new Date(),
+  }))
+  const db = {
+    appStoreTransaction: {
+      upsert: mock(async () => ({ id: 'transaction-row-1' })),
+    },
+    subscriptionEntitlement: {
+      findUnique: mock(async () => ({
+        platform: 'ios',
+        state: SubscriptionState.active,
+        productId: 'premium_monthly',
+        originalTransactionId: 'original-revoked',
+        transactionId: 'transaction-active',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        willAutoRenew: true,
+        updatedAt: new Date(),
+      })),
+      upsert: entitlementUpsert,
+    },
+    $transaction: async (callback: (tx: unknown) => unknown) => callback(db),
+  } as unknown as DbClient
+
+  const subscription = await reconcileAppStoreTransactions({
+    db,
+    env,
+    verifier: {
+      async verifyTransaction() {
+        return {
+          environment: Environment.SANDBOX,
+          payload: {
+            appAccountToken: userId,
+            environment: Environment.SANDBOX,
+            originalTransactionId: 'original-revoked',
+            productId: 'premium_monthly',
+            purchaseDate: Date.now() - 10 * 24 * 60 * 60 * 1000,
+            transactionId: 'transaction-revoked',
+          },
+        }
+      },
+      async verifyRenewalInfo() {
+        throw new Error('unexpected renewal verification')
+      },
+      async verifyNotification() {
+        throw new Error('unexpected notification verification')
+      },
+      async getSubscriptionStatuses() {
+        return [
+          {
+            status: Status.REVOKED,
+            signedTransactionInfo: 'signed-transaction-revoked',
+          },
+        ]
+      },
+    },
+    userId,
+    originalTransactionIds: ['original-revoked'],
+  })
+
+  expect(subscription).toMatchObject({
+    isActive: false,
+    state: 'revoked',
+    transactionId: 'transaction-revoked',
+  })
+  expect(entitlementUpsert).toHaveBeenCalled()
+})
+
+test('allows tokenless first App Store claims only with a valid offer-code redemption token', async () => {
+  const userId = '018fd4f2-1f3a-7c88-bc49-333333333333'
+  const token = await createOfferCodeRedemptionToken({ env, userId })
+  const createDb = () => {
+    const db = {
+      appStoreTransaction: {
+        upsert: mock(async () => ({ id: 'transaction-row-1' })),
+      },
+      subscriptionEntitlement: {
+        findUnique: mock(async () => null),
+        upsert: mock(async () => ({
+          platform: 'ios',
+          state: SubscriptionState.active,
+          productId: 'premium_monthly',
+          originalTransactionId: 'original-offer-code',
+          transactionId: 'transaction-offer-code',
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          willAutoRenew: null,
+          updatedAt: new Date(),
+        })),
+      },
+      $transaction: async (callback: (tx: unknown) => unknown) => callback(db),
+    } as unknown as DbClient
+    return db
+  }
+  let db = createDb()
+
+  await expect(
+    ingestAppStoreTransaction({
+      db,
+      env,
+      verifier: tokenlessOfferCodeVerifier(),
+      userId,
+      signedTransactionInfo: 'signed-offer-code',
+    }),
+  ).rejects.toMatchObject({ code: 'IAP_OWNERSHIP_MISMATCH' })
+
+  db = createDb()
+  const invalidTokenError = await ingestAppStoreTransaction({
+    db,
+    env,
+    verifier: tokenlessOfferCodeVerifier(),
+    userId,
+    signedTransactionInfo: 'signed-offer-code',
+    offerCodeRedemptionToken: 'not-a-jwt',
+  }).catch((error) => error)
+
+  expect(invalidTokenError).toMatchObject({ code: 'IAP_OWNERSHIP_MISMATCH' })
+  expect((invalidTokenError as { details?: unknown }).details).toBeUndefined()
+
+  for (const [label, overrides] of [
+    ['missing offer type', { offerType: undefined }],
+    ['promotional offer type', { offerType: OfferType.PROMOTIONAL_OFFER }],
+    ['missing offer identifier', { offerIdentifier: undefined }],
+    ['blank offer identifier', { offerIdentifier: '   ' }],
+  ] satisfies Array<[string, Partial<JWSTransactionDecodedPayload>]>) {
+    db = createDb()
+    await expect(
+      ingestAppStoreTransaction({
+        db,
+        env,
+        verifier: tokenlessOfferCodeVerifier(overrides),
+        userId,
+        signedTransactionInfo: `signed-offer-code-${label}`,
+        offerCodeRedemptionToken: token,
+      }),
+    ).rejects.toMatchObject({ code: 'IAP_OWNERSHIP_MISMATCH' })
+  }
+
+  db = createDb()
+  await expect(
+    ingestAppStoreTransaction({
+      db,
+      env,
+      verifier: tokenlessOfferCodeVerifier(),
+      userId,
+      signedTransactionInfo: 'signed-offer-code',
+      offerCodeRedemptionToken: token,
+    }),
+  ).resolves.toMatchObject({
+    isActive: true,
+    state: 'active',
+    transactionId: 'transaction-offer-code',
+  })
+})
+
 function fakeVerifier(): AppStoreSubscriptionVerifier {
   const notification: ResponseBodyV2DecodedPayload = {
     notificationUUID: 'notification-1',
@@ -135,6 +388,38 @@ function fakeVerifier(): AppStoreSubscriptionVerifier {
     },
     async verifyRenewalInfo() {
       throw new Error('unexpected renewal verification')
+    },
+    async getSubscriptionStatuses() {
+      return []
+    },
+  }
+}
+
+function tokenlessOfferCodeVerifier(
+  overrides: Partial<JWSTransactionDecodedPayload> = {},
+): AppStoreSubscriptionVerifier {
+  return {
+    async verifyTransaction() {
+      return {
+        environment: Environment.SANDBOX,
+        payload: {
+          environment: Environment.SANDBOX,
+          expiresDate: Date.now() + 30 * 24 * 60 * 60 * 1000,
+          offerIdentifier: 'WINBACK2026',
+          offerType: OfferType.OFFER_CODE,
+          originalTransactionId: 'original-offer-code',
+          productId: 'premium_monthly',
+          purchaseDate: Date.now(),
+          transactionId: 'transaction-offer-code',
+          ...overrides,
+        },
+      }
+    },
+    async verifyRenewalInfo() {
+      throw new Error('unexpected renewal verification')
+    },
+    async verifyNotification() {
+      throw new Error('unexpected notification verification')
     },
     async getSubscriptionStatuses() {
       return []

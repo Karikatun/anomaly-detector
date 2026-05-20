@@ -244,6 +244,10 @@ test('mobile ApiClient calls IAP entitlement, ingest, and reconcile endpoints wi
       return json({ subscription: { ...inactiveSubscription, state: 'active', isActive: true } }, 200);
     }
 
+    if (path === '/api/iap/app-store/offer-code-redemption') {
+      return json({ token: 'offer-code-redemption-token' }, 200);
+    }
+
     if (path === '/api/iap/app-store/reconcile') {
       return json({ subscription: inactiveSubscription }, 200);
     }
@@ -263,6 +267,9 @@ test('mobile ApiClient calls IAP entitlement, ingest, and reconcile endpoints wi
   await expect(
     client.ingestAppStoreTransaction({ signedTransactionInfo: 'signed-transaction' }),
   ).resolves.toMatchObject({ subscription: { isActive: true } });
+  await expect(client.createAppStoreOfferCodeRedemption()).resolves.toEqual({
+    token: 'offer-code-redemption-token',
+  });
   await expect(
     client.reconcileAppStoreTransactions({ signedTransactions: ['signed-transaction'] }),
   ).resolves.toEqual({ subscription: inactiveSubscription });
@@ -277,6 +284,11 @@ test('mobile ApiClient calls IAP entitlement, ingest, and reconcile endpoints wi
       path: '/api/iap/app-store/transactions',
       authorization: 'Bearer access-token',
       body: { signedTransactionInfo: 'signed-transaction' },
+    },
+    {
+      path: '/api/iap/app-store/offer-code-redemption',
+      authorization: 'Bearer access-token',
+      body: undefined,
     },
     {
       path: '/api/iap/app-store/reconcile',

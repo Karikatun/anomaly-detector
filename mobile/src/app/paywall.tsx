@@ -40,7 +40,7 @@ export default function PaywallScreen() {
         <PageHeader
           eyebrow="Premium"
           title="iOS subscriptions come first."
-          description="Android billing is intentionally deferred for this MVP. Your account, profile, and logout remain available."
+          description="Android billing and Google Play code redemption are intentionally deferred for this MVP. Your account, profile, and logout remain available."
         />
         <View style={styles.actions}>
           <Button testID={TEST_IDS.paywall.profileButton} onPress={() => router.push('/profile')} variant="outline">
@@ -147,6 +147,14 @@ export default function PaywallScreen() {
           testID={TEST_IDS.paywall.restoreButton}
           variant="outline">
           Restore purchases
+        </Button>
+        <Button
+          disabled={!iap.isConnected || iap.isRedeemingOfferCode || iap.isPurchasing}
+          loading={iap.isRedeemingOfferCode}
+          onPress={() => void iap.redeemOfferCode()}
+          testID={TEST_IDS.paywall.redeemOfferCodeButton}
+          variant="outline">
+          Redeem offer code
         </Button>
       </View>
 

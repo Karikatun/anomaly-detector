@@ -28,6 +28,7 @@ export const subscriptionSnapshotSchema = z.object({
 export const appStoreTransactionRequestSchema = z.object({
   signedTransactionInfo: z.string().trim().min(1),
   signedRenewalInfo: z.string().trim().min(1).optional(),
+  offerCodeRedemptionToken: z.string().trim().min(1).optional(),
 })
 
 export const appStoreReconcileRequestSchema = z
@@ -55,6 +56,10 @@ export const iapEntitlementResponseSchema = z.object({
 
 export const iapMutationResponseSchema = iapEntitlementResponseSchema
 
+export const appStoreOfferCodeRedemptionResponseSchema = z.object({
+  token: z.string().trim().min(1),
+})
+
 export type SubscriptionState = z.infer<typeof subscriptionStateSchema>
 export type SubscriptionSnapshot = z.infer<typeof subscriptionSnapshotSchema>
 export type AppStoreTransactionRequest = z.infer<typeof appStoreTransactionRequestSchema>
@@ -62,3 +67,4 @@ export type AppStoreReconcileRequest = z.infer<typeof appStoreReconcileRequestSc
 export type AppStoreWebhookRequest = z.infer<typeof appStoreWebhookRequestSchema>
 export type IapEntitlementResponse = z.infer<typeof iapEntitlementResponseSchema>
 export type IapMutationResponse = z.infer<typeof iapMutationResponseSchema>
+export type AppStoreOfferCodeRedemptionResponse = z.infer<typeof appStoreOfferCodeRedemptionResponseSchema>

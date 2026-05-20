@@ -143,16 +143,13 @@ export function createAppStoreSubscriptionVerifier(env: AppEnv): AppStoreSubscri
   async function verifyWithFallback<T>(
     verify: (verifier: SignedDataVerifier) => Promise<T>,
   ): Promise<AppStoreVerificationResult<T>> {
-    let lastError: unknown
-
     for (const environment of verificationEnvironments()) {
       try {
         return {
           environment,
           payload: await verify(getVerifier(environment)),
         }
-      } catch (error) {
-        lastError = error
+      } catch {
       }
     }
 
@@ -160,7 +157,6 @@ export function createAppStoreSubscriptionVerifier(env: AppEnv): AppStoreSubscri
       400,
       'IAP_INVALID_TRANSACTION',
       'App Store signed payload could not be verified',
-      lastError instanceof Error ? { reason: lastError.message } : undefined,
     )
   }
 

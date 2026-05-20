@@ -116,6 +116,7 @@ maybeDescribe('iap API integration', () => {
 
     expect(ingest.status).toBe(400)
     expect(body.error.code).toBe('IAP_INVALID_TRANSACTION')
+    expect(body.error.details).toBeUndefined()
     expect(await prisma.subscriptionEntitlement.count()).toBe(0)
   })
 

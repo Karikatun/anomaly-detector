@@ -1,6 +1,7 @@
 import {
   apiErrorSchema,
   appStoreReconcileRequestSchema,
+  appStoreOfferCodeRedemptionResponseSchema,
   appStoreTransactionRequestSchema,
   appStoreWebhookRequestSchema,
   iapEntitlementResponseSchema,
@@ -11,6 +12,7 @@ import type { Context } from 'hono'
 
 import type { AppBindings } from '../app'
 import {
+  createOfferCodeRedemptionToken,
   getSubscriptionSnapshot,
   ingestAppStoreTransaction,
   reconcileAppStoreTransactions,
@@ -78,6 +80,25 @@ const transactionRoute = createRoute({
     503: {
       content: errorResponseContent,
       description: 'App Store IAP verification is not configured',
+    },
+  },
+})
+
+const offerCodeRedemptionRoute = createRoute({
+  method: 'post',
+  path: '/app-store/offer-code-redemption',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: appStoreOfferCodeRedemptionResponseSchema,
+        },
+      },
+      description: 'Short-lived token for user-initiated App Store offer code redemption',
+    },
+    401: {
+      content: errorResponseContent,
+      description: 'Unauthorized',
     },
   },
 })
@@ -167,9 +188,20 @@ export function createIapRoutes() {
       userId: user.id,
       signedTransactionInfo: payload.signedTransactionInfo,
       signedRenewalInfo: payload.signedRenewalInfo,
+      offerCodeRedemptionToken: payload.offerCodeRedemptionToken,
     })
 
     return c.json({ subscription }, 200)
+  })
+
+  routes.openapi(offerCodeRedemptionRoute, async (c) => {
+    const { user } = await requireUser(c)
+    return c.json({
+      token: await createOfferCodeRedemptionToken({
+        env: c.get('env'),
+        userId: user.id,
+      }),
+    }, 200)
   })
 
   routes.openapi(reconcileRoute, async (c) => {

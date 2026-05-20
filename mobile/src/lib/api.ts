@@ -1,5 +1,6 @@
 import {
   apiErrorSchema,
+  appStoreOfferCodeRedemptionResponseSchema,
   authResponseSchema,
   appStoreReconcileRequestSchema,
   appStoreTransactionRequestSchema,
@@ -14,6 +15,7 @@ import {
   type AuthResponse,
   type AppStoreReconcileRequest,
   type AppStoreTransactionRequest,
+  type AppStoreOfferCodeRedemptionResponse,
   type IapEntitlementResponse,
   type IapMutationResponse,
   type LoginRequest,
@@ -103,6 +105,13 @@ export class ApiClient {
     return this.request('/api/iap/app-store/transactions', iapMutationResponseSchema, {
       method: 'POST',
       body: payload,
+      auth: true,
+    });
+  }
+
+  createAppStoreOfferCodeRedemption(): Promise<AppStoreOfferCodeRedemptionResponse> {
+    return this.request('/api/iap/app-store/offer-code-redemption', appStoreOfferCodeRedemptionResponseSchema, {
+      method: 'POST',
       auth: true,
     });
   }

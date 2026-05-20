@@ -70,7 +70,7 @@ test('finishes purchases only after backend ingest succeeds', async () => {
         successfulFinishCalls.push(purchase);
       },
     }),
-  ).resolves.toEqual(activeSubscription);
+  ).resolves.toEqual({ finishError: null, subscription: activeSubscription });
 
   await expect(
     ingestAndFinishPurchase({
@@ -102,9 +102,25 @@ test('retries transient finish failures after backend ingest succeeds', async ()
         }
       },
     }),
-  ).resolves.toEqual(activeSubscription);
+  ).resolves.toEqual({ finishError: null, subscription: activeSubscription });
 
   expect(finishCalls).toHaveLength(2);
+});
+
+test('returns verified subscriptions even when post-ingest finish fails', async () => {
+  const finishError = new Error('finish failed');
+  const result = await ingestAndFinishPurchase({
+    purchase: { purchaseToken: 'signed-jws' } as never,
+    ingest: async () => ({ subscription: activeSubscription }),
+    finish: async () => {
+      throw finishError;
+    },
+  });
+
+  expect(result).toEqual({
+    finishError,
+    subscription: activeSubscription,
+  });
 });
 
 test('recognizes user-cancelled purchase errors without surfacing them as failures', () => {
@@ -120,8 +136,13 @@ test('classifies retryable IAP errors and returns friendly messages', async () =
   expect(isRetryableIapError({ code: 'network-error' })).toBe(true);
   expect(isRetryableIapError({ code: 'E_SERVICE_ERROR' })).toBe(true);
   expect(isRetryableIapError({ code: 'SERVICE_ERROR' })).toBe(true);
+  expect(isRetryableIapError({ code: 'billing-unavailable' })).toBe(true);
+  expect(isRetryableIapError({ code: 'init-connection' })).toBe(true);
+  expect(isRetryableIapError({ code: 'query-product' })).toBe(true);
   expect(isRetryableIapError({ code: 'item-unavailable' })).toBe(false);
   expect(friendlyIapErrorMessage({ code: 'item-unavailable' })).toContain('not available');
+  expect(friendlyIapErrorMessage({ code: 'query-product' })).toContain('temporarily unavailable');
+  expect(friendlyIapErrorMessage({ code: 'init-connection' })).toContain('temporarily unavailable');
   expect(friendlyIapErrorMessage({ code: 'user-error' })).toContain('payment settings');
   expect(friendlyIapErrorMessage({ code: 'E_USER_ERROR' })).toContain('payment settings');
   expect(friendlyIapErrorMessage({ code: 'UserError' })).toContain('payment settings');

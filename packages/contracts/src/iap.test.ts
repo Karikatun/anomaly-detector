@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  appStoreOfferCodeRedemptionResponseSchema,
   appStoreReconcileRequestSchema,
   appStoreTransactionRequestSchema,
   appStoreWebhookRequestSchema,
@@ -48,9 +49,13 @@ describe('iap contracts', () => {
   test('validates App Store transaction and reconcile payloads', () => {
     expect(
       appStoreTransactionRequestSchema.parse({
+        offerCodeRedemptionToken: 'redemption-token',
         signedTransactionInfo: 'signed-jws',
       }),
-    ).toEqual({ signedTransactionInfo: 'signed-jws' })
+    ).toEqual({
+      offerCodeRedemptionToken: 'redemption-token',
+      signedTransactionInfo: 'signed-jws',
+    })
 
     expect(
       appStoreReconcileRequestSchema.parse({
@@ -72,6 +77,10 @@ describe('iap contracts', () => {
 
     expect(appStoreWebhookRequestSchema.parse({ signedPayload: 'payload' })).toEqual({
       signedPayload: 'payload',
+    })
+
+    expect(appStoreOfferCodeRedemptionResponseSchema.parse({ token: 'redemption-token' })).toEqual({
+      token: 'redemption-token',
     })
   })
 })

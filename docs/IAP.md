@@ -2,18 +2,19 @@
 
 This MVP implements iOS App Store subscriptions first. `expo-iap` is only the StoreKit transport in the mobile app; the backend is the entitlement source of truth.
 
-Android billing, offer-code redemption, promotional offer purchase flows, alternative billing, external purchase links, and Google Play validation are intentionally deferred. This document covers only the baseline iOS App Store subscription paywall. The paywall may display App Store introductory offer metadata returned with the base subscription products, but it does not implement offer-code redemption or signed promotional-offer purchases.
+Android billing, Android code redemption, promotional offer purchase flows, alternative billing, external purchase links, and Google Play validation are intentionally deferred. This document covers the baseline iOS App Store subscription paywall, including App Store offer-code redemption. The paywall may display App Store introductory offer metadata returned with the base subscription products, but it does not implement signed promotional-offer purchases.
 
 ## Runtime Shape
 
 - Mobile fetches configured iOS subscription products through `expo-iap`.
 - Purchase requests include `appAccountToken: user.id` and `andDangerouslyFinishTransactionAutomatically: false`.
+- Offer-code redemption opens Apple's native sheet and uses a short-lived backend token so first-time redeemed transactions without `appAccountToken` can be linked only after a user-initiated redemption action.
 - Mobile sends the StoreKit signed transaction JWS to the backend.
 - Backend verifies signed App Store data with `@apple/app-store-server-library`.
 - Backend rejects App Store products that are not listed in `APPLE_IAP_PRODUCT_IDS`; this allowlist is required when IAP verification is configured.
 - Backend stores decoded identifiers, entitlement state, and SHA-256 hashes of signed payloads. Do not log or persist raw signed tokens outside request handling.
 - Mobile calls `finishTransaction` only after backend verification and entitlement write succeed.
-- Restore and foreground sync reconcile both signed StoreKit purchases and the last known `originalTransactionId`; restored StoreKit transactions are finished only after backend reconciliation succeeds.
+- Restore and foreground sync ingest signed StoreKit purchases through `/transactions`, reconcile the last known `originalTransactionId` as a backend fallback, and finish restored StoreKit transactions only after backend ingest succeeds for that exact transaction.
 - `GET /api/auth/me` and `GET /api/iap/entitlement` expose the current `premium` subscription snapshot.
 
 ## App Store Connect
@@ -88,13 +89,21 @@ The endpoint accepts `{ "signedPayload": "..." }`, verifies the signed notificat
 
 ## Restore And Lifecycle
 
-The paywall exposes restore. Restore asks StoreKit for available purchases and active subscription status, sends signed transactions and the last known original transaction ID to `POST /api/iap/app-store/reconcile`, updates the local auth snapshot from backend response, and finishes restored transactions only after backend reconciliation succeeds.
+The paywall exposes restore. Restore asks StoreKit for available purchases and active subscription status, sends each signed App Store transaction to `POST /api/iap/app-store/transactions`, updates the local auth snapshot from backend response, and finishes restored transactions only after backend ingest succeeds for that exact transaction. The last known original transaction ID is sent to `POST /api/iap/app-store/reconcile` as a server-side fallback; this path does not finish local StoreKit purchases.
 
 The app also syncs entitlement on launch and foreground. If StoreKit returns no active purchase, the backend can still reconcile the known original transaction ID through App Store Server API. Profile exposes App Store subscription management for iOS subscriptions.
 
+`expo-iap` examples also show `getActiveSubscriptions()` for client-side subscription listing. This MVP does not use it as an access-control source: mobile can use StoreKit available purchases to recover signed transactions, but premium access is always derived from the backend entitlement snapshot after App Store Server verification.
+
+## Offer-Code Redemption
+
+The paywall exposes App Store offer-code redemption on iOS. Mobile first calls `POST /api/iap/app-store/offer-code-redemption` to create a short-lived redemption token, then opens `presentCodeRedemptionSheetIOS()`. If StoreKit later publishes a redeemed purchase without `appAccountToken`, mobile sends the signed transaction with that redemption token to `POST /api/iap/app-store/transactions`.
+
+The backend still verifies the App Store signed transaction, enforces `APPLE_IAP_PRODUCT_IDS`, stores only decoded identifiers plus signed-payload hashes, and rejects tokenless first claims unless the authenticated user has a valid redemption token. Normal purchases continue to require `appAccountToken: user.id` or an already-linked `originalTransactionId`.
+
 ## Deferred Billing Surfaces
 
-Alternative billing, external purchase links, offer-code redemption, signed promotional-offer purchase flows, Android billing, and Android redeem links are not part of this MVP. Do not expose those actions until the product scope includes the required store policy review, external checkout/deep-link return handling, offer signature handling, and backend validation path for those purchases.
+Alternative billing, external purchase links, signed promotional-offer purchase flows, Android billing, Android code redemption, and Android entitlement validation are not part of this MVP. Do not expose Android redemption until the product scope includes a dedicated Play Billing validation path.
 
 The basic `expo-iap` config plugin can still add native billing capabilities for both platforms when a native Android build is generated. Android user-facing billing remains disabled in this app until a dedicated Play Billing implementation is added.
 
@@ -117,6 +126,7 @@ Manual sandbox checks on a real iOS development build:
 - backend verifies transaction and activates `/components`
 - restore rehydrates entitlement after reinstall/logout/login
 - restored transactions are not finished before backend reconciliation succeeds
+- App Store offer-code redemption opens the native sheet and a redeemed transaction unlocks only after backend verification
 - profile opens App Store subscription management
 - webhook replay is idempotent
 
@@ -125,7 +135,7 @@ Manual sandbox checks on a real iOS development build:
 - Products empty: verify bundle ID, SKU spelling, subscription group status, sandbox tester, real iOS device, and rebuilt custom dev-client. Expo Go and iOS Simulator are not reliable purchase test targets.
 - `IAP_NOT_CONFIGURED`: backend is missing Apple credentials, root certificates, or required `APPLE_IAP_PRODUCT_IDS`.
 - `IAP_INVALID_TRANSACTION`: signed JWS is missing, expired, unverifiable, missing subscription expiry, or product ID is not in `APPLE_IAP_PRODUCT_IDS`.
-- `IAP_OWNERSHIP_MISMATCH`: StoreKit transaction `appAccountToken` does not match the authenticated user ID.
+- `IAP_OWNERSHIP_MISMATCH`: StoreKit transaction `appAccountToken` does not match the authenticated user ID, or a tokenless offer-code redemption claim is missing a valid redemption token.
 - Purchase succeeds but access stays locked: inspect backend logs for verification errors and confirm mobile can reach `EXPO_PUBLIC_API_URL`.
 - Works in sandbox but not production: switch `APPLE_IAP_ENVIRONMENT=Production`, set `APPLE_IAP_APP_APPLE_ID`, use production product IDs, and configure production webhooks.
 - Library issue: check Expo IAP GitHub Issues and the Expo IAP Slack/community support channel linked from the official support page.
