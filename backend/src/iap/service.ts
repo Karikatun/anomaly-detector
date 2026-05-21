@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import { AutoRenewStatus, Environment, OfferType, Status, type JWSRenewalInfoDecodedPayload, type JWSTransactionDecodedPayload } from '@apple/app-store-server-library'
+import { AutoRenewStatus, Environment, OfferType, Status, Type, type JWSRenewalInfoDecodedPayload, type JWSTransactionDecodedPayload } from '@apple/app-store-server-library'
 import type { SubscriptionSnapshot } from '@web-app-demo/contracts'
 
 import type { DbClient } from '../db'
@@ -355,6 +355,14 @@ async function applyVerifiedAppStoreTransaction({
 
   if (!env.APPLE_IAP_PRODUCT_IDS.includes(productId)) {
     throw new AppError(400, 'IAP_INVALID_TRANSACTION', 'App Store transaction product is not configured')
+  }
+
+  if (transaction.type !== Type.AUTO_RENEWABLE_SUBSCRIPTION) {
+    throw new AppError(
+      400,
+      'IAP_INVALID_TRANSACTION',
+      'App Store transaction is not an auto-renewable subscription',
+    )
   }
 
   const expiresAt = resolveSubscriptionExpiresAt(transaction, renewal, input.status)

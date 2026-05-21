@@ -7,6 +7,8 @@ const {
   friendlyIapErrorMessage,
   ingestAndFinishPurchase,
   introOfferLabel,
+  isNetworkIapError,
+  isRecoverableIapError,
   isRetryableIapError,
   isUserCancelledPurchaseError,
   purchaseButtonLabel,
@@ -126,8 +128,10 @@ test('returns verified subscriptions even when post-ingest finish fails', async 
 test('recognizes user-cancelled purchase errors without surfacing them as failures', () => {
   expect(isUserCancelledPurchaseError({ code: 'user-cancelled' })).toBe(true);
   expect(isUserCancelledPurchaseError({ code: 'E_USER_CANCELLED' })).toBe(true);
-  expect(isUserCancelledPurchaseError(new Error('User cancel'))).toBe(true);
+  expect(isUserCancelledPurchaseError(new Error('User cancel'))).toBe(false);
+  expect(isUserCancelledPurchaseError(new Error('User cancelled purchase'))).toBe(true);
   expect(isUserCancelledPurchaseError(new Error('Purchase cancelled by user'))).toBe(true);
+  expect(isUserCancelledPurchaseError(new Error('Payment cancelled'))).toBe(false);
   expect(isUserCancelledPurchaseError({ code: 'network-error' })).toBe(false);
   expect(isUserCancelledPurchaseError(new Error('Cannot complete purchase'))).toBe(false);
 });
@@ -136,9 +140,12 @@ test('classifies retryable IAP errors and returns friendly messages', async () =
   expect(isRetryableIapError({ code: 'network-error' })).toBe(true);
   expect(isRetryableIapError({ code: 'E_SERVICE_ERROR' })).toBe(true);
   expect(isRetryableIapError({ code: 'SERVICE_ERROR' })).toBe(true);
-  expect(isRetryableIapError({ code: 'billing-unavailable' })).toBe(true);
-  expect(isRetryableIapError({ code: 'init-connection' })).toBe(true);
-  expect(isRetryableIapError({ code: 'query-product' })).toBe(true);
+  expect(isNetworkIapError({ code: 'billing-unavailable' })).toBe(true);
+  expect(isRecoverableIapError({ code: 'query-product' })).toBe(true);
+  expect(isRecoverableIapError({ code: 'init-connection' })).toBe(true);
+  expect(isRetryableIapError({ code: 'billing-unavailable' })).toBe(false);
+  expect(isRetryableIapError({ code: 'init-connection' })).toBe(false);
+  expect(isRetryableIapError({ code: 'query-product' })).toBe(false);
   expect(isRetryableIapError({ code: 'item-unavailable' })).toBe(false);
   expect(friendlyIapErrorMessage({ code: 'item-unavailable' })).toContain('not available');
   expect(friendlyIapErrorMessage({ code: 'query-product' })).toContain('temporarily unavailable');
@@ -169,6 +176,21 @@ test('classifies retryable IAP errors and returns friendly messages', async () =
   ).resolves.toBe('ok');
   expect(attempts).toBe(3);
   expect(delays).toEqual([10, 20]);
+
+  attempts = 0;
+  await expect(
+    retryIapOperation(
+      async () => {
+        attempts += 1;
+        throw { code: 'billing-unavailable' };
+      },
+      {
+        attempts: 3,
+        sleep: async () => undefined,
+      },
+    ),
+  ).rejects.toEqual({ code: 'billing-unavailable' });
+  expect(attempts).toBe(1);
 });
 
 test('validates App Store purchases before backend ingest', () => {
@@ -238,8 +260,8 @@ test('formats iOS introductory offer copy by payment mode', () => {
     ],
   } as never;
 
-  expect(introOfferLabel(baseProduct)).toBe('Free trial for 2 weeks');
-  expect(purchaseButtonLabel(baseProduct)).toBe('Free trial for 2 weeks, then $9.99');
+  expect(introOfferLabel(baseProduct)).toBe('Eligible users may get a free trial for 2 weeks');
+  expect(purchaseButtonLabel(baseProduct)).toBe('Subscribe for $9.99');
   expect(
     introOfferLabel({
       ...baseProduct,
@@ -253,7 +275,7 @@ test('formats iOS introductory offer copy by payment mode', () => {
         },
       ],
     } as never),
-  ).toBe('Intro pay-as-you-go price: $0.99 for 3 months');
+  ).toBe('Eligible users may get an intro pay-as-you-go price: $0.99 for 3 months');
   expect(
     introOfferLabel({
       ...baseProduct,
@@ -267,7 +289,7 @@ test('formats iOS introductory offer copy by payment mode', () => {
         },
       ],
     } as never),
-  ).toBe('Intro upfront price: $19.99 for first 1 year');
+  ).toBe('Eligible users may get an intro upfront price: $19.99 for first 1 year');
 
   expect(
     introOfferLabel({
@@ -290,5 +312,5 @@ test('formats iOS introductory offer copy by payment mode', () => {
         },
       },
     } as never),
-  ).toBe('Free trial for 1 week');
+  ).toBe('Eligible users may get a free trial for 1 week');
 });

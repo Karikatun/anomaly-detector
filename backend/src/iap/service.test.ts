@@ -1,4 +1,4 @@
-import { Environment, OfferType, Status, type JWSTransactionDecodedPayload, type ResponseBodyV2DecodedPayload } from '@apple/app-store-server-library'
+import { Environment, OfferType, Status, Type, type JWSTransactionDecodedPayload, type ResponseBodyV2DecodedPayload } from '@apple/app-store-server-library'
 import { expect, mock, test } from 'bun:test'
 
 import type { DbClient } from '../db'
@@ -154,6 +154,7 @@ test('keeps billing grace period entitlements active until Apple grace expiratio
             productId: 'premium_monthly',
             purchaseDate: Date.now() - 30 * 24 * 60 * 60 * 1000,
             transactionId: 'transaction-grace',
+            type: Type.AUTO_RENEWABLE_SUBSCRIPTION,
           },
         }
       },
@@ -241,6 +242,7 @@ test('status-only revoked transactions override future active entitlements for t
             productId: 'premium_monthly',
             purchaseDate: Date.now() - 10 * 24 * 60 * 60 * 1000,
             transactionId: 'transaction-revoked',
+            type: Type.AUTO_RENEWABLE_SUBSCRIPTION,
           },
         }
       },
@@ -357,6 +359,34 @@ test('allows tokenless first App Store claims only with a valid offer-code redem
   })
 })
 
+test('rejects verified App Store transactions that are not auto-renewable subscriptions', async () => {
+  const db = {
+    appStoreTransaction: {
+      upsert: mock(async () => ({ id: 'transaction-row-1' })),
+    },
+    subscriptionEntitlement: {
+      findUnique: mock(async () => null),
+      upsert: mock(async () => {
+        throw new Error('unexpected entitlement write')
+      }),
+    },
+    $transaction: async (callback: (tx: unknown) => unknown) => callback(db),
+  } as unknown as DbClient
+
+  await expect(
+    ingestAppStoreTransaction({
+      db,
+      env,
+      verifier: nonSubscriptionVerifier(),
+      userId: '018fd4f2-1f3a-7c88-bc49-333333333333',
+      signedTransactionInfo: 'signed-consumable',
+    }),
+  ).rejects.toMatchObject({
+    code: 'IAP_INVALID_TRANSACTION',
+    message: 'App Store transaction is not an auto-renewable subscription',
+  })
+})
+
 function fakeVerifier(): AppStoreSubscriptionVerifier {
   const notification: ResponseBodyV2DecodedPayload = {
     notificationUUID: 'notification-1',
@@ -383,6 +413,7 @@ function fakeVerifier(): AppStoreSubscriptionVerifier {
           productId: 'premium_monthly',
           purchaseDate: Date.now() - 60_000,
           transactionId: 'transaction-1',
+          type: Type.AUTO_RENEWABLE_SUBSCRIPTION,
         },
       }
     },
@@ -411,7 +442,37 @@ function tokenlessOfferCodeVerifier(
           productId: 'premium_monthly',
           purchaseDate: Date.now(),
           transactionId: 'transaction-offer-code',
+          type: Type.AUTO_RENEWABLE_SUBSCRIPTION,
           ...overrides,
+        },
+      }
+    },
+    async verifyRenewalInfo() {
+      throw new Error('unexpected renewal verification')
+    },
+    async verifyNotification() {
+      throw new Error('unexpected notification verification')
+    },
+    async getSubscriptionStatuses() {
+      return []
+    },
+  }
+}
+
+function nonSubscriptionVerifier(): AppStoreSubscriptionVerifier {
+  return {
+    async verifyTransaction() {
+      return {
+        environment: Environment.SANDBOX,
+        payload: {
+          appAccountToken: '018fd4f2-1f3a-7c88-bc49-333333333333',
+          environment: Environment.SANDBOX,
+          expiresDate: Date.now() + 30 * 24 * 60 * 60 * 1000,
+          originalTransactionId: 'original-consumable',
+          productId: 'premium_monthly',
+          purchaseDate: Date.now() - 60_000,
+          transactionId: 'transaction-consumable',
+          type: Type.CONSUMABLE,
         },
       }
     },

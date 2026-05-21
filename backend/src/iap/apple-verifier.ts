@@ -149,7 +149,8 @@ export function createAppStoreSubscriptionVerifier(env: AppEnv): AppStoreSubscri
           environment,
           payload: await verify(getVerifier(environment)),
         }
-      } catch {
+      } catch (error) {
+        if (isIapConfigurationError(error)) throw error
       }
     }
 
@@ -190,4 +191,8 @@ export function createAppStoreSubscriptionVerifier(env: AppEnv): AppStoreSubscri
       )
     },
   }
+}
+
+function isIapConfigurationError(error: unknown) {
+  return error instanceof AppError && error.code === 'IAP_NOT_CONFIGURED'
 }

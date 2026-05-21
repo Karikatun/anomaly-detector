@@ -1,46 +1,30 @@
 import type { SubscriptionSnapshot } from '@web-app-demo/contracts';
 import type { ExpoPurchaseError, ProductSubscription, Purchase, RequestPurchaseProps } from 'expo-iap';
+import { ErrorCode } from 'expo-iap/build/types';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ExpoIapErrorCode = {
-  ActivityUnavailable: 'activity-unavailable',
-  AlreadyOwned: 'already-owned',
-  AlreadyPrepared: 'already-prepared',
-  BillingResponseJsonParseError: 'billing-response-json-parse-error',
-  BillingUnavailable: 'billing-unavailable',
-  ConnectionClosed: 'connection-closed',
-  DeferredPayment: 'deferred-payment',
-  DeveloperError: 'developer-error',
-  EmptySkuList: 'empty-sku-list',
-  FeatureNotSupported: 'feature-not-supported',
-  IapNotAvailable: 'iap-not-available',
-  InitConnection: 'init-connection',
-  Interrupted: 'interrupted',
-  ItemNotOwned: 'item-not-owned',
-  ItemUnavailable: 'item-unavailable',
-  NetworkError: 'network-error',
-  NotEnded: 'not-ended',
-  NotPrepared: 'not-prepared',
-  Pending: 'pending',
-  PurchaseError: 'purchase-error',
-  PurchaseVerificationFailed: 'purchase-verification-failed',
-  PurchaseVerificationFinishFailed: 'purchase-verification-finish-failed',
-  PurchaseVerificationFinished: 'purchase-verification-finished',
-  QueryProduct: 'query-product',
-  ReceiptFailed: 'receipt-failed',
-  ReceiptFinished: 'receipt-finished',
-  ReceiptFinishedFailed: 'receipt-finished-failed',
-  RemoteError: 'remote-error',
-  ServiceDisconnected: 'service-disconnected',
-  ServiceError: 'service-error',
-  SkuNotFound: 'sku-not-found',
-  SkuOfferMismatch: 'sku-offer-mismatch',
-  SyncError: 'sync-error',
-  TransactionValidationFailed: 'transaction-validation-failed',
-  Unknown: 'unknown',
-  UserCancelled: 'user-cancelled',
-  UserError: 'user-error',
-} as const;
+const nonRetryableRecoverableErrorCodes = new Set<ErrorCode>([
+  ErrorCode.BillingUnavailable,
+  ErrorCode.InitConnection,
+  ErrorCode.QueryProduct,
+]);
+const networkErrorCodes = new Set<ErrorCode>([
+  ErrorCode.BillingUnavailable,
+  ErrorCode.NetworkError,
+  ErrorCode.RemoteError,
+  ErrorCode.ServiceDisconnected,
+  ErrorCode.ServiceError,
+]);
+const recoverableErrorCodes = new Set<ErrorCode>([
+  ErrorCode.BillingUnavailable,
+  ErrorCode.InitConnection,
+  ErrorCode.Interrupted,
+  ErrorCode.NetworkError,
+  ErrorCode.QueryProduct,
+  ErrorCode.RemoteError,
+  ErrorCode.ServiceDisconnected,
+  ErrorCode.ServiceError,
+]);
 
 export function buildSubscriptionPurchaseRequest(productId: string, appAccountToken: string): RequestPurchaseProps {
   if (!uuidPattern.test(appAccountToken)) {
@@ -103,56 +87,58 @@ export function extractSignedTransactionInfo(purchase: Purchase) {
 }
 
 export function isUserCancelledPurchaseError(error: unknown) {
-  return getIapErrorCode(error) === ExpoIapErrorCode.UserCancelled || isLegacyUserCancelledMessage(error);
+  return getIapErrorCode(error) === ErrorCode.UserCancelled || isLegacyUserCancelledMessage(error);
+}
+
+export function isNetworkIapError(error: unknown) {
+  const code = getIapErrorCode(error);
+  return Boolean(code && networkErrorCodes.has(code));
+}
+
+export function isRecoverableIapError(error: unknown) {
+  const code = getIapErrorCode(error);
+  return Boolean(code && recoverableErrorCodes.has(code));
 }
 
 export function isRetryableIapError(error: unknown) {
-  return [
-    ExpoIapErrorCode.Interrupted,
-    ExpoIapErrorCode.NetworkError,
-    ExpoIapErrorCode.RemoteError,
-    ExpoIapErrorCode.ServiceDisconnected,
-    ExpoIapErrorCode.ServiceError,
-    ExpoIapErrorCode.BillingUnavailable,
-    ExpoIapErrorCode.QueryProduct,
-    ExpoIapErrorCode.InitConnection,
-  ].includes(getIapErrorCode(error) as never);
+  const code = getIapErrorCode(error);
+  return Boolean(code && isRecoverableIapError(error) && !nonRetryableRecoverableErrorCodes.has(code));
 }
 
 export function isPostSuccessNoiseError(error: unknown) {
-  return getIapErrorCode(error) === ExpoIapErrorCode.ServiceError;
+  return getIapErrorCode(error) === ErrorCode.ServiceError;
 }
 
 export function friendlyIapErrorMessage(error: unknown) {
   const code = getIapErrorCode(error);
 
   switch (code) {
-    case ExpoIapErrorCode.UserCancelled:
+    case ErrorCode.UserCancelled:
       return 'Purchase was cancelled.';
-    case ExpoIapErrorCode.DeferredPayment:
-    case ExpoIapErrorCode.Pending:
+    case ErrorCode.DeferredPayment:
+    case ErrorCode.Pending:
       return 'Purchase is pending approval. Premium will unlock after Apple approves it.';
-    case ExpoIapErrorCode.NetworkError:
-    case ExpoIapErrorCode.RemoteError:
-    case ExpoIapErrorCode.ServiceDisconnected:
-    case ExpoIapErrorCode.ServiceError:
-    case ExpoIapErrorCode.InitConnection:
-    case ExpoIapErrorCode.QueryProduct:
+    case ErrorCode.NetworkError:
+    case ErrorCode.RemoteError:
+    case ErrorCode.ServiceDisconnected:
+    case ErrorCode.ServiceError:
+    case ErrorCode.InitConnection:
+    case ErrorCode.QueryProduct:
       return 'The App Store is temporarily unavailable. Check your connection and try again.';
-    case ExpoIapErrorCode.IapNotAvailable:
-    case ExpoIapErrorCode.BillingUnavailable:
-    case ExpoIapErrorCode.FeatureNotSupported:
+    case ErrorCode.IapNotAvailable:
+    case ErrorCode.BillingUnavailable:
+    case ErrorCode.FeatureNotSupported:
       return 'In-app purchases are not available on this device or account.';
-    case ExpoIapErrorCode.ItemUnavailable:
-    case ExpoIapErrorCode.SkuNotFound:
+    case ErrorCode.ItemUnavailable:
+    case ErrorCode.SkuNotFound:
       return 'This subscription is not available in the App Store for this account.';
-    case ExpoIapErrorCode.ItemNotOwned:
+    case ErrorCode.ItemNotOwned:
       return 'No restorable App Store subscription was found for this account.';
-    case ExpoIapErrorCode.UserError:
+    case ErrorCode.UserError:
       return 'Apple could not complete the purchase. Check your App Store payment settings and try again.';
-    case ExpoIapErrorCode.AlreadyOwned:
+    case ErrorCode.AlreadyOwned:
       return 'This App Store account already owns the subscription. Use Restore purchases.';
-    case ExpoIapErrorCode.EmptySkuList:
+    case ErrorCode.EmptySkuList:
       return 'Subscription products are not configured correctly.';
     default:
       return 'Subscription is temporarily unavailable. Please try again.';
@@ -233,8 +219,7 @@ export function sortProductsByConfiguredOrder(products: ProductSubscription[], p
 }
 
 export function purchaseButtonLabel(product: ProductSubscription) {
-  const offer = introOfferLabel(product);
-  return offer ? `${offer}, then ${product.displayPrice}` : `Subscribe for ${product.displayPrice}`;
+  return `Subscribe for ${product.displayPrice}`;
 }
 
 export function introOfferLabel(product: ProductSubscription) {
@@ -247,21 +232,23 @@ export function introOfferLabel(product: ProductSubscription) {
 
   switch (offer.paymentMode) {
     case 'free-trial':
-      return period ? `Free trial for ${period}` : 'Free trial available';
+      return period ? `Eligible users may get a free trial for ${period}` : 'Eligible users may get a free trial';
     case 'pay-as-you-go':
       return period
-        ? `Intro pay-as-you-go price: ${offer.displayPrice} for ${period}`
-        : `Intro pay-as-you-go price: ${offer.displayPrice}`;
+        ? `Eligible users may get an intro pay-as-you-go price: ${offer.displayPrice} for ${period}`
+        : `Eligible users may get an intro pay-as-you-go price: ${offer.displayPrice}`;
     case 'pay-up-front':
       return period
-        ? `Intro upfront price: ${offer.displayPrice} for first ${period}`
-        : `Intro upfront price: ${offer.displayPrice}`;
+        ? `Eligible users may get an intro upfront price: ${offer.displayPrice} for first ${period}`
+        : `Eligible users may get an intro upfront price: ${offer.displayPrice}`;
     default:
-      return period ? `Intro offer: ${offer.displayPrice} for ${period}` : `Intro offer: ${offer.displayPrice}`;
+      return period
+        ? `Eligible users may get an intro offer: ${offer.displayPrice} for ${period}`
+        : `Eligible users may get an intro offer: ${offer.displayPrice}`;
   }
 }
 
-export function getIapErrorCode(error: unknown) {
+export function getIapErrorCode(error: unknown): ErrorCode | null {
   if (typeof error === 'string') return normalizeErrorCode(error);
   if (!error || typeof error !== 'object' || !('code' in error)) return null;
   const code = (error as ExpoPurchaseError).code;
@@ -276,28 +263,28 @@ function uniqueStrings(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function normalizeErrorCode(value: string) {
+function normalizeErrorCode(value: string): ErrorCode {
   const code = value.trim();
-  const knownCodes = new Set(Object.values(ExpoIapErrorCode));
-  if (knownCodes.has(code as never)) return code;
+  const knownCodes = new Set<string>(Object.values(ErrorCode));
+  if (knownCodes.has(code)) return code as ErrorCode;
 
   const normalized = toKebabCase(code);
-  if (knownCodes.has(normalized as never)) return normalized;
+  if (knownCodes.has(normalized)) return normalized as ErrorCode;
 
   if (code.startsWith('E_')) {
     const trimmed = code.slice(2);
-    if (knownCodes.has(trimmed as never)) return trimmed;
+    if (knownCodes.has(trimmed)) return trimmed as ErrorCode;
 
     const normalizedTrimmed = toKebabCase(trimmed);
-    if (knownCodes.has(normalizedTrimmed as never)) return normalizedTrimmed;
+    if (knownCodes.has(normalizedTrimmed)) return normalizedTrimmed as ErrorCode;
   }
 
-  return normalized || ExpoIapErrorCode.Unknown;
+  return ErrorCode.Unknown;
 }
 
 function isLegacyUserCancelledMessage(error: unknown) {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  return /\b(user|purchase|payment)\s+cancell?ed\b|\bcancell?ed\s+by\s+user\b|\buser\s+cancel\b/i.test(message);
+  return /\b(purchase|payment)\s+cancell?ed\s+by\s+user\b|\bcancell?ed\s+by\s+user\b|\buser\s+cancell?ed\s+(purchase|payment)\b/i.test(message);
 }
 
 function toKebabCase(value: string) {

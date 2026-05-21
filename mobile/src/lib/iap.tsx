@@ -1,11 +1,11 @@
 import type { SubscriptionSnapshot } from '@web-app-demo/contracts';
 import {
   deepLinkToSubscriptions,
-  getAvailablePurchases as getAvailablePurchasesFromStore,
   presentCodeRedemptionSheetIOS,
   useIAP,
   type ProductSubscription,
   type Purchase,
+  type PurchaseOptions,
 } from 'expo-iap';
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
@@ -19,6 +19,7 @@ import {
   friendlyIapErrorMessage,
   getIapErrorCode,
   ingestAndFinishPurchase,
+  isNetworkIapError,
   isPostSuccessNoiseError,
   isRetryableIapError,
   isUserCancelledPurchaseError,
@@ -34,10 +35,23 @@ const iosProductIds = [
   .map((productId) => productId?.trim())
   .filter((productId): productId is string => Boolean(productId));
 const offerCodeRedemptionClientTtlMs = 14 * 60 * 1000;
+const allIosAvailablePurchaseOptions: PurchaseOptions = {
+  alsoPublishToEventListenerIOS: false,
+  onlyIncludeActiveItemsIOS: false,
+};
 
 type OfferCodeRedemptionSession = {
   expiresAtMs: number;
   token: string;
+};
+
+type AvailablePurchasesReconciliation = {
+  finishPurchases: boolean;
+  hasKnownOriginalTransaction: boolean;
+  id: number;
+  kind: 'restore' | 'sync';
+  originalTransactionIds?: string[];
+  restoreError?: unknown;
 };
 
 type SubscriptionContextValue = {
@@ -68,7 +82,7 @@ const SubscriptionContext = createContext<SubscriptionContextValue | null>(null)
 export function IapProvider({ children }: PropsWithChildren) {
   const auth = useAuth();
 
-  if (!auth.user || Platform.OS !== 'ios') {
+  if (Platform.OS !== 'ios') {
     return (
       <SubscriptionContext.Provider value={unsupportedSubscriptionValue(auth.user?.subscription ?? null)}>
         {children}
@@ -97,12 +111,28 @@ function IosIapProvider({ children }: PropsWithChildren) {
   const purchaseRequestInFlightRef = useRef(false);
   const processingTransactionsRef = useRef(new Set<string>());
   const processedTransactionsRef = useRef(new Set<string>());
+  const handledAvailablePurchasesReconciliationIdsRef = useRef(new Set<number>());
+  const nextAvailablePurchasesReconciliationIdRef = useRef(0);
+  const pendingAvailablePurchasesReconciliationRef = useRef<AvailablePurchasesReconciliation | null>(null);
+  const queuedPurchaseKeysRef = useRef(new Set<string>());
+  const queuedPurchasesRef = useRef<Purchase[]>([]);
   const lastPurchaseSuccessAtRef = useRef<number | null>(null);
   const offerCodeRedemptionTokenRef = useRef<OfferCodeRedemptionSession | null>(null);
 
+  const queuePurchaseUntilAuthenticated = useCallback((purchase: Purchase) => {
+    const queueKey = purchaseQueueKey(purchase);
+    if (queueKey && queuedPurchaseKeysRef.current.has(queueKey)) return;
+
+    if (queueKey) {
+      queuedPurchaseKeysRef.current.add(queueKey);
+    }
+    queuedPurchasesRef.current.push(purchase);
+  }, []);
+
   const handlePurchase = useCallback(
     async (purchase: Purchase) => {
-      if (!user) {
+      if (!userId) {
+        queuePurchaseUntilAuthenticated(purchase);
         purchaseRequestInFlightRef.current = false;
         setIsPurchasing(false);
         return;
@@ -170,7 +200,7 @@ function IosIapProvider({ children }: PropsWithChildren) {
         setIsPurchasing(false);
       }
     },
-    [api, setSubscription, user],
+    [api, queuePurchaseUntilAuthenticated, setSubscription, userId],
   );
 
   const iap = useIAP({
@@ -198,8 +228,10 @@ function IosIapProvider({ children }: PropsWithChildren) {
   });
   iapRef.current = iap;
   const {
+    availablePurchases,
     connected,
     fetchProducts,
+    getAvailablePurchases,
     requestPurchase,
     restorePurchases,
     subscriptions,
@@ -236,12 +268,19 @@ function IosIapProvider({ children }: PropsWithChildren) {
     }) => {
       let firstError: unknown = null;
       let latestSubscription: SubscriptionSnapshot | null = null;
+      let pendingPurchaseMessage: string | null = null;
 
       if (finishPurchases) {
         for (const purchase of purchases) {
           const validation = validateAppStorePurchaseForIngest(purchase);
+          if (!validation.ok) {
+            if (validation.pending) {
+              pendingPurchaseMessage ??= validation.message;
+            }
+            continue;
+          }
+
           if (
-            !validation.ok ||
             processedTransactionsRef.current.has(validation.transactionKey) ||
             processingTransactionsRef.current.has(validation.transactionKey)
           ) {
@@ -299,6 +338,9 @@ function IosIapProvider({ children }: PropsWithChildren) {
       if (!originalPayload) {
         if (latestSubscription) return latestSubscription;
         if (firstError) throw firstError;
+        if (pendingPurchaseMessage) {
+          setError(pendingPurchaseMessage);
+        }
         return null;
       }
 
@@ -316,6 +358,9 @@ function IosIapProvider({ children }: PropsWithChildren) {
       try {
         const response = await api.reconcileAppStoreTransactions(originalPayload);
         setSubscription(response.subscription);
+        if (pendingPurchaseMessage && !response.subscription.isActive) {
+          setError(pendingPurchaseMessage);
+        }
         return response.subscription;
       } finally {
         inFlightReconcileKeysRef.current.delete(originalReconcileKey);
@@ -324,10 +369,60 @@ function IosIapProvider({ children }: PropsWithChildren) {
     [api, setSubscription],
   );
 
+  useEffect(() => {
+    const pendingReconciliation = pendingAvailablePurchasesReconciliationRef.current;
+    if (!pendingReconciliation) return;
+    if (handledAvailablePurchasesReconciliationIdsRef.current.has(pendingReconciliation.id)) return;
+
+    handledAvailablePurchasesReconciliationIdsRef.current.add(pendingReconciliation.id);
+    pendingAvailablePurchasesReconciliationRef.current = null;
+
+    void (async () => {
+      try {
+        const subscription = await reconcileAndFinishPurchases({
+          finishPurchases: pendingReconciliation.finishPurchases,
+          originalTransactionIds: pendingReconciliation.originalTransactionIds,
+          purchases: availablePurchases,
+        });
+
+        if (pendingReconciliation.kind === 'restore') {
+          if (
+            pendingReconciliation.restoreError &&
+            availablePurchases.length === 0 &&
+            !subscription?.isActive
+          ) {
+            setError(messageForIapError(pendingReconciliation.restoreError));
+          } else if (!subscription && availablePurchases.length === 0) {
+            setError(
+              pendingReconciliation.restoreError
+                ? messageForIapError(pendingReconciliation.restoreError)
+                : pendingReconciliation.hasKnownOriginalTransaction
+                  ? 'Apple did not return an active subscription for this account. Please try again.'
+                  : 'No restorable App Store subscription was found for this account.',
+            );
+          }
+        }
+      } catch (caughtError) {
+        reportIapDiagnostic(
+          pendingReconciliation.kind === 'restore' ? 'restore-error' : 'subscription-sync-error',
+          caughtError,
+        );
+        setError(messageForIapError(caughtError));
+      } finally {
+        if (pendingReconciliation.kind === 'restore') {
+          setIsRestoring(false);
+        } else {
+          setIsSyncing(false);
+        }
+      }
+    })();
+  }, [availablePurchases, reconcileAndFinishPurchases]);
+
   const sync = useCallback(async () => {
     if (!userId) return;
 
     setIsSyncing(true);
+    let waitingForAvailablePurchasesState = false;
 
     try {
       const entitlement = await api.iapEntitlement();
@@ -335,19 +430,24 @@ function IosIapProvider({ children }: PropsWithChildren) {
       const originalTransactionIds = entitlement.subscription.originalTransactionId
         ? [entitlement.subscription.originalTransactionId]
         : undefined;
-      let purchases: Purchase[] = [];
-      let finishPurchases = false;
 
       if (connected) {
+        const reconciliationId = nextAvailablePurchasesReconciliationIdRef.current + 1;
+        nextAvailablePurchasesReconciliationIdRef.current = reconciliationId;
+        pendingAvailablePurchasesReconciliationRef.current = {
+          finishPurchases: true,
+          hasKnownOriginalTransaction: Boolean(originalTransactionIds),
+          id: reconciliationId,
+          kind: 'sync',
+          originalTransactionIds,
+        };
+
         try {
-          purchases = await retryIapOperation(() =>
-            getAvailablePurchasesFromStore({
-              alsoPublishToEventListenerIOS: false,
-              onlyIncludeActiveItemsIOS: true,
-            }),
-          );
-          finishPurchases = true;
+          await retryIapOperation(() => getAvailablePurchases(allIosAvailablePurchaseOptions));
+          waitingForAvailablePurchasesState = true;
+          return;
         } catch (storeError) {
+          pendingAvailablePurchasesReconciliationRef.current = null;
           if (!originalTransactionIds) {
             throw storeError;
           }
@@ -355,20 +455,22 @@ function IosIapProvider({ children }: PropsWithChildren) {
         }
       }
 
-      if (finishPurchases || originalTransactionIds) {
+      if (originalTransactionIds) {
         await reconcileAndFinishPurchases({
-          finishPurchases,
+          finishPurchases: false,
           originalTransactionIds,
-          purchases,
+          purchases: [],
         });
       }
     } catch (caughtError) {
       reportIapDiagnostic('subscription-sync-error', caughtError);
       setError(messageForIapError(caughtError));
     } finally {
-      setIsSyncing(false);
+      if (!waitingForAvailablePurchasesState) {
+        setIsSyncing(false);
+      }
     }
-  }, [api, connected, reconcileAndFinishPurchases, setSubscription, userId]);
+  }, [api, connected, getAvailablePurchases, reconcileAndFinishPurchases, setSubscription, userId]);
 
   const purchase = useCallback(async () => {
     if (!user || !selectedProductId) return;
@@ -411,14 +513,12 @@ function IosIapProvider({ children }: PropsWithChildren) {
 
     setIsRestoring(true);
     setError(null);
+    let waitingForAvailablePurchasesState = false;
 
     try {
       let restoreError: unknown = null;
       let restoreCancelled = false;
-      await restorePurchases({
-        alsoPublishToEventListenerIOS: false,
-        onlyIncludeActiveItemsIOS: true,
-      }).catch((caughtError) => {
+      await restorePurchases(allIosAvailablePurchaseOptions).catch((caughtError) => {
         if (isUserCancelledPurchaseError(caughtError)) {
           restoreCancelled = true;
           return;
@@ -427,38 +527,32 @@ function IosIapProvider({ children }: PropsWithChildren) {
         reportIapDiagnostic('storekit-restore-sync-error', caughtError);
       });
       if (restoreCancelled) return;
-      const purchases = await retryIapOperation(() =>
-        getAvailablePurchasesFromStore({
-          alsoPublishToEventListenerIOS: false,
-          onlyIncludeActiveItemsIOS: true,
-        }),
-      );
-      const subscription = await reconcileAndFinishPurchases({
-        finishPurchases: true,
-        originalTransactionIds: user.subscription.originalTransactionId
-          ? [user.subscription.originalTransactionId]
-          : undefined,
-        purchases,
-      });
 
-      if (restoreError && purchases.length === 0 && !subscription?.isActive) {
-        setError(messageForIapError(restoreError));
-      } else if (!subscription && purchases.length === 0) {
-        setError(
-          restoreError
-            ? messageForIapError(restoreError)
-            : user.subscription.originalTransactionId
-              ? 'Apple did not return an active subscription for this account. Please try again.'
-              : 'No restorable App Store subscription was found for this account.',
-        );
-      }
+      const originalTransactionIds = user.subscription.originalTransactionId
+        ? [user.subscription.originalTransactionId]
+        : undefined;
+      const reconciliationId = nextAvailablePurchasesReconciliationIdRef.current + 1;
+      nextAvailablePurchasesReconciliationIdRef.current = reconciliationId;
+      pendingAvailablePurchasesReconciliationRef.current = {
+        finishPurchases: true,
+        hasKnownOriginalTransaction: Boolean(originalTransactionIds),
+        id: reconciliationId,
+        kind: 'restore',
+        originalTransactionIds,
+        restoreError,
+      };
+      await retryIapOperation(() => getAvailablePurchases(allIosAvailablePurchaseOptions));
+      waitingForAvailablePurchasesState = true;
     } catch (caughtError) {
+      pendingAvailablePurchasesReconciliationRef.current = null;
       reportIapDiagnostic('restore-error', caughtError);
       setError(messageForIapError(caughtError));
     } finally {
-      setIsRestoring(false);
+      if (!waitingForAvailablePurchasesState) {
+        setIsRestoring(false);
+      }
     }
-  }, [connected, reconcileAndFinishPurchases, restorePurchases, user]);
+  }, [connected, getAvailablePurchases, restorePurchases, user]);
 
   const redeemOfferCode = useCallback(async () => {
     if (!user) return;
@@ -515,11 +609,23 @@ function IosIapProvider({ children }: PropsWithChildren) {
   }, [connected]);
 
   useEffect(() => {
-    if (connected) {
+    if (connected && userId) {
       void loadProducts();
     }
     void sync();
-  }, [connected, loadProducts, sync]);
+  }, [connected, loadProducts, sync, userId]);
+
+  useEffect(() => {
+    if (!userId || queuedPurchasesRef.current.length === 0) return;
+
+    const queuedPurchases = queuedPurchasesRef.current;
+    queuedPurchasesRef.current = [];
+    queuedPurchaseKeysRef.current.clear();
+
+    for (const purchase of queuedPurchases) {
+      void handlePurchase(purchase);
+    }
+  }, [handlePurchase, userId]);
 
   useEffect(() => {
     if (subscriptions.length === 0) return;
@@ -627,6 +733,13 @@ function currentOfferCodeRedemptionToken(session: OfferCodeRedemptionSession | n
   return session.expiresAtMs > Date.now() ? session.token : undefined;
 }
 
+function purchaseQueueKey(purchase: Purchase) {
+  const validation = validateAppStorePurchaseForIngest(purchase);
+  if (validation.ok) return validation.transactionKey;
+
+  return purchase.transactionId?.trim() || purchase.purchaseToken?.trim() || null;
+}
+
 function messageForIapError(error: unknown) {
   if (error instanceof ApiRequestError) {
     switch (error.code) {
@@ -653,12 +766,57 @@ function shouldSuppressPostSuccessError(error: unknown, lastPurchaseSuccessAt: n
 }
 
 function reportIapDiagnostic(event: string, error: unknown) {
-  const code = getIapErrorCode(error);
-  const retryable = isRetryableIapError(error);
-  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : undefined;
+  const code = typeof error === 'string' ? null : getIapErrorCode(error);
+  const network = typeof error === 'string' ? false : isNetworkIapError(error);
+  const retryable = typeof error === 'string' ? false : isRetryableIapError(error);
+  const debugMessage = diagnosticStringField(error, 'debugMessage');
+  const message = diagnosticMessage(error);
+  const platform = diagnosticStringField(error, 'platform') ?? Platform.OS;
+  const productId = diagnosticStringField(error, 'productId');
+  const responseCode = diagnosticNumberField(error, 'responseCode');
+  const underlyingError = diagnosticStringField(error, 'underlyingError');
   trackIapDiagnostic(event, {
     code,
-    retryable,
+    debugMessage,
     message,
+    network,
+    platform,
+    productId,
+    responseCode,
+    retryable,
+    underlyingError,
   });
+}
+
+function diagnosticMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (!isRecord(error)) return undefined;
+
+  return diagnosticString(error.message);
+}
+
+function diagnosticStringField(error: unknown, field: 'debugMessage' | 'platform' | 'productId' | 'underlyingError') {
+  if (!isRecord(error)) return undefined;
+
+  return diagnosticString(error[field]);
+}
+
+function diagnosticString(value: unknown) {
+  if (value instanceof Error) return value.message;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+
+  return undefined;
+}
+
+function diagnosticNumberField(error: unknown, field: 'responseCode') {
+  if (!isRecord(error)) return undefined;
+
+  const value = error[field];
+  return typeof value === 'number' ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object';
 }

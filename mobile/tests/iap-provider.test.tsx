@@ -159,6 +159,13 @@ const purchase = {
   transactionId: 'transaction-1',
 };
 
+const pendingPurchase = {
+  purchaseState: 'pending',
+  purchaseToken: 'signed-pending',
+  store: 'apple',
+  transactionId: 'transaction-pending',
+};
+
 let authState: {
   api: {
     createAppStoreOfferCodeRedemption: ReturnType<typeof mock>;
@@ -177,15 +184,19 @@ let platformOS: 'android' | 'ios' = 'ios';
 let presentCodeRedemptionSheetIOSMock: ReturnType<typeof mock> = mock(async () => true);
 let useIapCallCount = 0;
 let currentIap: {
+  availablePurchases: Purchase[];
   connected: boolean;
   fetchProducts: ReturnType<typeof mock>;
   finishTransaction: ReturnType<typeof mock>;
+  getAvailablePurchases: ReturnType<typeof mock>;
   requestPurchase: ReturnType<typeof mock>;
   restorePurchases: ReturnType<typeof mock>;
   subscriptions: unknown[];
 };
+let iapDiagnostics: Array<{ event: string; payload: Record<string, unknown> }> = [];
 let latestUseIapOptions: UseIapOptions = {};
 let latestContext: IapContextProbe | null = null;
+let updateHookAvailablePurchases: ((purchases: Purchase[]) => void) | null = null;
 
 mock.module('react-native', () => ({
   ActivityIndicator: NativeHost('span'),
@@ -218,19 +229,32 @@ mock.module('react-native', () => ({
 
 mock.module('expo-iap', () => ({
   deepLinkToSubscriptions: () => deepLinkToSubscriptionsMock(),
-  getAvailablePurchases: () => getAvailablePurchasesMock(),
+  getAvailablePurchases: (options?: unknown) => getAvailablePurchasesMock(options),
   openRedeemOfferCodeAndroid: mock(async () => undefined),
   presentCodeRedemptionSheetIOS: () => presentCodeRedemptionSheetIOSMock(),
   useIAP(options: UseIapOptions) {
+    const [hookAvailablePurchases, setHookAvailablePurchases] = React.useState<Purchase[]>(
+      currentIap.availablePurchases,
+    );
+    updateHookAvailablePurchases = setHookAvailablePurchases;
     useIapCallCount += 1;
     latestUseIapOptions = options;
-    return currentIap;
+    return {
+      ...currentIap,
+      availablePurchases: hookAvailablePurchases,
+    };
   },
 }));
 
 mock.module('../src/lib/auth', () => ({
   useAuth() {
     return authState;
+  },
+}));
+
+mock.module('../src/lib/iap-diagnostics', () => ({
+  trackIapDiagnostic(event: string, payload: Record<string, unknown>) {
+    iapDiagnostics.push({ event, payload });
   },
 }));
 
@@ -251,13 +275,21 @@ beforeEach(() => {
   useIapCallCount = 0;
   latestUseIapOptions = {};
   currentIap = {
+    availablePurchases: [],
     connected: true,
     fetchProducts: mock(async () => undefined),
     finishTransaction: mock(async () => undefined),
+    getAvailablePurchases: mock(async (options?: unknown) => {
+      const purchases = await getAvailablePurchasesMock(options);
+      currentIap.availablePurchases = purchases;
+      updateHookAvailablePurchases?.([...purchases]);
+    }),
     requestPurchase: mock(async () => undefined),
     restorePurchases: mock(async () => undefined),
     subscriptions: [],
   };
+  iapDiagnostics = [];
+  updateHookAvailablePurchases = null;
   authState = {
     api: {
       createAppStoreOfferCodeRedemption: mock(async () => ({ token: 'offer-code-redemption-token' })),
@@ -293,6 +325,36 @@ test('IapProvider finishes purchase callbacks only after backend ingest succeeds
   });
 
   expect(events).toEqual(['ingest', 'finish']);
+  expect(authState.api.ingestAppStoreTransaction).toHaveBeenCalledWith({
+    signedTransactionInfo: 'signed-transaction',
+  });
+  expect(currentIap.finishTransaction).toHaveBeenCalledTimes(1);
+  await unmount(root);
+});
+
+test('IapProvider starts StoreKit listeners before auth resolves and processes queued purchases after login', async () => {
+  authState.user = null;
+
+  const root = await renderProvider();
+
+  expect(useIapCallCount).toBeGreaterThan(0);
+
+  await act(async () => {
+    await latestUseIapOptions.onPurchaseSuccess?.(purchase);
+    await waitForEffects();
+  });
+
+  expect(authState.api.ingestAppStoreTransaction).not.toHaveBeenCalled();
+  expect(currentIap.finishTransaction).not.toHaveBeenCalled();
+
+  authState.user = {
+    id: '018fd4f2-1f3a-7c88-bc49-333333333333',
+    subscription: inactiveSubscription,
+  };
+
+  await rerenderProvider(root);
+  await waitForEffects();
+
   expect(authState.api.ingestAppStoreTransaction).toHaveBeenCalledWith({
     signedTransactionInfo: 'signed-transaction',
   });
@@ -375,6 +437,66 @@ test('IapProvider allows retrying a purchase after StoreKit sends an error callb
   await unmount(root);
 });
 
+test('IapProvider records structured StoreKit error diagnostics', async () => {
+  const root = await renderProvider();
+
+  await act(async () => {
+    latestUseIapOptions.onPurchaseError?.({
+      code: 'network-error',
+      debugMessage: 'StoreKit request timed out',
+      message: 'Network down',
+      platform: 'ios',
+      productId: 'premium_monthly',
+      responseCode: 2,
+      underlyingError: new Error('NSURLErrorDomain -1009'),
+    });
+    await waitForEffects();
+  });
+
+  expect(iapDiagnostics).toContainEqual({
+    event: 'purchase-error',
+    payload: {
+      code: 'network-error',
+      debugMessage: 'StoreKit request timed out',
+      message: 'Network down',
+      network: true,
+      platform: 'ios',
+      productId: 'premium_monthly',
+      responseCode: 2,
+      retryable: true,
+      underlyingError: 'NSURLErrorDomain -1009',
+    },
+  });
+  expect(latestContext?.error).toContain('temporarily unavailable');
+  await unmount(root);
+});
+
+test('IapProvider does not treat generic payment-cancelled messages as user cancellations', async () => {
+  const root = await renderProvider();
+
+  await act(async () => {
+    latestUseIapOptions.onPurchaseError?.(new Error('Payment cancelled'));
+    await waitForEffects();
+  });
+
+  expect(latestContext?.error).toContain('temporarily unavailable');
+  expect(iapDiagnostics).toContainEqual({
+    event: 'purchase-error',
+    payload: {
+      code: null,
+      debugMessage: undefined,
+      message: 'Payment cancelled',
+      network: false,
+      platform: 'ios',
+      productId: undefined,
+      responseCode: undefined,
+      retryable: false,
+      underlyingError: undefined,
+    },
+  });
+  await unmount(root);
+});
+
 test('IapProvider allows retrying a purchase after StoreKit sends a non-ingestable success callback', async () => {
   currentIap.subscriptions = [
     {
@@ -448,6 +570,14 @@ test('IapProvider restore reconciles available purchases with the backend before
   });
 
   expect(events).toEqual(['ingest', 'finish', 'reconcile']);
+  expect(currentIap.restorePurchases).toHaveBeenCalledWith({
+    alsoPublishToEventListenerIOS: false,
+    onlyIncludeActiveItemsIOS: false,
+  });
+  expect(getAvailablePurchasesMock).toHaveBeenLastCalledWith({
+    alsoPublishToEventListenerIOS: false,
+    onlyIncludeActiveItemsIOS: false,
+  });
   expect(authState.api.ingestAppStoreTransaction).toHaveBeenCalledWith({
     signedTransactionInfo: 'signed-transaction',
   });
@@ -650,6 +780,39 @@ test('IapProvider restore does not mask StoreKit restore failures as empty resto
   }
 });
 
+test('IapProvider restore surfaces pending StoreKit purchases without ingesting or finishing', async () => {
+  let availablePurchaseCalls = 0;
+  getAvailablePurchasesMock = mock(async () => {
+    availablePurchaseCalls += 1;
+    return availablePurchaseCalls === 1 ? [] : [pendingPurchase];
+  });
+
+  const root = await renderProvider();
+  await waitForEffects();
+
+  await act(async () => {
+    await latestContext?.restore();
+    await waitForEffects();
+  });
+
+  expect(latestContext?.error).toContain('pending approval');
+  expect(authState.api.ingestAppStoreTransaction).not.toHaveBeenCalled();
+  expect(currentIap.finishTransaction).not.toHaveBeenCalled();
+  await unmount(root);
+});
+
+test('IapProvider startup sync surfaces pending StoreKit purchases without ingesting or finishing', async () => {
+  availablePurchases = [pendingPurchase];
+
+  const root = await renderProvider();
+  await waitForEffects();
+
+  expect(latestContext?.error).toContain('pending approval');
+  expect(authState.api.ingestAppStoreTransaction).not.toHaveBeenCalled();
+  expect(currentIap.finishTransaction).not.toHaveBeenCalled();
+  await unmount(root);
+});
+
 test('IapProvider restore ignores user-cancelled restore sheets', async () => {
   const originalWarn = console.warn;
   console.warn = mock(() => undefined) as never;
@@ -819,6 +982,28 @@ test('IapProvider does not finish available purchases that backend ingest reject
   } finally {
     console.warn = originalWarn;
   }
+});
+
+test('IapProvider startup sync scans non-active StoreKit purchases for unfinished cleanup', async () => {
+  authState.user = {
+    id: '018fd4f2-1f3a-7c88-bc49-333333333333',
+    subscription: activeSubscription,
+  };
+  authState.api.iapEntitlement = mock(async () => ({ subscription: activeSubscription }));
+  availablePurchases = [purchase];
+
+  const root = await renderProvider();
+  await waitForEffects();
+
+  expect(getAvailablePurchasesMock).toHaveBeenCalledWith({
+    alsoPublishToEventListenerIOS: false,
+    onlyIncludeActiveItemsIOS: false,
+  });
+  expect(authState.api.ingestAppStoreTransaction).toHaveBeenCalledWith({
+    signedTransactionInfo: 'signed-transaction',
+  });
+  expect(currentIap.finishTransaction).toHaveBeenCalledTimes(1);
+  await unmount(root);
 });
 
 test('IapProvider reconciles known original transactions even before StoreKit connects', async () => {

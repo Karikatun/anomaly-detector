@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { Environment, Status, type JWSRenewalInfoDecodedPayload, type JWSTransactionDecodedPayload, type ResponseBodyV2DecodedPayload } from '@apple/app-store-server-library'
+import { Environment, Status, Type, type JWSRenewalInfoDecodedPayload, type JWSTransactionDecodedPayload, type ResponseBodyV2DecodedPayload } from '@apple/app-store-server-library'
 import { beforeEach, afterAll, describe, expect, test } from 'bun:test'
 
 import { createApp } from '../app'
@@ -574,6 +574,7 @@ function activeTransaction(appAccountToken: string): JWSTransactionDecodedPayloa
     productId: 'premium_monthly',
     purchaseDate: Date.now() - 60_000,
     transactionId: 'transaction-active',
+    type: Type.AUTO_RENEWABLE_SUBSCRIPTION,
     webOrderLineItemId: 'web-order-active',
   }
 }
