@@ -4,18 +4,6 @@ import { ApiClient } from '../src/lib/api'
 import { bootstrapAuthSession } from '../src/lib/bootstrap-auth'
 
 const originalFetch = globalThis.fetch
-const inactiveSubscription = {
-  entitlement: 'premium',
-  isActive: false,
-  state: 'inactive',
-  platform: null,
-  productId: null,
-  originalTransactionId: null,
-  transactionId: null,
-  expiresAt: null,
-  willAutoRenew: null,
-  updatedAt: null,
-}
 
 afterEach(() => {
   globalThis.fetch = originalFetch
@@ -49,7 +37,6 @@ test('ApiClient refreshes and retries authenticated requests with the new access
             email: 'user@example.com',
             displayName: null,
             createdAt: '2026-05-11T00:00:00.000Z',
-            subscription: inactiveSubscription,
           },
         },
         200,
@@ -99,7 +86,6 @@ test('ApiClient shares one refresh across concurrent unauthorized requests', asy
             email: 'user@example.com',
             displayName: null,
             createdAt: '2026-05-11T00:00:00.000Z',
-            subscription: inactiveSubscription,
           },
         },
         200,

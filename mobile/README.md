@@ -9,10 +9,8 @@ This section may be updated during first-run bootstrap. If the root `README.md` 
 ## Current App Shape
 
 - `/` is the register/login screen and intentionally has no tabs.
-- Authenticated users without active premium land on `/paywall`.
-- Active premium users land on `/components`, which lives in the bottom tab shell with `/profile`.
-- `/details/[id]` is a stack screen outside the tabs and uses an in-screen back button at the top left. It is part of the premium surface.
-- Android shows a deferred billing placeholder for this MVP. iOS App Store subscriptions are the only active purchase path. Displaying App Store introductory offer metadata and App Store offer-code redemption are supported. Android billing, Google Play code redemption, Play Billing entitlement validation, signed promotional-offer purchase flows, alternative billing, and external purchase links are deferred.
+- Authenticated users land on `/components`, which lives in the bottom tab shell with `/profile`.
+- `/details/[id]` is a stack screen outside the tabs and uses an in-screen back button at the top left.
 - App screens should use `src/components/screen.tsx` for safe-area handling, standard spacing, scroll/non-scroll layout, keyboard avoidance, and consistent optional back navigation.
 
 ## Stack
@@ -24,7 +22,6 @@ This section may be updated during first-run bootstrap. If the root `README.md` 
 - TanStack Query
 - TanStack Form
 - Expo SecureStore
-- Expo IAP for iOS App Store subscription transport
 - Zod contracts from `@web-app-demo/contracts`
 - Native ShadCN-style UI primitives in `src/components/ui`
 - Maestro E2E smoke flow
@@ -50,8 +47,6 @@ Create `mobile/.env`:
 
 ```bash
 EXPO_PUBLIC_API_URL=http://localhost:3000
-EXPO_PUBLIC_IAP_IOS_MONTHLY_PRODUCT_ID=com.example.app.premium.monthly
-EXPO_PUBLIC_IAP_IOS_YEARLY_PRODUCT_ID=com.example.app.premium.yearly
 ```
 
 Use this value on Android emulators:
@@ -69,8 +64,6 @@ EXPO_PUBLIC_E2E=1
 
 `EXPO_PUBLIC_*` variables are included in the client bundle, so never put secrets there.
 
-IAP setup, backend Apple credentials, sandbox testing, restore behavior, and troubleshooting are documented in [../docs/IAP.md](../docs/IAP.md).
-
 ## Development Build
 
 1. Sign up or log in to an Expo account.
@@ -85,10 +78,6 @@ bunx eas-cli build --profile development --platform ios
 ```
 
 `expo-dev-client` is already installed. Native `ios` and `android` folders are not stored in this template; Expo prebuild/development build workflows generate them when needed.
-
-`expo-iap` requires a custom development build. App Store purchase and restore flows do not work in Expo Go.
-
-After changing the `expo-iap` config plugin or native purchase setup, rebuild the development client before testing. EAS handles prebuild during the remote build; for local native projects, run `npx expo prebuild --clean` before rebuilding. Real App Store purchase and restore checks should run on a real iOS device with a sandbox tester.
 
 ## Maestro E2E
 
