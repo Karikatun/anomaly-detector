@@ -1,4 +1,4 @@
-import { Redirect, useRouter, type Href } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 
@@ -194,10 +194,6 @@ function ComponentsCatalog() {
 
   if (!auth.user) {
     return <Redirect href="/" />;
-  }
-
-  if (!auth.user.subscription.isActive) {
-    return <Redirect href={'/paywall' as Href} />;
   }
 
   return (

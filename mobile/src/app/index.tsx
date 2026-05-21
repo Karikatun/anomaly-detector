@@ -5,7 +5,7 @@ import {
   type LoginRequest,
   type RegisterRequest,
 } from '@web-app-demo/contracts';
-import { Redirect, type Href } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { useState } from 'react';
 
 import {
@@ -67,7 +67,7 @@ export default function HomeScreen() {
   }
 
   if (auth.user) {
-    return <Redirect href={(auth.user.subscription.isActive ? '/components' : '/paywall') as Href} />;
+    return <Redirect href="/components" />;
   }
 
   return (
