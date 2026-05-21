@@ -8,15 +8,13 @@ datasource db {
 }
 
 model User {
-  id                      String                   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  email                   String                   @unique
-  passwordHash            String                   @map("password_hash")
-  displayName             String?                  @map("display_name")
-  createdAt               DateTime                 @default(now()) @map("created_at")
-  updatedAt               DateTime                 @updatedAt @map("updated_at")
-  sessions                AuthSession[]
-  subscriptionEntitlement SubscriptionEntitlement?
-  appStoreTransactions    AppStoreTransaction[]
+  id           String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  email        String        @unique
+  passwordHash String        @map("password_hash")
+  displayName  String?       @map("display_name")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  sessions     AuthSession[]
 
   @@map("users")
 }
@@ -36,88 +34,4 @@ model AuthSession {
   @@index([userId], map: "auth_sessions_user_id_idx")
   @@index([expiresAt], map: "auth_sessions_expires_at_idx")
   @@map("auth_sessions")
-}
-
-enum SubscriptionPlatform {
-  ios
-
-  @@map("subscription_platform")
-}
-
-enum SubscriptionState {
-  inactive
-  pending
-  active
-  billing_grace_period
-  billing_retry
-  expired
-  revoked
-
-  @@map("subscription_state")
-}
-
-model SubscriptionEntitlement {
-  id                    String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId                String                @unique @db.Uuid @map("user_id")
-  entitlementKey        String                @default("premium") @map("entitlement_key")
-  platform              SubscriptionPlatform?
-  state                 SubscriptionState     @default(inactive)
-  productId             String?               @map("product_id")
-  originalTransactionId String?               @unique @map("original_transaction_id")
-  transactionId         String?               @map("transaction_id")
-  webOrderLineItemId    String?               @map("web_order_line_item_id")
-  expiresAt             DateTime?             @map("expires_at")
-  willAutoRenew         Boolean?              @map("will_auto_renew")
-  environment           String?
-  createdAt             DateTime              @default(now()) @map("created_at")
-  updatedAt             DateTime              @updatedAt @map("updated_at")
-  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade, map: "subscription_entitlements_user_id_fkey")
-
-  @@index([state], map: "subscription_entitlements_state_idx")
-  @@index([expiresAt], map: "subscription_entitlements_expires_at_idx")
-  @@map("subscription_entitlements")
-}
-
-model AppStoreTransaction {
-  id                    String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId                String            @db.Uuid @map("user_id")
-  originalTransactionId String            @map("original_transaction_id")
-  transactionId         String            @unique @map("transaction_id")
-  webOrderLineItemId    String?           @map("web_order_line_item_id")
-  productId             String            @map("product_id")
-  state                 SubscriptionState
-  environment           String?
-  appAccountToken       String?           @map("app_account_token")
-  purchaseDate          DateTime?         @map("purchase_date")
-  expiresAt             DateTime?         @map("expires_at")
-  revokedAt             DateTime?         @map("revoked_at")
-  willAutoRenew         Boolean?          @map("will_auto_renew")
-  signedTransactionHash String            @unique @map("signed_transaction_hash")
-  signedRenewalHash     String?           @map("signed_renewal_hash")
-  createdAt             DateTime          @default(now()) @map("created_at")
-  updatedAt             DateTime          @updatedAt @map("updated_at")
-  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade, map: "app_store_transactions_user_id_fkey")
-
-  @@index([userId], map: "app_store_transactions_user_id_idx")
-  @@index([originalTransactionId], map: "app_store_transactions_original_transaction_id_idx")
-  @@index([state], map: "app_store_transactions_state_idx")
-  @@map("app_store_transactions")
-}
-
-model AppStoreWebhook {
-  id                    String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  notificationUuid      String?   @unique @map("notification_uuid")
-  signedPayloadHash     String    @unique @map("signed_payload_hash")
-  notificationType      String?   @map("notification_type")
-  subtype               String?
-  environment           String?
-  originalTransactionId String?   @map("original_transaction_id")
-  transactionId         String?   @map("transaction_id")
-  processedAt           DateTime? @map("processed_at")
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
-
-  @@index([originalTransactionId], map: "app_store_webhooks_original_transaction_id_idx")
-  @@index([processedAt], map: "app_store_webhooks_processed_at_idx")
-  @@map("app_store_webhooks")
 }

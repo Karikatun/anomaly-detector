@@ -21,8 +21,6 @@ maybeDescribe('auth API integration', () => {
     SPACES_UPLOAD_URL_TTL_SECONDS: 900,
     SPACES_DOWNLOAD_URL_TTL_SECONDS: 300,
     SPACES_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
-    APPLE_IAP_ENVIRONMENT: 'Sandbox',
-    APPLE_IAP_PRODUCT_IDS: [],
   }
   const prisma = createPrisma(databaseUrl!)
   const app = createApp({ env, prisma })

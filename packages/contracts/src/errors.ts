@@ -7,9 +7,6 @@ export const apiErrorCodeSchema = z.enum([
   'NOT_FOUND',
   'CONFLICT',
   'VALIDATION_ERROR',
-  'IAP_NOT_CONFIGURED',
-  'IAP_INVALID_TRANSACTION',
-  'IAP_OWNERSHIP_MISMATCH',
   'INTERNAL_ERROR',
 ])
 

@@ -1,4 +1,4 @@
-import { Redirect, useLocalSearchParams, type Href } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 
 import { KeyValueCard } from '@/components/key-value-card';
 import { PageHeader } from '@/components/page-header';
@@ -18,10 +18,6 @@ export default function DetailsScreen() {
 
   if (!auth.user) {
     return <Redirect href="/" />;
-  }
-
-  if (!auth.user.subscription.isActive) {
-    return <Redirect href={'/paywall' as Href} />;
   }
 
   return (
