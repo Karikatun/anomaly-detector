@@ -19,12 +19,6 @@ const optionalUrlSchema = z.preprocess((value) => {
   return trimmed === '' ? undefined : trimmed
 }, z.string().url().optional())
 
-const optionalPositiveIntegerSchema = z.preprocess((value) => {
-  if (typeof value !== 'string') return value
-  const trimmed = value.trim()
-  return trimmed === '' ? undefined : trimmed
-}, z.coerce.number().int().positive().optional())
-
 const stringWithDefault = (defaultValue: string) =>
   z.preprocess((value) => {
     if (typeof value !== 'string') return value
@@ -59,28 +53,10 @@ const envSchema = z.object({
   SPACES_UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 60 * 60).default(15 * 60),
   SPACES_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 60 * 60).default(5 * 60),
   SPACES_PUBLIC_CACHE_CONTROL: stringWithDefault('public, max-age=31536000, immutable'),
-  APPLE_IAP_BUNDLE_ID: optionalStringSchema,
-  APPLE_IAP_APP_APPLE_ID: optionalPositiveIntegerSchema,
-  APPLE_IAP_ENVIRONMENT: z.enum(['Sandbox', 'Production']).default('Sandbox'),
-  APPLE_IAP_ISSUER_ID: optionalStringSchema,
-  APPLE_IAP_KEY_ID: optionalStringSchema,
-  APPLE_IAP_PRIVATE_KEY_BASE64: optionalStringSchema,
-  APPLE_IAP_ROOT_CERTS_DIR: optionalStringSchema,
-  APPLE_IAP_PRODUCT_IDS: z
-    .string()
-    .optional()
-    .default('')
-    .transform((value) =>
-      value
-        .split(',')
-        .map((productId) => productId.trim())
-        .filter(Boolean),
-    ),
 }).superRefine((env, ctx) => {
   validateJwtSecret(env, ctx)
   validateCorsOrigins(env, ctx)
   validateStorageEnv(env, ctx)
-  validateAppleIapEnv(env, ctx)
 })
 
 export type AppEnv = z.infer<typeof envSchema>
@@ -193,43 +169,5 @@ function validateStorageEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx
         message: `${key} is required when DigitalOcean Spaces storage is configured`,
       })
     }
-  }
-}
-
-function validateAppleIapEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
-  const configuredKeys = [
-    'APPLE_IAP_BUNDLE_ID',
-    'APPLE_IAP_ISSUER_ID',
-    'APPLE_IAP_KEY_ID',
-    'APPLE_IAP_PRIVATE_KEY_BASE64',
-  ] as const
-  const isConfigured = configuredKeys.some((key) => env[key] !== undefined)
-
-  if (!isConfigured) return
-
-  for (const key of configuredKeys) {
-    if (env[key] === undefined) {
-      ctx.addIssue({
-        code: 'custom',
-        path: [key],
-        message: `${key} is required when App Store IAP verification is configured`,
-      })
-    }
-  }
-
-  if (env.APPLE_IAP_PRODUCT_IDS.length === 0) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['APPLE_IAP_PRODUCT_IDS'],
-      message: 'APPLE_IAP_PRODUCT_IDS must list every App Store subscription product ID when App Store IAP verification is configured',
-    })
-  }
-
-  if (env.APPLE_IAP_ENVIRONMENT === 'Production' && env.APPLE_IAP_APP_APPLE_ID === undefined) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['APPLE_IAP_APP_APPLE_ID'],
-      message: 'APPLE_IAP_APP_APPLE_ID is required for production App Store verification',
-    })
   }
 }

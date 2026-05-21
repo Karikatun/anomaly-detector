@@ -71,7 +71,6 @@ Install this repository into the project. First read README.md, CLAUDE.md if pre
 - `docs/TESTING.md` - the backend, Playwright, and Maestro testing contract.
 - `docs/LOCAL_DATABASE.md` - cross-platform local PostgreSQL setup for Windows, macOS, and Linux.
 - `docs/STORAGE.md` - DigitalOcean Spaces, CDN, uploads, and image/media storage rules.
-- `docs/IAP.md` - iOS App Store subscription setup, backend verification, sandbox testing, restore, and deferred Android scope.
 - `docs/YANDEX_CLOUD.md` - optional Yandex Cloud deployment path when the user explicitly chooses it.
 
 ## Quick Start
@@ -167,7 +166,7 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - `bun run test` - run contract, backend, web, and mobile unit/integration tests.
 - `bun run test:contracts` - run shared Zod contract tests.
 - `bun run test:backend` - run backend unit and integration tests.
-- `bun run test:backend:integration` - run DB-backed auth and IAP tests through `postgres_test`.
+- `bun run test:backend:integration` - run DB-backed auth tests through `postgres_test`.
 - `bun run test:web` - run web client tests.
 - `bun run test:mobile` - run mobile client tests.
 - `bun run deploy:do:specs` - safely generate concrete DigitalOcean specs under `.scratch/deploy`.
@@ -182,7 +181,6 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - [backend/README.md](backend/README.md) - API, auth, Prisma, and backend validation.
 - [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) - Docker Compose PostgreSQL setup and reset workflow.
 - [docs/STORAGE.md](docs/STORAGE.md) - DigitalOcean Spaces, CDN, uploads, and image/media storage rules.
-- [docs/IAP.md](docs/IAP.md) - iOS App Store subscription setup and troubleshooting.
 - [docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md) - optional Yandex Cloud deployment path when explicitly selected.
 - [web/README.md](web/README.md) - browser client setup, env, and Playwright smoke.
 - [mobile/README.md](mobile/README.md) - Expo setup, development builds, and Maestro smoke.

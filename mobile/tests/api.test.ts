@@ -5,18 +5,6 @@ import { ApiClient } from '../src/lib/api';
 const originalFetch = globalThis.fetch;
 const refreshToken = 'r'.repeat(32);
 const rotatedRefreshToken = 'n'.repeat(32);
-const inactiveSubscription = {
-  entitlement: 'premium',
-  isActive: false,
-  state: 'inactive',
-  platform: null,
-  productId: null,
-  originalTransactionId: null,
-  transactionId: null,
-  expiresAt: null,
-  willAutoRenew: null,
-  updatedAt: null,
-};
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -41,7 +29,6 @@ test('mobile ApiClient refreshes with the stored refresh token and retries authe
             email: 'user@example.com',
             displayName: null,
             createdAt: '2026-05-11T00:00:00.000Z',
-            subscription: inactiveSubscription,
           },
         },
         200,
@@ -112,7 +99,6 @@ test('mobile ApiClient shares one refresh request across concurrent 401 response
             email: 'user@example.com',
             displayName: null,
             createdAt: '2026-05-11T00:00:00.000Z',
-            subscription: inactiveSubscription,
           },
         },
         200,
@@ -225,77 +211,6 @@ test('mobile ApiClient sends the stored refresh token when logging out', async (
   await client.logout();
 
   expect(calls).toEqual([{ path: '/api/auth/logout', body: { refreshToken } }]);
-});
-
-test('mobile ApiClient calls IAP entitlement, ingest, and reconcile endpoints with auth', async () => {
-  const calls: Array<{ path: string; authorization: string | null; body: unknown }> = [];
-
-  globalThis.fetch = async (input, init) => {
-    const path = new URL(String(input)).pathname;
-    const headers = new Headers(init?.headers);
-    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({ path, authorization: headers.get('Authorization'), body });
-
-    if (path === '/api/iap/entitlement') {
-      return json({ subscription: inactiveSubscription }, 200);
-    }
-
-    if (path === '/api/iap/app-store/transactions') {
-      return json({ subscription: { ...inactiveSubscription, state: 'active', isActive: true } }, 200);
-    }
-
-    if (path === '/api/iap/app-store/offer-code-redemption') {
-      return json({ token: 'offer-code-redemption-token' }, 200);
-    }
-
-    if (path === '/api/iap/app-store/reconcile') {
-      return json({ subscription: inactiveSubscription }, 200);
-    }
-
-    return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404);
-  };
-
-  const client = new ApiClient({
-    getAccessToken: () => 'access-token',
-    setAccessToken: () => undefined,
-    getRefreshToken: async () => refreshToken,
-    setRefreshToken: async () => undefined,
-    clearRefreshToken: async () => undefined,
-  });
-
-  await expect(client.iapEntitlement()).resolves.toEqual({ subscription: inactiveSubscription });
-  await expect(
-    client.ingestAppStoreTransaction({ signedTransactionInfo: 'signed-transaction' }),
-  ).resolves.toMatchObject({ subscription: { isActive: true } });
-  await expect(client.createAppStoreOfferCodeRedemption()).resolves.toEqual({
-    token: 'offer-code-redemption-token',
-  });
-  await expect(
-    client.reconcileAppStoreTransactions({ signedTransactions: ['signed-transaction'] }),
-  ).resolves.toEqual({ subscription: inactiveSubscription });
-
-  expect(calls).toEqual([
-    {
-      path: '/api/iap/entitlement',
-      authorization: 'Bearer access-token',
-      body: undefined,
-    },
-    {
-      path: '/api/iap/app-store/transactions',
-      authorization: 'Bearer access-token',
-      body: { signedTransactionInfo: 'signed-transaction' },
-    },
-    {
-      path: '/api/iap/app-store/offer-code-redemption',
-      authorization: 'Bearer access-token',
-      body: undefined,
-    },
-    {
-      path: '/api/iap/app-store/reconcile',
-      authorization: 'Bearer access-token',
-      body: { signedTransactions: ['signed-transaction'] },
-    },
-  ]);
 });
 
 function json(body: unknown, status: number) {

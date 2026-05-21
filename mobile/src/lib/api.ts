@@ -1,11 +1,6 @@
 import {
   apiErrorSchema,
-  appStoreOfferCodeRedemptionResponseSchema,
   authResponseSchema,
-  appStoreReconcileRequestSchema,
-  appStoreTransactionRequestSchema,
-  iapEntitlementResponseSchema,
-  iapMutationResponseSchema,
   loginRequestSchema,
   logoutRequestSchema,
   meResponseSchema,
@@ -13,11 +8,6 @@ import {
   refreshResponseSchema,
   registerRequestSchema,
   type AuthResponse,
-  type AppStoreReconcileRequest,
-  type AppStoreTransactionRequest,
-  type AppStoreOfferCodeRedemptionResponse,
-  type IapEntitlementResponse,
-  type IapMutationResponse,
   type LoginRequest,
   type LogoutRequest,
   type MeResponse,
@@ -90,37 +80,6 @@ export class ApiClient {
 
   me(): Promise<MeResponse> {
     return this.request('/api/auth/me', meResponseSchema, {
-      auth: true,
-    });
-  }
-
-  iapEntitlement(): Promise<IapEntitlementResponse> {
-    return this.request('/api/iap/entitlement', iapEntitlementResponseSchema, {
-      auth: true,
-    });
-  }
-
-  ingestAppStoreTransaction(input: AppStoreTransactionRequest): Promise<IapMutationResponse> {
-    const payload = appStoreTransactionRequestSchema.parse(input);
-    return this.request('/api/iap/app-store/transactions', iapMutationResponseSchema, {
-      method: 'POST',
-      body: payload,
-      auth: true,
-    });
-  }
-
-  createAppStoreOfferCodeRedemption(): Promise<AppStoreOfferCodeRedemptionResponse> {
-    return this.request('/api/iap/app-store/offer-code-redemption', appStoreOfferCodeRedemptionResponseSchema, {
-      method: 'POST',
-      auth: true,
-    });
-  }
-
-  reconcileAppStoreTransactions(input: AppStoreReconcileRequest): Promise<IapMutationResponse> {
-    const payload = appStoreReconcileRequestSchema.parse(input);
-    return this.request('/api/iap/app-store/reconcile', iapMutationResponseSchema, {
-      method: 'POST',
-      body: payload,
       auth: true,
     });
   }
