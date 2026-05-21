@@ -7,23 +7,29 @@ import type { AppEnv } from './env'
 import { createAuthRoutes } from './auth/routes'
 import { AuthService } from './auth/service'
 import { errorResponse, handleError } from './http/errors'
+import { createAppStoreSubscriptionVerifier, type AppStoreSubscriptionVerifier } from './iap/apple-verifier'
+import { createAppStoreWebhookRoutes, createIapRoutes } from './iap/routes'
 import { createStorageServiceFromEnv, type StorageService } from './storage/service'
 
-type AppBindings = {
+export type AppBindings = {
   Variables: {
     authService: AuthService
     env: AppEnv
+    iapVerifier: AppStoreSubscriptionVerifier
+    prisma: DbClient
     storageService: StorageService | null
   }
 }
 
 type CreateAppOptions = {
   env: AppEnv
+  iapVerifier?: AppStoreSubscriptionVerifier
   prisma: DbClient
 }
 
-export function createApp({ env, prisma }: CreateAppOptions) {
+export function createApp({ env, iapVerifier, prisma }: CreateAppOptions) {
   const authService = new AuthService(prisma, env)
+  const appStoreIapVerifier = iapVerifier ?? createAppStoreSubscriptionVerifier(env)
   const storageService = createStorageServiceFromEnv(env)
   const app = new OpenAPIHono<AppBindings>({
     defaultHook: (result, c) => {
@@ -53,6 +59,8 @@ export function createApp({ env, prisma }: CreateAppOptions) {
   app.use('*', async (c, next) => {
     c.set('authService', authService)
     c.set('env', env)
+    c.set('iapVerifier', appStoreIapVerifier)
+    c.set('prisma', prisma)
     c.set('storageService', storageService)
     await next()
   })
@@ -71,6 +79,8 @@ export function createApp({ env, prisma }: CreateAppOptions) {
   })
 
   app.route('/api/auth', createAuthRoutes())
+  app.route('/api/iap', createIapRoutes())
+  app.route('/api/webhooks', createAppStoreWebhookRoutes())
 
   app.doc('/openapi.json', {
     openapi: '3.0.0',

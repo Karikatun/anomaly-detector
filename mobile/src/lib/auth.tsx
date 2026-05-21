@@ -3,6 +3,7 @@ import {
   type LoginRequest,
   type RefreshResponse,
   type RegisterRequest,
+  type SubscriptionSnapshot,
   type UserDto,
 } from '@web-app-demo/contracts';
 import {
@@ -25,15 +26,19 @@ import {
 
 type AuthContextValue = {
   user: UserDto | null;
+  api: ApiClient;
   isBootstrapping: boolean;
   isAuthenticated: boolean;
+  refreshUser: () => Promise<void>;
   register: (input: RegisterRequest) => Promise<void>;
   login: (input: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
+  setSubscription: (subscription: SubscriptionSnapshot) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const meQueryKey = ['auth', 'me'] as const;
+type MeQueryData = { user: UserDto };
 let bootstrapRefreshPromise: Promise<RefreshResponse | null> | null = null;
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -102,6 +107,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const isResolvingUser = !isBootstrapping && Boolean(accessToken) && !user && meQuery.isPending;
   const isAuthBootstrapping = isBootstrapping || isResolvingUser;
 
+  const refreshUser = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: meQueryKey });
+  }, [queryClient]);
+
+  const setSubscription = useCallback(
+    (subscription: SubscriptionSnapshot) => {
+      queryClient.setQueryData<MeQueryData | undefined>(meQueryKey, (current) =>
+        updateCachedSubscription(current, subscription),
+      );
+    },
+    [queryClient],
+  );
+
   const register = useCallback(
     async (input: RegisterRequest) => {
       const response = await api.register(input);
@@ -139,14 +157,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
+      api,
       user,
       isBootstrapping: isAuthBootstrapping,
       isAuthenticated: Boolean(user),
+      refreshUser,
       register,
       login,
       logout,
+      setSubscription,
     }),
-    [isAuthBootstrapping, login, logout, register, user],
+    [api, isAuthBootstrapping, login, logout, refreshUser, register, setSubscription, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -172,4 +193,37 @@ function refreshBootstrapSession(api: ApiClient) {
     });
 
   return bootstrapRefreshPromise;
+}
+
+function updateCachedSubscription(
+  current: MeQueryData | undefined,
+  subscription: SubscriptionSnapshot,
+): MeQueryData | undefined {
+  if (!current?.user) return current;
+  if (areSubscriptionSnapshotsEqual(current.user.subscription, subscription)) return current;
+
+  return {
+    user: {
+      ...current.user,
+      subscription,
+    },
+  };
+}
+
+function areSubscriptionSnapshotsEqual(
+  left: SubscriptionSnapshot,
+  right: SubscriptionSnapshot,
+) {
+  return (
+    left.entitlement === right.entitlement &&
+    left.isActive === right.isActive &&
+    left.state === right.state &&
+    left.platform === right.platform &&
+    left.productId === right.productId &&
+    left.originalTransactionId === right.originalTransactionId &&
+    left.transactionId === right.transactionId &&
+    left.expiresAt === right.expiresAt &&
+    left.willAutoRenew === right.willAutoRenew &&
+    left.updatedAt === right.updatedAt
+  );
 }

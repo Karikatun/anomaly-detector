@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { subscriptionSnapshotSchema } from './iap'
+
 const displayNameSchema = z
   .union([z.string().trim().min(2).max(80), z.literal('')])
   .optional()
@@ -20,6 +22,7 @@ export const userSchema = z.object({
   email: emailSchema,
   displayName: z.string().nullable(),
   createdAt: z.string().datetime(),
+  subscription: subscriptionSnapshotSchema,
 })
 
 export const registerRequestSchema = z.object({
