@@ -214,6 +214,7 @@ When touching a boundary, inspect and align directly coupled code.
 - Do not print secrets, tokens, private keys, credentials, cookies, customer data, or raw `.env` values in final responses.
 - Do not add real secrets to fixtures, tests, docs, screenshots, logs, or committed files.
 - Keep ad-hoc investigation artifacts out of the repository root. Put temporary screenshots, logs, and one-off exports under `./.scratch/` or the tool-owned artifact directory, and do not create new root-level `.tmp-*` or `.codex-tmp-*` files.
+- Do not create or use `git worktree` checkouts unless the user explicitly asks for worktrees. Use the main checkout and switch branches normally so work does not get stranded across multiple directories.
 - Do not weaken auth, permissions, validation, encryption, rate limits, or auditability to make a task easier.
 - Do not manually edit generated files unless the repository explicitly requires it. Update the source and run the generator instead.
 - Do not stage, commit, amend, rebase, reset, stash, push, or delete files unless explicitly asked.
