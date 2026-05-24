@@ -30,9 +30,6 @@ jobs:
       - name: Web client tests
         run: bun run test:web
 
-      - name: Mobile client tests
-        run: bun run test:mobile
-
       - name: Backend tests
         run: bun run test:backend
 

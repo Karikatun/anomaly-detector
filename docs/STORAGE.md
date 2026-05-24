@@ -6,7 +6,7 @@ The supported DigitalOcean-first storage path is:
 
 - DigitalOcean Spaces Standard Storage for persistent objects.
 - Spaces CDN for public images, media, and downloads.
-- Backend-issued presigned URLs for direct browser/mobile uploads and private downloads.
+- Backend-issued presigned URLs for direct browser/client uploads and private downloads.
 - App Platform only for API/runtime code and short-lived temporary files.
 
 Do not store user uploads or durable generated assets on the App Platform container filesystem. App Platform containers can be replaced during deployments and scaling, and their local filesystem is not durable.

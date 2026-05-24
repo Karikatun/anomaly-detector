@@ -1,3 +1,0 @@
-flows:
-  - flows/**/*.yaml
-testOutputDir: .maestro/reports
