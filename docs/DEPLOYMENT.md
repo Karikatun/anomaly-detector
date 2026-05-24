@@ -4,11 +4,11 @@ Use this document only after the user has asked for deployment. Read the root [R
 
 The default production path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Ask for product-facing release details instead:
 
-- which active surfaces should be released now: backend/API, web, landing, mobile, or full-stack;
-- production domains/URLs for API, web, landing, and the mobile API endpoint;
+- which active surfaces should be released now: backend/API, web, landing, or full-stack;
+- production domains/URLs for API, web, and landing;
 - whether uploads, images, media, exports, or downloads need DigitalOcean Spaces in this release;
 - whether real-time chat, presence, collaboration, live notifications, or WebSocket-style updates must work across multiple backend instances;
-- whether mobile work includes EAS builds only or App Store / Google Play submission;
+- whether mobile is active; if yes, switch to the `mobile` branch before mobile release planning;
 - whether an external CDN is required for advanced bot, rate-limit, or geographic traffic controls.
 
 Local setup from `README.md` and [LOCAL_DATABASE.md](LOCAL_DATABASE.md) does not require cloud credentials.
@@ -28,7 +28,7 @@ REFRESH_TOKEN_TTL_DAYS=30
 COOKIE_SECURE=true
 ```
 
-`CORS_ORIGINS` must include every browser origin that calls the API with credentials. Use exact origins only, for example `https://web.example.com`; do not use wildcards, empty values, or paths. Native mobile apps do not need CORS, but Expo web previews or browser-based mobile previews do.
+`CORS_ORIGINS` must include every browser origin that calls the API with credentials. Use exact origins only, for example `https://web.example.com`; do not use wildcards, empty values, or paths.
 
 `JWT_SECRET` belongs in the production backend runtime env. Generate it with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
 
@@ -130,7 +130,7 @@ doctl apps spec validate .scratch/deploy/landing-static-app.yaml
 doctl apps create --spec .scratch/deploy/landing-static-app.yaml
 ```
 
-Static Sites build from the connected Git branch, not from local `dist` folders. The branch must contain the full monorepo: root `package.json`, `bun.lock`, `backend`, `web`, `landing`, `mobile`, and `packages/contracts`.
+Static Sites build from the connected Git branch, not from local `dist` folders. The branch must contain the full web/backend monorepo: root `package.json`, `bun.lock`, `backend`, `web`, `landing`, and `packages/contracts`.
 
 ## Backend API
 
@@ -298,28 +298,9 @@ Use an external CDN only for explicit advanced needs such as custom WAF rules, b
 - use HTTPS on port `443`;
 - do not forward the original custom-domain `Host` header to App Platform.
 
-## Expo / EAS
+## Mobile Releases
 
-Mobile deployment is separate from DigitalOcean hosting. Use the deployed API URL as the mobile public API endpoint:
-
-```bash
-bunx eas-cli env:create --name EXPO_PUBLIC_API_URL --value https://api.example.com --environment production
-```
-
-Development build:
-
-```bash
-bunx eas-cli build --profile development --platform android
-bunx eas-cli build --profile development --platform ios
-```
-
-Production build:
-
-```bash
-bunx eas-cli build --profile production --platform all
-```
-
-Apple App Store release work requires Apple Developer Program access. Google Play release work requires a Google Play Developer account.
+The default branch does not contain the runnable Expo app. Mobile release work, including Expo/EAS env, development builds, production builds, and App Store / Google Play guidance, lives on the `mobile` branch.
 
 ## Validation
 
@@ -382,5 +363,3 @@ For deployment questions, consult current upstream docs first. This document cap
 - Yandex Cloud alternative runbook: https://yandex.cloud/en/docs/
 - Docker Compose: https://docs.docker.com/compose/
 - Prisma migrations: https://www.prisma.io/docs/orm/prisma-migrate
-- Expo EAS: https://docs.expo.dev/eas/
-- EAS Build: https://docs.expo.dev/build/introduction/

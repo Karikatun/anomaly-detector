@@ -18,8 +18,9 @@ DigitalOcean remains the default provider in this template. Do not ask the user 
 
 Ask only product and release questions:
 
-- which surfaces are being deployed now: backend/API, web, landing, mobile, or full-stack;
-- production domains for API, web, landing, media/CDN, and the mobile API endpoint;
+- which surfaces are being deployed now: backend/API, web, landing, or full-stack;
+- production domains for API, web, landing, and media/CDN;
+- whether mobile is active; if yes, switch to the `mobile` branch before mobile release planning;
 - whether backend/database traffic may stay private inside a Yandex Cloud network or must be reachable from the internet;
 - whether uploads/media are public, private, or mixed;
 - whether real-time chat, presence, collaboration, live notifications, or WebSocket-style updates must work across multiple backend instances;
