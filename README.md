@@ -1,5 +1,9 @@
 # Vibe Coding Template
 
+<p align="center">
+  <img src="docs/assets/vibe_tmpl_schema.png" alt="Vibe Coding Template architecture schema" width="100%">
+</p>
+
 A full-stack starter for web and backend products: one repository with a Bun/Hono backend, a React browser client, an Astro landing project, and shared API contracts. The runnable Expo mobile template lives on the `mobile` branch so the default branch stays focused on web, backend, landing, infrastructure, and shared contracts.
 
 ## Agent Intake Checklist Before Installing
