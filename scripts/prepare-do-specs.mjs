@@ -44,6 +44,7 @@ const packageJson = JSON.parse(await readFile(resolve(repoRoot, 'package.json'),
 const projectSlug = doName(process.env.DO_PROJECT_SLUG ?? packageJson.name ?? 'app')
 const gitBranch = requiredBranch()
 const githubRepo = requiredGithubRepo()
+assertCleanReleaseGitState(gitBranch)
 const appRegion = process.env.DO_APP_REGION?.trim() || 'nyc'
 const dbComponentName = doName(process.env.DO_DB_COMPONENT_NAME ?? `${projectSlug}-db`, 32)
 const dbClusterName = doName(process.env.DO_DB_CLUSTER_NAME ?? `${projectSlug}-pg`)
@@ -187,6 +188,59 @@ function requiredBranch() {
     return branch || 'main'
   } catch {
     return 'main'
+  }
+}
+
+function assertCleanReleaseGitState(gitBranch) {
+  if (process.env.NODE_ENV === 'test' && process.env.DO_SKIP_RELEASE_GIT_CHECK_FOR_TESTS === '1') {
+    return
+  }
+
+  const status = gitOutput(['status', '--short', '--branch'])
+  const lines = status.split('\n').filter(Boolean)
+  const branchLine = lines[0] ?? ''
+  const dirtyLines = lines.slice(1)
+  const currentBranch = gitOutput(['branch', '--show-current'])
+
+  if (!currentBranch) {
+    throw new Error('Deployment requires a named release branch. Stop instead of deploying from a detached checkout.')
+  }
+
+  if (currentBranch && currentBranch !== gitBranch) {
+    throw new Error(
+      `Deployment branch mismatch: current checkout is ${currentBranch}, but DO_GIT_BRANCH is ${gitBranch}. Switch to the release branch instead of deploying from a different dirty or partial workspace.`,
+    )
+  }
+
+  if (!branchLine.includes('...')) {
+    throw new Error(
+      `Deployment branch must track a pushed upstream before generating specs: ${branchLine}. Push the intended release branch first, or stop deployment.`,
+    )
+  }
+
+  if (/\[(ahead|behind|gone|diverged)/.test(branchLine)) {
+    throw new Error(
+      `Deployment branch must be pushed and in sync before generating specs: ${branchLine}. Commit and push the intended release, or stop deployment.`,
+    )
+  }
+
+  if (dirtyLines.length > 0) {
+    const preview = dirtyLines.slice(0, 8).join('\n')
+    const suffix = dirtyLines.length > 8 ? `\n...and ${dirtyLines.length - 8} more` : ''
+    throw new Error(
+      `Deployment requires a clean worktree. Stop instead of cleaning, stashing, resetting, or checking out over another session's work.\n${preview}${suffix}`,
+    )
+  }
+}
+
+function gitOutput(args) {
+  try {
+    return execFileSync('git', args, {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }).trim()
+  } catch (error) {
+    throw new Error(`Deployment release source check failed while running git ${args.join(' ')}: ${error.message}`)
   }
 }
 

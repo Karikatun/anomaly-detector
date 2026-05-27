@@ -15,6 +15,19 @@ Local setup from `README.md` and [LOCAL_DATABASE.md](LOCAL_DATABASE.md) does not
 
 If the user explicitly asks for Yandex Cloud, use [YANDEX_CLOUD.md](YANDEX_CLOUD.md) as the provider runbook. The supported Yandex Cloud alternative is Serverless Containers for backend/API, Managed Service for PostgreSQL for production data, Object Storage for files and static websites, and Cloud CDN for public static/media delivery.
 
+## Release Source Preflight
+
+Before any deployment or cloud-resource update, verify the release source:
+
+```bash
+git remote -v
+git status --short --branch
+```
+
+Deploy only from the intended release branch after the intended commit is pushed and the local branch is in sync with its upstream. If the worktree has modified, deleted, or untracked files, stop and report that deployment is blocked. Do not run `git reset`, `git checkout --`, `git clean`, `git stash`, or equivalent cleanup to make deployment possible unless the user explicitly requested that exact destructive action.
+
+DigitalOcean App Platform builds from the connected Git branch, not from local `dist` folders or uncommitted files. A dirty local checkout can still cause an agent to deploy the wrong branch, generate specs from the wrong release source, or erase another session's work while trying to make the branch clean. The supported failure mode is to stop, not to repair the checkout.
+
 ## Secrets And Backend Env
 
 Do not store secrets in the repository. Minimum backend production env:
@@ -83,6 +96,8 @@ bun run deploy:do:specs <backend-initial|backend-final|web|landing|all>
 ```
 
 The generator rejects empty `value:` lines, unresolved `REPLACE_WITH_*` placeholders, wildcard/empty/path-bearing production CORS origins, short, placeholder, or obviously weak `JWT_SECRET`, and missing build-time static URLs. Do not replace secrets or URLs with manual `sed`, `perl`, or shell one-liners.
+
+The generator also refuses to run unless the current checkout is on the configured deployment branch, the branch tracks a pushed upstream, the branch is not ahead/behind/diverged, and the worktree has no uncommitted or untracked changes.
 
 Concrete App Platform machine defaults live in [../scripts/prepare-do-specs.mjs](../scripts/prepare-do-specs.mjs), not in generated `.scratch` files. The `.do/*.yaml.example` templates intentionally keep budget-bearing values as placeholders so the generator can validate and test them. When changing default tiers, update the generator constants, generator tests, and this document in the same change.
 
@@ -329,6 +344,7 @@ After deployment:
 
 - `GitHub user not authenticated`: App Platform GitHub integration was not connected or did not have repository access before `doctl apps create`.
 - Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, `VITE_API_URL`, and `PUBLIC_WEB_APP_URL` must be concrete before deployment.
+- Dirty or ambiguous release source: deployment tooling must stop when the worktree has uncommitted/untracked files, the checkout branch differs from `DO_GIT_BRANCH`, or the branch is not pushed and in sync.
 - Backend crash on startup: empty, placeholder, or obviously weak `JWT_SECRET` is rejected by env validation, so the spec generator must fail before App Platform deploys it.
 - Broken browser auth CORS: production CORS must use exact HTTPS origins, not wildcard or empty values.
 - Web calling its own `/api/*`: missing `VITE_API_URL` at static build time makes the bundle use the wrong origin.

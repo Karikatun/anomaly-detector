@@ -55,6 +55,18 @@ describe('prepare-do-specs', () => {
     );
   });
 
+  test('rejects deployment spec generation from a different checkout branch', () => {
+    const result = runPrepareSpecs(
+      {
+        DO_GIT_BRANCH: 'codex-deploy-branch-mismatch-test',
+      },
+      { skipReleaseGitCheck: false },
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain('Deployment branch mismatch');
+  });
+
   test('generates explicit backend worker and cron job blocks', () => {
     const result = runPrepareSpecs({
       DO_BACKEND_WORKER_ENABLED: 'true',
@@ -99,13 +111,21 @@ describe('prepare-do-specs', () => {
   });
 });
 
-function runPrepareSpecs(extraEnv = {}) {
+function runPrepareSpecs(extraEnv = {}, { skipReleaseGitCheck = true } = {}) {
+  const testOnlyEnv = skipReleaseGitCheck
+    ? {
+        NODE_ENV: 'test',
+        DO_SKIP_RELEASE_GIT_CHECK_FOR_TESTS: '1',
+      }
+    : {};
+
   return spawnSync(process.execPath, ['scripts/prepare-do-specs.mjs', 'backend-final'], {
     cwd: repoRoot,
     encoding: 'utf8',
     env: {
       PATH: process.env.PATH ?? '',
       HOME: process.env.HOME ?? '',
+      ...testOnlyEnv,
       DO_PROJECT_SLUG: 'vibecoding-template-test',
       DO_GITHUB_REPO: 'owner/repo',
       DO_GIT_BRANCH: 'main',
