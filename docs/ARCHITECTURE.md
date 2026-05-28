@@ -1,12 +1,12 @@
 # Architecture
 
-This repository defines a golden path for web and backend products: shared contracts, one backend, one browser app, a static landing project, and little custom infrastructure. The runnable mobile app lives on the `mobile` branch and extends this architecture only when mobile is active.
+This repository defines a golden path for web and backend products: shared contracts, one backend, one CSR browser app (`webapp`), one Astro SSG/SSR site (`website`), and little custom infrastructure. The runnable mobile app lives on the `mobile` branch and extends this architecture only when mobile is active.
 
 ## Contracts
 
-`packages/contracts` is the source of truth for API payloads, DTOs, and error shapes. New endpoints should start with Zod schemas in contracts. The backend then uses those schemas for request validation, while web uses them in TanStack Form and API clients.
+`packages/contracts` is the source of truth for API payloads, DTOs, and error shapes. New endpoints should start with Zod schemas in contracts. The backend then uses those schemas for request validation, while the webapp uses them in TanStack Form and API clients.
 
-Do not hand-copy API shapes into clients. When a contract changes, validate producer and consumers in one pass: backend route/service and web API client/form. On the `mobile` branch, include the mobile API client/form in that same pass.
+Do not hand-copy API shapes into clients. When a contract changes, validate producer and consumers in one pass: backend route/service and webapp API client/form. On the `mobile` branch, include the mobile API client/form in that same pass.
 
 ## Backend
 
@@ -31,7 +31,7 @@ Routes should stay thin. Do not put business logic into Hono handlers, UI client
 
 The default runtime shape is a modular monolith: one backend codebase, one database, shared contracts, and clear feature boundaries inside the repository. The backend can expose separate API, worker, and cron entrypoints while still sharing Prisma schema, env validation, services, and contracts. Do not add queues, brokers, or extra infrastructure until the product has a concrete need that the monolith cannot meet clearly.
 
-On the default DigitalOcean production path, run the backend/API as one `apps-s-1vcpu-1gb` App Platform container so the starting infrastructure stays inside the low-cost budget when paired with the smallest production Managed PostgreSQL cluster. Add App Platform worker or scheduled-job components from the same `backend/Dockerfile` only when the product has a concrete background or periodic task. `web` and `landing` remain App Platform Static Site components and do not have runtime container sizes.
+On the default DigitalOcean production path, run the backend/API as one `apps-s-1vcpu-1gb` App Platform container so the starting infrastructure stays inside the low-cost budget when paired with the smallest production Managed PostgreSQL cluster. Add App Platform worker or scheduled-job components from the same `backend/Dockerfile` only when the product has a concrete background or periodic task. `webapp` and `website` remain App Platform Static Site components and do not have runtime container sizes, until a `website` route opts into SSR and is deployed as a service.
 
 For real-time features such as chat, presence, collaboration, live notifications, or activity feeds, start with the same backend service. A single instance can keep an in-memory registry of its own WebSocket connections. Once the backend runs multiple instances, in-memory fanout is no longer enough: one user may be connected to instance A while another is connected to instance B. At that point, add a managed Redis-compatible Pub/Sub broker between backend instances so each instance can publish domain events and subscribe to events it must deliver to its local sockets.
 
@@ -46,14 +46,16 @@ Auth v1 is custom JWT-based auth:
 - Passwords use `Bun.password.hash/verify` with Argon2id.
 - Access tokens are short-lived JWTs signed and verified with `jose`.
 - Refresh tokens are opaque random tokens; only their SHA-256 hash is stored in PostgreSQL.
-- Web keeps the refresh token in an HttpOnly cookie and keeps the access token in memory. Local HTTP uses `SameSite=Lax`; HTTPS production uses `Secure` and `SameSite=None` so browser auth works across separate web/API origins.
+- The webapp keeps the refresh token in an HttpOnly cookie and keeps the access token in memory. Local HTTP uses `SameSite=Lax`; HTTPS production uses `Secure` and `SameSite=None` so browser auth works across separate webapp/API origins.
 The `mobile` branch adds native token storage for Expo.
 
 Refresh-token rotation creates a new session and revokes the previous one. `/api/auth/me` checks both the JWT and the active database session.
 
 ## Frontend
 
-Web follows these client rules:
+There are two browser surfaces, split by whether the pages need SEO. `website` (Astro, SSG by default, SSR per route) owns everything that must be public and search-indexable or share with rich previews: landing, marketing, content, and the public side of a storefront or marketplace. `webapp` (React CSR) owns everything that lives behind sign-in and needs no SEO: dashboards, account areas, authenticated tools. A marketplace typically uses both — public catalog in `website`, authenticated app in `webapp` — sharing `@web-app-demo/contracts`. The decision rule the installing agent should apply is in the root [README.md](../README.md) under "Choosing `webapp` vs `website`".
+
+The webapp follows these client rules:
 
 - TanStack Query owns server state.
 - TanStack Form owns form state.
@@ -62,11 +64,11 @@ Web follows these client rules:
 
 Do not create a new form, query, auth, or API abstraction until the existing pattern stops solving the current problem.
 
-`landing` is a separate Astro workspace for a static landing page. It does not own the auth flow and should not duplicate the browser client from `web`. If the landing project starts reading API data or shared DTOs, connect `@web-app-demo/contracts` and validate producer/consumer sides the same way as `web`.
+`website` is a separate Astro workspace for public SSG/SSR pages (landing, content sites, marketplace). Pages prerender to static HTML by default; a route opts into SSR with `export const prerender = false` (Node adapter at runtime). It does not own the auth flow and should not duplicate the CSR client from `webapp`. If the website starts reading API data or shared DTOs, connect `@web-app-demo/contracts` and validate producer/consumer sides the same way as `webapp`.
 
 ## Testing
 
-Backend unit/integration tests verify contracts and auth behavior at the owning layer. Web E2E uses Playwright and starts a real backend + Vite through `webServer`. Mobile E2E lives on the `mobile` branch.
+Backend unit/integration tests verify contracts and auth behavior at the owning layer. Webapp E2E uses Playwright and starts a real backend + Vite through `webServer`. Mobile E2E lives on the `mobile` branch.
 
 Client E2E in this template is a happy-path smoke layer, not the place for large validation matrices. Keep negative payloads, password/JWT/session rules, and error-shape checks in backend tests. Add fast client-level tests for form validation and API state edge cases when those surfaces grow.
 
