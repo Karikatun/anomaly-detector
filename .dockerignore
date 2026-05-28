@@ -9,6 +9,6 @@ coverage
 .env
 .env.*
 !.env.example
-web/e2e/.artifacts
+webapp/e2e/.artifacts
 mobile/.maestro/reports
 *.log
