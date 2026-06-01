@@ -25,6 +25,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Deployment and script tests
+        run: bun run test:deploy
+
       - name: Contract tests
         run: bun run test:contracts
 
