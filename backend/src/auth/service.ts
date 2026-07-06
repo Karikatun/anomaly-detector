@@ -7,6 +7,8 @@ import type {
 import type { DbClient } from '../db'
 import type { AppEnv } from '../env'
 import { AppError } from '../http/errors'
+import type { AuthenticatedUserContext } from '../http/context'
+import { userDtoFromAuthenticatedUser } from '../http/context'
 import { Prisma } from '../generated/prisma/client'
 import { signAccessToken, verifyAccessToken } from './access-tokens'
 import { hashPassword, verifyPassword } from './passwords'
@@ -148,7 +150,7 @@ export class AuthService {
     }
   }
 
-  async getMe(accessToken: string | undefined) {
+  async authenticateAccessToken(accessToken: string | undefined): Promise<AuthenticatedUserContext> {
     if (!accessToken) {
       throw new AppError(401, 'UNAUTHORIZED', 'Access token is required')
     }
@@ -176,7 +178,16 @@ export class AuthService {
     }
 
     return {
-      user: toUserDto(session.user),
+      ...toUserDto(session.user),
+      sessionId: session.id,
+    }
+  }
+
+  async getMe(accessToken: string | undefined) {
+    const user = await this.authenticateAccessToken(accessToken)
+
+    return {
+      user: userDtoFromAuthenticatedUser(user),
     }
   }
 
