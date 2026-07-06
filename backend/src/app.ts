@@ -6,16 +6,9 @@ import type { DbClient } from './db'
 import type { AppEnv } from './env'
 import { createAuthRoutes } from './auth/routes'
 import { AuthService } from './auth/service'
+import type { AppHonoEnv } from './http/context'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
-import { createStorageServiceFromEnv, type StorageService } from './storage/service'
-
-type AppBindings = {
-  Variables: {
-    authService: AuthService
-    env: AppEnv
-    storageService: StorageService | null
-  }
-}
+import { createStorageServiceFromEnv } from './storage/service'
 
 type CreateAppOptions = {
   env: AppEnv
@@ -25,7 +18,7 @@ type CreateAppOptions = {
 export function createApp({ env, prisma }: CreateAppOptions) {
   const authService = new AuthService(prisma, env)
   const storageService = createStorageServiceFromEnv(env)
-  const app = new OpenAPIHono<AppBindings>({
+  const app = new OpenAPIHono<AppHonoEnv>({
     defaultHook: validationErrorHook,
   })
 
