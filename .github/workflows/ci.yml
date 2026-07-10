@@ -31,6 +31,9 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Architecture boundaries
+        run: bun run architecture:check
+
       - name: Webapp lint
         run: bun run --cwd webapp lint
 
