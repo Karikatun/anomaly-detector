@@ -5,7 +5,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query'
 import type {
-  AuthResponse,
+  CookieAuthResponse,
   LoginRequest,
   MeResponse,
   RegisterRequest,
@@ -74,7 +74,7 @@ export function useLogoutMutation({ api, setAccessToken }: AuthMutationOptions) 
 export function applyAuthenticatedSession(
   queryClient: QueryClient,
   setAccessToken: (accessToken: string | null) => void,
-  response: AuthResponse,
+  response: CookieAuthResponse,
 ) {
   setAccessToken(response.accessToken)
   queryClient.setQueryData(authQueryKeys.me(), { user: response.user } satisfies MeResponse)

@@ -2,13 +2,17 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   apiErrorSchema,
-  authResponseSchema,
+  cookieAuthResponseSchema,
+  cookieLogoutRequestSchema,
+  cookieRefreshRequestSchema,
+  cookieRefreshResponseSchema,
   loginRequestSchema,
-  logoutRequestSchema,
   meResponseSchema,
-  refreshRequestSchema,
-  refreshResponseSchema,
   registerRequestSchema,
+  tokenAuthResponseSchema,
+  tokenLogoutRequestSchema,
+  tokenRefreshRequestSchema,
+  tokenRefreshResponseSchema,
 } from './index'
 
 const validUser = {
@@ -72,23 +76,25 @@ describe('auth contracts', () => {
     ).toThrow()
   })
 
-  test('allows cookie-backed web refresh and explicit mobile refresh tokens', () => {
-    expect(refreshRequestSchema.parse(undefined)).toEqual({})
-    expect(refreshRequestSchema.parse({})).toEqual({})
-    expect(logoutRequestSchema.parse(undefined)).toEqual({})
-    expect(logoutRequestSchema.parse({})).toEqual({})
+  test('keeps cookie requests empty and requires explicit token transport credentials', () => {
+    expect(cookieRefreshRequestSchema.parse(undefined)).toEqual({})
+    expect(cookieRefreshRequestSchema.parse({})).toEqual({})
+    expect(cookieLogoutRequestSchema.parse(undefined)).toEqual({})
+    expect(cookieLogoutRequestSchema.parse({})).toEqual({})
 
     const refreshToken = 'r'.repeat(32)
-    expect(refreshRequestSchema.parse({ refreshToken })).toEqual({ refreshToken })
-    expect(logoutRequestSchema.parse({ refreshToken })).toEqual({ refreshToken })
+    expect(tokenRefreshRequestSchema.parse({ refreshToken })).toEqual({ refreshToken })
+    expect(tokenLogoutRequestSchema.parse({ refreshToken })).toEqual({ refreshToken })
 
-    expect(() => refreshRequestSchema.parse({ refreshToken: 'short' })).toThrow()
-    expect(() => logoutRequestSchema.parse({ refreshToken: 'short' })).toThrow()
+    expect(() => cookieRefreshRequestSchema.parse({ refreshToken })).toThrow()
+    expect(() => cookieLogoutRequestSchema.parse({ refreshToken })).toThrow()
+    expect(() => tokenRefreshRequestSchema.parse({})).toThrow()
+    expect(() => tokenLogoutRequestSchema.parse({ refreshToken: 'short' })).toThrow()
   })
 
-  test('validates auth response shapes for web and mobile clients', () => {
+  test('keeps cookie responses token-free and requires tokens for explicit token transport', () => {
     expect(
-      authResponseSchema.parse({
+      cookieAuthResponseSchema.parse({
         user: validUser,
         accessToken: 'access-token',
       }),
@@ -97,20 +103,38 @@ describe('auth contracts', () => {
       accessToken: 'access-token',
     })
 
-    expect(
-      authResponseSchema.parse({
+    expect(() =>
+      cookieAuthResponseSchema.parse({
         user: validUser,
         accessToken: 'access-token',
-        refreshToken: 'mobile-refresh-token',
+        refreshToken: 'must-not-be-exposed',
+      }),
+    ).toThrow()
+
+    expect(
+      tokenAuthResponseSchema.parse({
+        user: validUser,
+        accessToken: 'access-token',
+        refreshToken: 'token-transport-refresh-token',
       }),
     ).toEqual({
       user: validUser,
       accessToken: 'access-token',
-      refreshToken: 'mobile-refresh-token',
+      refreshToken: 'token-transport-refresh-token',
     })
 
-    expect(refreshResponseSchema.parse({ accessToken: 'access-token' })).toEqual({
+    expect(() => tokenAuthResponseSchema.parse({ user: validUser, accessToken: 'access-token' })).toThrow()
+    expect(cookieRefreshResponseSchema.parse({ accessToken: 'access-token' })).toEqual({
       accessToken: 'access-token',
+    })
+    expect(
+      tokenRefreshResponseSchema.parse({
+        accessToken: 'access-token',
+        refreshToken: 'token-transport-refresh-token',
+      }),
+    ).toEqual({
+      accessToken: 'access-token',
+      refreshToken: 'token-transport-refresh-token',
     })
     expect(meResponseSchema.parse({ user: validUser })).toEqual({ user: validUser })
   })

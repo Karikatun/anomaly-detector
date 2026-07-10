@@ -30,7 +30,7 @@ export function createApp({ env, prisma }: CreateAppOptions) {
         if (!origin) return env.CORS_ORIGINS[0] ?? null
         return env.CORS_ORIGINS.includes(origin) ? origin : null
       },
-      allowHeaders: ['Content-Type', 'Authorization', 'X-Client-Platform'],
+      allowHeaders: ['Content-Type', 'Authorization'],
       allowMethods: ['GET', 'POST', 'OPTIONS'],
       credentials: true,
       maxAge: 600,

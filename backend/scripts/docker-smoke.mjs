@@ -121,11 +121,10 @@ async function smokeAuthApi() {
   const baseUrl = `http://127.0.0.1:${hostPort}`
   const email = `docker-smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
 
-  const register = await fetch(`${baseUrl}/api/auth/register`, {
+  const register = await fetch(`${baseUrl}/api/auth/token/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Client-Platform': 'mobile',
     },
     body: JSON.stringify({
       email,

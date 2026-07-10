@@ -1,4 +1,4 @@
-import type { RefreshResponse } from '@web-app-demo/contracts'
+import type { CookieRefreshResponse } from '@web-app-demo/contracts'
 
 import type { ApiClient } from './api'
 
@@ -8,7 +8,7 @@ type BootstrapAuthSessionOptions = {
   setAccessToken: (accessToken: string | null) => void
 }
 
-let bootstrapRefreshPromise: Promise<RefreshResponse> | null = null
+let bootstrapRefreshPromise: Promise<CookieRefreshResponse> | null = null
 
 export async function bootstrapAuthSession({
   api,
