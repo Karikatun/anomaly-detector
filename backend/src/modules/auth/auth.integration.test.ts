@@ -1,8 +1,8 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
-import { createApp } from '../app'
-import { createPrisma } from '../db'
-import type { AppEnv } from '../env'
+import { createApp } from '../../app'
+import { createPrisma } from '../../db'
+import type { AppEnv } from '../../env'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 
