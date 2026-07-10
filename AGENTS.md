@@ -62,6 +62,15 @@
 - Prefer a monolithic backend. Do not split into microservices unless the product has a concrete operational need.
 - For real-time infrastructure decisions, follow `docs/ARCHITECTURE.md` and `docs/DEPLOYMENT.md`.
 
+### Product Modules Architecture
+
+- Follow the progressive DDD-lite module boundaries in `docs/ARCHITECTURE.md`; auth is the backend and web client golden path.
+- Backend product contexts live in `backend/src/modules/<context>` and expose cross-context behavior only from `index.ts` or explicit application ports.
+- Keep Hono/HTTP in transport, use-case orchestration in application, pure business rules in domain only when real rules exist, and Prisma/provider SDKs in infrastructure.
+- Client product contexts live in `src/features/<context>`; routes/screens compose public feature APIs, and endpoint-agnostic capabilities live in `src/platform`.
+- Do not add empty layers, generic/base repositories, CQRS, event sourcing, or state-machine libraries without a concrete product need.
+- Do not move business rules into routes, screens, providers, or UI primitives to avoid defining the owning application/domain boundary.
+
 ## Bootstrap-Only Instructions
 
 <!-- BOOTSTRAP_ONLY_START -->
@@ -151,6 +160,7 @@ This block exists only for fresh installs from the template. If this repository 
 ## Testing And Validation
 
 - Run the smallest meaningful validation that covers the changed surface.
+- Run `bun run architecture:check` whenever module, feature, contracts, platform, or UI dependency boundaries change.
 - Use fast checks for feedback first: targeted tests, typecheck, lint, build, focused scripts, then wider suites only when needed.
 - Use existing test infrastructure. Do not invent a heavier layer unless clearly justified.
 - Validate after implementation and before closing the task.
