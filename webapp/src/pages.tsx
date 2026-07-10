@@ -1,6 +1,5 @@
 import { Link, Outlet } from '@tanstack/react-router'
 
-import { AuthForm } from '@/components/AuthForm'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -13,8 +12,8 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
+import { AuthForm, useAuth } from '@/features/auth'
 import { cn } from '@/lib/utils'
-import { useAuth } from '@/lib/use-auth'
 
 const navLinkClass = cn(
   buttonVariants({ variant: 'ghost', size: 'sm' }),

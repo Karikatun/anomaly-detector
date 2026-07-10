@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 
-import { ApiClient } from '../src/lib/api'
-import { bootstrapAuthSession } from '../src/lib/bootstrap-auth'
+import { AuthApi } from '../src/features/auth/api'
+import { bootstrapAuthSession } from '../src/features/auth/bootstrap'
 
 const originalFetch = globalThis.fetch
 
@@ -9,7 +9,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch
 })
 
-test('ApiClient refreshes and retries authenticated requests with the new access token', async () => {
+test('AuthApi refreshes and retries authenticated requests with the new access token', async () => {
   let accessToken: string | null = 'expired-access-token'
   const calls: Array<{ path: string; authorization: string | null }> = []
 
@@ -46,7 +46,7 @@ test('ApiClient refreshes and retries authenticated requests with the new access
     return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
   }
 
-  const client = new ApiClient({
+  const client = new AuthApi({
     getAccessToken: () => accessToken,
     setAccessToken: (nextAccessToken) => {
       accessToken = nextAccessToken
@@ -62,7 +62,7 @@ test('ApiClient refreshes and retries authenticated requests with the new access
   expect(meCalls[1]?.authorization).toBe('Bearer fresh-access-token')
 })
 
-test('ApiClient shares one refresh across concurrent unauthorized requests', async () => {
+test('AuthApi shares one refresh across concurrent unauthorized requests', async () => {
   let accessToken: string | null = 'expired-access-token'
   const calls: Array<{ path: string; authorization: string | null; credentials: RequestCredentials | undefined }> = []
 
@@ -99,7 +99,7 @@ test('ApiClient shares one refresh across concurrent unauthorized requests', asy
     return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
   }
 
-  const client = new ApiClient({
+  const client = new AuthApi({
     getAccessToken: () => accessToken,
     setAccessToken: (nextAccessToken) => {
       accessToken = nextAccessToken
@@ -119,7 +119,7 @@ test('ApiClient shares one refresh across concurrent unauthorized requests', asy
   expect(calls.every((call) => call.credentials === 'include')).toBe(true)
 })
 
-test('ApiClient clears session when refresh fails during an authenticated request', async () => {
+test('AuthApi clears session when refresh fails during an authenticated request', async () => {
   let accessToken: string | null = 'expired-access-token'
   let authExpiredCalls = 0
   const calls: Array<{ path: string; authorization: string | null }> = []
@@ -145,7 +145,7 @@ test('ApiClient clears session when refresh fails during an authenticated reques
     return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
   }
 
-  const client = new ApiClient({
+  const client = new AuthApi({
     getAccessToken: () => accessToken,
     setAccessToken: (nextAccessToken) => {
       accessToken = nextAccessToken
@@ -169,7 +169,7 @@ test('ApiClient clears session when refresh fails during an authenticated reques
   ])
 })
 
-test('ApiClient preserves backend error status, code, and message', async () => {
+test('AuthApi preserves backend error status, code, and message', async () => {
   globalThis.fetch = async (input) => {
     const path = new URL(String(input)).pathname
 
@@ -188,7 +188,7 @@ test('ApiClient preserves backend error status, code, and message', async () => 
     return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
   }
 
-  const client = new ApiClient({
+  const client = new AuthApi({
     getAccessToken: () => null,
     setAccessToken: () => undefined,
   })
@@ -205,7 +205,7 @@ test('ApiClient preserves backend error status, code, and message', async () => 
   })
 })
 
-test('ApiClient expireSession clears stale web session cookie through logout', async () => {
+test('AuthApi expireSession clears stale web session cookie through logout', async () => {
   let accessToken: string | null = 'stale-access-token'
   let authExpiredCalls = 0
   const calls: Array<{ path: string; method: string | undefined }> = []
@@ -221,7 +221,7 @@ test('ApiClient expireSession clears stale web session cookie through logout', a
     return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
   }
 
-  const client = new ApiClient({
+  const client = new AuthApi({
     getAccessToken: () => accessToken,
     setAccessToken: (nextAccessToken) => {
       accessToken = nextAccessToken

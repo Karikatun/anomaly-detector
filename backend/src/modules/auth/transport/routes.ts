@@ -13,14 +13,15 @@ import {
   tokenRefreshResponseSchema,
 } from '@web-app-demo/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
-import type { Context } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 
-import type { AppEnv } from '../env'
-import type { AppHonoEnv, AuthenticatedHonoEnv } from '../http/context'
-import { userDtoFromAuthenticatedUser } from '../http/context'
-import { AppError, validationErrorHook } from '../http/errors'
-import { requireAuth } from './middleware'
+import type { AppEnv } from '../../../env'
+import { AppError, validationErrorHook } from '../../../http/errors'
+import type { AuthService } from '../application/auth-service'
+import { userDtoFromPrincipal } from '../domain/user'
+import { executeAuth } from './errors'
+import type { AuthHttpEnv } from './middleware'
 
 const refreshCookieName = 'web_app_demo_refresh'
 
@@ -245,67 +246,71 @@ const tokenLogoutRoute = createRoute({
   },
 })
 
-export function createAuthRoutes() {
-  const routes = new OpenAPIHono<AppHonoEnv>({ defaultHook: validationErrorHook })
-  const protectedRoutes = new OpenAPIHono<AuthenticatedHonoEnv>({
+type CreateAuthRoutesOptions = {
+  env: AppEnv
+  requireAuth: MiddlewareHandler<AuthHttpEnv>
+  service: AuthService
+}
+
+export function createAuthRoutes({ env, requireAuth, service }: CreateAuthRoutesOptions) {
+  const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
+  const protectedRoutes = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
   })
 
   routes.openapi(cookieRegisterRoute, async (c) => {
-    const result = await c.get('authService').register(c.req.valid('json'), requestMetadata(c))
-    setRefreshCookie(c, result.refreshToken, c.get('env'))
+    const result = await executeAuth(() => service.register(c.req.valid('json'), requestMetadata(c)))
+    setRefreshCookie(c, result.refreshToken, env)
     return c.json(withoutRefreshToken(result), 201)
   })
 
   routes.openapi(tokenRegisterRoute, async (c) => {
-    const result = await c.get('authService').register(c.req.valid('json'), requestMetadata(c))
+    const result = await executeAuth(() => service.register(c.req.valid('json'), requestMetadata(c)))
     return c.json(result, 201)
   })
 
   routes.openapi(cookieLoginRoute, async (c) => {
-    const result = await c.get('authService').login(c.req.valid('json'), requestMetadata(c))
-    setRefreshCookie(c, result.refreshToken, c.get('env'))
+    const result = await executeAuth(() => service.login(c.req.valid('json'), requestMetadata(c)))
+    setRefreshCookie(c, result.refreshToken, env)
     return c.json(withoutRefreshToken(result), 200)
   })
 
   routes.openapi(tokenLoginRoute, async (c) => {
-    const result = await c.get('authService').login(c.req.valid('json'), requestMetadata(c))
+    const result = await executeAuth(() => service.login(c.req.valid('json'), requestMetadata(c)))
     return c.json(result, 200)
   })
 
   routes.openapi(cookieRefreshRoute, async (c) => {
-    const env = c.get('env')
     const cookieRefreshToken = getRefreshCookie(c)
     assertTrustedCookieRequest(c, env, cookieRefreshToken)
-    const result = await c.get('authService').refresh(cookieRefreshToken, requestMetadata(c))
+    const result = await executeAuth(() => service.refresh(cookieRefreshToken, requestMetadata(c)))
     setRefreshCookie(c, result.refreshToken, env)
     return c.json(withoutRefreshToken(result), 200)
   })
 
   routes.openapi(tokenRefreshRoute, async (c) => {
-    const result = await c
-      .get('authService')
-      .refresh(c.req.valid('json').refreshToken, requestMetadata(c))
+    const result = await executeAuth(() =>
+      service.refresh(c.req.valid('json').refreshToken, requestMetadata(c)),
+    )
     return c.json(result, 200)
   })
 
   protectedRoutes.use('/me', requireAuth)
   protectedRoutes.openapi(meRoute, async (c) => {
-    return c.json({ user: userDtoFromAuthenticatedUser(c.var.user) }, 200)
+    return c.json({ user: userDtoFromPrincipal(c.var.user) }, 200)
   })
   routes.route('/', protectedRoutes)
 
   routes.openapi(cookieLogoutRoute, async (c) => {
-    const env = c.get('env')
     const cookieRefreshToken = getRefreshCookie(c)
     assertTrustedCookieRequest(c, env, cookieRefreshToken)
-    await c.get('authService').logout(cookieRefreshToken)
+    await executeAuth(() => service.logout(cookieRefreshToken))
     deleteRefreshCookie(c, env)
     return c.body(null, 204)
   })
 
   routes.openapi(tokenLogoutRoute, async (c) => {
-    await c.get('authService').logout(c.req.valid('json').refreshToken)
+    await executeAuth(() => service.logout(c.req.valid('json').refreshToken))
     return c.body(null, 204)
   })
 

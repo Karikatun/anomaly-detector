@@ -4,11 +4,8 @@ import { secureHeaders } from 'hono/secure-headers'
 
 import type { DbClient } from './db'
 import type { AppEnv } from './env'
-import { createAuthRoutes } from './auth/routes'
-import { AuthService } from './auth/service'
-import type { AppHonoEnv } from './http/context'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
-import { createStorageServiceFromEnv } from './storage/service'
+import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 
 type CreateAppOptions = {
   env: AppEnv
@@ -16,9 +13,8 @@ type CreateAppOptions = {
 }
 
 export function createApp({ env, prisma }: CreateAppOptions) {
-  const authService = new AuthService(prisma, env)
-  const storageService = createStorageServiceFromEnv(env)
-  const app = new OpenAPIHono<AppHonoEnv>({
+  const auth = createAuthModule({ db: prisma, env })
+  const app = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
   })
 
@@ -36,13 +32,6 @@ export function createApp({ env, prisma }: CreateAppOptions) {
       maxAge: 600,
     }),
   )
-  app.use('*', async (c, next) => {
-    c.set('authService', authService)
-    c.set('env', env)
-    c.set('storageService', storageService)
-    await next()
-  })
-
   app.get('/', (c) => {
     return c.json({
       name: 'web_app_demo backend',
@@ -56,7 +45,7 @@ export function createApp({ env, prisma }: CreateAppOptions) {
     })
   })
 
-  app.route('/api/auth', createAuthRoutes())
+  app.route('/api/auth', auth.routes)
 
   app.doc('/openapi.json', {
     openapi: '3.0.0',
