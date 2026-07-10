@@ -39,7 +39,7 @@ function run(command, args, options = {}) {
   })
 
   if (result.status !== 0) {
-    process.exit(result.status ?? 1)
+    throw new Error(`${command} ${args.join(' ')} failed with exit code ${result.status ?? 1}`)
   }
 }
 
@@ -92,7 +92,7 @@ async function waitForComposePostgres() {
   }
 
   process.stderr.write('Timed out waiting for postgres_test\n')
-  process.exit(1)
+  throw new Error('Timed out waiting for postgres_test')
 }
 
 async function waitForHealth() {
@@ -113,8 +113,8 @@ async function waitForHealth() {
   }
 
   process.stderr.write(`Timed out waiting for ${url}\n`)
-  run('docker', ['logs', containerName])
-  process.exit(1)
+  spawnSync('docker', ['logs', containerName], { stdio: 'inherit' })
+  throw new Error(`Timed out waiting for ${url}`)
 }
 
 async function smokeAuthApi() {
@@ -155,20 +155,20 @@ async function smokeAuthApi() {
   process.stdout.write('Backend Docker DB-backed auth smoke passed\n')
 }
 
-run('docker', [...composeArgs, 'up', '-d', 'postgres_test'], { env: dockerEnv })
-await waitForComposePostgres()
-
-run('bun', ['run', '--cwd', 'backend', 'prisma:deploy'], {
-  env: {
-    ...process.env,
-    DATABASE_URL: databaseUrlForHost,
-  },
-})
-
-run('docker', ['build', '-f', 'backend/Dockerfile', '-t', imageName, '.'])
-spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' })
-
 try {
+  run('docker', [...composeArgs, 'up', '-d', 'postgres_test'], { env: dockerEnv })
+  await waitForComposePostgres()
+
+  run('bun', ['run', '--cwd', 'backend', 'prisma:deploy'], {
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrlForHost,
+    },
+  })
+
+  run('docker', ['build', '-f', 'backend/Dockerfile', '-t', imageName, '.'])
+  spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' })
+
   run('docker', [
     'run',
     '--rm',
@@ -196,4 +196,9 @@ try {
   await smokeAuthApi()
 } finally {
   spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' })
+  spawnSync('docker', [...composeArgs, 'down', '--volumes', '--remove-orphans'], {
+    cwd: repositoryRoot,
+    env: dockerEnv,
+    stdio: 'inherit',
+  })
 }
