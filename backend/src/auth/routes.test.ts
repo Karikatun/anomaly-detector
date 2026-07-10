@@ -28,7 +28,6 @@ describe('auth routes', () => {
       headers: {
         'Content-Type': 'application/json',
         Cookie: refreshCookie,
-        'X-Client-Platform': 'web',
       },
       body: JSON.stringify({}),
     })
@@ -43,7 +42,6 @@ describe('auth routes', () => {
         'Content-Type': 'application/json',
         Cookie: refreshCookie,
         Origin: 'https://attacker.example',
-        'X-Client-Platform': 'web',
       },
       body: JSON.stringify({}),
     })

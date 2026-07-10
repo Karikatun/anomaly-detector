@@ -33,29 +33,30 @@ export const loginRequestSchema = z.object({
   password: passwordSchema,
 })
 
-export const refreshRequestSchema = z
-  .object({
-    refreshToken: z.string().min(32).optional(),
-  })
-  .optional()
-  .default({})
+export const cookieRefreshRequestSchema = z.object({}).strict().optional().default({})
+export const cookieLogoutRequestSchema = z.object({}).strict().optional().default({})
 
-export const logoutRequestSchema = z
-  .object({
-    refreshToken: z.string().min(32).optional(),
-  })
-  .optional()
-  .default({})
-
-export const authResponseSchema = z.object({
-  user: userSchema,
-  accessToken: z.string(),
-  refreshToken: z.string().optional(),
+export const tokenRefreshRequestSchema = z.object({
+  refreshToken: z.string().min(32),
 })
 
-export const refreshResponseSchema = z.object({
+export const tokenLogoutRequestSchema = tokenRefreshRequestSchema
+
+export const cookieAuthResponseSchema = z.object({
+  user: userSchema,
   accessToken: z.string(),
-  refreshToken: z.string().optional(),
+}).strict()
+
+export const tokenAuthResponseSchema = cookieAuthResponseSchema.extend({
+  refreshToken: z.string(),
+})
+
+export const cookieRefreshResponseSchema = z.object({
+  accessToken: z.string(),
+}).strict()
+
+export const tokenRefreshResponseSchema = cookieRefreshResponseSchema.extend({
+  refreshToken: z.string(),
 })
 
 export const meResponseSchema = z.object({
@@ -66,8 +67,12 @@ export type UserDto = z.infer<typeof userSchema>
 export type RegisterRequest = z.input<typeof registerRequestSchema>
 export type RegisterPayload = z.output<typeof registerRequestSchema>
 export type LoginRequest = z.infer<typeof loginRequestSchema>
-export type RefreshRequest = z.infer<typeof refreshRequestSchema>
-export type LogoutRequest = z.infer<typeof logoutRequestSchema>
-export type AuthResponse = z.infer<typeof authResponseSchema>
-export type RefreshResponse = z.infer<typeof refreshResponseSchema>
+export type CookieRefreshRequest = z.infer<typeof cookieRefreshRequestSchema>
+export type CookieLogoutRequest = z.infer<typeof cookieLogoutRequestSchema>
+export type TokenRefreshRequest = z.infer<typeof tokenRefreshRequestSchema>
+export type TokenLogoutRequest = z.infer<typeof tokenLogoutRequestSchema>
+export type CookieAuthResponse = z.infer<typeof cookieAuthResponseSchema>
+export type TokenAuthResponse = z.infer<typeof tokenAuthResponseSchema>
+export type CookieRefreshResponse = z.infer<typeof cookieRefreshResponseSchema>
+export type TokenRefreshResponse = z.infer<typeof tokenRefreshResponseSchema>
 export type MeResponse = z.infer<typeof meResponseSchema>

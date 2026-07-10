@@ -1,18 +1,16 @@
 import {
   apiErrorSchema,
-  authResponseSchema,
+  cookieAuthResponseSchema,
+  cookieLogoutRequestSchema,
+  cookieRefreshRequestSchema,
+  cookieRefreshResponseSchema,
   loginRequestSchema,
-  logoutRequestSchema,
   meResponseSchema,
-  refreshRequestSchema,
-  refreshResponseSchema,
   registerRequestSchema,
-  type AuthResponse,
+  type CookieAuthResponse,
+  type CookieRefreshResponse,
   type LoginRequest,
-  type LogoutRequest,
   type MeResponse,
-  type RefreshRequest,
-  type RefreshResponse,
   type RegisterRequest,
 } from '@web-app-demo/contracts'
 import type { z } from 'zod'
@@ -46,33 +44,33 @@ export class ApiRequestError extends Error {
 
 export class ApiClient {
   private readonly options: ApiClientOptions
-  private refreshPromise: Promise<RefreshResponse> | null = null
+  private refreshPromise: Promise<CookieRefreshResponse> | null = null
 
   constructor(options: ApiClientOptions) {
     this.options = options
   }
 
-  register(input: RegisterRequest): Promise<AuthResponse> {
+  register(input: RegisterRequest): Promise<CookieAuthResponse> {
     const payload = registerRequestSchema.parse(input)
-    return this.request('/api/auth/register', authResponseSchema, {
+    return this.request('/api/auth/register', cookieAuthResponseSchema, {
       method: 'POST',
       body: payload,
       auth: false,
     })
   }
 
-  login(input: LoginRequest): Promise<AuthResponse> {
+  login(input: LoginRequest): Promise<CookieAuthResponse> {
     const payload = loginRequestSchema.parse(input)
-    return this.request('/api/auth/login', authResponseSchema, {
+    return this.request('/api/auth/login', cookieAuthResponseSchema, {
       method: 'POST',
       body: payload,
       auth: false,
     })
   }
 
-  refresh(input: RefreshRequest = {}): Promise<RefreshResponse> {
-    const payload = refreshRequestSchema.parse(input)
-    return this.request('/api/auth/refresh', refreshResponseSchema, {
+  refresh(): Promise<CookieRefreshResponse> {
+    const payload = cookieRefreshRequestSchema.parse({})
+    return this.request('/api/auth/refresh', cookieRefreshResponseSchema, {
       method: 'POST',
       body: payload,
       auth: false,
@@ -86,8 +84,8 @@ export class ApiClient {
     })
   }
 
-  async logout(input: LogoutRequest = {}) {
-    const payload = logoutRequestSchema.parse(input)
+  async logout() {
+    const payload = cookieLogoutRequestSchema.parse({})
     await this.rawRequest('/api/auth/logout', {
       method: 'POST',
       body: payload,
@@ -154,9 +152,7 @@ export class ApiClient {
   }
 
   private headers(options: RequestOptions) {
-    const headers = new Headers({
-      'X-Client-Platform': 'web',
-    })
+    const headers = new Headers()
 
     if (options.body !== undefined) {
       headers.set('Content-Type', 'application/json')
