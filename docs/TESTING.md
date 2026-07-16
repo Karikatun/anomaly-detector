@@ -5,7 +5,7 @@ The goal of this template's tests is to show future agents where behavior should
 ## Pyramid
 
 - Contracts/unit: shared Zod schema matrices, env parsing, JWTs, password hashing, client API refresh/retry behavior, and token cleanup.
-- Backend integration: refresh-token rotation, auth guards, duplicate registration, concurrency, and stable error shapes through real routes and PostgreSQL.
+- Backend integration: refresh-token rotation and replay detection, auth guards, duplicate registration, concurrency, and stable error shapes through real routes and PostgreSQL.
 - Webapp Playwright: valuable browser flows through a real backend and Vite UI.
 - Mobile Maestro: lives on the `mobile` branch with the runnable Expo app.
 
@@ -45,7 +45,7 @@ Backend tests live next to backend code and verify auth behavior through service
 
 The integration and Docker smoke runners refuse database names that do not end with `_test` unless an override is set intentionally. This protects `web_app_demo` development data from test writes.
 
-The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health`, and removes only the smoke container it created.
+The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created.
 
 `.github/workflows/ci.yml` runs typecheck, deployment/script tests, contract tests, webapp client tests, backend tests, and the webapp Playwright smoke flow on pushes to `main` and `master` plus pull requests.
 
@@ -74,7 +74,8 @@ The webapp E2E flow:
 - starts the backend on `E2E_BACKEND_PORT`, which defaults to a repository-derived port;
 - starts Vite on `E2E_WEB_PORT`, which defaults to a repository-derived port;
 - stops its `postgres_test` compose project and removes the test volume after the run unless `E2E_KEEP_DOCKER=1` is set;
-- runs the auth smoke path: client validation visibility -> register/login mode switching -> register -> cookie refresh after reload -> protected route -> logout -> invalid login error -> successful login.
+- runs the auth smoke path: client validation visibility -> register/login mode switching -> register -> cookie refresh after reload -> protected route -> logout -> invalid login error -> successful login;
+- restores one logical browser session concurrently in two tabs, propagates confirmed logout and bootstrap-error recovery, and converges both tabs on the winning session after competing account changes.
 
 Useful env:
 

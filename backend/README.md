@@ -41,7 +41,7 @@ On Windows PowerShell, use `Copy-Item backend/.env.example backend/.env` instead
 
 `bun run test:integration` starts `postgres_test` from `../docker-compose.yml`, applies Prisma migrations to `web_app_demo_test`, and runs DB-backed auth API tests. If Docker is managed separately, set `TEST_SKIP_DOCKER=1` and `TEST_DATABASE_URL`. The test database name must end with `_test` unless `TEST_ALLOW_NON_TEST_DATABASE=1` is set intentionally.
 
-`bun run smoke:docker` builds the backend Docker image, starts it against `postgres_test`, waits for `/health`, and removes only the smoke container it created.
+`bun run smoke:docker` builds the backend Docker image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created.
 
 ## Env
 
@@ -51,9 +51,13 @@ The example `TEST_DATABASE_URL` matches the Docker Compose `postgres_test` servi
 
 Keep an explicit username and password in Prisma connection URLs even on local native PostgreSQL installs. Peer-auth style URLs without a user can make Prisma schema-engine commands such as `migrate dev`, `migrate deploy`, and `db push` fail with an unhelpful generic engine error.
 
-`JWT_SECRET` must be at least 32 characters. For production, generate it with `openssl rand -hex 32`; this creates 32 random bytes encoded as 64 hex characters. Do not use the `.env.example` placeholder, repeated characters, or human phrases.
+`JWT_SECRET` must be at least 32 characters locally. Production accepts the 64-or-more-character hexadecimal output of `openssl rand -hex 32`; do not use the `.env.example` placeholder, repeated characters, or human phrases.
 
-`COOKIE_SECURE=false` is appropriate for local HTTP; production should use `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, or path-bearing CORS origins are invalid. Cookie-backed `refresh` and `logout` requests also require a trusted `Origin` in production cookie mode.
+`COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
+
+Auth writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind a trusted proxy, set `TRUST_PROXY=true` together with the provider's authoritative `TRUSTED_PROXY_CLIENT_IP_HEADER`; use `TRUSTED_PROXY_CLIENT_IP_POSITION=last` only when the provider appends the client to a comma-separated chain. DigitalOcean App Platform uses `do-connecting-ip`, while the documented Yandex Serverless Containers path uses the last `X-Forwarded-For` value. The default App Platform shape is one API instance. Before horizontally scaling, move rate-limit state to a shared trusted store or edge/WAF layer.
+
+`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `auth:sessions:cleanup` on a schedule to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`.
 
 DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete Spaces group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
 
@@ -63,7 +67,7 @@ The backend is one workspace with one Prisma schema and one Dockerfile, but it h
 
 - API: `bun run start:api`, backed by `src/index.ts`.
 - Worker: `bun run start:worker`, backed by `src/worker.ts`. It is intentionally empty until a real long-running background handler is added, and deployment generation refuses to deploy this placeholder command as an App Platform worker.
-- Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Current local validation tasks are `noop` and `db:ping`.
+- Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, and `auth:sessions:cleanup`.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
 
@@ -85,9 +89,10 @@ Production deployment for the backend uses DigitalOcean App Platform with Digita
 - `POST /api/auth/token/refresh`
 - `POST /api/auth/token/logout`
 - `GET /openapi.json`
-- `GET /health`
+- `GET /health/live`
+- `GET /health/ready`
 
-Passwords are hashed through `Bun.password` with Argon2id. Access tokens are short-lived JWTs through `jose`. Refresh tokens are opaque random tokens; only a SHA-256 hash is stored in the database. Refresh rotates the token and revokes the previous session.
+Passwords are hashed through `Bun.password` with Argon2id. Access tokens are short-lived JWTs through `jose`. Initial refresh tokens are random; rotated successors are opaque, domain-separated HMAC values derived with the server secret so concurrent uses of the same credential receive the same successor. Only current and immediately previous SHA-256 hashes are stored in the database. Refresh atomically rotates the credential inside the same logical session, so another browser tab's still-valid access token is not revoked. Reuse of the previous credential after the short race-tolerance window revokes that session as potentially compromised.
 
 ## Architecture
 

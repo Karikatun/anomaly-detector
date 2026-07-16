@@ -60,11 +60,11 @@ Auth v1 is custom JWT-based auth:
 
 - Passwords use `Bun.password.hash/verify` with Argon2id.
 - Access tokens are short-lived JWTs signed and verified with `jose`.
-- Refresh tokens are opaque random tokens; only their SHA-256 hash is stored in PostgreSQL.
+- Refresh tokens are opaque random tokens; only the current and immediately previous SHA-256 hashes are stored in PostgreSQL.
 - Browser routes under `/api/auth/*` keep the refresh token only in an HttpOnly cookie and never return it in JSON. Local HTTP uses `SameSite=Lax`; HTTPS production uses `Secure` and `SameSite=None` so browser auth works across separate webapp/API origins.
 - Native routes under `/api/auth/token/*` never read or set cookies and explicitly exchange refresh tokens in JSON/body payloads. The `mobile` branch stores those tokens through its native adapter.
 
-Refresh-token rotation creates a new session and revokes the previous one. `/api/auth/me` checks both the JWT and the active database session.
+Refresh-token rotation updates the credential atomically inside one logical session, preserving already-issued access tokens for other tabs. The immediately previous refresh credential is accepted only during a short race-tolerance window; replay after that window revokes the session as potentially compromised. `/api/auth/me` checks both the JWT and the active database session, including its absolute lifetime.
 
 ## Frontend
 
@@ -104,11 +104,11 @@ Do not hand-write Prisma migration SQL. Change `backend/prisma/schema.prisma`, t
 
 ```bash
 bun run --cwd backend prisma:migrate
+```
 
 The template uses database-generated UUIDv7 primary keys (`@default(dbgenerated("uuidv7()")) @db.Uuid`) instead of ORM-generated `cuid()`/`uuid()`. That keeps ID generation consistent for Prisma Client, direct SQL, imports, and any future background workers or non-Prisma writers, but it also means the schema requires PostgreSQL 18+.
 
 Treat UUIDv7 as a repository-level rule, not a one-off model detail. New primary keys should use database-generated UUIDv7, and foreign keys that reference those IDs should use `@db.Uuid` so the type stays native all the way through PostgreSQL and Prisma.
-```
 
 For production, apply already-created migrations:
 
