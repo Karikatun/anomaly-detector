@@ -21,6 +21,8 @@ type AuthServiceDependencies = {
   passwords: Passwords
   projectUser: ProjectUser
   refreshTokenTtlDays: number
+  refreshReuseGraceSeconds: number
+  sessionAbsoluteTtlDays: number
   refreshTokens: RefreshTokens
   repository: AuthRepository
 }
@@ -35,8 +37,19 @@ export class AuthService {
     }
 
     const passwordHash = await this.dependencies.passwords.hash(input.password)
-    const user = await this.dependencies.repository.createPasswordUser({ ...input, passwordHash })
-    return this.issueSession(user, metadata)
+    const now = this.dependencies.clock.now()
+    const refreshToken = this.dependencies.refreshTokens.create()
+    const { user, session } = await this.dependencies.repository.createPasswordUserWithSession({
+      user: { ...input, passwordHash },
+      session: {
+        refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+        refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
+        expiresAt: this.refreshExpiresAt(now),
+        metadata,
+      },
+    })
+
+    return this.sessionResponse(user, session.id, refreshToken)
   }
 
   async login(input: LoginRequest, metadata: SessionMetadata) {
@@ -57,34 +70,84 @@ export class AuthService {
     }
 
     const now = this.dependencies.clock.now()
-    const currentSession = await this.dependencies.repository.findActiveRefreshSession({
-      refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+    const presentedRefreshTokenHash = this.dependencies.refreshTokens.hash(refreshToken)
+    const refreshLookup = {
+      refreshTokenHash: presentedRefreshTokenHash,
+      refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
       now,
-    })
+      createdAfter: this.sessionAbsoluteNotBefore(now),
+      reuseGraceAfter: new Date(
+        now.getTime() - this.dependencies.refreshReuseGraceSeconds * 1000,
+      ),
+    }
+    let currentSession = await this.dependencies.repository.findActiveRefreshSession(refreshLookup)
     if (!currentSession) {
       throw new AuthFailure('refresh_session_invalid', 'Refresh session is invalid or expired')
     }
 
-    const nextRefreshToken = this.dependencies.refreshTokens.create()
-    const nextSession = await this.dependencies.repository.rotateRefreshSession({
-      currentSessionId: currentSession.id,
-      userId: currentSession.userId,
-      now,
-      nextRefreshTokenHash: this.dependencies.refreshTokens.hash(nextRefreshToken),
-      nextExpiresAt: this.refreshExpiresAt(now),
-      metadata,
-    })
-    if (!nextSession) {
+    if (currentSession.credentialState === 'reused') {
+      await this.dependencies.repository.revokeSessionById({
+        sessionId: currentSession.id,
+        now,
+      })
       throw new AuthFailure('refresh_session_invalid', 'Refresh session is invalid or expired')
     }
 
+    const nextRefreshToken = this.dependencies.refreshTokens.rotate(refreshToken)
+    const nextRefreshTokenHash = this.dependencies.refreshTokens.hash(nextRefreshToken)
+    const nextRefreshTokenFamilyHash = this.dependencies.refreshTokens.familyHash(nextRefreshToken)
+    if (currentSession.credentialState === 'previous_within_grace') {
+      if (currentSession.refreshTokenHash !== nextRefreshTokenHash) {
+        throw new AuthFailure('refresh_session_invalid', 'Refresh session is invalid or expired')
+      }
+      return this.refreshResponse(currentSession, nextRefreshToken)
+    }
+
+    const rotated = await this.dependencies.repository.rotateRefreshSession({
+      currentSessionId: currentSession.id,
+      currentRefreshTokenHash: currentSession.refreshTokenHash,
+      now,
+      nextRefreshTokenHash,
+      nextRefreshTokenFamilyHash,
+      nextExpiresAt: this.refreshExpiresAt(now),
+      metadata,
+    })
+    if (!rotated) {
+      const racedSession = await this.dependencies.repository.findActiveRefreshSession(refreshLookup)
+      if (!racedSession || racedSession.id !== currentSession.id) {
+        throw new AuthFailure('refresh_session_invalid', 'Refresh session is invalid or expired')
+      }
+      if (racedSession.credentialState === 'reused') {
+        await this.dependencies.repository.revokeSessionById({
+          sessionId: racedSession.id,
+          now,
+        })
+        throw new AuthFailure('refresh_session_invalid', 'Refresh session is invalid or expired')
+      }
+      if (
+        racedSession.credentialState !== 'previous_within_grace' ||
+        racedSession.refreshTokenHash !== nextRefreshTokenHash
+      ) {
+        throw new AuthFailure('refresh_session_invalid', 'Refresh session is invalid or expired')
+      }
+
+      return this.refreshResponse(racedSession, nextRefreshToken)
+    }
+
+    return this.refreshResponse(currentSession, nextRefreshToken)
+  }
+
+  private async refreshResponse(
+    session: { id: string; user: AuthUserRecord },
+    refreshToken: string,
+  ) {
     return {
       accessToken: await this.dependencies.accessTokens.sign({
-        sub: currentSession.user.id,
-        email: currentSession.user.email,
-        sessionId: nextSession.id,
+        sub: session.user.id,
+        email: session.user.email,
+        sessionId: session.id,
       }),
-      refreshToken: nextRefreshToken,
+      refreshToken,
     }
   }
 
@@ -100,10 +163,12 @@ export class AuthService {
       throw new AuthFailure('access_token_invalid', 'Access token is invalid or expired')
     }
 
+    const now = this.dependencies.clock.now()
     const session = await this.dependencies.repository.findActiveAccessSession({
       sessionId: payload.sessionId,
       userId: payload.sub,
-      now: this.dependencies.clock.now(),
+      now,
+      createdAfter: this.sessionAbsoluteNotBefore(now),
     })
     if (!session) {
       throw new AuthFailure('session_invalid', 'Session is invalid or expired')
@@ -124,6 +189,7 @@ export class AuthService {
 
     const userId = await this.dependencies.repository.revokeSession({
       refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+      refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
       now: this.dependencies.clock.now(),
     })
     if (!userId) return false
@@ -138,16 +204,21 @@ export class AuthService {
     const session = await this.dependencies.repository.createSession({
       userId: user.id,
       refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+      refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
       expiresAt: this.refreshExpiresAt(now),
       metadata,
     })
 
+    return this.sessionResponse(user, session.id, refreshToken)
+  }
+
+  private async sessionResponse(user: AuthUserRecord, sessionId: string, refreshToken: string) {
     return {
       user: await this.dependencies.projectUser(user),
       accessToken: await this.dependencies.accessTokens.sign({
         sub: user.id,
         email: user.email,
-        sessionId: session.id,
+        sessionId,
       }),
       refreshToken,
     }
@@ -155,5 +226,9 @@ export class AuthService {
 
   private refreshExpiresAt(now: Date) {
     return sessionExpiresAt(now, this.dependencies.refreshTokenTtlDays)
+  }
+
+  private sessionAbsoluteNotBefore(now: Date) {
+    return new Date(now.getTime() - this.dependencies.sessionAbsoluteTtlDays * 24 * 60 * 60 * 1000)
   }
 }

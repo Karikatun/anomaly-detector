@@ -1,7 +1,7 @@
-import { Link, Outlet } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 
 import { Badge } from '@/components/ui/badge'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -13,52 +13,16 @@ import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { AuthForm, useAuth } from '@/features/auth'
-import { cn } from '@/lib/utils'
-
-const navLinkClass = cn(
-  buttonVariants({ variant: 'ghost', size: 'sm' }),
-  'text-muted-foreground data-[status=active]:bg-secondary data-[status=active]:text-secondary-foreground data-[status=active]:hover:bg-secondary/80 data-[status=active]:hover:text-secondary-foreground'
-)
-
-export function RootLayout() {
-  const auth = useAuth()
-
-  return (
-    <main className="min-h-svh bg-background text-foreground">
-      <header className="border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex min-h-16 w-full max-w-6xl flex-wrap items-center gap-3 px-5 py-3">
-          <Typography asChild variant="h6">
-            <Link to="/">web_app_demo</Link>
-          </Typography>
-          <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
-            <Typography asChild variant="control" tone="muted">
-              <Link to="/" className={navLinkClass}>
-                Auth
-              </Link>
-            </Typography>
-            <Typography asChild variant="control" tone="muted">
-              <Link to="/app" className={navLinkClass}>
-                App
-              </Link>
-            </Typography>
-          </nav>
-          {auth.isAuthenticated && (
-            <Button type="button" variant="outline" size="sm" onClick={() => void auth.logout()}>
-              Logout
-            </Button>
-          )}
-        </div>
-      </header>
-      <Outlet />
-    </main>
-  )
-}
 
 export function HomePage() {
   const auth = useAuth()
 
   if (auth.isBootstrapping) {
     return <LoadingState />
+  }
+
+  if (auth.sessionError && !auth.user) {
+    return <SessionErrorState retry={auth.retrySession} />
   }
 
   if (auth.user) {
@@ -109,6 +73,10 @@ export function AppPage() {
 
   if (auth.isBootstrapping) {
     return <LoadingState />
+  }
+
+  if (auth.sessionError && !auth.user) {
+    return <SessionErrorState retry={auth.retrySession} />
   }
 
   if (!auth.user) {
@@ -173,6 +141,20 @@ function LoadingState() {
           </Typography>
         </CardContent>
       </Card>
+    </section>
+  )
+}
+
+function SessionErrorState({ retry }: { retry: () => Promise<void> }) {
+  return (
+    <section className="mx-auto grid w-full max-w-6xl gap-4 px-5 py-16" role="alert">
+      <Typography variant="h2">Session check is temporarily unavailable</Typography>
+      <Typography tone="muted">
+        Your session was not cleared. Check the connection and try again.
+      </Typography>
+      <Button type="button" className="w-fit" onClick={() => void retry()}>
+        Try again
+      </Button>
     </section>
   )
 }

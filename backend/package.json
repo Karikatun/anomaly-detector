@@ -7,13 +7,13 @@
     "dev": "bun run prisma:generate && bun --watch src/index.ts",
     "start": "bun run start:api",
     "start:api": "bun run prisma:generate && bun src/index.ts",
-    "start:worker": "bun run prisma:generate && bun src/worker.ts",
-    "start:cron": "bun run prisma:generate && bun src/cron.ts",
+    "start:worker": "bun src/worker.ts",
+    "start:cron": "bun src/cron.ts",
     "start:raw": "bun src/index.ts",
     "build": "bun run prisma:generate && tsc --noEmit",
     "typecheck": "bun run prisma:generate && tsc --noEmit",
     "test": "bun run test:unit && bun run test:integration",
-    "test:unit": "bun test src/env.test.ts src/db.test.ts src/contracts.test.ts src/cron.test.ts src/modules/auth/infrastructure/access-tokens.test.ts src/modules/auth/infrastructure/passwords.test.ts src/modules/auth/infrastructure/refresh-tokens.test.ts src/modules/auth/transport/middleware.test.ts src/modules/auth/transport/routes.test.ts src/storage/service.test.ts",
+    "test:unit": "bun run prisma:generate && bun test src/app.test.ts src/env.test.ts src/db.test.ts src/contracts.test.ts src/cron.test.ts src/shutdown.test.ts src/modules/auth/application/auth-service.test.ts src/modules/auth/infrastructure/access-tokens.test.ts src/modules/auth/infrastructure/auth-repository.test.ts src/modules/auth/infrastructure/passwords.test.ts src/modules/auth/infrastructure/refresh-tokens.test.ts src/modules/auth/transport/middleware.test.ts src/modules/auth/transport/routes.test.ts src/storage/service.test.ts",
     "test:integration": "bun scripts/test-integration.mjs",
     "smoke:docker": "bun scripts/docker-smoke.mjs",
     "prisma": "prisma",
@@ -32,15 +32,15 @@
     "@prisma/client": "^7.8.0",
     "@web-app-demo/contracts": "workspace:*",
     "dotenv": "^17.4.2",
-    "hono": "^4.12.19",
+    "hono": "^4.12.30",
     "jose": "^6.2.3",
     "pg": "^8.20.0",
+    "prisma": "^7.8.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "@types/pg": "^8.20.0",
-    "prisma": "^7.8.0",
     "typescript": "~6.0.3"
   }
 }

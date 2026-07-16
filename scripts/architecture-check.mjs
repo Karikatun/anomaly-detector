@@ -12,6 +12,7 @@ const sourceRoots = [
 ]
 const sourceExtension = /\.(?:[cm]?[jt]sx?)$/
 const importPattern = /(?:^|\n)\s*(?:import|export)\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g
+const runtimeModulePattern = /\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g
 const applicationForbiddenPackages = [
   '@prisma/',
   'hono',
@@ -28,7 +29,9 @@ const contractForbiddenPackages = [
   'react-native',
   'expo-',
   '@aws-sdk/',
+  'jose',
 ]
+const transportForbiddenPackages = ['@prisma/', '@aws-sdk/', 'jose', 'pg']
 
 export function checkArchitectureSources(files) {
   const violations = []
@@ -85,11 +88,15 @@ async function main() {
 }
 
 function checkBackendLayers(filePath, specifier, report) {
-  const layer = filePath.match(/^backend\/src\/modules\/[^/]+\/(domain|application|transport)\//)?.[1]
+  const layer = filePath.match(
+    /^backend\/src\/modules\/[^/]+\/(domain|application|transport|infrastructure)\//,
+  )?.[1]
   if (!layer) return
 
   const forbiddenPackage = applicationForbiddenPackages.find((name) => packageMatches(specifier, name))
   const importsPrisma = specifier.includes('generated/prisma') || packageMatches(specifier, '@prisma/')
+  const target = resolveRepositoryImport(filePath, specifier)
+  const targetLayer = target?.match(/^backend\/src\/modules\/[^/]+\/(domain|application|transport|infrastructure)(?:\/|$)/)?.[1]
 
   if ((layer === 'domain' || layer === 'application') && (forbiddenPackage || importsPrisma)) {
     report(
@@ -100,7 +107,7 @@ function checkBackendLayers(filePath, specifier, report) {
 
   if (
     (layer === 'domain' || layer === 'application') &&
-    (specifier.includes('/env') || specifier.endsWith('/env') || specifier.includes('/infrastructure/'))
+    (specifier.includes('/env') || specifier.endsWith('/env'))
   ) {
     report(
       `backend-${layer}-dependencies`,
@@ -108,23 +115,43 @@ function checkBackendLayers(filePath, specifier, report) {
     )
   }
 
-  if (layer === 'transport' && importsPrisma) {
-    report('backend-transport-dependencies', `transport must not import Prisma (${specifier}).`)
+  if (
+    layer === 'transport' &&
+    (importsPrisma || transportForbiddenPackages.some((name) => packageMatches(specifier, name)))
+  ) {
+    report(
+      'backend-transport-dependencies',
+      `transport must not import persistence or provider SDK code (${specifier}).`,
+    )
+  }
+
+  const invalidTargetLayer =
+    (layer === 'domain' && targetLayer && targetLayer !== 'domain') ||
+    (layer === 'application' && (targetLayer === 'transport' || targetLayer === 'infrastructure')) ||
+    (layer === 'transport' && targetLayer === 'infrastructure') ||
+    (layer === 'infrastructure' && targetLayer === 'transport')
+
+  if (invalidTargetLayer) {
+    report(
+      `backend-${layer}-dependencies`,
+      `${layer} must not depend on outer backend layer ${targetLayer} (${specifier}).`,
+    )
   }
 }
 
 function checkBackendModuleBoundary(filePath, specifier, report) {
   const sourceModule = filePath.match(/^backend\/src\/modules\/([^/]+)\//)?.[1]
-  if (!sourceModule) return
-
   const target = resolveRepositoryImport(filePath, specifier)
   const match = target?.match(/^backend\/src\/modules\/([^/]+)(?:\/(.*))?$/)
   if (!match || match[1] === sourceModule) return
 
   if (match[2] && match[2] !== 'index' && match[2] !== 'index.ts') {
+    const boundaryMessage = sourceModule
+      ? `module ${sourceModule} must import module ${match[1]}`
+      : `code outside module ${match[1]} must import it`
     report(
       'backend-module-public-api',
-      `module ${sourceModule} must import module ${match[1]} through its public index (${specifier}).`,
+      `${boundaryMessage} through its public index (${specifier}).`,
     )
   }
 }
@@ -138,11 +165,12 @@ function checkClientBoundary(filePath, specifier, report) {
 
   const sourceFeature = filePath.match(new RegExp(`^${client}/src/features/([^/]+)/`))?.[1]
   const targetFeature = target.match(new RegExp(`^${client}/src/features/([^/]+)(?:/(.*))?$`))
-  if (sourceFeature && targetFeature && targetFeature[1] !== sourceFeature) {
-    if (targetFeature[2] && targetFeature[2] !== 'index' && targetFeature[2] !== 'index.ts') {
+  if (targetFeature && targetFeature[2] && targetFeature[2] !== 'index' && targetFeature[2] !== 'index.ts') {
+    const crossesPublicBoundary = !sourceFeature || targetFeature[1] !== sourceFeature
+    if (crossesPublicBoundary) {
       report(
         'client-feature-public-api',
-        `feature ${sourceFeature} must import feature ${targetFeature[1]} through its public index (${specifier}).`,
+        `code outside feature ${targetFeature[1]} must import it through its public index (${specifier}).`,
       )
     }
   }
@@ -192,14 +220,16 @@ function resolveRepositoryImport(importer, specifier) {
 
 function staticImports(source) {
   const imports = []
-  for (const match of source.matchAll(importPattern)) {
-    const specifier = match[1]
-    if (!specifier) continue
-    const specifierOffset = (match.index ?? 0) + match[0].lastIndexOf(specifier)
-    imports.push({
-      specifier,
-      line: source.slice(0, specifierOffset).split('\n').length,
-    })
+  for (const pattern of [importPattern, runtimeModulePattern]) {
+    for (const match of source.matchAll(pattern)) {
+      const specifier = match[1]
+      if (!specifier) continue
+      const specifierOffset = (match.index ?? 0) + match[0].lastIndexOf(specifier)
+      imports.push({
+        specifier,
+        line: source.slice(0, specifierOffset).split('\n').length,
+      })
+    }
   }
   return imports
 }
