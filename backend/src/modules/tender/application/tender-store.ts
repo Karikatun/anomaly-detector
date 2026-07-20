@@ -1,6 +1,7 @@
 import type {
   AdvanceDueTendersInput,
   CommandReceipt,
+  PowerAllocation,
   TenderCommand,
   TenderPhase,
   TenderTeam,
@@ -24,6 +25,7 @@ export type StoredTender = {
   anomalyConfiguration: AnomalyConfiguration
   id: string
   phase: TenderPhase
+  powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>
   requestedSlots: Record<string, number>
   teams: TenderTeam[]

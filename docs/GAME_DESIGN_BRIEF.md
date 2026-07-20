@@ -73,7 +73,7 @@ Each match has five rounds.
 
 1. Teams secretly choose an access slot.
 2. The server resolves slots and reveals the round order.
-3. Teams openly declare their power allocation in reverse slot order, from latest access to earliest access.
+3. Команды открыто распределяют мощность в порядке слотов доступа: от раннего к позднему.
 4. Operations resolve by phase, using the access order: reconnaissance, laboratory tests, model analysis, then contracts.
 5. The end-of-round calculation applies grants, contracts, trust, rating, and new available work.
 

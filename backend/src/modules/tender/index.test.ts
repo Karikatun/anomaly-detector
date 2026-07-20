@@ -221,3 +221,68 @@ test('rejects an Access Slot command after Power planning opens', async () => {
     tender.execute({ commandId: 'command-a-2', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 3 }),
   ).rejects.toMatchObject({ kind: 'invalid_tender_state' })
 })
+
+test('opens Power allocation in Access Slot order and then opens Reconnaissance', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    teams: [
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+
+  await expect(tender.execute({
+    allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+    actorId: 'player-b',
+    commandId: 'command-b-2',
+    tenderId,
+    type: 'allocate-power',
+  } as never)).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+
+  await tender.execute({
+    allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+    actorId: 'player-a',
+    commandId: 'command-a-2',
+    tenderId,
+    type: 'allocate-power',
+  } as never)
+
+  expect(await tender.readTenderView({ tenderId, participantId: 'player-a' })).toMatchObject({
+    phase: 'power-allocation',
+    teams: [
+      {
+        accessSlot: 1,
+        powerAllocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+        teamId: 'team-a',
+      },
+      { accessSlot: 2, teamId: 'team-b' },
+    ],
+  })
+
+  await tender.execute({
+    allocation: { contracts: 0, laboratory: 2, modelAnalysis: 1, reconnaissance: 1 },
+    actorId: 'player-b',
+    commandId: 'command-b-3',
+    tenderId,
+    type: 'allocate-power',
+  } as never)
+
+  expect(await tender.readTenderView({ tenderId, participantId: 'player-a' })).toMatchObject({
+    phase: 'reconnaissance',
+    teams: [
+      {
+        accessSlot: 1,
+        powerAllocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+        teamId: 'team-a',
+      },
+      {
+        accessSlot: 2,
+        powerAllocation: { contracts: 0, laboratory: 2, modelAnalysis: 1, reconnaissance: 1 },
+        teamId: 'team-b',
+      },
+    ],
+  })
+})

@@ -9,11 +9,15 @@ import type {
   TenderStore,
 } from '../application/tender-store'
 
-type PersistedTenderState = Pick<StoredTender, 'accessSlots' | 'anomalyConfiguration' | 'requestedSlots' | 'teams'>
+type PersistedTenderState = Pick<
+  StoredTender,
+  'accessSlots' | 'anomalyConfiguration' | 'powerAllocations' | 'requestedSlots' | 'teams'
+>
 
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   accessSlots: tender.accessSlots,
   anomalyConfiguration: tender.anomalyConfiguration,
+  powerAllocations: tender.powerAllocations,
   teams: tender.teams,
   requestedSlots: tender.requestedSlots,
 })
@@ -36,6 +40,7 @@ const toStoredTender = (record: {
     anomalyConfiguration: state.anomalyConfiguration,
     id: record.id,
     phase: record.phase as TenderPhase,
+    powerAllocations: state.powerAllocations ?? {},
     teams: state.teams,
     requestedSlots: state.requestedSlots,
     processedCommands: Object.fromEntries(record.commands.map((command) => [command.commandId, toStoredCommand(command)])),
