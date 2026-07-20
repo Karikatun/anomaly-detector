@@ -309,6 +309,103 @@ test('resolves Access Slots and opens Power planning after every player chooses'
   })
 })
 
+test('rotates Access Slot tie priority between rounds', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-1-slot', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-1-slot', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 1 })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    round: 1,
+    players: [
+      { accessSlot: 1, playerId: 'player-a' },
+      { accessSlot: 2, playerId: 'player-b' },
+    ],
+  })
+
+  await tender.execute({
+    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 2, reconnaissance: 0 },
+    actorId: 'player-a',
+    commandId: 'a-1-power',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 2, reconnaissance: 0 },
+    actorId: 'player-b',
+    commandId: 'b-1-power',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    commandId: 'a-1-thesis',
+    tenderId,
+    actorId: 'player-a',
+    type: 'submit-thesis',
+    signalId: 'aster',
+    fieldType: 'inertial',
+    polarity: 'positive',
+  })
+  await tender.execute({
+    commandId: 'b-1-thesis',
+    tenderId,
+    actorId: 'player-b',
+    type: 'submit-thesis',
+    signalId: 'boreal',
+    fieldType: 'inertial',
+    polarity: 'positive',
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'a-1-reserve',
+    contractId: 'round-1-contract-1',
+    tenderId,
+    type: 'reserve-contract',
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    claimedPublicResult: 'reflection',
+    commandId: 'a-1-bid',
+    contractId: 'round-1-contract-1',
+    requestedFunding: 1,
+    tenderId,
+    type: 'submit-contract-bid',
+  })
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'b-1-reserve',
+    contractId: 'round-1-contract-2',
+    tenderId,
+    type: 'reserve-contract',
+  })
+  await tender.execute({
+    actorId: 'player-b',
+    claimedPublicResult: 'attenuation',
+    commandId: 'b-1-bid',
+    contractId: 'round-1-contract-2',
+    requestedFunding: 1,
+    tenderId,
+    type: 'submit-contract-bid',
+  })
+
+  await tender.execute({ commandId: 'a-2-slot', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-2-slot', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 1 })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    round: 2,
+    players: [
+      { accessSlot: 2, playerId: 'player-a' },
+      { accessSlot: 1, playerId: 'player-b' },
+    ],
+  })
+})
+
 test('applies private Analytical Report compensation for the Night Access Slot', async () => {
   const tender = createTenderModule()
   const { tenderId } = await tender.createTender({

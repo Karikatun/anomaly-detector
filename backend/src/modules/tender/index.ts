@@ -42,6 +42,15 @@ const receivesAccessSlotAnalyticalReportCompensation = (slot: number) => slot ==
 
 const nextCompensationSample = (currentSamples: SignalId[]) => signalIds.find((signalId) => !currentSamples.includes(signalId))
 
+const rotateTiePriority = (players: TenderPlayer[], round: number) => {
+  const playerCount = players.length
+  const offset = (round - 1) % playerCount
+  return players.map((player) => ({
+    ...player,
+    tiePriority: ((player.tiePriority - 1 - offset + playerCount) % playerCount) + 1,
+  }))
+}
+
 export function createTenderModule({
   seedGenerator = randomUUID,
   store = createInMemoryTenderStore(),
@@ -203,7 +212,7 @@ export function createTenderModule({
         }
         const requestedSlots = { ...tender.requestedSlots, [player.id]: command.slot }
         const isReadyToResolve = Object.keys(requestedSlots).length === tender.players.length
-        const accessSlots = isReadyToResolve ? resolveAccessSlots(tender.players, requestedSlots) : tender.accessSlots
+        const accessSlots = isReadyToResolve ? resolveAccessSlots(rotateTiePriority(tender.players, tender.round), requestedSlots) : tender.accessSlots
         const budgetByPlayer = isReadyToResolve
           ? Object.fromEntries(tender.players.map((player) => [
             player.id,
