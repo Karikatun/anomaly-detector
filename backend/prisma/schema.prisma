@@ -16,6 +16,8 @@ model User {
   updatedAt    DateTime      @updatedAt @map("updated_at")
   sessions     AuthSession[]
   identities   AuthIdentity[]
+  hostedRooms  TenderRoom[]       @relation("TenderRoomHost")
+  roomMemberships TenderRoomMember[]
 
   @@map("users")
 }
@@ -76,9 +78,40 @@ model Tender {
   updatedAt   DateTime           @updatedAt @map("updated_at")
   commands    TenderCommand[]
   auditEvents TenderAuditEvent[]
+  room        TenderRoom?
 
   @@index([dueAt], map: "tenders_due_at_idx")
   @@map("tenders")
+}
+
+model TenderRoom {
+  id        String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  hostId    String             @map("host_id") @db.Uuid
+  capacity  Int
+  status    String
+  tenderId  String?            @unique @map("tender_id") @db.Uuid
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+  host      User               @relation("TenderRoomHost", fields: [hostId], references: [id], onDelete: Restrict, map: "tender_rooms_host_id_fkey")
+  tender    Tender?            @relation(fields: [tenderId], references: [id], onDelete: Restrict, map: "tender_rooms_tender_id_fkey")
+  members   TenderRoomMember[]
+
+  @@index([status], map: "tender_rooms_status_idx")
+  @@map("tender_rooms")
+}
+
+model TenderRoomMember {
+  roomId    String     @map("room_id") @db.Uuid
+  userId    String     @map("user_id") @db.Uuid
+  seat      Int
+  createdAt DateTime   @default(now()) @map("created_at")
+  room      TenderRoom @relation(fields: [roomId], references: [id], onDelete: Cascade, map: "tender_room_members_room_id_fkey")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade, map: "tender_room_members_user_id_fkey")
+
+  @@id([roomId, userId])
+  @@unique([roomId, seat], map: "tender_room_members_room_id_seat_key")
+  @@index([userId], map: "tender_room_members_user_id_idx")
+  @@map("tender_room_members")
 }
 
 model TenderCommand {
