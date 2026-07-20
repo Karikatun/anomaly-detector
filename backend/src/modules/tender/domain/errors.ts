@@ -4,7 +4,7 @@ export type TenderFailureKind =
   | 'invalid_tender_command'
   | 'invalid_tender_state'
   | 'invalid_tender_view_query'
-  | 'participant_not_in_tender'
+  | 'player_not_in_tender'
   | 'tender_not_found'
   | 'tender_version_conflict'
 

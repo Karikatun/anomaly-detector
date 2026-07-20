@@ -5,7 +5,7 @@ import type {
   CreateTender,
   PowerAllocation,
   TenderCommand,
-  TenderTeam,
+  TenderPlayer,
   TenderView,
   TenderViewQuery,
 } from '@the-game/contracts'
@@ -31,20 +31,20 @@ export function createTenderModule({
     return tender
   }
 
-  const readParticipantTeam = (tender: StoredTender, participantId: string) => {
-    const team = tender.teams.find((candidate) => candidate.participantId === participantId)
-    if (!team) throw new TenderFailure('participant_not_in_tender', `Participant ${participantId} is not in this Tender`)
-    return team
+  const readPlayer = (tender: StoredTender, playerId: string) => {
+    const player = tender.players.find((candidate) => candidate.id === playerId)
+    if (!player) throw new TenderFailure('player_not_in_tender', `Player ${playerId} is not in this Tender`)
+    return player
   }
 
   const fingerprint = (command: TenderCommand) => JSON.stringify(command)
 
-  const nextPowerAllocationTeam = (tender: StoredTender) => tender.teams
-    .filter((team) => tender.powerAllocations[team.id] === undefined)
+  const nextPowerAllocationPlayer = (tender: StoredTender) => tender.players
+    .filter((player) => tender.powerAllocations[player.id] === undefined)
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
-  const nextReconnaissanceTeam = (tender: StoredTender) => tender.teams
-    .filter((team) => tender.powerAllocations[team.id]?.reconnaissance > 0 && !tender.reconnaissanceCompletedByTeam[team.id])
+  const nextReconnaissancePlayer = (tender: StoredTender) => tender.players
+    .filter((player) => tender.powerAllocations[player.id]?.reconnaissance > 0 && !tender.reconnaissanceCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
   const commitCommand = async ({
@@ -92,11 +92,11 @@ export function createTenderModule({
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
         knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
-        rawTelemetrySignalsByTeam: Object.fromEntries(parsedInput.data.teams.map((team) => [team.id, ['aster']])),
-        reconnaissanceCompletedByTeam: {},
-        teams: parsedInput.data.teams,
+        rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
+        reconnaissanceCompletedByPlayer: {},
+        players: parsedInput.data.players,
         requestedSlots: {},
-        samplesByTeam: Object.fromEntries(parsedInput.data.teams.map((team) => [team.id, ['aster']])),
+        samplesByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
         processedCommands: {},
         phase: 'access-slot-selection',
         version: 0,
@@ -119,14 +119,14 @@ export function createTenderModule({
         }
         return previousCommand.receipt
       }
-      const team = readParticipantTeam(tender, command.actorId)
+      const player = readPlayer(tender, command.actorId)
       if (command.type === 'request-access-slot') {
         if (tender.phase !== 'access-slot-selection') {
           throw new TenderFailure('invalid_tender_state', 'Access Slot selection is closed')
         }
-        const requestedSlots = { ...tender.requestedSlots, [team.id]: command.slot }
-        const isReadyToResolve = Object.keys(requestedSlots).length === tender.teams.length
-        const accessSlots = isReadyToResolve ? resolveAccessSlots(tender.teams, requestedSlots) : tender.accessSlots
+        const requestedSlots = { ...tender.requestedSlots, [player.id]: command.slot }
+        const isReadyToResolve = Object.keys(requestedSlots).length === tender.players.length
+        const accessSlots = isReadyToResolve ? resolveAccessSlots(tender.players, requestedSlots) : tender.accessSlots
         const phase = isReadyToResolve ? 'power-allocation' : tender.phase
         return commitCommand({
           auditEvents: [
@@ -134,7 +134,7 @@ export function createTenderModule({
               actorId: command.actorId,
               commandId: command.commandId,
               kind: 'access_slot_requested',
-              payload: { slot: command.slot, teamId: team.id },
+              payload: { slot: command.slot, playerId: player.id },
             },
             ...(isReadyToResolve ? [{
               kind: 'access_slots_resolved',
@@ -152,18 +152,18 @@ export function createTenderModule({
         if (tender.phase !== 'power-allocation') {
           throw new TenderFailure('invalid_tender_state', 'Power allocation is closed')
         }
-        const expectedTeam = nextPowerAllocationTeam(tender)
-        if (expectedTeam?.id !== team.id) {
-          throw new TenderFailure('invalid_tender_state', 'It is not this Team\'s Power allocation turn')
+        const expectedPlayer = nextPowerAllocationPlayer(tender)
+        if (expectedPlayer?.id !== player.id) {
+          throw new TenderFailure('invalid_tender_state', 'It is not this Player\'s Power allocation turn')
         }
-        const powerAllocations: Record<string, PowerAllocation> = { ...tender.powerAllocations, [team.id]: command.allocation }
-        const isReadyToStartReconnaissance = Object.keys(powerAllocations).length === tender.teams.length
+        const powerAllocations: Record<string, PowerAllocation> = { ...tender.powerAllocations, [player.id]: command.allocation }
+        const isReadyToStartReconnaissance = Object.keys(powerAllocations).length === tender.players.length
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
             commandId: command.commandId,
             kind: 'power_allocated',
-            payload: { allocation: command.allocation, teamId: team.id },
+            payload: { allocation: command.allocation, playerId: player.id },
           }],
           command,
           commandFingerprint,
@@ -179,20 +179,20 @@ export function createTenderModule({
       if (tender.phase !== 'reconnaissance') {
         throw new TenderFailure('invalid_tender_state', 'Reconnaissance is closed')
       }
-      const expectedTeam = nextReconnaissanceTeam(tender)
-      if (expectedTeam?.id !== team.id || command.signals.length !== tender.powerAllocations[team.id]?.reconnaissance) {
-        throw new TenderFailure('invalid_tender_state', 'Reconnaissance command is not available to this Team')
+      const expectedPlayer = nextReconnaissancePlayer(tender)
+      if (expectedPlayer?.id !== player.id || command.signals.length !== tender.powerAllocations[player.id]?.reconnaissance) {
+        throw new TenderFailure('invalid_tender_state', 'Reconnaissance command is not available to this Player')
       }
-      const currentSamples = tender.samplesByTeam[team.id] ?? []
+      const currentSamples = tender.samplesByPlayer[player.id] ?? []
       if (command.signals.some((signal) => currentSamples.includes(signal))) {
-        throw new TenderFailure('invalid_tender_state', 'A Team cannot acquire a Sample it already holds')
+        throw new TenderFailure('invalid_tender_state', 'A Player cannot acquire a Sample it already holds')
       }
-      const samplesByTeam = { ...tender.samplesByTeam, [team.id]: [...currentSamples, ...command.signals] as SignalId[] }
-      const rawTelemetrySignalsByTeam = {
-        ...tender.rawTelemetrySignalsByTeam,
-        [team.id]: [...(tender.rawTelemetrySignalsByTeam[team.id] ?? []), ...command.signals] as SignalId[],
+      const samplesByPlayer = { ...tender.samplesByPlayer, [player.id]: [...currentSamples, ...command.signals] as SignalId[] }
+      const rawTelemetrySignalsByPlayer = {
+        ...tender.rawTelemetrySignalsByPlayer,
+        [player.id]: [...(tender.rawTelemetrySignalsByPlayer[player.id] ?? []), ...command.signals] as SignalId[],
       }
-      const reconnaissanceCompletedByTeam = { ...tender.reconnaissanceCompletedByTeam, [team.id]: true }
+      const reconnaissanceCompletedByPlayer = { ...tender.reconnaissanceCompletedByPlayer, [player.id]: true }
       const knownSignals = [...tender.knownSignals]
       for (const signal of command.signals) {
         if (!knownSignals.includes(signal)) knownSignals.push(signal)
@@ -200,17 +200,17 @@ export function createTenderModule({
       const nextTender = {
         ...tender,
         knownSignals,
-        rawTelemetrySignalsByTeam,
-        reconnaissanceCompletedByTeam,
-        samplesByTeam,
+        rawTelemetrySignalsByPlayer,
+        reconnaissanceCompletedByPlayer,
+        samplesByPlayer,
       }
-      const isReadyForLaboratory = nextReconnaissanceTeam(nextTender) === undefined
+      const isReadyForLaboratory = nextReconnaissancePlayer(nextTender) === undefined
       return commitCommand({
         auditEvents: [{
           actorId: command.actorId,
           commandId: command.commandId,
           kind: 'reconnaissance_completed',
-          payload: { signals: command.signals, teamId: team.id },
+          payload: { signals: command.signals, playerId: player.id },
         }],
         command,
         commandFingerprint,
@@ -224,26 +224,26 @@ export function createTenderModule({
       if (!parsedQuery.success) {
         throw new TenderFailure('invalid_tender_view_query', 'Tender view query is invalid')
       }
-      const { tenderId, participantId } = parsedQuery.data
+      const { tenderId, playerId } = parsedQuery.data
       const tender = await readTender(tenderId)
-      const participantTeam = readParticipantTeam(tender, participantId)
+      const player = readPlayer(tender, playerId)
       return {
         knownSignals: tender.knownSignals,
         tenderId,
         version: tender.version,
         phase: tender.phase,
-        teams: tender.teams.map((team) => ({
-          teamId: team.id,
-          ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[team.id] } : {}),
-          ...(tender.phase !== 'access-slot-selection' && tender.powerAllocations[team.id]
-            ? { powerAllocation: tender.powerAllocations[team.id] }
+        players: tender.players.map((player) => ({
+          playerId: player.id,
+          ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
+          ...(tender.phase !== 'access-slot-selection' && tender.powerAllocations[player.id]
+            ? { powerAllocation: tender.powerAllocations[player.id] }
             : {}),
-          ...(tender.phase === 'access-slot-selection' && team.participantId === participantId && tender.requestedSlots[team.id] !== undefined
-            ? { requestedAccessSlot: tender.requestedSlots[team.id] }
+          ...(tender.phase === 'access-slot-selection' && player.id === playerId && tender.requestedSlots[player.id] !== undefined
+            ? { requestedAccessSlot: tender.requestedSlots[player.id] }
             : {}),
         })),
-        privateRawTelemetrySignals: tender.rawTelemetrySignalsByTeam[participantTeam.id] ?? [],
-        privateSamples: tender.samplesByTeam[participantTeam.id] ?? [],
+        privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
+        privateSamples: tender.samplesByPlayer[player.id] ?? [],
       }
     },
 

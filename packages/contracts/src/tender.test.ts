@@ -9,7 +9,7 @@ import {
 } from './index'
 
 describe('Tender contracts', () => {
-  test('validates the Access Slot command, receipt, and participant-scoped view', () => {
+  test('validates the Access Slot command, receipt, and player-scoped view', () => {
     expect(
       tenderCommandSchema.parse({
         commandId: 'command-a-1',
@@ -37,9 +37,9 @@ describe('Tender contracts', () => {
         tenderId: 'tender-1',
         version: 1,
         phase: 'access-slot-selection',
-        teams: [
-          { teamId: 'team-a', requestedAccessSlot: 1 },
-          { teamId: 'team-b' },
+        players: [
+          { playerId: 'player-a', requestedAccessSlot: 1 },
+          { playerId: 'player-b' },
         ],
         privateRawTelemetrySignals: ['aster'],
         privateSamples: ['aster'],
@@ -49,9 +49,9 @@ describe('Tender contracts', () => {
       tenderId: 'tender-1',
       version: 1,
       phase: 'access-slot-selection',
-      teams: [
-        { teamId: 'team-a', requestedAccessSlot: 1 },
-        { teamId: 'team-b' },
+      players: [
+        { playerId: 'player-a', requestedAccessSlot: 1 },
+        { playerId: 'player-b' },
       ],
       privateRawTelemetrySignals: ['aster'],
       privateSamples: ['aster'],
