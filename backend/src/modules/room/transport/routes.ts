@@ -30,6 +30,18 @@ const joinRoomRoute = createRoute({
   },
 })
 
+const leaveRoomRoute = createRoute({
+  method: 'post',
+  path: '/{roomId}/leave',
+  request: { params: z.object({ roomId: roomIdSchema }) },
+  responses: {
+    204: { description: 'Left private room' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+    404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room cannot be left' },
+  },
+})
+
 export function createRoomRoutes(input: {
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   service: TenderRoomService
@@ -44,5 +56,9 @@ export function createRoomRoutes(input: {
     await executeRoom(() => input.service.joinRoom({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId })),
     200,
   ))
+  routes.openapi(leaveRoomRoute, async (c) => {
+    await executeRoom(() => input.service.leaveRoom({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId }))
+    return c.body(null, 204)
+  })
   return routes
 }

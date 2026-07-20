@@ -200,6 +200,22 @@ maybeDescribe('auth API integration', () => {
 
     expect(fullRoomJoin.status).toBe(409)
     expect(await fullRoomJoin.json()).toMatchObject({ error: { code: 'CONFLICT' } })
+
+    const leave = await app.request(`/api/rooms/${room.roomId}/leave`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${joiner.accessToken}` },
+    })
+    expect(leave.status).toBe(204)
+
+    const rejoin = await app.request(`/api/rooms/${room.roomId}/join`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${joiner.accessToken}` },
+    })
+    expect(rejoin.status).toBe(200)
+    expect(await rejoin.json()).toMatchObject({
+      members: [{ seat: 1, userId: user.id }, { seat: 2, userId: joiner.user.id }],
+      roomId: room.roomId,
+    })
   })
 
   test('returns one durable successor across three concurrent refresh requests', async () => {
