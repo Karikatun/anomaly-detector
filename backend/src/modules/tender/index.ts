@@ -6,8 +6,9 @@ import type {
   TenderCommand,
   TenderTeam,
   TenderView,
+  TenderViewQuery,
 } from '@the-game/contracts'
-import { createTenderSchema, tenderCommandSchema } from '@the-game/contracts'
+import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@the-game/contracts'
 import { TenderFailure } from './domain/errors'
 
 type Tender = {
@@ -80,7 +81,12 @@ export function createTenderModule() {
       return receipt
     },
 
-    async readTenderView({ tenderId, participantId }: { tenderId: string; participantId: string }): Promise<TenderView> {
+    async readTenderView(query: TenderViewQuery): Promise<TenderView> {
+      const parsedQuery = tenderViewQuerySchema.safeParse(query)
+      if (!parsedQuery.success) {
+        throw new TenderFailure('invalid_tender_view_query', 'Tender view query is invalid')
+      }
+      const { tenderId, participantId } = parsedQuery.data
       const tender = readTender(tenderId)
       readParticipantTeam(tender, participantId)
       return {

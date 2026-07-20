@@ -111,3 +111,17 @@ test('rejects a Tender with fewer than two teams', async () => {
     } as never),
   ).rejects.toMatchObject({ kind: 'invalid_create_tender' })
 })
+
+test('rejects an invalid Tender view query before checking participation', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    teams: [
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await expect(
+    tender.readTenderView({ tenderId, participantId: '' } as never),
+  ).rejects.toMatchObject({ kind: 'invalid_tender_view_query' })
+})
