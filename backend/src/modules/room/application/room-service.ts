@@ -11,6 +11,16 @@ export class TenderRoomService {
 
   async createRoom(input: { capacity: 2 | 3 | 4; hostId: string }): Promise<RoomView> {
     const room = await this.dependencies.repository.create(input)
+    return toRoomView(room)
+  }
+
+  async joinRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
+    const room = await this.dependencies.repository.join(input)
+    return toRoomView(room)
+  }
+}
+
+function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomView {
     return {
       capacity: room.capacity,
       hostId: room.hostId,
@@ -19,5 +29,4 @@ export class TenderRoomService {
       status: room.status,
       ...(room.tenderId === null ? {} : { tenderId: room.tenderId }),
     }
-  }
 }

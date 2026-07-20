@@ -102,6 +102,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 3. Implement profile locale preference, default and fallback `ru`.
 4. [-] Implement private rooms with a host-selected fixed size from 2 to 4. Starting requires every seat to be filled and an explicit host confirmation.
    - [x] Allow an authenticated host to create a waiting room and occupy the first seat.
+   - [x] Allow authenticated players to join open rooms in seat order and reject a full room.
 5. Add authenticated HTTP endpoints and WebSocket updates that only deliver each participant's authorised TenderView.
 6. Support reconnect without pausing the Tender and ensure the worker, not a browser connection, resolves deadlines.
 
