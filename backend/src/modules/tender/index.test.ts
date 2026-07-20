@@ -143,8 +143,8 @@ test('records an Access Slot command once and exposes it only to its player', as
     version: 1,
     phase: 'access-slot-selection',
     players: [
-      { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
-      { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+      { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+      { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-b', rating: 0 },
     ],
     privateAnalyticalReports: 1,
     privateRawTelemetrySignals: ['aster'],
@@ -351,8 +351,8 @@ test('restores a player Tender view from the shared store', async () => {
     version: 1,
     phase: 'access-slot-selection',
     players: [
-      { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
-      { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+      { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+      { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-b', rating: 0 },
     ],
     privateAnalyticalReports: 1,
     privateRawTelemetrySignals: ['aster'],
@@ -412,10 +412,10 @@ test('resolves Access Slots and opens Power planning after every player chooses'
     version: 4,
     phase: 'power-allocation',
     players: [
-      { accessSlot: 1, budget: 0, contractPowerRestriction: 0, playerId: 'player-a', rating: 0 },
-      { accessSlot: 3, budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
-      { accessSlot: 2, budget: 1, contractPowerRestriction: 0, playerId: 'player-c', rating: 0 },
-      { accessSlot: 6, budget: 3, contractPowerRestriction: 0, playerId: 'player-d', rating: 0 },
+      { accessSlot: 1, budget: 0, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-a', rating: 0 },
+      { accessSlot: 3, budget: 2, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-b', rating: 0 },
+      { accessSlot: 2, budget: 1, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-c', rating: 0 },
+      { accessSlot: 6, budget: 3, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-d', rating: 0 },
     ],
     privateAnalyticalReports: 1,
     privateRawTelemetrySignals: ['aster'],
@@ -1030,8 +1030,8 @@ test('reserves public Contracts in Access Slot order', async () => {
       { contractId: 'round-2-contract-3' },
     ],
     players: [
-      { budget: 0, playerId: 'player-a' },
-      { budget: 1, playerId: 'player-b' },
+      { budget: 1, corporateTrust: 0, playerId: 'player-a' },
+      { budget: 2, corporateTrust: 0, playerId: 'player-b' },
     ],
   })
 
@@ -1138,8 +1138,8 @@ test('awards a reserved Contract Bid with matching public Laboratory evidence', 
       { contractId: 'round-2-contract-3', requiredPublicResult: 'transmission_gain' },
     ],
     players: [
-      { budget: 2, playerId: 'player-a' },
-      { budget: 1, playerId: 'player-b' },
+      { budget: 3, corporateTrust: 1, playerId: 'player-a' },
+      { budget: 2, corporateTrust: 0, playerId: 'player-b' },
     ],
   })
 })

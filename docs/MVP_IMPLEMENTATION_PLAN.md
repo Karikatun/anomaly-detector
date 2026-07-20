@@ -73,7 +73,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Clear the temporary Contract Power restriction after the player's successful Laboratory test.
    - [x] Implement player-owned Working Model updates.
    - [x] Implement extended verification marker for two Model Analysis Power.
-7. [-] Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, Budget, and Corporate Trust.
+7. [x] Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, Budget, and Corporate Trust.
    - [x] Create `players + 1` public normal Contracts for the round.
    - [x] Reserve Contracts publicly in Access Slot order.
    - [x] Reject reservation of already reserved Contracts.
@@ -84,7 +84,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Add Access Slot Sample compensation for slots 4 and 6.
    - [x] Add starting Analytical Report and Access Slot analytical-report compensation for slot 5.
    - [x] Add requested-funding Budget payout for awarded single-Bid assessment.
-   - [ ] Add Budget and Corporate Trust effects.
+   - [x] Add Budget and Corporate Trust effects.
 8. [ ] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
 9. [x] Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.
 
