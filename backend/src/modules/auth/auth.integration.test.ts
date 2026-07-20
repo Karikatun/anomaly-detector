@@ -134,7 +134,7 @@ maybeDescribe('auth API integration', () => {
     expect(revokedRefresh.status).toBe(401)
   })
 
-  test('creates a private room for an authenticated host', async () => {
+  test('creates a private room and lets another authenticated player join it', async () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -151,17 +151,55 @@ maybeDescribe('auth API integration', () => {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ capacity: 3 }),
+      body: JSON.stringify({ capacity: 2 }),
     })
 
     expect(createRoom.status).toBe(201)
-    expect(await createRoom.json()).toEqual({
-      capacity: 3,
+    const room = await createRoom.json()
+    expect(room).toEqual({
+      capacity: 2,
       hostId: user.id,
       members: [{ seat: 1, userId: user.id }],
       roomId: expect.any(String),
       status: 'waiting',
     })
+
+    const joinerRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'room-joiner@example.com',
+        password: 'password123',
+      }),
+    })
+    const joiner = await joinerRegister.json()
+    const join = await app.request(`/api/rooms/${room.roomId}/join`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${joiner.accessToken}` },
+    })
+
+    expect(join.status).toBe(200)
+    expect(await join.json()).toMatchObject({
+      members: [{ seat: 1, userId: user.id }, { seat: 2, userId: joiner.user.id }],
+      roomId: room.roomId,
+    })
+
+    const extraRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'room-extra@example.com',
+        password: 'password123',
+      }),
+    })
+    const extra = await extraRegister.json()
+    const fullRoomJoin = await app.request(`/api/rooms/${room.roomId}/join`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${extra.accessToken}` },
+    })
+
+    expect(fullRoomJoin.status).toBe(409)
+    expect(await fullRoomJoin.json()).toMatchObject({ error: { code: 'CONFLICT' } })
   })
 
   test('returns one durable successor across three concurrent refresh requests', async () => {

@@ -1,5 +1,6 @@
 import type { DbClient } from '../../../db'
 import type { RoomRepository } from '../application/ports'
+import { RoomFailure } from '../domain/errors'
 
 export function createPrismaRoomRepository(db: DbClient): RoomRepository {
   return {
@@ -25,6 +26,40 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         status: 'waiting',
         tenderId: room.tenderId,
       }
+    },
+
+    async join(input) {
+      return db.$transaction(async (tx) => {
+        const room = await tx.tenderRoom.findUnique({
+          where: { id: input.roomId },
+          include: { members: { orderBy: { seat: 'asc' } } },
+        })
+        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
+        if (room.members.some((member) => member.userId === input.actorId)) {
+          throw new RoomFailure('room_already_joined', 'Player already joined this room')
+        }
+        if (room.members.length >= room.capacity) throw new RoomFailure('room_full', 'Room is already full')
+
+        const occupiedSeats = new Set(room.members.map((member) => member.seat))
+        const seat = Array.from({ length: room.capacity }, (_, index) => index + 1)
+          .find((candidate) => !occupiedSeats.has(candidate))
+        if (!seat) throw new RoomFailure('room_full', 'Room is already full')
+
+        await tx.tenderRoomMember.create({
+          data: { roomId: room.id, seat, userId: input.actorId },
+        })
+        return {
+          capacity: room.capacity as 2 | 3 | 4,
+          hostId: room.hostId,
+          id: room.id,
+          members: [...room.members, { seat, userId: input.actorId }]
+            .sort((left, right) => left.seat - right.seat)
+            .map((member) => ({ seat: member.seat, userId: member.userId })),
+          status: 'waiting' as const,
+          tenderId: room.tenderId,
+        }
+      }, { isolationLevel: 'Serializable' })
     },
   }
 }

@@ -13,6 +13,7 @@ test('creates a waiting private room with its host in the first seat', async () 
         status: 'waiting',
         tenderId: null,
       }),
+      join: async () => { throw new Error('not used') },
     },
   })
 
@@ -22,5 +23,26 @@ test('creates a waiting private room with its host in the first seat', async () 
     members: [{ seat: 1, userId: 'user-1' }],
     roomId: 'room-1',
     status: 'waiting',
+  })
+})
+
+test('adds a player to the next available seat in a waiting room', async () => {
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      join: async () => ({
+        capacity: 3,
+        hostId: 'user-1',
+        id: 'room-1',
+        members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+        status: 'waiting',
+        tenderId: null,
+      }),
+    },
+  })
+
+  await expect(service.joinRoom({ actorId: 'user-2', roomId: 'room-1' })).resolves.toMatchObject({
+    members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+    roomId: 'room-1',
   })
 })
