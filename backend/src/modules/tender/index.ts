@@ -29,6 +29,13 @@ const createRoundContracts = (playerCount: number) => Array.from(
   }),
 )
 
+const accessSlotBudgetDelta = (slot: number) => {
+  if (slot === 1) return -2
+  if (slot === 2) return -1
+  if (slot === 6) return 1
+  return 0
+}
+
 export function createTenderModule({
   seedGenerator = randomUUID,
   store = createInMemoryTenderStore(),
@@ -120,6 +127,7 @@ export function createTenderModule({
       const tender = await store.create({
         accessSlots: {},
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
+        budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
         contractPowerRestrictionsByPlayer: {},
         knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
@@ -166,6 +174,12 @@ export function createTenderModule({
         const requestedSlots = { ...tender.requestedSlots, [player.id]: command.slot }
         const isReadyToResolve = Object.keys(requestedSlots).length === tender.players.length
         const accessSlots = isReadyToResolve ? resolveAccessSlots(tender.players, requestedSlots) : tender.accessSlots
+        const budgetByPlayer = isReadyToResolve
+          ? Object.fromEntries(tender.players.map((player) => [
+            player.id,
+            (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
+          ]))
+          : tender.budgetByPlayer
         const phase = isReadyToResolve ? 'power-allocation' : tender.phase
         return commitCommand({
           auditEvents: [
@@ -177,12 +191,12 @@ export function createTenderModule({
             },
             ...(isReadyToResolve ? [{
               kind: 'access_slots_resolved',
-              payload: { accessSlots },
+              payload: { accessSlots, budgetByPlayer },
             }] : []),
           ],
           command,
           commandFingerprint,
-          nextTender: { ...tender, accessSlots, phase, requestedSlots },
+          nextTender: { ...tender, accessSlots, budgetByPlayer, phase, requestedSlots },
           tender,
         })
       }
@@ -461,6 +475,7 @@ export function createTenderModule({
         players: tender.players.map((player) => ({
           playerId: player.id,
           ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
+          budget: tender.budgetByPlayer[player.id] ?? 0,
           contractPowerRestriction: tender.contractPowerRestrictionsByPlayer[player.id] ?? 0,
           ...(tender.phase !== 'access-slot-selection' && tender.powerAllocations[player.id]
             ? { powerAllocation: tender.powerAllocations[player.id] }

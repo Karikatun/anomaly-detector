@@ -13,6 +13,7 @@ type PersistedTenderState = Pick<
   StoredTender,
   | 'accessSlots'
   | 'anomalyConfiguration'
+  | 'budgetByPlayer'
   | 'contractPowerRestrictionsByPlayer'
   | 'knownSignals'
   | 'powerAllocations'
@@ -34,6 +35,7 @@ type PersistedTenderState = Pick<
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   accessSlots: tender.accessSlots,
   anomalyConfiguration: tender.anomalyConfiguration,
+  budgetByPlayer: tender.budgetByPlayer,
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
@@ -68,6 +70,7 @@ const toStoredTender = (record: {
   return {
     accessSlots: state.accessSlots,
     anomalyConfiguration: state.anomalyConfiguration,
+    budgetByPlayer: state.budgetByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 2])),
     contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},
     id: record.id,
     knownSignals: state.knownSignals ?? ['aster', 'boreal'],

@@ -50,8 +50,8 @@ describe('Tender contracts', () => {
         version: 1,
         phase: 'access-slot-selection',
         players: [
-          { contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
-          { contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+          { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+          { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
         ],
         privateRawTelemetrySignals: ['aster'],
         privateMeasurements: [],
@@ -77,8 +77,8 @@ describe('Tender contracts', () => {
       version: 1,
       phase: 'access-slot-selection',
       players: [
-        { contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
-        { contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+        { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+        { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
       ],
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
