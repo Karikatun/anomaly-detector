@@ -51,7 +51,7 @@ test('keeps Access Slot compensation for a player who acted before the deadline'
   })
 })
 
-test('resolves an expired Power allocation by reserving all remaining Power', async () => {
+test('resolves an expired Power allocation and advances to the next round', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })
   const { tenderId } = await tender.createTender({
@@ -67,12 +67,49 @@ test('resolves an expired Power allocation by reserving all remaining Power', as
     advancedTenderIds: [tenderId],
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
-    phase: 'complete',
+    phase: 'access-slot-selection',
+    round: 2,
     players: [
-      { playerId: 'player-a', powerAllocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } },
-      { playerId: 'player-b', powerAllocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } },
+      { playerId: 'player-a', budget: 3 },
+      { playerId: 'player-b', budget: 3 },
     ],
   })
+})
+
+test('completes five rounds for every supported player count when all players reserve Power', async () => {
+  const now = new Date('2026-07-20T12:00:00.000Z')
+  for (const playerCount of [2, 3, 4]) {
+    const tender = createTenderModule({ now: () => now })
+    const players = Array.from({ length: playerCount }, (_, index) => ({
+      id: `player-${index + 1}`,
+      tiePriority: index + 1,
+    }))
+    const { tenderId } = await tender.createTender({ players })
+
+    let dueAt = now
+    for (let round = 1; round <= 5; round += 1) {
+      dueAt = new Date(dueAt.getTime() + 45_000)
+      await tender.advanceDueTenders({ limit: 10, now: dueAt })
+      dueAt = new Date(dueAt.getTime() + 60_000)
+      await tender.advanceDueTenders({ limit: 10, now: dueAt })
+    }
+
+    expect(await tender.readTenderView({ tenderId, playerId: players[0].id })).toMatchObject({
+      phase: 'final-scientific-model',
+      round: 5,
+      players: players.map((player) => ({ playerId: player.id, budget: 7 })),
+    })
+
+    for (const player of players) {
+      dueAt = new Date(dueAt.getTime() + 20_000)
+      await tender.advanceDueTenders({ limit: 10, now: dueAt })
+    }
+
+    expect(await tender.readTenderView({ tenderId, playerId: players[0].id })).toMatchObject({
+      phase: 'complete',
+      winnerPlayerIds: players.map((player) => player.id),
+    })
+  }
 })
 
 test('skips an unresolved operational action when its deadline expires', async () => {
@@ -106,7 +143,8 @@ test('skips an unresolved operational action when its deadline expires', async (
     advancedTenderIds: [tenderId],
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
-    phase: 'complete',
+    phase: 'access-slot-selection',
+    round: 2,
     privateSamples: ['aster'],
   })
 })
