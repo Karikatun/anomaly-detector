@@ -51,10 +51,22 @@ export const conductReconnaissanceCommandSchema = z.object({
   type: z.literal('conduct-reconnaissance'),
 }).strict()
 
+export const laboratoryProtocolSchema = z.enum(['impulse', 'continuous'])
+export const runLaboratoryTestCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  sourceSignal: signalIdSchema,
+  receiverSignal: signalIdSchema,
+  protocol: laboratoryProtocolSchema,
+  type: z.literal('run-laboratory-test'),
+}).strict().refine((command) => command.sourceSignal !== command.receiverSignal, 'Laboratory Signals must differ')
+
 export const tenderCommandSchema = z.discriminatedUnion('type', [
   requestAccessSlotCommandSchema,
   allocatePowerCommandSchema,
   conductReconnaissanceCommandSchema,
+  runLaboratoryTestCommandSchema,
 ])
 
 export const commandReceiptSchema = z.object({

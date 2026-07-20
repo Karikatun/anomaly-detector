@@ -12,7 +12,7 @@ import type {
 import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@the-game/contracts'
 import type { StoredTender, TenderStore } from './application/tender-store'
 import { resolveAccessSlots } from './domain/access-slots'
-import { createAnomalyConfiguration, type SignalId } from './domain/anomaly-configuration'
+import { createAnomalyConfiguration, resolvePublicResult, type SignalId } from './domain/anomaly-configuration'
 import { TenderFailure } from './domain/errors'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
@@ -45,6 +45,10 @@ export function createTenderModule({
 
   const nextReconnaissancePlayer = (tender: StoredTender) => tender.players
     .filter((player) => tender.powerAllocations[player.id]?.reconnaissance > 0 && !tender.reconnaissanceCompletedByPlayer[player.id])
+    .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
+
+  const nextLaboratoryPlayer = (tender: StoredTender) => tender.players
+    .filter((player) => tender.powerAllocations[player.id]?.laboratory > 0 && !tender.laboratoryCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
   const commitCommand = async ({
@@ -94,6 +98,7 @@ export function createTenderModule({
         powerAllocations: {},
         rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
         reconnaissanceCompletedByPlayer: {},
+        laboratoryCompletedByPlayer: {},
         players: parsedInput.data.players,
         requestedSlots: {},
         samplesByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
@@ -172,6 +177,36 @@ export function createTenderModule({
             phase: isReadyToStartReconnaissance ? 'reconnaissance' : tender.phase,
             powerAllocations,
           },
+          tender,
+        })
+      }
+
+      if (command.type === 'run-laboratory-test') {
+        if (tender.phase !== 'laboratory') {
+          throw new TenderFailure('invalid_tender_state', 'Laboratory is closed')
+        }
+        const expectedPlayer = nextLaboratoryPlayer(tender)
+        const samples = tender.samplesByPlayer[player.id] ?? []
+        const expectedProtocol = tender.powerAllocations[player.id]?.laboratory === 2 ? 'continuous' : 'impulse'
+        if (expectedPlayer?.id !== player.id || command.protocol !== expectedProtocol || !samples.includes(command.sourceSignal) || !samples.includes(command.receiverSignal)) {
+          throw new TenderFailure('invalid_tender_state', 'Laboratory command is not available to this Player')
+        }
+        const publicResult = resolvePublicResult(
+          tender.anomalyConfiguration.signals[command.sourceSignal],
+          tender.anomalyConfiguration.signals[command.receiverSignal],
+        )
+        const laboratoryCompletedByPlayer = { ...tender.laboratoryCompletedByPlayer, [player.id]: true }
+        const nextTender = { ...tender, laboratoryCompletedByPlayer }
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'laboratory_test_completed',
+            payload: { playerId: player.id, protocol: command.protocol, publicResult, receiverSignal: command.receiverSignal, sourceSignal: command.sourceSignal },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: { ...nextTender, phase: nextLaboratoryPlayer(nextTender) ? 'laboratory' : 'model-analysis' },
           tender,
         })
       }
