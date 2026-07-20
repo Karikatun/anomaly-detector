@@ -32,6 +32,7 @@ test('records an Access Slot command once and exposes it only to its player', as
       { playerId: 'player-b' },
     ],
     privateRawTelemetrySignals: ['aster'],
+    privateMeasurements: [],
     privateSamples: ['aster'],
   })
 })
@@ -160,6 +161,7 @@ test('restores a player Tender view from the shared store', async () => {
       { playerId: 'player-b' },
     ],
     privateRawTelemetrySignals: ['aster'],
+    privateMeasurements: [],
     privateSamples: ['aster'],
   })
 })
@@ -210,6 +212,7 @@ test('resolves Access Slots and opens Power planning after every player chooses'
       { playerId: 'player-d', accessSlot: 6 },
     ],
     privateRawTelemetrySignals: ['aster'],
+    privateMeasurements: [],
     privateSamples: ['aster'],
   })
 })

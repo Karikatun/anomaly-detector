@@ -8,6 +8,8 @@ import type {
 } from '@the-game/contracts'
 import type { AnomalyConfiguration, SignalId } from '../domain/anomaly-configuration'
 
+export type PrivateMeasurement = { receiverSignal: SignalId; sourceSignal: SignalId; stability: 'stable' | 'volatile' }
+
 export type StoredTenderCommand = {
   fingerprint: string
   receipt: CommandReceipt
@@ -32,6 +34,7 @@ export type StoredTender = {
   rawTelemetrySignalsByPlayer: Record<string, SignalId[]>
   reconnaissanceCompletedByPlayer: Record<string, boolean>
   laboratoryCompletedByPlayer: Record<string, boolean>
+  privateMeasurementsByPlayer: Record<string, PrivateMeasurement[]>
   samplesByPlayer: Record<string, SignalId[]>
   players: TenderPlayer[]
   version: number

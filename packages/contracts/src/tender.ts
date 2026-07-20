@@ -91,6 +91,12 @@ export const tenderPlayerViewSchema = z.object({
   requestedAccessSlot: z.number().int().min(1).max(6).optional(),
 }).strict()
 
+export const privateMeasurementSchema = z.object({
+  receiverSignal: signalIdSchema,
+  sourceSignal: signalIdSchema,
+  stability: z.enum(['stable', 'volatile']),
+}).strict()
+
 export const tenderViewSchema = z.object({
   knownSignals: z.array(signalIdSchema),
   tenderId: tenderIdSchema,
@@ -99,6 +105,7 @@ export const tenderViewSchema = z.object({
   players: z.array(tenderPlayerViewSchema),
   privateRawTelemetrySignals: z.array(signalIdSchema),
   privateSamples: z.array(signalIdSchema),
+  privateMeasurements: z.array(privateMeasurementSchema),
 }).strict()
 
 export const tenderViewQuerySchema = z.object({
