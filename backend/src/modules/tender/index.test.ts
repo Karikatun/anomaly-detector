@@ -25,9 +25,9 @@ test('records an Access Slot command once and exposes it only to its player', as
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
     knownSignals: ['aster', 'boreal'],
     publicContracts: [
-      { contractId: 'round-1-contract-1' },
-      { contractId: 'round-1-contract-2' },
-      { contractId: 'round-1-contract-3' },
+      { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
+      { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
+      { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
     ],
     publicLaboratoryResults: [],
     tenderId,
@@ -161,9 +161,9 @@ test('restores a player Tender view from the shared store', async () => {
   expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
     knownSignals: ['aster', 'boreal'],
     publicContracts: [
-      { contractId: 'round-1-contract-1' },
-      { contractId: 'round-1-contract-2' },
-      { contractId: 'round-1-contract-3' },
+      { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
+      { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
+      { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
     ],
     publicLaboratoryResults: [],
     tenderId,
@@ -217,11 +217,11 @@ test('resolves Access Slots and opens Power planning after every player chooses'
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
     knownSignals: ['aster', 'boreal'],
     publicContracts: [
-      { contractId: 'round-1-contract-1' },
-      { contractId: 'round-1-contract-2' },
-      { contractId: 'round-1-contract-3' },
-      { contractId: 'round-1-contract-4' },
-      { contractId: 'round-1-contract-5' },
+      { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
+      { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
+      { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
+      { contractId: 'round-1-contract-4', requiredPublicResult: 'unstable_collapse' },
+      { contractId: 'round-1-contract-5', requiredPublicResult: 'reflection' },
     ],
     publicLaboratoryResults: [],
     tenderId,
@@ -664,19 +664,136 @@ test('reserves public Contracts in Access Slot order', async () => {
   })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
 
   await tender.execute({
+    actorId: 'player-a',
+    claimedPublicResult: 'attenuation',
+    commandId: 'a-5',
+    contractId: 'round-1-contract-2',
+    requestedFunding: 3,
+    tenderId,
+    type: 'submit-contract-bid',
+  })
+
+  await expect(tender.execute({
     actorId: 'player-b',
     commandId: 'b-6',
+    contractId: 'round-1-contract-2',
+    tenderId,
+    type: 'reserve-contract',
+  })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'b-7',
     contractId: 'round-1-contract-3',
     tenderId,
     type: 'reserve-contract',
+  })
+
+  await tender.execute({
+    actorId: 'player-b',
+    claimedPublicResult: 'transmission_gain',
+    commandId: 'b-8',
+    contractId: 'round-1-contract-3',
+    requestedFunding: 2,
+    tenderId,
+    type: 'submit-contract-bid',
   })
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     phase: 'complete',
     publicContracts: [
       { contractId: 'round-1-contract-1' },
-      { contractId: 'round-1-contract-2', reservedByPlayerId: 'player-a' },
-      { contractId: 'round-1-contract-3', reservedByPlayerId: 'player-b' },
+      { bidOutcome: 'failed', contractId: 'round-1-contract-2', reservedByPlayerId: 'player-a' },
+      { bidOutcome: 'failed', contractId: 'round-1-contract-3', reservedByPlayerId: 'player-b' },
+    ],
+  })
+})
+
+test('awards a reserved Contract Bid with matching public Laboratory evidence', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+  await tender.execute({
+    allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+    actorId: 'player-a',
+    commandId: 'a-2',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 2, reconnaissance: 2 },
+    actorId: 'player-b',
+    commandId: 'b-2',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+  await tender.execute({ commandId: 'b-3', tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+  await tender.execute({
+    commandId: 'a-4',
+    tenderId,
+    actorId: 'player-a',
+    type: 'run-laboratory-test',
+    sourceSignal: 'cinder',
+    receiverSignal: 'delta',
+    protocol: 'impulse',
+  })
+  await tender.execute({
+    commandId: 'b-4',
+    tenderId,
+    actorId: 'player-b',
+    type: 'submit-thesis',
+    signalId: 'boreal',
+    fieldType: 'inertial',
+    polarity: 'positive',
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'a-5',
+    contractId: 'round-1-contract-1',
+    tenderId,
+    type: 'reserve-contract',
+  })
+
+  await expect(tender.execute({
+    actorId: 'player-b',
+    claimedPublicResult: 'reflection',
+    commandId: 'b-5',
+    contractId: 'round-1-contract-1',
+    requestedFunding: 1,
+    tenderId,
+    type: 'submit-contract-bid',
+  })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+
+  await tender.execute({
+    actorId: 'player-a',
+    claimedPublicResult: 'reflection',
+    commandId: 'a-6',
+    contractId: 'round-1-contract-1',
+    requestedFunding: 2,
+    tenderId,
+    type: 'submit-contract-bid',
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    phase: 'complete',
+    publicContracts: [
+      {
+        awardedToPlayerId: 'player-a',
+        bidOutcome: 'awarded',
+        contractId: 'round-1-contract-1',
+        requiredPublicResult: 'reflection',
+        reservedByPlayerId: 'player-a',
+      },
+      { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
+      { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
     ],
   })
 })

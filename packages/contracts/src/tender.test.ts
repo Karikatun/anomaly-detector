@@ -35,9 +35,15 @@ describe('Tender contracts', () => {
       tenderViewSchema.parse({
         knownSignals: ['aster', 'boreal'],
         publicContracts: [
-          { contractId: 'round-1-contract-1' },
-          { contractId: 'round-1-contract-2', reservedByPlayerId: 'player-a' },
-          { contractId: 'round-1-contract-3' },
+          { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
+          {
+            awardedToPlayerId: 'player-a',
+            bidOutcome: 'awarded',
+            contractId: 'round-1-contract-2',
+            requiredPublicResult: 'attenuation',
+            reservedByPlayerId: 'player-a',
+          },
+          { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
         ],
         publicLaboratoryResults: [],
         tenderId: 'tender-1',
@@ -55,9 +61,15 @@ describe('Tender contracts', () => {
     ).toEqual({
       knownSignals: ['aster', 'boreal'],
       publicContracts: [
-        { contractId: 'round-1-contract-1' },
-        { contractId: 'round-1-contract-2', reservedByPlayerId: 'player-a' },
-        { contractId: 'round-1-contract-3' },
+        { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
+        {
+          awardedToPlayerId: 'player-a',
+          bidOutcome: 'awarded',
+          contractId: 'round-1-contract-2',
+          requiredPublicResult: 'attenuation',
+          reservedByPlayerId: 'player-a',
+        },
+        { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
       ],
       publicLaboratoryResults: [],
       tenderId: 'tender-1',
@@ -130,5 +142,19 @@ describe('Tender contracts', () => {
         type: 'reserve-contract',
       }),
     ).toMatchObject({ type: 'reserve-contract' })
+  })
+
+  test('validates a Contract bid command', () => {
+    expect(
+      tenderCommandSchema.parse({
+        actorId: 'player-a',
+        claimedPublicResult: 'reflection',
+        commandId: 'command-a-6',
+        contractId: 'round-1-contract-1',
+        requestedFunding: 2,
+        tenderId: 'tender-1',
+        type: 'submit-contract-bid',
+      }),
+    ).toMatchObject({ type: 'submit-contract-bid' })
   })
 })
