@@ -1,4 +1,5 @@
 import type { DbClient } from '../../../db'
+import { createPersistentTenderModule } from '../../tender'
 import type { RoomRepository } from '../application/ports'
 import { RoomFailure } from '../domain/errors'
 
@@ -88,6 +89,37 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
             where: { id: room.id },
             data: { hostId: remainingMembers[0].userId },
           })
+        }
+      }, { isolationLevel: 'Serializable' })
+    },
+
+    async start(input) {
+      return db.$transaction(async (tx) => {
+        const room = await tx.tenderRoom.findUnique({
+          where: { id: input.roomId },
+          include: { members: { orderBy: { seat: 'asc' } } },
+        })
+        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        if (room.hostId !== input.actorId) throw new RoomFailure('room_not_host', 'Only the room host can start it')
+        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room has already started')
+        if (room.members.length !== room.capacity) throw new RoomFailure('room_full', 'Room needs every seat filled before starting')
+
+        const tender = createPersistentTenderModule(tx as DbClient)
+        const { tenderId } = await tender.createTender({
+          players: room.members.map((member) => ({ id: member.userId, tiePriority: member.seat })),
+        })
+        const startedRoom = await tx.tenderRoom.update({
+          where: { id: room.id },
+          data: { status: 'started', tenderId },
+          include: { members: { orderBy: { seat: 'asc' } } },
+        })
+        return {
+          capacity: startedRoom.capacity as 2 | 3 | 4,
+          hostId: startedRoom.hostId,
+          id: startedRoom.id,
+          members: startedRoom.members.map((member) => ({ seat: member.seat, userId: member.userId })),
+          status: 'started' as const,
+          tenderId,
         }
       }, { isolationLevel: 'Serializable' })
     },

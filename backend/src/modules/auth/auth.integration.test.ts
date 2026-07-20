@@ -216,6 +216,25 @@ maybeDescribe('auth API integration', () => {
       members: [{ seat: 1, userId: user.id }, { seat: 2, userId: joiner.user.id }],
       roomId: room.roomId,
     })
+
+    const nonHostStart = await app.request(`/api/rooms/${room.roomId}/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${joiner.accessToken}` },
+    })
+    expect(nonHostStart.status).toBe(409)
+
+    const start = await app.request(`/api/rooms/${room.roomId}/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(start.status).toBe(200)
+    const startedRoom = await start.json()
+    expect(startedRoom).toMatchObject({
+      roomId: room.roomId,
+      status: 'started',
+    })
+    expect(startedRoom.tenderId).toBeString()
+    expect(await prisma.tender.findUnique({ where: { id: startedRoom.tenderId } })).not.toBeNull()
   })
 
   test('returns one durable successor across three concurrent refresh requests', async () => {

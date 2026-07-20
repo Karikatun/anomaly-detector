@@ -22,6 +22,10 @@ export class TenderRoomService {
   async leaveRoom(input: { actorId: string; roomId: string }) {
     await this.dependencies.repository.leave(input)
   }
+
+  async startRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
+    return toRoomView(await this.dependencies.repository.start(input))
+  }
 }
 
 function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomView {

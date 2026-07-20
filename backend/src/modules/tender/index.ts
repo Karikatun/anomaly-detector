@@ -12,10 +12,12 @@ import type {
 } from '@the-game/contracts'
 import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@the-game/contracts'
 import type { StoredTender, TenderStore } from './application/tender-store'
+import type { DbClient } from '../../db'
 import { resolveAccessSlots } from './domain/access-slots'
 import { createAnomalyConfiguration, resolvePublicResult, signalIds, type SignalId } from './domain/anomaly-configuration'
 import { TenderFailure } from './domain/errors'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
+import { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
 
 type CreateTenderModuleOptions = {
   now?: () => Date
@@ -909,5 +911,9 @@ export function createTenderModule({
       return { advancedTenderIds }
     },
   }
+}
+
+export function createPersistentTenderModule(db: DbClient) {
+  return createTenderModule({ store: createPrismaTenderStore(db) })
 }
 import { randomUUID } from 'node:crypto'
