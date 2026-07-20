@@ -51,6 +51,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       { playerId: 'player-b' },
     ],
     privateRawTelemetrySignals: ['aster'],
+    privateMeasurements: [],
     privateSamples: ['aster'],
   })
     expect((await restartedStore.read(tenderId))?.anomalyConfiguration.seed).toBe('seed-1')
@@ -152,6 +153,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         { playerId: 'player-d', accessSlot: 6 },
       ],
       privateRawTelemetrySignals: ['aster'],
+      privateMeasurements: [],
       privateSamples: ['aster'],
     })
 
@@ -245,6 +247,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
       knownSignals: ['aster', 'boreal', 'cinder'],
       privateRawTelemetrySignals: ['aster'],
+      privateMeasurements: [],
       privateSamples: ['aster'],
     })
   })
