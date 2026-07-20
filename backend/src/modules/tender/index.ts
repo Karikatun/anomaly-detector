@@ -378,6 +378,7 @@ export function createTenderModule({
             playerId: player.id,
             polarity: command.polarity,
             signalId: command.signalId,
+            verification: tender.powerAllocations[player.id]?.modelAnalysis === 2 ? 'extended' as const : 'standard' as const,
           },
         ]
         const nextTender = {

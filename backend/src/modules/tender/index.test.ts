@@ -687,6 +687,7 @@ test('checks public Theses in Access Slot order and opens Contracts', async () =
       playerId: 'player-a',
       polarity: 'negative',
       signalId: 'aster',
+      verification: 'standard',
     }],
   })
 
@@ -709,6 +710,7 @@ test('checks public Theses in Access Slot order and opens Contracts', async () =
         playerId: 'player-a',
         polarity: 'negative',
         signalId: 'aster',
+        verification: 'standard',
       },
       {
         correct: false,
@@ -716,6 +718,7 @@ test('checks public Theses in Access Slot order and opens Contracts', async () =
         playerId: 'player-c',
         polarity: 'positive',
         signalId: 'boreal',
+        verification: 'extended',
       },
     ],
   })

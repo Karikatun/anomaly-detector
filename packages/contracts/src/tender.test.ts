@@ -59,7 +59,14 @@ describe('Tender contracts', () => {
         privateMeasurements: [],
         privateSamples: ['aster'],
         privateWorkingModel: { signals: {} },
-        publicTheses: [],
+        publicTheses: [{
+          correct: true,
+          fieldType: 'inertial',
+          playerId: 'player-a',
+          polarity: 'positive',
+          signalId: 'aster',
+          verification: 'extended',
+        }],
       }),
     ).toEqual({
       knownSignals: ['aster', 'boreal'],
@@ -88,7 +95,14 @@ describe('Tender contracts', () => {
       privateMeasurements: [],
       privateSamples: ['aster'],
       privateWorkingModel: { signals: {} },
-      publicTheses: [],
+      publicTheses: [{
+        correct: true,
+        fieldType: 'inertial',
+        playerId: 'player-a',
+        polarity: 'positive',
+        signalId: 'aster',
+        verification: 'extended',
+      }],
     })
   })
 
