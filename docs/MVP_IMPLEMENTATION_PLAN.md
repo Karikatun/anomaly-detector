@@ -2,7 +2,7 @@
 
 ## Goal
 
-Deliver a synchronous, competitive browser game for 2-4 authenticated players. A Tender lasts five rounds and targets approximately 45 minutes. Players research a hidden Anomaly Configuration, compete for exclusive Contracts, and receive one unambiguous winner by Rating.
+Deliver a synchronous, competitive browser game for 2-4 authenticated players. A Tender lasts five rounds and targets approximately 45 minutes. Players research a hidden Anomaly Configuration, compete for exclusive Contracts, and determine the winner or shared winners by Rating and deterministic tie-breaks.
 
 The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIEF.md). The game-server and data boundaries are defined in [ADR 0001](adr/0001-authoritative-match-server.md), [ADR 0002](adr/0002-russian-launch-data-and-auth-boundary.md), and [ADR 0003](adr/0003-tender-module-and-audit-log.md).
 
@@ -52,7 +52,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** a complete Tender is playable through the authoritative API.
 
-1. [-] Add five fixed rounds and the transitions between Access Slot selection, Power planning, four operational phases, and end-of-round calculation.
+1. [x] Add five fixed rounds and the transitions between Access Slot selection, Power planning, four operational phases, and end-of-round calculation.
    - [x] Add current round number to Tender state and participant Tender views.
    - [x] Add end-of-round transition from round 1 through round 5.
 2. [x] Resolve six secret Access Slots with rotating public tie priority and the confirmed direct-request rule: with `A=1`, `B=1`, `C=2`, `D=6`, results are `A=1`, `B=3`, `C=2`, `D=6`.
@@ -90,7 +90,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Skills:** `tdd` for every rule and edge case; `prototype` for timing, planning order, and decision clarity before complex UI work; `domain-modeling` whenever new rules add vocabulary; `grill-me` only if a rule changes score balance or the victory condition; `code-review` after each phase family.
 
-**Gate:** API-level simulated Tenders for 2, 3, and 4 players complete all five rounds, produce one winner, and replay deterministically from the audit log.
+**Gate:** API-level simulated Tenders for 2, 3, and 4 players complete all five rounds, determine the winner or shared winners, and expose a deterministic participant-only audit replay.
 
 ## Milestone 3: Identity, Rooms, And Realtime
 
@@ -142,7 +142,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 MVP is ready for closed beta only when all of the following hold:
 
 - Two to four authenticated players can create a full private room and complete five live rounds.
-- The server alone determines hidden configuration, timer outcomes, Rating, and the sole winner.
+- The server alone determines hidden configuration, timer outcomes, Rating, and the winner or shared winners.
 - Every participant receives only public information plus their authorised private information until the final audit.
 - Completed Tenders have a deterministic, participant-only replay and score explanation.
 - Russian is the default UI language, and all visible text is loaded from i18n resources.
