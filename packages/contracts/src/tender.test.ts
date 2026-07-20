@@ -42,6 +42,7 @@ describe('Tender contracts', () => {
           { playerId: 'player-b' },
         ],
         privateRawTelemetrySignals: ['aster'],
+        privateMeasurements: [],
         privateSamples: ['aster'],
       }),
     ).toEqual({
@@ -54,6 +55,7 @@ describe('Tender contracts', () => {
         { playerId: 'player-b' },
       ],
       privateRawTelemetrySignals: ['aster'],
+      privateMeasurements: [],
       privateSamples: ['aster'],
     })
   })
