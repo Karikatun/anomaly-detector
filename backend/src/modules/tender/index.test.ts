@@ -2,27 +2,46 @@ import { expect, test } from 'bun:test'
 
 import { createTenderModule } from './index'
 
-test('a direct Access Slot request keeps its slot when another team is displaced into it', () => {
+test('records an Access Slot command once and exposes it only to its participant', async () => {
   const tender = createTenderModule()
-  const { tenderId } = tender.createTender({
+  const { tenderId } = await tender.createTender({
     teams: [
-      { id: 'A', tiePriority: 1 },
-      { id: 'B', tiePriority: 2 },
-      { id: 'C', tiePriority: 3 },
-      { id: 'D', tiePriority: 4 },
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
     ],
   })
 
-  tender.execute({ tenderId, type: 'request-access-slot', teamId: 'A', slot: 1 })
-  tender.execute({ tenderId, type: 'request-access-slot', teamId: 'B', slot: 1 })
-  tender.execute({ tenderId, type: 'request-access-slot', teamId: 'C', slot: 2 })
-  tender.execute({ tenderId, type: 'request-access-slot', teamId: 'D', slot: 6 })
-  tender.execute({ tenderId, type: 'resolve-access-slots' })
+  const command = {
+    commandId: 'command-a-1',
+    tenderId,
+    actorId: 'player-a',
+    type: 'request-access-slot' as const,
+    slot: 1,
+  }
 
-  expect(tender.readTenderView({ tenderId, teamId: 'A' }).accessSlots).toEqual([
-    { teamId: 'A', slot: 1 },
-    { teamId: 'B', slot: 3 },
-    { teamId: 'C', slot: 2 },
-    { teamId: 'D', slot: 6 },
-  ])
+  expect(await tender.execute(command)).toEqual({ tenderId, version: 1 })
+  expect(await tender.execute(command)).toEqual({ tenderId, version: 1 })
+  expect(await tender.readTenderView({ tenderId, participantId: 'player-a' })).toEqual({
+    tenderId,
+    version: 1,
+    phase: 'access-slot-selection',
+    teams: [
+      { teamId: 'team-a', requestedAccessSlot: 1 },
+      { teamId: 'team-b' },
+    ],
+  })
+})
+
+test('does not return a Tender view to a non-participant', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    teams: [
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await expect(tender.readTenderView({ tenderId, participantId: 'player-c' })).rejects.toThrow(
+    'is not in this Tender',
+  )
 })
