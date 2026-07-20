@@ -175,3 +175,49 @@ test('stores a seed-derived Anomaly Configuration without exposing it in a Tende
     'anomalyConfiguration',
   )
 })
+
+test('resolves Access Slots and opens Power planning after every participant chooses', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    teams: [
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+      { id: 'team-c', participantId: 'player-c', tiePriority: 3 },
+      { id: 'team-d', participantId: 'player-d', tiePriority: 4 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'command-c-1', tenderId, actorId: 'player-c', type: 'request-access-slot', slot: 2 })
+  await tender.execute({ commandId: 'command-d-1', tenderId, actorId: 'player-d', type: 'request-access-slot', slot: 6 })
+
+  expect(await tender.readTenderView({ tenderId, participantId: 'player-a' })).toEqual({
+    tenderId,
+    version: 4,
+    phase: 'power-allocation',
+    teams: [
+      { teamId: 'team-a', accessSlot: 1 },
+      { teamId: 'team-b', accessSlot: 3 },
+      { teamId: 'team-c', accessSlot: 2 },
+      { teamId: 'team-d', accessSlot: 6 },
+    ],
+  })
+})
+
+test('rejects an Access Slot command after Power planning opens', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    teams: [
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+
+  await expect(
+    tender.execute({ commandId: 'command-a-2', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 3 }),
+  ).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+})
