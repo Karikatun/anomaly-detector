@@ -52,6 +52,12 @@ export function createTenderModule({
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
   const nextModelAnalysisPlayer = (tender: StoredTender) => tender.players.filter((player) => tender.powerAllocations[player.id]?.modelAnalysis > 0 && !tender.modelAnalysisCompletedByPlayer[player.id]).sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
+  const nextOperationalPhase = (tender: StoredTender, after: 'reconnaissance' | 'laboratory' | 'model-analysis') => {
+    if (after === 'reconnaissance' && nextLaboratoryPlayer(tender)) return 'laboratory'
+    if (after !== 'model-analysis' && nextModelAnalysisPlayer(tender)) return 'model-analysis'
+    return 'contracts'
+  }
+
   const commitCommand = async ({
     auditEvents,
     command,
@@ -97,6 +103,7 @@ export function createTenderModule({
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
         knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
+        publicTheses: [],
         rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
         reconnaissanceCompletedByPlayer: {},
         laboratoryCompletedByPlayer: {},
@@ -222,7 +229,7 @@ export function createTenderModule({
           }],
           command,
           commandFingerprint,
-          nextTender: { ...nextTender, phase: nextLaboratoryPlayer(nextTender) ? 'laboratory' : 'model-analysis' },
+          nextTender: { ...nextTender, phase: nextLaboratoryPlayer(nextTender) ? 'laboratory' : nextOperationalPhase(nextTender, 'laboratory') },
           tender,
         })
       }
@@ -232,8 +239,18 @@ export function createTenderModule({
         const actual = tender.anomalyConfiguration.signals[command.signalId]
         const correct = actual.fieldType === command.fieldType && actual.polarity === command.polarity
         const modelAnalysisCompletedByPlayer = { ...tender.modelAnalysisCompletedByPlayer, [player.id]: true }
-        const nextTender = { ...tender, modelAnalysisCompletedByPlayer }
-        return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_checked', payload: { correct, playerId: player.id, signalId: command.signalId } }], command, commandFingerprint, nextTender: { ...nextTender, phase: nextModelAnalysisPlayer(nextTender) ? 'model-analysis' : 'contracts' }, tender })
+        const publicTheses = [
+          ...tender.publicTheses,
+          {
+            correct,
+            fieldType: command.fieldType,
+            playerId: player.id,
+            polarity: command.polarity,
+            signalId: command.signalId,
+          },
+        ]
+        const nextTender = { ...tender, modelAnalysisCompletedByPlayer, publicTheses }
+        return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_checked', payload: { correct, playerId: player.id, signalId: command.signalId } }], command, commandFingerprint, nextTender: { ...nextTender, phase: nextModelAnalysisPlayer(nextTender) ? 'model-analysis' : nextOperationalPhase(nextTender, 'model-analysis') }, tender })
       }
 
       if (tender.phase !== 'reconnaissance') {
@@ -274,7 +291,7 @@ export function createTenderModule({
         }],
         command,
         commandFingerprint,
-        nextTender: { ...nextTender, phase: isReadyForLaboratory ? 'laboratory' : tender.phase },
+        nextTender: { ...nextTender, phase: isReadyForLaboratory ? nextOperationalPhase(nextTender, 'reconnaissance') : tender.phase },
         tender,
       })
     },
@@ -305,6 +322,7 @@ export function createTenderModule({
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
+        publicTheses: tender.publicTheses,
       }
     },
 

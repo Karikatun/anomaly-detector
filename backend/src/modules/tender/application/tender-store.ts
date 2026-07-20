@@ -2,6 +2,7 @@ import type {
   AdvanceDueTendersInput,
   CommandReceipt,
   PowerAllocation,
+  PublicThesis,
   TenderCommand,
   TenderPhase,
   TenderPlayer,
@@ -30,6 +31,7 @@ export type StoredTender = {
   phase: TenderPhase
   powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>
+  publicTheses: PublicThesis[]
   requestedSlots: Record<string, number>
   rawTelemetrySignalsByPlayer: Record<string, SignalId[]>
   reconnaissanceCompletedByPlayer: Record<string, boolean>

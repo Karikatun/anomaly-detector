@@ -34,6 +34,7 @@ test('records an Access Slot command once and exposes it only to its player', as
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
+    publicTheses: [],
   })
 })
 
@@ -163,6 +164,7 @@ test('restores a player Tender view from the shared store', async () => {
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
+    publicTheses: [],
   })
 })
 
@@ -214,6 +216,7 @@ test('resolves Access Slots and opens Power planning after every player chooses'
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
+    publicTheses: [],
   })
 })
 
@@ -390,10 +393,104 @@ test('resolves a continuous Laboratory test between a Player\'s Samples', async 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({ privateMeasurements: [] })
 })
 
-test('checks public theses in Access Slot order and opens Contracts', async () => {
-  const tender = createTenderModule()
-  const { tenderId } = await tender.createTender({ players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }] })
-  const store = (tender as never)
-  expect(store).toBeDefined()
-  await expect(tender.execute({ commandId: 'thesis-a', tenderId, actorId: 'player-a', type: 'submit-thesis', signalId: 'aster', fieldType: 'inertial', polarity: 'positive' } as never)).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+test('checks public Theses in Access Slot order and opens Contracts', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+      { id: 'player-c', tiePriority: 3 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+  await tender.execute({ commandId: 'c-1', tenderId, actorId: 'player-c', type: 'request-access-slot', slot: 3 })
+  await tender.execute({
+    allocation: { contracts: 1, laboratory: 0, modelAnalysis: 1, reconnaissance: 2 },
+    actorId: 'player-a',
+    commandId: 'a-2',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 },
+    actorId: 'player-b',
+    commandId: 'b-2',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 2, reconnaissance: 2 },
+    actorId: 'player-c',
+    commandId: 'c-2',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+  await tender.execute({ commandId: 'b-3', tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+  await tender.execute({ commandId: 'c-3', tenderId, actorId: 'player-c', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+
+  await expect(
+    tender.execute({
+      commandId: 'c-4',
+      tenderId,
+      actorId: 'player-c',
+      type: 'submit-thesis',
+      signalId: 'aster',
+      fieldType: 'phase',
+      polarity: 'negative',
+    }),
+  ).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+
+  await tender.execute({
+    commandId: 'a-4',
+    tenderId,
+    actorId: 'player-a',
+    type: 'submit-thesis',
+    signalId: 'aster',
+    fieldType: 'inertial',
+    polarity: 'negative',
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    phase: 'model-analysis',
+    publicTheses: [{
+      correct: true,
+      fieldType: 'inertial',
+      playerId: 'player-a',
+      polarity: 'negative',
+      signalId: 'aster',
+    }],
+  })
+
+  await tender.execute({
+    commandId: 'c-5',
+    tenderId,
+    actorId: 'player-c',
+    type: 'submit-thesis',
+    signalId: 'boreal',
+    fieldType: 'phase',
+    polarity: 'positive',
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'contracts',
+    publicTheses: [
+      {
+        correct: true,
+        fieldType: 'inertial',
+        playerId: 'player-a',
+        polarity: 'negative',
+        signalId: 'aster',
+      },
+      {
+        correct: false,
+        fieldType: 'phase',
+        playerId: 'player-c',
+        polarity: 'positive',
+        signalId: 'boreal',
+      },
+    ],
+  })
 })

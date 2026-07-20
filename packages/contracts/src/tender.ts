@@ -95,6 +95,14 @@ export const tenderPlayerViewSchema = z.object({
   requestedAccessSlot: z.number().int().min(1).max(6).optional(),
 }).strict()
 
+export const publicThesisSchema = z.object({
+  correct: z.boolean(),
+  fieldType: fieldTypeSchema,
+  playerId: playerIdSchema,
+  polarity: polaritySchema,
+  signalId: signalIdSchema,
+}).strict()
+
 export const privateMeasurementSchema = z.object({
   receiverSignal: signalIdSchema,
   sourceSignal: signalIdSchema,
@@ -110,6 +118,7 @@ export const tenderViewSchema = z.object({
   privateRawTelemetrySignals: z.array(signalIdSchema),
   privateSamples: z.array(signalIdSchema),
   privateMeasurements: z.array(privateMeasurementSchema),
+  publicTheses: z.array(publicThesisSchema),
 }).strict()
 
 export const tenderViewQuerySchema = z.object({
@@ -131,6 +140,7 @@ export type CreateTender = z.infer<typeof createTenderSchema>
 export type TenderCommand = z.infer<typeof tenderCommandSchema>
 export type PowerAllocation = z.infer<typeof powerAllocationSchema>
 export type CommandReceipt = z.infer<typeof commandReceiptSchema>
+export type PublicThesis = z.infer<typeof publicThesisSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>
 export type TenderViewQuery = z.infer<typeof tenderViewQuerySchema>

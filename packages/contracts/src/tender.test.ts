@@ -44,6 +44,7 @@ describe('Tender contracts', () => {
         privateRawTelemetrySignals: ['aster'],
         privateMeasurements: [],
         privateSamples: ['aster'],
+        publicTheses: [],
       }),
     ).toEqual({
       knownSignals: ['aster', 'boreal'],
@@ -57,6 +58,7 @@ describe('Tender contracts', () => {
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
       privateSamples: ['aster'],
+      publicTheses: [],
     })
   })
 
