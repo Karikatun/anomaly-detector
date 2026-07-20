@@ -63,4 +63,30 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       },
     ])
   })
+
+  test('replays a persisted command receipt through a new PostgreSQL store adapter', async () => {
+    const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await firstModule.createTender({
+      teams: [
+        { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+        { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+      ],
+    })
+    const command = {
+      commandId: 'command-a-1',
+      tenderId,
+      actorId: 'player-a',
+      type: 'request-access-slot' as const,
+      slot: 1,
+    }
+
+    await firstModule.execute(command)
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+
+    expect(await restartedModule.execute(command)).toEqual({ tenderId, version: 1 })
+    await expect(restartedModule.execute({ ...command, slot: 2 })).rejects.toMatchObject({
+      kind: 'duplicate_command_conflict',
+    })
+  })
 })
