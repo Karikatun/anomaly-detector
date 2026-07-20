@@ -22,7 +22,7 @@ Five fixed rounds end with a final corporate audit. The player with the highest 
 
 - About 60% of rating comes from commercial contracts.
 - About 40% comes from science: confirmed theses and the final fundamental model.
-- The final model gives partial credit for each correct signal property and a substantial bonus for a complete correct model.
+- The final model gives one Rating for each correct signal property and a three-Rating bonus for a complete correct model. A successful normal Contract gives four Rating; the Final Contract gives eight Rating.
 - Tie-breakers, in order: higher research confirmation, more remaining budget, then shared victory.
 - The score breakdown is public after every round. The unsubmitted portion of a player's final model stays hidden until the audit, with its possible score range shown.
 

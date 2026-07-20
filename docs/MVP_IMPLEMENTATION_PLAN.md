@@ -85,7 +85,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Add starting Analytical Report and Access Slot analytical-report compensation for slot 5.
    - [x] Add requested-funding Budget payout for awarded single-Bid assessment.
    - [x] Add Budget and Corporate Trust effects.
-8. [ ] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
+8. [x] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
 9. [x] Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.
 
 **Skills:** `tdd` for every rule and edge case; `prototype` for timing, planning order, and decision clarity before complex UI work; `domain-modeling` whenever new rules add vocabulary; `grill-me` only if a rule changes score balance or the victory condition; `code-review` after each phase family.

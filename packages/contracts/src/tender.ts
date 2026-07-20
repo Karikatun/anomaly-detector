@@ -109,6 +109,27 @@ export const submitContractBidCommandSchema = z.object({
   type: z.literal('submit-contract-bid'),
 }).strict()
 
+export const scientificModelSignalSchema = z.object({
+  fieldType: fieldTypeSchema.optional(),
+  polarity: polaritySchema.optional(),
+}).strict().refine(
+  (claim) => claim.fieldType !== undefined || claim.polarity !== undefined,
+  'Scientific Model Signal must claim at least one property',
+)
+export const scientificModelSchema = z.object({
+  signals: z.partialRecord(signalIdSchema, scientificModelSignalSchema),
+}).strict().refine(
+  (model) => Object.keys(model.signals).length > 0,
+  'Scientific Model must claim at least one Signal property',
+)
+export const submitScientificModelCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  scientificModel: scientificModelSchema,
+  type: z.literal('submit-scientific-model'),
+}).strict()
+
 export const tenderCommandSchema = z.discriminatedUnion('type', [
   requestAccessSlotCommandSchema,
   allocatePowerCommandSchema,
@@ -118,6 +139,7 @@ export const tenderCommandSchema = z.discriminatedUnion('type', [
   submitThesisCommandSchema,
   reserveContractCommandSchema,
   submitContractBidCommandSchema,
+  submitScientificModelCommandSchema,
 ])
 
 export const commandReceiptSchema = z.object({
@@ -132,6 +154,7 @@ export const tenderPhaseSchema = z.enum([
   'laboratory',
   'model-analysis',
   'contracts',
+  'final-scientific-model',
   'complete',
 ])
 
@@ -202,6 +225,7 @@ export const tenderAuditViewSchema = z.object({
 export const tenderViewSchema = z.object({
   knownSignals: z.array(signalIdSchema),
   publicContracts: z.array(publicContractSchema),
+  publicFinalContract: publicContractSchema.optional(),
   publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
   round: z.number().int().min(1).max(5),
   tenderId: tenderIdSchema,
@@ -215,6 +239,7 @@ export const tenderViewSchema = z.object({
   privateWorkingModel: workingModelSchema,
   publicTheses: z.array(publicThesisSchema),
   audit: tenderAuditViewSchema.optional(),
+  winnerPlayerIds: z.array(playerIdSchema).optional(),
 }).strict()
 
 export const tenderViewQuerySchema = z.object({
@@ -242,6 +267,7 @@ export type PublicThesis = z.infer<typeof publicThesisSchema>
 export type TenderAuditEvent = z.infer<typeof tenderAuditEventSchema>
 export type TenderAuditView = z.infer<typeof tenderAuditViewSchema>
 export type WorkingModel = z.infer<typeof workingModelSchema>
+export type ScientificModel = z.infer<typeof scientificModelSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>
 export type TenderViewQuery = z.infer<typeof tenderViewQuerySchema>

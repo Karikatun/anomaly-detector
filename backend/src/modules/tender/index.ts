@@ -4,6 +4,7 @@ import type {
   CommandReceipt,
   CreateTender,
   PowerAllocation,
+  ScientificModel,
   TenderCommand,
   TenderPlayer,
   TenderView,
@@ -26,6 +27,10 @@ const accessSlotSelectionDurationMs = 45_000
 const powerAllocationDurationMs = 60_000
 const operationalActionDurationMs = 20_000
 const operationalGrantBudget = 1
+const normalContractRating = 4
+const finalContractRating = 8
+const completeScientificModelBonus = 3
+const finalContractId = 'final-contract'
 
 const deadlineForPhase = (phase: string, at: Date) => {
   if (phase === 'access-slot-selection') return new Date(at.getTime() + accessSlotSelectionDurationMs)
@@ -115,6 +120,20 @@ export function createTenderModule({
     .filter((player) => tender.publicContracts.every((contract) => contract.reservedByPlayerId !== player.id || contract.bidOutcome === undefined))
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
+  const nextScientificModelPlayer = (tender: StoredTender) => tender.players
+    .filter((player) => !tender.finalScientificModelCompletedByPlayer[player.id])
+    .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
+
+  const resolveWinners = (tender: StoredTender) => {
+    const highestRating = Math.max(...tender.players.map((player) => tender.ratingByPlayer[player.id] ?? 0))
+    const ratingLeaders = tender.players.filter((player) => (tender.ratingByPlayer[player.id] ?? 0) === highestRating)
+    const correctThesisCount = (playerId: string) => tender.publicTheses.filter((thesis) => thesis.playerId === playerId && thesis.correct).length
+    const highestThesisCount = Math.max(...ratingLeaders.map((player) => correctThesisCount(player.id)))
+    const thesisLeaders = ratingLeaders.filter((player) => correctThesisCount(player.id) === highestThesisCount)
+    const highestBudget = Math.max(...thesisLeaders.map((player) => tender.budgetByPlayer[player.id] ?? 0))
+    return thesisLeaders.filter((player) => (tender.budgetByPlayer[player.id] ?? 0) === highestBudget).map((player) => player.id)
+  }
+
   const nextOperationalPhase = (tender: StoredTender, after: 'reconnaissance' | 'laboratory' | 'model-analysis') => {
     if (after === 'reconnaissance' && nextLaboratoryPlayer(tender)) return 'laboratory'
     if (after !== 'model-analysis' && nextModelAnalysisPlayer(tender)) return 'model-analysis'
@@ -133,7 +152,7 @@ export function createTenderModule({
       (tender.budgetByPlayer[player.id] ?? 0) + operationalGrantBudget,
     ]))
     const tenderAfterGrant = { ...tender, budgetByPlayer }
-    if (tender.round >= 5) return { ...tenderAfterGrant, phase: 'complete' }
+    if (tender.round >= 5) return { ...tenderAfterGrant, phase: 'final-scientific-model' }
     const round = tender.round + 1
     return {
       ...tenderAfterGrant,
@@ -213,9 +232,12 @@ export function createTenderModule({
         contractCompletedByPlayer: {},
         contractPowerRestrictionsByPlayer: {},
         dueAt: deadlineForPhase('access-slot-selection', now()),
+        finalScientificModelCompletedByPlayer: {},
+        finalScientificModelsByPlayer: {},
         knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
         publicContracts: createRoundContracts(1, parsedInput.data.players.length),
+        publicFinalContract: { contractId: finalContractId, requiredPublicResult: 'reflection' },
         publicLaboratoryResults: [],
         publicTheses: [],
         ratingByPlayer: {},
@@ -232,6 +254,7 @@ export function createTenderModule({
         processedCommands: {},
         phase: 'access-slot-selection',
         version: 0,
+        winnerPlayerIds: [],
       })
       return { tenderId: tender.id }
     },
@@ -472,20 +495,70 @@ export function createTenderModule({
         })
       }
 
+      if (command.type === 'submit-scientific-model') {
+        if (tender.phase !== 'final-scientific-model' || nextScientificModelPlayer(tender)?.id !== player.id) {
+          throw new TenderFailure('invalid_tender_state', 'Final Scientific Model is not available to this Player')
+        }
+        const correctProperties = Object.entries(command.scientificModel.signals).reduce((score, [signalId, claim]) => {
+          const actual = tender.anomalyConfiguration.signals[signalId as SignalId]
+          return score
+            + (claim.fieldType === actual.fieldType ? 1 : 0)
+            + (claim.polarity === actual.polarity ? 1 : 0)
+        }, 0)
+        const isCompleteModel = signalIds.every((signalId) => {
+          const claim = command.scientificModel.signals[signalId]
+          const actual = tender.anomalyConfiguration.signals[signalId]
+          return claim?.fieldType === actual.fieldType && claim.polarity === actual.polarity
+        })
+        const ratingAward = correctProperties + (isCompleteModel ? completeScientificModelBonus : 0)
+        const ratingByPlayer = {
+          ...tender.ratingByPlayer,
+          [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + ratingAward,
+        }
+        const nextTender = {
+          ...tender,
+          finalScientificModelCompletedByPlayer: { ...tender.finalScientificModelCompletedByPlayer, [player.id]: true },
+          finalScientificModelsByPlayer: { ...tender.finalScientificModelsByPlayer, [player.id]: command.scientificModel },
+          ratingByPlayer,
+        }
+        const phase = nextScientificModelPlayer(nextTender) ? 'final-scientific-model' : 'complete'
+        const completedTender = phase === 'complete'
+          ? { ...nextTender, winnerPlayerIds: resolveWinners(nextTender) }
+          : nextTender
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'scientific_model_scored',
+            payload: { correctProperties, isCompleteModel, playerId: player.id, ratingAward, scientificModel: command.scientificModel },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: { ...completedTender, dueAt: deadlineForPhase(phase, now()), phase },
+          tender,
+        })
+      }
+
       if (command.type === 'reserve-contract') {
         if (tender.phase !== 'contracts') {
           throw new TenderFailure('invalid_tender_state', 'Contracts are closed')
         }
         const expectedPlayer = nextContractsPlayer(tender)
-        const contract = tender.publicContracts.find((candidate) => candidate.contractId === command.contractId)
+        const isFinalContract = command.contractId === finalContractId
+        const contract = isFinalContract
+          ? tender.publicFinalContract
+          : tender.publicContracts.find((candidate) => candidate.contractId === command.contractId)
         const alreadyReservedContract = tender.publicContracts.some((candidate) => candidate.reservedByPlayerId === player.id)
-        if (!contract || contract.reservedByPlayerId || alreadyReservedContract || expectedPlayer?.id !== player.id) {
+          || tender.publicFinalContract.reservedByPlayerId === player.id
+        const canReserveFinalContract = tender.round === 5 && (tender.corporateTrustByPlayer[player.id] ?? 0) >= 2
+        if (!contract || contract.reservedByPlayerId || alreadyReservedContract || expectedPlayer?.id !== player.id || (isFinalContract && !canReserveFinalContract)) {
           throw new TenderFailure('invalid_tender_state', 'Contract reservation is not available to this Player')
         }
         const publicContracts = tender.publicContracts.map((candidate) => candidate.contractId === command.contractId
           ? { ...candidate, reservedByPlayerId: player.id }
           : candidate)
-        const nextTender = { ...tender, publicContracts }
+        const publicFinalContract = isFinalContract ? { ...tender.publicFinalContract, reservedByPlayerId: player.id } : tender.publicFinalContract
+        const nextTender = { ...tender, publicContracts, publicFinalContract }
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
@@ -505,7 +578,10 @@ export function createTenderModule({
           throw new TenderFailure('invalid_tender_state', 'Contracts are closed')
         }
         const expectedPlayer = nextContractsPlayer(tender)
-        const contract = tender.publicContracts.find((candidate) => candidate.contractId === command.contractId)
+        const isFinalContract = command.contractId === finalContractId
+        const contract = isFinalContract
+          ? tender.publicFinalContract
+          : tender.publicContracts.find((candidate) => candidate.contractId === command.contractId)
         if (!contract || contract.bidOutcome !== undefined || contract.reservedByPlayerId !== player.id || expectedPlayer?.id !== player.id) {
           throw new TenderFailure('invalid_tender_state', 'Contract Bid is not available to this Player')
         }
@@ -518,13 +594,23 @@ export function createTenderModule({
             bidOutcome: isAwarded ? 'awarded' as const : 'failed' as const,
           }
           : candidate)
+        const publicFinalContract = isFinalContract
+          ? {
+            ...tender.publicFinalContract,
+            ...(isAwarded ? { awardedToPlayerId: player.id } : {}),
+            bidOutcome: isAwarded ? 'awarded' as const : 'failed' as const,
+          }
+          : tender.publicFinalContract
         const budgetByPlayer = isAwarded
           ? { ...tender.budgetByPlayer, [player.id]: (tender.budgetByPlayer[player.id] ?? 0) + command.requestedFunding }
           : tender.budgetByPlayer
         const corporateTrustByPlayer = isAwarded
-          ? { ...tender.corporateTrustByPlayer, [player.id]: (tender.corporateTrustByPlayer[player.id] ?? 0) + 1 }
+          ? { ...tender.corporateTrustByPlayer, [player.id]: (tender.corporateTrustByPlayer[player.id] ?? 0) + (isFinalContract ? 0 : 1) }
           : tender.corporateTrustByPlayer
-        const nextTender = { ...tender, budgetByPlayer, contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [player.id]: true }, corporateTrustByPlayer, publicContracts }
+        const ratingByPlayer = isAwarded
+          ? { ...tender.ratingByPlayer, [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + (isFinalContract ? finalContractRating : normalContractRating) }
+          : tender.ratingByPlayer
+        const nextTender = { ...tender, budgetByPlayer, contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [player.id]: true }, corporateTrustByPlayer, publicContracts, publicFinalContract, ratingByPlayer }
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
@@ -537,6 +623,7 @@ export function createTenderModule({
               contractId: command.contractId,
               corporateTrustByPlayer,
               playerId: player.id,
+              ratingByPlayer,
               requestedFunding: command.requestedFunding,
             },
           }],
@@ -607,6 +694,7 @@ export function createTenderModule({
       return {
         knownSignals: tender.knownSignals,
         publicContracts: tender.publicContracts,
+        publicFinalContract: tender.publicFinalContract,
         publicLaboratoryResults: tender.publicLaboratoryResults,
         round: tender.round,
         tenderId,
@@ -632,6 +720,7 @@ export function createTenderModule({
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
         publicTheses: tender.publicTheses,
+        ...(tender.phase === 'complete' ? { winnerPlayerIds: tender.winnerPlayerIds } : {}),
         ...(tender.phase === 'complete' ? {
           audit: {
             anomalyConfiguration: tender.anomalyConfiguration,
@@ -746,6 +835,25 @@ export function createTenderModule({
           const completed = await commitTimeout({
             auditEvents: [{ kind: 'operational_action_timeout_resolved', payload: { phase: tender.phase, playerId: expectedPlayer.id } }],
             nextTender: { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, dueNow) },
+            tender,
+          })
+          if (completed) advancedTenderIds.push(tenderId)
+          continue
+        }
+        if (tender.phase === 'final-scientific-model') {
+          const expectedPlayer = nextScientificModelPlayer(tender)
+          if (!expectedPlayer) continue
+          const nextTender = {
+            ...tender,
+            finalScientificModelCompletedByPlayer: { ...tender.finalScientificModelCompletedByPlayer, [expectedPlayer.id]: true },
+          }
+          const phase = nextScientificModelPlayer(nextTender) ? 'final-scientific-model' : 'complete'
+          const completedTender = phase === 'complete'
+            ? { ...nextTender, winnerPlayerIds: resolveWinners(nextTender) }
+            : nextTender
+          const completed = await commitTimeout({
+            auditEvents: [{ kind: 'operational_action_timeout_resolved', payload: { phase: tender.phase, playerId: expectedPlayer.id } }],
+            nextTender: { ...completedTender, dueAt: deadlineForPhase(phase, dueNow), phase },
             tender,
           })
           if (completed) advancedTenderIds.push(tenderId)
