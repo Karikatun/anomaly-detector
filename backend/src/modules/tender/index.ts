@@ -12,7 +12,7 @@ import type {
 import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@the-game/contracts'
 import type { StoredTender, TenderStore } from './application/tender-store'
 import { resolveAccessSlots } from './domain/access-slots'
-import { createAnomalyConfiguration, resolvePublicResult, type SignalId } from './domain/anomaly-configuration'
+import { createAnomalyConfiguration, resolvePublicResult, signalIds, type SignalId } from './domain/anomaly-configuration'
 import { TenderFailure } from './domain/errors'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
@@ -35,6 +35,10 @@ const accessSlotBudgetDelta = (slot: number) => {
   if (slot === 6) return 1
   return 0
 }
+
+const receivesAccessSlotSampleCompensation = (slot: number) => slot === 4 || slot === 6
+
+const nextCompensationSample = (currentSamples: SignalId[]) => signalIds.find((signalId) => !currentSamples.includes(signalId))
 
 export function createTenderModule({
   seedGenerator = randomUUID,
@@ -180,6 +184,19 @@ export function createTenderModule({
             (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
           ]))
           : tender.budgetByPlayer
+        const sampleCompensationByPlayer: Record<string, SignalId> = {}
+        const samplesByPlayer = isReadyToResolve ? { ...tender.samplesByPlayer } : tender.samplesByPlayer
+        const rawTelemetrySignalsByPlayer = isReadyToResolve ? { ...tender.rawTelemetrySignalsByPlayer } : tender.rawTelemetrySignalsByPlayer
+        if (isReadyToResolve) {
+          for (const player of tender.players) {
+            if (!receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
+            const nextSample = nextCompensationSample(samplesByPlayer[player.id] ?? [])
+            if (!nextSample) continue
+            sampleCompensationByPlayer[player.id] = nextSample
+            samplesByPlayer[player.id] = [...(samplesByPlayer[player.id] ?? []), nextSample]
+            rawTelemetrySignalsByPlayer[player.id] = [...(rawTelemetrySignalsByPlayer[player.id] ?? []), nextSample]
+          }
+        }
         const phase = isReadyToResolve ? 'power-allocation' : tender.phase
         return commitCommand({
           auditEvents: [
@@ -191,12 +208,20 @@ export function createTenderModule({
             },
             ...(isReadyToResolve ? [{
               kind: 'access_slots_resolved',
-              payload: { accessSlots, budgetByPlayer },
+              payload: { accessSlots, budgetByPlayer, sampleCompensationByPlayer },
             }] : []),
           ],
           command,
           commandFingerprint,
-          nextTender: { ...tender, accessSlots, budgetByPlayer, phase, requestedSlots },
+          nextTender: {
+            ...tender,
+            accessSlots,
+            budgetByPlayer,
+            phase,
+            rawTelemetrySignalsByPlayer,
+            requestedSlots,
+            samplesByPlayer,
+          },
           tender,
         })
       }
