@@ -18,8 +18,6 @@ type CreateTenderModuleOptions = {
 }
 
 export function createTenderModule({ store = createInMemoryTenderStore() }: CreateTenderModuleOptions = {}) {
-  let nextTenderId = 1
-
   const readTender = async (tenderId: string) => {
     const tender = await store.read(tenderId)
     if (!tender) throw new TenderFailure('tender_not_found', `Unknown Tender ${tenderId}`)
@@ -40,16 +38,14 @@ export function createTenderModule({ store = createInMemoryTenderStore() }: Crea
       if (!parsedInput.success) {
         throw new TenderFailure('invalid_create_tender', 'Tender creation input is invalid')
       }
-      const tenderId = `tender-${nextTenderId++}`
-      await store.create({
-        id: tenderId,
+      const tender = await store.create({
         teams: parsedInput.data.teams,
         requestedSlots: {},
         processedCommands: {},
         phase: 'access-slot-selection',
         version: 0,
       })
-      return { tenderId }
+      return { tenderId: tender.id }
     },
 
     async execute(commandInput: TenderCommand): Promise<CommandReceipt> {
@@ -79,7 +75,8 @@ export function createTenderModule({ store = createInMemoryTenderStore() }: Crea
           requestedSlots: { ...tender.requestedSlots, [team.id]: command.slot },
           version: receipt.version,
         },
-        command: { command, fingerprint: commandFingerprint, receipt },
+        commandId: command.commandId,
+        command: { fingerprint: commandFingerprint, receipt },
       })
       if (result.kind === 'command_exists') {
         if (result.command.fingerprint !== commandFingerprint) {

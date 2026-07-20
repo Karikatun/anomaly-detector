@@ -38,3 +38,46 @@ model AuthSession {
   @@index([expiresAt], map: "auth_sessions_expires_at_idx")
   @@map("auth_sessions")
 }
+
+model Tender {
+  id          String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  version     Int
+  phase       String
+  dueAt       DateTime?          @map("due_at")
+  state       Json
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  commands    TenderCommand[]
+  auditEvents TenderAuditEvent[]
+
+  @@index([dueAt], map: "tenders_due_at_idx")
+  @@map("tenders")
+}
+
+model TenderCommand {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenderId    String   @map("tender_id") @db.Uuid
+  commandId   String   @map("command_id")
+  fingerprint String
+  receipt     Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  tender      Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade, map: "tender_commands_tender_id_fkey")
+
+  @@unique([tenderId, commandId], map: "tender_commands_tender_id_command_id_key")
+  @@map("tender_commands")
+}
+
+model TenderAuditEvent {
+  id         String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenderId   String   @map("tender_id") @db.Uuid
+  sequence   Int
+  kind       String
+  payload    Json
+  commandId  String?  @map("command_id")
+  actorId    String?  @map("actor_id")
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  tender     Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade, map: "tender_audit_events_tender_id_fkey")
+
+  @@unique([tenderId, sequence], map: "tender_audit_events_tender_id_sequence_key")
+  @@map("tender_audit_events")
+}

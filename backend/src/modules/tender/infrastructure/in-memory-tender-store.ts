@@ -9,6 +9,7 @@ const cloneTender = (tender: StoredTender) => structuredClone(tender)
 
 export function createInMemoryTenderStore(): TenderStore {
   const tenders = new Map<string, StoredTender>()
+  let nextTenderId = 1
 
   const readCurrentTender = (tenderId: string) => {
     const tender = tenders.get(tenderId)
@@ -18,7 +19,9 @@ export function createInMemoryTenderStore(): TenderStore {
 
   return {
     async create(tender) {
-      tenders.set(tender.id, cloneTender(tender))
+      const createdTender = { ...tender, id: `tender-${nextTenderId++}` }
+      tenders.set(createdTender.id, cloneTender(createdTender))
+      return cloneTender(createdTender)
     },
 
     async read(tenderId) {
@@ -28,12 +31,12 @@ export function createInMemoryTenderStore(): TenderStore {
 
     async commit(change: TenderCommit): Promise<TenderCommitResult> {
       const current = readCurrentTender(change.tenderId)
-      const previousCommand = current.processedCommands[change.command.command.commandId]
+      const previousCommand = current.processedCommands[change.commandId]
       if (previousCommand) return { kind: 'command_exists', command: structuredClone(previousCommand) }
       if (current.version !== change.expectedVersion) return { kind: 'version_conflict' }
 
       const nextTender = cloneTender(change.nextTender)
-      nextTender.processedCommands[change.command.command.commandId] = structuredClone(change.command)
+      nextTender.processedCommands[change.commandId] = structuredClone(change.command)
       tenders.set(change.tenderId, nextTender)
       return { kind: 'committed' }
     },
