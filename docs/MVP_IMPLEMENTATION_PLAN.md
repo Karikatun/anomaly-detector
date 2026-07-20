@@ -104,6 +104,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Allow an authenticated host to create a waiting room and occupy the first seat.
    - [x] Allow authenticated players to join open rooms in seat order and reject a full room.
    - [x] Allow a participant to leave a waiting room and join it again while a seat is free.
+   - [x] Allow only the host to start a full room and atomically create its Tender.
 5. Add authenticated HTTP endpoints and WebSocket updates that only deliver each participant's authorised TenderView.
 6. Support reconnect without pausing the Tender and ensure the worker, not a browser connection, resolves deadlines.
 
