@@ -34,6 +34,11 @@ describe('Tender contracts', () => {
     expect(
       tenderViewSchema.parse({
         knownSignals: ['aster', 'boreal'],
+        publicContracts: [
+          { contractId: 'round-1-contract-1' },
+          { contractId: 'round-1-contract-2', reservedByPlayerId: 'player-a' },
+          { contractId: 'round-1-contract-3' },
+        ],
         tenderId: 'tender-1',
         version: 1,
         phase: 'access-slot-selection',
@@ -48,6 +53,11 @@ describe('Tender contracts', () => {
       }),
     ).toEqual({
       knownSignals: ['aster', 'boreal'],
+      publicContracts: [
+        { contractId: 'round-1-contract-1' },
+        { contractId: 'round-1-contract-2', reservedByPlayerId: 'player-a' },
+        { contractId: 'round-1-contract-3' },
+      ],
       tenderId: 'tender-1',
       version: 1,
       phase: 'access-slot-selection',
@@ -106,5 +116,17 @@ describe('Tender contracts', () => {
         type: 'conduct-reconnaissance',
       }),
     ).toMatchObject({ type: 'conduct-reconnaissance' })
+  })
+
+  test('validates a Contract reservation command', () => {
+    expect(
+      tenderCommandSchema.parse({
+        actorId: 'player-a',
+        commandId: 'command-a-5',
+        contractId: 'round-1-contract-1',
+        tenderId: 'tender-1',
+        type: 'reserve-contract',
+      }),
+    ).toMatchObject({ type: 'reserve-contract' })
   })
 })

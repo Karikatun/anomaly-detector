@@ -16,6 +16,7 @@ type PersistedTenderState = Pick<
   | 'contractPowerRestrictionsByPlayer'
   | 'knownSignals'
   | 'powerAllocations'
+  | 'publicContracts'
   | 'publicTheses'
   | 'ratingByPlayer'
   | 'rawTelemetrySignalsByPlayer'
@@ -34,6 +35,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
+  publicContracts: tender.publicContracts,
   publicTheses: tender.publicTheses,
   ratingByPlayer: tender.ratingByPlayer,
   rawTelemetrySignalsByPlayer: tender.rawTelemetrySignalsByPlayer,
@@ -67,6 +69,7 @@ const toStoredTender = (record: {
     knownSignals: state.knownSignals ?? ['aster', 'boreal'],
     phase: record.phase as TenderPhase,
     powerAllocations: state.powerAllocations ?? {},
+    publicContracts: state.publicContracts ?? createDefaultContracts(state.players.length),
     publicTheses: state.publicTheses ?? [],
     ratingByPlayer: state.ratingByPlayer ?? {},
     rawTelemetrySignalsByPlayer: state.rawTelemetrySignalsByPlayer ?? {},
@@ -80,6 +83,10 @@ const toStoredTender = (record: {
     processedCommands: Object.fromEntries(record.commands.map((command) => [command.commandId, toStoredCommand(command)])),
     version: record.version,
   }
+}
+
+function createDefaultContracts(playerCount: number) {
+  return Array.from({ length: playerCount + 1 }, (_, index) => ({ contractId: `round-1-contract-${index + 1}` }))
 }
 
 export function createPrismaTenderStore(db: DbClient): TenderStore {

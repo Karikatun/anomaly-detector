@@ -46,6 +46,11 @@ maybeDescribe('Tender PostgreSQL integration', () => {
 
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
       knownSignals: ['aster', 'boreal'],
+      publicContracts: [
+        { contractId: 'round-1-contract-1' },
+        { contractId: 'round-1-contract-2' },
+        { contractId: 'round-1-contract-3' },
+      ],
       tenderId,
       version: 1,
       phase: 'access-slot-selection',
@@ -147,6 +152,13 @@ maybeDescribe('Tender PostgreSQL integration', () => {
 
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toEqual({
       knownSignals: ['aster', 'boreal'],
+      publicContracts: [
+        { contractId: 'round-1-contract-1' },
+        { contractId: 'round-1-contract-2' },
+        { contractId: 'round-1-contract-3' },
+        { contractId: 'round-1-contract-4' },
+        { contractId: 'round-1-contract-5' },
+      ],
       tenderId,
       version: 4,
       phase: 'power-allocation',

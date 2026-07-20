@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const tenderIdSchema = z.string().min(1).max(128)
 export const playerIdSchema = z.string().min(1).max(128)
 export const commandIdSchema = z.string().min(1).max(128)
+export const contractIdSchema = z.string().min(1).max(128)
 export const signalIdSchema = z.enum(['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'])
 
 export const tenderPlayerSchema = z.object({
@@ -65,12 +66,21 @@ export const runLaboratoryTestCommandSchema = z.object({
   type: z.literal('run-laboratory-test'),
 }).strict().refine((command) => command.sourceSignal !== command.receiverSignal, 'Laboratory Signals must differ')
 
+export const reserveContractCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  contractId: contractIdSchema,
+  type: z.literal('reserve-contract'),
+}).strict()
+
 export const tenderCommandSchema = z.discriminatedUnion('type', [
   requestAccessSlotCommandSchema,
   allocatePowerCommandSchema,
   conductReconnaissanceCommandSchema,
   runLaboratoryTestCommandSchema,
   submitThesisCommandSchema,
+  reserveContractCommandSchema,
 ])
 
 export const commandReceiptSchema = z.object({
@@ -105,6 +115,11 @@ export const publicThesisSchema = z.object({
   signalId: signalIdSchema,
 }).strict()
 
+export const publicContractSchema = z.object({
+  contractId: contractIdSchema,
+  reservedByPlayerId: playerIdSchema.optional(),
+}).strict()
+
 export const privateMeasurementSchema = z.object({
   receiverSignal: signalIdSchema,
   sourceSignal: signalIdSchema,
@@ -113,6 +128,7 @@ export const privateMeasurementSchema = z.object({
 
 export const tenderViewSchema = z.object({
   knownSignals: z.array(signalIdSchema),
+  publicContracts: z.array(publicContractSchema),
   tenderId: tenderIdSchema,
   version: z.number().int().min(0),
   phase: tenderPhaseSchema,
@@ -142,6 +158,7 @@ export type CreateTender = z.infer<typeof createTenderSchema>
 export type TenderCommand = z.infer<typeof tenderCommandSchema>
 export type PowerAllocation = z.infer<typeof powerAllocationSchema>
 export type CommandReceipt = z.infer<typeof commandReceiptSchema>
+export type PublicContract = z.infer<typeof publicContractSchema>
 export type PublicThesis = z.infer<typeof publicThesisSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>
