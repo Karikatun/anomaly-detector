@@ -3,7 +3,7 @@
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 // @ts-ignore Node type stripping requires an explicit TypeScript extension in this prototype.
-import { createPrototypeState, exampleAllocation, reducePrototypeState, type PowerAllocation, type PrototypeState, type TeamId } from "./round-machine.ts";
+import { createPrototypeState, exampleAllocation, reducePrototypeState, type PowerAllocation, type PrototypeState, type PlayerId } from "./round-machine.ts";
 
 let state: PrototypeState = createPrototypeState(4);
 
@@ -13,15 +13,15 @@ const render = () => {
   console.log("\x1b[2mQuestion: are slot conflicts, planning order, and phase actions clear?\x1b[0m\n");
   console.log(`\x1b[1mRound\x1b[0m ${state.round}`);
   console.log(`\x1b[1mPhase\x1b[0m ${state.phase}`);
-  console.log(`\x1b[1mPending teams\x1b[0m ${state.pendingTeams.join(", ") || "none"}\n`);
-  console.log("\x1b[1mTeams\x1b[0m");
+  console.log(`\x1b[1mPending players\x1b[0m ${state.pendingPlayers.join(", ") || "none"}\n`);
+  console.log("\x1b[1mPlayers\x1b[0m");
   console.table(
-    state.teams.map((team) => ({
-      team: team.id,
-      tiePriority: team.tiePriority,
-      requestedSlot: team.requestedSlot ?? "-",
-      accessSlot: team.accessSlot ?? "-",
-      power: team.power ? JSON.stringify(team.power) : "-",
+    state.players.map((player) => ({
+      player: player.id,
+      tiePriority: player.tiePriority,
+      requestedSlot: player.requestedSlot ?? "-",
+      accessSlot: player.accessSlot ?? "-",
+      power: player.power ? JSON.stringify(player.power) : "-",
     })),
   );
   console.log("\x1b[1mEvent log\x1b[0m");
@@ -40,17 +40,17 @@ const parsePower = (values: string[]): PowerAllocation => ({
 
 const demo = () => {
   state = createPrototypeState(4);
-  for (const [team, slot] of [
+  for (const [player, slot] of [
     ["A", 1],
     ["B", 1],
     ["C", 2],
     ["D", 6],
   ] as const) {
-    state = reducePrototypeState(state, { type: "request-slot", teamId: team, slot });
+    state = reducePrototypeState(state, { type: "request-slot", playerId: player, slot });
   }
   state = reducePrototypeState(state, { type: "resolve-slots" });
-  for (const team of [...state.pendingTeams]) {
-    state = reducePrototypeState(state, { type: "allocate-power", teamId: team, power: exampleAllocation() });
+  for (const player of [...state.pendingPlayers]) {
+    state = reducePrototypeState(state, { type: "allocate-power", playerId: player, power: exampleAllocation() });
   }
   state = reducePrototypeState(state, { type: "start-operations" });
 };
@@ -68,7 +68,7 @@ const execute = (line: string): boolean => {
     return true;
   }
   if (command === "slot") {
-    state = reducePrototypeState(state, { type: "request-slot", teamId: args[0] as TeamId, slot: Number(args[1]) });
+    state = reducePrototypeState(state, { type: "request-slot", playerId: args[0] as PlayerId, slot: Number(args[1]) });
     return true;
   }
   if (command === "resolve") {
@@ -76,7 +76,7 @@ const execute = (line: string): boolean => {
     return true;
   }
   if (command === "power") {
-    state = reducePrototypeState(state, { type: "allocate-power", teamId: args[0] as TeamId, power: parsePower(args.slice(1)) });
+    state = reducePrototypeState(state, { type: "allocate-power", playerId: args[0] as PlayerId, power: parsePower(args.slice(1)) });
     return true;
   }
   if (command === "start") {

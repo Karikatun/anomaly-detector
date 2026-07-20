@@ -9,11 +9,11 @@ The hidden, seed-derived assignment of properties and directed interactions for 
 _Avoid_: world model, hidden model, solution
 
 **Working Model**:
-A team's private deduction workspace containing possible properties, exclusions, and hypotheses. It has no effect on the match until the team submits a thesis or final Scientific Model.
+A player's private deduction workspace containing possible properties, exclusions, and hypotheses. It has no effect on the match until the player submits a thesis or final Scientific Model.
 _Avoid_: player model, notes, theory board
 
 **Scientific Model**:
-A team's submitted claims about the anomaly, consisting of public theses during play and its final audit submission.
+A player's submitted claims about the anomaly, consisting of public theses during play and its final audit submission.
 _Avoid_: final model, theory, solution
 
 **Signal**:
@@ -21,7 +21,7 @@ One of the six persistent named phenomena in the anomaly registry, such as `Aste
 _Avoid_: sample, ingredient, resource card
 
 **Sample**:
-A team's non-consumable access to a Signal for research and laboratory tests. Multiple teams may hold Samples of the same Signal.
+A player's non-consumable access to a Signal for research and laboratory tests. Multiple players may hold Samples of the same Signal.
 _Avoid_: signal, ingredient, consumable
 
 **Raw Telemetry**:
@@ -31,25 +31,25 @@ _Avoid_: sample, laboratory result, public evidence
 ## Tender Economy
 
 **Rating**:
-The public cumulative score that determines which team wins the Tender. Rating is never spent.
+The public cumulative score that determines which player wins the Tender. Rating is never spent.
 _Avoid_: reputation, budget, score multiplier
 
 **Budget**:
-A team's spendable research funding. It pays for early Access Slots and precise work, and is replenished by grants, contracts, and slot compensation.
+A player's spendable research funding. It pays for early Access Slots and precise work, and is replenished by grants, contracts, and slot compensation.
 _Avoid_: rating, points, currency
 
 **Corporate Trust**:
-A team's standing with the corporation, which governs eligibility for high-value Contracts. It is not a victory score or a payment resource.
+A player's standing with the corporation, which governs eligibility for high-value Contracts. It is not a victory score or a payment resource.
 _Avoid_: reputation, rating, budget
 
 ## Match Flow
 
 **Access Slot**:
-A team's secret round choice that determines operational order, price, and fixed compensation.
+A player's secret round choice that determines operational order, price, and fixed compensation.
 _Avoid_: turn order, initiative bid, action space
 
 **Power**:
-One of four units that a team allocates across research, analysis, and contract categories each round.
+One of four units that a player allocates across research, analysis, and contract categories each round.
 _Avoid_: action point, energy, move
 
 **Phase**:
@@ -57,7 +57,7 @@ A shared resolution stage of a round: Reconnaissance, Laboratory, Model Analysis
 _Avoid_: turn, action
 
 **Action**:
-A team's confirmed, target-specific decision inside a Phase.
+A player's confirmed, target-specific decision inside a Phase.
 _Avoid_: turn, power, phase
 
 ## Evidence
@@ -71,15 +71,15 @@ The operating mode of a Directed Test. The MVP protocols are Impulse and Continu
 _Avoid_: test, power, action
 
 **Public Result**:
-The test outcome visible to every team: transmission gain, attenuation, reflection, or unstable collapse.
+The test outcome visible to every player: transmission gain, attenuation, reflection, or unstable collapse.
 _Avoid_: evidence, measurement, private result
 
 **Private Measurement**:
-An extra parameter from a Continuous Protocol that only the initiating team sees until the post-match audit.
+An extra parameter from a Continuous Protocol that only the initiating player sees until the post-match audit.
 _Avoid_: public result, raw telemetry, evidence
 
 **Thesis**:
-A public, immediately checked claim submitted from a team's Scientific Model.
+A public, immediately checked claim submitted from a player's Scientific Model.
 _Avoid_: note, hypothesis, public result
 
 ## Tender
@@ -89,15 +89,15 @@ The five-round competitive funding process that ends with the final audit and a 
 _Avoid_: match, contract, tournament
 
 **Contract**:
-An exclusive corporate request that a team can fulfil during a Tender.
+An exclusive corporate request that a player can fulfil during a Tender.
 _Avoid_: tender, mission, quest
 
 **Bid**:
-A team's contract submission, assessed by effect fit, evidence level, and requested funding.
+A player's contract submission, assessed by effect fit, evidence level, and requested funding.
 _Avoid_: contract, reservation, offer
 
 **Challenge**:
-A deliberate Bid for a Contract that another team has already reserved.
+A deliberate Bid for a Contract that another player has already reserved.
 _Avoid_: sabotage, attack, block
 
 **Final Contract**:

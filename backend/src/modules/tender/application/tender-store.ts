@@ -4,7 +4,7 @@ import type {
   PowerAllocation,
   TenderCommand,
   TenderPhase,
-  TenderTeam,
+  TenderPlayer,
 } from '@the-game/contracts'
 import type { AnomalyConfiguration, SignalId } from '../domain/anomaly-configuration'
 
@@ -29,10 +29,10 @@ export type StoredTender = {
   powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>
   requestedSlots: Record<string, number>
-  rawTelemetrySignalsByTeam: Record<string, SignalId[]>
-  reconnaissanceCompletedByTeam: Record<string, boolean>
-  samplesByTeam: Record<string, SignalId[]>
-  teams: TenderTeam[]
+  rawTelemetrySignalsByPlayer: Record<string, SignalId[]>
+  reconnaissanceCompletedByPlayer: Record<string, boolean>
+  samplesByPlayer: Record<string, SignalId[]>
+  players: TenderPlayer[]
   version: number
 }
 

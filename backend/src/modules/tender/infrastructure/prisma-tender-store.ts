@@ -15,11 +15,11 @@ type PersistedTenderState = Pick<
   | 'anomalyConfiguration'
   | 'knownSignals'
   | 'powerAllocations'
-  | 'rawTelemetrySignalsByTeam'
-  | 'reconnaissanceCompletedByTeam'
+  | 'rawTelemetrySignalsByPlayer'
+  | 'reconnaissanceCompletedByPlayer'
   | 'requestedSlots'
-  | 'samplesByTeam'
-  | 'teams'
+  | 'samplesByPlayer'
+  | 'players'
 >
 
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
@@ -27,11 +27,11 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   anomalyConfiguration: tender.anomalyConfiguration,
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
-  rawTelemetrySignalsByTeam: tender.rawTelemetrySignalsByTeam,
-  reconnaissanceCompletedByTeam: tender.reconnaissanceCompletedByTeam,
-  teams: tender.teams,
+  rawTelemetrySignalsByPlayer: tender.rawTelemetrySignalsByPlayer,
+  reconnaissanceCompletedByPlayer: tender.reconnaissanceCompletedByPlayer,
+  players: tender.players,
   requestedSlots: tender.requestedSlots,
-  samplesByTeam: tender.samplesByTeam,
+  samplesByPlayer: tender.samplesByPlayer,
 })
 
 const toStoredCommand = (record: { fingerprint: string; receipt: Prisma.JsonValue }): StoredTenderCommand => ({
@@ -54,11 +54,11 @@ const toStoredTender = (record: {
     knownSignals: state.knownSignals ?? ['aster', 'boreal'],
     phase: record.phase as TenderPhase,
     powerAllocations: state.powerAllocations ?? {},
-    rawTelemetrySignalsByTeam: state.rawTelemetrySignalsByTeam ?? {},
-    reconnaissanceCompletedByTeam: state.reconnaissanceCompletedByTeam ?? {},
-    teams: state.teams,
+    rawTelemetrySignalsByPlayer: state.rawTelemetrySignalsByPlayer ?? {},
+    reconnaissanceCompletedByPlayer: state.reconnaissanceCompletedByPlayer ?? {},
+    players: state.players,
     requestedSlots: state.requestedSlots,
-    samplesByTeam: state.samplesByTeam ?? {},
+    samplesByPlayer: state.samplesByPlayer ?? {},
     processedCommands: Object.fromEntries(record.commands.map((command) => [command.commandId, toStoredCommand(command)])),
     version: record.version,
   }

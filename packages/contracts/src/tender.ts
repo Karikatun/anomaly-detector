@@ -1,25 +1,23 @@
 import { z } from 'zod'
 
 export const tenderIdSchema = z.string().min(1).max(128)
-export const participantIdSchema = z.string().min(1).max(128)
-export const teamIdSchema = z.string().min(1).max(128)
+export const playerIdSchema = z.string().min(1).max(128)
 export const commandIdSchema = z.string().min(1).max(128)
 export const signalIdSchema = z.enum(['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'])
 
-export const tenderTeamSchema = z.object({
-  id: teamIdSchema,
-  participantId: participantIdSchema,
+export const tenderPlayerSchema = z.object({
+  id: playerIdSchema,
   tiePriority: z.number().int().min(1).max(4),
 }).strict()
 
 export const createTenderSchema = z.object({
-  teams: z.array(tenderTeamSchema).min(2).max(4),
+  players: z.array(tenderPlayerSchema).min(2).max(4),
 }).strict()
 
 export const requestAccessSlotCommandSchema = z.object({
   commandId: commandIdSchema,
   tenderId: tenderIdSchema,
-  actorId: participantIdSchema,
+  actorId: playerIdSchema,
   type: z.literal('request-access-slot'),
   slot: z.number().int().min(1).max(6),
 }).strict()
@@ -38,14 +36,14 @@ export const allocatePowerCommandSchema = z.object({
   allocation: powerAllocationSchema,
   commandId: commandIdSchema,
   tenderId: tenderIdSchema,
-  actorId: participantIdSchema,
+  actorId: playerIdSchema,
   type: z.literal('allocate-power'),
 }).strict()
 
 export const conductReconnaissanceCommandSchema = z.object({
   commandId: commandIdSchema,
   tenderId: tenderIdSchema,
-  actorId: participantIdSchema,
+  actorId: playerIdSchema,
   signals: z.array(signalIdSchema).min(1).max(2).refine(
     (signals) => new Set(signals).size === signals.length,
     'Reconnaissance Signals must be distinct',
@@ -74,8 +72,8 @@ export const tenderPhaseSchema = z.enum([
   'complete',
 ])
 
-export const tenderTeamViewSchema = z.object({
-  teamId: teamIdSchema,
+export const tenderPlayerViewSchema = z.object({
+  playerId: playerIdSchema,
   accessSlot: z.number().int().min(1).max(6).optional(),
   powerAllocation: powerAllocationSchema.optional(),
   requestedAccessSlot: z.number().int().min(1).max(6).optional(),
@@ -86,14 +84,14 @@ export const tenderViewSchema = z.object({
   tenderId: tenderIdSchema,
   version: z.number().int().min(0),
   phase: tenderPhaseSchema,
-  teams: z.array(tenderTeamViewSchema),
+  players: z.array(tenderPlayerViewSchema),
   privateRawTelemetrySignals: z.array(signalIdSchema),
   privateSamples: z.array(signalIdSchema),
 }).strict()
 
 export const tenderViewQuerySchema = z.object({
   tenderId: tenderIdSchema,
-  participantId: participantIdSchema,
+  playerId: playerIdSchema,
 }).strict()
 
 export const advanceDueTendersInputSchema = z.object({
@@ -105,7 +103,7 @@ export const advanceDueTendersResultSchema = z.object({
   advancedTenderIds: z.array(tenderIdSchema),
 }).strict()
 
-export type TenderTeam = z.infer<typeof tenderTeamSchema>
+export type TenderPlayer = z.infer<typeof tenderPlayerSchema>
 export type CreateTender = z.infer<typeof createTenderSchema>
 export type TenderCommand = z.infer<typeof tenderCommandSchema>
 export type PowerAllocation = z.infer<typeof powerAllocationSchema>

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Deliver a synchronous, competitive browser game for 2-4 authenticated players. A Tender lasts five rounds and targets approximately 45 minutes. Teams research a hidden Anomaly Configuration, compete for exclusive Contracts, and receive one unambiguous winner by Rating.
+Deliver a synchronous, competitive browser game for 2-4 authenticated players. A Tender lasts five rounds and targets approximately 45 minutes. Players research a hidden Anomaly Configuration, compete for exclusive Contracts, and receive one unambiguous winner by Rating.
 
 The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIEF.md). The game-server and data boundaries are defined in [ADR 0001](adr/0001-authoritative-match-server.md), [ADR 0002](adr/0002-russian-launch-data-and-auth-boundary.md), and [ADR 0003](adr/0003-tender-module-and-audit-log.md).
 
@@ -33,8 +33,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** the server can persist, resume, and audit a Tender without a browser client.
 
-1. Add PostgreSQL write models for Tender, teams, current round/phase state, commands, and append-only audit records.
-2. Implement Tender creation for 2-4 teams with a server-generated seed and hidden Anomaly Configuration.
+1. Add PostgreSQL write models for Tender, players, current round/phase state, commands, and append-only audit records.
+2. Implement Tender creation for 2-4 players with a server-generated seed and hidden Anomaly Configuration.
 3. Implement deterministic restoration after restart and idempotent command handling by `commandId`.
 4. Implement `advanceDueTenders` as the only timeout-resolution path.
 5. Build participant-only audit projections; audit data is not public or shareable.
@@ -49,8 +49,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 1. Add five fixed rounds and the transitions between Access Slot selection, Power planning, four operational phases, and end-of-round calculation.
 2. Resolve six secret Access Slots with rotating public tie priority and the confirmed direct-request rule: with `A=1`, `B=1`, `C=2`, `D=6`, results are `A=1`, `B=3`, `C=2`, `D=6`.
-3. Add four Power per team, a maximum of two per category, and open planning in Access Slot order.
-4. Add Reconnaissance: six persistent Signals, non-consumable Samples, and initiating-team Raw Telemetry.
+3. Add four Power per player, a maximum of two per category, and open planning in Access Slot order.
+4. Add Reconnaissance: six persistent Signals, non-consumable Samples, and initiating-player Raw Telemetry.
 5. Add Laboratory: directed source-to-receiver tests with Impulse and Continuous Protocols, public results, and authorised Private Measurements.
 6. Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.
 7. Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, rare Challenge, Budget, and Corporate Trust.
@@ -59,7 +59,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Skills:** `tdd` for every rule and edge case; `prototype` for timing, planning order, and decision clarity before complex UI work; `domain-modeling` whenever new rules add vocabulary; `grill-me` only if a rule changes score balance or the victory condition; `code-review` after each phase family.
 
-**Gate:** API-level simulated Tenders for 2, 3, and 4 teams complete all five rounds, produce one winner, and replay deterministically from the audit log.
+**Gate:** API-level simulated Tenders for 2, 3, and 4 players complete all five rounds, produce one winner, and replay deterministically from the audit log.
 
 ## Milestone 3: Identity, Rooms, And Realtime
 
