@@ -70,7 +70,7 @@ The first-position tie priority rotates once per round. It resolves otherwise eq
 
 ### Access Slots
 
-There are always six fixed slots, even with fewer than four teams. Each team secretly chooses one. If several teams select the same slot, the conflict winner keeps it; the others move to the nearest available later slot, one at a time by the rotating tie priority.
+There are always six fixed slots, even with fewer than four teams. Each team secretly chooses one. A team that directly selected a slot keeps priority for that slot over a team displaced from an earlier conflict. If several teams directly select the same slot, the conflict winner keeps it and the others move to the nearest later free slot, one at a time by the rotating tie priority. For example, with tie priority `A, B, C, D`, requests `A=1`, `B=1`, `C=2`, `D=6` resolve as `A=1`, `B=3`, `C=2`, `D=6`.
 
 | Slot | Access order | Cost | Compensation |
 | --- | ---: | ---: | --- |
