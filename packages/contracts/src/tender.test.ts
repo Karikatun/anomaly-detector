@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   commandReceiptSchema,
+  powerAllocationSchema,
   tenderCommandSchema,
   tenderViewSchema,
 } from './index'
@@ -48,5 +49,38 @@ describe('Tender contracts', () => {
         { teamId: 'team-b' },
       ],
     })
+  })
+
+  test('validates an open Power allocation', () => {
+    expect(
+      powerAllocationSchema.parse({
+        contracts: 1,
+        laboratory: 1,
+        modelAnalysis: 0,
+        reconnaissance: 2,
+      }),
+    ).toEqual({
+      contracts: 1,
+      laboratory: 1,
+      modelAnalysis: 0,
+      reconnaissance: 2,
+    })
+
+    expect(
+      tenderCommandSchema.parse({
+        allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+        actorId: 'player-b',
+        commandId: 'command-b-2',
+        tenderId: 'tender-1',
+        type: 'allocate-power',
+      }),
+    ).toMatchObject({ type: 'allocate-power' })
+
+    expect(() => powerAllocationSchema.parse({
+      contracts: 2,
+      laboratory: 2,
+      modelAnalysis: 1,
+      reconnaissance: 0,
+    })).toThrow()
   })
 })

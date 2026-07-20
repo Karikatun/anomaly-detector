@@ -161,4 +161,38 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       },
     ])
   })
+
+  test('restores open Power allocations through a new PostgreSQL store adapter', async () => {
+    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await module.createTender({
+      teams: [
+        { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+        { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+      ],
+    })
+
+    await module.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+    await module.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+    await module.execute({
+      allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+      actorId: 'player-a',
+      commandId: 'command-a-2',
+      tenderId,
+      type: 'allocate-power',
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+
+    expect(await restartedModule.readTenderView({ tenderId, participantId: 'player-a' })).toMatchObject({
+      phase: 'power-allocation',
+      teams: [
+        {
+          accessSlot: 1,
+          powerAllocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+          teamId: 'team-a',
+        },
+        { accessSlot: 2, teamId: 'team-b' },
+      ],
+    })
+  })
 })

@@ -23,7 +23,28 @@ export const requestAccessSlotCommandSchema = z.object({
   slot: z.number().int().min(1).max(6),
 }).strict()
 
-export const tenderCommandSchema = z.discriminatedUnion('type', [requestAccessSlotCommandSchema])
+export const powerAllocationSchema = z.object({
+  contracts: z.number().int().min(0).max(2),
+  laboratory: z.number().int().min(0).max(2),
+  modelAnalysis: z.number().int().min(0).max(2),
+  reconnaissance: z.number().int().min(0).max(2),
+}).strict().refine(
+  (allocation) => Object.values(allocation).reduce((total, power) => total + power, 0) === 4,
+  'Power allocation must contain exactly four units',
+)
+
+export const allocatePowerCommandSchema = z.object({
+  allocation: powerAllocationSchema,
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: participantIdSchema,
+  type: z.literal('allocate-power'),
+}).strict()
+
+export const tenderCommandSchema = z.discriminatedUnion('type', [
+  requestAccessSlotCommandSchema,
+  allocatePowerCommandSchema,
+])
 
 export const commandReceiptSchema = z.object({
   tenderId: tenderIdSchema,
@@ -43,6 +64,7 @@ export const tenderPhaseSchema = z.enum([
 export const tenderTeamViewSchema = z.object({
   teamId: teamIdSchema,
   accessSlot: z.number().int().min(1).max(6).optional(),
+  powerAllocation: powerAllocationSchema.optional(),
   requestedAccessSlot: z.number().int().min(1).max(6).optional(),
 }).strict()
 
@@ -70,6 +92,7 @@ export const advanceDueTendersResultSchema = z.object({
 export type TenderTeam = z.infer<typeof tenderTeamSchema>
 export type CreateTender = z.infer<typeof createTenderSchema>
 export type TenderCommand = z.infer<typeof tenderCommandSchema>
+export type PowerAllocation = z.infer<typeof powerAllocationSchema>
 export type CommandReceipt = z.infer<typeof commandReceiptSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>
