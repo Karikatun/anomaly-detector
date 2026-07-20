@@ -47,9 +47,9 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
       knownSignals: ['aster', 'boreal'],
       publicContracts: [
-        { contractId: 'round-1-contract-1' },
-        { contractId: 'round-1-contract-2' },
-        { contractId: 'round-1-contract-3' },
+        { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
+        { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
+        { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
       ],
       publicLaboratoryResults: [],
       tenderId,
@@ -154,11 +154,11 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toEqual({
       knownSignals: ['aster', 'boreal'],
       publicContracts: [
-        { contractId: 'round-1-contract-1' },
-        { contractId: 'round-1-contract-2' },
-        { contractId: 'round-1-contract-3' },
-        { contractId: 'round-1-contract-4' },
-        { contractId: 'round-1-contract-5' },
+        { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
+        { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
+        { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
+        { contractId: 'round-1-contract-4', requiredPublicResult: 'unstable_collapse' },
+        { contractId: 'round-1-contract-5', requiredPublicResult: 'reflection' },
       ],
       publicLaboratoryResults: [],
       tenderId,

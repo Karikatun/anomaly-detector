@@ -89,7 +89,11 @@ const toStoredTender = (record: {
 }
 
 function createDefaultContracts(playerCount: number) {
-  return Array.from({ length: playerCount + 1 }, (_, index) => ({ contractId: `round-1-contract-${index + 1}` }))
+  const requiredPublicResults = ['reflection', 'attenuation', 'transmission_gain', 'unstable_collapse'] as const
+  return Array.from({ length: playerCount + 1 }, (_, index) => ({
+    contractId: `round-1-contract-${index + 1}`,
+    requiredPublicResult: requiredPublicResults[index % requiredPublicResults.length],
+  }))
 }
 
 export function createPrismaTenderStore(db: DbClient): TenderStore {

@@ -23,7 +23,10 @@ type CreateTenderModuleOptions = {
 
 const createRoundContracts = (playerCount: number) => Array.from(
   { length: playerCount + 1 },
-  (_, index) => ({ contractId: `round-1-contract-${index + 1}` }),
+  (_, index) => ({
+    contractId: `round-1-contract-${index + 1}`,
+    requiredPublicResult: ['reflection', 'attenuation', 'transmission_gain', 'unstable_collapse'][index % 4] as 'reflection' | 'attenuation' | 'transmission_gain' | 'unstable_collapse',
+  }),
 )
 
 export function createTenderModule({
@@ -64,7 +67,7 @@ export function createTenderModule({
 
   const nextContractsPlayer = (tender: StoredTender) => tender.players
     .filter((player) => effectiveContractPower(tender, player.id) > 0)
-    .filter((player) => tender.publicContracts.every((contract) => contract.reservedByPlayerId !== player.id))
+    .filter((player) => tender.publicContracts.every((contract) => contract.reservedByPlayerId !== player.id || contract.bidOutcome === undefined))
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
   const nextOperationalPhase = (tender: StoredTender, after: 'reconnaissance' | 'laboratory' | 'model-analysis') => {
@@ -311,7 +314,8 @@ export function createTenderModule({
         }
         const expectedPlayer = nextContractsPlayer(tender)
         const contract = tender.publicContracts.find((candidate) => candidate.contractId === command.contractId)
-        if (!contract || contract.reservedByPlayerId || expectedPlayer?.id !== player.id) {
+        const alreadyReservedContract = tender.publicContracts.some((candidate) => candidate.reservedByPlayerId === player.id)
+        if (!contract || contract.reservedByPlayerId || alreadyReservedContract || expectedPlayer?.id !== player.id) {
           throw new TenderFailure('invalid_tender_state', 'Contract reservation is not available to this Player')
         }
         const publicContracts = tender.publicContracts.map((candidate) => candidate.contractId === command.contractId
@@ -324,6 +328,44 @@ export function createTenderModule({
             commandId: command.commandId,
             kind: 'contract_reserved',
             payload: { contractId: command.contractId, playerId: player.id },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: { ...nextTender, phase: 'contracts' },
+          tender,
+        })
+      }
+
+      if (command.type === 'submit-contract-bid') {
+        if (tender.phase !== 'contracts') {
+          throw new TenderFailure('invalid_tender_state', 'Contracts are closed')
+        }
+        const expectedPlayer = nextContractsPlayer(tender)
+        const contract = tender.publicContracts.find((candidate) => candidate.contractId === command.contractId)
+        if (!contract || contract.reservedByPlayerId !== player.id || contract.bidOutcome !== undefined || expectedPlayer?.id !== player.id) {
+          throw new TenderFailure('invalid_tender_state', 'Contract Bid is not available to this Player')
+        }
+        const hasMatchingEvidence = tender.publicLaboratoryResults.some((result) => result.playerId === player.id && result.publicResult === command.claimedPublicResult)
+        const isAwarded = command.claimedPublicResult === contract.requiredPublicResult && hasMatchingEvidence
+        const publicContracts = tender.publicContracts.map((candidate) => candidate.contractId === command.contractId
+          ? {
+            ...candidate,
+            ...(isAwarded ? { awardedToPlayerId: player.id } : {}),
+            bidOutcome: isAwarded ? 'awarded' as const : 'failed' as const,
+          }
+          : candidate)
+        const nextTender = { ...tender, publicContracts }
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'contract_bid_assessed',
+            payload: {
+              awarded: isAwarded,
+              contractId: command.contractId,
+              playerId: player.id,
+              requestedFunding: command.requestedFunding,
+            },
           }],
           command,
           commandFingerprint,

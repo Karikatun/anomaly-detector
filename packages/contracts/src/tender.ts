@@ -55,6 +55,7 @@ export const conductReconnaissanceCommandSchema = z.object({
 export const laboratoryProtocolSchema = z.enum(['impulse', 'continuous'])
 export const fieldTypeSchema = z.enum(['inertial', 'electromagnetic', 'phase'])
 export const polaritySchema = z.enum(['positive', 'negative'])
+export const publicResultSchema = z.enum(['attenuation', 'reflection', 'transmission_gain', 'unstable_collapse'])
 export const submitThesisCommandSchema = z.object({ commandId: commandIdSchema, tenderId: tenderIdSchema, actorId: playerIdSchema, signalId: signalIdSchema, fieldType: fieldTypeSchema, polarity: polaritySchema, type: z.literal('submit-thesis') }).strict()
 export const runLaboratoryTestCommandSchema = z.object({
   commandId: commandIdSchema,
@@ -74,6 +75,16 @@ export const reserveContractCommandSchema = z.object({
   type: z.literal('reserve-contract'),
 }).strict()
 
+export const submitContractBidCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  contractId: contractIdSchema,
+  claimedPublicResult: publicResultSchema,
+  requestedFunding: z.number().int().min(0).max(10),
+  type: z.literal('submit-contract-bid'),
+}).strict()
+
 export const tenderCommandSchema = z.discriminatedUnion('type', [
   requestAccessSlotCommandSchema,
   allocatePowerCommandSchema,
@@ -81,6 +92,7 @@ export const tenderCommandSchema = z.discriminatedUnion('type', [
   runLaboratoryTestCommandSchema,
   submitThesisCommandSchema,
   reserveContractCommandSchema,
+  submitContractBidCommandSchema,
 ])
 
 export const commandReceiptSchema = z.object({
@@ -116,14 +128,17 @@ export const publicThesisSchema = z.object({
 }).strict()
 
 export const publicContractSchema = z.object({
+  awardedToPlayerId: playerIdSchema.optional(),
+  bidOutcome: z.enum(['awarded', 'failed']).optional(),
   contractId: contractIdSchema,
+  requiredPublicResult: publicResultSchema,
   reservedByPlayerId: playerIdSchema.optional(),
 }).strict()
 
 export const publicLaboratoryResultSchema = z.object({
   playerId: playerIdSchema,
   protocol: laboratoryProtocolSchema,
-  publicResult: z.enum(['attenuation', 'reflection', 'transmission_gain', 'unstable_collapse']),
+  publicResult: publicResultSchema,
   receiverSignal: signalIdSchema,
   sourceSignal: signalIdSchema,
 }).strict()

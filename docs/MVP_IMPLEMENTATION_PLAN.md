@@ -73,7 +73,9 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Create `players + 1` public normal Contracts for the round.
    - [x] Reserve Contracts publicly in Access Slot order.
    - [x] Reject reservation of already reserved Contracts until Challenge is implemented.
-   - [ ] Add Bid assessment by effect fit, evidence level, requested funding, and access-order tie break.
+   - [x] Add private Bid submission for a reserved Contract.
+   - [x] Assess a reserved Bid by required Public Result fit and matching public Laboratory evidence.
+   - [ ] Add requested-funding ranking and access-order tie break across competing Bids.
    - [ ] Add rare Challenge flow for reserved Contracts.
    - [ ] Add Budget and Corporate Trust effects.
 8. [ ] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
