@@ -7,7 +7,6 @@ import type {
 } from '@the-game/contracts'
 
 export type StoredTenderCommand = {
-  command: TenderCommand
   fingerprint: string
   receipt: CommandReceipt
 }
@@ -23,6 +22,7 @@ export type StoredTender = {
 
 export type TenderCommit = {
   command: StoredTenderCommand
+  commandId: string
   expectedVersion: number
   nextTender: StoredTender
   tenderId: string
@@ -35,7 +35,7 @@ export type TenderCommitResult =
 
 export type TenderStore = {
   commit(change: TenderCommit): Promise<TenderCommitResult>
-  create(tender: StoredTender): Promise<void>
+  create(tender: Omit<StoredTender, 'id'>): Promise<StoredTender>
   findDue(input: AdvanceDueTendersInput): Promise<string[]>
   read(tenderId: string): Promise<StoredTender | null>
 }
