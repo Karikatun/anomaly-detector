@@ -94,7 +94,7 @@ export const tenderPlayerViewSchema = z.object({
 export const privateMeasurementSchema = z.object({
   receiverSignal: signalIdSchema,
   sourceSignal: signalIdSchema,
-  stability: z.enum(['stable', 'volatile']),
+  polarityRelation: z.enum(['same', 'different']),
 }).strict()
 
 export const tenderViewSchema = z.object({
