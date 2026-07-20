@@ -176,6 +176,28 @@ export const privateMeasurementSchema = z.object({
   polarityRelation: z.enum(['same', 'different']),
 }).strict()
 
+export const anomalyConfigurationSchema = z.object({
+  seed: z.string().min(1),
+  signals: z.record(signalIdSchema, z.object({
+    fieldType: fieldTypeSchema,
+    polarity: polaritySchema,
+  }).strict()),
+}).strict()
+
+export const tenderAuditEventSchema = z.object({
+  actorId: playerIdSchema.optional(),
+  commandId: commandIdSchema.optional(),
+  kind: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()),
+  sequence: z.number().int().min(1),
+}).strict()
+
+export const tenderAuditViewSchema = z.object({
+  anomalyConfiguration: anomalyConfigurationSchema,
+  events: z.array(tenderAuditEventSchema),
+  privateMeasurementsByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)),
+}).strict()
+
 export const tenderViewSchema = z.object({
   knownSignals: z.array(signalIdSchema),
   publicContracts: z.array(publicContractSchema),
@@ -191,6 +213,7 @@ export const tenderViewSchema = z.object({
   privateMeasurements: z.array(privateMeasurementSchema),
   privateWorkingModel: workingModelSchema,
   publicTheses: z.array(publicThesisSchema),
+  audit: tenderAuditViewSchema.optional(),
 }).strict()
 
 export const tenderViewQuerySchema = z.object({
@@ -215,6 +238,8 @@ export type CommandReceipt = z.infer<typeof commandReceiptSchema>
 export type PublicContract = z.infer<typeof publicContractSchema>
 export type PublicLaboratoryResult = z.infer<typeof publicLaboratoryResultSchema>
 export type PublicThesis = z.infer<typeof publicThesisSchema>
+export type TenderAuditEvent = z.infer<typeof tenderAuditEventSchema>
+export type TenderAuditView = z.infer<typeof tenderAuditViewSchema>
 export type WorkingModel = z.infer<typeof workingModelSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>

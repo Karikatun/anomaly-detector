@@ -69,6 +69,20 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         },
       },
     ])
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).not.toHaveProperty('audit')
+    expect(await createPrismaTenderStore(prisma).readAuditEvents(tenderId)).toMatchObject([
+      {
+        actorId: 'player-a',
+        commandId: 'access-slot-a-1',
+        kind: 'access_slot_requested',
+        payload: { playerId: 'player-a', slot: 1 },
+        sequence: 1,
+      },
+      {
+        kind: 'access_slot_timeout_resolved',
+        sequence: 2,
+      },
+    ])
   })
 
   test('restores a player view through a new PostgreSQL store adapter', async () => {

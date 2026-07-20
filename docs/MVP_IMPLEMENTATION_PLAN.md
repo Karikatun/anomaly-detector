@@ -42,7 +42,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 2. [x] Implement Tender creation for 2-4 players with a server-generated seed and hidden Anomaly Configuration.
 3. [x] Implement deterministic restoration after restart and idempotent command handling by `commandId`.
 4. [x] Implement `advanceDueTenders` as the only timeout-resolution path.
-5. [-] Build player-only audit projections; audit data is not public or shareable.
+5. [x] Build player-only audit projections; audit data is not public or shareable.
 
 **Skills:** `tdd` for persistence, retries, deadlines, and visibility; `codebase-design` before repository and audit adapter boundaries; `domain-modeling` for audit terminology; `code-review` before proceeding.
 
@@ -64,7 +64,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Resolve Impulse and Continuous Protocols deterministically from the hidden Anomaly Configuration.
    - [x] Store authorised Continuous Private Measurements in participant-scoped Tender views.
    - [x] Project public Laboratory results into Tender views.
-   - [ ] Project Laboratory results into replay/audit views beyond the append-only audit event.
+   - [x] Project Laboratory results into replay/audit views beyond the append-only audit event.
 6. [-] Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.
    - [x] Validate and resolve public Thesis submissions in Access Slot order.
    - [x] Project checked public Theses to every participant without exposing the hidden Anomaly Configuration.

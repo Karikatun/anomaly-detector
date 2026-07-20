@@ -4,6 +4,7 @@ import {
   commandReceiptSchema,
   powerAllocationSchema,
   signalIdSchema,
+  tenderAuditViewSchema,
   tenderCommandSchema,
   tenderViewSchema,
 } from './index'
@@ -197,5 +198,33 @@ describe('Tender contracts', () => {
         type: 'submit-contract-bid',
       }),
     ).toMatchObject({ type: 'submit-contract-bid' })
+  })
+
+  test('validates a participant audit replay with private measurements', () => {
+    expect(tenderAuditViewSchema.parse({
+      anomalyConfiguration: {
+        seed: 'seed-1',
+        signals: {
+          aster: { fieldType: 'inertial', polarity: 'positive' },
+          boreal: { fieldType: 'inertial', polarity: 'negative' },
+          cinder: { fieldType: 'electromagnetic', polarity: 'positive' },
+          delta: { fieldType: 'electromagnetic', polarity: 'negative' },
+          eclipse: { fieldType: 'phase', polarity: 'positive' },
+          ferro: { fieldType: 'phase', polarity: 'negative' },
+        },
+      },
+      events: [{
+        actorId: 'player-a',
+        commandId: 'command-a-4',
+        kind: 'laboratory_test_completed',
+        payload: { playerId: 'player-a', protocol: 'continuous' },
+        sequence: 1,
+      }],
+      privateMeasurementsByPlayer: {
+        'player-a': [{ polarityRelation: 'same', receiverSignal: 'cinder', sourceSignal: 'aster' }],
+      },
+    })).toMatchObject({
+      events: [{ kind: 'laboratory_test_completed', sequence: 1 }],
+    })
   })
 })

@@ -169,6 +169,27 @@ test('does not return a Tender view to a non-player', async () => {
   })
 })
 
+test('does not expose the post-match audit before the Tender is complete', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'working-model-a-1',
+    tenderId,
+    type: 'update-working-model',
+    workingModel: { signals: { aster: { note: 'Private draft.' } } },
+  })
+
+  await expect(tender.readTenderView({ tenderId, playerId: 'player-a' })).resolves.not.toHaveProperty('audit')
+  await expect(tender.readTenderView({ tenderId, playerId: 'player-b' })).resolves.not.toHaveProperty('audit')
+})
+
 test('stores a player-owned Working Model without exposing it to other players', async () => {
   const tender = createTenderModule()
   const { tenderId } = await tender.createTender({
@@ -1213,6 +1234,24 @@ test('completes the Tender after Contracts in round five', async () => {
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     phase: 'complete',
     round: 5,
+    audit: {
+      anomalyConfiguration: {
+        seed: expect.any(String),
+        signals: expect.objectContaining({
+          aster: { fieldType: expect.any(String), polarity: expect.any(String) },
+        }),
+      },
+      events: expect.arrayContaining([
+        expect.objectContaining({ actorId: 'player-a', commandId: 'a-1-slot', kind: 'access_slot_requested', sequence: 1 }),
+        expect.objectContaining({ actorId: 'player-a', commandId: 'a-2-lab', kind: 'laboratory_test_completed' }),
+        expect.objectContaining({ actorId: 'player-b', commandId: 'b-5-bid', kind: 'contract_bid_assessed' }),
+      ]),
+      privateMeasurementsByPlayer: {
+        'player-a': expect.arrayContaining([
+          expect.objectContaining({ receiverSignal: 'cinder', sourceSignal: 'aster' }),
+        ]),
+      },
+    },
   })
 
   await expect(tender.execute({

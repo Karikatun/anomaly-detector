@@ -3,12 +3,14 @@ import type {
   TenderCommitResult,
   TenderStore,
   StoredTender,
+  StoredTenderAuditEvent,
 } from '../application/tender-store'
 
 const cloneTender = (tender: StoredTender) => structuredClone(tender)
 
 export function createInMemoryTenderStore(): TenderStore {
   const tenders = new Map<string, StoredTender>()
+  const auditEvents = new Map<string, StoredTenderAuditEvent[]>()
   let nextTenderId = 1
 
   const readCurrentTender = (tenderId: string) => {
@@ -21,6 +23,7 @@ export function createInMemoryTenderStore(): TenderStore {
     async create(tender) {
       const createdTender = { ...tender, id: `tender-${nextTenderId++}` }
       tenders.set(createdTender.id, cloneTender(createdTender))
+      auditEvents.set(createdTender.id, [])
       return cloneTender(createdTender)
     },
 
@@ -40,6 +43,14 @@ export function createInMemoryTenderStore(): TenderStore {
         nextTender.processedCommands[change.commandId] = structuredClone(change.command)
       }
       tenders.set(change.tenderId, nextTender)
+      const currentEvents = auditEvents.get(change.tenderId) ?? []
+      auditEvents.set(change.tenderId, [
+        ...currentEvents,
+        ...change.auditEvents.map((event, index) => ({
+          ...event,
+          sequence: currentEvents.length + index + 1,
+        })),
+      ])
       return { kind: 'committed' }
     },
 
@@ -49,6 +60,10 @@ export function createInMemoryTenderStore(): TenderStore {
         .sort((left, right) => left.dueAt!.getTime() - right.dueAt!.getTime())
         .slice(0, limit)
         .map((tender) => tender.id)
+    },
+
+    async readAuditEvents(tenderId) {
+      return structuredClone(auditEvents.get(tenderId) ?? [])
     },
   }
 }

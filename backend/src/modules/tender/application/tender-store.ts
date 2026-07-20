@@ -6,6 +6,7 @@ import type {
   PublicLaboratoryResult,
   PublicThesis,
   TenderCommand,
+  TenderAuditEvent,
   TenderPhase,
   TenderPlayer,
   WorkingModel,
@@ -19,12 +20,14 @@ export type StoredTenderCommand = {
   receipt: CommandReceipt
 }
 
-export type TenderAuditEvent = {
+export type PendingTenderAuditEvent = {
   actorId?: string
   commandId?: string
   kind: string
   payload: Record<string, unknown>
 }
+
+export type StoredTenderAuditEvent = TenderAuditEvent
 
 export type StoredTender = {
   accessSlots: Record<string, number>
@@ -57,7 +60,7 @@ export type StoredTender = {
 }
 
 export type TenderCommit = {
-  auditEvents: TenderAuditEvent[]
+  auditEvents: PendingTenderAuditEvent[]
   command?: StoredTenderCommand
   commandId?: string
   expectedVersion: number
@@ -74,5 +77,6 @@ export type TenderStore = {
   commit(change: TenderCommit): Promise<TenderCommitResult>
   create(tender: Omit<StoredTender, 'id'>): Promise<StoredTender>
   findDue(input: AdvanceDueTendersInput): Promise<string[]>
+  readAuditEvents(tenderId: string): Promise<StoredTenderAuditEvent[]>
   read(tenderId: string): Promise<StoredTender | null>
 }
