@@ -15,8 +15,35 @@ model User {
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
   sessions     AuthSession[]
+  identities   AuthIdentity[]
 
   @@map("users")
+}
+
+model AuthIdentity {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  provider  String
+  subject   String
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "auth_identities_user_id_fkey")
+
+  @@unique([provider, subject], map: "auth_identities_provider_subject_key")
+  @@index([userId], map: "auth_identities_user_id_idx")
+  @@map("auth_identities")
+}
+
+model OAuthTransaction {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  stateHash    String   @unique @map("state_hash")
+  codeVerifier String   @map("code_verifier")
+  provider     String
+  redirectUri  String   @map("redirect_uri")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt], map: "oauth_transactions_expires_at_idx")
+  @@map("oauth_transactions")
 }
 
 model AuthSession {

@@ -96,7 +96,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** real players can securely form and play a private live Tender.
 
-1. Implement Yandex ID and VK ID authentication. Keep Telegram outside MVP until a separate legal review permits it.
+1. [-] Implement Yandex ID and VK ID authentication. Keep Telegram outside MVP until a separate legal review permits it.
+   - [x] Add provider-agnostic OAuth identities, PKCE transaction storage, and the application port without exposing provider routes.
 2. Enforce Russian-launch data policy: 16+ audience, account deletion that anonymises old match entries, and no foreign-email registration path.
 3. Implement profile locale preference, default and fallback `ru`.
 4. Implement private rooms with a host-selected fixed size from 2 to 4. Starting requires every seat to be filled and an explicit host confirmation.

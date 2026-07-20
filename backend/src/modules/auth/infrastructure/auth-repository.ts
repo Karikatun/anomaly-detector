@@ -179,7 +179,24 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
         return revoked.count === 1 ? session.userId : null
       })
     },
+
+    async createOAuthTransaction(transaction) {
+      await db.oAuthTransaction.create({
+        data: {
+          codeVerifier: transaction.codeVerifier,
+          expiresAt: transaction.expiresAt,
+          provider: transaction.provider,
+          redirectUri: transaction.redirectUri,
+          stateHash: await sha256(transaction.state),
+        },
+      })
+    },
   }
+}
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function isUniqueConstraintError(error: unknown) {

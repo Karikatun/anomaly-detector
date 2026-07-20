@@ -1,6 +1,7 @@
 import type { RegisterPayload, UserDto } from '@the-game/contracts'
 
 import type { SessionMetadata } from '../domain/session'
+import type { OAuthProviderId, OAuthTransaction } from '../domain/oauth'
 import type { AuthUserRecord } from '../domain/user'
 
 export type AccessTokenPayload = {
@@ -61,6 +62,19 @@ export type AuthRepository = {
     refreshTokenFamilyHash: string
     now: Date
   }): Promise<string | null>
+  createOAuthTransaction(transaction: OAuthTransaction): Promise<void>
+}
+
+export type OAuthProvider = {
+  authorizationUrl(input: {
+    codeChallenge: string
+    redirectUri: string
+    state: string
+  }): string
+}
+
+export type OAuthProviderRegistry = {
+  require(provider: OAuthProviderId): OAuthProvider
 }
 
 export type AccessTokens = {
