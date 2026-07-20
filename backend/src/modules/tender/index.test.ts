@@ -866,5 +866,9 @@ test('awards a reserved Contract Bid with matching public Laboratory evidence', 
       { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
       { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
     ],
+    players: [
+      { budget: 2, playerId: 'player-a' },
+      { budget: 1, playerId: 'player-b' },
+    ],
   })
 })

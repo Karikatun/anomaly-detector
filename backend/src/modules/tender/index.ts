@@ -418,7 +418,10 @@ export function createTenderModule({
             bidOutcome: isAwarded ? 'awarded' as const : 'failed' as const,
           }
           : candidate)
-        const nextTender = { ...tender, publicContracts }
+        const budgetByPlayer = isAwarded
+          ? { ...tender.budgetByPlayer, [player.id]: (tender.budgetByPlayer[player.id] ?? 0) + command.requestedFunding }
+          : tender.budgetByPlayer
+        const nextTender = { ...tender, budgetByPlayer, publicContracts }
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
@@ -427,6 +430,7 @@ export function createTenderModule({
             payload: {
               awarded: isAwarded,
               awardedToPlayerId: isAwarded ? player.id : undefined,
+              budgetByPlayer,
               contractId: command.contractId,
               playerId: player.id,
               requestedFunding: command.requestedFunding,
