@@ -21,7 +21,20 @@
 
 - If instructions conflict, follow higher-priority system, developer, and user instructions first, then the nearest repository instructions.
 - Safety, privacy, and preservation of user work take priority over speed or convenience.
-- When editing this file, keep equivalent agent files such as `CLAUDE.md` aligned unless the difference is intentional and documented.
+
+## Agent Skills
+
+### Issue Tracker
+
+Tasks and PRDs live in GitHub Issues. External pull requests are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage Labels
+
+Use `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain Docs
+
+This is a single-context repository. Read root `CONTEXT.md` and relevant `docs/adr/` decisions when they exist. See `docs/agents/domain.md`.
 
 ## Working With The User
 
@@ -44,7 +57,7 @@
 - In Codex shell sessions, do not assume JS tooling is on `PATH`. For `node`, `npm`, and `bun`, prefer `PATH="/opt/homebrew/bin:$HOME/.bun/bin:$PATH"`.
 - Prefer existing utilities, framework APIs, and the standard library before adding dependencies.
 - Do not add new production or tooling dependencies without explicit user approval unless the user directly requested that dependency by name.
-- Before using a new library, inspect the relevant `package.json`. Prefer installed libraries such as Zod, TanStack Query, TanStack Form, Hono, Prisma, Expo, and `@web-app-demo/contracts`.
+- Before using a new library, inspect the relevant `package.json`. Prefer installed libraries such as Zod, TanStack Query, TanStack Form, Hono, Prisma, Expo, and `@the-game/contracts`.
 - If a missing dependency clearly improves the product outcome, explain the user-visible reason, maintenance/security impact, and ask before installing.
 - Before using framework-specific APIs, check current official docs, local package types, or existing examples.
 - For E2E, use Playwright for web and Maestro for mobile. Read `docs/TESTING.md` before adding flows.
@@ -70,17 +83,6 @@
 - Client product contexts live in `src/features/<context>`; routes/screens compose public feature APIs, and endpoint-agnostic capabilities live in `src/platform`.
 - Do not add empty layers, generic/base repositories, CQRS, event sourcing, or state-machine libraries without a concrete product need.
 - Do not move business rules into routes, screens, providers, or UI primitives to avoid defining the owning application/domain boundary.
-
-## Bootstrap-Only Instructions
-
-<!-- BOOTSTRAP_ONLY_START -->
-This block exists only for fresh installs from the template. If this repository has not been initialized for a real project yet:
-
-- Read `README.md`, especially `Agent Repo Download Instructions`, before setup or feature work.
-- Follow that README section for product intake, active/deferred surfaces, repository remote handling, Docker/PostgreSQL setup, deployment scope, Expo/EAS owner setup, and mobile Maestro dev-client setup when mobile E2E is active.
-- Record durable project choices in README files and docs, not in `AGENTS.md` or `CLAUDE.md`.
-- After first-run setup is complete, delete this entire `Bootstrap-Only Instructions` block from both `AGENTS.md` and `CLAUDE.md`.
-<!-- BOOTSTRAP_ONLY_END -->
 
 ## Git And Remote Policy
 

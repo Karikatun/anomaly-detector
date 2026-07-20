@@ -1,5 +1,5 @@
 import { useForm } from '@tanstack/react-form'
-import { loginRequestSchema, type LoginRequest } from '@web-app-demo/contracts'
+import { loginRequestSchema, type LoginRequest } from '@the-game/contracts'
 import { useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'

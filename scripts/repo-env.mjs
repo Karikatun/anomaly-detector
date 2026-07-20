@@ -5,12 +5,12 @@ import { fileURLToPath } from 'node:url'
 export const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 export const repositoryHash = createHash('sha256').update(repositoryRoot).digest('hex').slice(0, 12)
 export const composeProjectName =
-  process.env.COMPOSE_PROJECT_NAME ?? `vibecoding-template-${repositoryHash}`
+  process.env.COMPOSE_PROJECT_NAME ?? `the-game-${repositoryHash}`
 export const defaultPostgresTestPort =
   process.env.POSTGRES_TEST_PORT ?? String(30000 + (Number.parseInt(repositoryHash.slice(0, 6), 16) % 20000))
 
 export function defaultTestDatabaseUrl(port = defaultPostgresTestPort) {
-  return `postgresql://superuser:superpassword@localhost:${port}/web_app_demo_test?schema=public`
+  return `postgresql://superuser:superpassword@localhost:${port}/the_game_test?schema=public`
 }
 
 export function postgresPortFromDatabaseUrl(databaseUrl) {

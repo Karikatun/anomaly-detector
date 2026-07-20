@@ -279,7 +279,7 @@ function runPrepareSpecs(extraEnv = {}, { skipReleaseGitCheck = true, target = '
       PATH: process.env.PATH ?? '',
       HOME: process.env.HOME ?? '',
       ...testOnlyEnv,
-      DO_PROJECT_SLUG: 'vibecoding-template-test',
+      DO_PROJECT_SLUG: 'the-game-test',
       DO_GITHUB_REPO: 'owner/repo',
       DO_GIT_BRANCH: 'main',
       JWT_SECRET: '0123456789abcdef'.repeat(4),

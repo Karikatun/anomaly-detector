@@ -210,7 +210,7 @@ function resolveRepositoryImport(importer, specifier) {
     return `${workspace}/src/${specifier.slice(2)}`
   }
 
-  const workspaceAlias = specifier.match(/^@(web-app-demo)\/(backend|contracts|webapp|website|mobile)(?:\/(.*))?$/)
+  const workspaceAlias = specifier.match(/^@(the-game)\/(backend|contracts|webapp|website|mobile)(?:\/(.*))?$/)
   if (workspaceAlias) {
     return `${workspaceAlias[2]}/src/${workspaceAlias[3] ?? 'index'}`
   }

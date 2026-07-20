@@ -1,4 +1,4 @@
-import { apiErrorSchema } from '@web-app-demo/contracts'
+import { apiErrorSchema } from '@the-game/contracts'
 import type { z } from 'zod'
 
 const defaultApiBaseUrl = (import.meta.env?.VITE_API_URL ?? 'http://localhost:3000').replace(/\/$/, '')

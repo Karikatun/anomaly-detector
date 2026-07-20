@@ -1,4 +1,4 @@
-import type { RegisterPayload, UserDto } from '@web-app-demo/contracts'
+import type { RegisterPayload, UserDto } from '@the-game/contracts'
 
 import type { SessionMetadata } from '../domain/session'
 import type { AuthUserRecord } from '../domain/user'

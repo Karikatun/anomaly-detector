@@ -1,4 +1,4 @@
-import type { UserDto } from '@web-app-demo/contracts'
+import type { UserDto } from '@the-game/contracts'
 
 export type AuthUserRecord = {
   id: string

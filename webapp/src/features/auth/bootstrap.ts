@@ -1,4 +1,4 @@
-import type { CookieRefreshResponse } from '@web-app-demo/contracts'
+import type { CookieRefreshResponse } from '@the-game/contracts'
 import { ApiRequestError } from '@/platform/api'
 
 import type { AuthApi } from './api'

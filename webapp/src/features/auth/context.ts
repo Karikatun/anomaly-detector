@@ -1,4 +1,4 @@
-import type { LoginRequest, RegisterRequest, UserDto } from '@web-app-demo/contracts'
+import type { LoginRequest, RegisterRequest, UserDto } from '@the-game/contracts'
 import { createContext } from 'react'
 import type { AuthenticatedTransport } from '@/platform/api'
 

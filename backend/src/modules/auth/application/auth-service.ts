@@ -1,4 +1,4 @@
-import type { LoginRequest, RegisterPayload } from '@web-app-demo/contracts'
+import type { LoginRequest, RegisterPayload } from '@the-game/contracts'
 
 import { AuthFailure } from '../domain/errors'
 import { sessionExpiresAt, type SessionMetadata } from '../domain/session'
