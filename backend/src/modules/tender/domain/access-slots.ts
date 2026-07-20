@@ -25,9 +25,15 @@ export function resolveAccessSlots(
   }
 
   for (const team of displaced) {
-    let assignedSlot = requestedSlots[team.id] + 1
-    while (occupied.has(assignedSlot)) assignedSlot += 1
-    if (assignedSlot > accessSlotCount) throw new Error('No later Access Slot is available')
+    const requestedSlot = requestedSlots[team.id]
+    const assignedSlot = Array.from({ length: accessSlotCount }, (_, index) => index + 1)
+      .filter((slot) => !occupied.has(slot))
+      .sort((left, right) => {
+        const distanceOrder = Math.abs(left - requestedSlot) - Math.abs(right - requestedSlot)
+        return distanceOrder || right - left
+      })[0]
+
+    if (assignedSlot === undefined) throw new Error('No Access Slot is available')
     assignedSlots[team.id] = assignedSlot
     occupied.add(assignedSlot)
   }
