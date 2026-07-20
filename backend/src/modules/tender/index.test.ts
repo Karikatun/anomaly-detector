@@ -793,21 +793,35 @@ test('reserves public Contracts in Access Slot order', async () => {
   })
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
-    phase: 'complete',
+    phase: 'access-slot-selection',
+    round: 2,
     publicContracts: [
-      { contractId: 'round-1-contract-1' },
-      { bidOutcome: 'failed', contractId: 'round-1-contract-2', reservedByPlayerId: 'player-a' },
-      { bidOutcome: 'failed', contractId: 'round-1-contract-3', reservedByPlayerId: 'player-b' },
+      { contractId: 'round-2-contract-1' },
+      { contractId: 'round-2-contract-2' },
+      { contractId: 'round-2-contract-3' },
+    ],
+    players: [
+      { budget: 0, playerId: 'player-a' },
+      { budget: 1, playerId: 'player-b' },
     ],
   })
 
-  await expect(tender.execute({
+  await tender.execute({
     actorId: 'player-a',
     commandId: 'a-9',
     tenderId,
-    type: 'update-working-model',
-    workingModel: { signals: { aster: { hypothesis: { fieldType: 'phase' } } } },
-  })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+    type: 'request-access-slot',
+    slot: 3,
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'access-slot-selection',
+    round: 2,
+    players: [
+      { playerId: 'player-a', requestedAccessSlot: 3 },
+      { playerId: 'player-b' },
+    ],
+  })
 })
 
 test('awards a reserved Contract Bid with matching public Laboratory evidence', async () => {
@@ -884,21 +898,120 @@ test('awards a reserved Contract Bid with matching public Laboratory evidence', 
   })
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
-    phase: 'complete',
+    phase: 'access-slot-selection',
+    round: 2,
     publicContracts: [
       {
-        awardedToPlayerId: 'player-a',
-        bidOutcome: 'awarded',
-        contractId: 'round-1-contract-1',
+        contractId: 'round-2-contract-1',
         requiredPublicResult: 'reflection',
-        reservedByPlayerId: 'player-a',
       },
-      { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
-      { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
+      { contractId: 'round-2-contract-2', requiredPublicResult: 'attenuation' },
+      { contractId: 'round-2-contract-3', requiredPublicResult: 'transmission_gain' },
     ],
     players: [
       { budget: 2, playerId: 'player-a' },
       { budget: 1, playerId: 'player-b' },
     ],
   })
+})
+
+test('completes the Tender after Contracts in round five', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  for (let round = 1; round <= 5; round += 1) {
+    await tender.execute({ commandId: `a-${round}-slot`, tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 3 })
+    await tender.execute({ commandId: `b-${round}-slot`, tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 4 })
+    await tender.execute({
+      allocation: round === 1
+        ? { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 }
+        : { contracts: 2, laboratory: 2, modelAnalysis: 0, reconnaissance: 0 },
+      actorId: 'player-a',
+      commandId: `a-${round}-power`,
+      tenderId,
+      type: 'allocate-power',
+    })
+    await tender.execute({
+      allocation: round === 1
+        ? { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 }
+        : { contracts: 2, laboratory: 2, modelAnalysis: 0, reconnaissance: 0 },
+      actorId: 'player-b',
+      commandId: `b-${round}-power`,
+      tenderId,
+      type: 'allocate-power',
+    })
+    if (round === 1) {
+      await tender.execute({ commandId: `a-${round}-recon`, tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+      await tender.execute({ commandId: `b-${round}-recon`, tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+    } else {
+      await tender.execute({
+        commandId: `a-${round}-lab`,
+        tenderId,
+        actorId: 'player-a',
+        type: 'run-laboratory-test',
+        sourceSignal: 'aster',
+        receiverSignal: 'cinder',
+        protocol: 'continuous',
+      })
+      await tender.execute({
+        commandId: `b-${round}-lab`,
+        tenderId,
+        actorId: 'player-b',
+        type: 'run-laboratory-test',
+        sourceSignal: 'aster',
+        receiverSignal: 'cinder',
+        protocol: 'continuous',
+      })
+    }
+    await tender.execute({
+      actorId: 'player-a',
+      commandId: `a-${round}-reserve`,
+      contractId: `round-${round}-contract-1`,
+      tenderId,
+      type: 'reserve-contract',
+    })
+    await tender.execute({
+      actorId: 'player-a',
+      claimedPublicResult: 'unstable_collapse',
+      commandId: `a-${round}-bid`,
+      contractId: `round-${round}-contract-1`,
+      requestedFunding: 1,
+      tenderId,
+      type: 'submit-contract-bid',
+    })
+    await tender.execute({
+      actorId: 'player-b',
+      commandId: `b-${round}-reserve`,
+      contractId: `round-${round}-contract-2`,
+      tenderId,
+      type: 'reserve-contract',
+    })
+    await tender.execute({
+      actorId: 'player-b',
+      claimedPublicResult: 'reflection',
+      commandId: `b-${round}-bid`,
+      contractId: `round-${round}-contract-2`,
+      requestedFunding: 1,
+      tenderId,
+      type: 'submit-contract-bid',
+    })
+  }
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'complete',
+    round: 5,
+  })
+
+  await expect(tender.execute({
+    actorId: 'player-a',
+    commandId: 'a-after-complete-working-model',
+    tenderId,
+    type: 'update-working-model',
+    workingModel: { signals: { aster: { hypothesis: { fieldType: 'phase' } } } },
+  })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
 })
