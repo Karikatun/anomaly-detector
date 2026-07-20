@@ -1,4 +1,4 @@
-export type RoomFailureKind = 'room_already_joined' | 'room_full' | 'room_not_found' | 'room_not_joinable'
+export type RoomFailureKind = 'room_already_joined' | 'room_full' | 'room_not_found' | 'room_not_joinable' | 'room_not_member'
 
 export class RoomFailure extends Error {
   constructor(

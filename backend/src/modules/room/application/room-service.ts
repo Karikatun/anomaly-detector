@@ -18,6 +18,10 @@ export class TenderRoomService {
     const room = await this.dependencies.repository.join(input)
     return toRoomView(room)
   }
+
+  async leaveRoom(input: { actorId: string; roomId: string }) {
+    await this.dependencies.repository.leave(input)
+  }
 }
 
 function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomView {

@@ -61,5 +61,35 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         }
       }, { isolationLevel: 'Serializable' })
     },
+
+    async leave(input) {
+      await db.$transaction(async (tx) => {
+        const room = await tx.tenderRoom.findUnique({
+          where: { id: input.roomId },
+          include: { members: { orderBy: { seat: 'asc' } } },
+        })
+        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
+        if (!room.members.some((member) => member.userId === input.actorId)) {
+          throw new RoomFailure('room_not_member', 'Player did not join this room')
+        }
+
+        const remainingMembers = room.members.filter((member) => member.userId !== input.actorId)
+        if (remainingMembers.length === 0) {
+          await tx.tenderRoom.delete({ where: { id: room.id } })
+          return
+        }
+
+        await tx.tenderRoomMember.delete({
+          where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
+        })
+        if (room.hostId === input.actorId) {
+          await tx.tenderRoom.update({
+            where: { id: room.id },
+            data: { hostId: remainingMembers[0].userId },
+          })
+        }
+      }, { isolationLevel: 'Serializable' })
+    },
   }
 }

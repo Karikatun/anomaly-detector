@@ -14,6 +14,7 @@ test('creates a waiting private room with its host in the first seat', async () 
         tenderId: null,
       }),
       join: async () => { throw new Error('not used') },
+      leave: async () => { throw new Error('not used') },
     },
   })
 
@@ -38,6 +39,7 @@ test('adds a player to the next available seat in a waiting room', async () => {
         status: 'waiting',
         tenderId: null,
       }),
+      leave: async () => { throw new Error('not used') },
     },
   })
 
@@ -45,4 +47,18 @@ test('adds a player to the next available seat in a waiting room', async () => {
     members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
   })
+})
+
+test('lets a player leave a waiting room', async () => {
+  const left: Array<{ actorId: string; roomId: string }> = []
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      join: async () => { throw new Error('not used') },
+      leave: async (input) => { left.push(input) },
+    },
+  })
+
+  await expect(service.leaveRoom({ actorId: 'user-2', roomId: 'room-1' })).resolves.toBeUndefined()
+  expect(left).toEqual([{ actorId: 'user-2', roomId: 'room-1' }])
 })
