@@ -54,8 +54,24 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 3. [x] Add four Power per player, a maximum of two per category, and open planning in Access Slot order.
 4. [x] Add Reconnaissance: six persistent Signals, non-consumable Samples, and initiating-player Raw Telemetry.
 5. [-] Add Laboratory: directed source-to-receiver tests with Impulse and Continuous Protocols, public results, and authorised Private Measurements.
+   - [x] Validate Directed Test source/receiver Samples and reject self-tests through the shared command contract.
+   - [x] Resolve Impulse and Continuous Protocols deterministically from the hidden Anomaly Configuration.
+   - [x] Store authorised Continuous Private Measurements in participant-scoped Tender views.
+   - [ ] Project public Laboratory results into Tender views and replay/audit views beyond the append-only audit event.
 6. [-] Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.
-7. [ ] Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, rare Challenge, Budget, and Corporate Trust.
+   - [x] Validate and resolve public Thesis submissions in Access Slot order.
+   - [x] Project checked public Theses to every participant without exposing the hidden Anomaly Configuration.
+   - [x] Apply the correct-Thesis Rating reward.
+   - [x] Apply and expose the wrong-Thesis temporary Contract Power restriction.
+   - [x] Clear the temporary Contract Power restriction after the player's successful Laboratory test.
+   - [ ] Implement player-owned Working Model updates and extended verification for two Model Analysis Power.
+7. [-] Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, rare Challenge, Budget, and Corporate Trust.
+   - [x] Create `players + 1` public normal Contracts for the round.
+   - [x] Reserve Contracts publicly in Access Slot order.
+   - [x] Reject reservation of already reserved Contracts until Challenge is implemented.
+   - [ ] Add Bid assessment by effect fit, evidence level, requested funding, and access-order tie break.
+   - [ ] Add rare Challenge flow for reserved Contracts.
+   - [ ] Add Budget and Corporate Trust effects.
 8. [ ] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
 9. [ ] Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.
 
