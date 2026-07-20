@@ -119,7 +119,7 @@ Each round exposes `number of players + 1` exclusive normal contracts. Every con
 
 Contracts require both an appropriate verified effect and a minimum evidence level. A more accurate model can improve the bid's cost and strength.
 
-The budget economy is a fixed operational grant each round, contract payouts, and late-slot compensation. Corporate trust gates access to high-value contracts; it is not a score multiplier. There are no permanent laboratory upgrades in the MVP. Contract rewards may grant one-round benefits only.
+The budget economy grants each player one Budget at the end of every round, in addition to contract payouts and late-slot compensation. A successful normal Contract grants one Corporate Trust. Corporate Trust gates access to high-value Contracts: the Final Contract requires at least two Trust; it is not a score multiplier. There are no permanent laboratory upgrades in the MVP. Contract rewards may grant one-round benefits only.
 
 ## Timing And Failure Handling
 

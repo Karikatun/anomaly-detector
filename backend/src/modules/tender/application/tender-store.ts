@@ -34,6 +34,7 @@ export type StoredTender = {
   analyticalReportsByPlayer: Record<string, number>
   anomalyConfiguration: AnomalyConfiguration
   budgetByPlayer: Record<string, number>
+  corporateTrustByPlayer: Record<string, number>
   contractCompletedByPlayer: Record<string, boolean>
   contractPowerRestrictionsByPlayer: Record<string, number>
   dueAt: Date | null

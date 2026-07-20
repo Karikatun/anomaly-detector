@@ -46,6 +46,10 @@ _Avoid_: rating, points, currency
 A player's standing with the corporation, which governs eligibility for high-value Contracts. It is not a victory score or a payment resource.
 _Avoid_: reputation, rating, budget
 
+**Operational Grant**:
+One Budget granted to every player at the end of each round, including the final round.
+_Avoid_: contract payout, Rating reward
+
 ## Match Flow
 
 **Access Slot**:

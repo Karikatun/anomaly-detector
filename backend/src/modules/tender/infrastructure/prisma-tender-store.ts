@@ -16,6 +16,7 @@ type PersistedTenderState = Pick<
   | 'analyticalReportsByPlayer'
   | 'anomalyConfiguration'
   | 'budgetByPlayer'
+  | 'corporateTrustByPlayer'
   | 'contractCompletedByPlayer'
   | 'contractPowerRestrictionsByPlayer'
   | 'knownSignals'
@@ -41,6 +42,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   analyticalReportsByPlayer: tender.analyticalReportsByPlayer,
   anomalyConfiguration: tender.anomalyConfiguration,
   budgetByPlayer: tender.budgetByPlayer,
+  corporateTrustByPlayer: tender.corporateTrustByPlayer,
   contractCompletedByPlayer: tender.contractCompletedByPlayer,
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
   knownSignals: tender.knownSignals,
@@ -80,6 +82,7 @@ const toStoredTender = (record: {
     analyticalReportsByPlayer: state.analyticalReportsByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 1])),
     anomalyConfiguration: state.anomalyConfiguration,
     budgetByPlayer: state.budgetByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 2])),
+    corporateTrustByPlayer: state.corporateTrustByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 0])),
     contractCompletedByPlayer: state.contractCompletedByPlayer ?? {},
     contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},
     dueAt: record.dueAt,

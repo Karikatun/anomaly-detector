@@ -52,7 +52,7 @@ describe('Tender contracts', () => {
         version: 1,
         phase: 'access-slot-selection',
         players: [
-          { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+          { budget: 2, contractPowerRestriction: 0, corporateTrust: 1, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
           { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
         ],
         privateAnalyticalReports: 1,
@@ -88,7 +88,7 @@ describe('Tender contracts', () => {
       version: 1,
       phase: 'access-slot-selection',
       players: [
-        { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+      { budget: 2, contractPowerRestriction: 0, corporateTrust: 1, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
         { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
       ],
       privateAnalyticalReports: 1,

@@ -25,6 +25,7 @@ type CreateTenderModuleOptions = {
 const accessSlotSelectionDurationMs = 45_000
 const powerAllocationDurationMs = 60_000
 const operationalActionDurationMs = 20_000
+const operationalGrantBudget = 1
 
 const deadlineForPhase = (phase: string, at: Date) => {
   if (phase === 'access-slot-selection') return new Date(at.getTime() + accessSlotSelectionDurationMs)
@@ -127,10 +128,15 @@ export function createTenderModule({
 
   const advanceAfterContracts = (tender: StoredTender): StoredTender => {
     if (nextContractsPlayer(tender)) return { ...tender, phase: 'contracts' }
-    if (tender.round >= 5) return { ...tender, phase: 'complete' }
+    const budgetByPlayer = Object.fromEntries(tender.players.map((player) => [
+      player.id,
+      (tender.budgetByPlayer[player.id] ?? 0) + operationalGrantBudget,
+    ]))
+    const tenderAfterGrant = { ...tender, budgetByPlayer }
+    if (tender.round >= 5) return { ...tenderAfterGrant, phase: 'complete' }
     const round = tender.round + 1
     return {
-      ...tender,
+      ...tenderAfterGrant,
       accessSlots: {},
       contractCompletedByPlayer: {},
       laboratoryCompletedByPlayer: {},
@@ -203,6 +209,7 @@ export function createTenderModule({
         analyticalReportsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 1])),
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
         budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
+        corporateTrustByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 0])),
         contractCompletedByPlayer: {},
         contractPowerRestrictionsByPlayer: {},
         dueAt: deadlineForPhase('access-slot-selection', now()),
@@ -514,7 +521,10 @@ export function createTenderModule({
         const budgetByPlayer = isAwarded
           ? { ...tender.budgetByPlayer, [player.id]: (tender.budgetByPlayer[player.id] ?? 0) + command.requestedFunding }
           : tender.budgetByPlayer
-        const nextTender = { ...tender, budgetByPlayer, contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [player.id]: true }, publicContracts }
+        const corporateTrustByPlayer = isAwarded
+          ? { ...tender.corporateTrustByPlayer, [player.id]: (tender.corporateTrustByPlayer[player.id] ?? 0) + 1 }
+          : tender.corporateTrustByPlayer
+        const nextTender = { ...tender, budgetByPlayer, contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [player.id]: true }, corporateTrustByPlayer, publicContracts }
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
@@ -525,6 +535,7 @@ export function createTenderModule({
               awardedToPlayerId: isAwarded ? player.id : undefined,
               budgetByPlayer,
               contractId: command.contractId,
+              corporateTrustByPlayer,
               playerId: player.id,
               requestedFunding: command.requestedFunding,
             },
@@ -605,6 +616,7 @@ export function createTenderModule({
           playerId: player.id,
           ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
           budget: tender.budgetByPlayer[player.id] ?? 0,
+          corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,
           contractPowerRestriction: tender.contractPowerRestrictionsByPlayer[player.id] ?? 0,
           ...(tender.phase !== 'access-slot-selection' && tender.powerAllocations[player.id]
             ? { powerAllocation: tender.powerAllocations[player.id] }
