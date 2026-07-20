@@ -49,7 +49,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 1. Add five fixed rounds and the transitions between Access Slot selection, Power planning, four operational phases, and end-of-round calculation.
 2. Resolve six secret Access Slots with rotating public tie priority and the confirmed direct-request rule: with `A=1`, `B=1`, `C=2`, `D=6`, results are `A=1`, `B=3`, `C=2`, `D=6`.
-3. Add four Power per team, a maximum of two per category, and reverse-order open planning.
+3. Add four Power per team, a maximum of two per category, and open planning in Access Slot order.
 4. Add Reconnaissance: six persistent Signals, non-consumable Samples, and initiating-team Raw Telemetry.
 5. Add Laboratory: directed source-to-receiver tests with Impulse and Continuous Protocols, public results, and authorised Private Measurements.
 6. Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.

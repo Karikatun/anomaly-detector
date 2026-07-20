@@ -42,6 +42,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     const restartedModule = createTenderModule({ store: restartedStore })
 
     expect(await restartedModule.readTenderView({ tenderId, participantId: 'player-a' })).toEqual({
+      knownSignals: ['aster', 'boreal'],
       tenderId,
       version: 1,
       phase: 'access-slot-selection',
@@ -49,6 +50,8 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         { teamId: 'team-a', requestedAccessSlot: 1 },
       { teamId: 'team-b' },
     ],
+    privateRawTelemetrySignals: ['aster'],
+    privateSamples: ['aster'],
   })
     expect((await restartedStore.read(tenderId))?.anomalyConfiguration.seed).toBe('seed-1')
 
@@ -138,6 +141,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
 
     expect(await restartedModule.readTenderView({ tenderId, participantId: 'player-b' })).toEqual({
+      knownSignals: ['aster', 'boreal'],
       tenderId,
       version: 4,
       phase: 'power-allocation',
@@ -147,6 +151,8 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         { teamId: 'team-c', accessSlot: 2 },
         { teamId: 'team-d', accessSlot: 6 },
       ],
+      privateRawTelemetrySignals: ['aster'],
+      privateSamples: ['aster'],
     })
 
     expect(
@@ -193,6 +199,53 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         },
         { accessSlot: 2, teamId: 'team-b' },
       ],
+    })
+  })
+
+  test('restores participant-scoped Reconnaissance data through a new PostgreSQL store adapter', async () => {
+    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await module.createTender({
+      teams: [
+        { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+        { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+      ],
+    })
+
+    await module.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+    await module.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+    await module.execute({
+      allocation: { contracts: 1, laboratory: 1, modelAnalysis: 1, reconnaissance: 1 },
+      actorId: 'player-a',
+      commandId: 'command-a-2',
+      tenderId,
+      type: 'allocate-power',
+    })
+    await module.execute({
+      allocation: { contracts: 2, laboratory: 1, modelAnalysis: 0, reconnaissance: 1 },
+      actorId: 'player-b',
+      commandId: 'command-b-2',
+      tenderId,
+      type: 'allocate-power',
+    })
+    await module.execute({
+      actorId: 'player-a',
+      commandId: 'command-a-3',
+      signals: ['cinder'],
+      tenderId,
+      type: 'conduct-reconnaissance',
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+
+    expect(await restartedModule.readTenderView({ tenderId, participantId: 'player-a' })).toMatchObject({
+      knownSignals: ['aster', 'boreal', 'cinder'],
+      privateRawTelemetrySignals: ['aster', 'cinder'],
+      privateSamples: ['aster', 'cinder'],
+    })
+    expect(await restartedModule.readTenderView({ tenderId, participantId: 'player-b' })).toMatchObject({
+      knownSignals: ['aster', 'boreal', 'cinder'],
+      privateRawTelemetrySignals: ['aster'],
+      privateSamples: ['aster'],
     })
   })
 })

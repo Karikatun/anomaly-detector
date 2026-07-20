@@ -12,7 +12,7 @@ import type {
 import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@the-game/contracts'
 import type { StoredTender, TenderStore } from './application/tender-store'
 import { resolveAccessSlots } from './domain/access-slots'
-import { createAnomalyConfiguration } from './domain/anomaly-configuration'
+import { createAnomalyConfiguration, type SignalId } from './domain/anomaly-configuration'
 import { TenderFailure } from './domain/errors'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
@@ -41,6 +41,10 @@ export function createTenderModule({
 
   const nextPowerAllocationTeam = (tender: StoredTender) => tender.teams
     .filter((team) => tender.powerAllocations[team.id] === undefined)
+    .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
+
+  const nextReconnaissanceTeam = (tender: StoredTender) => tender.teams
+    .filter((team) => tender.powerAllocations[team.id]?.reconnaissance > 0 && !tender.reconnaissanceCompletedByTeam[team.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
   const commitCommand = async ({
@@ -86,9 +90,13 @@ export function createTenderModule({
       const tender = await store.create({
         accessSlots: {},
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
+        knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
+        rawTelemetrySignalsByTeam: Object.fromEntries(parsedInput.data.teams.map((team) => [team.id, ['aster']])),
+        reconnaissanceCompletedByTeam: {},
         teams: parsedInput.data.teams,
         requestedSlots: {},
+        samplesByTeam: Object.fromEntries(parsedInput.data.teams.map((team) => [team.id, ['aster']])),
         processedCommands: {},
         phase: 'access-slot-selection',
         version: 0,
@@ -140,29 +148,73 @@ export function createTenderModule({
         })
       }
 
-      if (tender.phase !== 'power-allocation') {
-        throw new TenderFailure('invalid_tender_state', 'Power allocation is closed')
+      if (command.type === 'allocate-power') {
+        if (tender.phase !== 'power-allocation') {
+          throw new TenderFailure('invalid_tender_state', 'Power allocation is closed')
+        }
+        const expectedTeam = nextPowerAllocationTeam(tender)
+        if (expectedTeam?.id !== team.id) {
+          throw new TenderFailure('invalid_tender_state', 'It is not this Team\'s Power allocation turn')
+        }
+        const powerAllocations: Record<string, PowerAllocation> = { ...tender.powerAllocations, [team.id]: command.allocation }
+        const isReadyToStartReconnaissance = Object.keys(powerAllocations).length === tender.teams.length
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'power_allocated',
+            payload: { allocation: command.allocation, teamId: team.id },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: {
+            ...tender,
+            phase: isReadyToStartReconnaissance ? 'reconnaissance' : tender.phase,
+            powerAllocations,
+          },
+          tender,
+        })
       }
-      const expectedTeam = nextPowerAllocationTeam(tender)
-      if (expectedTeam?.id !== team.id) {
-        throw new TenderFailure('invalid_tender_state', 'It is not this Team\'s Power allocation turn')
+
+      if (tender.phase !== 'reconnaissance') {
+        throw new TenderFailure('invalid_tender_state', 'Reconnaissance is closed')
       }
-      const powerAllocations: Record<string, PowerAllocation> = { ...tender.powerAllocations, [team.id]: command.allocation }
-      const isReadyToStartReconnaissance = Object.keys(powerAllocations).length === tender.teams.length
+      const expectedTeam = nextReconnaissanceTeam(tender)
+      if (expectedTeam?.id !== team.id || command.signals.length !== tender.powerAllocations[team.id]?.reconnaissance) {
+        throw new TenderFailure('invalid_tender_state', 'Reconnaissance command is not available to this Team')
+      }
+      const currentSamples = tender.samplesByTeam[team.id] ?? []
+      if (command.signals.some((signal) => currentSamples.includes(signal))) {
+        throw new TenderFailure('invalid_tender_state', 'A Team cannot acquire a Sample it already holds')
+      }
+      const samplesByTeam = { ...tender.samplesByTeam, [team.id]: [...currentSamples, ...command.signals] as SignalId[] }
+      const rawTelemetrySignalsByTeam = {
+        ...tender.rawTelemetrySignalsByTeam,
+        [team.id]: [...(tender.rawTelemetrySignalsByTeam[team.id] ?? []), ...command.signals] as SignalId[],
+      }
+      const reconnaissanceCompletedByTeam = { ...tender.reconnaissanceCompletedByTeam, [team.id]: true }
+      const knownSignals = [...tender.knownSignals]
+      for (const signal of command.signals) {
+        if (!knownSignals.includes(signal)) knownSignals.push(signal)
+      }
+      const nextTender = {
+        ...tender,
+        knownSignals,
+        rawTelemetrySignalsByTeam,
+        reconnaissanceCompletedByTeam,
+        samplesByTeam,
+      }
+      const isReadyForLaboratory = nextReconnaissanceTeam(nextTender) === undefined
       return commitCommand({
         auditEvents: [{
           actorId: command.actorId,
           commandId: command.commandId,
-          kind: 'power_allocated',
-          payload: { allocation: command.allocation, teamId: team.id },
+          kind: 'reconnaissance_completed',
+          payload: { signals: command.signals, teamId: team.id },
         }],
         command,
         commandFingerprint,
-        nextTender: {
-          ...tender,
-          phase: isReadyToStartReconnaissance ? 'reconnaissance' : tender.phase,
-          powerAllocations,
-        },
+        nextTender: { ...nextTender, phase: isReadyForLaboratory ? 'laboratory' : tender.phase },
         tender,
       })
     },
@@ -174,8 +226,9 @@ export function createTenderModule({
       }
       const { tenderId, participantId } = parsedQuery.data
       const tender = await readTender(tenderId)
-      readParticipantTeam(tender, participantId)
+      const participantTeam = readParticipantTeam(tender, participantId)
       return {
+        knownSignals: tender.knownSignals,
         tenderId,
         version: tender.version,
         phase: tender.phase,
@@ -189,6 +242,8 @@ export function createTenderModule({
             ? { requestedAccessSlot: tender.requestedSlots[team.id] }
             : {}),
         })),
+        privateRawTelemetrySignals: tender.rawTelemetrySignalsByTeam[participantTeam.id] ?? [],
+        privateSamples: tender.samplesByTeam[participantTeam.id] ?? [],
       }
     },
 

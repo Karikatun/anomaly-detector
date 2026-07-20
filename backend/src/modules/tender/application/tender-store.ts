@@ -6,7 +6,7 @@ import type {
   TenderPhase,
   TenderTeam,
 } from '@the-game/contracts'
-import type { AnomalyConfiguration } from '../domain/anomaly-configuration'
+import type { AnomalyConfiguration, SignalId } from '../domain/anomaly-configuration'
 
 export type StoredTenderCommand = {
   fingerprint: string
@@ -24,10 +24,14 @@ export type StoredTender = {
   accessSlots: Record<string, number>
   anomalyConfiguration: AnomalyConfiguration
   id: string
+  knownSignals: SignalId[]
   phase: TenderPhase
   powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>
   requestedSlots: Record<string, number>
+  rawTelemetrySignalsByTeam: Record<string, SignalId[]>
+  reconnaissanceCompletedByTeam: Record<string, boolean>
+  samplesByTeam: Record<string, SignalId[]>
   teams: TenderTeam[]
   version: number
 }

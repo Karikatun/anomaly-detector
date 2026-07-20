@@ -4,6 +4,7 @@ export const tenderIdSchema = z.string().min(1).max(128)
 export const participantIdSchema = z.string().min(1).max(128)
 export const teamIdSchema = z.string().min(1).max(128)
 export const commandIdSchema = z.string().min(1).max(128)
+export const signalIdSchema = z.enum(['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'])
 
 export const tenderTeamSchema = z.object({
   id: teamIdSchema,
@@ -41,9 +42,21 @@ export const allocatePowerCommandSchema = z.object({
   type: z.literal('allocate-power'),
 }).strict()
 
+export const conductReconnaissanceCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: participantIdSchema,
+  signals: z.array(signalIdSchema).min(1).max(2).refine(
+    (signals) => new Set(signals).size === signals.length,
+    'Reconnaissance Signals must be distinct',
+  ),
+  type: z.literal('conduct-reconnaissance'),
+}).strict()
+
 export const tenderCommandSchema = z.discriminatedUnion('type', [
   requestAccessSlotCommandSchema,
   allocatePowerCommandSchema,
+  conductReconnaissanceCommandSchema,
 ])
 
 export const commandReceiptSchema = z.object({
@@ -69,10 +82,13 @@ export const tenderTeamViewSchema = z.object({
 }).strict()
 
 export const tenderViewSchema = z.object({
+  knownSignals: z.array(signalIdSchema),
   tenderId: tenderIdSchema,
   version: z.number().int().min(0),
   phase: tenderPhaseSchema,
   teams: z.array(tenderTeamViewSchema),
+  privateRawTelemetrySignals: z.array(signalIdSchema),
+  privateSamples: z.array(signalIdSchema),
 }).strict()
 
 export const tenderViewQuerySchema = z.object({
