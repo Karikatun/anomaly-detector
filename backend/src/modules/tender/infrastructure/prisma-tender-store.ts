@@ -15,6 +15,7 @@ type PersistedTenderState = Pick<
   | 'analyticalReportsByPlayer'
   | 'anomalyConfiguration'
   | 'budgetByPlayer'
+  | 'contractCompletedByPlayer'
   | 'contractPowerRestrictionsByPlayer'
   | 'knownSignals'
   | 'powerAllocations'
@@ -39,6 +40,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   analyticalReportsByPlayer: tender.analyticalReportsByPlayer,
   anomalyConfiguration: tender.anomalyConfiguration,
   budgetByPlayer: tender.budgetByPlayer,
+  contractCompletedByPlayer: tender.contractCompletedByPlayer,
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
@@ -64,6 +66,7 @@ const toStoredCommand = (record: { fingerprint: string; receipt: Prisma.JsonValu
 })
 
 const toStoredTender = (record: {
+  dueAt: Date | null
   id: string
   phase: string
   state: Prisma.JsonValue
@@ -76,7 +79,9 @@ const toStoredTender = (record: {
     analyticalReportsByPlayer: state.analyticalReportsByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 1])),
     anomalyConfiguration: state.anomalyConfiguration,
     budgetByPlayer: state.budgetByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 2])),
+    contractCompletedByPlayer: state.contractCompletedByPlayer ?? {},
     contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},
+    dueAt: record.dueAt,
     id: record.id,
     knownSignals: state.knownSignals ?? ['aster', 'boreal'],
     phase: record.phase as TenderPhase,
@@ -115,6 +120,7 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
         data: {
           version: tender.version,
           phase: tender.phase,
+          dueAt: tender.dueAt,
           state: toPersistedState({ ...tender, id: '' }) as Prisma.InputJsonValue,
         },
         include: { commands: true },
@@ -133,7 +139,7 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
     async commit(change: TenderCommit): Promise<TenderCommitResult> {
       try {
         return await db.$transaction<TenderCommitResult>(async (tx) => {
-          try {
+          if (change.command && change.commandId) try {
             await tx.tenderCommand.create({
               data: {
                 tenderId: change.tenderId,
@@ -160,6 +166,7 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
             data: {
               version: change.nextTender.version,
               phase: change.nextTender.phase,
+              dueAt: change.nextTender.dueAt,
               state: toPersistedState(change.nextTender) as Prisma.InputJsonValue,
             },
           })

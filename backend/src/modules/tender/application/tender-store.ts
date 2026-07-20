@@ -31,7 +31,9 @@ export type StoredTender = {
   analyticalReportsByPlayer: Record<string, number>
   anomalyConfiguration: AnomalyConfiguration
   budgetByPlayer: Record<string, number>
+  contractCompletedByPlayer: Record<string, boolean>
   contractPowerRestrictionsByPlayer: Record<string, number>
+  dueAt: Date | null
   id: string
   knownSignals: SignalId[]
   phase: TenderPhase
@@ -56,8 +58,8 @@ export type StoredTender = {
 
 export type TenderCommit = {
   auditEvents: TenderAuditEvent[]
-  command: StoredTenderCommand
-  commandId: string
+  command?: StoredTenderCommand
+  commandId?: string
   expectedVersion: number
   nextTender: StoredTender
   tenderId: string

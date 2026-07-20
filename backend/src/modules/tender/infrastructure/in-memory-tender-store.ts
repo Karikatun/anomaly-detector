@@ -31,18 +31,24 @@ export function createInMemoryTenderStore(): TenderStore {
 
     async commit(change: TenderCommit): Promise<TenderCommitResult> {
       const current = readCurrentTender(change.tenderId)
-      const previousCommand = current.processedCommands[change.commandId]
+      const previousCommand = change.commandId ? current.processedCommands[change.commandId] : undefined
       if (previousCommand) return { kind: 'command_exists', command: structuredClone(previousCommand) }
       if (current.version !== change.expectedVersion) return { kind: 'version_conflict' }
 
       const nextTender = cloneTender(change.nextTender)
-      nextTender.processedCommands[change.commandId] = structuredClone(change.command)
+      if (change.commandId && change.command) {
+        nextTender.processedCommands[change.commandId] = structuredClone(change.command)
+      }
       tenders.set(change.tenderId, nextTender)
       return { kind: 'committed' }
     },
 
-    async findDue(_input) {
-      return []
+    async findDue({ limit, now }) {
+      return [...tenders.values()]
+        .filter((tender) => tender.dueAt !== null && tender.dueAt <= now)
+        .sort((left, right) => left.dueAt!.getTime() - right.dueAt!.getTime())
+        .slice(0, limit)
+        .map((tender) => tender.id)
     },
   }
 }

@@ -21,6 +21,56 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     await prisma.$disconnect()
   })
 
+  test('persists a due Access Slot deadline and resolves it after a restart', async () => {
+    const createdAt = new Date('2026-07-20T12:00:00.000Z')
+    const firstModule = createTenderModule({
+      now: () => createdAt,
+      store: createPrismaTenderStore(prisma),
+    })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'access-slot-a-1',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+
+    expect(await restartedModule.advanceDueTenders({
+      limit: 10,
+      now: new Date('2026-07-20T12:00:45.000Z'),
+    })).toEqual({ advancedTenderIds: [tenderId] })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+      phase: 'power-allocation',
+      players: [
+        { playerId: 'player-a', accessSlot: 1, budget: 0 },
+        { playerId: 'player-b', accessSlot: 3, budget: 2 },
+      ],
+    })
+    expect(await prisma.tenderAuditEvent.findMany({
+      where: { tenderId, kind: 'access_slot_timeout_resolved' },
+      select: { payload: true },
+    })).toEqual([
+      {
+        payload: {
+          accessSlots: { 'player-a': 1, 'player-b': 3 },
+          analyticalReportsByPlayer: { 'player-a': 1, 'player-b': 1 },
+          budgetByPlayer: { 'player-a': 0, 'player-b': 2 },
+          sampleCompensationByPlayer: {},
+          timedOutPlayerIds: ['player-b'],
+        },
+      },
+    ])
+  })
+
   test('restores a player view through a new PostgreSQL store adapter', async () => {
     const firstModule = createTenderModule({
       seedGenerator: () => 'seed-1',

@@ -56,6 +56,10 @@ _Avoid_: turn order, initiative bid, action space
 One of four units that a player allocates across research, analysis, and contract categories each round.
 _Avoid_: action point, energy, move
 
+**Reserve Power**:
+Power deliberately left unallocated by a player or assigned by the server after a timeout. It grants no action or benefit in the current round.
+_Avoid_: unused action, skipped action
+
 **Phase**:
 A shared resolution stage of a round: Reconnaissance, Laboratory, Model Analysis, or Contracts.
 _Avoid_: turn, action

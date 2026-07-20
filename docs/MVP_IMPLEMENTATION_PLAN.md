@@ -41,7 +41,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [ ] Add focused indexes for `phase`, `dueAt`, participants, and status when the corresponding query paths are implemented.
 2. [x] Implement Tender creation for 2-4 players with a server-generated seed and hidden Anomaly Configuration.
 3. [x] Implement deterministic restoration after restart and idempotent command handling by `commandId`.
-4. [-] Implement `advanceDueTenders` as the only timeout-resolution path.
+4. [x] Implement `advanceDueTenders` as the only timeout-resolution path.
 5. [-] Build player-only audit projections; audit data is not public or shareable.
 
 **Skills:** `tdd` for persistence, retries, deadlines, and visibility; `codebase-design` before repository and audit adapter boundaries; `domain-modeling` for audit terminology; `code-review` before proceeding.
@@ -86,7 +86,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Add requested-funding Budget payout for awarded single-Bid assessment.
    - [ ] Add Budget and Corporate Trust effects.
 8. [ ] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
-9. [ ] Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.
+9. [x] Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.
 
 **Skills:** `tdd` for every rule and edge case; `prototype` for timing, planning order, and decision clarity before complex UI work; `domain-modeling` whenever new rules add vocabulary; `grill-me` only if a rule changes score balance or the victory condition; `code-review` after each phase family.
 

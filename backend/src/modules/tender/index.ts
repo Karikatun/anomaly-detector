@@ -17,8 +17,28 @@ import { TenderFailure } from './domain/errors'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
 type CreateTenderModuleOptions = {
+  now?: () => Date
   seedGenerator?: () => string
   store?: TenderStore
+}
+
+const accessSlotSelectionDurationMs = 45_000
+const powerAllocationDurationMs = 60_000
+const operationalActionDurationMs = 20_000
+
+const deadlineForPhase = (phase: string, at: Date) => {
+  if (phase === 'access-slot-selection') return new Date(at.getTime() + accessSlotSelectionDurationMs)
+  if (phase === 'power-allocation') return new Date(at.getTime() + powerAllocationDurationMs)
+  if (phase === 'complete') return null
+  return new Date(at.getTime() + operationalActionDurationMs)
+}
+
+const reservePowerAllocation: PowerAllocation = {
+  contracts: 0,
+  laboratory: 0,
+  modelAnalysis: 0,
+  reconnaissance: 0,
+  reserve: 4,
 }
 
 const createRoundContracts = (round: number, playerCount: number) => Array.from(
@@ -52,6 +72,7 @@ const rotateTiePriority = (players: TenderPlayer[], round: number) => {
 }
 
 export function createTenderModule({
+  now = () => new Date(),
   seedGenerator = randomUUID,
   store = createInMemoryTenderStore(),
 }: CreateTenderModuleOptions = {}) {
@@ -89,6 +110,7 @@ export function createTenderModule({
 
   const nextContractsPlayer = (tender: StoredTender) => tender.players
     .filter((player) => effectiveContractPower(tender, player.id) > 0)
+    .filter((player) => !tender.contractCompletedByPlayer[player.id])
     .filter((player) => tender.publicContracts.every((contract) => contract.reservedByPlayerId !== player.id || contract.bidOutcome === undefined))
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
@@ -110,6 +132,7 @@ export function createTenderModule({
     return {
       ...tender,
       accessSlots: {},
+      contractCompletedByPlayer: {},
       laboratoryCompletedByPlayer: {},
       modelAnalysisCompletedByPlayer: {},
       phase: 'access-slot-selection',
@@ -155,6 +178,20 @@ export function createTenderModule({
     return receipt
   }
 
+  const commitTimeout = async ({ auditEvents, nextTender, tender }: {
+    auditEvents: Parameters<TenderStore['commit']>[0]['auditEvents']
+    nextTender: StoredTender
+    tender: StoredTender
+  }) => {
+    const result = await store.commit({
+      auditEvents,
+      expectedVersion: tender.version,
+      nextTender: { ...nextTender, version: tender.version + 1 },
+      tenderId: tender.id,
+    })
+    return result.kind === 'committed'
+  }
+
   return {
     async createTender(input: CreateTender) {
       const parsedInput = createTenderSchema.safeParse(input)
@@ -166,7 +203,9 @@ export function createTenderModule({
         analyticalReportsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 1])),
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
         budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
+        contractCompletedByPlayer: {},
         contractPowerRestrictionsByPlayer: {},
+        dueAt: deadlineForPhase('access-slot-selection', now()),
         knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
         publicContracts: createRoundContracts(1, parsedInput.data.players.length),
@@ -259,6 +298,7 @@ export function createTenderModule({
             accessSlots,
             analyticalReportsByPlayer,
             budgetByPlayer,
+            dueAt: isReadyToResolve ? deadlineForPhase('power-allocation', now()) : tender.dueAt,
             phase,
             rawTelemetrySignalsByPlayer,
             requestedSlots,
@@ -278,6 +318,7 @@ export function createTenderModule({
         }
         const powerAllocations: Record<string, PowerAllocation> = { ...tender.powerAllocations, [player.id]: command.allocation }
         const isReadyToStartReconnaissance = Object.keys(powerAllocations).length === tender.players.length
+        const phase = isReadyToStartReconnaissance ? firstOperationalPhase({ ...tender, powerAllocations }) : tender.phase
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
@@ -289,8 +330,11 @@ export function createTenderModule({
           commandFingerprint,
           nextTender: {
             ...tender,
+            dueAt: isReadyToStartReconnaissance
+              ? deadlineForPhase(phase, now())
+              : tender.dueAt,
             powerAllocations,
-            phase: isReadyToStartReconnaissance ? firstOperationalPhase({ ...tender, powerAllocations }) : tender.phase,
+            phase,
           },
           tender,
         })
@@ -354,7 +398,10 @@ export function createTenderModule({
           }],
           command,
           commandFingerprint,
-          nextTender: { ...nextTender, phase: nextLaboratoryPlayer(nextTender) ? 'laboratory' : nextOperationalPhase(nextTender, 'laboratory') },
+          nextTender: (() => {
+            const phase = nextLaboratoryPlayer(nextTender) ? 'laboratory' : nextOperationalPhase(nextTender, 'laboratory')
+            return { ...nextTender, dueAt: deadlineForPhase(phase, now()), phase }
+          })(),
           tender,
         })
       }
@@ -388,7 +435,10 @@ export function createTenderModule({
           publicTheses,
           ratingByPlayer,
         }
-        return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_checked', payload: { correct, playerId: player.id, signalId: command.signalId } }], command, commandFingerprint, nextTender: { ...nextTender, phase: nextModelAnalysisPlayer(nextTender) ? 'model-analysis' : nextOperationalPhase(nextTender, 'model-analysis') }, tender })
+        return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_checked', payload: { correct, playerId: player.id, signalId: command.signalId } }], command, commandFingerprint, nextTender: (() => {
+          const phase = nextModelAnalysisPlayer(nextTender) ? 'model-analysis' : nextOperationalPhase(nextTender, 'model-analysis')
+          return { ...nextTender, dueAt: deadlineForPhase(phase, now()), phase }
+        })(), tender })
       }
 
       if (command.type === 'update-working-model') {
@@ -438,7 +488,7 @@ export function createTenderModule({
           }],
           command,
           commandFingerprint,
-          nextTender: { ...nextTender, phase: 'contracts' },
+          nextTender: { ...nextTender, dueAt: deadlineForPhase('contracts', now()), phase: 'contracts' },
           tender,
         })
       }
@@ -464,7 +514,7 @@ export function createTenderModule({
         const budgetByPlayer = isAwarded
           ? { ...tender.budgetByPlayer, [player.id]: (tender.budgetByPlayer[player.id] ?? 0) + command.requestedFunding }
           : tender.budgetByPlayer
-        const nextTender = { ...tender, budgetByPlayer, publicContracts }
+        const nextTender = { ...tender, budgetByPlayer, contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [player.id]: true }, publicContracts }
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
@@ -481,7 +531,10 @@ export function createTenderModule({
           }],
           command,
           commandFingerprint,
-          nextTender: advanceAfterContracts(nextTender),
+          nextTender: (() => {
+            const advancedTender = advanceAfterContracts(nextTender)
+            return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, now()) }
+          })(),
           tender,
         })
       }
@@ -524,7 +577,10 @@ export function createTenderModule({
         }],
         command,
         commandFingerprint,
-        nextTender: { ...nextTender, phase: isReadyForLaboratory ? nextOperationalPhase(nextTender, 'reconnaissance') : tender.phase },
+        nextTender: (() => {
+          const phase = isReadyForLaboratory ? nextOperationalPhase(nextTender, 'reconnaissance') : tender.phase
+          return { ...nextTender, dueAt: deadlineForPhase(phase, now()), phase }
+        })(),
         tender,
       })
     },
@@ -567,8 +623,167 @@ export function createTenderModule({
       }
     },
 
-    async advanceDueTenders({ limit: _limit, now: _now }: AdvanceDueTendersInput): Promise<AdvanceDueTendersResult> {
-      return { advancedTenderIds: await store.findDue({ limit: _limit, now: _now }) }
+    async advanceDueTenders({ limit, now: dueNow }: AdvanceDueTendersInput): Promise<AdvanceDueTendersResult> {
+      const advancedTenderIds: string[] = []
+      for (const tenderId of await store.findDue({ limit, now: dueNow })) {
+        const tender = await store.read(tenderId)
+        if (!tender || tender.dueAt === null || tender.dueAt > dueNow) continue
+
+        if (tender.phase === 'power-allocation') {
+          const powerAllocations = { ...tender.powerAllocations }
+          for (const player of tender.players) {
+            if (powerAllocations[player.id] === undefined) powerAllocations[player.id] = reservePowerAllocation
+          }
+          const phase = firstOperationalPhase({ ...tender, powerAllocations })
+          const completed = await commitTimeout({
+            auditEvents: [{
+              kind: 'power_allocation_timeout_resolved',
+              payload: {
+                timedOutPlayerIds: tender.players
+                  .filter((player) => tender.powerAllocations[player.id] === undefined)
+                  .map((player) => player.id),
+              },
+            }],
+            nextTender: {
+              ...tender,
+              dueAt: deadlineForPhase(phase, dueNow),
+              phase,
+              powerAllocations,
+            },
+            tender,
+          })
+          if (completed) advancedTenderIds.push(tenderId)
+          continue
+        }
+        if (tender.phase === 'reconnaissance') {
+          const expectedPlayer = nextReconnaissancePlayer(tender)
+          if (!expectedPlayer) continue
+          const nextTender = {
+            ...tender,
+            reconnaissanceCompletedByPlayer: { ...tender.reconnaissanceCompletedByPlayer, [expectedPlayer.id]: true },
+          }
+          const phase = nextReconnaissancePlayer(nextTender)
+            ? 'reconnaissance'
+            : nextOperationalPhase(nextTender, 'reconnaissance')
+          const completed = await commitTimeout({
+            auditEvents: [{
+              kind: 'operational_action_timeout_resolved',
+              payload: { phase: tender.phase, playerId: expectedPlayer.id },
+            }],
+            nextTender: {
+              ...nextTender,
+              dueAt: deadlineForPhase(phase, dueNow),
+              phase,
+            },
+            tender,
+          })
+          if (completed) advancedTenderIds.push(tenderId)
+          continue
+        }
+        if (tender.phase === 'laboratory') {
+          const expectedPlayer = nextLaboratoryPlayer(tender)
+          if (!expectedPlayer) continue
+          const nextTender = {
+            ...tender,
+            laboratoryCompletedByPlayer: { ...tender.laboratoryCompletedByPlayer, [expectedPlayer.id]: true },
+          }
+          const phase = nextLaboratoryPlayer(nextTender)
+            ? 'laboratory'
+            : nextOperationalPhase(nextTender, 'laboratory')
+          const completed = await commitTimeout({
+            auditEvents: [{ kind: 'operational_action_timeout_resolved', payload: { phase: tender.phase, playerId: expectedPlayer.id } }],
+            nextTender: { ...nextTender, dueAt: deadlineForPhase(phase, dueNow), phase },
+            tender,
+          })
+          if (completed) advancedTenderIds.push(tenderId)
+          continue
+        }
+        if (tender.phase === 'model-analysis') {
+          const expectedPlayer = nextModelAnalysisPlayer(tender)
+          if (!expectedPlayer) continue
+          const nextTender = {
+            ...tender,
+            modelAnalysisCompletedByPlayer: { ...tender.modelAnalysisCompletedByPlayer, [expectedPlayer.id]: true },
+          }
+          const phase = nextModelAnalysisPlayer(nextTender)
+            ? 'model-analysis'
+            : nextOperationalPhase(nextTender, 'model-analysis')
+          const completed = await commitTimeout({
+            auditEvents: [{ kind: 'operational_action_timeout_resolved', payload: { phase: tender.phase, playerId: expectedPlayer.id } }],
+            nextTender: { ...nextTender, dueAt: deadlineForPhase(phase, dueNow), phase },
+            tender,
+          })
+          if (completed) advancedTenderIds.push(tenderId)
+          continue
+        }
+        if (tender.phase === 'contracts') {
+          const expectedPlayer = nextContractsPlayer(tender)
+          if (!expectedPlayer) continue
+          const nextTender = {
+            ...tender,
+            contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [expectedPlayer.id]: true },
+          }
+          const advancedTender = advanceAfterContracts(nextTender)
+          const completed = await commitTimeout({
+            auditEvents: [{ kind: 'operational_action_timeout_resolved', payload: { phase: tender.phase, playerId: expectedPlayer.id } }],
+            nextTender: { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, dueNow) },
+            tender,
+          })
+          if (completed) advancedTenderIds.push(tenderId)
+          continue
+        }
+        if (tender.phase !== 'access-slot-selection') continue
+
+        const timedOutPlayers = tender.players.filter((player) => tender.requestedSlots[player.id] === undefined)
+        const requestedSlots = {
+          ...tender.requestedSlots,
+          ...Object.fromEntries(timedOutPlayers.map((player) => [player.id, 3])),
+        }
+        const accessSlots = resolveAccessSlots(rotateTiePriority(tender.players, tender.round), requestedSlots)
+        const timedOutPlayerIds = new Set(timedOutPlayers.map((player) => player.id))
+        const budgetByPlayer = Object.fromEntries(tender.players.map((player) => [
+          player.id,
+          timedOutPlayerIds.has(player.id)
+            ? tender.budgetByPlayer[player.id] ?? 0
+            : (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
+        ]))
+        const analyticalReportsByPlayer = Object.fromEntries(tender.players.map((player) => [
+          player.id,
+          (tender.analyticalReportsByPlayer[player.id] ?? 0)
+            + (!timedOutPlayerIds.has(player.id) && receivesAccessSlotAnalyticalReportCompensation(accessSlots[player.id] ?? 3) ? 1 : 0),
+        ]))
+        const samplesByPlayer = { ...tender.samplesByPlayer }
+        const rawTelemetrySignalsByPlayer = { ...tender.rawTelemetrySignalsByPlayer }
+        const sampleCompensationByPlayer: Record<string, SignalId> = {}
+        for (const player of tender.players) {
+          if (timedOutPlayerIds.has(player.id) || !receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
+          const nextSample = nextCompensationSample(samplesByPlayer[player.id] ?? [])
+          if (!nextSample) continue
+          sampleCompensationByPlayer[player.id] = nextSample
+          samplesByPlayer[player.id] = [...(samplesByPlayer[player.id] ?? []), nextSample]
+          rawTelemetrySignalsByPlayer[player.id] = [...(rawTelemetrySignalsByPlayer[player.id] ?? []), nextSample]
+        }
+        const completed = await commitTimeout({
+          auditEvents: [{
+            kind: 'access_slot_timeout_resolved',
+            payload: { accessSlots, analyticalReportsByPlayer, budgetByPlayer, sampleCompensationByPlayer, timedOutPlayerIds: [...timedOutPlayerIds] },
+          }],
+          nextTender: {
+            ...tender,
+            accessSlots,
+            analyticalReportsByPlayer,
+            budgetByPlayer,
+            dueAt: deadlineForPhase('power-allocation', dueNow),
+            phase: 'power-allocation',
+            rawTelemetrySignalsByPlayer,
+            requestedSlots,
+            samplesByPlayer,
+          },
+          tender,
+        })
+        if (completed) advancedTenderIds.push(tenderId)
+      }
+      return { advancedTenderIds }
     },
   }
 }
