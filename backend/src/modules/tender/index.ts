@@ -101,9 +101,11 @@ export function createTenderModule({
       const tender = await store.create({
         accessSlots: {},
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
+        contractPowerRestrictionsByPlayer: {},
         knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
         publicTheses: [],
+        ratingByPlayer: {},
         rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
         reconnaissanceCompletedByPlayer: {},
         laboratoryCompletedByPlayer: {},
@@ -206,6 +208,10 @@ export function createTenderModule({
           tender.anomalyConfiguration.signals[command.receiverSignal],
         )
         const laboratoryCompletedByPlayer = { ...tender.laboratoryCompletedByPlayer, [player.id]: true }
+        const contractPowerRestrictionsByPlayer = {
+          ...tender.contractPowerRestrictionsByPlayer,
+          [player.id]: 0,
+        }
         const measurement = command.protocol === 'continuous'
           ? [{
             receiverSignal: command.receiverSignal,
@@ -219,7 +225,12 @@ export function createTenderModule({
           ...tender.privateMeasurementsByPlayer,
           [player.id]: [...(tender.privateMeasurementsByPlayer[player.id] ?? []), ...measurement],
         }
-        const nextTender = { ...tender, laboratoryCompletedByPlayer, privateMeasurementsByPlayer }
+        const nextTender = {
+          ...tender,
+          contractPowerRestrictionsByPlayer,
+          laboratoryCompletedByPlayer,
+          privateMeasurementsByPlayer,
+        }
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
@@ -239,6 +250,12 @@ export function createTenderModule({
         const actual = tender.anomalyConfiguration.signals[command.signalId]
         const correct = actual.fieldType === command.fieldType && actual.polarity === command.polarity
         const modelAnalysisCompletedByPlayer = { ...tender.modelAnalysisCompletedByPlayer, [player.id]: true }
+        const ratingByPlayer = correct
+          ? { ...tender.ratingByPlayer, [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + 1 }
+          : tender.ratingByPlayer
+        const contractPowerRestrictionsByPlayer = correct
+          ? tender.contractPowerRestrictionsByPlayer
+          : { ...tender.contractPowerRestrictionsByPlayer, [player.id]: 1 }
         const publicTheses = [
           ...tender.publicTheses,
           {
@@ -249,7 +266,13 @@ export function createTenderModule({
             signalId: command.signalId,
           },
         ]
-        const nextTender = { ...tender, modelAnalysisCompletedByPlayer, publicTheses }
+        const nextTender = {
+          ...tender,
+          contractPowerRestrictionsByPlayer,
+          modelAnalysisCompletedByPlayer,
+          publicTheses,
+          ratingByPlayer,
+        }
         return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_checked', payload: { correct, playerId: player.id, signalId: command.signalId } }], command, commandFingerprint, nextTender: { ...nextTender, phase: nextModelAnalysisPlayer(nextTender) ? 'model-analysis' : nextOperationalPhase(nextTender, 'model-analysis') }, tender })
       }
 
@@ -312,9 +335,11 @@ export function createTenderModule({
         players: tender.players.map((player) => ({
           playerId: player.id,
           ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
+          contractPowerRestriction: tender.contractPowerRestrictionsByPlayer[player.id] ?? 0,
           ...(tender.phase !== 'access-slot-selection' && tender.powerAllocations[player.id]
             ? { powerAllocation: tender.powerAllocations[player.id] }
             : {}),
+          rating: tender.ratingByPlayer[player.id] ?? 0,
           ...(tender.phase === 'access-slot-selection' && player.id === playerId && tender.requestedSlots[player.id] !== undefined
             ? { requestedAccessSlot: tender.requestedSlots[player.id] }
             : {}),

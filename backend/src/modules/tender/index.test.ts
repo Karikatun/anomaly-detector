@@ -28,8 +28,8 @@ test('records an Access Slot command once and exposes it only to its player', as
     version: 1,
     phase: 'access-slot-selection',
     players: [
-      { playerId: 'player-a', requestedAccessSlot: 1 },
-      { playerId: 'player-b' },
+      { contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+      { contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
     ],
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
@@ -158,8 +158,8 @@ test('restores a player Tender view from the shared store', async () => {
     version: 1,
     phase: 'access-slot-selection',
     players: [
-      { playerId: 'player-a', requestedAccessSlot: 1 },
-      { playerId: 'player-b' },
+      { contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+      { contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
     ],
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
@@ -208,10 +208,10 @@ test('resolves Access Slots and opens Power planning after every player chooses'
     version: 4,
     phase: 'power-allocation',
     players: [
-      { playerId: 'player-a', accessSlot: 1 },
-      { playerId: 'player-b', accessSlot: 3 },
-      { playerId: 'player-c', accessSlot: 2 },
-      { playerId: 'player-d', accessSlot: 6 },
+      { accessSlot: 1, contractPowerRestriction: 0, playerId: 'player-a', rating: 0 },
+      { accessSlot: 3, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+      { accessSlot: 2, contractPowerRestriction: 0, playerId: 'player-c', rating: 0 },
+      { accessSlot: 6, contractPowerRestriction: 0, playerId: 'player-d', rating: 0 },
     ],
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
@@ -490,6 +490,69 @@ test('checks public Theses in Access Slot order and opens Contracts', async () =
         playerId: 'player-c',
         polarity: 'positive',
         signalId: 'boreal',
+      },
+    ],
+  })
+})
+
+test('applies Model Analysis Rating rewards and wrong-Thesis Contract Power restrictions', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+  await tender.execute({
+    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 1, reconnaissance: 1 },
+    actorId: 'player-a',
+    commandId: 'a-2',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 1, reconnaissance: 1 },
+    actorId: 'player-b',
+    commandId: 'b-2',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder'] })
+  await tender.execute({ commandId: 'b-3', tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', signals: ['cinder'] })
+  await tender.execute({
+    commandId: 'a-4',
+    tenderId,
+    actorId: 'player-a',
+    type: 'submit-thesis',
+    signalId: 'aster',
+    fieldType: 'inertial',
+    polarity: 'negative',
+  })
+  await tender.execute({
+    commandId: 'b-4',
+    tenderId,
+    actorId: 'player-b',
+    type: 'submit-thesis',
+    signalId: 'boreal',
+    fieldType: 'phase',
+    polarity: 'positive',
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'contracts',
+    players: [
+      {
+        contractPowerRestriction: 0,
+        playerId: 'player-a',
+        rating: 1,
+      },
+      {
+        contractPowerRestriction: 1,
+        playerId: 'player-b',
+        rating: 0,
       },
     ],
   })

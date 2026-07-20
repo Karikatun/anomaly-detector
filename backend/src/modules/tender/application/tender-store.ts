@@ -26,12 +26,14 @@ export type TenderAuditEvent = {
 export type StoredTender = {
   accessSlots: Record<string, number>
   anomalyConfiguration: AnomalyConfiguration
+  contractPowerRestrictionsByPlayer: Record<string, number>
   id: string
   knownSignals: SignalId[]
   phase: TenderPhase
   powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>
   publicTheses: PublicThesis[]
+  ratingByPlayer: Record<string, number>
   requestedSlots: Record<string, number>
   rawTelemetrySignalsByPlayer: Record<string, SignalId[]>
   reconnaissanceCompletedByPlayer: Record<string, boolean>
