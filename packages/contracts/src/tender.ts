@@ -52,6 +52,9 @@ export const conductReconnaissanceCommandSchema = z.object({
 }).strict()
 
 export const laboratoryProtocolSchema = z.enum(['impulse', 'continuous'])
+export const fieldTypeSchema = z.enum(['inertial', 'electromagnetic', 'phase'])
+export const polaritySchema = z.enum(['positive', 'negative'])
+export const submitThesisCommandSchema = z.object({ commandId: commandIdSchema, tenderId: tenderIdSchema, actorId: playerIdSchema, signalId: signalIdSchema, fieldType: fieldTypeSchema, polarity: polaritySchema, type: z.literal('submit-thesis') }).strict()
 export const runLaboratoryTestCommandSchema = z.object({
   commandId: commandIdSchema,
   tenderId: tenderIdSchema,
@@ -67,6 +70,7 @@ export const tenderCommandSchema = z.discriminatedUnion('type', [
   allocatePowerCommandSchema,
   conductReconnaissanceCommandSchema,
   runLaboratoryTestCommandSchema,
+  submitThesisCommandSchema,
 ])
 
 export const commandReceiptSchema = z.object({
