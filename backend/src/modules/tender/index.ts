@@ -9,37 +9,30 @@ import type {
   TenderViewQuery,
 } from '@the-game/contracts'
 import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@the-game/contracts'
+import type { StoredTender, TenderStore } from './application/tender-store'
 import { TenderFailure } from './domain/errors'
+import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
-type Tender = {
-  teams: TenderTeam[]
-  requestedSlots: Map<string, number>
-  processedCommands: Map<string, { command: TenderCommand; receipt: CommandReceipt }>
-  version: number
+type CreateTenderModuleOptions = {
+  store?: TenderStore
 }
 
-export function createTenderModule() {
-  const tenders = new Map<string, Tender>()
+export function createTenderModule({ store = createInMemoryTenderStore() }: CreateTenderModuleOptions = {}) {
   let nextTenderId = 1
 
-  const readTender = (tenderId: string) => {
-    const tender = tenders.get(tenderId)
+  const readTender = async (tenderId: string) => {
+    const tender = await store.read(tenderId)
     if (!tender) throw new TenderFailure('tender_not_found', `Unknown Tender ${tenderId}`)
     return tender
   }
 
-  const readParticipantTeam = (tender: Tender, participantId: string) => {
+  const readParticipantTeam = (tender: StoredTender, participantId: string) => {
     const team = tender.teams.find((candidate) => candidate.participantId === participantId)
     if (!team) throw new TenderFailure('participant_not_in_tender', `Participant ${participantId} is not in this Tender`)
     return team
   }
 
-  const isSameCommand = (left: TenderCommand, right: TenderCommand) =>
-    left.commandId === right.commandId
-    && left.tenderId === right.tenderId
-    && left.actorId === right.actorId
-    && left.type === right.type
-    && left.slot === right.slot
+  const fingerprint = (command: TenderCommand) => JSON.stringify(command)
 
   return {
     async createTender(input: CreateTender) {
@@ -48,10 +41,12 @@ export function createTenderModule() {
         throw new TenderFailure('invalid_create_tender', 'Tender creation input is invalid')
       }
       const tenderId = `tender-${nextTenderId++}`
-      tenders.set(tenderId, {
+      await store.create({
+        id: tenderId,
         teams: parsedInput.data.teams,
-        requestedSlots: new Map(),
-        processedCommands: new Map(),
+        requestedSlots: {},
+        processedCommands: {},
+        phase: 'access-slot-selection',
         version: 0,
       })
       return { tenderId }
@@ -63,10 +58,11 @@ export function createTenderModule() {
         throw new TenderFailure('invalid_tender_command', 'Tender command is invalid')
       }
       const command = parsedCommand.data
-      const tender = readTender(command.tenderId)
-      const previousCommand = tender.processedCommands.get(command.commandId)
+      const tender = await readTender(command.tenderId)
+      const commandFingerprint = fingerprint(command)
+      const previousCommand = tender.processedCommands[command.commandId]
       if (previousCommand) {
-        if (!isSameCommand(previousCommand.command, command)) {
+        if (previousCommand.fingerprint !== commandFingerprint) {
           throw new TenderFailure('duplicate_command_conflict', `Command ${command.commandId} conflicts with its first use`)
         }
         return previousCommand.receipt
@@ -74,10 +70,26 @@ export function createTenderModule() {
 
       const team = readParticipantTeam(tender, command.actorId)
 
-      tender.requestedSlots.set(team.id, command.slot)
-      tender.version += 1
-      const receipt = { tenderId: command.tenderId, version: tender.version }
-      tender.processedCommands.set(command.commandId, { command, receipt })
+      const receipt = { tenderId: command.tenderId, version: tender.version + 1 }
+      const result = await store.commit({
+        tenderId: command.tenderId,
+        expectedVersion: tender.version,
+        nextTender: {
+          ...tender,
+          requestedSlots: { ...tender.requestedSlots, [team.id]: command.slot },
+          version: receipt.version,
+        },
+        command: { command, fingerprint: commandFingerprint, receipt },
+      })
+      if (result.kind === 'command_exists') {
+        if (result.command.fingerprint !== commandFingerprint) {
+          throw new TenderFailure('duplicate_command_conflict', `Command ${command.commandId} conflicts with its first use`)
+        }
+        return result.command.receipt
+      }
+      if (result.kind === 'version_conflict') {
+        throw new TenderFailure('tender_version_conflict', `Tender ${command.tenderId} changed before command execution`)
+      }
       return receipt
     },
 
@@ -87,7 +99,7 @@ export function createTenderModule() {
         throw new TenderFailure('invalid_tender_view_query', 'Tender view query is invalid')
       }
       const { tenderId, participantId } = parsedQuery.data
-      const tender = readTender(tenderId)
+      const tender = await readTender(tenderId)
       readParticipantTeam(tender, participantId)
       return {
         tenderId,
@@ -95,15 +107,15 @@ export function createTenderModule() {
         phase: 'access-slot-selection' as const,
         teams: tender.teams.map((team) => ({
           teamId: team.id,
-          ...(team.participantId === participantId && tender.requestedSlots.has(team.id)
-            ? { requestedAccessSlot: tender.requestedSlots.get(team.id) }
+          ...(team.participantId === participantId && tender.requestedSlots[team.id] !== undefined
+            ? { requestedAccessSlot: tender.requestedSlots[team.id] }
             : {}),
         })),
       }
     },
 
     async advanceDueTenders({ limit: _limit, now: _now }: AdvanceDueTendersInput): Promise<AdvanceDueTendersResult> {
-      return { advancedTenderIds: [] }
+      return { advancedTenderIds: await store.findDue({ limit: _limit, now: _now }) }
     },
   }
 }

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 
 import { createTenderModule } from './index'
+import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
 test('records an Access Slot command once and exposes it only to its participant', async () => {
   const tender = createTenderModule()
@@ -124,4 +125,35 @@ test('rejects an invalid Tender view query before checking participation', async
   await expect(
     tender.readTenderView({ tenderId, participantId: '' } as never),
   ).rejects.toMatchObject({ kind: 'invalid_tender_view_query' })
+})
+
+test('restores a participant Tender view from the shared store', async () => {
+  const store = createInMemoryTenderStore()
+  const firstModule = createTenderModule({ store })
+  const { tenderId } = await firstModule.createTender({
+    teams: [
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await firstModule.execute({
+    commandId: 'command-a-1',
+    tenderId,
+    actorId: 'player-a',
+    type: 'request-access-slot',
+    slot: 1,
+  })
+
+  const restartedModule = createTenderModule({ store })
+
+  expect(await restartedModule.readTenderView({ tenderId, participantId: 'player-a' })).toEqual({
+    tenderId,
+    version: 1,
+    phase: 'access-slot-selection',
+    teams: [
+      { teamId: 'team-a', requestedAccessSlot: 1 },
+      { teamId: 'team-b' },
+    ],
+  })
 })
