@@ -620,6 +620,13 @@ export function createTenderModule({
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
         publicTheses: tender.publicTheses,
+        ...(tender.phase === 'complete' ? {
+          audit: {
+            anomalyConfiguration: tender.anomalyConfiguration,
+            events: await store.readAuditEvents(tenderId),
+            privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
+          },
+        } : {}),
       }
     },
 

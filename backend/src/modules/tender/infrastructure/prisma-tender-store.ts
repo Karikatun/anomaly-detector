@@ -3,6 +3,7 @@ import type { Prisma } from '../../../generated/prisma/client'
 import type { DbClient } from '../../../db'
 import type {
   StoredTender,
+  StoredTenderAuditEvent,
   StoredTenderCommand,
   TenderCommit,
   TenderCommitResult,
@@ -207,6 +208,21 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
         select: { id: true },
       })
       return tenders.map((tender) => tender.id)
+    },
+
+    async readAuditEvents(tenderId): Promise<StoredTenderAuditEvent[]> {
+      const events = await db.tenderAuditEvent.findMany({
+        where: { tenderId },
+        orderBy: { sequence: 'asc' },
+        select: { actorId: true, commandId: true, kind: true, payload: true, sequence: true },
+      })
+      return events.map((event) => ({
+        ...(event.actorId ? { actorId: event.actorId } : {}),
+        ...(event.commandId ? { commandId: event.commandId } : {}),
+        kind: event.kind,
+        payload: event.payload as Record<string, unknown>,
+        sequence: event.sequence,
+      }))
     },
   }
 }
