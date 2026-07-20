@@ -28,8 +28,9 @@ export const powerAllocationSchema = z.object({
   laboratory: z.number().int().min(0).max(2),
   modelAnalysis: z.number().int().min(0).max(2),
   reconnaissance: z.number().int().min(0).max(2),
+  reserve: z.number().int().min(0).max(4).optional(),
 }).strict().refine(
-  (allocation) => Object.values(allocation).reduce((total, power) => total + power, 0) === 4,
+  (allocation) => Object.values(allocation).reduce((total, power) => total + (power ?? 0), 0) === 4,
   'Power allocation must contain exactly four units',
 )
 

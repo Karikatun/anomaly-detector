@@ -3,6 +3,114 @@ import { expect, test } from 'bun:test'
 import { createTenderModule } from './index'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
+test('resolves an expired Access Slot selection with conservative free defaults', async () => {
+  const now = new Date('2026-07-20T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'access-slot-a-1',
+    slot: 1,
+    tenderId,
+    type: 'request-access-slot',
+  })
+
+  expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:00:45.000Z') })).toEqual({
+    advancedTenderIds: [tenderId],
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    phase: 'power-allocation',
+    players: [
+      { playerId: 'player-a', accessSlot: 1, budget: 0 },
+      { playerId: 'player-b', accessSlot: 3, budget: 2 },
+    ],
+  })
+})
+
+test('keeps Access Slot compensation for a player who acted before the deadline', async () => {
+  const now = new Date('2026-07-20T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ actorId: 'player-a', commandId: 'access-slot-a-1', slot: 5, tenderId, type: 'request-access-slot' })
+  await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:00:45.000Z') })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    privateAnalyticalReports: 2,
+  })
+})
+
+test('resolves an expired Power allocation by reserving all remaining Power', async () => {
+  const now = new Date('2026-07-20T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:00:45.000Z') })
+
+  expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:01:45.000Z') })).toEqual({
+    advancedTenderIds: [tenderId],
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'complete',
+    players: [
+      { playerId: 'player-a', powerAllocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } },
+      { playerId: 'player-b', powerAllocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } },
+    ],
+  })
+})
+
+test('skips an unresolved operational action when its deadline expires', async () => {
+  const now = new Date('2026-07-20T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ actorId: 'player-a', commandId: 'access-slot-a-1', slot: 3, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-b', commandId: 'access-slot-b-1', slot: 4, tenderId, type: 'request-access-slot' })
+  await tender.execute({
+    actorId: 'player-a',
+    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 1, reserve: 3 },
+    commandId: 'power-a-1',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    actorId: 'player-b',
+    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 },
+    commandId: 'power-b-1',
+    tenderId,
+    type: 'allocate-power',
+  })
+
+  expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:00:20.000Z') })).toEqual({
+    advancedTenderIds: [tenderId],
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'complete',
+    privateSamples: ['aster'],
+  })
+})
+
 test('records an Access Slot command once and exposes it only to its player', async () => {
   const tender = createTenderModule()
   const { tenderId } = await tender.createTender({
