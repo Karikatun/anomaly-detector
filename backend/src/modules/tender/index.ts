@@ -99,6 +99,7 @@ export function createTenderModule({
         rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
         reconnaissanceCompletedByPlayer: {},
         laboratoryCompletedByPlayer: {},
+        privateMeasurementsByPlayer: {},
         players: parsedInput.data.players,
         requestedSlots: {},
         samplesByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
@@ -196,7 +197,14 @@ export function createTenderModule({
           tender.anomalyConfiguration.signals[command.receiverSignal],
         )
         const laboratoryCompletedByPlayer = { ...tender.laboratoryCompletedByPlayer, [player.id]: true }
-        const nextTender = { ...tender, laboratoryCompletedByPlayer }
+        const measurement = command.protocol === 'continuous'
+          ? [{ receiverSignal: command.receiverSignal, sourceSignal: command.sourceSignal, stability: publicResult === 'unstable_collapse' ? 'volatile' as const : 'stable' as const }]
+          : []
+        const privateMeasurementsByPlayer = measurement.length === 0 ? tender.privateMeasurementsByPlayer : {
+          ...tender.privateMeasurementsByPlayer,
+          [player.id]: [...(tender.privateMeasurementsByPlayer[player.id] ?? []), ...measurement],
+        }
+        const nextTender = { ...tender, laboratoryCompletedByPlayer, privateMeasurementsByPlayer }
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
@@ -279,6 +287,7 @@ export function createTenderModule({
         })),
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
+        privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
       }
     },
 
