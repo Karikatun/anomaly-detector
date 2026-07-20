@@ -43,8 +43,24 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       phase: 'access-slot-selection',
       teams: [
         { teamId: 'team-a', requestedAccessSlot: 1 },
-        { teamId: 'team-b' },
-      ],
-    })
+      { teamId: 'team-b' },
+    ],
+  })
+
+    expect(
+      await prisma.tenderAuditEvent.findMany({
+        where: { tenderId },
+        orderBy: { sequence: 'asc' },
+        select: { actorId: true, commandId: true, kind: true, payload: true, sequence: true },
+      }),
+    ).toEqual([
+      {
+        actorId: 'player-a',
+        commandId: 'command-a-1',
+        kind: 'access_slot_requested',
+        payload: { slot: 1, teamId: 'team-a' },
+        sequence: 1,
+      },
+    ])
   })
 })
