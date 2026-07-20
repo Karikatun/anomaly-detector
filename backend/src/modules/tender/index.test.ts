@@ -37,6 +37,7 @@ test('records an Access Slot command once and exposes it only to its player', as
       { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
       { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
     ],
+    privateAnalyticalReports: 1,
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
@@ -222,6 +223,7 @@ test('restores a player Tender view from the shared store', async () => {
       { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
       { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
     ],
+    privateAnalyticalReports: 1,
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
@@ -283,6 +285,7 @@ test('resolves Access Slots and opens Power planning after every player chooses'
       { accessSlot: 2, budget: 1, contractPowerRestriction: 0, playerId: 'player-c', rating: 0 },
       { accessSlot: 6, budget: 3, contractPowerRestriction: 0, playerId: 'player-d', rating: 0 },
     ],
+    privateAnalyticalReports: 1,
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
@@ -300,6 +303,30 @@ test('resolves Access Slots and opens Power planning after every player chooses'
       { accessSlot: 2, budget: 1, playerId: 'player-c' },
       { accessSlot: 6, budget: 3, playerId: 'player-d' },
     ],
+  })
+})
+
+test('applies private Analytical Report compensation for the Night Access Slot', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 5 })
+  await tender.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 3 })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    players: [
+      { accessSlot: 5, budget: 2, playerId: 'player-a' },
+      { accessSlot: 3, budget: 2, playerId: 'player-b' },
+    ],
+    privateAnalyticalReports: 2,
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    privateAnalyticalReports: 1,
   })
 })
 

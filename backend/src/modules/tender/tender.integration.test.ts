@@ -59,6 +59,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
         { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
       ],
+      privateAnalyticalReports: 1,
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
       privateSamples: ['aster'],
@@ -214,6 +215,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         { accessSlot: 2, budget: 1, contractPowerRestriction: 0, playerId: 'player-c', rating: 0 },
         { accessSlot: 6, budget: 3, contractPowerRestriction: 0, playerId: 'player-d', rating: 0 },
       ],
+      privateAnalyticalReports: 1,
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
       privateSamples: ['aster'],
@@ -230,6 +232,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       {
         payload: {
           accessSlots: { 'player-a': 1, 'player-b': 3, 'player-c': 2, 'player-d': 6 },
+          analyticalReportsByPlayer: { 'player-a': 1, 'player-b': 1, 'player-c': 1, 'player-d': 1 },
           budgetByPlayer: { 'player-a': 0, 'player-b': 2, 'player-c': 1, 'player-d': 3 },
           sampleCompensationByPlayer: { 'player-d': 'boreal' },
         },

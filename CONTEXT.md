@@ -28,6 +28,10 @@ _Avoid_: signal, ingredient, consumable
 Private discovery data associated with a Sample before its first laboratory use.
 _Avoid_: sample, laboratory result, public evidence
 
+**Analytical Report**:
+A private research aid held by a player. It is granted at match start and by the Night Access Slot; its concrete spend effect is defined by later Model Analysis rules.
+_Avoid_: thesis, working model, public result
+
 ## Tender Economy
 
 **Rating**:
