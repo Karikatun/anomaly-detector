@@ -1,0 +1,41 @@
+import type {
+  AdvanceDueTendersInput,
+  CommandReceipt,
+  TenderCommand,
+  TenderPhase,
+  TenderTeam,
+} from '@the-game/contracts'
+
+export type StoredTenderCommand = {
+  command: TenderCommand
+  fingerprint: string
+  receipt: CommandReceipt
+}
+
+export type StoredTender = {
+  id: string
+  phase: TenderPhase
+  processedCommands: Record<string, StoredTenderCommand>
+  requestedSlots: Record<string, number>
+  teams: TenderTeam[]
+  version: number
+}
+
+export type TenderCommit = {
+  command: StoredTenderCommand
+  expectedVersion: number
+  nextTender: StoredTender
+  tenderId: string
+}
+
+export type TenderCommitResult =
+  | { kind: 'committed' }
+  | { command: StoredTenderCommand; kind: 'command_exists' }
+  | { kind: 'version_conflict' }
+
+export type TenderStore = {
+  commit(change: TenderCommit): Promise<TenderCommitResult>
+  create(tender: StoredTender): Promise<void>
+  findDue(input: AdvanceDueTendersInput): Promise<string[]>
+  read(tenderId: string): Promise<StoredTender | null>
+}
