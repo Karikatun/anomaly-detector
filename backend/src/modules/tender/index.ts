@@ -21,10 +21,10 @@ type CreateTenderModuleOptions = {
   store?: TenderStore
 }
 
-const createRoundContracts = (playerCount: number) => Array.from(
+const createRoundContracts = (round: number, playerCount: number) => Array.from(
   { length: playerCount + 1 },
   (_, index) => ({
-    contractId: `round-1-contract-${index + 1}`,
+    contractId: `round-${round}-contract-${index + 1}`,
     requiredPublicResult: ['reflection', 'attenuation', 'transmission_gain', 'unstable_collapse'][index % 4] as 'reflection' | 'attenuation' | 'transmission_gain' | 'unstable_collapse',
   }),
 )
@@ -90,6 +90,28 @@ export function createTenderModule({
     return 'complete'
   }
 
+  const firstOperationalPhase = (tender: StoredTender) => nextReconnaissancePlayer(tender)
+    ? 'reconnaissance'
+    : nextOperationalPhase(tender, 'reconnaissance')
+
+  const advanceAfterContracts = (tender: StoredTender): StoredTender => {
+    if (nextContractsPlayer(tender)) return { ...tender, phase: 'contracts' }
+    if (tender.round >= 5) return { ...tender, phase: 'complete' }
+    const round = tender.round + 1
+    return {
+      ...tender,
+      accessSlots: {},
+      laboratoryCompletedByPlayer: {},
+      modelAnalysisCompletedByPlayer: {},
+      phase: 'access-slot-selection',
+      powerAllocations: {},
+      publicContracts: createRoundContracts(round, tender.players.length),
+      reconnaissanceCompletedByPlayer: {},
+      requestedSlots: {},
+      round,
+    }
+  }
+
   const commitCommand = async ({
     auditEvents,
     command,
@@ -138,7 +160,7 @@ export function createTenderModule({
         contractPowerRestrictionsByPlayer: {},
         knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
-        publicContracts: createRoundContracts(parsedInput.data.players.length),
+        publicContracts: createRoundContracts(1, parsedInput.data.players.length),
         publicLaboratoryResults: [],
         publicTheses: [],
         ratingByPlayer: {},
@@ -258,8 +280,8 @@ export function createTenderModule({
           commandFingerprint,
           nextTender: {
             ...tender,
-            phase: isReadyToStartReconnaissance ? 'reconnaissance' : tender.phase,
             powerAllocations,
+            phase: isReadyToStartReconnaissance ? firstOperationalPhase({ ...tender, powerAllocations }) : tender.phase,
           },
           tender,
         })
@@ -449,7 +471,7 @@ export function createTenderModule({
           }],
           command,
           commandFingerprint,
-          nextTender: { ...nextTender, phase: nextContractsPlayer(nextTender) ? 'contracts' : 'complete' },
+          nextTender: advanceAfterContracts(nextTender),
           tender,
         })
       }
