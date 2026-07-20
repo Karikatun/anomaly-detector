@@ -29,6 +29,7 @@ export type TenderAuditEvent = {
 export type StoredTender = {
   accessSlots: Record<string, number>
   anomalyConfiguration: AnomalyConfiguration
+  budgetByPlayer: Record<string, number>
   contractPowerRestrictionsByPlayer: Record<string, number>
   id: string
   knownSignals: SignalId[]

@@ -56,8 +56,8 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       version: 1,
       phase: 'access-slot-selection',
       players: [
-        { contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
-        { contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+        { budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+        { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
       ],
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
@@ -209,10 +209,10 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       version: 4,
       phase: 'power-allocation',
       players: [
-        { accessSlot: 1, contractPowerRestriction: 0, playerId: 'player-a', rating: 0 },
-        { accessSlot: 3, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
-        { accessSlot: 2, contractPowerRestriction: 0, playerId: 'player-c', rating: 0 },
-        { accessSlot: 6, contractPowerRestriction: 0, playerId: 'player-d', rating: 0 },
+        { accessSlot: 1, budget: 0, contractPowerRestriction: 0, playerId: 'player-a', rating: 0 },
+        { accessSlot: 3, budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+        { accessSlot: 2, budget: 1, contractPowerRestriction: 0, playerId: 'player-c', rating: 0 },
+        { accessSlot: 6, budget: 3, contractPowerRestriction: 0, playerId: 'player-d', rating: 0 },
       ],
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
@@ -228,7 +228,10 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       }),
     ).toEqual([
       {
-        payload: { accessSlots: { 'player-a': 1, 'player-b': 3, 'player-c': 2, 'player-d': 6 } },
+        payload: {
+          accessSlots: { 'player-a': 1, 'player-b': 3, 'player-c': 2, 'player-d': 6 },
+          budgetByPlayer: { 'player-a': 0, 'player-b': 2, 'player-c': 1, 'player-d': 3 },
+        },
         sequence: 5,
       },
     ])
