@@ -1,23 +1,70 @@
-# The Game
+# Anomaly Detector
 
 <p align="center">
-  <img src="docs/assets/vibe_tmpl_schema.png" alt="The Game architecture schema" width="100%">
+  <img src="docs/assets/vibe_tmpl_schema.png" alt="Схема архитектуры проекта" width="100%">
 </p>
 
-A full-stack game project built from the Vibe template: one repository with a Bun/Hono backend, a React CSR browser client (`webapp`), an Astro SSG/SSR site (`website`), and shared API contracts. The runnable Expo mobile template lives on the `mobile` branch so the default branch stays focused on webapp, backend, website, infrastructure, and shared contracts.
+`Anomaly Detector` - соревновательная браузерная игра для 2-4 игроков. Игроки исследуют аномалию на орбитальной станции и за пять раундов борются за корпоративное финансирование. Победитель определяется однозначно по итоговому рейтингу.
+
+## Игра
+
+- В начале раунда игроки тайно выбирают один из шести слотов доступа. При коллизии прямой выбор имеет приоритет; сдвинутый игрок получает ближайший свободный слот.
+- Игроки открыто распределяют четыре единицы мощности по разведке, лаборатории, анализу модели и контрактам. На одно направление можно выделить не больше двух единиц. Порядок подтверждения: от раннего слота доступа к позднему.
+- В разведке игрок получает образцы одного или двух сигналов в соответствии с выделенной мощностью. Открытие сигнала видно всем, но образец и необработанная телеметрия остаются приватными.
+- Скрытая конфигурация аномалии создаётся сервером детерминированно по seed. В ней шесть сигналов, у каждого есть скрытые тип поля и полярность.
+
+Подробные согласованные правила: [docs/GAME_DESIGN_BRIEF.md](docs/GAME_DESIGN_BRIEF.md). Порядок реализации: [docs/MVP_IMPLEMENTATION_PLAN.md](docs/MVP_IMPLEMENTATION_PLAN.md).
+
+## Текущий Статус
+
+Реализован авторитетный серверный модуль тендера: создание партии, скрытая конфигурация, выбор слотов, распределение мощности, разведка, идемпотентность запросов, журнал аудита и восстановление состояния из PostgreSQL.
+
+Лабораторные опыты, анализ модели, контракты, пять полных раундов, комнаты и интерфейс партии ещё находятся в реализации. Развёртывание пока не выполняется; целевая инфраструктура - Yandex Cloud через `yc` CLI.
+
+## Локальный Запуск
+
+Требования: Bun `1.3.14` и Docker Compose.
+
+```bash
+bun install
+docker compose up -d postgres
+cp backend/.env.example backend/.env
+bun run --cwd backend prisma:deploy
+```
+
+Запустите сервисы в отдельных терминалах:
+
+```bash
+bun run dev:backend  # API: http://localhost:3000
+bun run dev:webapp   # клиент Vite: адрес будет показан в терминале
+```
+
+Для полного запуска всех рабочих пространств используйте `bun run dev`. Локальная база PostgreSQL работает в Docker на порту `54329`; подробности и сброс базы описаны в [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md).
+
+## Тестирование
+
+```bash
+bun run test:contracts            # схемы и общие контракты
+bun run test:backend:unit         # правила и модуль тендера без БД
+bun run test:backend:integration  # PostgreSQL, миграции и восстановление состояния
+bun run typecheck                 # TypeScript во всех рабочих пространствах
+bun run architecture:check        # проверка границ модулей
+```
+
+Полный набор, включая шаблонные и webapp-проверки: `bun run test`. Интеграционные тесты самостоятельно поднимают отдельный контейнер `postgres_test`.
 
 ## Project Decisions
 
-- Project name: The Game.
-- Project slug: `the-game`.
+- Project name: Anomaly Detector.
+- Project slug: `the-game` (технический идентификатор пока не переименован).
 - Active surfaces now: `webapp` and `backend/API`.
 - Deferred surfaces: `mobile` and public `website` until the game concept needs them.
-- Product direction: game concept to be grilled before feature implementation.
+- Product direction: synchronous competitive deduction game for individual players.
 - Agreed MVP game design: [docs/GAME_DESIGN_BRIEF.md](docs/GAME_DESIGN_BRIEF.md).
 - MVP implementation roadmap and required engineering skills: [docs/MVP_IMPLEMENTATION_PLAN.md](docs/MVP_IMPLEMENTATION_PLAN.md).
 - Deployment status: not deploying now.
 - Production target when deployment starts: Yandex Cloud through the `yc` CLI, following [docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md). DigitalOcean scripts and docs remain template artifacts, but they are not this project's chosen production path.
-- Git publishing: no project `origin` is configured yet; the template remote was removed.
+- Git publishing: `origin` points to `git@github.com:Karikatun/anomaly-detector.git`.
 
 ## Agent Intake Checklist Before Installing
 
