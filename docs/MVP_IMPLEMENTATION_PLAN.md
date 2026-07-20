@@ -53,6 +53,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 **Outcome:** a complete Tender is playable through the authoritative API.
 
 1. [-] Add five fixed rounds and the transitions between Access Slot selection, Power planning, four operational phases, and end-of-round calculation.
+   - [x] Add current round number to Tender state and participant Tender views.
+   - [ ] Add end-of-round transition from round 1 through round 5.
 2. [x] Resolve six secret Access Slots with rotating public tie priority and the confirmed direct-request rule: with `A=1`, `B=1`, `C=2`, `D=6`, results are `A=1`, `B=3`, `C=2`, `D=6`.
 3. [x] Add four Power per player, a maximum of two per category, and open planning in Access Slot order.
 4. [x] Add Reconnaissance: six persistent Signals, non-consumable Samples, and initiating-player Raw Telemetry.
