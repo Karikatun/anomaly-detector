@@ -26,6 +26,12 @@ export function createTenderModule() {
     return tender
   }
 
+  const readParticipantTeam = (tender: Tender, participantId: string) => {
+    const team = tender.teams.find((candidate) => candidate.participantId === participantId)
+    if (!team) throw new TenderFailure('participant_not_in_tender', `Participant ${participantId} is not in this Tender`)
+    return team
+  }
+
   return {
     async createTender(input: CreateTender) {
       const tenderId = `tender-${nextTenderId++}`
@@ -43,8 +49,7 @@ export function createTenderModule() {
       const previousReceipt = tender.processedCommands.get(command.commandId)
       if (previousReceipt) return previousReceipt
 
-      const team = tender.teams.find((candidate) => candidate.participantId === command.actorId)
-      if (!team) throw new Error(`Participant ${command.actorId} is not in this Tender`)
+      const team = readParticipantTeam(tender, command.actorId)
 
       tender.requestedSlots.set(team.id, command.slot)
       tender.version += 1
@@ -55,9 +60,7 @@ export function createTenderModule() {
 
     async readTenderView({ tenderId, participantId }: { tenderId: string; participantId: string }): Promise<TenderView> {
       const tender = readTender(tenderId)
-      if (!tender.teams.some((team) => team.participantId === participantId)) {
-        throw new Error(`Participant ${participantId} is not in this Tender`)
-      }
+      readParticipantTeam(tender, participantId)
       return {
         tenderId,
         version: tender.version,
