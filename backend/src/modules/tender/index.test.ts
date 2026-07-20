@@ -45,3 +45,11 @@ test('does not return a Tender view to a non-participant', async () => {
     'is not in this Tender',
   )
 })
+
+test('identifies an unknown Tender with a stable failure kind', async () => {
+  const tender = createTenderModule()
+
+  await expect(tender.readTenderView({ tenderId: 'missing-tender', participantId: 'player-a' })).rejects.toMatchObject({
+    kind: 'tender_not_found',
+  })
+})

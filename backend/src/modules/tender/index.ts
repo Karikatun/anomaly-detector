@@ -7,6 +7,7 @@ import type {
   TenderTeam,
   TenderView,
 } from '@the-game/contracts'
+import { TenderFailure } from './domain/errors'
 
 type Tender = {
   teams: TenderTeam[]
@@ -21,7 +22,7 @@ export function createTenderModule() {
 
   const readTender = (tenderId: string) => {
     const tender = tenders.get(tenderId)
-    if (!tender) throw new Error(`Unknown Tender ${tenderId}`)
+    if (!tender) throw new TenderFailure('tender_not_found', `Unknown Tender ${tenderId}`)
     return tender
   }
 
