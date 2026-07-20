@@ -13,9 +13,11 @@ type PersistedTenderState = Pick<
   StoredTender,
   | 'accessSlots'
   | 'anomalyConfiguration'
+  | 'contractPowerRestrictionsByPlayer'
   | 'knownSignals'
   | 'powerAllocations'
   | 'publicTheses'
+  | 'ratingByPlayer'
   | 'rawTelemetrySignalsByPlayer'
   | 'laboratoryCompletedByPlayer'
   | 'modelAnalysisCompletedByPlayer'
@@ -29,9 +31,11 @@ type PersistedTenderState = Pick<
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   accessSlots: tender.accessSlots,
   anomalyConfiguration: tender.anomalyConfiguration,
+  contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
   publicTheses: tender.publicTheses,
+  ratingByPlayer: tender.ratingByPlayer,
   rawTelemetrySignalsByPlayer: tender.rawTelemetrySignalsByPlayer,
   laboratoryCompletedByPlayer: tender.laboratoryCompletedByPlayer,
   modelAnalysisCompletedByPlayer: tender.modelAnalysisCompletedByPlayer,
@@ -58,11 +62,13 @@ const toStoredTender = (record: {
   return {
     accessSlots: state.accessSlots,
     anomalyConfiguration: state.anomalyConfiguration,
+    contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},
     id: record.id,
     knownSignals: state.knownSignals ?? ['aster', 'boreal'],
     phase: record.phase as TenderPhase,
     powerAllocations: state.powerAllocations ?? {},
     publicTheses: state.publicTheses ?? [],
+    ratingByPlayer: state.ratingByPlayer ?? {},
     rawTelemetrySignalsByPlayer: state.rawTelemetrySignalsByPlayer ?? {},
     laboratoryCompletedByPlayer: state.laboratoryCompletedByPlayer ?? {},
     modelAnalysisCompletedByPlayer: state.modelAnalysisCompletedByPlayer ?? {},

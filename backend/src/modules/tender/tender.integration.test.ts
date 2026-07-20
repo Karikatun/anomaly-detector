@@ -50,14 +50,14 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       version: 1,
       phase: 'access-slot-selection',
       players: [
-        { playerId: 'player-a', requestedAccessSlot: 1 },
-      { playerId: 'player-b' },
-    ],
-    privateRawTelemetrySignals: ['aster'],
-    privateMeasurements: [],
-    privateSamples: ['aster'],
-    publicTheses: [],
-  })
+        { contractPowerRestriction: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+        { contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+      ],
+      privateRawTelemetrySignals: ['aster'],
+      privateMeasurements: [],
+      privateSamples: ['aster'],
+      publicTheses: [],
+    })
     expect((await restartedStore.read(tenderId))?.anomalyConfiguration.seed).toBe('seed-1')
 
     expect(
@@ -151,10 +151,10 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       version: 4,
       phase: 'power-allocation',
       players: [
-        { playerId: 'player-a', accessSlot: 1 },
-        { playerId: 'player-b', accessSlot: 3 },
-        { playerId: 'player-c', accessSlot: 2 },
-        { playerId: 'player-d', accessSlot: 6 },
+        { accessSlot: 1, contractPowerRestriction: 0, playerId: 'player-a', rating: 0 },
+        { accessSlot: 3, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+        { accessSlot: 2, contractPowerRestriction: 0, playerId: 'player-c', rating: 0 },
+        { accessSlot: 6, contractPowerRestriction: 0, playerId: 'player-d', rating: 0 },
       ],
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
