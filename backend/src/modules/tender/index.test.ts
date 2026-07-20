@@ -289,6 +289,18 @@ test('resolves Access Slots and opens Power planning after every player chooses'
     privateWorkingModel: { signals: {} },
     publicTheses: [],
   })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-d' })).toMatchObject({
+    knownSignals: ['aster', 'boreal'],
+    privateRawTelemetrySignals: ['aster', 'boreal'],
+    privateSamples: ['aster', 'boreal'],
+    players: [
+      { accessSlot: 1, budget: 0, playerId: 'player-a' },
+      { accessSlot: 3, budget: 2, playerId: 'player-b' },
+      { accessSlot: 2, budget: 1, playerId: 'player-c' },
+      { accessSlot: 6, budget: 3, playerId: 'player-d' },
+    ],
+  })
 })
 
 test('rejects an Access Slot command after Power planning opens', async () => {
