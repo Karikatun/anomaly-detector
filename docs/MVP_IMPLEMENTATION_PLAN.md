@@ -12,6 +12,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 - The backend is authoritative for hidden state, legal actions, timers, Rating, outcomes, and audit data.
 - The Tender Module is the only application seam for game behavior: `createTender`, `execute`, `readTenderView`, and `advanceDueTenders`.
+- PostgreSQL remains the source of truth for Tender state, commands, audit data, rooms, users, and match history. Keep current Tender state in JSONB, keep audit events append-only, and add indexes for `phase`, `dueAt`, participants, and status as query needs appear. Introduce object storage or analytics storage only for derived artifacts such as large replay exports, raw telemetry files, or aggregate reporting when a concrete scale or cost problem appears.
 - Work in vertical slices. Each game rule starts with one red test through the public Tender Module interface, followed by the minimum green implementation.
 - Update `CONTEXT.md` before introducing a new domain term; do not use competing names for existing terms.
 - Every issue is independently deliverable, linked to its dependencies, and classified before implementation.
@@ -36,6 +37,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 **Outcome:** the server can persist, resume, and audit a Tender without a browser client.
 
 1. [x] Add PostgreSQL write models for Tender, players, current round/phase state, commands, and append-only audit records.
+   - [x] Use PostgreSQL as the Tender source of truth, with JSONB current state and append-only audit events instead of a separate match database.
+   - [ ] Add focused indexes for `phase`, `dueAt`, participants, and status when the corresponding query paths are implemented.
 2. [x] Implement Tender creation for 2-4 players with a server-generated seed and hidden Anomaly Configuration.
 3. [x] Implement deterministic restoration after restart and idempotent command handling by `commandId`.
 4. [-] Implement `advanceDueTenders` as the only timeout-resolution path.
