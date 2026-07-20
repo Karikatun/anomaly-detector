@@ -34,6 +34,7 @@ export type StoredTender = {
   rawTelemetrySignalsByPlayer: Record<string, SignalId[]>
   reconnaissanceCompletedByPlayer: Record<string, boolean>
   laboratoryCompletedByPlayer: Record<string, boolean>
+  modelAnalysisCompletedByPlayer: Record<string, boolean>
   privateMeasurementsByPlayer: Record<string, PrivateMeasurement[]>
   samplesByPlayer: Record<string, SignalId[]>
   players: TenderPlayer[]

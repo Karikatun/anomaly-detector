@@ -50,6 +50,7 @@ export function createTenderModule({
   const nextLaboratoryPlayer = (tender: StoredTender) => tender.players
     .filter((player) => tender.powerAllocations[player.id]?.laboratory > 0 && !tender.laboratoryCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
+  const nextModelAnalysisPlayer = (tender: StoredTender) => tender.players.filter((player) => tender.powerAllocations[player.id]?.modelAnalysis > 0 && !tender.modelAnalysisCompletedByPlayer[player.id]).sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
   const commitCommand = async ({
     auditEvents,
@@ -99,6 +100,7 @@ export function createTenderModule({
         rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
         reconnaissanceCompletedByPlayer: {},
         laboratoryCompletedByPlayer: {},
+        modelAnalysisCompletedByPlayer: {},
         privateMeasurementsByPlayer: {},
         players: parsedInput.data.players,
         requestedSlots: {},
@@ -223,6 +225,15 @@ export function createTenderModule({
           nextTender: { ...nextTender, phase: nextLaboratoryPlayer(nextTender) ? 'laboratory' : 'model-analysis' },
           tender,
         })
+      }
+
+      if (command.type === 'submit-thesis') {
+        if (tender.phase !== 'model-analysis' || nextModelAnalysisPlayer(tender)?.id !== player.id) throw new TenderFailure('invalid_tender_state', 'Model analysis is not available to this Player')
+        const actual = tender.anomalyConfiguration.signals[command.signalId]
+        const correct = actual.fieldType === command.fieldType && actual.polarity === command.polarity
+        const modelAnalysisCompletedByPlayer = { ...tender.modelAnalysisCompletedByPlayer, [player.id]: true }
+        const nextTender = { ...tender, modelAnalysisCompletedByPlayer }
+        return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_checked', payload: { correct, playerId: player.id, signalId: command.signalId } }], command, commandFingerprint, nextTender: { ...nextTender, phase: nextModelAnalysisPlayer(nextTender) ? 'model-analysis' : 'contracts' }, tender })
       }
 
       if (tender.phase !== 'reconnaissance') {

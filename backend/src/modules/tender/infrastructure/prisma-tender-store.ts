@@ -17,6 +17,7 @@ type PersistedTenderState = Pick<
   | 'powerAllocations'
   | 'rawTelemetrySignalsByPlayer'
   | 'laboratoryCompletedByPlayer'
+  | 'modelAnalysisCompletedByPlayer'
   | 'privateMeasurementsByPlayer'
   | 'reconnaissanceCompletedByPlayer'
   | 'requestedSlots'
@@ -31,6 +32,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   powerAllocations: tender.powerAllocations,
   rawTelemetrySignalsByPlayer: tender.rawTelemetrySignalsByPlayer,
   laboratoryCompletedByPlayer: tender.laboratoryCompletedByPlayer,
+  modelAnalysisCompletedByPlayer: tender.modelAnalysisCompletedByPlayer,
   privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
   reconnaissanceCompletedByPlayer: tender.reconnaissanceCompletedByPlayer,
   players: tender.players,
@@ -60,6 +62,7 @@ const toStoredTender = (record: {
     powerAllocations: state.powerAllocations ?? {},
     rawTelemetrySignalsByPlayer: state.rawTelemetrySignalsByPlayer ?? {},
     laboratoryCompletedByPlayer: state.laboratoryCompletedByPlayer ?? {},
+    modelAnalysisCompletedByPlayer: state.modelAnalysisCompletedByPlayer ?? {},
     privateMeasurementsByPlayer: state.privateMeasurementsByPlayer ?? {},
     reconnaissanceCompletedByPlayer: state.reconnaissanceCompletedByPlayer ?? {},
     players: state.players,
