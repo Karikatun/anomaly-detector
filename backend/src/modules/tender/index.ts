@@ -7,6 +7,7 @@ import type {
   TenderTeam,
   TenderView,
 } from '@the-game/contracts'
+import { tenderCommandSchema } from '@the-game/contracts'
 import { TenderFailure } from './domain/errors'
 
 type Tender = {
@@ -51,7 +52,12 @@ export function createTenderModule() {
       return { tenderId }
     },
 
-    async execute(command: TenderCommand): Promise<CommandReceipt> {
+    async execute(commandInput: TenderCommand): Promise<CommandReceipt> {
+      const parsedCommand = tenderCommandSchema.safeParse(commandInput)
+      if (!parsedCommand.success) {
+        throw new TenderFailure('invalid_tender_command', 'Tender command is invalid')
+      }
+      const command = parsedCommand.data
       const tender = readTender(command.tenderId)
       const previousCommand = tender.processedCommands.get(command.commandId)
       if (previousCommand) {
