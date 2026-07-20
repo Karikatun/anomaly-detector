@@ -10,14 +10,19 @@ import type {
 } from '@the-game/contracts'
 import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@the-game/contracts'
 import type { StoredTender, TenderStore } from './application/tender-store'
+import { createAnomalyConfiguration } from './domain/anomaly-configuration'
 import { TenderFailure } from './domain/errors'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
 type CreateTenderModuleOptions = {
+  seedGenerator?: () => string
   store?: TenderStore
 }
 
-export function createTenderModule({ store = createInMemoryTenderStore() }: CreateTenderModuleOptions = {}) {
+export function createTenderModule({
+  seedGenerator = randomUUID,
+  store = createInMemoryTenderStore(),
+}: CreateTenderModuleOptions = {}) {
   const readTender = async (tenderId: string) => {
     const tender = await store.read(tenderId)
     if (!tender) throw new TenderFailure('tender_not_found', `Unknown Tender ${tenderId}`)
@@ -39,6 +44,7 @@ export function createTenderModule({ store = createInMemoryTenderStore() }: Crea
         throw new TenderFailure('invalid_create_tender', 'Tender creation input is invalid')
       }
       const tender = await store.create({
+        anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
         teams: parsedInput.data.teams,
         requestedSlots: {},
         processedCommands: {},
@@ -122,3 +128,4 @@ export function createTenderModule({ store = createInMemoryTenderStore() }: Crea
     },
   }
 }
+import { randomUUID } from 'node:crypto'

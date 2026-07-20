@@ -5,6 +5,7 @@ import type {
   TenderPhase,
   TenderTeam,
 } from '@the-game/contracts'
+import type { AnomalyConfiguration } from '../domain/anomaly-configuration'
 
 export type StoredTenderCommand = {
   fingerprint: string
@@ -19,6 +20,7 @@ export type TenderAuditEvent = {
 }
 
 export type StoredTender = {
+  anomalyConfiguration: AnomalyConfiguration
   id: string
   phase: TenderPhase
   processedCommands: Record<string, StoredTenderCommand>

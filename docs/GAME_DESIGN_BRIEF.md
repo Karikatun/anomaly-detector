@@ -39,6 +39,17 @@ Each match has a server-generated, reproducible, solvable anomaly configuration.
 - A signal sample does not get consumed. Scarcity comes from access to new telemetry, laboratory capacity, budget, and timing.
 - A newly discovered signal is public knowledge, but its raw telemetry remains private to the discovering team until laboratory use.
 
+### Правило направленного взаимодействия
+
+Типы поля образуют цикл: инерционное -> электромагнитное -> фазовое -> инерционное. В направленном опыте важны источник и приёмник.
+
+- Одинаковый тип поля и одинаковая полярность дают усиление.
+- Одинаковый тип поля и разная полярность дают ослабление.
+- Если тип приёмника следующий в цикле после типа источника, одинаковая полярность даёт отражение, а разная - нестабильный срыв.
+- Если тип приёмника предыдущий в цикле, одинаковая полярность даёт ослабление, а разная - усиление.
+
+Например, опыт из инерционного источника в электромагнитный приёмник идёт вперёд по циклу: одинаковая полярность даст отражение, разная - нестабильный срыв.
+
 At match start each team receives one private signal sample, two budget, and one basic analytical report. Two signals are publicly available from round one.
 
 ## Laboratory And Deduction
