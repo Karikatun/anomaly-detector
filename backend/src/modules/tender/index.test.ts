@@ -81,3 +81,23 @@ test('rejects a commandId reused for a different Access Slot command', async () 
     }),
   ).rejects.toMatchObject({ kind: 'duplicate_command_conflict' })
 })
+
+test('rejects an Access Slot command outside the shared contract', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    teams: [
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await expect(
+    tender.execute({
+      commandId: 'command-a-7',
+      tenderId,
+      actorId: 'player-a',
+      type: 'request-access-slot',
+      slot: 7,
+    } as never),
+  ).rejects.toMatchObject({ kind: 'invalid_tender_command' })
+})
