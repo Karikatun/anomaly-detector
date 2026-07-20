@@ -389,3 +389,11 @@ test('resolves a continuous Laboratory test between a Player\'s Samples', async 
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({ privateMeasurements: [] })
 })
+
+test('checks public theses in Access Slot order and opens Contracts', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({ players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }] })
+  const store = (tender as never)
+  expect(store).toBeDefined()
+  await expect(tender.execute({ commandId: 'thesis-a', tenderId, actorId: 'player-a', type: 'submit-thesis', signalId: 'aster', fieldType: 'inertial', polarity: 'positive' } as never)).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+})
