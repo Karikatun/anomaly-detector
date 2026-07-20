@@ -79,7 +79,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Keep Contract reservation and Bid submission in Access Slot order; Challenge is out of MVP scope.
    - [x] Add starting Budget and Access Slot budget cost/Remote compensation.
    - [x] Add Access Slot Sample compensation for slots 4 and 6.
-   - [ ] Add Access Slot analytical-report compensation for slot 5.
+   - [x] Add starting Analytical Report and Access Slot analytical-report compensation for slot 5.
    - [x] Add requested-funding Budget payout for awarded single-Bid assessment.
    - [ ] Add Budget and Corporate Trust effects.
 8. [ ] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.

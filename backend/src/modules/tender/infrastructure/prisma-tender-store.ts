@@ -12,6 +12,7 @@ import type {
 type PersistedTenderState = Pick<
   StoredTender,
   | 'accessSlots'
+  | 'analyticalReportsByPlayer'
   | 'anomalyConfiguration'
   | 'budgetByPlayer'
   | 'contractPowerRestrictionsByPlayer'
@@ -34,6 +35,7 @@ type PersistedTenderState = Pick<
 
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   accessSlots: tender.accessSlots,
+  analyticalReportsByPlayer: tender.analyticalReportsByPlayer,
   anomalyConfiguration: tender.anomalyConfiguration,
   budgetByPlayer: tender.budgetByPlayer,
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
@@ -69,6 +71,7 @@ const toStoredTender = (record: {
   const state = record.state as PersistedTenderState
   return {
     accessSlots: state.accessSlots,
+    analyticalReportsByPlayer: state.analyticalReportsByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 1])),
     anomalyConfiguration: state.anomalyConfiguration,
     budgetByPlayer: state.budgetByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 2])),
     contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},

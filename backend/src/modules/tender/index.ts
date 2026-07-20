@@ -38,6 +38,8 @@ const accessSlotBudgetDelta = (slot: number) => {
 
 const receivesAccessSlotSampleCompensation = (slot: number) => slot === 4 || slot === 6
 
+const receivesAccessSlotAnalyticalReportCompensation = (slot: number) => slot === 5
+
 const nextCompensationSample = (currentSamples: SignalId[]) => signalIds.find((signalId) => !currentSamples.includes(signalId))
 
 export function createTenderModule({
@@ -130,6 +132,7 @@ export function createTenderModule({
       }
       const tender = await store.create({
         accessSlots: {},
+        analyticalReportsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 1])),
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
         budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
         contractPowerRestrictionsByPlayer: {},
@@ -184,6 +187,12 @@ export function createTenderModule({
             (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
           ]))
           : tender.budgetByPlayer
+        const analyticalReportsByPlayer = isReadyToResolve
+          ? Object.fromEntries(tender.players.map((player) => [
+            player.id,
+            (tender.analyticalReportsByPlayer[player.id] ?? 0) + (receivesAccessSlotAnalyticalReportCompensation(accessSlots[player.id] ?? 3) ? 1 : 0),
+          ]))
+          : tender.analyticalReportsByPlayer
         const sampleCompensationByPlayer: Record<string, SignalId> = {}
         const samplesByPlayer = isReadyToResolve ? { ...tender.samplesByPlayer } : tender.samplesByPlayer
         const rawTelemetrySignalsByPlayer = isReadyToResolve ? { ...tender.rawTelemetrySignalsByPlayer } : tender.rawTelemetrySignalsByPlayer
@@ -208,7 +217,7 @@ export function createTenderModule({
             },
             ...(isReadyToResolve ? [{
               kind: 'access_slots_resolved',
-              payload: { accessSlots, budgetByPlayer, sampleCompensationByPlayer },
+              payload: { accessSlots, analyticalReportsByPlayer, budgetByPlayer, sampleCompensationByPlayer },
             }] : []),
           ],
           command,
@@ -216,6 +225,7 @@ export function createTenderModule({
           nextTender: {
             ...tender,
             accessSlots,
+            analyticalReportsByPlayer,
             budgetByPlayer,
             phase,
             rawTelemetrySignalsByPlayer,
@@ -515,6 +525,7 @@ export function createTenderModule({
             : {}),
         })),
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
+        privateAnalyticalReports: tender.analyticalReportsByPlayer[player.id] ?? 0,
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
