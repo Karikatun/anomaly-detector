@@ -97,17 +97,29 @@ export const reducePrototypeState = (state: PrototypeState, action: PrototypeAct
     }
 
     const occupied = new Set<number>();
+    const displaced: TeamState[] = [];
     const requests = [...next.teams].sort(
       (left, right) => left.requestedSlot! - right.requestedSlot! || left.tiePriority - right.tiePriority,
     );
 
     for (const team of requests) {
-      let assigned = team.requestedSlot!;
+      const requested = team.requestedSlot!;
+      if (occupied.has(requested)) {
+        displaced.push(team);
+        continue;
+      }
+      team.accessSlot = requested;
+      occupied.add(requested);
+      next.log.push(`Team ${team.id} received slot ${requested}.`);
+    }
+
+    for (const team of displaced) {
+      let assigned = team.requestedSlot! + 1;
       while (occupied.has(assigned)) assigned += 1;
       if (assigned > 6) throw new Error("No later Access Slot is available.");
       team.accessSlot = assigned;
       occupied.add(assigned);
-      next.log.push(`Team ${team.id} received slot ${assigned}.`);
+      next.log.push(`Team ${team.id} was displaced to slot ${assigned}.`);
     }
 
     next.phase = "power-allocation";

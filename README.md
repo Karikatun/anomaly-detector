@@ -14,6 +14,7 @@ A full-stack game project built from the Vibe template: one repository with a Bu
 - Deferred surfaces: `mobile` and public `website` until the game concept needs them.
 - Product direction: game concept to be grilled before feature implementation.
 - Agreed MVP game design: [docs/GAME_DESIGN_BRIEF.md](docs/GAME_DESIGN_BRIEF.md).
+- MVP implementation roadmap and required engineering skills: [docs/MVP_IMPLEMENTATION_PLAN.md](docs/MVP_IMPLEMENTATION_PLAN.md).
 - Deployment status: not deploying now.
 - Production target when deployment starts: Yandex Cloud through the `yc` CLI, following [docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md). DigitalOcean scripts and docs remain template artifacts, but they are not this project's chosen production path.
 - Git publishing: no project `origin` is configured yet; the template remote was removed.
