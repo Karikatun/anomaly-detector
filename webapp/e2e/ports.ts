@@ -54,7 +54,7 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
   const webUrl = process.env.E2E_WEB_URL ?? `http://127.0.0.1:${webPort}`
   const databaseUrl =
     explicitDatabaseUrl
-    ?? `postgresql://superuser:superpassword@localhost:${postgresTestPort}/web_app_demo_test?schema=public`
+    ?? `postgresql://superuser:superpassword@localhost:${postgresTestPort}/the_game_test?schema=public`
 
   return {
     backendPort,

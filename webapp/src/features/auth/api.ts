@@ -11,7 +11,7 @@ import {
   type LoginRequest,
   type MeResponse,
   type RegisterRequest,
-} from '@web-app-demo/contracts'
+} from '@the-game/contracts'
 import type { z } from 'zod'
 import { ApiRequestError, HttpClient, type HttpRequestOptions } from '@/platform/api'
 import {

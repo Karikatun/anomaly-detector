@@ -11,10 +11,10 @@ import {
   repositoryRoot,
 } from '../../scripts/repo-env.mjs'
 
-const imageName = process.env.BACKEND_DOCKER_SMOKE_IMAGE ?? 'vibecoding-template-backend:smoke'
+const imageName = process.env.BACKEND_DOCKER_SMOKE_IMAGE ?? 'the-game-backend:smoke'
 const containerName =
   process.env.BACKEND_DOCKER_SMOKE_CONTAINER ??
-  `vibecoding-template-backend-smoke-${repositoryHash}-${process.pid}`
+  `the-game-backend-smoke-${repositoryHash}-${process.pid}`
 const hostPort = process.env.BACKEND_DOCKER_SMOKE_PORT ?? String(await findOpenPort())
 const networkName = `${composeProjectName}_default`
 const composeArgs = ['compose', '-p', composeProjectName]
@@ -22,7 +22,7 @@ const databaseUrlForHost =
   process.env.TEST_DATABASE_URL ?? defaultTestDatabaseUrl(defaultPostgresTestPort)
 const databaseUrlForContainer =
   process.env.BACKEND_DOCKER_SMOKE_DATABASE_URL ??
-  'postgresql://superuser:superpassword@postgres_test:5432/web_app_demo_test?schema=public'
+  'postgresql://superuser:superpassword@postgres_test:5432/the_game_test?schema=public'
 assertTestDatabaseUrl(databaseUrlForHost)
 assertTestDatabaseUrl(databaseUrlForContainer, {
   allowEnvName: 'BACKEND_DOCKER_SMOKE_ALLOW_NON_TEST_DATABASE',
@@ -75,7 +75,7 @@ async function waitForComposePostgres() {
         '-U',
         'superuser',
         '-d',
-        'web_app_demo_test',
+        'the_game_test',
       ],
       {
         cwd: repositoryRoot,
