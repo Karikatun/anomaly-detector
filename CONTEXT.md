@@ -5,7 +5,7 @@ The shared language for the competitive research game in `docs/GAME_DESIGN_BRIEF
 ## Anomaly Research
 
 **Anomaly Configuration**:
-The hidden, seed-derived assignment of properties and directed interactions for one match. It is known only to the authoritative server until the post-match audit.
+The hidden, seed-derived assignment of properties and directed interactions for one match. Its six Signals use the unique combinations of `inertial`, `electromagnetic`, and `phase` field types with `positive` and `negative` polarities. It is known only to the authoritative server until the post-match audit.
 _Avoid_: world model, hidden model, solution
 
 **Working Model**:
