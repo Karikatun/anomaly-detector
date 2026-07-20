@@ -97,6 +97,24 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
           if (updated.count === 0) {
             throw new TenderVersionConflict()
           }
+
+          if (change.auditEvents.length > 0) {
+            const latestAuditEvent = await tx.tenderAuditEvent.findFirst({
+              where: { tenderId: change.tenderId },
+              orderBy: { sequence: 'desc' },
+              select: { sequence: true },
+            })
+            await tx.tenderAuditEvent.createMany({
+              data: change.auditEvents.map((event, index) => ({
+                tenderId: change.tenderId,
+                sequence: (latestAuditEvent?.sequence ?? 0) + index + 1,
+                actorId: event.actorId,
+                commandId: event.commandId,
+                kind: event.kind,
+                payload: event.payload as Prisma.InputJsonValue,
+              })),
+            })
+          }
           return { kind: 'committed' }
         })
       } catch (error) {

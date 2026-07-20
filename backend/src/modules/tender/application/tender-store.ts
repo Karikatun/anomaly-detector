@@ -11,6 +11,13 @@ export type StoredTenderCommand = {
   receipt: CommandReceipt
 }
 
+export type TenderAuditEvent = {
+  actorId?: string
+  commandId?: string
+  kind: string
+  payload: Record<string, unknown>
+}
+
 export type StoredTender = {
   id: string
   phase: TenderPhase
@@ -21,6 +28,7 @@ export type StoredTender = {
 }
 
 export type TenderCommit = {
+  auditEvents: TenderAuditEvent[]
   command: StoredTenderCommand
   commandId: string
   expectedVersion: number

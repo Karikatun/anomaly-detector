@@ -68,6 +68,12 @@ export function createTenderModule({ store = createInMemoryTenderStore() }: Crea
 
       const receipt = { tenderId: command.tenderId, version: tender.version + 1 }
       const result = await store.commit({
+        auditEvents: [{
+          actorId: command.actorId,
+          commandId: command.commandId,
+          kind: 'access_slot_requested',
+          payload: { slot: command.slot, teamId: team.id },
+        }],
         tenderId: command.tenderId,
         expectedVersion: tender.version,
         nextTender: {
