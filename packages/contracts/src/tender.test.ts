@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   commandReceiptSchema,
   powerAllocationSchema,
+  signalIdSchema,
   tenderCommandSchema,
   tenderViewSchema,
 } from './index'
@@ -32,6 +33,7 @@ describe('Tender contracts', () => {
 
     expect(
       tenderViewSchema.parse({
+        knownSignals: ['aster', 'boreal'],
         tenderId: 'tender-1',
         version: 1,
         phase: 'access-slot-selection',
@@ -39,8 +41,11 @@ describe('Tender contracts', () => {
           { teamId: 'team-a', requestedAccessSlot: 1 },
           { teamId: 'team-b' },
         ],
+        privateRawTelemetrySignals: ['aster'],
+        privateSamples: ['aster'],
       }),
     ).toEqual({
+      knownSignals: ['aster', 'boreal'],
       tenderId: 'tender-1',
       version: 1,
       phase: 'access-slot-selection',
@@ -48,6 +53,8 @@ describe('Tender contracts', () => {
         { teamId: 'team-a', requestedAccessSlot: 1 },
         { teamId: 'team-b' },
       ],
+      privateRawTelemetrySignals: ['aster'],
+      privateSamples: ['aster'],
     })
   })
 
@@ -82,5 +89,18 @@ describe('Tender contracts', () => {
       modelAnalysis: 1,
       reconnaissance: 0,
     })).toThrow()
+  })
+
+  test('validates a Reconnaissance command with one or two distinct Signals', () => {
+    expect(signalIdSchema.parse('aster')).toBe('aster')
+    expect(
+      tenderCommandSchema.parse({
+        actorId: 'player-a',
+        commandId: 'command-a-3',
+        signals: ['cinder', 'delta'],
+        tenderId: 'tender-1',
+        type: 'conduct-reconnaissance',
+      }),
+    ).toMatchObject({ type: 'conduct-reconnaissance' })
   })
 })

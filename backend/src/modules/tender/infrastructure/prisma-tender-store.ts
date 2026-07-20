@@ -11,15 +11,27 @@ import type {
 
 type PersistedTenderState = Pick<
   StoredTender,
-  'accessSlots' | 'anomalyConfiguration' | 'powerAllocations' | 'requestedSlots' | 'teams'
+  | 'accessSlots'
+  | 'anomalyConfiguration'
+  | 'knownSignals'
+  | 'powerAllocations'
+  | 'rawTelemetrySignalsByTeam'
+  | 'reconnaissanceCompletedByTeam'
+  | 'requestedSlots'
+  | 'samplesByTeam'
+  | 'teams'
 >
 
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   accessSlots: tender.accessSlots,
   anomalyConfiguration: tender.anomalyConfiguration,
+  knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
+  rawTelemetrySignalsByTeam: tender.rawTelemetrySignalsByTeam,
+  reconnaissanceCompletedByTeam: tender.reconnaissanceCompletedByTeam,
   teams: tender.teams,
   requestedSlots: tender.requestedSlots,
+  samplesByTeam: tender.samplesByTeam,
 })
 
 const toStoredCommand = (record: { fingerprint: string; receipt: Prisma.JsonValue }): StoredTenderCommand => ({
@@ -39,10 +51,14 @@ const toStoredTender = (record: {
     accessSlots: state.accessSlots,
     anomalyConfiguration: state.anomalyConfiguration,
     id: record.id,
+    knownSignals: state.knownSignals ?? ['aster', 'boreal'],
     phase: record.phase as TenderPhase,
     powerAllocations: state.powerAllocations ?? {},
+    rawTelemetrySignalsByTeam: state.rawTelemetrySignalsByTeam ?? {},
+    reconnaissanceCompletedByTeam: state.reconnaissanceCompletedByTeam ?? {},
     teams: state.teams,
     requestedSlots: state.requestedSlots,
+    samplesByTeam: state.samplesByTeam ?? {},
     processedCommands: Object.fromEntries(record.commands.map((command) => [command.commandId, toStoredCommand(command)])),
     version: record.version,
   }

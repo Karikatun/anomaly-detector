@@ -23,6 +23,7 @@ test('records an Access Slot command once and exposes it only to its participant
   expect(await tender.execute(command)).toEqual({ tenderId, version: 1 })
   expect(await tender.execute(command)).toEqual({ tenderId, version: 1 })
   expect(await tender.readTenderView({ tenderId, participantId: 'player-a' })).toEqual({
+    knownSignals: ['aster', 'boreal'],
     tenderId,
     version: 1,
     phase: 'access-slot-selection',
@@ -30,6 +31,8 @@ test('records an Access Slot command once and exposes it only to its participant
       { teamId: 'team-a', requestedAccessSlot: 1 },
       { teamId: 'team-b' },
     ],
+    privateRawTelemetrySignals: ['aster'],
+    privateSamples: ['aster'],
   })
 })
 
@@ -148,6 +151,7 @@ test('restores a participant Tender view from the shared store', async () => {
   const restartedModule = createTenderModule({ store })
 
   expect(await restartedModule.readTenderView({ tenderId, participantId: 'player-a' })).toEqual({
+    knownSignals: ['aster', 'boreal'],
     tenderId,
     version: 1,
     phase: 'access-slot-selection',
@@ -155,6 +159,8 @@ test('restores a participant Tender view from the shared store', async () => {
       { teamId: 'team-a', requestedAccessSlot: 1 },
       { teamId: 'team-b' },
     ],
+    privateRawTelemetrySignals: ['aster'],
+    privateSamples: ['aster'],
   })
 })
 
@@ -193,6 +199,7 @@ test('resolves Access Slots and opens Power planning after every participant cho
   await tender.execute({ commandId: 'command-d-1', tenderId, actorId: 'player-d', type: 'request-access-slot', slot: 6 })
 
   expect(await tender.readTenderView({ tenderId, participantId: 'player-a' })).toEqual({
+    knownSignals: ['aster', 'boreal'],
     tenderId,
     version: 4,
     phase: 'power-allocation',
@@ -202,6 +209,8 @@ test('resolves Access Slots and opens Power planning after every participant cho
       { teamId: 'team-c', accessSlot: 2 },
       { teamId: 'team-d', accessSlot: 6 },
     ],
+    privateRawTelemetrySignals: ['aster'],
+    privateSamples: ['aster'],
   })
 })
 
@@ -284,5 +293,73 @@ test('opens Power allocation in Access Slot order and then opens Reconnaissance'
         teamId: 'team-b',
       },
     ],
+  })
+})
+
+test('makes newly acquired Signals public while keeping Samples and Raw Telemetry private', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    teams: [
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+  await tender.execute({
+    allocation: { contracts: 1, laboratory: 1, modelAnalysis: 1, reconnaissance: 1 },
+    actorId: 'player-a',
+    commandId: 'command-a-2',
+    tenderId,
+    type: 'allocate-power',
+  } as never)
+  await tender.execute({
+    allocation: { contracts: 2, laboratory: 1, modelAnalysis: 0, reconnaissance: 1 },
+    actorId: 'player-b',
+    commandId: 'command-b-2',
+    tenderId,
+    type: 'allocate-power',
+  } as never)
+
+  await expect(tender.execute({
+    actorId: 'player-b',
+    commandId: 'command-b-3',
+    signals: ['cinder'],
+    tenderId,
+    type: 'conduct-reconnaissance',
+  } as never)).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'command-a-3',
+    signals: ['cinder'],
+    tenderId,
+    type: 'conduct-reconnaissance',
+  } as never)
+
+  expect(await tender.readTenderView({ tenderId, participantId: 'player-a' })).toMatchObject({
+    knownSignals: ['aster', 'boreal', 'cinder'],
+    privateRawTelemetrySignals: ['aster', 'cinder'],
+    privateSamples: ['aster', 'cinder'],
+  })
+  expect(await tender.readTenderView({ tenderId, participantId: 'player-b' })).toMatchObject({
+    knownSignals: ['aster', 'boreal', 'cinder'],
+    privateRawTelemetrySignals: ['aster'],
+    privateSamples: ['aster'],
+  })
+
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'command-b-4',
+    signals: ['delta'],
+    tenderId,
+    type: 'conduct-reconnaissance',
+  } as never)
+
+  expect(await tender.readTenderView({ tenderId, participantId: 'player-a' })).toMatchObject({
+    knownSignals: ['aster', 'boreal', 'cinder', 'delta'],
+    phase: 'laboratory',
+    privateSamples: ['aster', 'cinder'],
   })
 })
