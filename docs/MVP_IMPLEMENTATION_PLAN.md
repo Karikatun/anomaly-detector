@@ -6,6 +6,8 @@ Deliver a synchronous, competitive browser game for 2-4 authenticated players. A
 
 The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIEF.md). The game-server and data boundaries are defined in [ADR 0001](adr/0001-authoritative-match-server.md), [ADR 0002](adr/0002-russian-launch-data-and-auth-boundary.md), and [ADR 0003](adr/0003-tender-module-and-audit-log.md).
 
+**Статусы:** `[x]` выполнено, `[-]` начато частично, `[ ]` не начато.
+
 ## Delivery Rules
 
 - The backend is authoritative for hidden state, legal actions, timers, Rating, outcomes, and audit data.
@@ -19,11 +21,11 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** implementation can proceed through stable seams without embedding game rules in routes or realtime handlers.
 
-1. Bring the temporary Access Slot implementation to the asynchronous Tender Module contract in ADR 0003.
-2. Define shared command, receipt, view, error, and audit-event DTOs in `packages/contracts`.
-3. Require `commandId`, `tenderId`, and authenticated `actorId` for every Tender command.
-4. Define participant-scoped `TenderView` projections and the error shape for invalid, forbidden, stale, or duplicate commands.
-5. Break this plan into tracer-bullet GitHub issues, including dependencies and acceptance criteria.
+1. [x] Bring the temporary Access Slot implementation to the asynchronous Tender Module contract in ADR 0003.
+2. [x] Define shared command, receipt, view, error, and audit-event DTOs in `packages/contracts`.
+3. [x] Require `commandId`, `tenderId`, and authenticated `actorId` for every Tender command.
+4. [x] Define player-scoped `TenderView` projections and the error shape for invalid, forbidden, stale, or duplicate commands.
+5. [x] Break this plan into tracer-bullet GitHub issues, including dependencies and acceptance criteria.
 
 **Skills:** `tdd` for contract migration and behavior; `domain-modeling` for vocabulary; `to-issues` to create vertical slices; `triage` before work begins; `code-review` after the milestone.
 
@@ -33,11 +35,11 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** the server can persist, resume, and audit a Tender without a browser client.
 
-1. Add PostgreSQL write models for Tender, players, current round/phase state, commands, and append-only audit records.
-2. Implement Tender creation for 2-4 players with a server-generated seed and hidden Anomaly Configuration.
-3. Implement deterministic restoration after restart and idempotent command handling by `commandId`.
-4. Implement `advanceDueTenders` as the only timeout-resolution path.
-5. Build participant-only audit projections; audit data is not public or shareable.
+1. [x] Add PostgreSQL write models for Tender, players, current round/phase state, commands, and append-only audit records.
+2. [x] Implement Tender creation for 2-4 players with a server-generated seed and hidden Anomaly Configuration.
+3. [x] Implement deterministic restoration after restart and idempotent command handling by `commandId`.
+4. [-] Implement `advanceDueTenders` as the only timeout-resolution path.
+5. [-] Build player-only audit projections; audit data is not public or shareable.
 
 **Skills:** `tdd` for persistence, retries, deadlines, and visibility; `codebase-design` before repository and audit adapter boundaries; `domain-modeling` for audit terminology; `code-review` before proceeding.
 
@@ -47,15 +49,15 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** a complete Tender is playable through the authoritative API.
 
-1. Add five fixed rounds and the transitions between Access Slot selection, Power planning, four operational phases, and end-of-round calculation.
-2. Resolve six secret Access Slots with rotating public tie priority and the confirmed direct-request rule: with `A=1`, `B=1`, `C=2`, `D=6`, results are `A=1`, `B=3`, `C=2`, `D=6`.
-3. Add four Power per player, a maximum of two per category, and open planning in Access Slot order.
-4. Add Reconnaissance: six persistent Signals, non-consumable Samples, and initiating-player Raw Telemetry.
-5. Add Laboratory: directed source-to-receiver tests with Impulse and Continuous Protocols, public results, and authorised Private Measurements.
-6. Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.
-7. Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, rare Challenge, Budget, and Corporate Trust.
-8. Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
-9. Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.
+1. [-] Add five fixed rounds and the transitions between Access Slot selection, Power planning, four operational phases, and end-of-round calculation.
+2. [x] Resolve six secret Access Slots with rotating public tie priority and the confirmed direct-request rule: with `A=1`, `B=1`, `C=2`, `D=6`, results are `A=1`, `B=3`, `C=2`, `D=6`.
+3. [x] Add four Power per player, a maximum of two per category, and open planning in Access Slot order.
+4. [x] Add Reconnaissance: six persistent Signals, non-consumable Samples, and initiating-player Raw Telemetry.
+5. [-] Add Laboratory: directed source-to-receiver tests with Impulse and Continuous Protocols, public results, and authorised Private Measurements.
+6. [-] Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.
+7. [ ] Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, rare Challenge, Budget, and Corporate Trust.
+8. [ ] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
+9. [ ] Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.
 
 **Skills:** `tdd` for every rule and edge case; `prototype` for timing, planning order, and decision clarity before complex UI work; `domain-modeling` whenever new rules add vocabulary; `grill-me` only if a rule changes score balance or the victory condition; `code-review` after each phase family.
 
