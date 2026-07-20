@@ -120,6 +120,14 @@ export const publicContractSchema = z.object({
   reservedByPlayerId: playerIdSchema.optional(),
 }).strict()
 
+export const publicLaboratoryResultSchema = z.object({
+  playerId: playerIdSchema,
+  protocol: laboratoryProtocolSchema,
+  publicResult: z.enum(['attenuation', 'reflection', 'transmission_gain', 'unstable_collapse']),
+  receiverSignal: signalIdSchema,
+  sourceSignal: signalIdSchema,
+}).strict()
+
 export const privateMeasurementSchema = z.object({
   receiverSignal: signalIdSchema,
   sourceSignal: signalIdSchema,
@@ -129,6 +137,7 @@ export const privateMeasurementSchema = z.object({
 export const tenderViewSchema = z.object({
   knownSignals: z.array(signalIdSchema),
   publicContracts: z.array(publicContractSchema),
+  publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
   tenderId: tenderIdSchema,
   version: z.number().int().min(0),
   phase: tenderPhaseSchema,
@@ -159,6 +168,7 @@ export type TenderCommand = z.infer<typeof tenderCommandSchema>
 export type PowerAllocation = z.infer<typeof powerAllocationSchema>
 export type CommandReceipt = z.infer<typeof commandReceiptSchema>
 export type PublicContract = z.infer<typeof publicContractSchema>
+export type PublicLaboratoryResult = z.infer<typeof publicLaboratoryResultSchema>
 export type PublicThesis = z.infer<typeof publicThesisSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>
