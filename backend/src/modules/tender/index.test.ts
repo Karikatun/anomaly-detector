@@ -41,9 +41,9 @@ test('does not return a Tender view to a non-participant', async () => {
     ],
   })
 
-  await expect(tender.readTenderView({ tenderId, participantId: 'player-c' })).rejects.toThrow(
-    'is not in this Tender',
-  )
+  await expect(tender.readTenderView({ tenderId, participantId: 'player-c' })).rejects.toMatchObject({
+    kind: 'participant_not_in_tender',
+  })
 })
 
 test('identifies an unknown Tender with a stable failure kind', async () => {
