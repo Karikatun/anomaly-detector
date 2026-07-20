@@ -132,6 +132,7 @@ export function createTenderModule({
         laboratoryCompletedByPlayer: {},
         modelAnalysisCompletedByPlayer: {},
         privateMeasurementsByPlayer: {},
+        privateWorkingModelsByPlayer: {},
         players: parsedInput.data.players,
         requestedSlots: {},
         samplesByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
@@ -308,6 +309,30 @@ export function createTenderModule({
         return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_checked', payload: { correct, playerId: player.id, signalId: command.signalId } }], command, commandFingerprint, nextTender: { ...nextTender, phase: nextModelAnalysisPlayer(nextTender) ? 'model-analysis' : nextOperationalPhase(nextTender, 'model-analysis') }, tender })
       }
 
+      if (command.type === 'update-working-model') {
+        if (tender.phase === 'complete') {
+          throw new TenderFailure('invalid_tender_state', 'Working Model updates are closed')
+        }
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'working_model_updated',
+            payload: { playerId: player.id, workingModel: command.workingModel },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: {
+            ...tender,
+            privateWorkingModelsByPlayer: {
+              ...tender.privateWorkingModelsByPlayer,
+              [player.id]: command.workingModel,
+            },
+          },
+          tender,
+        })
+      }
+
       if (command.type === 'reserve-contract') {
         if (tender.phase !== 'contracts') {
           throw new TenderFailure('invalid_tender_state', 'Contracts are closed')
@@ -448,6 +473,7 @@ export function createTenderModule({
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
+        privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
         publicTheses: tender.publicTheses,
       }
     },

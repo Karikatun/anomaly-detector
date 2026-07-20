@@ -96,10 +96,6 @@ _Avoid_: tender, mission, quest
 A player's contract submission, assessed by effect fit, evidence level, and requested funding.
 _Avoid_: contract, reservation, offer
 
-**Challenge**:
-A deliberate Bid for a Contract that another player has already reserved.
-_Avoid_: sabotage, attack, block
-
 **Final Contract**:
 A high-value Contract visible from the first round and resolved in round five.
 _Avoid_: final tender, endgame contract

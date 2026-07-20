@@ -68,7 +68,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Apply the correct-Thesis Rating reward.
    - [x] Apply and expose the wrong-Thesis temporary Contract Power restriction.
    - [x] Clear the temporary Contract Power restriction after the player's successful Laboratory test.
-   - [ ] Implement player-owned Working Model updates and extended verification for two Model Analysis Power.
+   - [x] Implement player-owned Working Model updates.
+   - [ ] Implement extended verification for two Model Analysis Power.
 7. [-] Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, Budget, and Corporate Trust.
    - [x] Create `players + 1` public normal Contracts for the round.
    - [x] Reserve Contracts publicly in Access Slot order.

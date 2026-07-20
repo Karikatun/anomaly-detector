@@ -56,6 +56,7 @@ describe('Tender contracts', () => {
         privateRawTelemetrySignals: ['aster'],
         privateMeasurements: [],
         privateSamples: ['aster'],
+        privateWorkingModel: { signals: {} },
         publicTheses: [],
       }),
     ).toEqual({
@@ -82,8 +83,30 @@ describe('Tender contracts', () => {
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
       privateSamples: ['aster'],
+      privateWorkingModel: { signals: {} },
       publicTheses: [],
     })
+  })
+
+  test('validates a Working Model update command', () => {
+    expect(
+      tenderCommandSchema.parse({
+        actorId: 'player-a',
+        commandId: 'command-a-working-model-1',
+        tenderId: 'tender-1',
+        type: 'update-working-model',
+        workingModel: {
+          signals: {
+            aster: {
+              excludedFieldTypes: ['phase'],
+              hypothesis: { fieldType: 'inertial', polarity: 'positive' },
+              note: 'Candidate source for reflection.',
+              possiblePolarities: ['positive'],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({ type: 'update-working-model' })
   })
 
   test('validates an open Power allocation', () => {

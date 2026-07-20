@@ -40,6 +40,7 @@ test('records an Access Slot command once and exposes it only to its player', as
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
+    privateWorkingModel: { signals: {} },
     publicTheses: [],
   })
 })
@@ -55,6 +56,54 @@ test('does not return a Tender view to a non-player', async () => {
 
   await expect(tender.readTenderView({ tenderId, playerId: 'player-c' })).rejects.toMatchObject({
     kind: 'player_not_in_tender',
+  })
+})
+
+test('stores a player-owned Working Model without exposing it to other players', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'working-model-a-1',
+    tenderId,
+    type: 'update-working-model',
+    workingModel: {
+      signals: {
+        aster: {
+          excludedFieldTypes: ['phase'],
+          hypothesis: { fieldType: 'inertial', polarity: 'positive' },
+          note: 'Aster behaves like a stable source.',
+          possiblePolarities: ['positive'],
+        },
+      },
+    },
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'access-slot-selection',
+    players: [
+      { playerId: 'player-a', rating: 0 },
+      { playerId: 'player-b', rating: 0 },
+    ],
+    privateWorkingModel: {
+      signals: {
+        aster: {
+          excludedFieldTypes: ['phase'],
+          hypothesis: { fieldType: 'inertial', polarity: 'positive' },
+          note: 'Aster behaves like a stable source.',
+          possiblePolarities: ['positive'],
+        },
+      },
+    },
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    privateWorkingModel: { signals: {} },
   })
 })
 
@@ -176,6 +225,7 @@ test('restores a player Tender view from the shared store', async () => {
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
+    privateWorkingModel: { signals: {} },
     publicTheses: [],
   })
 })
@@ -236,6 +286,7 @@ test('resolves Access Slots and opens Power planning after every player chooses'
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
+    privateWorkingModel: { signals: {} },
     publicTheses: [],
   })
 })
@@ -707,6 +758,14 @@ test('reserves public Contracts in Access Slot order', async () => {
       { bidOutcome: 'failed', contractId: 'round-1-contract-3', reservedByPlayerId: 'player-b' },
     ],
   })
+
+  await expect(tender.execute({
+    actorId: 'player-a',
+    commandId: 'a-9',
+    tenderId,
+    type: 'update-working-model',
+    workingModel: { signals: { aster: { hypothesis: { fieldType: 'phase' } } } },
+  })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
 })
 
 test('awards a reserved Contract Bid with matching public Laboratory evidence', async () => {

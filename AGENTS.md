@@ -237,6 +237,6 @@ This is a single-context repository. Read root `CONTEXT.md` and relevant `docs/a
 - `Secondary signal status`: exact checks run and what they showed.
 - Say whether docs were updated, not needed, or still need alignment.
 - Call out remaining risks, missing coverage, failed checks, migrations, rollout notes, or follow-up work when relevant.
-- After every completed implementation step that changes code or project files, end the final status update with a concise `Commit title: <title>` line. Do not create the commit unless the user explicitly asks.
+- After every completed implementation step that changes code or project files, end the final status update with a concise `Commit title: <title>` line. Match the repository's existing Conventional Commit style from recent history: `feat(scope): short lowercase subject`, `test(scope): short lowercase subject`, or `docs: short lowercase subject`; use an imperative, no trailing period, and prefer the touched product scope such as `tender` or `contracts`. Do not create the commit unless the user explicitly asks.
 - For `Direct` or read-only `Review` tasks, compress the report to the relevant fields only.
 - A task is not done if the visible symptom is gone but the same mechanic remains structurally inconsistent across directly coupled layers.

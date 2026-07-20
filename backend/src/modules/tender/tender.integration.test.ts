@@ -62,6 +62,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
       privateSamples: ['aster'],
+      privateWorkingModel: { signals: {} },
       publicTheses: [],
     })
     expect((await restartedStore.read(tenderId))?.anomalyConfiguration.seed).toBe('seed-1')
@@ -106,6 +107,49 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     expect(await restartedModule.execute(command)).toEqual({ tenderId, version: 1 })
     await expect(restartedModule.execute({ ...command, slot: 2 })).rejects.toMatchObject({
       kind: 'duplicate_command_conflict',
+    })
+  })
+
+  test('restores a player-owned Working Model through a new PostgreSQL store adapter', async () => {
+    const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'command-a-working-model-1',
+      tenderId,
+      type: 'update-working-model',
+      workingModel: {
+        signals: {
+          aster: {
+            excludedFieldTypes: ['phase'],
+            hypothesis: { fieldType: 'inertial', polarity: 'positive' },
+            note: 'Candidate source for reflection.',
+          },
+        },
+      },
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+      privateWorkingModel: {
+        signals: {
+          aster: {
+            excludedFieldTypes: ['phase'],
+            hypothesis: { fieldType: 'inertial', polarity: 'positive' },
+            note: 'Candidate source for reflection.',
+          },
+        },
+      },
+    })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+      privateWorkingModel: { signals: {} },
     })
   })
 
@@ -173,6 +217,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
       privateSamples: ['aster'],
+      privateWorkingModel: { signals: {} },
       publicTheses: [],
     })
 
