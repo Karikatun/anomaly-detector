@@ -69,6 +69,7 @@ This is a single-context repository. Read root `CONTEXT.md` and relevant `docs/a
 ## Project Context
 
 - Use `README.md` as the source of truth for first-run repository download, bootstrap, and product intake instructions.
+- Write player-facing, product, and domain documentation in Russian. Keep English only for code identifiers, stable data keys, and required external technical terms.
 - Keep durable project choices in README files and docs, not in this agent file.
 - Infrastructure, deployment, storage, local database, testing runbooks, and provider-specific choices live in `README.md` and `docs/`.
 - When a surface is deferred, prefer a short note in that surface's README over extra agent instructions.
