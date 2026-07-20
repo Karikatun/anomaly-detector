@@ -1,23 +1,37 @@
 type TeamId = string
+type ParticipantId = string
 
 type Team = {
   id: TeamId
+  participantId: ParticipantId
   tiePriority: number
 }
 
 type Tender = {
   teams: Team[]
-  accessSlots: Map<TeamId, number>
   requestedSlots: Map<TeamId, number>
+  processedCommands: Map<string, CommandReceipt>
+  version: number
 }
 
-type CreateTenderInput = {
+type CreateTender = {
   teams: Team[]
 }
 
-type TenderCommand =
-  | { tenderId: string; type: 'request-access-slot'; teamId: TeamId; slot: number }
-  | { tenderId: string; type: 'resolve-access-slots' }
+type RequestAccessSlotCommand = {
+  commandId: string
+  tenderId: string
+  actorId: ParticipantId
+  type: 'request-access-slot'
+  slot: number
+}
+
+type TenderCommand = RequestAccessSlotCommand
+
+type CommandReceipt = {
+  tenderId: string
+  version: number
+}
 
 const accessSlotCount = 6
 
@@ -32,58 +46,55 @@ export function createTenderModule() {
   }
 
   return {
-    createTender(input: CreateTenderInput) {
+    async createTender(input: CreateTender) {
       const tenderId = `tender-${nextTenderId++}`
       tenders.set(tenderId, {
         teams: input.teams,
-        accessSlots: new Map(),
         requestedSlots: new Map(),
+        processedCommands: new Map(),
+        version: 0,
       })
       return { tenderId }
     },
 
-    execute(command: TenderCommand) {
+    async execute(command: TenderCommand): Promise<CommandReceipt> {
       const tender = readTender(command.tenderId)
+      const previousReceipt = tender.processedCommands.get(command.commandId)
+      if (previousReceipt) return previousReceipt
 
-      if (command.type === 'request-access-slot') {
-        tender.requestedSlots.set(command.teamId, command.slot)
-        return
+      const team = tender.teams.find((candidate) => candidate.participantId === command.actorId)
+      if (!team) throw new Error(`Participant ${command.actorId} is not in this Tender`)
+      if (command.slot < 1 || command.slot > accessSlotCount) {
+        throw new Error(`Access Slot must be between 1 and ${accessSlotCount}`)
       }
 
-      const occupied = new Set<number>()
-      const displaced: Team[] = []
-      const teamsByRequest = [...tender.teams].sort((left, right) => {
-        const slotOrder = tender.requestedSlots.get(left.id)! - tender.requestedSlots.get(right.id)!
-        return slotOrder || left.tiePriority - right.tiePriority
-      })
+      tender.requestedSlots.set(team.id, command.slot)
+      tender.version += 1
+      const receipt = { tenderId: command.tenderId, version: tender.version }
+      tender.processedCommands.set(command.commandId, receipt)
+      return receipt
+    },
 
-      for (const team of teamsByRequest) {
-        const requestedSlot = tender.requestedSlots.get(team.id)!
-        if (occupied.has(requestedSlot)) {
-          displaced.push(team)
-          continue
-        }
-        tender.accessSlots.set(team.id, requestedSlot)
-        occupied.add(requestedSlot)
+    async readTenderView({ tenderId, participantId }: { tenderId: string; participantId: ParticipantId }) {
+      const tender = readTender(tenderId)
+      if (!tender.teams.some((team) => team.participantId === participantId)) {
+        throw new Error(`Participant ${participantId} is not in this Tender`)
       }
-
-      for (const team of displaced) {
-        let slot = tender.requestedSlots.get(team.id)! + 1
-        while (occupied.has(slot)) slot += 1
-        if (slot > accessSlotCount) throw new Error('No later Access Slot is available.')
-        tender.accessSlots.set(team.id, slot)
-        occupied.add(slot)
+      return {
+        tenderId,
+        version: tender.version,
+        phase: 'access-slot-selection' as const,
+        teams: tender.teams.map((team) => ({
+          teamId: team.id,
+          ...(team.participantId === participantId && tender.requestedSlots.has(team.id)
+            ? { requestedAccessSlot: tender.requestedSlots.get(team.id) }
+            : {}),
+        })),
       }
     },
 
-    readTenderView({ tenderId }: { tenderId: string; teamId: TeamId }) {
-      const tender = readTender(tenderId)
-      return {
-        accessSlots: tender.teams.map((team) => ({
-          teamId: team.id,
-          slot: tender.accessSlots.get(team.id),
-        })),
-      }
+    async advanceDueTenders({ limit: _limit, now: _now }: { limit: number; now: Date }) {
+      return { advancedTenderIds: [] as string[] }
     },
   }
 }

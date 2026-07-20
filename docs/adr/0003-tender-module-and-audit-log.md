@@ -23,4 +23,4 @@ type TenderModule = {
 
 `advanceDueTenders` is called by the worker for deadlines and reconnection-safe timeout resolution. It owns timer consequences and writes the corresponding audit records; adapters must not resolve timeouts themselves.
 
-The in-process implementation used by the initial Access Slot TDD cycle is a temporary shape. It must be brought to this interface before the next production Tender behavior is added.
+The initial in-memory implementation establishes this public interface for TDD. Milestone 1 replaces its storage with PostgreSQL and an audit log without changing the interface shape.
