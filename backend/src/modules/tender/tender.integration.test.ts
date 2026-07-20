@@ -5,9 +5,12 @@ import { createTenderModule } from './index'
 import { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
-const maybeDescribe = databaseUrl ? describe : describe.skip
+const maybeDescribe = databaseUrl
+  ? describe
+  : (name: string, fn: () => void) => describe.skip(name, fn)
 
 maybeDescribe('Tender PostgreSQL integration', () => {
+  if (!databaseUrl) return
   const prisma = createPrisma(databaseUrl!)
 
   beforeEach(async () => {
@@ -53,6 +56,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     privateRawTelemetrySignals: ['aster'],
     privateMeasurements: [],
     privateSamples: ['aster'],
+    publicTheses: [],
   })
     expect((await restartedStore.read(tenderId))?.anomalyConfiguration.seed).toBe('seed-1')
 
@@ -155,6 +159,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       privateRawTelemetrySignals: ['aster'],
       privateMeasurements: [],
       privateSamples: ['aster'],
+      publicTheses: [],
     })
 
     expect(
