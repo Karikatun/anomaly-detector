@@ -69,14 +69,14 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Apply and expose the wrong-Thesis temporary Contract Power restriction.
    - [x] Clear the temporary Contract Power restriction after the player's successful Laboratory test.
    - [ ] Implement player-owned Working Model updates and extended verification for two Model Analysis Power.
-7. [-] Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, rare Challenge, Budget, and Corporate Trust.
+7. [-] Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, Budget, and Corporate Trust.
    - [x] Create `players + 1` public normal Contracts for the round.
    - [x] Reserve Contracts publicly in Access Slot order.
-   - [x] Reject reservation of already reserved Contracts until Challenge is implemented.
+   - [x] Reject reservation of already reserved Contracts.
    - [x] Add private Bid submission for a reserved Contract.
    - [x] Assess a reserved Bid by required Public Result fit and matching public Laboratory evidence.
-   - [ ] Add requested-funding ranking and access-order tie break across competing Bids.
-   - [ ] Add rare Challenge flow for reserved Contracts.
+   - [x] Keep Contract reservation and Bid submission in Access Slot order; Challenge is out of MVP scope.
+   - [ ] Add requested-funding effects inside single-Bid assessment if Budget and Trust rules require them.
    - [ ] Add Budget and Corporate Trust effects.
 8. [ ] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
 9. [ ] Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.

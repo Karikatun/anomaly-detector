@@ -342,7 +342,7 @@ export function createTenderModule({
         }
         const expectedPlayer = nextContractsPlayer(tender)
         const contract = tender.publicContracts.find((candidate) => candidate.contractId === command.contractId)
-        if (!contract || contract.reservedByPlayerId !== player.id || contract.bidOutcome !== undefined || expectedPlayer?.id !== player.id) {
+        if (!contract || contract.bidOutcome !== undefined || contract.reservedByPlayerId !== player.id || expectedPlayer?.id !== player.id) {
           throw new TenderFailure('invalid_tender_state', 'Contract Bid is not available to this Player')
         }
         const hasMatchingEvidence = tender.publicLaboratoryResults.some((result) => result.playerId === player.id && result.publicResult === command.claimedPublicResult)
@@ -362,6 +362,7 @@ export function createTenderModule({
             kind: 'contract_bid_assessed',
             payload: {
               awarded: isAwarded,
+              awardedToPlayerId: isAwarded ? player.id : undefined,
               contractId: command.contractId,
               playerId: player.id,
               requestedFunding: command.requestedFunding,
