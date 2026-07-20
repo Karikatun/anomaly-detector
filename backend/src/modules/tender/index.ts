@@ -21,6 +21,11 @@ type CreateTenderModuleOptions = {
   store?: TenderStore
 }
 
+const createRoundContracts = (playerCount: number) => Array.from(
+  { length: playerCount + 1 },
+  (_, index) => ({ contractId: `round-1-contract-${index + 1}` }),
+)
+
 export function createTenderModule({
   seedGenerator = randomUUID,
   store = createInMemoryTenderStore(),
@@ -52,10 +57,21 @@ export function createTenderModule({
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
   const nextModelAnalysisPlayer = (tender: StoredTender) => tender.players.filter((player) => tender.powerAllocations[player.id]?.modelAnalysis > 0 && !tender.modelAnalysisCompletedByPlayer[player.id]).sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
+  const effectiveContractPower = (tender: StoredTender, playerId: string) => Math.max(
+    0,
+    (tender.powerAllocations[playerId]?.contracts ?? 0) - (tender.contractPowerRestrictionsByPlayer[playerId] ?? 0),
+  )
+
+  const nextContractsPlayer = (tender: StoredTender) => tender.players
+    .filter((player) => effectiveContractPower(tender, player.id) > 0)
+    .filter((player) => tender.publicContracts.every((contract) => contract.reservedByPlayerId !== player.id))
+    .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
+
   const nextOperationalPhase = (tender: StoredTender, after: 'reconnaissance' | 'laboratory' | 'model-analysis') => {
     if (after === 'reconnaissance' && nextLaboratoryPlayer(tender)) return 'laboratory'
     if (after !== 'model-analysis' && nextModelAnalysisPlayer(tender)) return 'model-analysis'
-    return 'contracts'
+    if (nextContractsPlayer(tender)) return 'contracts'
+    return 'complete'
   }
 
   const commitCommand = async ({
@@ -104,6 +120,7 @@ export function createTenderModule({
         contractPowerRestrictionsByPlayer: {},
         knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
+        publicContracts: createRoundContracts(parsedInput.data.players.length),
         publicTheses: [],
         ratingByPlayer: {},
         rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
@@ -276,6 +293,33 @@ export function createTenderModule({
         return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_checked', payload: { correct, playerId: player.id, signalId: command.signalId } }], command, commandFingerprint, nextTender: { ...nextTender, phase: nextModelAnalysisPlayer(nextTender) ? 'model-analysis' : nextOperationalPhase(nextTender, 'model-analysis') }, tender })
       }
 
+      if (command.type === 'reserve-contract') {
+        if (tender.phase !== 'contracts') {
+          throw new TenderFailure('invalid_tender_state', 'Contracts are closed')
+        }
+        const expectedPlayer = nextContractsPlayer(tender)
+        const contract = tender.publicContracts.find((candidate) => candidate.contractId === command.contractId)
+        if (!contract || contract.reservedByPlayerId || expectedPlayer?.id !== player.id) {
+          throw new TenderFailure('invalid_tender_state', 'Contract reservation is not available to this Player')
+        }
+        const publicContracts = tender.publicContracts.map((candidate) => candidate.contractId === command.contractId
+          ? { ...candidate, reservedByPlayerId: player.id }
+          : candidate)
+        const nextTender = { ...tender, publicContracts }
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'contract_reserved',
+            payload: { contractId: command.contractId, playerId: player.id },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: { ...nextTender, phase: nextContractsPlayer(nextTender) ? 'contracts' : 'complete' },
+          tender,
+        })
+      }
+
       if (tender.phase !== 'reconnaissance') {
         throw new TenderFailure('invalid_tender_state', 'Reconnaissance is closed')
       }
@@ -329,6 +373,7 @@ export function createTenderModule({
       const player = readPlayer(tender, playerId)
       return {
         knownSignals: tender.knownSignals,
+        publicContracts: tender.publicContracts,
         tenderId,
         version: tender.version,
         phase: tender.phase,

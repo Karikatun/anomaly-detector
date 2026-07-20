@@ -24,6 +24,11 @@ test('records an Access Slot command once and exposes it only to its player', as
   expect(await tender.execute(command)).toEqual({ tenderId, version: 1 })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
     knownSignals: ['aster', 'boreal'],
+    publicContracts: [
+      { contractId: 'round-1-contract-1' },
+      { contractId: 'round-1-contract-2' },
+      { contractId: 'round-1-contract-3' },
+    ],
     tenderId,
     version: 1,
     phase: 'access-slot-selection',
@@ -154,6 +159,11 @@ test('restores a player Tender view from the shared store', async () => {
 
   expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
     knownSignals: ['aster', 'boreal'],
+    publicContracts: [
+      { contractId: 'round-1-contract-1' },
+      { contractId: 'round-1-contract-2' },
+      { contractId: 'round-1-contract-3' },
+    ],
     tenderId,
     version: 1,
     phase: 'access-slot-selection',
@@ -204,6 +214,13 @@ test('resolves Access Slots and opens Power planning after every player chooses'
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
     knownSignals: ['aster', 'boreal'],
+    publicContracts: [
+      { contractId: 'round-1-contract-1' },
+      { contractId: 'round-1-contract-2' },
+      { contractId: 'round-1-contract-3' },
+      { contractId: 'round-1-contract-4' },
+      { contractId: 'round-1-contract-5' },
+    ],
     tenderId,
     version: 4,
     phase: 'power-allocation',
@@ -554,6 +571,93 @@ test('applies Model Analysis Rating rewards and wrong-Thesis Contract Power rest
         playerId: 'player-b',
         rating: 0,
       },
+    ],
+  })
+})
+
+test('reserves public Contracts in Access Slot order', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    publicContracts: [
+      { contractId: 'round-1-contract-1' },
+      { contractId: 'round-1-contract-2' },
+      { contractId: 'round-1-contract-3' },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+  await tender.execute({
+    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 },
+    actorId: 'player-a',
+    commandId: 'a-2',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 },
+    actorId: 'player-b',
+    commandId: 'b-2',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+  await tender.execute({ commandId: 'b-3', tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+
+  await expect(tender.execute({
+    actorId: 'player-b',
+    commandId: 'b-4',
+    contractId: 'round-1-contract-1',
+    tenderId,
+    type: 'reserve-contract',
+  })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'a-4',
+    contractId: 'round-1-contract-2',
+    tenderId,
+    type: 'reserve-contract',
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    phase: 'contracts',
+    publicContracts: [
+      { contractId: 'round-1-contract-1' },
+      { contractId: 'round-1-contract-2', reservedByPlayerId: 'player-a' },
+      { contractId: 'round-1-contract-3' },
+    ],
+  })
+
+  await expect(tender.execute({
+    actorId: 'player-b',
+    commandId: 'b-5',
+    contractId: 'round-1-contract-2',
+    tenderId,
+    type: 'reserve-contract',
+  })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'b-6',
+    contractId: 'round-1-contract-3',
+    tenderId,
+    type: 'reserve-contract',
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'complete',
+    publicContracts: [
+      { contractId: 'round-1-contract-1' },
+      { contractId: 'round-1-contract-2', reservedByPlayerId: 'player-a' },
+      { contractId: 'round-1-contract-3', reservedByPlayerId: 'player-b' },
     ],
   })
 })
