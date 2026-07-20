@@ -7,7 +7,7 @@ import type {
   TenderTeam,
   TenderView,
 } from '@the-game/contracts'
-import { tenderCommandSchema } from '@the-game/contracts'
+import { createTenderSchema, tenderCommandSchema } from '@the-game/contracts'
 import { TenderFailure } from './domain/errors'
 
 type Tender = {
@@ -42,9 +42,13 @@ export function createTenderModule() {
 
   return {
     async createTender(input: CreateTender) {
+      const parsedInput = createTenderSchema.safeParse(input)
+      if (!parsedInput.success) {
+        throw new TenderFailure('invalid_create_tender', 'Tender creation input is invalid')
+      }
       const tenderId = `tender-${nextTenderId++}`
       tenders.set(tenderId, {
-        teams: input.teams,
+        teams: parsedInput.data.teams,
         requestedSlots: new Map(),
         processedCommands: new Map(),
         version: 0,
