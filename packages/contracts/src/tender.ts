@@ -52,6 +52,11 @@ export const tenderViewSchema = z.object({
   teams: z.array(tenderTeamViewSchema),
 }).strict()
 
+export const tenderViewQuerySchema = z.object({
+  tenderId: tenderIdSchema,
+  participantId: participantIdSchema,
+}).strict()
+
 export const advanceDueTendersInputSchema = z.object({
   now: z.date(),
   limit: z.number().int().min(1).max(1000),
@@ -67,5 +72,6 @@ export type TenderCommand = z.infer<typeof tenderCommandSchema>
 export type CommandReceipt = z.infer<typeof commandReceiptSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>
+export type TenderViewQuery = z.infer<typeof tenderViewQuerySchema>
 export type AdvanceDueTendersInput = z.infer<typeof advanceDueTendersInputSchema>
 export type AdvanceDueTendersResult = z.infer<typeof advanceDueTendersResultSchema>
