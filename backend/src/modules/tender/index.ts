@@ -12,7 +12,7 @@ import { TenderFailure } from './domain/errors'
 type Tender = {
   teams: TenderTeam[]
   requestedSlots: Map<string, number>
-  processedCommands: Map<string, CommandReceipt>
+  processedCommands: Map<string, { command: TenderCommand; receipt: CommandReceipt }>
   version: number
 }
 
@@ -32,6 +32,13 @@ export function createTenderModule() {
     return team
   }
 
+  const isSameCommand = (left: TenderCommand, right: TenderCommand) =>
+    left.commandId === right.commandId
+    && left.tenderId === right.tenderId
+    && left.actorId === right.actorId
+    && left.type === right.type
+    && left.slot === right.slot
+
   return {
     async createTender(input: CreateTender) {
       const tenderId = `tender-${nextTenderId++}`
@@ -46,15 +53,20 @@ export function createTenderModule() {
 
     async execute(command: TenderCommand): Promise<CommandReceipt> {
       const tender = readTender(command.tenderId)
-      const previousReceipt = tender.processedCommands.get(command.commandId)
-      if (previousReceipt) return previousReceipt
+      const previousCommand = tender.processedCommands.get(command.commandId)
+      if (previousCommand) {
+        if (!isSameCommand(previousCommand.command, command)) {
+          throw new TenderFailure('duplicate_command_conflict', `Command ${command.commandId} conflicts with its first use`)
+        }
+        return previousCommand.receipt
+      }
 
       const team = readParticipantTeam(tender, command.actorId)
 
       tender.requestedSlots.set(team.id, command.slot)
       tender.version += 1
       const receipt = { tenderId: command.tenderId, version: tender.version }
-      tender.processedCommands.set(command.commandId, receipt)
+      tender.processedCommands.set(command.commandId, { command, receipt })
       return receipt
     },
 
