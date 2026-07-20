@@ -112,8 +112,8 @@ Power allocation fixes only the category and amount. A player picks its exact ta
 Each round exposes `number of players + 1` exclusive normal contracts. Every contract has two possible fulfilment paths. A player can win at most one normal contract per round.
 
 - When a player reaches the contract phase, it publicly reserves its chosen contract; only the chosen contract is visible, not bid quality.
-- A second player may intentionally challenge a reserved contract.
-- A bid is ranked by fit to the requested public effect, evidence level, and requested funding. The current round's access order breaks a complete tie.
+- Reserved contracts cannot be challenged in the MVP; later players must choose from remaining unreserved contracts.
+- A bid is assessed by fit to the requested public effect, evidence level, and requested funding. Access order determines who may reserve and bid each contract.
 - Unclaimed or failed contracts expire at round end and are replaced.
 - One valuable final contract is visible from round one and resolves in round five. It is worth about 15-20% of the maximum rating, never enough to invalidate an otherwise better full match.
 
