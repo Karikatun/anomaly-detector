@@ -383,5 +383,9 @@ test('resolves a continuous Laboratory test between a Player\'s Samples', async 
 
   await tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', sourceSignal: 'cinder', receiverSignal: 'delta', protocol: 'continuous' } as never)
 
-  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({ phase: 'model-analysis' })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'model-analysis',
+    privateMeasurements: [{ receiverSignal: 'delta', sourceSignal: 'cinder', polarityRelation: expect.any(String) }],
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({ privateMeasurements: [] })
 })

@@ -198,7 +198,13 @@ export function createTenderModule({
         )
         const laboratoryCompletedByPlayer = { ...tender.laboratoryCompletedByPlayer, [player.id]: true }
         const measurement = command.protocol === 'continuous'
-          ? [{ receiverSignal: command.receiverSignal, sourceSignal: command.sourceSignal, stability: publicResult === 'unstable_collapse' ? 'volatile' as const : 'stable' as const }]
+          ? [{
+            receiverSignal: command.receiverSignal,
+            sourceSignal: command.sourceSignal,
+            polarityRelation: tender.anomalyConfiguration.signals[command.sourceSignal].polarity === tender.anomalyConfiguration.signals[command.receiverSignal].polarity
+              ? 'same' as const
+              : 'different' as const,
+          }]
           : []
         const privateMeasurementsByPlayer = measurement.length === 0 ? tender.privateMeasurementsByPlayer : {
           ...tender.privateMeasurementsByPlayer,
