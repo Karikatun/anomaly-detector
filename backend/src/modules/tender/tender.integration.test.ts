@@ -94,4 +94,71 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       kind: 'duplicate_command_conflict',
     })
   })
+
+  test('persists resolved Access Slots and the phase transition', async () => {
+    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await module.createTender({
+      teams: [
+        { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+        { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+        { id: 'team-c', participantId: 'player-c', tiePriority: 3 },
+        { id: 'team-d', participantId: 'player-d', tiePriority: 4 },
+      ],
+    })
+
+    await module.execute({
+      commandId: 'command-a-1',
+      tenderId,
+      actorId: 'player-a',
+      type: 'request-access-slot',
+      slot: 1,
+    })
+    await module.execute({
+      commandId: 'command-b-1',
+      tenderId,
+      actorId: 'player-b',
+      type: 'request-access-slot',
+      slot: 1,
+    })
+    await module.execute({
+      commandId: 'command-c-1',
+      tenderId,
+      actorId: 'player-c',
+      type: 'request-access-slot',
+      slot: 2,
+    })
+    await module.execute({
+      commandId: 'command-d-1',
+      tenderId,
+      actorId: 'player-d',
+      type: 'request-access-slot',
+      slot: 6,
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+
+    expect(await restartedModule.readTenderView({ tenderId, participantId: 'player-b' })).toEqual({
+      tenderId,
+      version: 4,
+      phase: 'power-allocation',
+      teams: [
+        { teamId: 'team-a', accessSlot: 1 },
+        { teamId: 'team-b', accessSlot: 3 },
+        { teamId: 'team-c', accessSlot: 2 },
+        { teamId: 'team-d', accessSlot: 6 },
+      ],
+    })
+
+    expect(
+      await prisma.tenderAuditEvent.findMany({
+        where: { tenderId, kind: 'access_slots_resolved' },
+        select: { payload: true, sequence: true },
+      }),
+    ).toEqual([
+      {
+        payload: { accessSlots: { 'team-a': 1, 'team-b': 3, 'team-c': 2, 'team-d': 6 } },
+        sequence: 5,
+      },
+    ])
+  })
 })

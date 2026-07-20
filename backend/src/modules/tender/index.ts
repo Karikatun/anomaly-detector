@@ -10,6 +10,7 @@ import type {
 } from '@the-game/contracts'
 import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@the-game/contracts'
 import type { StoredTender, TenderStore } from './application/tender-store'
+import { resolveAccessSlots } from './domain/access-slots'
 import { createAnomalyConfiguration } from './domain/anomaly-configuration'
 import { TenderFailure } from './domain/errors'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
@@ -44,6 +45,7 @@ export function createTenderModule({
         throw new TenderFailure('invalid_create_tender', 'Tender creation input is invalid')
       }
       const tender = await store.create({
+        accessSlots: {},
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
         teams: parsedInput.data.teams,
         requestedSlots: {},
@@ -69,22 +71,37 @@ export function createTenderModule({
         }
         return previousCommand.receipt
       }
+      if (tender.phase !== 'access-slot-selection') {
+        throw new TenderFailure('invalid_tender_state', 'Access Slot selection is closed')
+      }
 
       const team = readParticipantTeam(tender, command.actorId)
 
       const receipt = { tenderId: command.tenderId, version: tender.version + 1 }
+      const requestedSlots = { ...tender.requestedSlots, [team.id]: command.slot }
+      const isReadyToResolve = Object.keys(requestedSlots).length === tender.teams.length
+      const accessSlots = isReadyToResolve ? resolveAccessSlots(tender.teams, requestedSlots) : tender.accessSlots
+      const phase = isReadyToResolve ? 'power-allocation' : tender.phase
       const result = await store.commit({
-        auditEvents: [{
-          actorId: command.actorId,
-          commandId: command.commandId,
-          kind: 'access_slot_requested',
-          payload: { slot: command.slot, teamId: team.id },
-        }],
+        auditEvents: [
+          {
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'access_slot_requested',
+            payload: { slot: command.slot, teamId: team.id },
+          },
+          ...(isReadyToResolve ? [{
+            kind: 'access_slots_resolved',
+            payload: { accessSlots },
+          }] : []),
+        ],
         tenderId: command.tenderId,
         expectedVersion: tender.version,
         nextTender: {
           ...tender,
-          requestedSlots: { ...tender.requestedSlots, [team.id]: command.slot },
+          accessSlots,
+          phase,
+          requestedSlots,
           version: receipt.version,
         },
         commandId: command.commandId,
@@ -113,10 +130,11 @@ export function createTenderModule({
       return {
         tenderId,
         version: tender.version,
-        phase: 'access-slot-selection' as const,
+        phase: tender.phase,
         teams: tender.teams.map((team) => ({
           teamId: team.id,
-          ...(team.participantId === participantId && tender.requestedSlots[team.id] !== undefined
+          ...(tender.phase === 'power-allocation' ? { accessSlot: tender.accessSlots[team.id] } : {}),
+          ...(tender.phase === 'access-slot-selection' && team.participantId === participantId && tender.requestedSlots[team.id] !== undefined
             ? { requestedAccessSlot: tender.requestedSlots[team.id] }
             : {}),
         })),

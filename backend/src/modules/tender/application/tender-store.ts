@@ -20,6 +20,7 @@ export type TenderAuditEvent = {
 }
 
 export type StoredTender = {
+  accessSlots: Record<string, number>
   anomalyConfiguration: AnomalyConfiguration
   id: string
   phase: TenderPhase

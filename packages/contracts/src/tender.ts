@@ -42,6 +42,7 @@ export const tenderPhaseSchema = z.enum([
 
 export const tenderTeamViewSchema = z.object({
   teamId: teamIdSchema,
+  accessSlot: z.number().int().min(1).max(6).optional(),
   requestedAccessSlot: z.number().int().min(1).max(6).optional(),
 }).strict()
 
