@@ -19,7 +19,10 @@ maybeDescribe('Tender PostgreSQL integration', () => {
   })
 
   test('restores a participant view through a new PostgreSQL store adapter', async () => {
-    const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const firstModule = createTenderModule({
+      seedGenerator: () => 'seed-1',
+      store: createPrismaTenderStore(prisma),
+    })
     const { tenderId } = await firstModule.createTender({
       teams: [
         { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
@@ -35,7 +38,8 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       slot: 1,
     })
 
-    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const restartedStore = createPrismaTenderStore(prisma)
+    const restartedModule = createTenderModule({ store: restartedStore })
 
     expect(await restartedModule.readTenderView({ tenderId, participantId: 'player-a' })).toEqual({
       tenderId,
@@ -46,6 +50,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       { teamId: 'team-b' },
     ],
   })
+    expect((await restartedStore.read(tenderId))?.anomalyConfiguration.seed).toBe('seed-1')
 
     expect(
       await prisma.tenderAuditEvent.findMany({

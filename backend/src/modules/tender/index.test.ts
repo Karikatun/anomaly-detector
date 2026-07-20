@@ -157,3 +157,21 @@ test('restores a participant Tender view from the shared store', async () => {
     ],
   })
 })
+
+test('stores a seed-derived Anomaly Configuration without exposing it in a Tender view', async () => {
+  const store = createInMemoryTenderStore()
+  const tender = createTenderModule({ store, seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    teams: [
+      { id: 'team-a', participantId: 'player-a', tiePriority: 1 },
+      { id: 'team-b', participantId: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  expect(await store.read(tenderId)).toMatchObject({
+    anomalyConfiguration: { seed: 'seed-1' },
+  })
+  await expect(tender.readTenderView({ tenderId, participantId: 'player-a' })).resolves.not.toHaveProperty(
+    'anomalyConfiguration',
+  )
+})
