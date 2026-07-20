@@ -41,6 +41,7 @@ export type StoredTender = {
   publicLaboratoryResults: PublicLaboratoryResult[]
   publicTheses: PublicThesis[]
   ratingByPlayer: Record<string, number>
+  round: number
   requestedSlots: Record<string, number>
   rawTelemetrySignalsByPlayer: Record<string, SignalId[]>
   reconnaissanceCompletedByPlayer: Record<string, boolean>
