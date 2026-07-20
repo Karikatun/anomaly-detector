@@ -101,3 +101,13 @@ test('rejects an Access Slot command outside the shared contract', async () => {
     } as never),
   ).rejects.toMatchObject({ kind: 'invalid_tender_command' })
 })
+
+test('rejects a Tender with fewer than two teams', async () => {
+  const tender = createTenderModule()
+
+  await expect(
+    tender.createTender({
+      teams: [{ id: 'team-a', participantId: 'player-a', tiePriority: 1 }],
+    } as never),
+  ).rejects.toMatchObject({ kind: 'invalid_create_tender' })
+})

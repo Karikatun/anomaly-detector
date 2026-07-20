@@ -1,5 +1,6 @@
 export type TenderFailureKind =
   | 'duplicate_command_conflict'
+  | 'invalid_create_tender'
   | 'invalid_tender_command'
   | 'participant_not_in_tender'
   | 'tender_not_found'
