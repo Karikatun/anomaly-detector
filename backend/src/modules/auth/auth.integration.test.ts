@@ -34,6 +34,8 @@ maybeDescribe('auth API integration', () => {
   const app = createApp({ env, prisma })
 
   beforeEach(async () => {
+    await prisma.tenderRoomMember.deleteMany()
+    await prisma.tenderRoom.deleteMany()
     await prisma.authSession.deleteMany()
     await prisma.user.deleteMany()
   })
@@ -130,6 +132,36 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({ refreshToken: staleRefreshBody.refreshToken }),
     })
     expect(revokedRefresh.status).toBe(401)
+  })
+
+  test('creates a private room for an authenticated host', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'room-host@example.com',
+        password: 'password123',
+      }),
+    })
+    const { accessToken, user } = await register.json()
+
+    const createRoom = await app.request('/api/rooms', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ capacity: 3 }),
+    })
+
+    expect(createRoom.status).toBe(201)
+    expect(await createRoom.json()).toEqual({
+      capacity: 3,
+      hostId: user.id,
+      members: [{ seat: 1, userId: user.id }],
+      roomId: expect.any(String),
+      status: 'waiting',
+    })
   })
 
   test('returns one durable successor across three concurrent refresh requests', async () => {
