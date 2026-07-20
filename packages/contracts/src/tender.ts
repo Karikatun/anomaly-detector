@@ -57,6 +57,29 @@ export const fieldTypeSchema = z.enum(['inertial', 'electromagnetic', 'phase'])
 export const polaritySchema = z.enum(['positive', 'negative'])
 export const publicResultSchema = z.enum(['attenuation', 'reflection', 'transmission_gain', 'unstable_collapse'])
 export const submitThesisCommandSchema = z.object({ commandId: commandIdSchema, tenderId: tenderIdSchema, actorId: playerIdSchema, signalId: signalIdSchema, fieldType: fieldTypeSchema, polarity: polaritySchema, type: z.literal('submit-thesis') }).strict()
+const uniqueFieldTypes = (values: Array<z.infer<typeof fieldTypeSchema>>) => new Set(values).size === values.length
+const uniquePolarities = (values: Array<z.infer<typeof polaritySchema>>) => new Set(values).size === values.length
+export const workingModelSignalSchema = z.object({
+  excludedFieldTypes: z.array(fieldTypeSchema).max(3).refine(uniqueFieldTypes, 'Working Model field type marks must be distinct').optional(),
+  excludedPolarities: z.array(polaritySchema).max(2).refine(uniquePolarities, 'Working Model polarity marks must be distinct').optional(),
+  hypothesis: z.object({
+    fieldType: fieldTypeSchema.optional(),
+    polarity: polaritySchema.optional(),
+  }).strict().optional(),
+  note: z.string().max(1000).optional(),
+  possibleFieldTypes: z.array(fieldTypeSchema).max(3).refine(uniqueFieldTypes, 'Working Model field type marks must be distinct').optional(),
+  possiblePolarities: z.array(polaritySchema).max(2).refine(uniquePolarities, 'Working Model polarity marks must be distinct').optional(),
+}).strict()
+export const workingModelSchema = z.object({
+  signals: z.partialRecord(signalIdSchema, workingModelSignalSchema),
+}).strict()
+export const updateWorkingModelCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  type: z.literal('update-working-model'),
+  workingModel: workingModelSchema,
+}).strict()
 export const runLaboratoryTestCommandSchema = z.object({
   commandId: commandIdSchema,
   tenderId: tenderIdSchema,
@@ -90,6 +113,7 @@ export const tenderCommandSchema = z.discriminatedUnion('type', [
   allocatePowerCommandSchema,
   conductReconnaissanceCommandSchema,
   runLaboratoryTestCommandSchema,
+  updateWorkingModelCommandSchema,
   submitThesisCommandSchema,
   reserveContractCommandSchema,
   submitContractBidCommandSchema,
@@ -160,6 +184,7 @@ export const tenderViewSchema = z.object({
   privateRawTelemetrySignals: z.array(signalIdSchema),
   privateSamples: z.array(signalIdSchema),
   privateMeasurements: z.array(privateMeasurementSchema),
+  privateWorkingModel: workingModelSchema,
   publicTheses: z.array(publicThesisSchema),
 }).strict()
 
@@ -185,6 +210,7 @@ export type CommandReceipt = z.infer<typeof commandReceiptSchema>
 export type PublicContract = z.infer<typeof publicContractSchema>
 export type PublicLaboratoryResult = z.infer<typeof publicLaboratoryResultSchema>
 export type PublicThesis = z.infer<typeof publicThesisSchema>
+export type WorkingModel = z.infer<typeof workingModelSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>
 export type TenderViewQuery = z.infer<typeof tenderViewQuerySchema>

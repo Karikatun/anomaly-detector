@@ -8,6 +8,7 @@ import type {
   TenderCommand,
   TenderPhase,
   TenderPlayer,
+  WorkingModel,
 } from '@the-game/contracts'
 import type { AnomalyConfiguration, SignalId } from '../domain/anomaly-configuration'
 
@@ -44,6 +45,7 @@ export type StoredTender = {
   laboratoryCompletedByPlayer: Record<string, boolean>
   modelAnalysisCompletedByPlayer: Record<string, boolean>
   privateMeasurementsByPlayer: Record<string, PrivateMeasurement[]>
+  privateWorkingModelsByPlayer: Record<string, WorkingModel>
   samplesByPlayer: Record<string, SignalId[]>
   players: TenderPlayer[]
   version: number
