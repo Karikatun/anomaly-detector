@@ -150,6 +150,7 @@ export const publicThesisSchema = z.object({
   playerId: playerIdSchema,
   polarity: polaritySchema,
   signalId: signalIdSchema,
+  verification: z.enum(['standard', 'extended']),
 }).strict()
 
 export const publicContractSchema = z.object({
