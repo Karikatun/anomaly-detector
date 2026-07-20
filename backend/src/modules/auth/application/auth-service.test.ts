@@ -32,6 +32,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
     findActiveAccessSession: async () => null,
     revokeSessionById: async () => false,
     revokeSession: async () => null,
+    createOAuthTransaction: async () => undefined,
   } satisfies AuthRepository
 
   const service = new AuthService({
@@ -170,4 +171,38 @@ test('refresh returns the winning successor when another request wins the rotati
   })
   expect(findCalls).toBe(2)
   expect(rotateCalls).toBe(1)
+})
+
+test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction', async () => {
+  const transactions: Array<Record<string, unknown>> = []
+  const dependencies: ConstructorParameters<typeof AuthService>[0] = {
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, email: user.email, sessionId: 'session-1' }) },
+    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: { hash: async () => 'hash', verify: async () => true },
+    projectUser: async () => ({ id: user.id, email: user.email, displayName: null, createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: {
+      createOAuthTransaction: async (transaction: Record<string, unknown>) => { transactions.push(transaction) },
+    } as unknown as AuthRepository,
+    oauthProviders: {
+      require: () => ({
+        authorizationUrl: ({ state, codeChallenge }: { state: string; codeChallenge: string }) => `https://provider.example/authorize?state=${state}&code_challenge=${codeChallenge}`,
+      }),
+    },
+  }
+  const service = new AuthService(dependencies)
+
+  const result = await (service as unknown as {
+    startOAuthSignIn(input: { provider: 'yandex'; redirectUri: string }): Promise<{ authorizationUrl: string }>
+  }).startOAuthSignIn({
+    provider: 'yandex',
+    redirectUri: 'https://app.example.ru/api/auth/oauth/yandex/callback',
+  })
+
+  expect(result.authorizationUrl).toContain('https://provider.example/authorize')
+  expect(transactions).toEqual([expect.objectContaining({ provider: 'yandex' })])
 })

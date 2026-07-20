@@ -1,6 +1,7 @@
 import type { LoginRequest, RegisterPayload } from '@the-game/contracts'
 
 import { AuthFailure } from '../domain/errors'
+import type { OAuthProviderId } from '../domain/oauth'
 import { sessionExpiresAt, type SessionMetadata } from '../domain/session'
 import type { AuthUserRecord, AuthenticatedPrincipal } from '../domain/user'
 import { userDtoFromPrincipal } from '../domain/user'
@@ -9,6 +10,7 @@ import type {
   AuthRepository,
   Clock,
   LogoutCleanup,
+  OAuthProviderRegistry,
   Passwords,
   ProjectUser,
   RefreshTokens,
@@ -18,6 +20,7 @@ type AuthServiceDependencies = {
   accessTokens: AccessTokens
   clock: Clock
   logoutCleanup: LogoutCleanup
+  oauthProviders?: OAuthProviderRegistry
   passwords: Passwords
   projectUser: ProjectUser
   refreshTokenTtlDays: number
@@ -50,6 +53,30 @@ export class AuthService {
     })
 
     return this.sessionResponse(user, session.id, refreshToken)
+  }
+
+  async startOAuthSignIn(input: { provider: OAuthProviderId; redirectUri: string }) {
+    const { codeChallenge, codeVerifier } = await createPkcePair()
+    const state = `${crypto.randomUUID()}${crypto.randomUUID()}`
+    const oauthProviders = this.dependencies.oauthProviders
+    if (!oauthProviders) {
+      throw new AuthFailure('oauth_not_configured', 'OAuth sign-in is not configured')
+    }
+    const provider = oauthProviders.require(input.provider)
+    await this.dependencies.repository.createOAuthTransaction({
+      codeVerifier,
+      expiresAt: new Date(this.dependencies.clock.now().getTime() + 10 * 60 * 1000),
+      provider: input.provider,
+      redirectUri: input.redirectUri,
+      state,
+    })
+    return {
+      authorizationUrl: provider.authorizationUrl({
+        codeChallenge,
+        redirectUri: input.redirectUri,
+        state,
+      }),
+    }
   }
 
   async login(input: LoginRequest, metadata: SessionMetadata) {
@@ -231,4 +258,14 @@ export class AuthService {
   private sessionAbsoluteNotBefore(now: Date) {
     return new Date(now.getTime() - this.dependencies.sessionAbsoluteTtlDays * 24 * 60 * 60 * 1000)
   }
+}
+
+async function createPkcePair() {
+  const codeVerifier = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll('-', '')
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier))
+  const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replaceAll('=', '')
+  return { codeChallenge, codeVerifier }
 }
