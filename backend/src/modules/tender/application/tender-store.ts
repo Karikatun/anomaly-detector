@@ -5,6 +5,7 @@ import type {
   PublicContract,
   PublicLaboratoryResult,
   PublicThesis,
+  ScientificModel,
   TenderCommand,
   TenderAuditEvent,
   TenderPhase,
@@ -41,9 +42,12 @@ export type StoredTender = {
   id: string
   knownSignals: SignalId[]
   phase: TenderPhase
+  finalScientificModelCompletedByPlayer: Record<string, boolean>
+  finalScientificModelsByPlayer: Record<string, ScientificModel>
   powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>
   publicContracts: PublicContract[]
+  publicFinalContract: PublicContract
   publicLaboratoryResults: PublicLaboratoryResult[]
   publicTheses: PublicThesis[]
   ratingByPlayer: Record<string, number>
@@ -58,6 +62,7 @@ export type StoredTender = {
   samplesByPlayer: Record<string, SignalId[]>
   players: TenderPlayer[]
   version: number
+  winnerPlayerIds: string[]
 }
 
 export type TenderCommit = {

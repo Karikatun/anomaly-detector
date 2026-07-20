@@ -137,6 +137,7 @@ test('records an Access Slot command once and exposes it only to its player', as
       { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
       { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
     ],
+    publicFinalContract: { contractId: 'final-contract', requiredPublicResult: 'reflection' },
     publicLaboratoryResults: [],
     round: 1,
     tenderId,
@@ -345,6 +346,7 @@ test('restores a player Tender view from the shared store', async () => {
       { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
       { contractId: 'round-1-contract-3', requiredPublicResult: 'transmission_gain' },
     ],
+    publicFinalContract: { contractId: 'final-contract', requiredPublicResult: 'reflection' },
     publicLaboratoryResults: [],
     round: 1,
     tenderId,
@@ -406,6 +408,7 @@ test('resolves Access Slots and opens Power planning after every player chooses'
       { contractId: 'round-1-contract-4', requiredPublicResult: 'unstable_collapse' },
       { contractId: 'round-1-contract-5', requiredPublicResult: 'reflection' },
     ],
+    publicFinalContract: { contractId: 'final-contract', requiredPublicResult: 'reflection' },
     publicLaboratoryResults: [],
     round: 1,
     tenderId,
@@ -1138,7 +1141,7 @@ test('awards a reserved Contract Bid with matching public Laboratory evidence', 
       { contractId: 'round-2-contract-3', requiredPublicResult: 'transmission_gain' },
     ],
     players: [
-      { budget: 3, corporateTrust: 1, playerId: 'player-a' },
+      { budget: 3, corporateTrust: 1, playerId: 'player-a', rating: 4 },
       { budget: 2, corporateTrust: 0, playerId: 'player-b' },
     ],
   })
@@ -1232,8 +1235,29 @@ test('completes the Tender after Contracts in round five', async () => {
   }
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'final-scientific-model',
+    round: 5,
+  })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'a-final-model',
+    scientificModel: { signals: { aster: { fieldType: 'inertial' } } },
+    tenderId,
+    type: 'submit-scientific-model',
+  })
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'b-final-model',
+    scientificModel: { signals: { aster: { fieldType: 'inertial' } } },
+    tenderId,
+    type: 'submit-scientific-model',
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     phase: 'complete',
     round: 5,
+    winnerPlayerIds: ['player-a', 'player-b'],
     audit: {
       anomalyConfiguration: {
         seed: expect.any(String),

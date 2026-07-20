@@ -19,9 +19,12 @@ type PersistedTenderState = Pick<
   | 'corporateTrustByPlayer'
   | 'contractCompletedByPlayer'
   | 'contractPowerRestrictionsByPlayer'
+  | 'finalScientificModelCompletedByPlayer'
+  | 'finalScientificModelsByPlayer'
   | 'knownSignals'
   | 'powerAllocations'
   | 'publicContracts'
+  | 'publicFinalContract'
   | 'publicLaboratoryResults'
   | 'publicTheses'
   | 'ratingByPlayer'
@@ -34,6 +37,7 @@ type PersistedTenderState = Pick<
   | 'reconnaissanceCompletedByPlayer'
   | 'requestedSlots'
   | 'samplesByPlayer'
+  | 'winnerPlayerIds'
   | 'players'
 >
 
@@ -45,9 +49,12 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   corporateTrustByPlayer: tender.corporateTrustByPlayer,
   contractCompletedByPlayer: tender.contractCompletedByPlayer,
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
+  finalScientificModelCompletedByPlayer: tender.finalScientificModelCompletedByPlayer,
+  finalScientificModelsByPlayer: tender.finalScientificModelsByPlayer,
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
   publicContracts: tender.publicContracts,
+  publicFinalContract: tender.publicFinalContract,
   publicLaboratoryResults: tender.publicLaboratoryResults,
   publicTheses: tender.publicTheses,
   ratingByPlayer: tender.ratingByPlayer,
@@ -61,6 +68,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   players: tender.players,
   requestedSlots: tender.requestedSlots,
   samplesByPlayer: tender.samplesByPlayer,
+  winnerPlayerIds: tender.winnerPlayerIds,
 })
 
 const toStoredCommand = (record: { fingerprint: string; receipt: Prisma.JsonValue }): StoredTenderCommand => ({
@@ -86,11 +94,14 @@ const toStoredTender = (record: {
     contractCompletedByPlayer: state.contractCompletedByPlayer ?? {},
     contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},
     dueAt: record.dueAt,
+    finalScientificModelCompletedByPlayer: state.finalScientificModelCompletedByPlayer ?? {},
+    finalScientificModelsByPlayer: state.finalScientificModelsByPlayer ?? {},
     id: record.id,
     knownSignals: state.knownSignals ?? ['aster', 'boreal'],
     phase: record.phase as TenderPhase,
     powerAllocations: state.powerAllocations ?? {},
     publicContracts: state.publicContracts ?? createDefaultContracts(state.players.length),
+    publicFinalContract: state.publicFinalContract ?? { contractId: 'final-contract', requiredPublicResult: 'reflection' },
     publicLaboratoryResults: state.publicLaboratoryResults ?? [],
     publicTheses: state.publicTheses ?? [],
     ratingByPlayer: state.ratingByPlayer ?? {},
@@ -106,6 +117,7 @@ const toStoredTender = (record: {
     samplesByPlayer: state.samplesByPlayer ?? {},
     processedCommands: Object.fromEntries(record.commands.map((command) => [command.commandId, toStoredCommand(command)])),
     version: record.version,
+    winnerPlayerIds: state.winnerPlayerIds ?? [],
   }
 }
 
