@@ -29,6 +29,7 @@ test('records an Access Slot command once and exposes it only to its player', as
       { contractId: 'round-1-contract-2' },
       { contractId: 'round-1-contract-3' },
     ],
+    publicLaboratoryResults: [],
     tenderId,
     version: 1,
     phase: 'access-slot-selection',
@@ -164,6 +165,7 @@ test('restores a player Tender view from the shared store', async () => {
       { contractId: 'round-1-contract-2' },
       { contractId: 'round-1-contract-3' },
     ],
+    publicLaboratoryResults: [],
     tenderId,
     version: 1,
     phase: 'access-slot-selection',
@@ -221,6 +223,7 @@ test('resolves Access Slots and opens Power planning after every player chooses'
       { contractId: 'round-1-contract-4' },
       { contractId: 'round-1-contract-5' },
     ],
+    publicLaboratoryResults: [],
     tenderId,
     version: 4,
     phase: 'power-allocation',
@@ -406,8 +409,24 @@ test('resolves a continuous Laboratory test between a Player\'s Samples', async 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     phase: 'model-analysis',
     privateMeasurements: [{ receiverSignal: 'delta', sourceSignal: 'cinder', polarityRelation: expect.any(String) }],
+    publicLaboratoryResults: [{
+      playerId: 'player-a',
+      protocol: 'continuous',
+      publicResult: expect.any(String),
+      receiverSignal: 'delta',
+      sourceSignal: 'cinder',
+    }],
   })
-  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({ privateMeasurements: [] })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    privateMeasurements: [],
+    publicLaboratoryResults: [{
+      playerId: 'player-a',
+      protocol: 'continuous',
+      publicResult: expect.any(String),
+      receiverSignal: 'delta',
+      sourceSignal: 'cinder',
+    }],
+  })
 })
 
 test('checks public Theses in Access Slot order and opens Contracts', async () => {

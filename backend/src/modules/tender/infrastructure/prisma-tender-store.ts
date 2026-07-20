@@ -17,6 +17,7 @@ type PersistedTenderState = Pick<
   | 'knownSignals'
   | 'powerAllocations'
   | 'publicContracts'
+  | 'publicLaboratoryResults'
   | 'publicTheses'
   | 'ratingByPlayer'
   | 'rawTelemetrySignalsByPlayer'
@@ -36,6 +37,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
   publicContracts: tender.publicContracts,
+  publicLaboratoryResults: tender.publicLaboratoryResults,
   publicTheses: tender.publicTheses,
   ratingByPlayer: tender.ratingByPlayer,
   rawTelemetrySignalsByPlayer: tender.rawTelemetrySignalsByPlayer,
@@ -70,6 +72,7 @@ const toStoredTender = (record: {
     phase: record.phase as TenderPhase,
     powerAllocations: state.powerAllocations ?? {},
     publicContracts: state.publicContracts ?? createDefaultContracts(state.players.length),
+    publicLaboratoryResults: state.publicLaboratoryResults ?? [],
     publicTheses: state.publicTheses ?? [],
     ratingByPlayer: state.ratingByPlayer ?? {},
     rawTelemetrySignalsByPlayer: state.rawTelemetrySignalsByPlayer ?? {},

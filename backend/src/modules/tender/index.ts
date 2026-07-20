@@ -121,6 +121,7 @@ export function createTenderModule({
         knownSignals: ['aster', 'boreal'],
         powerAllocations: {},
         publicContracts: createRoundContracts(parsedInput.data.players.length),
+        publicLaboratoryResults: [],
         publicTheses: [],
         ratingByPlayer: {},
         rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
@@ -224,6 +225,16 @@ export function createTenderModule({
           tender.anomalyConfiguration.signals[command.sourceSignal],
           tender.anomalyConfiguration.signals[command.receiverSignal],
         )
+        const publicLaboratoryResults = [
+          ...tender.publicLaboratoryResults,
+          {
+            playerId: player.id,
+            protocol: command.protocol,
+            publicResult,
+            receiverSignal: command.receiverSignal,
+            sourceSignal: command.sourceSignal,
+          },
+        ]
         const laboratoryCompletedByPlayer = { ...tender.laboratoryCompletedByPlayer, [player.id]: true }
         const contractPowerRestrictionsByPlayer = {
           ...tender.contractPowerRestrictionsByPlayer,
@@ -247,6 +258,7 @@ export function createTenderModule({
           contractPowerRestrictionsByPlayer,
           laboratoryCompletedByPlayer,
           privateMeasurementsByPlayer,
+          publicLaboratoryResults,
         }
         return commitCommand({
           auditEvents: [{
@@ -374,6 +386,7 @@ export function createTenderModule({
       return {
         knownSignals: tender.knownSignals,
         publicContracts: tender.publicContracts,
+        publicLaboratoryResults: tender.publicLaboratoryResults,
         tenderId,
         version: tender.version,
         phase: tender.phase,

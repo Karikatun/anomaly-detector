@@ -60,7 +60,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Validate Directed Test source/receiver Samples and reject self-tests through the shared command contract.
    - [x] Resolve Impulse and Continuous Protocols deterministically from the hidden Anomaly Configuration.
    - [x] Store authorised Continuous Private Measurements in participant-scoped Tender views.
-   - [ ] Project public Laboratory results into Tender views and replay/audit views beyond the append-only audit event.
+   - [x] Project public Laboratory results into Tender views.
+   - [ ] Project Laboratory results into replay/audit views beyond the append-only audit event.
 6. [-] Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.
    - [x] Validate and resolve public Thesis submissions in Access Slot order.
    - [x] Project checked public Theses to every participant without exposing the hidden Anomaly Configuration.
