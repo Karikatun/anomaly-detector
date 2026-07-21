@@ -23,7 +23,19 @@ const appRoute = createRoute({
   component: lazyRouteComponent(() => import('./pages'), 'AppPage'),
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, appRoute])
+const roomsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/rooms',
+  component: lazyRouteComponent(() => import('./features/rooms'), 'RoomListPage'),
+})
+
+const roomLobbyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/rooms/$roomId',
+  component: lazyRouteComponent(() => import('./features/rooms'), 'RoomLobbyPage'),
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, appRoute, roomsRoute, roomLobbyRoute])
 
 export const router = createRouter({ routeTree })
 
