@@ -32,7 +32,8 @@ export function RegisterForm({
     defaultValues: draft,
     onSubmit: async ({ value }) => {
       setFormError(null)
-      const result = registerRequestSchema.safeParse(value)
+      const merged = { ...value, privacyConsent: draft.privacyConsent, ageConfirmation: draft.ageConfirmation }
+      const result = registerRequestSchema.safeParse(merged)
       if (!result.success) {
         setFieldErrors(toFieldErrors(result.error.issues))
         return
@@ -137,6 +138,39 @@ export function RegisterForm({
             </Field>
           )}
         />
+
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={draft.privacyConsent}
+            onChange={(event) => {
+              onDraftChange({ privacyConsent: event.target.checked })
+              clearFieldError('privacyConsent', setFieldErrors)
+            }}
+            className="mt-1"
+          />
+          <span>
+            I agree to the{' '}
+            <a href="/privacy" target="_blank" className="underline">
+              personal data processing policy
+            </a>
+          </span>
+        </label>
+        <FieldError errors={fieldErrors.privacyConsent} />
+
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={draft.ageConfirmation}
+            onChange={(event) => {
+              onDraftChange({ ageConfirmation: event.target.checked })
+              clearFieldError('ageConfirmation', setFieldErrors)
+            }}
+            className="mt-1"
+          />
+          <span>I confirm I am at least 16 years old</span>
+        </label>
+        <FieldError errors={fieldErrors.ageConfirmation} />
 
         <FormAlert message={formError} />
 

@@ -7,12 +7,16 @@ describe('contracts', () => {
       email: ' USER@Example.COM ',
       password: 'password123',
       displayName: '',
+      privacyConsent: true,
+      ageConfirmation: true,
     })
 
     expect(result).toEqual({
       email: 'user@example.com',
       password: 'password123',
       displayName: undefined,
+      privacyConsent: true,
+      ageConfirmation: true,
     })
   })
 })

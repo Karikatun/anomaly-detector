@@ -32,6 +32,8 @@ test('refresh keeps the logical session id stable while rotating its credential'
     findActiveAccessSession: async () => null,
     revokeSessionById: async () => false,
     revokeSession: async () => null,
+    anonymizeUser: async () => undefined,
+    revokeAllSessionsByUserId: async () => undefined,
     createOAuthTransaction: async () => undefined,
   } satisfies AuthRepository
 
@@ -205,4 +207,34 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
 
   expect(result.authorizationUrl).toContain('https://provider.example/authorize')
   expect(transactions).toEqual([expect.objectContaining({ provider: 'yandex' })])
+})
+
+test('deleteAccount anonymises the user and revokes all sessions', async () => {
+  const anonymizedUserIds: string[] = []
+  const revokedSessionIds: string[] = []
+  const repository = {
+    anonymizeUser: async (input: { userId: string; now: Date }) => {
+      anonymizedUserIds.push(input.userId)
+    },
+    revokeAllSessionsByUserId: async (input: { userId: string; now: Date }) => {
+      revokedSessionIds.push(input.userId)
+    },
+  } as unknown as AuthRepository
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, email: user.email, sessionId: 'session-1' }) },
+    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: { hash: async () => 'hash', verify: async () => true },
+    projectUser: async () => ({ id: user.id, email: user.email, displayName: null, createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository,
+  })
+
+  await service.deleteAccount(user.id)
+
+  expect(anonymizedUserIds).toEqual([user.id])
+  expect(revokedSessionIds).toEqual([user.id])
 })

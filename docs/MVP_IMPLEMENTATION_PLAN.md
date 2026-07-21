@@ -106,8 +106,13 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 1. [-] Implement Yandex ID and VK ID authentication. Keep Telegram outside MVP until a separate legal review permits it.
    - [x] Add provider-agnostic OAuth identities, PKCE transaction storage, and the application port without exposing provider routes.
-2. Enforce Russian-launch data policy: 16+ audience, account deletion that anonymises old match entries, and no foreign-email registration path.
-3. Implement profile locale preference, default and fallback `ru`.
+2. [x] Enforce Russian-launch data policy: 16+ audience, account deletion that anonymises old match entries, and no foreign-email registration path.
+   - [x] Add `DELETE /api/auth/account` endpoint: revokes all sessions, anonymises user record
+   - [x] Add `privacyConsent` and `ageConfirmation` fields to register schema (Zod validation rejects missing/falsy values)
+   - [x] Display consent checkbox and age gate in the registration form
+   - [x] Create privacy policy template for legal review
+   - [x] Add `anonymizedAt` field to User model (Prisma migration applied)
+3. [-] Implement profile locale preference, default and fallback `ru`.
 4. [-] Implement private rooms with a host-selected fixed size from 2 to 4. Starting requires every seat to be filled and an explicit host confirmation.
    - [x] Allow an authenticated host to create a waiting room and occupy the first seat.
    - [x] Allow authenticated players to join open rooms in seat order and reject a full room.

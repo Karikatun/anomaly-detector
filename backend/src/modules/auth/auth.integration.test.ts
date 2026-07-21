@@ -54,6 +54,8 @@ maybeDescribe('auth API integration', () => {
         email: 'user@example.com',
         password: 'password123',
         displayName: 'User',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()
@@ -138,7 +140,7 @@ maybeDescribe('auth API integration', () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'ticket@example.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'ticket@example.com', password: 'password123', privacyConsent: true, ageConfirmation: true }),
     })
     const { accessToken } = await register.json()
 
@@ -161,6 +163,8 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({
         email: 'room-host@example.com',
         password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     })
     const { accessToken, user } = await register.json()
@@ -179,8 +183,8 @@ maybeDescribe('auth API integration', () => {
     expect(room).toEqual({
       capacity: 2,
       hostId: user.id,
-      members: [{ seat: 1, userId: user.id }],
       roomId: expect.any(String),
+      members: [{ seat: 1, userId: user.id }],
       status: 'waiting',
     })
 
@@ -190,6 +194,8 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({
         email: 'room-joiner@example.com',
         password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     })
     const joiner = await joinerRegister.json()
@@ -210,6 +216,8 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({
         email: 'room-extra@example.com',
         password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     })
     const extra = await extraRegister.json()
@@ -297,6 +305,8 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({
         email: 'race@example.com',
         password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()
@@ -367,7 +377,7 @@ maybeDescribe('auth API integration', () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'reuse@example.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'reuse@example.com', password: 'password123', privacyConsent: true, ageConfirmation: true }),
     })
     const registered = await register.json()
     const refresh = await app.request('/api/auth/token/refresh', {
@@ -415,6 +425,8 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({
         email: 'web-cookie@example.com',
         password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()
@@ -480,6 +492,8 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({
         email: 'production-cookie@example.com',
         password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()
@@ -513,6 +527,8 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({
         email: 'csrf-cookie@example.com',
         password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     })
     const cookie = register.headers.get('set-cookie')!.split(';')[0]
@@ -671,6 +687,8 @@ maybeDescribe('auth API integration', () => {
     const payload = {
       email: 'dupe@example.com',
       password: 'password123',
+      privacyConsent: true,
+      ageConfirmation: true,
     }
 
     await app.request('/api/auth/register', {
@@ -701,6 +719,8 @@ maybeDescribe('auth API integration', () => {
     const payload = {
       email: 'register-race@example.com',
       password: 'password123',
+      privacyConsent: true,
+      ageConfirmation: true,
     }
 
     const [first, second] = await Promise.all([
@@ -736,6 +756,8 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({
         email,
         password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()
