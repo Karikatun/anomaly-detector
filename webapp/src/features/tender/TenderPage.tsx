@@ -4,13 +4,14 @@ import { useCallback, useState } from 'react'
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
 import { AccessSlotPanel } from './AccessSlotPanel'
 import { ContractsPanel } from './ContractsPanel'
+import { FinalScientificModelPanel } from './FinalScientificModelPanel'
 import { LaboratoryPanel } from './LaboratoryPanel'
 import { ModelAnalysisPanel } from './ModelAnalysisPanel'
 import { PowerAllocationPanel } from './PowerAllocationPanel'
@@ -125,6 +126,73 @@ function PhasePanel({ view, disabled, error, onCommand }: {
         <Card><CardContent className="py-8"><Typography tone="muted">Нет доступной мощности для контрактов.</Typography></CardContent></Card>
       )
     }
+
+    case 'final-scientific-model': {
+      return (
+        <FinalScientificModelPanel
+          disabled={disabled}
+          error={error}
+          onConfirm={(scientificModel) => onCommand({ type: 'submit-scientific-model', scientificModel })}
+        />
+      )
+    }
+
+    case 'complete':
+      return view.audit ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Тендер завершён</CardTitle>
+            <CardDescription>
+              Победитель{view.winnerPlayerIds && view.winnerPlayerIds.length > 1 ? 'и' : ''}:{' '}
+              {view.winnerPlayerIds?.join(', ') ?? '—'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Typography variant="bodySm" tone="muted">
+              Аномалия раскрыта. Ниже — полная конфигурация и журнал событий.
+            </Typography>
+            <div className="mt-4 grid gap-2">
+              <Typography variant="control" tone="muted">Свойства сигналов</Typography>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {Object.entries(view.audit.anomalyConfiguration.signals).map(([sig, props]) => (
+                  <Card key={sig} size="sm">
+                    <CardContent className="py-3">
+                      <Typography variant="bodySm" className="font-bold">
+                        {sig}
+                      </Typography>
+                      <Typography variant="control" tone="muted">
+                        {props.fieldType} / {props.polarity}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2">
+              <Typography variant="control" tone="muted">Итоговый рейтинг</Typography>
+              {view.players.map((p) => (
+                <div key={p.playerId} className="flex items-center gap-2 rounded-lg border p-3">
+                  <Typography variant="bodySm" className="font-medium">Слот {p.accessSlot}</Typography>
+                  <Typography variant="control" tone="muted">
+                    {p.playerId.slice(0, 8)}
+                  </Typography>
+                  <Typography variant="bodySm" className="ml-auto font-bold">
+                    Рейтинг: {p.rating} · Бюджет: {p.budget}
+                  </Typography>
+                  {view.winnerPlayerIds?.includes(p.playerId) && (
+                    <Badge variant="outline">Победитель</Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader><CardTitle>Тендер завершён</CardTitle></CardHeader>
+          <CardContent><Typography tone="muted">Ожидание данных аудита...</Typography></CardContent>
+        </Card>
+      )
 
     default:
       return (
