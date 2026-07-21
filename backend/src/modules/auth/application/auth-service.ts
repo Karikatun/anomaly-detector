@@ -225,6 +225,12 @@ export class AuthService {
     return true
   }
 
+  async deleteAccount(userId: string) {
+    const now = this.dependencies.clock.now()
+    await this.dependencies.repository.revokeAllSessionsByUserId({ userId, now })
+    await this.dependencies.repository.anonymizeUser({ userId, now })
+  }
+
   private async issueSession(user: AuthUserRecord, metadata: SessionMetadata) {
     const now = this.dependencies.clock.now()
     const refreshToken = this.dependencies.refreshTokens.create()

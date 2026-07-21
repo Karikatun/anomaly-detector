@@ -268,6 +268,15 @@ const tokenLogoutRoute = createRoute({
   },
 })
 
+const deleteAccountRoute = createRoute({
+  method: 'delete',
+  path: '/account',
+  responses: {
+    204: { description: 'Account deleted and anonymised' },
+    401: { content: errorResponseContent, description: 'Authentication required' },
+  },
+})
+
 type CreateAuthRoutesOptions = {
   env: AppEnv
   requireAuth: MiddlewareHandler<AuthHttpEnv>
@@ -322,6 +331,12 @@ export function createAuthRoutes({ env, requireAuth, service }: CreateAuthRoutes
   protectedRoutes.use('/me', requireAuth)
   protectedRoutes.openapi(meRoute, async (c) => {
     return c.json({ user: userDtoFromPrincipal(c.var.user) }, 200)
+  })
+  protectedRoutes.use('/account', requireAuth)
+  protectedRoutes.openapi(deleteAccountRoute, async (c) => {
+    const userId = c.var.user.id
+    await executeAuth(() => service.deleteAccount(userId))
+    return c.body(null, 204)
   })
   routes.route('/', protectedRoutes)
 

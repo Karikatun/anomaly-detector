@@ -62,6 +62,8 @@ export type AuthRepository = {
     refreshTokenFamilyHash: string
     now: Date
   }): Promise<string | null>
+  anonymizeUser(input: { userId: string; now: Date }): Promise<void>
+  revokeAllSessionsByUserId(input: { userId: string; now: Date }): Promise<void>
   createOAuthTransaction(transaction: OAuthTransaction): Promise<void>
 }
 

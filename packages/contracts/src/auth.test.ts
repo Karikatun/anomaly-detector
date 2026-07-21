@@ -29,11 +29,15 @@ describe('auth contracts', () => {
         email: ' USER@Example.COM ',
         password: 'password123',
         displayName: ' Jane ',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     ).toEqual({
       email: 'user@example.com',
       password: 'password123',
       displayName: 'Jane',
+      privacyConsent: true,
+      ageConfirmation: true,
     })
 
     expect(
@@ -41,11 +45,15 @@ describe('auth contracts', () => {
         email: 'user@example.com',
         password: 'password123',
         displayName: '',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     ).toEqual({
       email: 'user@example.com',
       password: 'password123',
       displayName: undefined,
+      privacyConsent: true,
+      ageConfirmation: true,
     })
 
     expect(
@@ -65,6 +73,17 @@ describe('auth contracts', () => {
         email: 'not-an-email',
         password: 'short',
         displayName: 'A',
+        privacyConsent: true,
+        ageConfirmation: true,
+      }),
+    ).toThrow()
+
+    expect(() =>
+      registerRequestSchema.parse({
+        email: 'user@example.com',
+        password: 'short',
+        privacyConsent: true,
+        ageConfirmation: true,
       }),
     ).toThrow()
 
@@ -72,6 +91,43 @@ describe('auth contracts', () => {
       loginRequestSchema.parse({
         email: 'user@example.com',
         password: 'short',
+      }),
+    ).toThrow()
+
+    // Rejects missing privacy consent
+    expect(() =>
+      registerRequestSchema.parse({
+        email: 'user@example.com',
+        password: 'password123',
+        ageConfirmation: true,
+      }),
+    ).toThrow()
+
+    // Rejects missing age confirmation
+    expect(() =>
+      registerRequestSchema.parse({
+        email: 'user@example.com',
+        password: 'password123',
+        privacyConsent: true,
+      }),
+    ).toThrow()
+
+    // Rejects falsy consent values
+    expect(() =>
+      registerRequestSchema.parse({
+        email: 'user@example.com',
+        password: 'password123',
+        privacyConsent: false,
+        ageConfirmation: true,
+      }),
+    ).toThrow()
+
+    expect(() =>
+      registerRequestSchema.parse({
+        email: 'user@example.com',
+        password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: false,
       }),
     ).toThrow()
   })

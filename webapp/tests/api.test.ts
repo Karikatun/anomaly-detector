@@ -370,6 +370,8 @@ test('AuthApi preserves backend error status, code, and message', async () => {
     client.register({
       email: 'dupe@example.com',
       password: 'password123',
+      privacyConsent: true,
+      ageConfirmation: true,
     }),
   ).rejects.toMatchObject({
     status: 409,

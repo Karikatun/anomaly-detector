@@ -191,6 +191,25 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
         },
       })
     },
+
+    async anonymizeUser({ userId, now }) {
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          email: `deleted-${crypto.randomUUID()}@anonymized`,
+          passwordHash: 'ANONYMIZED',
+          displayName: null,
+          anonymizedAt: now,
+        },
+      })
+    },
+
+    async revokeAllSessionsByUserId({ userId, now }) {
+      await db.authSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      })
+    },
   }
 }
 
