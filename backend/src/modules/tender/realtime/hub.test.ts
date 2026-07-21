@@ -113,4 +113,36 @@ describe('realtime hub', () => {
 
     expect(changed).toEqual([tenderId])
   })
+
+  test('reconnecting subscriber receives the current state after a timeout', async () => {
+    let now = new Date('2026-07-21T12:00:00Z')
+    const tender = createTenderModule({ now: () => now })
+    const { tenderId } = await tender.createTender({ players })
+    const hub = createRealtimeHub({ tender })
+
+    // First connection — subscribe player-a
+    const first = collectSocket()
+    const sub1 = await hub.subscribe({ playerId: 'player-a', socket: first.socket, tenderId })
+    expect(JSON.parse(first.messages[0]).view.phase).toBe('access-slot-selection')
+
+    // Disconnect
+    await sub1.close()
+
+    // Timeout resolves — deadline passes, tender advances
+    now = new Date('2026-07-21T12:01:00Z')
+    const result = await tender.advanceDueTenders({ limit: 10, now })
+    expect(result.advancedTenderIds).toContain(tenderId)
+    await hub.handleTenderChanged(tenderId)
+
+    // Reconnect
+    const second = collectSocket()
+    await hub.subscribe({ playerId: 'player-a', socket: second.socket, tenderId })
+
+    // Should receive the current (advanced) state
+    expect(second.messages).toHaveLength(1)
+    const view = JSON.parse(second.messages[0]).view
+    expect(view.tenderId).toBe(tenderId)
+    // Phase should have moved past access-slot-selection
+    expect(view.phase).not.toBe('access-slot-selection')
+  })
 })

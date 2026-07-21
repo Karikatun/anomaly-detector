@@ -25,6 +25,8 @@ const tender = createTenderModule({
 })
 realtime = createRealtimeHub({ tender })
 
+const stopAdvanceLoop = tender.startAdvanceLoop()
+
 const app = createApp({ env: runtime.env, prisma: runtime.prisma, tender })
 
 const server = Bun.serve<RealtimeSocketData>({
@@ -48,6 +50,7 @@ async function shutdown(signal: string) {
   shuttingDown = true
 
   console.log(`Backend received ${signal}; shutting down`)
+  stopAdvanceLoop()
   await stopServerGracefully(server, runtime.env.SHUTDOWN_GRACE_SECONDS * 1000)
   await runtime.close()
 }

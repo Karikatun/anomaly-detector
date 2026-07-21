@@ -917,6 +917,16 @@ export function createTenderModule({
       }
       return { advancedTenderIds }
     },
+    startAdvanceLoop(intervalMs: number = 1000): () => void {
+      const timer = setInterval(async () => {
+        try {
+          await this.advanceDueTenders({ limit: 50, now: new Date() })
+        } catch (error) {
+          console.error('Advance loop failed:', error)
+        }
+      }, intervalMs)
+      return () => clearInterval(timer)
+    },
   }
 }
 

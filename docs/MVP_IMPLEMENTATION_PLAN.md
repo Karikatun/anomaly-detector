@@ -8,6 +8,14 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Статусы:** `[x]` выполнено, `[-]` начато частично, `[ ]` не начато.
 
+**Общий статус:**
+- **Milestone 0 (Contracts)** — ✅ 100% завершён
+- **Milestone 1 (Tender Foundation)** — ✅ 100% завершён
+- **Milestone 2 (Game Core)** — ✅ 100% завершён (вся игровая логика на бэкенде)
+- **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 ~50%: бэкенд (OAuth инфра, комнаты, WebSocket) готов; нужны провайдерские routes, reconnect, data policy, locale
+- **Milestone 4 (Game Interface)** — ❌ 0%: фронтенд не начат (только auth)
+- **Milestone 5 (Operations, Beta)** — ❌ 0%
+
 ## Delivery Rules
 
 - The backend is authoritative for hidden state, legal actions, timers, Rating, outcomes, and audit data.
@@ -65,7 +73,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Store authorised Continuous Private Measurements in participant-scoped Tender views.
    - [x] Project public Laboratory results into Tender views.
    - [x] Project Laboratory results into replay/audit views beyond the append-only audit event.
-6. [-] Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.
+6. [x] Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.
    - [x] Validate and resolve public Thesis submissions in Access Slot order.
    - [x] Project checked public Theses to every participant without exposing the hidden Anomaly Configuration.
    - [x] Apply the correct-Thesis Rating reward.
@@ -109,7 +117,10 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Add authenticated HTTP reads and command submission through participant-scoped TenderView projections.
    - [x] Issue one-time, session-bound realtime tickets without exposing access tokens in WebSocket URLs.
    - [x] Stream each participant's authorised TenderView over ticket-upgraded WebSocket connections.
-6. Support reconnect without pausing the Tender and ensure the worker, not a browser connection, resolves deadlines.
+6. [x] Support reconnect without pausing the Tender and ensure the worker, not a browser connection, resolves deadlines.
+   - [x] Add automatic advanceDueTenders loop to the server entry point
+   - [x] Start and stop the loop on server lifecycle
+   - [x] Reconnecting subscriber receives the current state after a timeout
 
 **Skills:** `tdd` for authorization, room capacity, reconnect, and deadline behavior; `design-an-interface` before OAuth-provider and realtime protocol boundaries; `context7-mcp` when consulting Hono, Prisma, OAuth, or WebSocket documentation; `triage` and `code-review` for security-sensitive work.
 

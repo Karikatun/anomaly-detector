@@ -1,18 +1,27 @@
-import { createBackendRuntime, type BackendRuntime } from './runtime'
+import { createBackendRuntime } from './runtime'
+import { createPrismaTenderStore } from './modules/tender'
+import { createTenderModule } from './modules/tender'
 
-export async function runWorker(runtime: BackendRuntime) {
-  void runtime
-  console.log('Backend worker entrypoint initialized; no background handlers are registered yet.')
+export async function runWorker() {
+  const runtime = createBackendRuntime()
+  const store = createPrismaTenderStore(runtime.prisma)
+  const tender = createTenderModule({ store })
+
+  console.log('Worker: starting advance loop for due tenders')
+  const stop = tender.startAdvanceLoop(2_000)
+
+  const shutdown = (signal: string) => {
+    console.log(`Worker: received ${signal}; shutting down`)
+    stop()
+    void runtime.close()
+  }
+
+  process.on('SIGINT', () => shutdown('SIGINT'))
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
 }
 
 export async function main() {
-  const runtime = createBackendRuntime()
-
-  try {
-    await runWorker(runtime)
-  } finally {
-    await runtime.close()
-  }
+  await runWorker()
 }
 
 if (import.meta.main) {
