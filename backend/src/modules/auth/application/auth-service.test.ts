@@ -37,6 +37,10 @@ test('refresh keeps the logical session id stable while rotating its credential'
     anonymizeUser: async () => undefined,
     revokeAllSessionsByUserId: async () => undefined,
     createOAuthTransaction: async () => undefined,
+    findOAuthTransactionByState: async () => null,
+    deleteOAuthTransaction: async () => undefined,
+    findUserByIdentity: async () => null,
+    createOAuthUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
   } satisfies AuthRepository
 
   const service = new AuthService({
@@ -198,6 +202,8 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
     oauthProviders: {
       require: () => ({
         authorizationUrl: ({ state, codeChallenge }: { state: string; codeChallenge: string }) => `https://provider.example/authorize?state=${state}&code_challenge=${codeChallenge}`,
+        exchangeCode: async () => ({ accessToken: 'provider-token', providerSubject: 'provider-sub-1' }),
+        getUserInfo: async () => ({ email: 'oauth@example.com', displayName: 'OAuth User', providerSubject: 'provider-sub-1' }),
       }),
     },
   }

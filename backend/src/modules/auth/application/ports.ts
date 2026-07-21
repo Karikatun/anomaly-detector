@@ -70,6 +70,19 @@ export type AuthRepository = {
   anonymizeUser(input: { userId: string; now: Date }): Promise<void>
   revokeAllSessionsByUserId(input: { userId: string; now: Date }): Promise<void>
   createOAuthTransaction(transaction: OAuthTransaction): Promise<void>
+  findOAuthTransactionByState(input: { state: string }): Promise<OAuthTransaction | null>
+  deleteOAuthTransaction(input: { state: string }): Promise<void>
+  findUserByIdentity(input: { provider: string; subject: string }): Promise<AuthUserRecord | null>
+  createOAuthUserWithSession(input: {
+    user: { email: string; displayName?: string | null }
+    identity: { provider: string; subject: string }
+    session: {
+      refreshTokenHash: string
+      refreshTokenFamilyHash: string
+      expiresAt: Date
+      metadata: SessionMetadata
+    }
+  }): Promise<{ user: AuthUserRecord; session: { id: string } }>
 }
 
 export type OAuthProvider = {
@@ -78,6 +91,19 @@ export type OAuthProvider = {
     redirectUri: string
     state: string
   }): string
+  exchangeCode(input: {
+    code: string
+    codeVerifier: string
+    redirectUri: string
+  }): Promise<{
+    accessToken: string
+    providerSubject: string
+  }>
+  getUserInfo(accessToken: string): Promise<{
+    email: string
+    displayName?: string | null
+    providerSubject: string
+  }>
 }
 
 export type OAuthProviderRegistry = {

@@ -13,9 +13,11 @@ import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { AuthForm, useAuth } from '@/features/auth'
+import { useI18n } from '@/platform/i18n'
 
 export function HomePage() {
   const auth = useAuth()
+  const { t } = useI18n()
 
   if (auth.isBootstrapping) {
     return <LoadingState />
@@ -29,21 +31,20 @@ export function HomePage() {
     return (
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
         <Badge variant="outline" className="w-fit">
-          Authenticated starter
+          {t('home.authenticated.badge')}
         </Badge>
         <div className="grid max-w-3xl gap-4">
-          <Typography variant="h1">Session is active</Typography>
+          <Typography variant="h1">{t('home.authenticated.title')}</Typography>
           <Typography className="max-w-2xl" tone="muted">
-            Logged in as{' '}
+            {t('home.authenticated.description')}{' '}
             <Typography as="strong" variant="emphasis" tone="default">
               {auth.user.email}
             </Typography>
-            .
-            This is the baseline auth pattern for future web features.
+            . {t('home.authenticated.subtitle')}
           </Typography>
         </div>
         <Button asChild size="lg" className="w-fit">
-          <Link to="/app">Open app</Link>
+          <Link to="/app">{t('home.authenticated.cta')}</Link>
         </Button>
       </section>
     )
@@ -53,14 +54,13 @@ export function HomePage() {
     <section className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center">
       <div className="grid gap-5">
         <Badge variant="outline" className="w-fit">
-          Golden path template
+          {t('home.guest.badge')}
         </Badge>
         <Typography className="max-w-3xl" variant="h1">
-          Auth, validation, API state, and forms are wired from day one.
+          {t('home.guest.title')}
         </Typography>
         <Typography className="max-w-2xl" tone="muted">
-          The web app uses shared Zod contracts, TanStack Query for server state, TanStack Form for
-          input state, and an API client that refreshes sessions through the backend.
+          {t('home.guest.description')}
         </Typography>
       </div>
       <AuthForm />
@@ -70,6 +70,7 @@ export function HomePage() {
 
 export function AppPage() {
   const auth = useAuth()
+  const { t } = useI18n()
 
   if (auth.isBootstrapping) {
     return <LoadingState />
@@ -83,16 +84,16 @@ export function AppPage() {
     return (
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
         <Badge variant="outline" className="w-fit">
-          Protected example
+          {t('app.protected.badge')}
         </Badge>
         <div className="grid max-w-3xl gap-4">
-          <Typography variant="h1">Login required</Typography>
+          <Typography variant="h1">{t('app.protected.title')}</Typography>
           <Typography className="max-w-2xl" tone="muted">
-            This route intentionally stays small and shows where protected product UI begins.
+            {t('app.protected.description')}
           </Typography>
         </div>
         <Button asChild size="lg" className="w-fit">
-          <Link to="/">Go to auth</Link>
+          <Link to="/">{t('app.protected.cta')}</Link>
         </Button>
       </section>
     )
@@ -102,7 +103,7 @@ export function AppPage() {
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-12">
       <div className="grid gap-3">
         <Badge variant="outline" className="w-fit">
-          Current user
+          {t('app.profile.badge')}
         </Badge>
         <Typography variant="h1">
           {auth.user.displayName ?? auth.user.email}
@@ -115,19 +116,21 @@ export function AppPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <Card size="sm">
           <CardHeader>
-            <CardTitle>User ID</CardTitle>
+            <CardTitle>{t('app.profile.userId')}</CardTitle>
             <CardDescription wrap="break">{auth.user.id}</CardDescription>
           </CardHeader>
         </Card>
         <Card size="sm">
           <CardHeader>
-            <CardTitle>Locale</CardTitle>
-            <CardDescription>{auth.user.locale === 'ru' ? 'Русский' : 'English'}</CardDescription>
+            <CardTitle>{t('app.profile.locale')}</CardTitle>
+            <CardDescription>
+              {auth.user.locale === 'ru' ? t('app.profile.locale.ru') : t('app.profile.locale.en')}
+            </CardDescription>
           </CardHeader>
         </Card>
         <Card size="sm">
           <CardHeader>
-            <CardTitle>Created</CardTitle>
+            <CardTitle>{t('app.profile.created')}</CardTitle>
             <CardDescription>{new Date(auth.user.createdAt).toLocaleString()}</CardDescription>
           </CardHeader>
         </Card>
@@ -137,13 +140,14 @@ export function AppPage() {
 }
 
 function LoadingState() {
+  const { t } = useI18n()
   return (
     <section className="mx-auto w-full max-w-6xl px-5 py-16">
       <Card className="w-fit">
         <CardContent className="flex items-center gap-3">
           <Spinner />
           <Typography variant="bodySm" tone="muted">
-            Checking session...
+            {t('loading.session')}
           </Typography>
         </CardContent>
       </Card>
@@ -152,14 +156,15 @@ function LoadingState() {
 }
 
 function SessionErrorState({ retry }: { retry: () => Promise<void> }) {
+  const { t } = useI18n()
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-4 px-5 py-16" role="alert">
-      <Typography variant="h2">Session check is temporarily unavailable</Typography>
+      <Typography variant="h2">{t('error.session.title')}</Typography>
       <Typography tone="muted">
-        Your session was not cleared. Check the connection and try again.
+        {t('error.session.description')}
       </Typography>
       <Button type="button" className="w-fit" onClick={() => void retry()}>
-        Try again
+        {t('error.session.retry')}
       </Button>
     </section>
   )

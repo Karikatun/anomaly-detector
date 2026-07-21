@@ -79,6 +79,82 @@ export class AuthService {
     }
   }
 
+  async completeOAuthSignIn(input: {
+    code: string
+    state: string
+    metadata: SessionMetadata
+  }) {
+    const oauthProviders = this.dependencies.oauthProviders
+    if (!oauthProviders) {
+      throw new AuthFailure('oauth_not_configured', 'OAuth sign-in is not configured')
+    }
+
+    const transaction = await this.dependencies.repository.findOAuthTransactionByState({
+      state: input.state,
+    })
+    if (!transaction) {
+      throw new AuthFailure('oauth_transaction_invalid', 'OAuth transaction is invalid or expired')
+    }
+
+    const provider = oauthProviders.require(transaction.provider)
+    const tokenResult = await provider.exchangeCode({
+      code: input.code,
+      codeVerifier: transaction.codeVerifier,
+      redirectUri: transaction.redirectUri,
+    })
+
+    const userInfo = await provider.getUserInfo(tokenResult.accessToken)
+    const providerSubject = userInfo.providerSubject || tokenResult.providerSubject
+
+    // Store the user identity
+    let existingUser = await this.dependencies.repository.findUserByIdentity({
+      provider: transaction.provider,
+      subject: providerSubject,
+    })
+
+    const now = this.dependencies.clock.now()
+    const refreshToken = this.dependencies.refreshTokens.create()
+
+    let session: { id: string }
+    let user: import('../domain/user').AuthUserRecord
+
+    if (existingUser) {
+      user = existingUser
+      const createdSession = await this.dependencies.repository.createSession({
+        userId: existingUser.id,
+        refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+        refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
+        expiresAt: this.refreshExpiresAt(now),
+        metadata: input.metadata,
+      })
+      session = createdSession
+    } else {
+      const created = await this.dependencies.repository.createOAuthUserWithSession({
+        user: {
+          email: userInfo.email,
+          displayName: userInfo.displayName ?? null,
+        },
+        identity: {
+          provider: transaction.provider,
+          subject: providerSubject,
+        },
+        session: {
+          refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+          refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
+          expiresAt: this.refreshExpiresAt(now),
+          metadata: input.metadata,
+        },
+      })
+      user = created.user
+      session = created.session
+    }
+
+    // Clean up the used transaction
+    await this.dependencies.repository.deleteOAuthTransaction({ state: input.state }).catch(() => undefined)
+
+    return this.sessionResponse(user, session.id, refreshToken)
+  }
+
   async login(input: LoginRequest, metadata: SessionMetadata) {
     const user = await this.dependencies.repository.findUserByEmail(input.email)
     if (

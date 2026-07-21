@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ApiRequestError } from '@/platform/api'
+import { useI18n } from '@/platform/i18n'
 import { useAuth } from '../use-auth'
 import { FormAlert } from './form-errors'
 import type { AuthDraft, FieldErrors } from './form-model'
@@ -18,6 +19,7 @@ export function RegisterForm({
   draft: AuthDraft
   onDraftChange: (draft: Partial<AuthDraft>) => void
 }) {
+  const { t } = useI18n()
   const auth = useAuth()
   const displayNameId = useId()
   const displayNameErrorId = useId()
@@ -44,7 +46,7 @@ export function RegisterForm({
         await auth.register(result.data as RegisterRequest)
       } catch (caughtError) {
         setFormError(
-          caughtError instanceof ApiRequestError ? caughtError.message : 'Unexpected auth error',
+          caughtError instanceof ApiRequestError ? caughtError.message : t('register.error.unexpected'),
         )
       }
     },
@@ -62,12 +64,13 @@ export function RegisterForm({
           name="displayName"
           children={(field) => (
             <Field data-invalid={hasErrors(fieldErrors.displayName)}>
-              <FieldLabel htmlFor={displayNameId}>Name</FieldLabel>
+              <FieldLabel htmlFor={displayNameId}>{t('register.displayName')}</FieldLabel>
               <Input
                 id={displayNameId}
                 name={field.name}
                 value={field.state.value ?? ''}
                 autoComplete="name"
+                placeholder={t('register.displayName.placeholder')}
                 aria-invalid={hasErrors(fieldErrors.displayName)}
                 aria-describedby={errorId(fieldErrors.displayName, displayNameErrorId)}
                 onBlur={field.handleBlur}
@@ -88,7 +91,7 @@ export function RegisterForm({
           name="email"
           children={(field) => (
             <Field data-invalid={hasErrors(fieldErrors.email)}>
-              <FieldLabel htmlFor={emailId}>Email</FieldLabel>
+              <FieldLabel htmlFor={emailId}>{t('register.email')}</FieldLabel>
               <Input
                 id={emailId}
                 name={field.name}
@@ -96,6 +99,7 @@ export function RegisterForm({
                 type="text"
                 inputMode="email"
                 autoComplete="email"
+                placeholder={t('register.email.placeholder')}
                 aria-invalid={hasErrors(fieldErrors.email)}
                 aria-describedby={errorId(fieldErrors.email, emailErrorId)}
                 onBlur={field.handleBlur}
@@ -116,13 +120,14 @@ export function RegisterForm({
           name="password"
           children={(field) => (
             <Field data-invalid={hasErrors(fieldErrors.password)}>
-              <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
+              <FieldLabel htmlFor={passwordId}>{t('register.password')}</FieldLabel>
               <Input
                 id={passwordId}
                 name={field.name}
                 value={field.state.value}
                 type="password"
                 autoComplete="new-password"
+                placeholder={t('register.password.placeholder')}
                 aria-invalid={hasErrors(fieldErrors.password)}
                 aria-describedby={errorId(fieldErrors.password, passwordErrorId)}
                 onBlur={field.handleBlur}
@@ -149,12 +154,7 @@ export function RegisterForm({
             }}
             className="mt-1"
           />
-          <span>
-            I agree to the{' '}
-            <a href="/privacy" target="_blank" className="underline">
-              personal data processing policy
-            </a>
-          </span>
+          <span>{t('register.privacyConsent')}</span>
         </label>
         <FieldError errors={fieldErrors.privacyConsent} />
 
@@ -168,7 +168,7 @@ export function RegisterForm({
             }}
             className="mt-1"
           />
-          <span>I confirm I am at least 16 years old</span>
+          <span>{t('register.ageConfirmation')}</span>
         </label>
         <FieldError errors={fieldErrors.ageConfirmation} />
 
@@ -178,7 +178,7 @@ export function RegisterForm({
           selector={(state) => state.isSubmitting}
           children={(isSubmitting) => (
             <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Working...' : 'Create account'}
+              {isSubmitting ? t('register.submitting') : t('register.submit')}
             </Button>
           )}
         />

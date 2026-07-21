@@ -8,6 +8,10 @@ import {
   cookieRefreshResponseSchema,
   loginRequestSchema,
   meResponseSchema,
+  oauthCallbackQuerySchema,
+  oauthProviderSchema,
+  oauthStartRequestSchema,
+  oauthStartResponseSchema,
   registerRequestSchema,
   tokenAuthResponseSchema,
   tokenLogoutRequestSchema,
@@ -221,5 +225,40 @@ describe('auth contracts', () => {
         },
       }),
     ).toThrow()
+  })
+
+  test('validates OAuth start request and response', () => {
+    const start = oauthStartRequestSchema.parse({
+      redirectUri: 'http://localhost:5173/api/auth/oauth/yandex/callback',
+    })
+    expect(start.redirectUri).toBe('http://localhost:5173/api/auth/oauth/yandex/callback')
+
+    expect(() => oauthStartRequestSchema.parse({ redirectUri: 'not-a-url' })).toThrow()
+    expect(() => oauthStartRequestSchema.parse({})).toThrow()
+
+    const response = oauthStartResponseSchema.parse({
+      authorizationUrl: 'https://oauth.yandex.ru/authorize?state=abc',
+    })
+    expect(response.authorizationUrl).toContain('state=abc')
+  })
+
+  test('validates OAuth provider param', () => {
+    expect(oauthProviderSchema.parse('yandex')).toBe('yandex')
+    expect(oauthProviderSchema.parse('vk')).toBe('vk')
+    expect(() => oauthProviderSchema.parse('google')).toThrow()
+    expect(() => oauthProviderSchema.parse('')).toThrow()
+  })
+
+  test('validates OAuth callback query', () => {
+    const query = oauthCallbackQuerySchema.parse({
+      code: 'auth-code-123',
+      state: 'state-abc-def',
+    })
+    expect(query.code).toBe('auth-code-123')
+    expect(query.state).toBe('state-abc-def')
+
+    expect(() => oauthCallbackQuerySchema.parse({ code: '', state: 'state' })).toThrow()
+    expect(() => oauthCallbackQuerySchema.parse({ code: 'code', state: '' })).toThrow()
+    expect(() => oauthCallbackQuerySchema.parse({})).toThrow()
   })
 })

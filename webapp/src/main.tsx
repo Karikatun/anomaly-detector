@@ -7,6 +7,8 @@ import { AuthProvider } from '@/features/auth'
 import App from './App'
 import './index.css'
 
+import { I18nProvider } from '@/platform/i18n'
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -20,9 +22,11 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </I18nProvider>
       </TooltipProvider>
     </QueryClientProvider>
   </StrictMode>,

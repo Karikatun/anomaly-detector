@@ -4,6 +4,7 @@ export type AuthFailureKind =
   | 'email_already_exists'
   | 'invalid_credentials'
   | 'oauth_not_configured'
+  | 'oauth_transaction_invalid'
   | 'refresh_session_invalid'
   | 'refresh_token_required'
   | 'session_invalid'

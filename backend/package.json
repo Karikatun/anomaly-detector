@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "bun run prisma:generate && bun --watch src/index.ts",
+    "dev": "bun run dev:kill && bun run prisma:generate && bun --watch src/index.ts",
     "start": "bun run start:api",
     "start:api": "bun run prisma:generate && bun src/index.ts",
     "start:worker": "bun src/worker.ts",
@@ -21,7 +21,8 @@
     "prisma:generate:raw": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:validate": "prisma validate"
+    "prisma:validate": "prisma validate",
+    "dev:kill": "kill -9 $(lsof -ti:3000) 2>/dev/null; true"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1048.0",
