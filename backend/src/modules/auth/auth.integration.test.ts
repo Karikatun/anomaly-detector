@@ -134,6 +134,26 @@ maybeDescribe('auth API integration', () => {
     expect(revokedRefresh.status).toBe(401)
   })
 
+  test('issues a short-lived realtime ticket for an authenticated session', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'ticket@example.com', password: 'password123' }),
+    })
+    const { accessToken } = await register.json()
+
+    const ticket = await app.request('/api/realtime/tickets', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+
+    expect(ticket.status).toBe(201)
+    expect(await ticket.json()).toMatchObject({
+      expiresAt: expect.any(String),
+      ticket: expect.any(String),
+    })
+  })
+
   test('creates a private room and lets another authenticated player join it', async () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
