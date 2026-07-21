@@ -16,18 +16,19 @@ import { LaboratoryPanel } from './LaboratoryPanel'
 import { ModelAnalysisPanel } from './ModelAnalysisPanel'
 import { PowerAllocationPanel } from './PowerAllocationPanel'
 import { ReconnaissancePanel } from './ReconnaissancePanel'
+import { TenderTimer } from './TenderTimer'
 import { WorkingModelPanel } from './WorkingModelPanel'
 import { useRealtimeTender } from './realtime'
 import { useTenderCommands } from './commands'
 
 const phaseLabels: Record<string, string> = {
-  'access-slot-selection': 'Выбор слота доступа',
-  'power-allocation': 'Распределение мощности',
-  'reconnaissance': 'Разведка',
-  'laboratory': 'Лаборатория',
-  'model-analysis': 'Анализ модели',
-  'contracts': 'Контракты',
-  'final-scientific-model': 'Финальная научная модель',
+  'access-slot-selection': '1. Выбор слота доступа',
+  'power-allocation': '2. Распределение мощности',
+  'reconnaissance': '3. Разведка',
+  'laboratory': '4. Лаборатория',
+  'model-analysis': '5. Анализ модели',
+  'contracts': '6. Контракты',
+  'final-scientific-model': '7. Финальная научная модель',
   'complete': 'Завершён',
 }
 
@@ -259,8 +260,9 @@ export function TenderPage() {
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-8">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
-        <Badge variant="outline">Раунд {tenderView.round} / 5</Badge>
+        <Badge variant="outline" className="tracking-widest uppercase">Раунд {tenderView.round} / 5</Badge>
         <Typography variant="h3">{phase}</Typography>
+        <TenderTimer dueAt={tenderView.dueAt} />
         {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}
         {connected ? (
           <Badge variant="outline" className="ml-auto">Live</Badge>
@@ -365,7 +367,12 @@ export function TenderPage() {
       {/* Working Model */}
       <Separator />
       <details open className="mt-4">
-        <summary className="cursor-pointer text-sm font-medium">Рабочая модель</summary>
+        <summary className="cursor-pointer text-sm font-medium">
+          <span className="flex items-center gap-3">
+            <img src="/assets/icons.webp" alt="" className="h-8 w-12 rounded object-cover opacity-70" />
+            Рабочая модель
+          </span>
+        </summary>
         <div className="mt-4">
           <WorkingModelPanel
             model={tenderView.privateWorkingModel}
@@ -374,6 +381,17 @@ export function TenderPage() {
           />
         </div>
       </details>
+
+      {/* Anomaly visual */}
+      <Separator />
+      <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-lg">
+        <img
+          src="/assets/anomaly-display.webp"
+          alt="Аномалия"
+          className="w-full object-cover opacity-80"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
+      </div>
 
       {/* Debug panel */}
       <details className="mt-4">

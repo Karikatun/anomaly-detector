@@ -35,6 +35,8 @@ export class HttpClient {
     options: HttpRequestOptions = {},
   ): Promise<z.infer<TSchema>> {
     const response = await this.raw(path, options)
+    // 204 No Content — return undefined without parsing
+    if (response.status === 204) return undefined as z.infer<TSchema>
     return schema.parse(await response.json())
   }
 

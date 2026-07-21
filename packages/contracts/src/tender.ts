@@ -232,6 +232,7 @@ export const tenderViewSchema = z.object({
   tenderId: tenderIdSchema,
   version: z.number().int().min(0),
   phase: tenderPhaseSchema,
+  dueAt: z.string().datetime().nullable().optional(),
   players: z.array(tenderPlayerViewSchema),
   privateAnalyticalReports: z.number().int().min(0),
   privateRawTelemetrySignals: z.array(signalIdSchema),

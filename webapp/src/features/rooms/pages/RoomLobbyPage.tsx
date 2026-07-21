@@ -58,16 +58,20 @@ export function RoomLobbyPage() {
   useEffect(() => {
     if (!room || room.status === 'started') return
 
+    let active = true
     const interval = setInterval(async () => {
       try {
         const updated = await api.join(roomId)
-        setRoom(updated)
+        if (active) setRoom(updated)
       } catch {
-        // Ignore poll errors
+        // Ignore poll errors — room may have been deleted
       }
     }, 3000)
 
-    return () => clearInterval(interval)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
   }, [roomId, room]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
       if (room?.status === 'started' && room.tenderId) {

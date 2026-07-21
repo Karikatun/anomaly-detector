@@ -27,7 +27,7 @@ export function RootLayout() {
   }
 
   return (
-    <div className="min-h-svh bg-background text-foreground">
+    <div className="min-h-svh bg-background/60 text-foreground">
       <header className="border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex min-h-16 w-full max-w-6xl flex-wrap items-center gap-3 px-5 py-3">
           <Typography asChild variant="h6">
@@ -46,7 +46,7 @@ export function RootLayout() {
             </Typography>
             <Typography asChild variant="control" tone="muted">
               <Link to="/app" className={navLinkClass}>
-                {t('nav.app')}
+                {t('nav.matches')}
               </Link>
             </Typography>
           </nav>
