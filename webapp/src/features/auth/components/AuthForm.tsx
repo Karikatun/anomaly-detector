@@ -22,7 +22,7 @@ export function AuthForm() {
   return (
     <Card className="w-full" aria-label={t('auth.title')}>
       <CardHeader>
-        <CardTitle>{t('auth.title')}</CardTitle>
+        <CardTitle className="tracking-wide uppercase">{t('auth.title')}</CardTitle>
         <CardDescription>{t('auth.description')}</CardDescription>
       </CardHeader>
       <CardContent>

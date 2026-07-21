@@ -38,7 +38,15 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
         if (room.members.some((member) => member.userId === input.actorId)) {
-          throw new RoomFailure('room_already_joined', 'Player already joined this room')
+          // Already joined — return current room state (idempotent)
+          return {
+            capacity: room.capacity as 2 | 3 | 4,
+            hostId: room.hostId,
+            id: room.id,
+            members: room.members.map((m) => ({ seat: m.seat, userId: m.userId })),
+            status: room.status as 'waiting' | 'started',
+            tenderId: room.tenderId,
+          }
         }
         if (room.members.length >= room.capacity) throw new RoomFailure('room_full', 'Room is already full')
 

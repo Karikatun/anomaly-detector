@@ -5,7 +5,9 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { Separator } from '@/components/ui/separator'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
 import { RoomsApi, useCreateRoomMutation } from '@/features/rooms'
@@ -17,6 +19,8 @@ export function RoomListPage() {
   const navigate = useNavigate()
   const [capacity, setCapacity] = useState<2 | 3 | 4>(2)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [joinCode, setJoinCode] = useState('')
+  const [joinError, setJoinError] = useState<string | null>(null)
 
   const api = new RoomsApi(auth.transport)
   const { mutateAsync: createRoom, isPending: isCreating } = useCreateRoomMutation({ api })
@@ -28,13 +32,19 @@ export function RoomListPage() {
       setCreateError(t('rooms.create.error.invalid'))
       return
     }
-
     try {
       const room = await createRoom(result.data)
       await navigate({ to: '/rooms/$roomId', params: { roomId: room.roomId } })
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : t('rooms.create.error.generic'))
     }
+  }
+
+  const handleJoinByCode = () => {
+    const trimmed = joinCode.trim()
+    if (!trimmed) return
+    setJoinError(null)
+    void navigate({ to: '/rooms/$roomId', params: { roomId: trimmed } })
   }
 
   return (
@@ -44,9 +54,39 @@ export function RoomListPage() {
         <Typography tone="muted">{t('rooms.description')}</Typography>
       </div>
 
+      {/* Join by code */}
       <Card>
         <CardHeader>
-          <CardTitle>{t('rooms.create.title')}</CardTitle>
+          <CardTitle className="tracking-wide uppercase">{t('rooms.join.title')}</CardTitle>
+          <CardDescription>{t('rooms.join.description')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup className="gap-4">
+            <Field>
+              <FieldLabel htmlFor="join-code">{t('rooms.join.placeholder')}</FieldLabel>
+              <Input
+                id="join-code"
+                value={joinCode}
+                placeholder={t('rooms.join.placeholder')}
+                className="font-mono"
+                onChange={(e) => { setJoinCode(e.target.value); setJoinError(null) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleJoinByCode() }}
+              />
+            </Field>
+            {joinError && <FieldError id="join-error" errors={[{ message: joinError }]} />}
+            <Button type="button" size="lg" className="w-full" onClick={handleJoinByCode}>
+              {t('rooms.join.submit')}
+            </Button>
+          </FieldGroup>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Create room */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="tracking-wide uppercase">{t('rooms.create.title')}</CardTitle>
           <CardDescription>{t('rooms.create.description')}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -63,18 +103,8 @@ export function RoomListPage() {
                 <option value="4">{t('rooms.create.capacity.4')}</option>
               </NativeSelect>
             </Field>
-
-            {createError && (
-              <FieldError id="create-error" errors={[{ message: createError }]} />
-            )}
-
-            <Button
-              type="button"
-              size="lg"
-              className="w-full"
-              disabled={isCreating}
-              onClick={() => void handleCreate()}
-            >
+            {createError && <FieldError id="create-error" errors={[{ message: createError }]} />}
+            <Button type="button" size="lg" className="w-full" disabled={isCreating} onClick={() => void handleCreate()}>
               {isCreating ? t('rooms.create.submitting') : t('rooms.create.submit')}
             </Button>
           </FieldGroup>

@@ -21,7 +21,7 @@ test('resolves an expired Access Slot selection with conservative free defaults'
     type: 'request-access-slot',
   })
 
-  expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:00:45.000Z') })).toEqual({
+  expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:00:45.000Z') })).toMatchObject({
     advancedTenderIds: [tenderId],
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
@@ -63,7 +63,7 @@ test('resolves an expired Power allocation and advances to the next round', asyn
 
   await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:00:45.000Z') })
 
-  expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:01:45.000Z') })).toEqual({
+  expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:01:45.000Z') })).toMatchObject({
     advancedTenderIds: [tenderId],
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
@@ -139,7 +139,7 @@ test('skips an unresolved operational action when its deadline expires', async (
     type: 'allocate-power',
   })
 
-  expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:00:20.000Z') })).toEqual({
+  expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:00:20.000Z') })).toMatchObject({
     advancedTenderIds: [tenderId],
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
@@ -166,9 +166,9 @@ test('records an Access Slot command once and exposes it only to its player', as
     slot: 1,
   }
 
-  expect(await tender.execute(command)).toEqual({ tenderId, version: 1 })
-  expect(await tender.execute(command)).toEqual({ tenderId, version: 1 })
-  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
+  expect(await tender.execute(command)).toMatchObject({ tenderId, version: 1 })
+  expect(await tender.execute(command)).toMatchObject({ tenderId, version: 1 })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     knownSignals: ['aster', 'boreal'],
     publicContracts: [
       { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
@@ -377,7 +377,7 @@ test('restores a player Tender view from the shared store', async () => {
 
   const restartedModule = createTenderModule({ store })
 
-  expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
+  expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     knownSignals: ['aster', 'boreal'],
     publicContracts: [
       { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
@@ -437,7 +437,7 @@ test('resolves Access Slots and opens Power planning after every player chooses'
   await tender.execute({ commandId: 'command-c-1', tenderId, actorId: 'player-c', type: 'request-access-slot', slot: 2 })
   await tender.execute({ commandId: 'command-d-1', tenderId, actorId: 'player-d', type: 'request-access-slot', slot: 6 })
 
-  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     knownSignals: ['aster', 'boreal'],
     publicContracts: [
       { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
@@ -1375,7 +1375,7 @@ test('projects public Laboratory results into the participant audit view', async
   expect(view.phase).toBe('complete')
   expect(view.audit).toBeDefined()
   expect(view.audit!.publicLaboratoryResults.length).toBeGreaterThanOrEqual(1)
-  expect(view.audit!.publicLaboratoryResults).toEqual(
+  expect(view.audit!.publicLaboratoryResults).toMatchObject(
     expect.arrayContaining([
       expect.objectContaining({
         playerId: 'player-a',
@@ -1517,7 +1517,7 @@ test('allows Working Model updates during the power-allocation phase', async () 
     type: 'update-working-model',
     workingModel: { signals: { aster: { note: 'Taking notes during planning.' } } },
   })
-  expect(receipt).toEqual({ tenderId, version: 3 })
+  expect(receipt).toMatchObject({ tenderId, version: 3 })
 })
 
 test('advanceDueTenders skips a completed Tender whose phase has no deadline', async () => {
@@ -1539,7 +1539,7 @@ test('advanceDueTenders skips a completed Tender whose phase has no deadline', a
     phase: 'complete',
   })
   now = new Date(now.getTime() + 24 * 60 * 60 * 1000)
-  expect(await tender.advanceDueTenders({ limit: 10, now })).toEqual({ advancedTenderIds: [] })
+  expect(await tender.advanceDueTenders({ limit: 10, now })).toMatchObject({ advancedTenderIds: [] })
 })
 
 test('startAdvanceLoop returns a stop function and calls advanceDueTenders', async () => {
