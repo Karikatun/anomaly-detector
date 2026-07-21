@@ -1541,3 +1541,30 @@ test('advanceDueTenders skips a completed Tender whose phase has no deadline', a
   now = new Date(now.getTime() + 24 * 60 * 60 * 1000)
   expect(await tender.advanceDueTenders({ limit: 10, now })).toEqual({ advancedTenderIds: [] })
 })
+
+test('startAdvanceLoop returns a stop function and calls advanceDueTenders', async () => {
+  const now = new Date('2026-07-21T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  // Manually set dueAt to the past so the loop will pick it up
+  // We simulate by calling advanceDueTenders with a past time
+  const stop = tender.startAdvanceLoop(10)
+
+  // Wait for the loop to fire at least once
+  await new Promise((resolve) => setTimeout(resolve, 30))
+
+  // Stop the loop
+  stop()
+
+  // The tender should have advanced past access-slot-selection
+  // (dueAt was in the past relative to the loop's new Date())
+  const view = await tender.readTenderView({ tenderId, playerId: 'player-a' })
+  expect(view.phase).not.toBe('access-slot-selection')
+  expect(['power-allocation', 'reconnaissance', 'laboratory', 'model-analysis', 'contracts', 'complete']).toContain(view.phase)
+})
