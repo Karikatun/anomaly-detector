@@ -9,33 +9,9 @@ const ru = {
   'button.logout': 'Выйти',
   'logout.failed': 'Не удалось выйти. Сессия всё ещё активна, попробуйте ещё раз.',
 
-  // Auth pages
-  'auth.title': 'Доступ к аккаунту',
-  'auth.description': 'Создайте аккаунт или продолжайте существующую сессию.',
-  'auth.tab.register': 'Регистрация',
-  'auth.tab.login': 'Вход',
-  'auth.oauth.or': 'Или продолжить через',
-
-  // Register form
-  'register.email': 'Email',
-  'register.email.placeholder': 'you@example.com',
-  'register.password': 'Пароль',
-  'register.password.placeholder': 'Минимум 8 символов',
-  'register.displayName': 'Имя',
-  'register.displayName.placeholder': 'Ваше имя',
-  'register.privacyConsent': 'Я принимаю политику обработки персональных данных',
-  'register.ageConfirmation': 'Подтверждаю, что мне есть 16 лет',
-  'register.submit': 'Зарегистрироваться',
-  'register.submitting': 'Регистрация...',
-  'register.error.unexpected': 'Непредвиденная ошибка',
-
-  // Login form
-  'login.email': 'Email',
-  'login.email.placeholder': 'you@example.com',
-  'login.password': 'Пароль',
-  'login.submit': 'Войти',
-  'login.submitting': 'Вход...',
-  'login.error.unexpected': 'Непредвиденная ошибка',
+  // Auth page
+  'auth.title': 'Вход',
+  'auth.description': 'Войдите через один из сервисов.',
 
   // OAuth
   'oauth.yandex': 'Яндекс ID',
