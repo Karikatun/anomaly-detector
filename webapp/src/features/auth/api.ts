@@ -135,8 +135,7 @@ export class AuthApi {
   }
 
   async startOAuth(provider: OAuthProviderId): Promise<void> {
-    const redirectUri = `${window.location.origin}/api/auth/oauth/${provider}/callback`
-    const payload = oauthStartRequestSchema.parse({ redirectUri })
+    const payload = oauthStartRequestSchema.parse({})
     const response = await this.http.request(
       `/api/auth/oauth/${provider}/start`,
       oauthStartResponseSchema,

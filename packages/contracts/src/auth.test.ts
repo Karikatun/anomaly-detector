@@ -233,8 +233,10 @@ describe('auth contracts', () => {
     })
     expect(start.redirectUri).toBe('http://localhost:5173/api/auth/oauth/yandex/callback')
 
+    // redirectUri is optional — empty body is valid
+    expect(oauthStartRequestSchema.parse({}).redirectUri).toBeUndefined()
+
     expect(() => oauthStartRequestSchema.parse({ redirectUri: 'not-a-url' })).toThrow()
-    expect(() => oauthStartRequestSchema.parse({})).toThrow()
 
     const response = oauthStartResponseSchema.parse({
       authorizationUrl: 'https://oauth.yandex.ru/authorize?state=abc',
@@ -250,6 +252,7 @@ describe('auth contracts', () => {
   })
 
   test('validates OAuth callback query', () => {
+    // success: code + state
     const query = oauthCallbackQuerySchema.parse({
       code: 'auth-code-123',
       state: 'state-abc-def',
@@ -257,8 +260,27 @@ describe('auth contracts', () => {
     expect(query.code).toBe('auth-code-123')
     expect(query.state).toBe('state-abc-def')
 
+    // error: error + state (OAuth provider returned an error)
+    const errorQuery = oauthCallbackQuerySchema.parse({
+      error: 'invalid_request',
+      state: 'state-abc-def',
+    })
+    expect(errorQuery.error).toBe('invalid_request')
+    expect(errorQuery.state).toBe('state-abc-def')
+
+    // error with description
+    const errorDescQuery = oauthCallbackQuerySchema.parse({
+      error: 'access_denied',
+      error_description: 'User denied',
+      state: 'state-abc-def',
+    })
+    expect(errorDescQuery.error).toBe('access_denied')
+    expect(errorDescQuery.error_description).toBe('User denied')
+
+    // rejections
     expect(() => oauthCallbackQuerySchema.parse({ code: '', state: 'state' })).toThrow()
     expect(() => oauthCallbackQuerySchema.parse({ code: 'code', state: '' })).toThrow()
     expect(() => oauthCallbackQuerySchema.parse({})).toThrow()
+    expect(() => oauthCallbackQuerySchema.parse({ state: 'state' })).toThrow() // neither code nor error
   })
 })
