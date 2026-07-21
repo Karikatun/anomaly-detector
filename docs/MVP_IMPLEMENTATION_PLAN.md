@@ -107,6 +107,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Allow only the host to start a full room and atomically create its Tender.
 5. [-] Add authenticated HTTP endpoints and WebSocket updates that only deliver each participant's authorised TenderView.
    - [x] Add authenticated HTTP reads and command submission through participant-scoped TenderView projections.
+   - [x] Issue one-time, session-bound realtime tickets without exposing access tokens in WebSocket URLs.
 6. Support reconnect without pausing the Tender and ensure the worker, not a browser connection, resolves deadlines.
 
 **Skills:** `tdd` for authorization, room capacity, reconnect, and deadline behavior; `design-an-interface` before OAuth-provider and realtime protocol boundaries; `context7-mcp` when consulting Hono, Prisma, OAuth, or WebSocket documentation; `triage` and `code-review` for security-sensitive work.

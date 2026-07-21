@@ -15,6 +15,7 @@ model User {
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
   sessions     AuthSession[]
+  realtimeTickets RealtimeTicket[]
   identities   AuthIdentity[]
   hostedRooms  TenderRoom[]       @relation("TenderRoomHost")
   roomMemberships TenderRoomMember[]
@@ -62,10 +63,26 @@ model AuthSession {
   createdAt                DateTime  @default(now()) @map("created_at")
   updatedAt                DateTime  @updatedAt @map("updated_at")
   user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "auth_sessions_user_id_fkey")
+  realtimeTickets          RealtimeTicket[]
 
   @@index([userId], map: "auth_sessions_user_id_idx")
   @@index([expiresAt], map: "auth_sessions_expires_at_idx")
   @@map("auth_sessions")
+}
+
+model RealtimeTicket {
+  id         String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  ticketHash String      @unique @map("ticket_hash")
+  userId     String      @map("user_id") @db.Uuid
+  sessionId  String      @map("session_id") @db.Uuid
+  expiresAt  DateTime    @map("expires_at")
+  usedAt     DateTime?   @map("used_at")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade, map: "realtime_tickets_user_id_fkey")
+  session    AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, map: "realtime_tickets_session_id_fkey")
+
+  @@index([expiresAt], map: "realtime_tickets_expires_at_idx")
+  @@map("realtime_tickets")
 }
 
 model Tender {

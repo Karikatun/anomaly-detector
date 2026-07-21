@@ -918,4 +918,5 @@ export function createPersistentTenderModule(db: DbClient) {
 }
 
 export { createTenderRoutes } from './transport/routes'
+export { createRealtimeTicketRoutes } from './realtime/ticket-routes'
 import { randomUUID } from 'node:crypto'
