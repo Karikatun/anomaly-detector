@@ -98,6 +98,7 @@ model Tender {
   room        TenderRoom?
 
   @@index([dueAt], map: "tenders_due_at_idx")
+  @@index([phase], map: "tenders_phase_idx")
   @@map("tenders")
 }
 
@@ -156,5 +157,6 @@ model TenderAuditEvent {
   tender     Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade, map: "tender_audit_events_tender_id_fkey")
 
   @@unique([tenderId, sequence], map: "tender_audit_events_tender_id_sequence_key")
+  @@index([tenderId, kind], map: "tender_audit_events_tender_id_kind_idx")
   @@map("tender_audit_events")
 }
