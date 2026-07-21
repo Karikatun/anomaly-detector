@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 
 import { TenderRoomService } from './room-service'
+import { RoomFailure } from '../domain/errors'
 
 test('creates a waiting private room with its host in the first seat', async () => {
   const service = new TenderRoomService({
@@ -91,4 +92,95 @@ test('starts a full room and exposes its Tender id', async () => {
     status: 'started',
     tenderId: 'tender-1',
   })
+})
+
+test('allows creating a room with the minimum capacity of two', async () => {
+  const service = new TenderRoomService({
+    repository: {
+      create: async (input) => ({
+        capacity: input.capacity,
+        hostId: input.hostId,
+        id: 'room-2',
+        members: [{ seat: 1, userId: input.hostId }],
+        status: 'waiting',
+        tenderId: null,
+      }),
+      join: async () => { throw new Error('not used') },
+      leave: async () => { throw new Error('not used') },
+      start: async () => { throw new Error('not used') },
+    },
+  })
+
+  await expect(service.createRoom({ capacity: 2, hostId: 'user-1' })).resolves.toMatchObject({
+    capacity: 2,
+    members: [{ seat: 1, userId: 'user-1' }],
+  })
+})
+
+test('allows creating a room with the maximum capacity of four', async () => {
+  const service = new TenderRoomService({
+    repository: {
+      create: async (input) => ({
+        capacity: input.capacity,
+        hostId: input.hostId,
+        id: 'room-4',
+        members: [{ seat: 1, userId: input.hostId }],
+        status: 'waiting',
+        tenderId: null,
+      }),
+      join: async () => { throw new Error('not used') },
+      leave: async () => { throw new Error('not used') },
+      start: async () => { throw new Error('not used') },
+    },
+  })
+
+  await expect(service.createRoom({ capacity: 4, hostId: 'user-1' })).resolves.toMatchObject({
+    capacity: 4,
+    members: [{ seat: 1, userId: 'user-1' }],
+  })
+})
+
+test('propagates a repository error when a non-host tries to start a room', async () => {
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      join: async () => { throw new Error('not used') },
+      leave: async () => { throw new Error('not used') },
+      start: async () => { throw new RoomFailure('room_not_host', 'Only the host can start') },
+    },
+  })
+
+  await expect(
+    service.startRoom({ actorId: 'user-2', roomId: 'room-1' }),
+  ).rejects.toMatchObject({ kind: 'room_not_host' })
+})
+
+test('propagates a repository error when starting a room that is not full', async () => {
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      join: async () => { throw new Error('not used') },
+      leave: async () => { throw new Error('not used') },
+      start: async () => { throw new RoomFailure('room_full', 'Room needs every seat filled') },
+    },
+  })
+
+  await expect(
+    service.startRoom({ actorId: 'user-1', roomId: 'room-1' }),
+  ).rejects.toMatchObject({ kind: 'room_full' })
+})
+
+test('propagates a repository error when joining a full room', async () => {
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      join: async () => { throw new RoomFailure('room_full', 'Room full') },
+      leave: async () => { throw new Error('not used') },
+      start: async () => { throw new Error('not used') },
+    },
+  })
+
+  await expect(
+    service.joinRoom({ actorId: 'user-3', roomId: 'room-1' }),
+  ).rejects.toMatchObject({ kind: 'room_full' })
 })

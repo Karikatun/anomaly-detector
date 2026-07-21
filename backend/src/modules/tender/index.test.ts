@@ -1458,3 +1458,86 @@ test('rejects a Final Contract reservation below two Corporate Trust', async () 
     tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'reserve-contract', contractId: 'final-contract' }),
   ).rejects.toMatchObject({ kind: 'invalid_tender_state' })
 })
+
+test('rejects a self-directed Laboratory test', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+  await tender.execute({ commandId: 'a-2', tenderId, actorId: 'player-a', type: 'allocate-power', allocation: { contracts: 0, laboratory: 1, modelAnalysis: 0, reconnaissance: 1, reserve: 2 } as never })
+  await tender.execute({ commandId: 'b-2', tenderId, actorId: 'player-b', type: 'allocate-power', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 2 } as never })
+  await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder'] })
+  await tender.execute({ commandId: 'b-3', tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+
+  await expect(
+    tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', sourceSignal: 'cinder', receiverSignal: 'cinder', protocol: 'impulse' }),
+  ).rejects.toMatchObject({ kind: 'invalid_tender_command' })
+})
+
+test('rejects Reconnaissance with duplicate Signal ids', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+  await tender.execute({ commandId: 'a-2', tenderId, actorId: 'player-a', type: 'allocate-power', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 2 } as never })
+  await tender.execute({ commandId: 'b-2', tenderId, actorId: 'player-b', type: 'allocate-power', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 2 } as never })
+
+  await expect(
+    tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder', 'cinder'] }),
+  ).rejects.toMatchObject({ kind: 'invalid_tender_command' })
+})
+
+test('allows Working Model updates during the power-allocation phase', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+  const receipt = await tender.execute({
+    actorId: 'player-a',
+    commandId: 'wm-1',
+    tenderId,
+    type: 'update-working-model',
+    workingModel: { signals: { aster: { note: 'Taking notes during planning.' } } },
+  })
+  expect(receipt).toEqual({ tenderId, version: 3 })
+})
+
+test('advanceDueTenders skips a completed Tender whose phase has no deadline', async () => {
+  let now = new Date('2026-07-21T12:00:00Z')
+  const tender = createTenderModule({ now: () => now })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  for (let i = 0; i < 20; i += 1) {
+    now = new Date(now.getTime() + 150_000)
+    await tender.advanceDueTenders({ limit: 10, now })
+  }
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'complete',
+  })
+  now = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  expect(await tender.advanceDueTenders({ limit: 10, now })).toEqual({ advancedTenderIds: [] })
+})
