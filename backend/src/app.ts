@@ -8,6 +8,7 @@ import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createAuthSecurity } from './http/security'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 import { createRoomModule } from './modules/room'
+import { createPersistentTenderModule, createTenderRoutes } from './modules/tender'
 
 type CreateAppOptions = {
   env: AppEnv
@@ -16,6 +17,7 @@ type CreateAppOptions = {
 
 export function createApp({ env, prisma }: CreateAppOptions) {
   const auth = createAuthModule({ db: prisma, env })
+  const tender = createPersistentTenderModule(prisma)
   const rooms = createRoomModule({
     db: prisma,
     requireAuth: auth.requireAuth,
@@ -78,6 +80,7 @@ export function createApp({ env, prisma }: CreateAppOptions) {
 
   app.route('/api/auth', auth.routes)
   app.route('/api/rooms', rooms.routes)
+  app.route('/api/tenders', createTenderRoutes({ requireAuth: auth.requireAuth, tender }))
 
   app.doc('/openapi.json', {
     openapi: '3.0.0',
