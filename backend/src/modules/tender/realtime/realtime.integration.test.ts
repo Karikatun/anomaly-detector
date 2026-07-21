@@ -1,0 +1,193 @@
+import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+
+import { createApp } from '../../../app'
+import { createPrisma } from '../../../db'
+import type { AppEnv } from '../../../env'
+import { createTenderModule } from '../index'
+import { createPrismaTenderStore } from '../infrastructure/prisma-tender-store'
+import { createRealtimeHub, type RealtimeHub } from './hub'
+import { createPrismaRealtimeTicketStore } from './prisma-realtime-ticket-store'
+import {
+  createRealtimeWebSocketHandlers,
+  upgradeRealtimeWebSocket,
+  type RealtimeSocketData,
+} from './websocket'
+
+const databaseUrl = process.env.TEST_DATABASE_URL
+const maybeDescribe = databaseUrl ? describe : describe.skip
+
+maybeDescribe('realtime websocket integration', () => {
+  const env: AppEnv = {
+    PORT: 3000,
+    DATABASE_URL: databaseUrl!,
+    JWT_SECRET: '12345678901234567890123456789012',
+    CORS_ORIGINS: ['http://localhost:5173'],
+    ACCESS_TOKEN_TTL_SECONDS: 60,
+    REFRESH_TOKEN_TTL_DAYS: 30,
+    REFRESH_REUSE_GRACE_SECONDS: 10,
+    SESSION_ABSOLUTE_TTL_DAYS: 90,
+    SESSION_RETENTION_DAYS: 7,
+    AUTH_BODY_LIMIT_BYTES: 64 * 1024,
+    AUTH_RATE_LIMIT_MAX: 60,
+    AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
+    SHUTDOWN_GRACE_SECONDS: 20,
+    TRUST_PROXY: false,
+    COOKIE_SECURE: false,
+    SPACES_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
+    SPACES_UPLOAD_URL_TTL_SECONDS: 900,
+    SPACES_DOWNLOAD_URL_TTL_SECONDS: 300,
+    SPACES_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
+  }
+  const prisma = createPrisma(databaseUrl!)
+  const ticketStore = createPrismaRealtimeTicketStore(prisma)
+
+  let realtime: RealtimeHub
+  const tender = createTenderModule({
+    onTenderChanged: (tenderId) => {
+      void realtime?.handleTenderChanged(tenderId)
+    },
+    store: createPrismaTenderStore(prisma),
+  })
+  realtime = createRealtimeHub({ tender })
+  const app = createApp({ env, prisma, tender })
+
+  const server = Bun.serve<RealtimeSocketData>({
+    port: 0,
+    fetch(request, bunServer) {
+      const url = new URL(request.url)
+      if (url.pathname === '/api/realtime/ws') {
+        return upgradeRealtimeWebSocket({ hub: realtime, request, server: bunServer, ticketStore })
+      }
+      return app.fetch(request)
+    },
+    websocket: createRealtimeWebSocketHandlers({ hub: realtime }),
+  })
+  const baseUrl = `http://127.0.0.1:${server.port}`
+  const wsPath = '/api/realtime/ws'
+  const wsUrl = `ws://127.0.0.1:${server.port}${wsPath}`
+
+  const register = async (email: string) => {
+    const response = await fetch(`${baseUrl}/api/auth/token/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'password123' }),
+    })
+    expect(response.status).toBe(201)
+    return response.json() as Promise<{ accessToken: string; user: { id: string } }>
+  }
+
+  const issueTicket = async (accessToken: string) => {
+    const response = await fetch(`${baseUrl}/api/realtime/tickets`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(response.status).toBe(201)
+    return (await response.json()) as { ticket: string }
+  }
+
+  const connect = (url: string) => new Promise<{ messages: unknown[]; socket: WebSocket }>((resolve, reject) => {
+    const messages: unknown[] = []
+    const socket = new WebSocket(url)
+    const timeout = setTimeout(() => reject(new Error('WebSocket open timeout')), 5_000)
+    socket.onmessage = (event) => { messages.push(JSON.parse(String(event.data))) }
+    socket.onerror = () => { clearTimeout(timeout); reject(new Error('WebSocket error')) }
+    socket.onopen = () => {
+      clearTimeout(timeout)
+      resolve({ messages, socket })
+    }
+  })
+
+  const nextMessage = (messages: unknown[], count: number) => new Promise<unknown>((resolve, reject) => {
+    const startedAt = Date.now()
+    const poll = () => {
+      if (messages.length > count) {
+        resolve(messages[count])
+        return
+      }
+      if (Date.now() - startedAt > 5_000) {
+        reject(new Error(`Timed out waiting for message ${count + 1}; received ${messages.length}`))
+        return
+      }
+      setTimeout(poll, 10)
+    }
+    poll()
+  })
+
+  beforeEach(async () => {
+    await prisma.tender.deleteMany()
+    await prisma.realtimeTicket.deleteMany()
+    await prisma.authSession.deleteMany()
+    await prisma.user.deleteMany()
+  })
+
+  afterAll(async () => {
+    server.stop(true)
+    await prisma.$disconnect()
+  })
+
+  test('streams participant-scoped tender views and burns one-time tickets', async () => {
+    const host = await register('ws-host@example.com')
+    const joiner = await register('ws-joiner@example.com')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: joiner.user.id, tiePriority: 2 },
+      ],
+    })
+
+    const hostTicket = await issueTicket(host.accessToken)
+    const joinerTicket = await issueTicket(joiner.accessToken)
+
+    const hostSocket = await connect(`${wsUrl}?ticket=${hostTicket.ticket}&tenderId=${tenderId}`)
+    const joinerSocket = await connect(`${wsUrl}?ticket=${joinerTicket.ticket}&tenderId=${tenderId}`)
+
+    const hostGreeting = await nextMessage(hostSocket.messages, 0) as {
+      type: string
+      view: { phase: string; tenderId: string; players: Array<{ playerId: string }> }
+    }
+    expect(hostGreeting.type).toBe('tender-view')
+    expect(hostGreeting.view.tenderId).toBe(tenderId)
+    expect(hostGreeting.view.phase).toBe('access-slot-selection')
+    expect(hostGreeting.view.players.map((player) => player.playerId).sort())
+      .toEqual([host.user.id, joiner.user.id].sort())
+    expect(await nextMessage(joinerSocket.messages, 0)).toMatchObject({ type: 'tender-view' })
+
+    const command = await fetch(`${baseUrl}/api/tenders/${tenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${host.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: host.user.id,
+        commandId: 'ws-command-1',
+        slot: 4,
+        tenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(command.status).toBe(200)
+
+    const hostUpdate = await nextMessage(hostSocket.messages, 1) as {
+      view: { players: Array<{ playerId: string; requestedAccessSlot?: number }> }
+    }
+    const joinerUpdate = await nextMessage(joinerSocket.messages, 1) as {
+      view: { players: Array<{ playerId: string; requestedAccessSlot?: number }> }
+    }
+    const hostSeesSelf = hostUpdate.view.players.find((player) => player.playerId === host.user.id)
+    const joinerSeesHost = joinerUpdate.view.players.find((player) => player.playerId === host.user.id)
+    expect(hostSeesSelf?.requestedAccessSlot).toBe(4)
+    expect(joinerSeesHost?.requestedAccessSlot).toBeUndefined()
+
+    hostSocket.socket.close()
+    joinerSocket.socket.close()
+
+    const replay = await fetch(`${baseUrl}${wsPath}?ticket=${hostTicket.ticket}&tenderId=${tenderId}`)
+    expect(replay.status).toBe(401)
+  }, 15_000)
+
+  test('rejects unknown tickets at the upgrade boundary', async () => {
+    const response = await fetch(`${baseUrl}${wsPath}?ticket=${'x'.repeat(64)}&tenderId=00000000-0000-0000-0000-000000000000`)
+    expect(response.status).toBe(401)
+  })
+})

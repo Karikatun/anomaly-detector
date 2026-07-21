@@ -8,16 +8,22 @@ import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createAuthSecurity } from './http/security'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 import { createRoomModule } from './modules/room'
-import { createPersistentTenderModule, createRealtimeTicketRoutes, createTenderRoutes } from './modules/tender'
+import {
+  createPersistentTenderModule,
+  createRealtimeTicketRoutes,
+  createTenderRoutes,
+  type TenderModule,
+} from './modules/tender'
 
 type CreateAppOptions = {
   env: AppEnv
   prisma: DbClient
+  tender?: TenderModule
 }
 
-export function createApp({ env, prisma }: CreateAppOptions) {
+export function createApp({ env, prisma, tender: providedTender }: CreateAppOptions) {
   const auth = createAuthModule({ db: prisma, env })
-  const tender = createPersistentTenderModule(prisma)
+  const tender = providedTender ?? createPersistentTenderModule(prisma)
   const rooms = createRoomModule({
     db: prisma,
     requireAuth: auth.requireAuth,
