@@ -59,7 +59,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Rotate direct-collision tie priority between rounds.
 3. [x] Add four Power per player, a maximum of two per category, and open planning in Access Slot order.
 4. [x] Add Reconnaissance: six persistent Signals, non-consumable Samples, and initiating-player Raw Telemetry.
-5. [-] Add Laboratory: directed source-to-receiver tests with Impulse and Continuous Protocols, public results, and authorised Private Measurements.
+5. [x] Add Laboratory: directed source-to-receiver tests with Impulse and Continuous Protocols, public results, and authorised Private Measurements.
    - [x] Validate Directed Test source/receiver Samples and reject self-tests through the shared command contract.
    - [x] Resolve Impulse and Continuous Protocols deterministically from the hidden Anomaly Configuration.
    - [x] Store authorised Continuous Private Measurements in participant-scoped Tender views.
