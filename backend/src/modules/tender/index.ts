@@ -916,4 +916,6 @@ export function createTenderModule({
 export function createPersistentTenderModule(db: DbClient) {
   return createTenderModule({ store: createPrismaTenderStore(db) })
 }
+
+export { createTenderRoutes } from './transport/routes'
 import { randomUUID } from 'node:crypto'

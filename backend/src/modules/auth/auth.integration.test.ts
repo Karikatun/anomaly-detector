@@ -235,6 +235,37 @@ maybeDescribe('auth API integration', () => {
     })
     expect(startedRoom.tenderId).toBeString()
     expect(await prisma.tender.findUnique({ where: { id: startedRoom.tenderId } })).not.toBeNull()
+
+    const playerView = await app.request(`/api/tenders/${startedRoom.tenderId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(playerView.status).toBe(200)
+    expect(await playerView.json()).toMatchObject({
+      phase: 'access-slot-selection',
+      tenderId: startedRoom.tenderId,
+    })
+
+    const outsiderView = await app.request(`/api/tenders/${startedRoom.tenderId}`, {
+      headers: { Authorization: `Bearer ${extra.accessToken}` },
+    })
+    expect(outsiderView.status).toBe(403)
+
+    const command = await app.request(`/api/tenders/${startedRoom.tenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: user.id,
+        commandId: 'access-slot-host-1',
+        slot: 3,
+        tenderId: startedRoom.tenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(command.status).toBe(200)
+    expect(await command.json()).toEqual({ tenderId: startedRoom.tenderId, version: 1 })
   })
 
   test('returns one durable successor across three concurrent refresh requests', async () => {
