@@ -1,4 +1,4 @@
-import type { TenderPlayer } from '@the-game/contracts'
+import type { TenderPlayer } from '@anomaly-detector/contracts'
 
 const accessSlotCount = 6
 

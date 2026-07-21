@@ -41,7 +41,7 @@ If Docker cannot be installed on the machine, local database-backed development 
 docker compose pull postgres
 docker compose up -d postgres
 docker compose ps postgres
-docker compose exec postgres pg_isready -U superuser -d the_game
+docker compose exec postgres pg_isready -U superuser -d anomaly_detector
 ```
 
 The development database is:
@@ -49,10 +49,10 @@ The development database is:
 ```text
 host: localhost
 port: 54329
-database: the_game
+database: anomaly_detector
 user: superuser
 password: superpassword
-DATABASE_URL: postgresql://superuser:superpassword@localhost:54329/the_game?schema=public
+DATABASE_URL: postgresql://superuser:superpassword@localhost:54329/anomaly_detector?schema=public
 ```
 
 Create the backend env file:
@@ -102,10 +102,10 @@ Manual default connection:
 ```text
 host: localhost
 port: 54330
-database: the_game_test
+database: anomaly_detector_test
 user: superuser
 password: superpassword
-TEST_DATABASE_URL: postgresql://superuser:superpassword@localhost:54330/the_game_test?schema=public
+TEST_DATABASE_URL: postgresql://superuser:superpassword@localhost:54330/anomaly_detector_test?schema=public
 ```
 
 Automated test runners normally set a repository-derived `POSTGRES_TEST_PORT` and derive `TEST_DATABASE_URL` from it so multiple template checkouts can run in parallel. Set `POSTGRES_TEST_PORT` only when a fixed test database port is required.

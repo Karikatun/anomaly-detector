@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import type { LoginRequest, RegisterRequest } from '@the-game/contracts'
+import type { LoginRequest, RegisterRequest } from '@anomaly-detector/contracts'
 import {
   type PropsWithChildren,
   useCallback,

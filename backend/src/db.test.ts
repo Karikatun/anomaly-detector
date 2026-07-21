@@ -25,9 +25,9 @@ describe('normalizePgConnectionString', () => {
 
   test('does not change non-TLS local URLs', () => {
     const result = normalizePgConnectionString(
-      'postgresql://superuser:superpassword@localhost:54329/the_game?schema=public',
+      'postgresql://superuser:superpassword@localhost:54329/anomaly_detector?schema=public',
     )
 
-    expect(result).toBe('postgresql://superuser:superpassword@localhost:54329/the_game?schema=public')
+    expect(result).toBe('postgresql://superuser:superpassword@localhost:54329/anomaly_detector?schema=public')
   })
 })

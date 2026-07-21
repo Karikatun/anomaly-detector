@@ -1,4 +1,4 @@
-import type { CommandReceipt, TenderPhase } from '@the-game/contracts'
+import type { CommandReceipt, TenderPhase } from '@anomaly-detector/contracts'
 import type { Prisma } from '../../../generated/prisma/client'
 import type { DbClient } from '../../../db'
 import type {

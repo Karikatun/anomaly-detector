@@ -1,4 +1,4 @@
-import type { RegisterPayload, UserDto } from '@the-game/contracts'
+import type { RegisterPayload, UserDto } from '@anomaly-detector/contracts'
 
 import type { SessionMetadata } from '../domain/session'
 import type { OAuthProviderId, OAuthTransaction } from '../domain/oauth'

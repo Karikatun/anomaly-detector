@@ -12,14 +12,14 @@ export const preferredBackendPort =
 export const preferredWebPort =
   55000 + (Number.parseInt(repositoryHash.slice(0, 6), 16) % 5000)
 export const composeProjectName =
-  process.env.COMPOSE_PROJECT_NAME ?? `the-game-${repositoryHash}`
+  process.env.COMPOSE_PROJECT_NAME ?? `anomaly-detector-${repositoryHash}`
 export const defaultPostgresTestPort =
   process.env.POSTGRES_TEST_PORT ?? String(preferredPostgresTestPort)
 export const defaultBackendPort =
   process.env.E2E_BACKEND_PORT ?? String(preferredBackendPort)
 export const defaultWebPort =
   process.env.E2E_WEB_PORT ?? String(preferredWebPort)
-export const defaultDatabaseUrl = `postgresql://superuser:superpassword@localhost:${defaultPostgresTestPort}/the_game_test?schema=public`
+export const defaultDatabaseUrl = `postgresql://superuser:superpassword@localhost:${defaultPostgresTestPort}/anomaly_detector_test?schema=public`
 
 export function composeEnv(extra: NodeJS.ProcessEnv = {}) {
   const explicitDatabaseUrl =

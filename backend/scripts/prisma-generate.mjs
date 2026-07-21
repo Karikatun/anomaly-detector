@@ -42,7 +42,7 @@ try {
     cwd: backendRoot,
     env: {
       ...process.env,
-      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:5432/the_game?schema=public',
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:5432/anomaly_detector?schema=public',
     },
     stdio: 'inherit',
   })

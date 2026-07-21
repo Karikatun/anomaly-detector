@@ -11,7 +11,7 @@ import {
   type LoginRequest,
   type MeResponse,
   type RegisterRequest,
-} from '@the-game/contracts'
+} from '@anomaly-detector/contracts'
 import type { z } from 'zod'
 import { ApiRequestError, HttpClient, type HttpRequestOptions } from '@/platform/api'
 import {

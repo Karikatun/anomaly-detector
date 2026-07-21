@@ -4,7 +4,7 @@ import {
   tenderCommandSchema,
   tenderIdSchema,
   tenderViewSchema,
-} from '@the-game/contracts'
+} from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'

@@ -22,19 +22,19 @@ afterEach(() => {
 
 test('defaultTestDatabaseUrl builds the documented postgres test URL', () => {
   expect(defaultTestDatabaseUrl('55432')).toBe(
-    'postgresql://superuser:superpassword@localhost:55432/the_game_test?schema=public',
+    'postgresql://superuser:superpassword@localhost:55432/anomaly_detector_test?schema=public',
   )
 })
 
 test('postgresPortFromDatabaseUrl returns explicit ports and postgres defaults', () => {
   expect(
     postgresPortFromDatabaseUrl(
-      'postgresql://superuser:superpassword@localhost:55432/the_game_test?schema=public',
+      'postgresql://superuser:superpassword@localhost:55432/anomaly_detector_test?schema=public',
     ),
   ).toBe('55432')
   expect(
     postgresPortFromDatabaseUrl(
-      'postgresql://superuser:superpassword@localhost/the_game_test?schema=public',
+      'postgresql://superuser:superpassword@localhost/anomaly_detector_test?schema=public',
     ),
   ).toBe('5432')
 })
@@ -42,15 +42,15 @@ test('postgresPortFromDatabaseUrl returns explicit ports and postgres defaults',
 test('assertTestDatabaseUrl accepts test databases and rejects development databases', () => {
   expect(() =>
     assertTestDatabaseUrl(
-      'postgresql://superuser:superpassword@localhost:55432/the_game_test?schema=public',
+      'postgresql://superuser:superpassword@localhost:55432/anomaly_detector_test?schema=public',
     ),
   ).not.toThrow()
 
   expect(() =>
     assertTestDatabaseUrl(
-      'postgresql://superuser:superpassword@localhost:54329/the_game?schema=public',
+      'postgresql://superuser:superpassword@localhost:54329/anomaly_detector?schema=public',
     ),
-  ).toThrow(/Refusing to run tests against non-test database "the_game"/)
+  ).toThrow(/Refusing to run tests against non-test database "anomaly_detector"/)
 })
 
 test('assertTestDatabaseUrl accepts non-test databases with an intentional override', () => {
@@ -58,7 +58,7 @@ test('assertTestDatabaseUrl accepts non-test databases with an intentional overr
 
   expect(() =>
     assertTestDatabaseUrl(
-      'postgresql://superuser:superpassword@localhost:54329/the_game?schema=public',
+      'postgresql://superuser:superpassword@localhost:54329/anomaly_detector?schema=public',
     ),
   ).not.toThrow()
 })

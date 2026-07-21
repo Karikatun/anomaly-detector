@@ -9,8 +9,8 @@ import type {
   TenderPlayer,
   TenderView,
   TenderViewQuery,
-} from '@the-game/contracts'
-import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@the-game/contracts'
+} from '@anomaly-detector/contracts'
+import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@anomaly-detector/contracts'
 import type { StoredTender, TenderStore } from './application/tender-store'
 import type { DbClient } from '../../db'
 import { resolveAccessSlots } from './domain/access-slots'

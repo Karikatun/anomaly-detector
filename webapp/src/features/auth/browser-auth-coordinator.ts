@@ -1,6 +1,6 @@
 export type BrowserAuthCoordinator = <T>(mutation: () => Promise<T>) => Promise<T>
 
-const browserAuthLockName = 'the_game:auth-cookie-mutation'
+const browserAuthLockName = 'anomaly_detector:auth-cookie-mutation'
 
 export const coordinateBrowserAuthMutation: BrowserAuthCoordinator = async (mutation) => {
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks

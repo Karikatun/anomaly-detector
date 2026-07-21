@@ -5,7 +5,7 @@ export type BrowserSessionEvent = {
   state: BrowserSessionState
 }
 
-const sessionEventStorageKey = 'the_game:auth-session-event'
+const sessionEventStorageKey = 'anomaly_detector:auth-session-event'
 let currentSessionEvent: BrowserSessionEvent = {
   epoch: 'initial',
   state: 'cleared',

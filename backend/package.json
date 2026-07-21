@@ -1,5 +1,5 @@
 {
-  "name": "@the-game/backend",
+  "name": "@anomaly-detector/backend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -30,7 +30,7 @@
     "@hono/zod-validator": "^0.8.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@the-game/contracts": "workspace:*",
+    "@anomaly-detector/contracts": "workspace:*",
     "dotenv": "^17.4.2",
     "hono": "^4.12.30",
     "jose": "^6.2.3",
