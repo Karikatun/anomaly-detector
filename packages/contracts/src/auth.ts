@@ -78,7 +78,7 @@ export const meResponseSchema = z.object({
 export const oauthProviderSchema = z.union([z.literal('yandex'), z.literal('vk')])
 
 export const oauthStartRequestSchema = z.object({
-  redirectUri: z.string().url().max(512),
+  redirectUri: z.string().url().max(512).optional(),
 })
 
 export const oauthStartResponseSchema = z.object({
@@ -86,14 +86,14 @@ export const oauthStartResponseSchema = z.object({
 })
 
 export const oauthCallbackQuerySchema = z.object({
-  code: z.string().min(1),
+  code: z.string().min(1).optional(),
   state: z.string().min(1),
-})
-
-export const oauthCallbackErrorQuerySchema = z.object({
-  error: z.string().min(1),
+  error: z.string().min(1).optional(),
   error_description: z.string().optional(),
-})
+}).refine(
+  (q) => q.code !== undefined || q.error !== undefined,
+  { message: 'Either code or error must be provided' },
+)
 
 // ── Type exports ─────────────────────────────────────────────────────────────
 
@@ -114,4 +114,3 @@ export type OAuthProviderId = z.infer<typeof oauthProviderSchema>
 export type OAuthStartRequest = z.infer<typeof oauthStartRequestSchema>
 export type OAuthStartResponse = z.infer<typeof oauthStartResponseSchema>
 export type OAuthCallbackQuery = z.infer<typeof oauthCallbackQuerySchema>
-export type OAuthCallbackErrorQuery = z.infer<typeof oauthCallbackErrorQuerySchema>

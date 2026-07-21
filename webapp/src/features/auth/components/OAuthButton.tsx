@@ -1,7 +1,5 @@
 import { useCallback, useState } from 'react'
 
-import { oauthStartRequestSchema, oauthStartResponseSchema } from '@anomaly-detector/contracts'
-
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/platform/i18n'
 
@@ -20,18 +18,16 @@ export function OAuthButton({ provider, label }: OAuthButtonProps) {
     if (busy) return
     setBusy(true)
     try {
-      const redirectUri = `${defaultApiBaseUrl}/api/auth/oauth/${provider}/callback`
-      const payload = oauthStartRequestSchema.parse({ redirectUri })
       const response = await fetch(`${defaultApiBaseUrl}/api/auth/oauth/${provider}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({}),
       })
       if (!response.ok) {
         setBusy(false)
         return
       }
-      const data = oauthStartResponseSchema.parse(await response.json())
+      const data = await response.json()
       window.location.href = data.authorizationUrl
     } catch {
       setBusy(false)

@@ -417,14 +417,28 @@ export function createAuthRoutes({ env, requireAuth, service, webappUrl }: Creat
 
   routes.openapi(oauthStartRoute, async (c) => {
     const { provider } = c.req.valid('param')
-    const { redirectUri } = c.req.valid('json')
+    const { redirectUri: bodyRedirectUri } = c.req.valid('json')
+    const redirectUri =
+      bodyRedirectUri ??
+      `${reqProtocol(c)}://${c.req.header('host') ?? 'localhost:3000'}/api/auth/oauth/${provider}/callback`
     const result = await executeAuth(() => service.startOAuthSignIn({ provider, redirectUri }))
     return c.json(result, 200)
   })
 
   routes.openapi(oauthCallbackRoute, async (c) => {
     const { provider: _provider } = c.req.valid('param')
-    const { code, state } = c.req.valid('query')
+    const query = c.req.valid('query')
+
+    // OAuth provider returned an error (e.g. redirect_uri mismatch)
+    if (query.error) {
+      const redirectUrl = new URL(webappUrl)
+      redirectUrl.pathname = '/'
+      redirectUrl.searchParams.set('auth_error', query.error_description ?? query.error)
+      return c.redirect(redirectUrl.toString(), 302)
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- refined by query.error check above
+    const { code, state } = query as { code: string; state: string }
     try {
       const result = await executeAuth(() =>
         service.completeOAuthSignIn({ code, state, metadata: requestMetadata(c, env) }),
@@ -520,4 +534,9 @@ function refreshCookieSameSite(env: AppEnv) {
 function withoutRefreshToken<T extends { refreshToken: string }>(response: T): Omit<T, 'refreshToken'> {
   const { refreshToken: _refreshToken, ...cookieResponse } = response
   return cookieResponse
+}
+
+function reqProtocol(c: Context) {
+  const forwarded = c.req.header('x-forwarded-proto')
+  return forwarded === 'https' ? 'https' : 'http'
 }
