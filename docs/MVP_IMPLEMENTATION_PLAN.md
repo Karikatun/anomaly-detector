@@ -38,7 +38,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 1. [x] Add PostgreSQL write models for Tender, players, current round/phase state, commands, and append-only audit records.
    - [x] Use PostgreSQL as the Tender source of truth, with JSONB current state and append-only audit events instead of a separate match database.
-   - [ ] Add focused indexes for `phase`, `dueAt`, participants, and status when the corresponding query paths are implemented.
+   - [x] Add focused indexes for `phase`, `dueAt`, participants, and status when the corresponding query paths are implemented.
 2. [x] Implement Tender creation for 2-4 players with a server-generated seed and hidden Anomaly Configuration.
 3. [x] Implement deterministic restoration after restart and idempotent command handling by `commandId`.
 4. [x] Implement `advanceDueTenders` as the only timeout-resolution path.
