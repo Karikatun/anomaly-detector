@@ -1,5 +1,5 @@
-import { useParams } from '@tanstack/react-router'
-import { useCallback, useState } from 'react'
+import { useParams, useNavigate } from '@tanstack/react-router'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { TenderView } from '@anomaly-detector/contracts'
 
@@ -208,6 +208,14 @@ function PhasePanel({ view, disabled, error, onCommand }: {
 export function TenderPage() {
   const { tenderId } = useParams({ strict: false }) as { tenderId: string }
   const auth = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!auth.isBootstrapping && !auth.user) {
+      void navigate({ to: '/', replace: true })
+    }
+  }, [auth.isBootstrapping, auth.user, navigate])
+
   const { connected, error, tenderView } = useRealtimeTender(auth.transport, tenderId)
   const { execute } = useTenderCommands(auth.transport, tenderId)
   const [commandError, setCommandError] = useState<string | null>(null)
