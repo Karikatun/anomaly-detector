@@ -29,10 +29,10 @@ export function RoomListPage() {
   const [joinCode, setJoinCode] = useState('')
   const [joinError, setJoinError] = useState<string | null>(null)
 
-  if (auth.isBootstrapping || !auth.user) return null
-
   const api = new RoomsApi(auth.transport)
   const { mutateAsync: createRoom, isPending: isCreating } = useCreateRoomMutation({ api })
+
+  if (auth.isBootstrapping || !auth.user) return null
 
   const handleCreate = async () => {
     setCreateError(null)
