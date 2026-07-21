@@ -5,11 +5,14 @@ import {
   cookieRefreshResponseSchema,
   loginRequestSchema,
   meResponseSchema,
+  oauthStartRequestSchema,
+  oauthStartResponseSchema,
   registerRequestSchema,
   type CookieAuthResponse,
   type CookieRefreshResponse,
   type LoginRequest,
   type MeResponse,
+  type OAuthProviderId,
   type RegisterRequest,
 } from '@anomaly-detector/contracts'
 import type { z } from 'zod'
@@ -129,6 +132,17 @@ export class AuthApi {
 
   async clearSession() {
     return this.authCoordinator(() => this.expireSessionWithinMutation(this.sessionEpoch))
+  }
+
+  async startOAuth(provider: OAuthProviderId): Promise<void> {
+    const redirectUri = `${window.location.origin}/api/auth/oauth/${provider}/callback`
+    const payload = oauthStartRequestSchema.parse({ redirectUri })
+    const response = await this.http.request(
+      `/api/auth/oauth/${provider}/start`,
+      oauthStartResponseSchema,
+      { method: 'POST', body: payload },
+    )
+    window.location.href = response.authorizationUrl
   }
 
   isSessionEpochCurrent(epoch: string) {

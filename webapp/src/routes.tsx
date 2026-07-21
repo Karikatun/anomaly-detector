@@ -35,7 +35,13 @@ const roomLobbyRoute = createRoute({
   component: lazyRouteComponent(() => import('./features/rooms'), 'RoomLobbyPage'),
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, appRoute, roomsRoute, roomLobbyRoute])
+const tenderRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tenders/$tenderId',
+  component: lazyRouteComponent(() => import('./features/tender'), 'TenderPage'),
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, appRoute, roomsRoute, roomLobbyRoute, tenderRoute])
 
 export const router = createRouter({ routeTree })
 

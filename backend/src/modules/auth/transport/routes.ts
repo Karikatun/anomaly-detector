@@ -6,6 +6,10 @@ import {
   cookieRefreshResponseSchema,
   loginRequestSchema,
   meResponseSchema,
+  oauthCallbackQuerySchema,
+  oauthProviderSchema,
+  oauthStartRequestSchema,
+  oauthStartResponseSchema,
   registerRequestSchema,
   tokenAuthResponseSchema,
   tokenLogoutRequestSchema,
@@ -16,6 +20,7 @@ import {
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { Context, MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { z } from 'zod'
 
 import type { AppEnv } from '../../../env'
 import { AppError, validationErrorHook } from '../../../http/errors'
@@ -297,13 +302,55 @@ const updateProfileRoute = createRoute({
   },
 })
 
+// ── OAuth Routes ─────────────────────────────────────────────────────────────
+
+const oauthStartRoute = createRoute({
+  method: 'post',
+  path: '/oauth/{provider}/start',
+  request: {
+    params: z.object({ provider: oauthProviderSchema }),
+    body: {
+      content: {
+        'application/json': {
+          schema: oauthStartRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: oauthStartResponseSchema } },
+      description: 'OAuth authorization URL',
+    },
+    400: { content: errorResponseContent, description: 'Invalid payload' },
+    501: { content: errorResponseContent, description: 'OAuth provider not configured' },
+  },
+})
+
+const oauthCallbackRoute = createRoute({
+  method: 'get',
+  path: '/oauth/{provider}/callback',
+  request: {
+    params: z.object({ provider: oauthProviderSchema }),
+    query: oauthCallbackQuerySchema,
+  },
+  responses: {
+    302: { description: 'Redirect back to the webapp with session' },
+    400: { content: errorResponseContent, description: 'Invalid OAuth callback' },
+    401: { content: errorResponseContent, description: 'OAuth transaction invalid or expired' },
+  },
+})
+
+// ── Factory ──────────────────────────────────────────────────────────────────
+
 type CreateAuthRoutesOptions = {
   env: AppEnv
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   service: AuthService
+  webappUrl: string
 }
 
-export function createAuthRoutes({ env, requireAuth, service }: CreateAuthRoutesOptions) {
+export function createAuthRoutes({ env, requireAuth, service, webappUrl }: CreateAuthRoutesOptions) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   const protectedRoutes = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
@@ -365,6 +412,47 @@ export function createAuthRoutes({ env, requireAuth, service }: CreateAuthRoutes
     return c.body(null, 204)
   })
   routes.route('/', protectedRoutes)
+
+  // ── OAuth handlers ───────────────────────────────────────────────────────
+
+  routes.openapi(oauthStartRoute, async (c) => {
+    const { provider } = c.req.valid('param')
+    const { redirectUri } = c.req.valid('json')
+    const result = await executeAuth(() => service.startOAuthSignIn({ provider, redirectUri }))
+    return c.json(result, 200)
+  })
+
+  routes.openapi(oauthCallbackRoute, async (c) => {
+    const { provider: _provider } = c.req.valid('param')
+    const { code, state } = c.req.valid('query')
+    try {
+      const result = await executeAuth(() =>
+        service.completeOAuthSignIn({ code, state, metadata: requestMetadata(c, env) }),
+      )
+      // Set session cookie and redirect to webapp
+      // Note: must set cookie on the response manually because c.redirect()
+      // discards headers set by setCookie() from hono/cookie
+      const redirectUrl = new URL(webappUrl)
+      redirectUrl.pathname = '/'
+      const cookieMaxAge = env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60
+      const cookieSameSite = env.COOKIE_SECURE ? 'None' : 'Lax'
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: redirectUrl.toString(),
+          'Set-Cookie':
+            `${refreshCookieName}=${result.refreshToken}; HttpOnly${env.COOKIE_SECURE ? '; Secure' : ''}; SameSite=${cookieSameSite}; Path=/api/auth; Max-Age=${cookieMaxAge}`,
+        },
+      })
+    } catch (error) {
+      console.error('OAuth callback failed:', error)
+      const redirectUrl = new URL(webappUrl)
+      redirectUrl.pathname = '/'
+      const message = error instanceof Error ? encodeURIComponent(error.message) : 'oauth_failed'
+      redirectUrl.searchParams.set('auth_error', message)
+      return c.redirect(redirectUrl.toString(), 302)
+    }
+  })
 
   routes.openapi(cookieLogoutRoute, async (c) => {
     const cookieRefreshToken = getRefreshCookie(c)

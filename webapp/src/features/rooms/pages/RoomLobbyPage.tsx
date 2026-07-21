@@ -15,8 +15,10 @@ import {
   useLeaveRoomMutation,
   useStartRoomMutation,
 } from '@/features/rooms'
+import { useI18n } from '@/platform/i18n'
 
 export function RoomLobbyPage() {
+  const { t } = useI18n()
   const { roomId } = useParams({ from: '/rooms/$roomId' })
   const auth = useAuth()
   const navigate = useNavigate()
@@ -29,7 +31,6 @@ export function RoomLobbyPage() {
   const { mutateAsync: leaveRoom, isPending: isLeaving } = useLeaveRoomMutation({ api })
   const { mutateAsync: startRoom, isPending: isStarting } = useStartRoomMutation({ api })
 
-  // Fetch room on mount
   useEffect(() => {
     let cancelled = false
 
@@ -42,7 +43,7 @@ export function RoomLobbyPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load room')
+          setError(err instanceof Error ? err.message : t('lobby.error.loadFailed'))
           setLoading(false)
         }
       }
@@ -54,7 +55,6 @@ export function RoomLobbyPage() {
     }
   }, [roomId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll for room updates while waiting
   useEffect(() => {
     if (!room || room.status === 'started') return
 
@@ -69,41 +69,38 @@ export function RoomLobbyPage() {
 
     return () => clearInterval(interval)
   }, [roomId, room]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Redirect to tender when started
   useEffect(() => {
-    if (room?.status === 'started' && room.tenderId) {
-      // Tender started — for now navigate to /app
-      void navigate({ to: '/app' })
-    }
-  }, [room, navigate])
+      if (room?.status === 'started' && room.tenderId) {
+        void navigate({ to: '/tenders/$tenderId', params: { tenderId: room.tenderId } })
+      }
+    }, [room, navigate])
 
   const handleJoin = useCallback(async () => {
     try {
       const updated = await joinRoom(roomId)
       setRoom(updated)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to join room')
+      setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
     }
-  }, [joinRoom, roomId])
+  }, [joinRoom, roomId, t])
 
   const handleLeave = useCallback(async () => {
     try {
       await leaveRoom(roomId)
       await navigate({ to: '/rooms' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to leave room')
+      setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
     }
-  }, [leaveRoom, navigate, roomId])
+  }, [leaveRoom, navigate, roomId, t])
 
   const handleStart = useCallback(async () => {
     try {
       const updated = await startRoom(roomId)
       setRoom(updated)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start room')
+      setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
     }
-  }, [startRoom, roomId])
+  }, [startRoom, roomId, t])
 
   const isHost = room?.hostId === auth.user?.id
   const isMember = room?.members.some((m) => m.userId === auth.user?.id) ?? false
@@ -127,11 +124,11 @@ export function RoomLobbyPage() {
         <Card>
           <CardContent className="grid gap-4 py-8">
             <Typography variant="h4" tone="destructive">
-              Room not found
+              {t('lobby.error.notFound')}
             </Typography>
             <Typography tone="muted">{error}</Typography>
             <Button asChild className="w-fit">
-              <a href="/rooms">Back to rooms</a>
+              <a href="/rooms">{t('lobby.button.back')}</a>
             </Button>
           </CardContent>
         </Card>
@@ -144,12 +141,10 @@ export function RoomLobbyPage() {
       <section className="mx-auto grid w-full max-w-2xl gap-6 px-5 py-16">
         <Card>
           <CardContent className="grid gap-4 py-8">
-            <Typography variant="h4">Room not found</Typography>
-            <Typography tone="muted">
-              This room does not exist or has expired.
-            </Typography>
+            <Typography variant="h4">{t('lobby.error.notFound')}</Typography>
+            <Typography tone="muted">{t('lobby.error.notFound.description')}</Typography>
             <Button asChild className="w-fit">
-              <a href="/rooms">Back to rooms</a>
+              <a href="/rooms">{t('lobby.button.back')}</a>
             </Button>
           </CardContent>
         </Card>
@@ -160,39 +155,31 @@ export function RoomLobbyPage() {
   return (
     <section className="mx-auto grid w-full max-w-2xl gap-6 px-5 py-16">
       <div className="grid gap-2">
-        <Typography variant="h1">Tender Room</Typography>
-        <Typography tone="muted">
-          Share the room ID with other players to invite them.
-        </Typography>
+        <Typography variant="h1">{t('lobby.title')}</Typography>
+        <Typography tone="muted">{t('lobby.description')}</Typography>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Room {room.roomId.slice(0, 8)}</CardTitle>
+          <CardTitle>{t('lobby.room.id')} {room.roomId.slice(0, 8)}</CardTitle>
           <CardDescription>
-            {room.members.length}/{room.capacity} players joined
-            {room.status === 'started' ? ' — Tender in progress' : ''}
+            {t('lobby.players.joined', { count: room.members.length, capacity: room.capacity })}
+            {room.status === 'started' ? t('lobby.players.inProgress') : ''}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4">
-            {/* Room ID for sharing */}
             <div className="rounded-lg border bg-muted/50 p-3">
               <Typography variant="control" tone="muted" className="mb-1">
-                Room ID
+                {t('lobby.room.id')}
               </Typography>
-              <Typography variant="body" className="font-mono text-sm">
-                {room.roomId}
-              </Typography>
+              <Typography variant="body" className="font-mono text-sm">{room.roomId}</Typography>
             </div>
 
             <Separator />
 
-            {/* Player list */}
             <div className="grid gap-2">
-              <Typography variant="control" tone="muted">
-                Players
-              </Typography>
+              <Typography variant="control" tone="muted">{t('lobby.players')}</Typography>
               {room.members.map((member) => (
                 <div
                   key={member.userId}
@@ -203,10 +190,10 @@ export function RoomLobbyPage() {
                   </div>
                   <div className="grid gap-0.5">
                     <Typography variant="bodySm">
-                      Player {member.seat}
+                      {t('lobby.player.label', { seat: member.seat })}
                       {member.userId === room.hostId ? (
                         <Typography as="span" variant="control" tone="muted" className="ml-2">
-                          (Host)
+                          {t('lobby.player.host')}
                         </Typography>
                       ) : null}
                     </Typography>
@@ -225,7 +212,7 @@ export function RoomLobbyPage() {
                     {room.members.length + i + 1}
                   </div>
                   <Typography variant="bodySm" tone="muted">
-                    Waiting for player...
+                    {t('lobby.player.waiting')}
                   </Typography>
                 </div>
               ))}
@@ -233,14 +220,10 @@ export function RoomLobbyPage() {
 
             <Separator />
 
-            {/* Error message */}
             {error && (
-              <Typography role="alert" variant="bodySm" tone="destructive">
-                {error}
-              </Typography>
+              <Typography role="alert" variant="bodySm" tone="destructive">{error}</Typography>
             )}
 
-            {/* Actions */}
             <div className="flex flex-wrap gap-3">
               {isMember && !isHost && (
                 <Button
@@ -249,7 +232,7 @@ export function RoomLobbyPage() {
                   disabled={isLeaving}
                   onClick={() => void handleLeave()}
                 >
-                  {isLeaving ? 'Leaving...' : 'Leave room'}
+                  {isLeaving ? t('lobby.button.leaving') : t('lobby.button.leave')}
                 </Button>
               )}
 
@@ -261,7 +244,7 @@ export function RoomLobbyPage() {
                     disabled={isLeaving}
                     onClick={() => void handleLeave()}
                   >
-                    {isLeaving ? 'Cancelling...' : 'Cancel room'}
+                    {isLeaving ? t('lobby.button.cancelling') : t('lobby.button.cancel')}
                   </Button>
                   <Button
                     type="button"
@@ -270,10 +253,10 @@ export function RoomLobbyPage() {
                     onClick={() => void handleStart()}
                   >
                     {isStarting
-                      ? 'Starting...'
+                      ? t('lobby.button.starting')
                       : isFull
-                        ? 'Start Tender'
-                        : 'Waiting for players...'}
+                        ? t('lobby.button.start')
+                        : t('lobby.button.waiting')}
                   </Button>
                 </>
               )}
@@ -285,7 +268,7 @@ export function RoomLobbyPage() {
                   disabled={isJoining}
                   onClick={() => void handleJoin()}
                 >
-                  {isJoining ? 'Joining...' : 'Join room'}
+                  {isJoining ? t('lobby.button.joining') : t('lobby.button.join')}
                 </Button>
               )}
             </div>

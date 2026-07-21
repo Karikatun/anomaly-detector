@@ -9,8 +9,10 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
 import { RoomsApi, useCreateRoomMutation } from '@/features/rooms'
+import { useI18n } from '@/platform/i18n'
 
 export function RoomListPage() {
+  const { t } = useI18n()
   const auth = useAuth()
   const navigate = useNavigate()
   const [capacity, setCapacity] = useState<2 | 3 | 4>(2)
@@ -23,7 +25,7 @@ export function RoomListPage() {
     setCreateError(null)
     const result = createRoomRequestSchema.safeParse({ capacity })
     if (!result.success) {
-      setCreateError('Invalid room capacity')
+      setCreateError(t('rooms.create.error.invalid'))
       return
     }
 
@@ -31,36 +33,34 @@ export function RoomListPage() {
       const room = await createRoom(result.data)
       await navigate({ to: '/rooms/$roomId', params: { roomId: room.roomId } })
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : 'Failed to create room')
+      setCreateError(error instanceof Error ? error.message : t('rooms.create.error.generic'))
     }
   }
 
   return (
     <section className="mx-auto grid w-full max-w-2xl gap-6 px-5 py-16">
       <div className="grid gap-2">
-        <Typography variant="h1">Tender Rooms</Typography>
-        <Typography tone="muted">
-          Create a private room and invite other players to start a Tender.
-        </Typography>
+        <Typography variant="h1">{t('rooms.title')}</Typography>
+        <Typography tone="muted">{t('rooms.description')}</Typography>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Create a room</CardTitle>
-          <CardDescription>Choose the number of players for this Tender.</CardDescription>
+          <CardTitle>{t('rooms.create.title')}</CardTitle>
+          <CardDescription>{t('rooms.create.description')}</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup className="gap-4">
             <Field>
-              <FieldLabel htmlFor="room-capacity">Number of players</FieldLabel>
+              <FieldLabel htmlFor="room-capacity">{t('rooms.create.capacity')}</FieldLabel>
               <NativeSelect
                 id="room-capacity"
                 value={String(capacity)}
                 onChange={(e) => setCapacity(Number(e.target.value) as 2 | 3 | 4)}
               >
-                <option value="2">2 players</option>
-                <option value="3">3 players</option>
-                <option value="4">4 players</option>
+                <option value="2">{t('rooms.create.capacity.2')}</option>
+                <option value="3">{t('rooms.create.capacity.3')}</option>
+                <option value="4">{t('rooms.create.capacity.4')}</option>
               </NativeSelect>
             </Field>
 
@@ -75,7 +75,7 @@ export function RoomListPage() {
               disabled={isCreating}
               onClick={() => void handleCreate()}
             >
-              {isCreating ? 'Creating...' : 'Create room'}
+              {isCreating ? t('rooms.create.submitting') : t('rooms.create.submit')}
             </Button>
           </FieldGroup>
         </CardContent>

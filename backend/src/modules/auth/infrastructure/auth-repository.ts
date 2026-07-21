@@ -192,6 +192,67 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
       })
     },
 
+    async findOAuthTransactionByState({ state }) {
+      const stateHash = await sha256(state)
+      const transaction = await db.oAuthTransaction.findUnique({
+        where: { stateHash },
+      })
+      if (!transaction) return null
+      if (transaction.expiresAt < new Date()) return null
+      return {
+        codeVerifier: transaction.codeVerifier,
+        expiresAt: transaction.expiresAt,
+        provider: transaction.provider as 'yandex' | 'vk',
+        redirectUri: transaction.redirectUri,
+        state,
+      }
+    },
+
+    async deleteOAuthTransaction({ state }) {
+      const stateHash = await sha256(state)
+      await db.oAuthTransaction.deleteMany({ where: { stateHash } })
+    },
+
+    async findUserByIdentity({ provider, subject }) {
+      const identity = await db.authIdentity.findUnique({
+        where: { provider_subject: { provider, subject } },
+        include: { user: true },
+      })
+      return identity?.user ?? null
+    },
+
+    async createOAuthUserWithSession(input) {
+      const { user: userData, identity: identityData, session: sessionData } = input
+      return await db.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email: userData.email,
+            passwordHash: 'OAUTH_USER',
+            displayName: userData.displayName ?? null,
+          },
+        })
+        await tx.authIdentity.create({
+          data: {
+            userId: user.id,
+            provider: identityData.provider,
+            subject: identityData.subject,
+          },
+        })
+        const session = await tx.authSession.create({
+          data: {
+            userId: user.id,
+            refreshTokenHash: sessionData.refreshTokenHash,
+            refreshTokenFamilyHash: sessionData.refreshTokenFamilyHash,
+            expiresAt: sessionData.expiresAt,
+            userAgent: sessionData.metadata.userAgent,
+            ipAddress: sessionData.metadata.ipAddress,
+          },
+          select: { id: true },
+        })
+        return { user, session }
+      })
+    },
+
     async anonymizeUser({ userId, now }) {
       await db.user.update({
         where: { id: userId },

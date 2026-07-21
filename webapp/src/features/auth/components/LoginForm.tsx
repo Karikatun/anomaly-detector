@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ApiRequestError } from '@/platform/api'
+import { useI18n } from '@/platform/i18n'
 import { useAuth } from '../use-auth'
 import { FormAlert } from './form-errors'
 import type { AuthDraft, FieldErrors } from './form-model'
@@ -18,6 +19,7 @@ export function LoginForm({
   draft: AuthDraft
   onDraftChange: (draft: Partial<AuthDraft>) => void
 }) {
+  const { t } = useI18n()
   const auth = useAuth()
   const emailId = useId()
   const emailErrorId = useId()
@@ -41,7 +43,7 @@ export function LoginForm({
         await auth.login(result.data as LoginRequest)
       } catch (caughtError) {
         setFormError(
-          caughtError instanceof ApiRequestError ? caughtError.message : 'Unexpected auth error',
+          caughtError instanceof ApiRequestError ? caughtError.message : t('login.error.unexpected'),
         )
       }
     },
@@ -59,7 +61,7 @@ export function LoginForm({
           name="email"
           children={(field) => (
             <Field data-invalid={hasErrors(fieldErrors.email)}>
-              <FieldLabel htmlFor={emailId}>Email</FieldLabel>
+              <FieldLabel htmlFor={emailId}>{t('login.email')}</FieldLabel>
               <Input
                 id={emailId}
                 name={field.name}
@@ -67,6 +69,7 @@ export function LoginForm({
                 type="text"
                 inputMode="email"
                 autoComplete="email"
+                placeholder={t('login.email.placeholder')}
                 aria-invalid={hasErrors(fieldErrors.email)}
                 aria-describedby={errorId(fieldErrors.email, emailErrorId)}
                 onBlur={field.handleBlur}
@@ -87,7 +90,7 @@ export function LoginForm({
           name="password"
           children={(field) => (
             <Field data-invalid={hasErrors(fieldErrors.password)}>
-              <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
+              <FieldLabel htmlFor={passwordId}>{t('login.password')}</FieldLabel>
               <Input
                 id={passwordId}
                 name={field.name}
@@ -116,7 +119,7 @@ export function LoginForm({
           selector={(state) => state.isSubmitting}
           children={(isSubmitting) => (
             <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Working...' : 'Login'}
+              {isSubmitting ? t('login.submitting') : t('login.submit')}
             </Button>
           )}
         />

@@ -73,6 +73,30 @@ export const meResponseSchema = z.object({
   user: userSchema,
 })
 
+// ── OAuth ────────────────────────────────────────────────────────────────────
+
+export const oauthProviderSchema = z.union([z.literal('yandex'), z.literal('vk')])
+
+export const oauthStartRequestSchema = z.object({
+  redirectUri: z.string().url().max(512),
+})
+
+export const oauthStartResponseSchema = z.object({
+  authorizationUrl: z.string(),
+})
+
+export const oauthCallbackQuerySchema = z.object({
+  code: z.string().min(1),
+  state: z.string().min(1),
+})
+
+export const oauthCallbackErrorQuerySchema = z.object({
+  error: z.string().min(1),
+  error_description: z.string().optional(),
+})
+
+// ── Type exports ─────────────────────────────────────────────────────────────
+
 export type UserDto = z.infer<typeof userSchema>
 export type RegisterRequest = z.input<typeof registerRequestSchema>
 export type RegisterPayload = z.output<typeof registerRequestSchema>
@@ -86,3 +110,8 @@ export type TokenAuthResponse = z.infer<typeof tokenAuthResponseSchema>
 export type CookieRefreshResponse = z.infer<typeof cookieRefreshResponseSchema>
 export type TokenRefreshResponse = z.infer<typeof tokenRefreshResponseSchema>
 export type MeResponse = z.infer<typeof meResponseSchema>
+export type OAuthProviderId = z.infer<typeof oauthProviderSchema>
+export type OAuthStartRequest = z.infer<typeof oauthStartRequestSchema>
+export type OAuthStartResponse = z.infer<typeof oauthStartResponseSchema>
+export type OAuthCallbackQuery = z.infer<typeof oauthCallbackQuerySchema>
+export type OAuthCallbackErrorQuery = z.infer<typeof oauthCallbackErrorQuerySchema>

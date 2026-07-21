@@ -14,6 +14,9 @@ import {
 } from './infrastructure/refresh-tokens'
 import { createRequireAuth, type AuthHttpEnv } from './transport/middleware'
 import { createAuthRoutes } from './transport/routes'
+import { OAuthProviderRegistry } from './infrastructure/oauth-registry'
+import { createYandexOAuthProvider } from './infrastructure/oauth-yandex'
+import { createVkOAuthProvider } from './infrastructure/oauth-vk'
 
 type CreateAuthModuleOptions = {
   clock?: Clock
@@ -36,6 +39,23 @@ export function createAuthModule({
   logoutCleanup = noLogoutCleanup,
   projectUser = toBaseUserDto,
 }: CreateAuthModuleOptions) {
+  // Build OAuth provider registry
+  const oauthProviders = new OAuthProviderRegistry()
+
+  if (env.YANDEX_OAUTH_CLIENT_ID && env.YANDEX_OAUTH_CLIENT_SECRET) {
+    oauthProviders.register('yandex', createYandexOAuthProvider({
+      clientId: env.YANDEX_OAUTH_CLIENT_ID,
+      clientSecret: env.YANDEX_OAUTH_CLIENT_SECRET,
+    }))
+  }
+
+  if (env.VK_OAUTH_CLIENT_ID && env.VK_OAUTH_CLIENT_SECRET) {
+    oauthProviders.register('vk', createVkOAuthProvider({
+      clientId: env.VK_OAUTH_CLIENT_ID,
+      clientSecret: env.VK_OAUTH_CLIENT_SECRET,
+    }))
+  }
+
   const service = new AuthService({
     accessTokens: {
       sign: (payload) => signAccessToken(payload, env),
@@ -43,6 +63,7 @@ export function createAuthModule({
     },
     clock,
     logoutCleanup,
+    oauthProviders: oauthProviders.hasAny() ? oauthProviders : undefined,
     passwords: {
       hash: hashPassword,
       verify: verifyPassword,
@@ -65,7 +86,7 @@ export function createAuthModule({
     authenticateAccessToken: (accessToken: string | undefined) =>
       service.authenticateAccessToken(accessToken),
     requireAuth,
-    routes: createAuthRoutes({ env, requireAuth, service }),
+    routes: createAuthRoutes({ env, requireAuth, service, webappUrl: env.CORS_ORIGINS[0] }),
   }
 }
 
