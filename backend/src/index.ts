@@ -1,13 +1,42 @@
 import { createApp } from './app'
+import {
+  createPrismaRealtimeTicketStore,
+  createPrismaTenderStore,
+  createRealtimeHub,
+  createRealtimeWebSocketHandlers,
+  createTenderModule,
+  upgradeRealtimeWebSocket,
+  type RealtimeHub,
+  type RealtimeSocketData,
+} from './modules/tender'
 import { createBackendRuntime } from './runtime'
 import { stopServerGracefully } from './shutdown'
 
 const runtime = createBackendRuntime()
-const app = createApp({ env: runtime.env, prisma: runtime.prisma })
+const ticketStore = createPrismaRealtimeTicketStore(runtime.prisma)
+const tenderStore = createPrismaTenderStore(runtime.prisma)
 
-const server = Bun.serve({
+let realtime: RealtimeHub
+const tender = createTenderModule({
+  onTenderChanged: (tenderId) => {
+    void realtime?.handleTenderChanged(tenderId)
+  },
+  store: tenderStore,
+})
+realtime = createRealtimeHub({ tender })
+
+const app = createApp({ env: runtime.env, prisma: runtime.prisma, tender })
+
+const server = Bun.serve<RealtimeSocketData>({
   port: runtime.env.PORT,
-  fetch: app.fetch,
+  fetch(request, server) {
+    const url = new URL(request.url)
+    if (url.pathname === '/api/realtime/ws') {
+      return upgradeRealtimeWebSocket({ hub: realtime, request, server, ticketStore })
+    }
+    return app.fetch(request)
+  },
+  websocket: createRealtimeWebSocketHandlers({ hub: realtime }),
 })
 
 console.log(`Backend listening on ${server.url}`)

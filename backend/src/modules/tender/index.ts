@@ -23,6 +23,7 @@ type CreateTenderModuleOptions = {
   now?: () => Date
   seedGenerator?: () => string
   store?: TenderStore
+  onTenderChanged?: (tenderId: string) => void
 }
 
 const accessSlotSelectionDurationMs = 45_000
@@ -83,6 +84,7 @@ export function createTenderModule({
   now = () => new Date(),
   seedGenerator = randomUUID,
   store = createInMemoryTenderStore(),
+  onTenderChanged,
 }: CreateTenderModuleOptions = {}) {
   const readTender = async (tenderId: string) => {
     const tender = await store.read(tenderId)
@@ -201,6 +203,7 @@ export function createTenderModule({
     if (result.kind === 'version_conflict') {
       throw new TenderFailure('tender_version_conflict', `Tender ${command.tenderId} changed before command execution`)
     }
+    onTenderChanged?.(command.tenderId)
     return receipt
   }
 
@@ -215,6 +218,9 @@ export function createTenderModule({
       nextTender: { ...nextTender, version: tender.version + 1 },
       tenderId: tender.id,
     })
+    if (result.kind === 'committed') {
+      onTenderChanged?.(tender.id)
+    }
     return result.kind === 'committed'
   }
 
@@ -917,6 +923,16 @@ export function createPersistentTenderModule(db: DbClient) {
   return createTenderModule({ store: createPrismaTenderStore(db) })
 }
 
+export type TenderModule = ReturnType<typeof createTenderModule>
+
 export { createTenderRoutes } from './transport/routes'
 export { createRealtimeTicketRoutes } from './realtime/ticket-routes'
+export { createRealtimeHub, type RealtimeHub } from './realtime/hub'
+export { createPrismaRealtimeTicketStore } from './realtime/prisma-realtime-ticket-store'
+export { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
+export {
+  createRealtimeWebSocketHandlers,
+  upgradeRealtimeWebSocket,
+  type RealtimeSocketData,
+} from './realtime/websocket'
 import { randomUUID } from 'node:crypto'
