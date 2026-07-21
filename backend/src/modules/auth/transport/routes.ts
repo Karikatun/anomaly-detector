@@ -11,6 +11,7 @@ import {
   tokenLogoutRequestSchema,
   tokenRefreshRequestSchema,
   tokenRefreshResponseSchema,
+  updateProfileSchema,
 } from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { Context, MiddlewareHandler } from 'hono'
@@ -277,6 +278,25 @@ const deleteAccountRoute = createRoute({
   },
 })
 
+const updateProfileRoute = createRoute({
+  method: 'patch',
+  path: '/profile',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: updateProfileSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    204: { description: 'Profile updated' },
+    400: { content: errorResponseContent, description: 'Invalid payload' },
+    401: { content: errorResponseContent, description: 'Authentication required' },
+  },
+})
+
 type CreateAuthRoutesOptions = {
   env: AppEnv
   requireAuth: MiddlewareHandler<AuthHttpEnv>
@@ -336,6 +356,12 @@ export function createAuthRoutes({ env, requireAuth, service }: CreateAuthRoutes
   protectedRoutes.openapi(deleteAccountRoute, async (c) => {
     const userId = c.var.user.id
     await executeAuth(() => service.deleteAccount(userId))
+    return c.body(null, 204)
+  })
+  protectedRoutes.use('/profile', requireAuth)
+  protectedRoutes.openapi(updateProfileRoute, async (c) => {
+    const userId = c.var.user.id
+    await executeAuth(() => service.updateProfile(userId, c.req.valid('json')))
     return c.body(null, 204)
   })
   routes.route('/', protectedRoutes)
