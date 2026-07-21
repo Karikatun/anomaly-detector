@@ -1,4 +1,4 @@
-import type { UserDto } from '@the-game/contracts'
+import type { UserDto } from '@anomaly-detector/contracts'
 
 export type AuthUserRecord = {
   id: string

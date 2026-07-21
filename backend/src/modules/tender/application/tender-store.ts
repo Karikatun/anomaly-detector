@@ -11,7 +11,7 @@ import type {
   TenderPhase,
   TenderPlayer,
   WorkingModel,
-} from '@the-game/contracts'
+} from '@anomaly-detector/contracts'
 import type { AnomalyConfiguration, SignalId } from '../domain/anomaly-configuration'
 
 export type PrivateMeasurement = { receiverSignal: SignalId; sourceSignal: SignalId; polarityRelation: 'same' | 'different' }

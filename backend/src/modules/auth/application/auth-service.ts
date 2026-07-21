@@ -1,4 +1,4 @@
-import type { LoginRequest, RegisterPayload } from '@the-game/contracts'
+import type { LoginRequest, RegisterPayload } from '@anomaly-detector/contracts'
 
 import { AuthFailure } from '../domain/errors'
 import type { OAuthProviderId } from '../domain/oauth'

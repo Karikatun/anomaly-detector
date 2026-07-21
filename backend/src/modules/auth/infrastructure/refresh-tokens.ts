@@ -11,7 +11,7 @@ export function hashRefreshToken(refreshToken: string) {
 export function deriveRotatedRefreshToken(refreshToken: string, secret: string) {
   const familyId = refreshTokenFamilyId(refreshToken, secret)
   const nextCredential = createHmac('sha256', secret)
-    .update('the-game:refresh-rotation:v1\0')
+    .update('anomaly-detector:refresh-rotation:v1\0')
     .update(refreshToken)
     .digest('base64url')
 
@@ -35,7 +35,7 @@ function refreshTokenFamilyId(refreshToken: string, secret: string) {
   }
 
   return createHmac('sha256', secret)
-    .update('the-game:refresh-family:v1\0')
+    .update('anomaly-detector:refresh-family:v1\0')
     .update(refreshToken)
     .digest('base64url')
 }

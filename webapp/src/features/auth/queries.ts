@@ -9,7 +9,7 @@ import type {
   LoginRequest,
   MeResponse,
   RegisterRequest,
-} from '@the-game/contracts'
+} from '@anomaly-detector/contracts'
 
 import type { AuthApi } from './api'
 

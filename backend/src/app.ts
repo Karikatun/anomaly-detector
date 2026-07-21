@@ -58,7 +58,7 @@ export function createApp({ env, prisma, tender: providedTender }: CreateAppOpti
   }
   app.get('/', (c) => {
     return c.json({
-      name: 'the_game backend',
+      name: 'anomaly_detector backend',
       status: 'ok',
     })
   })
@@ -92,7 +92,7 @@ export function createApp({ env, prisma, tender: providedTender }: CreateAppOpti
   app.doc('/openapi.json', {
     openapi: '3.0.0',
     info: {
-      title: 'the_game API',
+      title: 'anomaly_detector API',
       version: '1.0.0',
     },
   })

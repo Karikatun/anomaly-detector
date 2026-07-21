@@ -1,4 +1,4 @@
-import type { RealtimeServerMessage } from '@the-game/contracts'
+import type { RealtimeServerMessage } from '@anomaly-detector/contracts'
 
 import type { createTenderModule } from '../index'
 

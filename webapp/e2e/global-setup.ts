@@ -62,7 +62,7 @@ export default async function globalSetup() {
 
   if (process.env.E2E_SKIP_DOCKER !== '1') {
     run('docker', [...composeArgs, 'up', '-d', 'postgres_test'], env)
-    await waitForComposePostgres('postgres_test', 'the_game_test', env)
+    await waitForComposePostgres('postgres_test', 'anomaly_detector_test', env)
   }
 
   run('bun', ['run', '--cwd', 'backend', 'prisma:deploy'], env)

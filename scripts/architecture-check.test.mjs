@@ -4,7 +4,7 @@ import { checkArchitectureSources } from './architecture-check.mjs'
 
 describe('backend layers', () => {
   test('accepts pure domain and application ports', () => {
-    expect(check([file('backend/src/modules/auth/domain/session.ts', "import type { UserDto } from '@the-game/contracts'")])).toEqual([])
+    expect(check([file('backend/src/modules/auth/domain/session.ts', "import type { UserDto } from '@anomaly-detector/contracts'")])).toEqual([])
   })
 
   test('rejects framework, persistence, env, and infrastructure from inner layers', () => {

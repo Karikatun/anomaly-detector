@@ -7,11 +7,11 @@ WORKDIR /app
 # remain valid for both repository shapes.
 COPY . .
 
-RUN bun install --frozen-lockfile --filter @the-game/backend
+RUN bun install --frozen-lockfile --filter @anomaly-detector/backend
 
 WORKDIR /app/backend
 
-RUN DATABASE_URL="postgresql://superuser:superpassword@localhost:5432/the_game?schema=public" bun run prisma:generate
+RUN DATABASE_URL="postgresql://superuser:superpassword@localhost:5432/anomaly_detector?schema=public" bun run prisma:generate
 
 FROM oven/bun:1.3.14 AS production-dependencies
 
@@ -19,7 +19,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN bun install --frozen-lockfile --production --filter @the-game/backend
+RUN bun install --frozen-lockfile --production --filter @anomaly-detector/backend
 
 FROM oven/bun:1.3.14 AS runtime
 

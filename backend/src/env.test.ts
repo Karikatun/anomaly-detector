@@ -5,7 +5,7 @@ import { loadEnv } from './env'
 describe('loadEnv', () => {
   test('parses defaults and comma-separated origins', () => {
     const env = loadEnv({
-      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
       JWT_SECRET: '12345678901234567890123456789012',
       CORS_ORIGINS: 'http://localhost:5173, http://localhost:8081',
     })
@@ -26,21 +26,21 @@ describe('loadEnv', () => {
   test('requires complete DigitalOcean Spaces configuration when storage is enabled', () => {
     expect(() =>
       loadEnv({
-        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
         JWT_SECRET: '12345678901234567890123456789012',
         SPACES_BUCKET: 'uploads',
       }),
     ).toThrow()
     expect(() =>
       loadEnv({
-        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
         JWT_SECRET: '12345678901234567890123456789012',
         SPACES_CDN_BASE_URL: 'https://images.example.com',
       }),
     ).toThrow()
 
     const env = loadEnv({
-      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
       JWT_SECRET: '12345678901234567890123456789012',
       SPACES_REGION: 'nyc3',
       SPACES_BUCKET: 'uploads',
@@ -59,14 +59,14 @@ describe('loadEnv', () => {
     expect(() =>
       loadEnv({
         NODE_ENV: 'production',
-        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
         JWT_SECRET: 'replace-with-at-least-32-random-characters',
       }),
     ).toThrow('JWT_SECRET')
 
     expect(() =>
       loadEnv({
-        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
         JWT_SECRET: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         COOKIE_SECURE: 'true',
         CORS_ORIGINS: 'https://web.example.com',
@@ -75,7 +75,7 @@ describe('loadEnv', () => {
 
     expect(() =>
       loadEnv({
-        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
         JWT_SECRET: 'a-memorable-human-secret-phrase-that-is-long-enough-to-pass',
         COOKIE_SECURE: 'true',
         CORS_ORIGINS: 'https://web.example.com',
@@ -86,7 +86,7 @@ describe('loadEnv', () => {
   test('requires generated secrets, secure cookies, and HTTPS origins in production', () => {
     const productionBase = {
       NODE_ENV: 'production',
-      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
       JWT_SECRET: '0123456789abcdef'.repeat(4),
       COOKIE_SECURE: 'true',
       CORS_ORIGINS: 'https://web.example.com',
@@ -102,7 +102,7 @@ describe('loadEnv', () => {
 
   test('rejects unsafe production CORS origins', () => {
     const baseEnv = {
-      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
       JWT_SECRET: '12345678901234567890123456789012',
     }
 
@@ -139,7 +139,7 @@ describe('loadEnv', () => {
   test('keeps absolute session lifetime at least as long as refresh lifetime', () => {
     expect(() =>
       loadEnv({
-        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
         JWT_SECRET: '12345678901234567890123456789012',
         REFRESH_TOKEN_TTL_DAYS: '30',
         SESSION_ABSOLUTE_TTL_DAYS: '29',
@@ -150,7 +150,7 @@ describe('loadEnv', () => {
   test('bounds refresh replay tolerance to a short window', () => {
     expect(() =>
       loadEnv({
-        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+        DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
         JWT_SECRET: '12345678901234567890123456789012',
         REFRESH_REUSE_GRACE_SECONDS: '61',
       }),
@@ -159,7 +159,7 @@ describe('loadEnv', () => {
 
   test('requires an explicit client IP header when a trusted proxy is enabled', () => {
     const baseEnv = {
-      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/the_game',
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
       JWT_SECRET: '12345678901234567890123456789012',
       TRUST_PROXY: 'true',
     }

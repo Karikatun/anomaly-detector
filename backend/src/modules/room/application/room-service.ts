@@ -1,4 +1,4 @@
-import type { RoomView } from '@the-game/contracts'
+import type { RoomView } from '@anomaly-detector/contracts'
 
 import type { RoomRepository } from './ports'
 

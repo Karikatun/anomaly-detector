@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { registerRequestSchema } from '@the-game/contracts'
+import { registerRequestSchema } from '@anomaly-detector/contracts'
 
 describe('contracts', () => {
   test('normalizes auth registration payloads', () => {

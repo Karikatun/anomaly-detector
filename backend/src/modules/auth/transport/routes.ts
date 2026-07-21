@@ -11,7 +11,7 @@ import {
   tokenLogoutRequestSchema,
   tokenRefreshRequestSchema,
   tokenRefreshResponseSchema,
-} from '@the-game/contracts'
+} from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { Context, MiddlewareHandler } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
@@ -24,7 +24,7 @@ import { userDtoFromPrincipal } from '../domain/user'
 import { executeAuth } from './errors'
 import type { AuthHttpEnv } from './middleware'
 
-const refreshCookieName = 'the_game_refresh'
+const refreshCookieName = 'anomaly_detector_refresh'
 
 const cookieAuthResponseContent = {
   'application/json': {

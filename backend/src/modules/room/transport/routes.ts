@@ -1,4 +1,4 @@
-import { apiErrorSchema, createRoomRequestSchema, roomIdSchema, roomViewSchema } from '@the-game/contracts'
+import { apiErrorSchema, createRoomRequestSchema, roomIdSchema, roomViewSchema } from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'

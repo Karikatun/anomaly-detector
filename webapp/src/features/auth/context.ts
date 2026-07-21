@@ -1,4 +1,4 @@
-import type { LoginRequest, RegisterRequest, UserDto } from '@the-game/contracts'
+import type { LoginRequest, RegisterRequest, UserDto } from '@anomaly-detector/contracts'
 import { createContext } from 'react'
 import type { AuthenticatedTransport } from '@/platform/api'
 

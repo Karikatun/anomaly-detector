@@ -1,4 +1,4 @@
-import { apiErrorSchema, realtimeTicketResponseSchema } from '@the-game/contracts'
+import { apiErrorSchema, realtimeTicketResponseSchema } from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
 

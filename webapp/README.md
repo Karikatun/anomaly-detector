@@ -17,7 +17,7 @@ This section may be updated during first-run bootstrap. If the root `README.md` 
 - TanStack Query
 - TanStack Form
 - TanStack Router
-- Zod contracts from `@the-game/contracts`
+- Zod contracts from `@anomaly-detector/contracts`
 - shadcn CLI
 - Playwright
 - ESLint
@@ -78,7 +78,7 @@ Use the local `shadcn` devDependency pinned in `webapp/package.json` and `bun.lo
 
 The Playwright smoke tests live in `e2e/specs/auth.spec.ts` and verify client-side auth validation visibility, register/login mode switching, register, refresh after reload, protected UI, logout, invalid login error rendering, successful login after logout, concurrent session restoration, cross-tab logout/error recovery, and convergence after competing account changes in two tabs.
 
-The run starts Docker Compose `postgres_test`, applies migrations to `the_game_test`, starts the backend with `TEST_DATABASE_URL` as its `DATABASE_URL`, starts Vite, and removes the test database volume after the run by default.
+The run starts Docker Compose `postgres_test`, applies migrations to `anomaly_detector_test`, starts the backend with `TEST_DATABASE_URL` as its `DATABASE_URL`, starts Vite, and removes the test database volume after the run by default.
 
 First run:
 
