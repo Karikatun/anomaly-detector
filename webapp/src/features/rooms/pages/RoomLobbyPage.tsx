@@ -26,6 +26,12 @@ export function RoomLobbyPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
+  useEffect(() => {
+    if (!auth.isBootstrapping && !auth.user) {
+      void navigate({ to: '/', replace: true })
+    }
+  }, [auth.isBootstrapping, auth.user, navigate])
+
   const api = new RoomsApi(auth.transport)
   const { mutateAsync: joinRoom, isPending: isJoining } = useJoinRoomMutation({ api })
   const { mutateAsync: leaveRoom, isPending: isLeaving } = useLeaveRoomMutation({ api })

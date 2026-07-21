@@ -1,6 +1,6 @@
 import { createRoomRequestSchema } from '@anomaly-detector/contracts'
 import { useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,9 +18,18 @@ export function RoomListPage() {
   const auth = useAuth()
   const navigate = useNavigate()
   const [capacity, setCapacity] = useState<2 | 3 | 4>(2)
+
+  useEffect(() => {
+    if (!auth.isBootstrapping && !auth.user) {
+      void navigate({ to: '/', replace: true })
+    }
+  }, [auth.isBootstrapping, auth.user, navigate])
+
   const [createError, setCreateError] = useState<string | null>(null)
   const [joinCode, setJoinCode] = useState('')
   const [joinError, setJoinError] = useState<string | null>(null)
+
+  if (auth.isBootstrapping || !auth.user) return null
 
   const api = new RoomsApi(auth.transport)
   const { mutateAsync: createRoom, isPending: isCreating } = useCreateRoomMutation({ api })

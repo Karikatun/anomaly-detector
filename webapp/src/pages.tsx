@@ -1,4 +1,5 @@
-import { Link } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,13 @@ import { useI18n } from '@/platform/i18n'
 
 export function HomePage() {
   const auth = useAuth()
-  const { t } = useI18n()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (auth.user) {
+      void navigate({ to: '/rooms', replace: true })
+    }
+  }, [auth.user, navigate])
 
   if (auth.isBootstrapping) {
     return <LoadingState />
@@ -28,42 +35,14 @@ export function HomePage() {
   }
 
   if (auth.user) {
-    return (
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
-        <Badge variant="outline" className="w-fit">
-          {t('home.authenticated.badge')}
-        </Badge>
-        <div className="grid max-w-3xl gap-4">
-          <Typography variant="h1">{t('home.authenticated.title')}</Typography>
-          <Typography className="max-w-2xl" tone="muted">
-            {t('home.authenticated.description')}{' '}
-            <Typography as="strong" variant="emphasis" tone="default">
-              {auth.user.email}
-            </Typography>
-            . {t('home.authenticated.subtitle')}
-          </Typography>
-        </div>
-        <Button asChild size="lg" className="w-fit">
-          <Link to="/app">{t('home.authenticated.cta')}</Link>
-        </Button>
-      </section>
-    )
+    return null
   }
 
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center">
-      <div className="grid gap-5">
-        <Badge variant="outline" className="w-fit">
-          {t('home.guest.badge')}
-        </Badge>
-        <Typography className="max-w-3xl" variant="h1">
-          {t('home.guest.title')}
-        </Typography>
-        <Typography className="max-w-2xl" tone="muted">
-          {t('home.guest.description')}
-        </Typography>
+    <section className="flex min-h-[80vh] items-center justify-center px-5 py-12">
+      <div className="w-full max-w-sm">
+        <AuthForm />
       </div>
-      <AuthForm />
     </section>
   )
 }
@@ -71,32 +50,24 @@ export function HomePage() {
 export function AppPage() {
   const auth = useAuth()
   const { t } = useI18n()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!auth.isBootstrapping && !auth.user) {
+      void navigate({ to: '/', replace: true })
+    }
+  }, [auth.isBootstrapping, auth.user, navigate])
 
   if (auth.isBootstrapping) {
     return <LoadingState />
   }
 
-  if (auth.sessionError && !auth.user) {
-    return <SessionErrorState retry={auth.retrySession} />
+  if (!auth.isBootstrapping && !auth.user) {
+    return null
   }
 
-  if (!auth.user) {
-    return (
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
-        <Badge variant="outline" className="w-fit">
-          {t('app.protected.badge')}
-        </Badge>
-        <div className="grid max-w-3xl gap-4">
-          <Typography variant="h1">{t('app.protected.title')}</Typography>
-          <Typography className="max-w-2xl" tone="muted">
-            {t('app.protected.description')}
-          </Typography>
-        </div>
-        <Button asChild size="lg" className="w-fit">
-          <Link to="/">{t('app.protected.cta')}</Link>
-        </Button>
-      </section>
-    )
+  if (auth.sessionError && !auth.user) {
+    return <SessionErrorState retry={auth.retrySession} />
   }
 
   return (
@@ -106,9 +77,9 @@ export function AppPage() {
           {t('app.profile.badge')}
         </Badge>
         <Typography variant="h1">
-          {auth.user.displayName ?? auth.user.email}
+          {auth.user?.displayName ?? auth.user?.email}
         </Typography>
-        <Typography tone="muted">{auth.user.email}</Typography>
+        <Typography tone="muted">{auth.user?.email}</Typography>
       </div>
 
       <Separator />
@@ -117,21 +88,21 @@ export function AppPage() {
         <Card size="sm">
           <CardHeader>
             <CardTitle>{t('app.profile.userId')}</CardTitle>
-            <CardDescription wrap="break">{auth.user.id}</CardDescription>
+            <CardDescription wrap="break">{auth.user?.id}</CardDescription>
           </CardHeader>
         </Card>
         <Card size="sm">
           <CardHeader>
             <CardTitle>{t('app.profile.locale')}</CardTitle>
             <CardDescription>
-              {auth.user.locale === 'ru' ? t('app.profile.locale.ru') : t('app.profile.locale.en')}
+              {auth.user?.locale === 'ru' ? t('app.profile.locale.ru') : t('app.profile.locale.en')}
             </CardDescription>
           </CardHeader>
         </Card>
         <Card size="sm">
           <CardHeader>
             <CardTitle>{t('app.profile.created')}</CardTitle>
-            <CardDescription>{new Date(auth.user.createdAt).toLocaleString()}</CardDescription>
+            <CardDescription>{new Date(auth.user?.createdAt ?? '').toLocaleString()}</CardDescription>
           </CardHeader>
         </Card>
       </div>

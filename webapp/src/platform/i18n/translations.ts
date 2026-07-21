@@ -2,10 +2,8 @@
 const ru = {
   // Layout
   'app.logo': 'anomaly_detector',
-  'nav.auth': 'Вход',
   'nav.rooms': 'Комнаты',
   'nav.matches': 'Мои матчи',
-  'nav.app': 'Приложение',
   'button.logout': 'Выйти',
   'logout.failed': 'Не удалось выйти. Сессия всё ещё активна, попробуйте ещё раз.',
 
@@ -18,21 +16,7 @@ const ru = {
   'oauth.vk': 'VK ID',
   'oauth.redirecting': 'Перенаправляем...',
 
-  // Home page
-  'home.authenticated.badge': 'Сессия активна',
-  'home.authenticated.title': 'Сессия активна',
-  'home.authenticated.description': 'Вы вошли как',
-  'home.authenticated.subtitle': 'Базовая аутентификация для будущих функций.',
-  'home.authenticated.cta': 'В приложение',
-  'home.guest.badge': 'Демо приложение',
-  'home.guest.title': 'Аутентификация, валидация, API-состояние и формы — готовы к работе.',
-  'home.guest.description': 'Приложение использует общие Zod-контракты, TanStack Query для серверного состояния, TanStack Form для форм и API-клиент с автообновлением сессии.',
-
   // App page
-  'app.protected.badge': 'Требуется вход',
-  'app.protected.title': 'Требуется вход',
-  'app.protected.description': 'Этот раздел доступен только авторизованным пользователям.',
-  'app.protected.cta': 'Войти',
   'app.profile.badge': 'Текущий пользователь',
   'app.profile.title': 'Профиль',
   'app.profile.userId': 'ID пользователя',
