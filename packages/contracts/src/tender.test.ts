@@ -200,7 +200,7 @@ describe('Tender contracts', () => {
     ).toMatchObject({ type: 'submit-contract-bid' })
   })
 
-  test('validates a participant audit replay with private measurements', () => {
+  test('validates a participant audit replay with private measurements and public laboratory results', () => {
     expect(tenderAuditViewSchema.parse({
       anomalyConfiguration: {
         seed: 'seed-1',
@@ -223,6 +223,13 @@ describe('Tender contracts', () => {
       privateMeasurementsByPlayer: {
         'player-a': [{ polarityRelation: 'same', receiverSignal: 'cinder', sourceSignal: 'aster' }],
       },
+      publicLaboratoryResults: [{
+        playerId: 'player-a',
+        protocol: 'continuous',
+        publicResult: 'transmission_gain',
+        receiverSignal: 'cinder',
+        sourceSignal: 'aster',
+      }],
     })).toMatchObject({
       events: [{ kind: 'laboratory_test_completed', sequence: 1 }],
     })

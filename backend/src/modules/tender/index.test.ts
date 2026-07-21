@@ -1324,3 +1324,66 @@ test('completes the Tender after Contracts in round five', async () => {
     workingModel: { signals: { aster: { hypothesis: { fieldType: 'phase' } } } },
   })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
 })
+
+test('projects public Laboratory results into the participant audit view', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  for (let round = 1; round <= 5; round += 1) {
+    await tender.execute({ commandId: `a-${round}-slot`, tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 3 })
+    await tender.execute({ commandId: `b-${round}-slot`, tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 4 })
+    await tender.execute({
+      allocation: round === 1
+        ? { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 }
+        : { contracts: 2, laboratory: 2, modelAnalysis: 0, reconnaissance: 0 },
+      actorId: 'player-a',
+      commandId: `a-${round}-power`,
+      tenderId,
+      type: 'allocate-power',
+    })
+    await tender.execute({
+      allocation: round === 1
+        ? { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 }
+        : { contracts: 2, laboratory: 2, modelAnalysis: 0, reconnaissance: 0 },
+      actorId: 'player-b',
+      commandId: `b-${round}-power`,
+      tenderId,
+      type: 'allocate-power',
+    })
+    if (round === 1) {
+      await tender.execute({ commandId: `a-${round}-recon`, tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+      await tender.execute({ commandId: `b-${round}-recon`, tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
+    } else {
+      await tender.execute({ commandId: `a-${round}-lab`, tenderId, actorId: 'player-a', type: 'run-laboratory-test', sourceSignal: 'aster', receiverSignal: 'cinder', protocol: 'continuous' })
+      await tender.execute({ commandId: `b-${round}-lab`, tenderId, actorId: 'player-b', type: 'run-laboratory-test', sourceSignal: 'aster', receiverSignal: 'cinder', protocol: 'continuous' })
+    }
+    await tender.execute({ commandId: `a-${round}-reserve`, tenderId, actorId: 'player-a', type: 'reserve-contract', contractId: `round-${round}-contract-1` })
+    await tender.execute({ commandId: `a-${round}-bid`, tenderId, actorId: 'player-a', type: 'submit-contract-bid', contractId: `round-${round}-contract-1`, claimedPublicResult: 'unstable_collapse', requestedFunding: 1 })
+    await tender.execute({ commandId: `b-${round}-reserve`, tenderId, actorId: 'player-b', type: 'reserve-contract', contractId: `round-${round}-contract-2` })
+    await tender.execute({ commandId: `b-${round}-bid`, tenderId, actorId: 'player-b', type: 'submit-contract-bid', contractId: `round-${round}-contract-2`, claimedPublicResult: 'reflection', requestedFunding: 1 })
+  }
+
+  await tender.execute({ commandId: 'a-final-model', tenderId, actorId: 'player-a', type: 'submit-scientific-model', scientificModel: { signals: { aster: { fieldType: 'inertial' } } } })
+  await tender.execute({ commandId: 'b-final-model', tenderId, actorId: 'player-b', type: 'submit-scientific-model', scientificModel: { signals: { aster: { fieldType: 'inertial' } } } })
+
+  const view = await tender.readTenderView({ tenderId, playerId: 'player-a' })
+  expect(view.phase).toBe('complete')
+  expect(view.audit).toBeDefined()
+  expect(view.audit!.publicLaboratoryResults.length).toBeGreaterThanOrEqual(1)
+  expect(view.audit!.publicLaboratoryResults).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        playerId: 'player-a',
+        protocol: 'continuous',
+        publicResult: expect.any(String),
+        receiverSignal: 'cinder',
+        sourceSignal: 'aster',
+      }),
+    ]),
+  )
+})

@@ -739,6 +739,7 @@ export function createTenderModule({
             anomalyConfiguration: tender.anomalyConfiguration,
             events: await store.readAuditEvents(tenderId),
             privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
+            publicLaboratoryResults: tender.publicLaboratoryResults,
           },
         } : {}),
       }

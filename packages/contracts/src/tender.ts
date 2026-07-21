@@ -220,6 +220,7 @@ export const tenderAuditViewSchema = z.object({
   anomalyConfiguration: anomalyConfigurationSchema,
   events: z.array(tenderAuditEventSchema),
   privateMeasurementsByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)),
+  publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
 }).strict()
 
 export const tenderViewSchema = z.object({
