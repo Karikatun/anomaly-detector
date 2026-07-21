@@ -55,9 +55,9 @@ export class AuthService {
     return this.sessionResponse(user, session.id, refreshToken)
   }
 
-  async startOAuthSignIn(input: { provider: OAuthProviderId; redirectUri: string }) {
+  async startOAuthSignIn(input: { provider: OAuthProviderId; redirectUri: string; webappOrigin: string }) {
     const { codeChallenge, codeVerifier } = await createPkcePair()
-    const state = `${crypto.randomUUID()}${crypto.randomUUID()}`
+    const state = `${encodeWebappOrigin(input.webappOrigin)}::${crypto.randomUUID()}${crypto.randomUUID()}`
     const oauthProviders = this.dependencies.oauthProviders
     if (!oauthProviders) {
       throw new AuthFailure('oauth_not_configured', 'OAuth sign-in is not configured')
@@ -150,9 +150,11 @@ export class AuthService {
     }
 
     // Clean up the used transaction
+    const webappOrigin = decodeWebappOrigin(input.state) ?? ''
     await this.dependencies.repository.deleteOAuthTransaction({ state: input.state }).catch(() => undefined)
 
-    return this.sessionResponse(user, session.id, refreshToken)
+    const response = await this.sessionResponse(user, session.id, refreshToken)
+    return { ...response, webappOrigin }
   }
 
   async login(input: LoginRequest, metadata: SessionMetadata) {
@@ -358,4 +360,18 @@ async function createPkcePair() {
     .replaceAll('/', '_')
     .replaceAll('=', '')
   return { codeChallenge, codeVerifier }
+}
+
+function encodeWebappOrigin(origin: string) {
+  return Buffer.from(origin).toString('base64url')
+}
+
+function decodeWebappOrigin(state: string) {
+  const parts = state.split('::')
+  if (parts.length < 2) return null
+  try {
+    return Buffer.from(parts[0], 'base64url').toString('utf-8')
+  } catch {
+    return null
+  }
 }

@@ -421,7 +421,8 @@ export function createAuthRoutes({ env, requireAuth, service, webappUrl }: Creat
     const redirectUri =
       bodyRedirectUri ??
       `${reqProtocol(c)}://${c.req.header('host') ?? 'localhost:3000'}/api/auth/oauth/${provider}/callback`
-    const result = await executeAuth(() => service.startOAuthSignIn({ provider, redirectUri }))
+    const webappOrigin = c.req.header('origin') ?? webappUrl
+    const result = await executeAuth(() => service.startOAuthSignIn({ provider, redirectUri, webappOrigin }))
     return c.json(result, 200)
   })
 
@@ -446,7 +447,7 @@ export function createAuthRoutes({ env, requireAuth, service, webappUrl }: Creat
       // Set session cookie and redirect to webapp
       // Note: must set cookie on the response manually because c.redirect()
       // discards headers set by setCookie() from hono/cookie
-      const redirectUrl = new URL(webappUrl)
+      const redirectUrl = new URL(result.webappOrigin)
       redirectUrl.pathname = '/'
       const cookieMaxAge = env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60
       const cookieSameSite = env.COOKIE_SECURE ? 'None' : 'Lax'
