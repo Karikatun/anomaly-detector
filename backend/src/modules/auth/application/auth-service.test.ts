@@ -210,10 +210,11 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
   const service = new AuthService(dependencies)
 
   const result = await (service as unknown as {
-    startOAuthSignIn(input: { provider: 'yandex'; redirectUri: string }): Promise<{ authorizationUrl: string }>
+    startOAuthSignIn(input: { provider: 'yandex'; redirectUri: string; webappOrigin: string }): Promise<{ authorizationUrl: string }>
   }).startOAuthSignIn({
     provider: 'yandex',
     redirectUri: 'https://app.example.ru/api/auth/oauth/yandex/callback',
+    webappOrigin: 'https://app.example.ru',
   })
 
   expect(result.authorizationUrl).toContain('https://provider.example/authorize')
