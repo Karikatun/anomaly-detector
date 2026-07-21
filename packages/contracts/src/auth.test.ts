@@ -19,6 +19,7 @@ const validUser = {
   id: 'user_1',
   email: 'user@example.com',
   displayName: null,
+  locale: 'ru' as const,
   createdAt: '2026-05-11T00:00:00.000Z',
 }
 

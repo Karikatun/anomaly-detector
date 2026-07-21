@@ -15,10 +15,13 @@ export const passwordSchema = z
   .min(8, 'Password must be at least 8 characters')
   .max(128, 'Password must be at most 128 characters')
 
+export const localeSchema = z.union([z.literal('ru'), z.literal('en')]).default('ru')
+
 export const userSchema = z.object({
   id: z.string(),
   email: emailSchema,
   displayName: z.string().nullable(),
+  locale: localeSchema,
   createdAt: z.string().datetime(),
 })
 
@@ -43,6 +46,11 @@ export const tokenRefreshRequestSchema = z.object({
 })
 
 export const tokenLogoutRequestSchema = tokenRefreshRequestSchema
+
+export const updateProfileSchema = z.object({
+  displayName: displayNameSchema,
+  locale: localeSchema.optional(),
+})
 
 export const cookieAuthResponseSchema = z.object({
   user: userSchema,

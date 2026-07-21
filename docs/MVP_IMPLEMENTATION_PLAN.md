@@ -112,7 +112,11 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Display consent checkbox and age gate in the registration form
    - [x] Create privacy policy template for legal review
    - [x] Add `anonymizedAt` field to User model (Prisma migration applied)
-3. [-] Implement profile locale preference, default and fallback `ru`.
+3. [x] Implement profile locale preference, default and fallback `ru`.
+   - [x] Add `locale` field to User model with Prisma migration (default `'ru'`)
+   - [x] Include `locale` in `UserDto` and auth responses
+   - [x] Add `PATCH /api/auth/profile` endpoint to update locale
+   - [x] Display locale in the webapp profile page
 4. [-] Implement private rooms with a host-selected fixed size from 2 to 4. Starting requires every seat to be filled and an explicit host confirmation.
    - [x] Allow an authenticated host to create a waiting room and occupy the first seat.
    - [x] Allow authenticated players to join open rooms in seat order and reject a full room.

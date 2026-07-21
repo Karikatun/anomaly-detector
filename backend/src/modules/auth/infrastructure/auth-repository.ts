@@ -210,6 +210,13 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
         data: { revokedAt: now },
       })
     },
+
+    async updateUser({ userId, displayName, locale }) {
+      const data: Record<string, string | null> = {}
+      if (displayName !== undefined) data.displayName = displayName
+      if (locale !== undefined) data.locale = locale
+      await db.user.update({ where: { id: userId }, data })
+    },
   }
 }
 

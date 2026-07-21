@@ -44,6 +44,7 @@ function createProtectedTestApp() {
       id: 'user-1',
       email: 'user@example.com',
       displayName: null,
+  locale: 'ru',
       createdAt: '2026-01-01T00:00:00.000Z',
       sessionId: 'session-1',
     }

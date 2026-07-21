@@ -5,6 +5,7 @@ export type AuthUserRecord = {
   email: string
   passwordHash: string | null
   displayName: string | null
+  locale: string
   createdAt: Date
 }
 
@@ -17,6 +18,7 @@ export function toBaseUserDto(user: AuthUserRecord): UserDto {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
+    locale: user.locale as 'ru' | 'en',
     createdAt: user.createdAt.toISOString(),
   }
 }

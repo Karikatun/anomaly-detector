@@ -231,6 +231,14 @@ export class AuthService {
     await this.dependencies.repository.anonymizeUser({ userId, now })
   }
 
+  async updateProfile(userId: string, input: { displayName?: string | null; locale?: 'ru' | 'en' }) {
+    await this.dependencies.repository.updateUser({
+      userId,
+      displayName: input.displayName === '' ? null : input.displayName,
+      locale: input.locale,
+    })
+  }
+
   private async issueSession(user: AuthUserRecord, metadata: SessionMetadata) {
     const now = this.dependencies.clock.now()
     const refreshToken = this.dependencies.refreshTokens.create()

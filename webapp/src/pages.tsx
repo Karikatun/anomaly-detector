@@ -121,6 +121,12 @@ export function AppPage() {
         </Card>
         <Card size="sm">
           <CardHeader>
+            <CardTitle>Locale</CardTitle>
+            <CardDescription>{auth.user.locale === 'ru' ? 'Русский' : 'English'}</CardDescription>
+          </CardHeader>
+        </Card>
+        <Card size="sm">
+          <CardHeader>
             <CardTitle>Created</CardTitle>
             <CardDescription>{new Date(auth.user.createdAt).toLocaleString()}</CardDescription>
           </CardHeader>
