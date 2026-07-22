@@ -1,3 +1,5 @@
+import { expect, type Page } from '@playwright/test'
+
 export { expect, test } from '@playwright/test'
 
 export const e2ePassword = 'password123'
@@ -7,4 +9,28 @@ export function uniqueEmail(prefix = 'web-e2e') {
   const suffix = Math.random().toString(36).slice(2, 8)
 
   return `${prefix}-${timestamp}-${suffix}@example.com`
+}
+
+export async function registerBrowserUser(
+  page: Page,
+  displayName: string,
+  prefix = 'web-e2e',
+  startUrl = '/',
+) {
+  const email = uniqueEmail(prefix)
+  await page.goto(startUrl)
+  await page.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }).click()
+  await page.getByLabel('Имя').fill(displayName)
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Пароль').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Регистрация' }).click()
+  await expect(page.getByRole('link', { name: 'Комнаты' })).toBeVisible()
+  await expect
+    .poll(async () =>
+      (await page.context().cookies()).some(
+        (cookie) => cookie.name === 'anomaly_detector_refresh' && cookie.httpOnly,
+      ),
+    )
+    .toBe(true)
+  return { email }
 }
