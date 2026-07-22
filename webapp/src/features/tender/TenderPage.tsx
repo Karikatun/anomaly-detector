@@ -65,6 +65,11 @@ const protocolLabels: Record<string, string> = {
   continuous: 'Непрерывный',
 }
 
+const verificationLabels: Record<string, string> = {
+  standard: 'Стандартная проверка',
+  extended: 'Расширенная проверка',
+}
+
 const sequentialPhases = new Set([
   'power-allocation',
   'reconnaissance',
@@ -465,10 +470,10 @@ export function TenderPage() {
               <Card key={i} size="sm" className={thesis.correct ? 'border-green-500/50' : 'border-red-500/50'}>
                 <CardContent className="py-3">
                   <Typography variant="bodySm" className="font-medium">
-                    {thesis.signalId}: {thesis.fieldType} / {thesis.polarity}
+                    {signalNames[thesis.signalId] ?? thesis.signalId}: {fieldTypeLabels[thesis.fieldType] ?? thesis.fieldType} / {polarityLabels[thesis.polarity] ?? thesis.polarity}
                   </Typography>
                   <Typography variant="control" tone={thesis.correct ? 'default' : 'destructive'}>
-                    {thesis.correct ? 'Верно' : 'Неверно'} · {thesis.verification}
+                    {thesis.correct ? 'Верно' : 'Неверно'} · {verificationLabels[thesis.verification] ?? thesis.verification}
                   </Typography>
                 </CardContent>
               </Card>
