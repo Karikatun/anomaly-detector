@@ -46,7 +46,7 @@ export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm, tie
             {t('tender.access.tiePriority', { players: tiePriorityPlayers })}
           </Typography>
         )}
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
           {accessSlots.map(({ slot, labelKey, termsKey }) => {
             const isSelected = selectedSlot === slot
             const label = t(labelKey)
@@ -59,18 +59,18 @@ export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm, tie
                 variant={isSelected ? 'default' : 'outline'}
                 size="lg"
                 aria-label={t('tender.access.aria', { slot, name: label, order: slot, terms })}
-                className="flex h-auto min-h-44 flex-col gap-2 py-4 text-left"
+                className="flex h-auto min-h-52 w-full min-w-0 flex-col gap-2 px-4 py-4 text-center"
                 disabled={disabled || isConfirmed}
                 onClick={() => setSelected(slot)}
               >
                 <Typography variant="h6">{String(slot).padStart(2, '0')}</Typography>
-                <Typography variant="control" tone="muted">
+                <Typography variant="control" tone="muted" className="w-full whitespace-normal leading-snug">
                   {label}
                 </Typography>
-                <Typography variant="control" tone="muted">
+                <Typography variant="control" tone="muted" className="w-full whitespace-normal leading-snug">
                   {t('tender.access.order', { order: slot })}
                 </Typography>
-                <Typography variant="control" className="text-center">
+                <Typography variant="control" className="w-full whitespace-normal text-center leading-snug">
                   {terms}
                 </Typography>
               </Button>
