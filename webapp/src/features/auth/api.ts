@@ -17,7 +17,7 @@ import {
   type RegisterRequest,
 } from '@anomaly-detector/contracts'
 import { z } from 'zod'
-import { ApiRequestError, HttpClient, type HttpRequestOptions } from '@/platform/api'
+import { ApiRequestError, getOAuthApiBaseUrl, HttpClient, type HttpRequestOptions } from '@/platform/api'
 import {
   coordinateBrowserAuthMutation,
   type BrowserAuthCoordinator,
@@ -45,6 +45,7 @@ class BrowserSessionEpochChangedError extends Error {}
 export class AuthApi {
   private readonly options: AuthApiOptions
   private readonly http: HttpClient
+  private readonly oauthHttp: HttpClient
   private readonly authCoordinator: BrowserAuthCoordinator
   private readonly sessionEpoch: string
   private refreshInFlight: {
@@ -52,9 +53,10 @@ export class AuthApi {
     promise: Promise<CookieRefreshResponse>
   } | null = null
 
-  constructor(options: AuthApiOptions, http = new HttpClient()) {
+  constructor(options: AuthApiOptions, http = new HttpClient(), oauthHttp = new HttpClient(getOAuthApiBaseUrl())) {
     this.options = options
     this.http = http
+    this.oauthHttp = oauthHttp
     this.authCoordinator = options.authCoordinator ?? coordinateBrowserAuthMutation
     this.sessionEpoch = currentBrowserSessionEpoch()
   }
@@ -137,7 +139,7 @@ export class AuthApi {
 
   async startOAuth(provider: OAuthProviderId): Promise<void> {
     const payload = oauthStartRequestSchema.parse({ webappOrigin: window.location.origin })
-    const response = await this.http.request(
+    const response = await this.oauthHttp.request(
       `/api/auth/oauth/${provider}/start`,
       oauthStartResponseSchema,
       { method: 'POST', body: payload },

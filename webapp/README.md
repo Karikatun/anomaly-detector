@@ -43,9 +43,10 @@ Create `webapp/.env` when needed:
 
 ```bash
 VITE_API_URL=http://localhost:3000
+# VITE_OAUTH_API_URL=https://api.example.com
 ```
 
-`VITE_API_URL` is build-time config. In production it must be a concrete backend origin such as `https://api.example.com`; if it changes, redeploy the App Platform Static Site so the built bundle stops using the old URL.
+`VITE_API_URL` is build-time config for ordinary API requests. Use `VITE_OAUTH_API_URL` only when OAuth must reach a separate public API origin for provider callbacks; otherwise it falls back to `VITE_API_URL`. If either value changes, redeploy the App Platform Static Site so the built bundle stops using the old URL.
 
 ## Deployment
 

@@ -15,3 +15,8 @@ export function getApiBaseUrl(): string {
   const port = 3000
   return `http://${hostname}:${port}`
 }
+
+export function getOAuthApiBaseUrl(): string {
+  const override = import.meta.env?.VITE_OAUTH_API_URL
+  return override ? override.replace(/\/$/, '') : getApiBaseUrl()
+}
