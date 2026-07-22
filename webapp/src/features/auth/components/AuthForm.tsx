@@ -1,5 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 import { useI18n } from '@/platform/i18n'
+import { LoginForm } from './LoginForm'
 import { OAuthButton } from './OAuthButton'
 
 export function AuthForm() {
@@ -11,9 +13,13 @@ export function AuthForm() {
         <CardTitle className="tracking-wide uppercase">{t('auth.title')}</CardTitle>
         <CardDescription>{t('auth.description')}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
-        <OAuthButton provider="yandex" label={t('oauth.yandex')} />
-        <OAuthButton provider="vk" label={t('oauth.vk')} />
+      <CardContent className="grid gap-4">
+        <LoginForm />
+        <Separator />
+        <div className="grid gap-3">
+          <OAuthButton provider="yandex" label={t('oauth.yandex')} />
+          <OAuthButton provider="vk" label={t('oauth.vk')} />
+        </div>
       </CardContent>
     </Card>
   )
