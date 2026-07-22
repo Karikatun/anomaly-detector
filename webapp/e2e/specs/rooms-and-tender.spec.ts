@@ -92,6 +92,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expectPhase(page, headings.access)
     await expectPhase(guestPage, headings.access)
+    await expect(page.getByText('При равном выборе слот получает игрок по этому приоритету: Хост E2E → Гость E2E.')).toBeVisible()
     await expect(page.getByText('Компенсация: 1 аналитический отчёт')).toBeVisible()
     await expect(page.getByText('Компенсация: 1 бюджет и 1 образец сигнала')).toBeVisible()
 
@@ -103,6 +104,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
 
     await expectPhase(page, headings.power)
     await expectPhase(guestPage, headings.power)
+    await expect(page.getByText('Результат выбора слота')).toBeVisible()
+    await expect(page.getByText('Вы выбрали слот 1 и получили его.')).toBeVisible()
     await allocatePower(page, { 'Разведка': 1, 'Лаборатория': 1, 'Контракты': 2 })
     await expect(page.getByText('Ожидание хода')).toBeVisible()
     await expect(page.getByText('Сейчас действует Гость E2E.')).toBeVisible()

@@ -717,6 +717,9 @@ export function createTenderModule({
       const tender = await readTender(tenderId)
       const player = readPlayer(tender, playerId)
       const activePlayerId = activePlayerIdForView(tender)
+      const tiePriorities = Object.fromEntries(
+        rotateTiePriority(tender.players, tender.round).map((candidate) => [candidate.id, candidate.tiePriority]),
+      )
       return {
         ...(activePlayerId ? { activePlayerId } : {}),
         knownSignals: tender.knownSignals,
@@ -731,6 +734,7 @@ export function createTenderModule({
         players: tender.players.map((player) => ({
           playerId: player.id,
           displayName: player.displayName ?? player.id.slice(0, 8),
+          tiePriority: tiePriorities[player.id],
           ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
           budget: tender.budgetByPlayer[player.id] ?? 0,
           corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,
@@ -739,7 +743,7 @@ export function createTenderModule({
             ? { powerAllocation: tender.powerAllocations[player.id] }
             : {}),
           rating: tender.ratingByPlayer[player.id] ?? 0,
-          ...(tender.phase === 'access-slot-selection' && player.id === playerId && tender.requestedSlots[player.id] !== undefined
+          ...(player.id === playerId && tender.requestedSlots[player.id] !== undefined
             ? { requestedAccessSlot: tender.requestedSlots[player.id] }
             : {}),
         })),

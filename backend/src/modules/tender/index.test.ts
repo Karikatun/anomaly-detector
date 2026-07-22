@@ -454,7 +454,7 @@ test('resolves Access Slots and opens Power planning after every player chooses'
     version: 4,
     phase: 'power-allocation',
     players: [
-      { accessSlot: 1, budget: 0, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-a', rating: 0 },
+      { accessSlot: 1, budget: 0, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1, tiePriority: 1 },
       { accessSlot: 3, budget: 2, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-b', rating: 0 },
       { accessSlot: 2, budget: 1, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-c', rating: 0 },
       { accessSlot: 6, budget: 3, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-d', rating: 0 },
@@ -467,7 +467,8 @@ test('resolves Access Slots and opens Power planning after every player chooses'
     publicTheses: [],
   })
 
-  expect(await tender.readTenderView({ tenderId, playerId: 'player-d' })).toMatchObject({
+  const playerDView = await tender.readTenderView({ tenderId, playerId: 'player-d' })
+  expect(playerDView).toMatchObject({
     knownSignals: ['aster', 'boreal'],
     privateRawTelemetrySignals: ['aster', 'boreal'],
     privateSamples: ['aster', 'boreal'],
@@ -478,6 +479,7 @@ test('resolves Access Slots and opens Power planning after every player chooses'
       { accessSlot: 6, budget: 3, playerId: 'player-d' },
     ],
   })
+  expect(playerDView.players.find((player) => player.playerId === 'player-a')).not.toHaveProperty('requestedAccessSlot')
 })
 
 test('rotates Access Slot tie priority between rounds', async () => {

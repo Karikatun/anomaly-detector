@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
+import { useI18n } from '@/platform/i18n'
 import { AccessSlotPanel } from './AccessSlotPanel'
 import { ContractsPanel } from './ContractsPanel'
 import { FinalScientificModelPanel } from './FinalScientificModelPanel'
@@ -82,6 +83,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
           confirmedSlot={myPlayer?.requestedAccessSlot}
           error={error}
           onConfirm={(slot) => onCommand({ type: 'request-access-slot', slot })}
+          tiePriorityOrder={view.players}
         />
       )
 
@@ -241,6 +243,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
 export function TenderPage() {
   const { tenderId } = useParams({ strict: false }) as { tenderId: string }
   const auth = useAuth()
+  const { t } = useI18n()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -299,6 +302,9 @@ export function TenderPage() {
   const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
   const isSequentialPhase = sequentialPhases.has(tenderView.phase)
   const isMyTurn = !isSequentialPhase || tenderView.activePlayerId === auth.user?.id
+  const accessSlotWasDisplaced = myPlayer?.requestedAccessSlot !== undefined
+    && myPlayer.accessSlot !== undefined
+    && myPlayer.requestedAccessSlot !== myPlayer.accessSlot
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-8">
@@ -328,6 +334,22 @@ export function TenderPage() {
           )}
         </div>
       </div>
+
+      {myPlayer?.requestedAccessSlot !== undefined && myPlayer.accessSlot !== undefined && (
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle>{t('tender.access.result.title')}</CardTitle>
+            <CardDescription>
+              {accessSlotWasDisplaced
+                ? t('tender.access.result.displaced', {
+                    requested: myPlayer.requestedAccessSlot,
+                    assigned: myPlayer.accessSlot,
+                  })
+                : t('tender.access.result.same', { slot: myPlayer.accessSlot })}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
       {/* Phase panel + right sidebar */}
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
