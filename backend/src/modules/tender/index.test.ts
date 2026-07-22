@@ -52,7 +52,7 @@ test('keeps Access Slot compensation for a player who acted before the deadline'
   })
 })
 
-test('resolves an expired Power allocation and advances to the next round', async () => {
+test('gives each player a full Power allocation deadline before advancing', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })
   const { tenderId } = await tender.createTender({
@@ -67,6 +67,17 @@ test('resolves an expired Power allocation and advances to the next round', asyn
   expect(await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:01:45.000Z') })).toMatchObject({
     advancedTenderIds: [tenderId],
   })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    activePlayerId: 'player-b',
+    dueAt: '2026-07-20T12:02:45.000Z',
+    phase: 'power-allocation',
+    players: [
+      { playerId: 'player-a', powerAllocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } },
+      { playerId: 'player-b' },
+    ],
+  })
+
+  await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:02:45.000Z') })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     phase: 'access-slot-selection',
     round: 2,
@@ -91,8 +102,10 @@ test('completes five rounds for every supported player count when all players re
     for (let round = 1; round <= 5; round += 1) {
       dueAt = new Date(dueAt.getTime() + 45_000)
       await tender.advanceDueTenders({ limit: 10, now: dueAt })
-      dueAt = new Date(dueAt.getTime() + 60_000)
-      await tender.advanceDueTenders({ limit: 10, now: dueAt })
+      for (const _player of players) {
+        dueAt = new Date(dueAt.getTime() + 60_000)
+        await tender.advanceDueTenders({ limit: 10, now: dueAt })
+      }
     }
 
     expect(await tender.readTenderView({ tenderId, playerId: players[0].id })).toMatchObject({

@@ -334,6 +334,8 @@ export function TenderPage() {
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="outline" className="tracking-widest uppercase">Раунд {tenderView.round} / 5</Badge>
           <TenderTimer dueAt={tenderView.dueAt} />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
           {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}
           {isSequentialPhase && (
             <Badge variant={isMyTurn ? 'default' : 'outline'}>
