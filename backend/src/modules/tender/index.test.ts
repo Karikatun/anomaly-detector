@@ -69,6 +69,23 @@ test('writes Continuous tests to the public Scientific Journal while keeping pri
   })
 })
 
+test('creates Research Certifications for correct Theses and charges later Theses during Corporate Review', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({ players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }] })
+  await tender.execute({ actorId: 'player-a', commandId: 'slot-a', slot: 1, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-b', commandId: 'slot-b', slot: 2, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-a', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 1, reconnaissance: 2, reserve: 1 }, commandId: 'power-a', tenderId, type: 'allocate-power' })
+  await tender.execute({ actorId: 'player-b', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 1, reconnaissance: 2, reserve: 1 }, commandId: 'power-b', tenderId, type: 'allocate-power' })
+  await tender.execute({ actorId: 'player-a', commandId: 'recon-a', targets: ['unknown-sector', 'unknown-sector'], tenderId, type: 'conduct-reconnaissance' } as never)
+  await tender.execute({ actorId: 'player-b', commandId: 'recon-b', targets: ['unknown-sector', 'unknown-sector'], tenderId, type: 'conduct-reconnaissance' } as never)
+
+  await tender.execute({ actorId: 'player-a', commandId: 'thesis-a', fieldType: 'inertial', polarity: 'positive', signalId: 'aster', tenderId, type: 'submit-thesis' })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({ corporateReviewActive: true, privateResearchCertifications: [] })
+  await tender.execute({ actorId: 'player-b', commandId: 'thesis-b', fieldType: 'phase', polarity: 'positive', signalId: 'boreal', tenderId, type: 'submit-thesis' })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({ players: [{ playerId: 'player-a' }, { playerId: 'player-b', budget: 1 }] })
+})
+
 test('resolves an expired Access Slot selection with conservative free defaults', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })

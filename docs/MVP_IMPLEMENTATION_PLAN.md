@@ -34,7 +34,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 2. [x] Make Power allocation simultaneous and private after Access Slot resolution. Limit Model Analysis and Contracts to one Power; retain two-Power choices only for Reconnaissance and Laboratory.
 3. [x] Implement Reconnaissance targets: Unknown Sector or an already revealed Signal. An acquired Sample must be usable in the same round's Laboratory phase.
 4. [x] Add the permanent public scientific journal and Continuous private same/different-polarity telemetry.
-5. [ ] Replace the wrong-Thesis contract-power restriction with Corporate Review and spendable Research Certifications.
+5. [x] Replace the wrong-Thesis contract-power restriction with Corporate Review and spendable Research Certifications.
 6. [ ] Replace the Contract generator and bidding model with a seeded round deck of Light, Complex, and Scientific Contracts, target-Signal roles, permanent-but-single-use Contract Evidence, Rating-only rewards, and the revised Final Contract.
 7. [ ] Implement the revised final Scientific Model scoring: property points, per-complete-Signal points, and complete-model bonus.
 8. [ ] Build the post-auth home page and the full Rules Reference. The reference must be reachable from the home page and as an in-game modal without leaving a Tender.

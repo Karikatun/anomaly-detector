@@ -16,6 +16,7 @@ type PersistedTenderState = Pick<
   | 'anomalyConfiguration'
   | 'budgetByPlayer'
   | 'corporateTrustByPlayer'
+  | 'corporateReviewActive'
   | 'contractCompletedByPlayer'
   | 'contractPowerRestrictionsByPlayer'
   | 'finalScientificModelCompletedByPlayer'
@@ -33,6 +34,7 @@ type PersistedTenderState = Pick<
   | 'laboratoryCompletedByPlayer'
   | 'modelAnalysisCompletedByPlayer'
   | 'privateMeasurementsByPlayer'
+  | 'researchCertificationsByPlayer'
   | 'privateWorkingModelsByPlayer'
   | 'reconnaissanceCompletedByPlayer'
   | 'requestedSlots'
@@ -46,6 +48,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   anomalyConfiguration: tender.anomalyConfiguration,
   budgetByPlayer: tender.budgetByPlayer,
   corporateTrustByPlayer: tender.corporateTrustByPlayer,
+  corporateReviewActive: tender.corporateReviewActive,
   contractCompletedByPlayer: tender.contractCompletedByPlayer,
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
   finalScientificModelCompletedByPlayer: tender.finalScientificModelCompletedByPlayer,
@@ -63,6 +66,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   laboratoryCompletedByPlayer: tender.laboratoryCompletedByPlayer,
   modelAnalysisCompletedByPlayer: tender.modelAnalysisCompletedByPlayer,
   privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
+  researchCertificationsByPlayer: tender.researchCertificationsByPlayer,
   privateWorkingModelsByPlayer: tender.privateWorkingModelsByPlayer,
   reconnaissanceCompletedByPlayer: tender.reconnaissanceCompletedByPlayer,
   players: tender.players,
@@ -90,6 +94,7 @@ const toStoredTender = (record: {
     anomalyConfiguration: state.anomalyConfiguration,
     budgetByPlayer: state.budgetByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 2])),
     corporateTrustByPlayer: state.corporateTrustByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 0])),
+    corporateReviewActive: state.corporateReviewActive ?? false,
     contractCompletedByPlayer: state.contractCompletedByPlayer ?? {},
     contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},
     dueAt: record.dueAt,
@@ -110,6 +115,7 @@ const toStoredTender = (record: {
     laboratoryCompletedByPlayer: state.laboratoryCompletedByPlayer ?? {},
     modelAnalysisCompletedByPlayer: state.modelAnalysisCompletedByPlayer ?? {},
     privateMeasurementsByPlayer: state.privateMeasurementsByPlayer ?? {},
+    researchCertificationsByPlayer: state.researchCertificationsByPlayer ?? {},
     privateWorkingModelsByPlayer: state.privateWorkingModelsByPlayer ?? {},
     reconnaissanceCompletedByPlayer: state.reconnaissanceCompletedByPlayer ?? {},
     players: state.players,
