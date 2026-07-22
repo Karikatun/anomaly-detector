@@ -86,7 +86,13 @@ export function createAuthModule({
     authenticateAccessToken: (accessToken: string | undefined) =>
       service.authenticateAccessToken(accessToken),
     requireAuth,
-    routes: createAuthRoutes({ env, requireAuth, service, webappUrl: env.CORS_ORIGINS[0] }),
+    routes: createAuthRoutes({
+      env,
+      oauthCallbackBaseUrl: env.OAUTH_CALLBACK_BASE_URL,
+      requireAuth,
+      service,
+      webappUrl: env.CORS_ORIGINS[0],
+    }),
   }
 }
 

@@ -142,4 +142,24 @@ describe('auth routes', () => {
     expect(untrustedLogout.status).toBe(403)
     expect(untrustedLogoutBody.error.code).toBe('FORBIDDEN')
   })
+
+  test('rejects untrusted OAuth return origins and caller-provided callback URLs', async () => {
+    const app = createApp({ env, prisma: {} as DbClient })
+
+    const untrustedOrigin = await app.request('/api/auth/oauth/yandex/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webappOrigin: 'https://attacker.example' }),
+    })
+    expect(untrustedOrigin.status).toBe(403)
+    expect((await untrustedOrigin.json()).error.code).toBe('FORBIDDEN')
+
+    const callerProvidedCallback = await app.request('/api/auth/oauth/yandex/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ redirectUri: 'https://attacker.example/callback' }),
+    })
+    expect(callerProvidedCallback.status).toBe(400)
+    expect((await callerProvidedCallback.json()).error.code).toBe('VALIDATION_ERROR')
+  })
 })

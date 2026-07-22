@@ -229,14 +229,14 @@ describe('auth contracts', () => {
 
   test('validates OAuth start request and response', () => {
     const start = oauthStartRequestSchema.parse({
-      redirectUri: 'http://localhost:5173/api/auth/oauth/yandex/callback',
+      webappOrigin: 'http://localhost:5173',
     })
-    expect(start.redirectUri).toBe('http://localhost:5173/api/auth/oauth/yandex/callback')
+    expect(start.webappOrigin).toBe('http://localhost:5173')
 
-    // redirectUri is optional — empty body is valid
-    expect(oauthStartRequestSchema.parse({}).redirectUri).toBeUndefined()
+    // webappOrigin is optional — the backend falls back to its configured origin.
+    expect(oauthStartRequestSchema.parse({}).webappOrigin).toBeUndefined()
 
-    expect(() => oauthStartRequestSchema.parse({ redirectUri: 'not-a-url' })).toThrow()
+    expect(() => oauthStartRequestSchema.parse({ redirectUri: 'https://attacker.example/callback' })).toThrow()
 
     const response = oauthStartResponseSchema.parse({
       authorizationUrl: 'https://oauth.yandex.ru/authorize?state=abc',
