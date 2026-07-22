@@ -86,6 +86,7 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
                     <div className="grid gap-0.5">
                       {fieldTypes.map((ft) => (
                         <button
+                          aria-label={`${signalNames[signal]}: тип поля ${ftLabels[ft]}`}
                           key={ft}
                           type="button"
                           disabled={disabled}
@@ -110,6 +111,7 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
                     <div className="grid grid-cols-2 gap-1">
                       {polarities.map((pol) => (
                         <button
+                          aria-label={`${signalNames[signal]}: полярность ${pol === 'positive' ? 'Позитив' : 'Негатив'}`}
                           key={pol}
                           type="button"
                           disabled={disabled}

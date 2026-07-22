@@ -74,6 +74,7 @@ export function ReconnaissancePanel({
             const isSel = selected.has(signal)
             return (
               <Button
+                aria-label={`Сигнал для разведки: ${signalNames[signal] ?? signal}`}
                 key={signal}
                 type="button"
                 variant={isSel ? 'default' : 'outline'}
