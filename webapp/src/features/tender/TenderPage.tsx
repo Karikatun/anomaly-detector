@@ -53,6 +53,18 @@ const signalNames: Record<string, string> = {
   ferro: 'Ferro',
 }
 
+const laboratoryResultLabels: Record<string, string> = {
+  transmission_gain: 'Усиление',
+  attenuation: 'Ослабление',
+  reflection: 'Отражение',
+  unstable_collapse: 'Нестабильный срыв',
+}
+
+const protocolLabels: Record<string, string> = {
+  impulse: 'Импульсный',
+  continuous: 'Непрерывный',
+}
+
 const sequentialPhases = new Set([
   'power-allocation',
   'reconnaissance',
@@ -435,7 +447,7 @@ export function TenderPage() {
                     {r.sourceSignal} → {r.receiverSignal}
                   </Typography>
                   <Typography variant="control" tone="muted">
-                    {r.publicResult} ({r.protocol})
+                    {laboratoryResultLabels[r.publicResult] ?? r.publicResult} ({protocolLabels[r.protocol] ?? r.protocol})
                   </Typography>
                 </CardContent>
               </Card>
