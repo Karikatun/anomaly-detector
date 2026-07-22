@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
@@ -272,11 +273,20 @@ export function TenderPage() {
         <Typography variant="h3">{phase}</Typography>
         <TenderTimer dueAt={tenderView.dueAt} />
         {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}
-        {connected ? (
-          <Badge variant="outline" className="ml-auto">Live</Badge>
-        ) : (
-          <Badge variant="outline" className="ml-auto text-amber-400">Reconnecting...</Badge>
-        )}
+        <div className="ml-auto flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void navigate({ to: '/rooms' })}
+          >
+            Выйти
+          </Button>
+          {connected ? (
+            <Badge variant="outline">Live</Badge>
+          ) : (
+            <Badge variant="outline" className="text-amber-400">Reconnecting...</Badge>
+          )}
+        </div>
       </div>
 
       {/* Phase panel + right sidebar */}
