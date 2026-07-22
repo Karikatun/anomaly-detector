@@ -107,13 +107,20 @@ export const reserveContractCommandSchema = z.object({
   type: z.literal('reserve-contract'),
 }).strict()
 
+export const contractKindSchema = z.enum(['light', 'complex', 'scientific', 'final'])
+export const contractSignalRoleSchema = z.enum(['source', 'receiver'])
+
 export const submitContractBidCommandSchema = z.object({
   commandId: commandIdSchema,
   tenderId: tenderIdSchema,
   actorId: playerIdSchema,
   contractId: contractIdSchema,
-  claimedPublicResult: publicResultSchema,
-  requestedFunding: z.number().int().min(0).max(10),
+  evidenceTestIds: z.array(z.string().min(1).max(128)).max(2).optional(),
+  researchCertificationSignal: signalIdSchema.optional(),
+  // Accepted only to replay commands recorded before the Contract-evidence migration.
+  // The Tender module intentionally ignores both fields.
+  claimedPublicResult: publicResultSchema.optional(),
+  requestedFunding: z.number().int().min(0).max(5).optional(),
   type: z.literal('submit-contract-bid'),
 }).strict()
 
@@ -192,9 +199,13 @@ export const publicContractSchema = z.object({
   awardedToPlayerId: playerIdSchema.optional(),
   bidOutcome: z.enum(['awarded', 'failed']).optional(),
   contractId: contractIdSchema,
+  kind: contractKindSchema.optional(),
+  ratingReward: z.number().int().min(0).optional(),
   requiredPublicResult: publicResultSchema,
+  requiredSecondaryPublicResult: publicResultSchema.optional(),
   reservedByPlayerId: playerIdSchema.optional(),
   targetSignal: signalIdSchema.optional(),
+  targetRole: contractSignalRoleSchema.optional(),
 }).strict()
 
 export const publicLaboratoryResultSchema = z.object({

@@ -3,6 +3,59 @@ import { expect, test } from 'bun:test'
 import { createTenderModule } from './index'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
+test('builds a reproducible seeded Contract deck with one contract of every required type', async () => {
+  const first = createTenderModule({ seedGenerator: () => 'deck-seed' })
+  const second = createTenderModule({ seedGenerator: () => 'deck-seed' })
+  const players = [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }, { id: 'player-c', tiePriority: 3 }]
+  const [firstTender, secondTender] = await Promise.all([first.createTender({ players }), second.createTender({ players })])
+  const [firstView, secondView] = await Promise.all([
+    first.readTenderView({ tenderId: firstTender.tenderId, playerId: 'player-a' }),
+    second.readTenderView({ tenderId: secondTender.tenderId, playerId: 'player-a' }),
+  ])
+
+  expect(firstView.publicContracts).toEqual(secondView.publicContracts)
+  expect(firstView.publicContracts.map((contract) => contract.kind)).toEqual(['scientific', 'complex', 'light', 'light'])
+  expect(firstView.publicFinalContract).toMatchObject({ kind: 'final', ratingReward: 8 })
+})
+
+test('awards a Light Contract once and permanently consumes its journal evidence', async () => {
+  const store = createInMemoryTenderStore()
+  const tender = createTenderModule({ store, seedGenerator: () => 'evidence-seed' })
+  const { tenderId } = await tender.createTender({ players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }] })
+  const initial = await store.read(tenderId)
+  if (!initial) throw new Error('Tender was not created')
+  const contract = {
+    contractId: 'evidence-contract-1', kind: 'light' as const, ratingReward: 2,
+    requiredPublicResult: 'reflection' as const, targetRole: 'source' as const, targetSignal: 'aster' as const,
+  }
+  const prepared = {
+    ...initial,
+    accessSlots: { 'player-a': 1, 'player-b': 2 },
+    phase: 'contracts' as const,
+    powerAllocations: {
+      'player-a': { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 3 },
+      'player-b': { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 },
+    },
+    publicContracts: [contract],
+    publicScientificJournal: [{ testId: 'r1-t1', playerId: 'player-a', protocol: 'impulse' as const, sourceSignal: 'aster' as const, receiverSignal: 'boreal' as const, publicResult: 'reflection' as const }],
+    round: 5,
+  }
+  await store.commit({ auditEvents: [], expectedVersion: initial.version, nextTender: prepared, tenderId })
+  await tender.execute({ actorId: 'player-a', commandId: 'reserve-first', contractId: contract.contractId, tenderId, type: 'reserve-contract' })
+  await tender.execute({ actorId: 'player-a', commandId: 'bid-first', contractId: contract.contractId, evidenceTestIds: ['r1-t1'], tenderId, type: 'submit-contract-bid' })
+  const afterAward = await store.read(tenderId)
+  expect(afterAward?.usedContractEvidenceTestIds).toEqual(['r1-t1'])
+  expect(afterAward?.ratingByPlayer['player-a']).toBe(2)
+
+  if (!afterAward) throw new Error('Tender disappeared')
+  const second = { ...contract, contractId: 'evidence-contract-2' }
+  const retry = { ...afterAward, contractCompletedByPlayer: {}, phase: 'contracts' as const, publicContracts: [second] }
+  await store.commit({ auditEvents: [], expectedVersion: afterAward.version, nextTender: retry, tenderId })
+  await tender.execute({ actorId: 'player-a', commandId: 'reserve-second', contractId: second.contractId, tenderId, type: 'reserve-contract' })
+  await tender.execute({ actorId: 'player-a', commandId: 'bid-second', contractId: second.contractId, evidenceTestIds: ['r1-t1'], tenderId, type: 'submit-contract-bid' })
+  expect((await store.read(tenderId))?.publicContracts[0]).toMatchObject({ bidOutcome: 'failed' })
+})
+
 test('starts without Samples or Analytical Reports and reveals a Night Slot Sample publicly', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({

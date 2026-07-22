@@ -215,10 +215,9 @@ describe('Tender contracts', () => {
     expect(
       tenderCommandSchema.parse({
         actorId: 'player-a',
-        claimedPublicResult: 'reflection',
         commandId: 'command-a-6',
         contractId: 'round-1-contract-1',
-        requestedFunding: 2,
+        evidenceTestIds: ['r1-t1'],
         tenderId: 'tender-1',
         type: 'submit-contract-bid',
       }),
