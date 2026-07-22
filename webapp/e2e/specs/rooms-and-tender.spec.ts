@@ -156,8 +156,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await submitFinalModel(page)
     await expectPhase(guestPage, headings.final)
     await submitFinalModel(guestPage)
-    await expect(page.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
-    await expect(guestPage.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
+    await expect(page.getByText('Тендер завершён', { exact: true })).toBeVisible()
+    await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
   } finally {
     await guestContext.close()
   }

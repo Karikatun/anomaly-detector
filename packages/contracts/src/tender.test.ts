@@ -10,6 +10,25 @@ import {
 } from './index'
 
 describe('Tender contracts', () => {
+  test('allows an Access Slot cost to put a player into a budget deficit', () => {
+    expect(tenderViewSchema.parse({
+      knownSignals: ['aster', 'boreal'],
+      publicContracts: [],
+      publicLaboratoryResults: [],
+      round: 2,
+      tenderId: 'tender-1',
+      version: 14,
+      phase: 'power-allocation',
+      players: [{ budget: -1, contractPowerRestriction: 0, playerId: 'player-a', rating: 0 }],
+      privateAnalyticalReports: 1,
+      privateRawTelemetrySignals: ['aster'],
+      privateMeasurements: [],
+      privateSamples: ['aster'],
+      privateWorkingModel: { signals: {} },
+      publicTheses: [],
+    }).players[0]?.budget).toBe(-1)
+  })
+
   test('validates the Access Slot command, receipt, and player-scoped view', () => {
     expect(
       tenderCommandSchema.parse({

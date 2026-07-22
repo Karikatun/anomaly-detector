@@ -164,7 +164,7 @@ export const tenderPlayerViewSchema = z.object({
   displayName: z.string().min(1).max(100).optional(),
   tiePriority: z.number().int().min(1).max(4).optional(),
   accessSlot: z.number().int().min(1).max(6).optional(),
-  budget: z.number().int().min(0),
+  budget: z.number().int(),
   corporateTrust: z.number().int().min(0).optional(),
   contractPowerRestriction: z.number().int().min(0).max(1),
   powerAllocation: powerAllocationSchema.optional(),
