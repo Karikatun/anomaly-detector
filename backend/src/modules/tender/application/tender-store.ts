@@ -32,7 +32,6 @@ export type StoredTenderAuditEvent = TenderAuditEvent
 
 export type StoredTender = {
   accessSlots: Record<string, number>
-  analyticalReportsByPlayer: Record<string, number>
   anomalyConfiguration: AnomalyConfiguration
   budgetByPlayer: Record<string, number>
   corporateTrustByPlayer: Record<string, number>

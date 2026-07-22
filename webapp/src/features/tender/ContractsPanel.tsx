@@ -73,6 +73,11 @@ export function ContractsPanel({ contracts, maxPower, playerId, disabled, error,
                 <Typography variant="control" tone="muted">
                   {t('tender.contracts.required', { result: t(`tender.result.${contract.requiredPublicResult}`) })}
                 </Typography>
+                {contract.targetSignal && (
+                  <Typography variant="control" tone="muted">
+                    {contract.targetSignal}
+                  </Typography>
+                )}
 
                 {!draft && (
                   <Button

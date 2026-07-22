@@ -55,6 +55,7 @@ const createRoundContracts = (round: number, playerCount: number) => Array.from(
   (_, index) => ({
     contractId: `round-${round}-contract-${index + 1}`,
     requiredPublicResult: ['reflection', 'attenuation', 'transmission_gain', 'unstable_collapse'][index % 4] as 'reflection' | 'attenuation' | 'transmission_gain' | 'unstable_collapse',
+    targetSignal: signalIds[((round - 1) * (playerCount + 1) + index) % signalIds.length],
   }),
 )
 
@@ -65,11 +66,11 @@ const accessSlotBudgetDelta = (slot: number) => {
   return 0
 }
 
-const receivesAccessSlotSampleCompensation = (slot: number) => slot === 4 || slot === 6
+const receivesAccessSlotSampleCompensation = (slot: number) => slot === 5 || slot === 6
 
-const receivesAccessSlotAnalyticalReportCompensation = (slot: number) => slot === 5
-
-const nextCompensationSample = (currentSamples: SignalId[]) => signalIds.find((signalId) => !currentSamples.includes(signalId))
+const nextCompensationSample = (knownSignals: SignalId[], currentSamples: SignalId[]) =>
+  signalIds.find((signalId) => !knownSignals.includes(signalId))
+  ?? signalIds.find((signalId) => !currentSamples.includes(signalId))
 
 const rotateTiePriority = (players: TenderPlayer[], round: number) => {
   const playerCount = players.length
@@ -154,6 +155,7 @@ export function createTenderModule({
     const tenderAfterGrant = { ...tender, budgetByPlayer }
     if (tender.round >= 5) return { ...tenderAfterGrant, phase: 'final-scientific-model' }
     const round = tender.round + 1
+    const publicContracts = createRoundContracts(round, tender.players.length)
     return {
       ...tenderAfterGrant,
       accessSlots: {},
@@ -162,7 +164,8 @@ export function createTenderModule({
       modelAnalysisCompletedByPlayer: {},
       phase: 'access-slot-selection',
       powerAllocations: {},
-      publicContracts: createRoundContracts(round, tender.players.length),
+      knownSignals: [...new Set([...tender.knownSignals, ...publicContracts.map((contract) => contract.targetSignal)])],
+      publicContracts,
       reconnaissanceCompletedByPlayer: {},
       requestedSlots: {},
       round,
@@ -242,9 +245,10 @@ export function createTenderModule({
       if (!parsedInput.success) {
         throw new TenderFailure('invalid_create_tender', 'Tender creation input is invalid')
       }
+      const publicContracts = createRoundContracts(1, parsedInput.data.players.length)
+      const publicFinalContract = { contractId: finalContractId, requiredPublicResult: 'reflection' as const, targetSignal: 'ferro' as const }
       const tender = await store.create({
         accessSlots: {},
-        analyticalReportsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 1])),
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
         budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
         corporateTrustByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 0])),
@@ -253,15 +257,15 @@ export function createTenderModule({
         dueAt: deadlineForPhase('access-slot-selection', now()),
         finalScientificModelCompletedByPlayer: {},
         finalScientificModelsByPlayer: {},
-        knownSignals: ['aster', 'boreal'],
+        knownSignals: [...new Set([...publicContracts.map((contract) => contract.targetSignal), publicFinalContract.targetSignal])],
         powerAllocations: {},
-        publicContracts: createRoundContracts(1, parsedInput.data.players.length),
-        publicFinalContract: { contractId: finalContractId, requiredPublicResult: 'reflection' },
+        publicContracts,
+        publicFinalContract,
         publicLaboratoryResults: [],
         publicTheses: [],
         ratingByPlayer: {},
         round: 1,
-        rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
+        rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, []])),
         reconnaissanceCompletedByPlayer: {},
         laboratoryCompletedByPlayer: {},
         modelAnalysisCompletedByPlayer: {},
@@ -269,7 +273,7 @@ export function createTenderModule({
         privateWorkingModelsByPlayer: {},
         players: parsedInput.data.players,
         requestedSlots: {},
-        samplesByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, ['aster']])),
+        samplesByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, []])),
         processedCommands: {},
         phase: 'access-slot-selection',
         version: 0,
@@ -307,23 +311,17 @@ export function createTenderModule({
             (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
           ]))
           : tender.budgetByPlayer
-        const analyticalReportsByPlayer = isReadyToResolve
-          ? Object.fromEntries(tender.players.map((player) => [
-            player.id,
-            (tender.analyticalReportsByPlayer[player.id] ?? 0) + (receivesAccessSlotAnalyticalReportCompensation(accessSlots[player.id] ?? 3) ? 1 : 0),
-          ]))
-          : tender.analyticalReportsByPlayer
         const sampleCompensationByPlayer: Record<string, SignalId> = {}
         const samplesByPlayer = isReadyToResolve ? { ...tender.samplesByPlayer } : tender.samplesByPlayer
-        const rawTelemetrySignalsByPlayer = isReadyToResolve ? { ...tender.rawTelemetrySignalsByPlayer } : tender.rawTelemetrySignalsByPlayer
+        const knownSignals = isReadyToResolve ? [...tender.knownSignals] : tender.knownSignals
         if (isReadyToResolve) {
           for (const player of tender.players) {
             if (!receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
-            const nextSample = nextCompensationSample(samplesByPlayer[player.id] ?? [])
+            const nextSample = nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
             if (!nextSample) continue
             sampleCompensationByPlayer[player.id] = nextSample
             samplesByPlayer[player.id] = [...(samplesByPlayer[player.id] ?? []), nextSample]
-            rawTelemetrySignalsByPlayer[player.id] = [...(rawTelemetrySignalsByPlayer[player.id] ?? []), nextSample]
+            if (!knownSignals.includes(nextSample)) knownSignals.push(nextSample)
           }
         }
         const phase = isReadyToResolve ? 'power-allocation' : tender.phase
@@ -337,7 +335,7 @@ export function createTenderModule({
             },
             ...(isReadyToResolve ? [{
               kind: 'access_slots_resolved',
-              payload: { accessSlots, analyticalReportsByPlayer, budgetByPlayer, sampleCompensationByPlayer },
+              payload: { accessSlots, budgetByPlayer, sampleCompensationByPlayer },
             }] : []),
           ],
           command,
@@ -345,11 +343,10 @@ export function createTenderModule({
           nextTender: {
             ...tender,
             accessSlots,
-            analyticalReportsByPlayer,
             budgetByPlayer,
             dueAt: isReadyToResolve ? deadlineForPhase('power-allocation', now()) : tender.dueAt,
             phase,
-            rawTelemetrySignalsByPlayer,
+            knownSignals,
             requestedSlots,
             samplesByPlayer,
           },
@@ -747,7 +744,6 @@ export function createTenderModule({
             : {}),
         })),
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
-        privateAnalyticalReports: tender.analyticalReportsByPlayer[player.id] ?? 0,
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
@@ -900,35 +896,30 @@ export function createTenderModule({
             ? tender.budgetByPlayer[player.id] ?? 0
             : (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
         ]))
-        const analyticalReportsByPlayer = Object.fromEntries(tender.players.map((player) => [
-          player.id,
-          (tender.analyticalReportsByPlayer[player.id] ?? 0)
-            + (!timedOutPlayerIds.has(player.id) && receivesAccessSlotAnalyticalReportCompensation(accessSlots[player.id] ?? 3) ? 1 : 0),
-        ]))
         const samplesByPlayer = { ...tender.samplesByPlayer }
         const rawTelemetrySignalsByPlayer = { ...tender.rawTelemetrySignalsByPlayer }
+        const knownSignals = [...tender.knownSignals]
         const sampleCompensationByPlayer: Record<string, SignalId> = {}
         for (const player of tender.players) {
           if (timedOutPlayerIds.has(player.id) || !receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
-          const nextSample = nextCompensationSample(samplesByPlayer[player.id] ?? [])
+          const nextSample = nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
           if (!nextSample) continue
           sampleCompensationByPlayer[player.id] = nextSample
           samplesByPlayer[player.id] = [...(samplesByPlayer[player.id] ?? []), nextSample]
-          rawTelemetrySignalsByPlayer[player.id] = [...(rawTelemetrySignalsByPlayer[player.id] ?? []), nextSample]
+          if (!knownSignals.includes(nextSample)) knownSignals.push(nextSample)
         }
         const completed = await commitTimeout({
           auditEvents: [{
             kind: 'access_slot_timeout_resolved',
-            payload: { accessSlots, analyticalReportsByPlayer, budgetByPlayer, sampleCompensationByPlayer, timedOutPlayerIds: [...timedOutPlayerIds] },
+            payload: { accessSlots, budgetByPlayer, sampleCompensationByPlayer, timedOutPlayerIds: [...timedOutPlayerIds] },
           }],
           nextTender: {
             ...tender,
             accessSlots,
-            analyticalReportsByPlayer,
             budgetByPlayer,
             dueAt: deadlineForPhase('power-allocation', dueNow),
             phase: 'power-allocation',
-            rawTelemetrySignalsByPlayer,
+            knownSignals,
             requestedSlots,
             samplesByPlayer,
           },
