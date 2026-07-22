@@ -13,8 +13,13 @@ const signalNames: Record<string, string> = {
   ferro: 'Ferro',
 }
 
+const signalIds = Object.keys(signalNames)
+
+export function availableReconnaissanceSignals(mySamples: string[]) {
+  return signalIds.filter((signal) => !mySamples.includes(signal))
+}
+
 type ReconnaissancePanelProps = {
-  knownSignals: string[]
   mySamples: string[]
   maxSignals: number
   disabled?: boolean
@@ -23,7 +28,6 @@ type ReconnaissancePanelProps = {
 }
 
 export function ReconnaissancePanel({
-  knownSignals,
   mySamples,
   maxSignals,
   disabled,
@@ -32,7 +36,7 @@ export function ReconnaissancePanel({
 }: ReconnaissancePanelProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  const available = knownSignals.filter((s) => !mySamples.includes(s))
+  const available = availableReconnaissanceSignals(mySamples)
 
   const toggle = (signal: string) => {
     setSelected((prev) => {
