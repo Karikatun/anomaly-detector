@@ -33,6 +33,26 @@ const phaseLabels: Record<string, string> = {
   'complete': 'Завершён',
 }
 
+const fieldTypeLabels: Record<string, string> = {
+  inertial: 'Инерционное',
+  electromagnetic: 'Электромагнитное',
+  phase: 'Фазовое',
+}
+
+const polarityLabels: Record<string, string> = {
+  positive: 'Позитив (+)',
+  negative: 'Негатив (−)',
+}
+
+const signalNames: Record<string, string> = {
+  aster: 'Aster',
+  boreal: 'Boreal',
+  cinder: 'Cinder',
+  delta: 'Delta',
+  eclipse: 'Eclipse',
+  ferro: 'Ferro',
+}
+
 const sequentialPhases = new Set([
   'power-allocation',
   'reconnaissance',
@@ -178,7 +198,9 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
             <CardTitle>Тендер завершён</CardTitle>
             <CardDescription>
               Победитель{view.winnerPlayerIds && view.winnerPlayerIds.length > 1 ? 'и' : ''}:{' '}
-              {view.winnerPlayerIds?.join(', ') ?? '—'}
+              {view.winnerPlayerIds
+                ?.map((playerId) => view.players.find((player) => player.playerId === playerId)?.displayName ?? playerId.slice(0, 8))
+                .join(', ') ?? '—'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -192,10 +214,10 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
                   <Card key={sig} size="sm">
                     <CardContent className="py-3">
                       <Typography variant="bodySm" className="font-bold">
-                        {sig}
+                        {signalNames[sig] ?? sig}
                       </Typography>
-                      <Typography variant="control" tone="muted">
-                        {props.fieldType} / {props.polarity}
+                      <Typography variant="bodySm" tone="muted" className="leading-snug">
+                        {fieldTypeLabels[props.fieldType] ?? props.fieldType} / {polarityLabels[props.polarity] ?? props.polarity}
                       </Typography>
                     </CardContent>
                   </Card>
@@ -205,16 +227,16 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
             <div className="mt-4 grid gap-2">
               <Typography variant="control" tone="muted">Итоговый рейтинг</Typography>
               {view.players.map((p) => (
-                <div key={p.playerId} className="flex items-center gap-2 rounded-lg border p-3">
+                <div key={p.playerId} className="grid gap-2 rounded-lg border p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center">
                   <Typography variant="bodySm" className="font-medium">Слот {p.accessSlot}</Typography>
-                  <Typography variant="control" tone="muted">
-                    {p.playerId.slice(0, 8)}
+                  <Typography variant="bodySm" tone="muted" className="min-w-0 break-words">
+                    {p.displayName ?? p.playerId.slice(0, 8)}
                   </Typography>
-                  <Typography variant="bodySm" className="ml-auto font-bold">
+                  <Typography variant="bodySm" className="font-bold">
                     Рейтинг: {p.rating} · Бюджет: {p.budget}
                   </Typography>
                   {view.winnerPlayerIds?.includes(p.playerId) && (
-                    <Badge variant="outline">Победитель</Badge>
+                    <Badge variant="outline" className="justify-self-start sm:justify-self-auto">Победитель</Badge>
                   )}
                 </div>
               ))}
