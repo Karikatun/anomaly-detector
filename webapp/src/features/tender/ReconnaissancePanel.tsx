@@ -48,7 +48,7 @@ export function ReconnaissancePanel({
 
   const handleConfirm = () => {
     const signals = [...selected]
-    if (signals.length > 0) {
+    if (signals.length === maxSignals) {
       onConfirm(signals)
       setSelected(new Set())
     }
@@ -107,10 +107,14 @@ export function ReconnaissancePanel({
           type="button"
           size="lg"
           className="mt-6 w-full"
-          disabled={disabled || selected.size === 0}
+          disabled={disabled || selected.size !== maxSignals}
           onClick={handleConfirm}
         >
-          {selected.size === 0 ? 'Выберите сигнал' : 'Исследовать'}
+          {selected.size === 0
+            ? `Выберите ${maxSignals === 1 ? 'сигнал' : `${maxSignals} сигнала`}`
+            : selected.size < maxSignals
+              ? `Выбрано ${selected.size} из ${maxSignals}`
+              : 'Исследовать'}
         </Button>
       </CardContent>
     </Card>
