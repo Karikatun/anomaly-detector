@@ -17,20 +17,12 @@ A player's submitted claims about the anomaly, consisting of public theses durin
 _Avoid_: final model, theory, solution
 
 **Signal**:
-One of the six persistent named phenomena in the anomaly registry, such as `Aster`. Its properties are hidden by the Anomaly Configuration.
+One of the six persistent named phenomena in the anomaly. Its name enters the public registry when a player first receives its Sample or when a Contract names it; its properties remain hidden.
 _Avoid_: sample, ingredient, resource card
 
 **Sample**:
 A player's non-consumable access to a Signal for research and laboratory tests. Multiple players may hold Samples of the same Signal.
 _Avoid_: signal, ingredient, consumable
-
-**Raw Telemetry**:
-Private discovery data associated with a Sample before its first laboratory use.
-_Avoid_: sample, laboratory result, public evidence
-
-**Analytical Report**:
-A private research aid held by a player. It is granted at match start and by the Night Access Slot; its concrete spend effect is defined by later Model Analysis rules.
-_Avoid_: thesis, working model, public result
 
 ## Tender Economy
 
@@ -47,7 +39,7 @@ A player's standing with the corporation, which governs eligibility for high-val
 _Avoid_: reputation, rating, budget
 
 **Operational Grant**:
-One Budget granted to every player at the end of each round, including the final round.
+One Budget granted to every player at the end of each round, including the final round. Ordinary Contracts do not grant Budget.
 _Avoid_: contract payout, Rating reward
 
 ## Match Flow
@@ -87,12 +79,24 @@ The test outcome visible to every player: transmission gain, attenuation, reflec
 _Avoid_: evidence, measurement, private result
 
 **Private Measurement**:
-An extra parameter from a Continuous Protocol that only the initiating player sees until the post-match audit.
+The same-or-different-polarity measurement received only by the initiator of a Continuous Directed Test until the post-match audit.
 _Avoid_: public result, raw telemetry, evidence
 
 **Thesis**:
 A public, immediately checked claim submitted from a player's Scientific Model.
 _Avoid_: note, hypothesis, public result
+
+**Corporate Review**:
+The round-local state triggered by an incorrect Thesis. Every later Thesis in that round costs its author one Budget; a player who cannot pay loses their allocated Model Analysis Power.
+_Avoid_: contract-power penalty, research tax
+
+**Research Certification**:
+One personal, spendable proof created by a correct Thesis. It is consumed by one successful Scientific Contract.
+_Avoid_: reusable thesis, shared certification
+
+**Contract Evidence**:
+One player's Directed Test record used to fulfil a Contract. It remains permanently visible in the public journal, but can be attached to only one successful Contract.
+_Avoid_: consumed result, private evidence
 
 ## Tender
 
@@ -101,11 +105,11 @@ The five-round competitive funding process that ends with the final audit and a 
 _Avoid_: match, contract, tournament
 
 **Contract**:
-An exclusive corporate request that a player can fulfil during a Tender.
+An exclusive public corporate request with a target Signal, its source/receiver role, defined evidence conditions, Rating reward, and a reservation status. The seeded contract deck is fixed at Tender creation and revealed one round at a time.
 _Avoid_: tender, mission, quest
 
 **Bid**:
-A player's contract submission, assessed by effect fit, evidence level, and requested funding.
+A player's final submission of their reserved Contract Evidence or Research Certification. It has no requested-funding field.
 _Avoid_: contract, reservation, offer
 
 **Final Contract**:

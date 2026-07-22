@@ -11,9 +11,9 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 **Общий статус:**
 - **Milestone 0 (Contracts)** — ✅ 100% завершён
 - **Milestone 1 (Tender Foundation)** — ✅ 100% завершён
-- **Milestone 2 (Game Core)** — ✅ 100% завершён (вся игровая логика на бэкенде)
-- **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 ~50%: бэкенд (OAuth инфра, комнаты, WebSocket) готов; нужны провайдерские routes, reconnect, data policy, locale
-- **Milestone 4 (Game Interface)** — ❌ 0%: фронтенд не начат (только auth)
+- **Milestone 2 (Game Core)** — 🔶 прежняя версия реализована; согласованная переработка правил ожидает реализации
+- **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 комнаты, парольный вход, Yandex ID, locale, удаление аккаунта, HTTP/WebSocket и reconnect готовы; остаётся VK ID
+- **Milestone 4 (Game Interface)** — 🔶 реализован рабочий интерфейс прежнего набора правил: лобби, история матчей, экран партии и основные действия; для целевого набора правил нужны главная страница, справочник, UI-миграция, i18n и визуальная система
 - **Milestone 5 (Operations, Beta)** — ❌ 0%
 
 ## Delivery Rules
@@ -25,6 +25,21 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 - Update `CONTEXT.md` before introducing a new domain term; do not use competing names for existing terms.
 - Every issue is independently deliverable, linked to its dependencies, and classified before implementation.
 - Do not add chat, public matchmaking, bots, random events, permanent upgrades, monetization, native apps, PWA support, or public sharing to the MVP.
+
+## Approved Ruleset Migration
+
+`GAME_DESIGN_BRIEF.md` now describes the agreed target ruleset. The current Tender implementation is an older ruleset and must not be presented as matching it until this migration is complete.
+
+1. [ ] Replace starting Samples and Analytical Reports with the new discovery model: no starting Samples; Samples only from Access Slots or Reconnaissance; unknown Signals are revealed when acquired or named by a Contract.
+2. [ ] Make Power allocation simultaneous and private after Access Slot resolution. Limit Model Analysis and Contracts to one Power; retain two-Power choices only for Reconnaissance and Laboratory.
+3. [ ] Implement Reconnaissance targets: Unknown Sector or an already revealed Signal. An acquired Sample must be usable in the same round's Laboratory phase.
+4. [ ] Add the permanent public scientific journal and Continuous private same/different-polarity telemetry.
+5. [ ] Replace the wrong-Thesis contract-power restriction with Corporate Review and spendable Research Certifications.
+6. [ ] Replace the Contract generator and bidding model with a seeded round deck of Light, Complex, and Scientific Contracts, target-Signal roles, permanent-but-single-use Contract Evidence, Rating-only rewards, and the revised Final Contract.
+7. [ ] Implement the revised final Scientific Model scoring: property points, per-complete-Signal points, and complete-model bonus.
+8. [ ] Build the post-auth home page and the full Rules Reference. The reference must be reachable from the home page and as an in-game modal without leaving a Tender.
+
+**Gate:** deterministic API simulations for 2, 3, and 4 players cover every new rule, including hidden Power planning, Corporate Review, one-use Contract Evidence, Contract deck reproducibility, and final scoring; browser tests cover the Rules Reference from the home page and from an active Tender.
 
 ## Milestone 0: Contract And Work Breakdown
 
@@ -105,7 +120,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 **Outcome:** real players can securely form and play a private live Tender.
 
 1. [-] Implement Yandex ID and VK ID authentication. Keep Telegram outside MVP until a separate legal review permits it.
-   - [x] Add provider-agnostic OAuth identities, PKCE transaction storage, and the application port without exposing provider routes.
+   - [x] Add provider-agnostic OAuth identities, PKCE transaction storage, application ports, and Yandex ID start/callback flow.
+   - [ ] Complete and validate the VK ID start/callback flow.
 2. [x] Enforce Russian-launch data policy: 16+ audience, account deletion that anonymises old match entries, and password registration through a unique login.
    - [x] Add `DELETE /api/auth/account` endpoint: revokes all sessions, anonymises user record
    - [x] Add `privacyConsent` and `ageConfirmation` fields to register schema (Zod validation rejects missing/falsy values)
@@ -117,12 +133,12 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Include `locale` in `UserDto` and auth responses
    - [x] Add `PATCH /api/auth/profile` endpoint to update locale
    - [x] Display locale in the webapp profile page
-4. [-] Implement private rooms with a host-selected fixed size from 2 to 4. Starting requires every seat to be filled and an explicit host confirmation.
+4. [x] Implement private rooms with a host-selected fixed size from 2 to 4. Starting requires every seat to be filled and an explicit host confirmation.
    - [x] Allow an authenticated host to create a waiting room and occupy the first seat.
    - [x] Allow authenticated players to join open rooms in seat order and reject a full room.
    - [x] Allow a participant to leave a waiting room and join it again while a seat is free.
    - [x] Allow only the host to start a full room and atomically create its Tender.
-5. [-] Add authenticated HTTP endpoints and WebSocket updates that only deliver each participant's authorised TenderView.
+5. [x] Add authenticated HTTP endpoints and WebSocket updates that only deliver each participant's authorised TenderView.
    - [x] Add authenticated HTTP reads and command submission through participant-scoped TenderView projections.
    - [x] Issue one-time, session-bound realtime tickets without exposing access tokens in WebSocket URLs.
    - [x] Stream each participant's authorised TenderView over ticket-upgraded WebSocket connections.
@@ -139,13 +155,13 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** players can finish a Tender from a portrait mobile browser while desktop remains efficient.
 
-1. Build login, profile, room creation, room waiting, and host-confirmation flows.
-2. Build the live Tender screen: timer, round and phase status, Access Slot order, Power planning, public Rating, and legal actions.
-3. Build Reconnaissance, Directed Test, Thesis, Contract, Bid, and Final Scientific Model interactions.
-4. Build the interactive Working Model without exposing hidden Anomaly Configuration data.
-5. Build end-of-round score breakdown and the final participant-only audit view.
-6. Store every visible string in i18n chunks. Ship Russian copy first while preserving locale-selection architecture.
-7. Apply the realistic corporate sci-fi visual system: an orbital station operating around an unknown object.
+1. [x] Build login, profile, room creation, room waiting, and host-confirmation flows for the existing ruleset.
+2. [-] Build the live Tender screen: the existing ruleset has timer, phase status, Access Slot order, Power planning, public Rating, and legal actions; migrate it to the target ruleset.
+3. [-] Build Reconnaissance, Directed Test, Thesis, Contract, Bid, and Final Scientific Model interactions for the target ruleset.
+4. [-] Build the interactive Working Model without exposing hidden Anomaly Configuration data; the private model exists, but needs the target interaction and mobile treatment.
+5. [-] Build end-of-round score breakdown and the final participant-only audit view; a basic end screen exists, but replay and score explanation remain incomplete.
+6. [-] Store every visible string in i18n chunks. Ship Russian copy first while preserving locale-selection architecture.
+7. [-] Apply the realistic corporate sci-fi visual system: an orbital station operating around an unknown object.
 
 **Skills:** `prototype` for the Working Model and dense mobile interactions; `browser:control-in-app-browser` for mobile and desktop verification; `imagegen` only when original raster assets are needed; `tdd` for client state that affects correctness; `code-review` for each completed journey.
 
