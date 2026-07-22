@@ -96,7 +96,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('Компенсация: 1 бюджет и 1 образец сигнала')).toBeVisible()
 
     await chooseAccessSlot(page, 1)
-    await expect(page.getByRole('button', { name: 'Подтвердить выбор' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Выбор принят — ожидаем игроков' })).toBeDisabled()
+    await expect(page.getByRole('status')).toContainText('Слот 1: Аварийный зафиксирован и остаётся секретным.')
     await expectPhase(guestPage, headings.access)
     await chooseAccessSlot(guestPage, 2)
 

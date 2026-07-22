@@ -15,27 +15,29 @@ const accessSlots = [
 ] as const
 
 type AccessSlotPanelProps = {
+  confirmedSlot?: number
   disabled?: boolean
   error?: string | null
   onConfirm: (slot: number) => void
 }
 
-export function AccessSlotPanel({ disabled, error, onConfirm }: AccessSlotPanelProps) {
+export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm }: AccessSlotPanelProps) {
   const [selected, setSelected] = useState<number | null>(null)
   const { t } = useI18n()
+  const confirmedSlotInfo = accessSlots.find(({ slot }) => slot === confirmedSlot)
+  const selectedSlot = confirmedSlot ?? selected
+  const isConfirmed = confirmedSlotInfo !== undefined
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t('tender.access.title')}</CardTitle>
-        <CardDescription>
-          {t('tender.access.description')}
-        </CardDescription>
+        <CardDescription>{t('tender.access.description')}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
           {accessSlots.map(({ slot, labelKey, termsKey }) => {
-            const isSelected = selected === slot
+            const isSelected = selectedSlot === slot
             const label = t(labelKey)
             const terms = t(termsKey)
 
@@ -47,7 +49,7 @@ export function AccessSlotPanel({ disabled, error, onConfirm }: AccessSlotPanelP
                 size="lg"
                 aria-label={t('tender.access.aria', { slot, name: label, order: slot, terms })}
                 className="flex h-auto min-h-44 flex-col gap-2 py-4 text-left"
-                disabled={disabled}
+                disabled={disabled || isConfirmed}
                 onClick={() => setSelected(slot)}
               >
                 <Typography variant="h6">{String(slot).padStart(2, '0')}</Typography>
@@ -65,6 +67,15 @@ export function AccessSlotPanel({ disabled, error, onConfirm }: AccessSlotPanelP
           })}
         </div>
 
+        {confirmedSlotInfo && (
+          <Typography role="status" variant="bodySm" className="mt-4">
+            {t('tender.access.confirmed.title')}. {t('tender.access.confirmed.description', {
+              slot: confirmedSlotInfo.slot,
+              name: t(confirmedSlotInfo.labelKey),
+            })}
+          </Typography>
+        )}
+
         {error && (
           <Typography role="alert" variant="bodySm" tone="destructive" className="mt-4">
             {error}
@@ -75,7 +86,7 @@ export function AccessSlotPanel({ disabled, error, onConfirm }: AccessSlotPanelP
           type="button"
           size="lg"
           className="mt-6 w-full"
-          disabled={disabled || selected === null}
+          disabled={disabled || isConfirmed || selected === null}
           onClick={() => {
             if (selected !== null) {
               onConfirm(selected)
@@ -83,7 +94,7 @@ export function AccessSlotPanel({ disabled, error, onConfirm }: AccessSlotPanelP
             }
           }}
         >
-          {t('tender.access.confirm')}
+          {isConfirmed ? t('tender.access.confirmed.button') : t('tender.access.confirm')}
         </Button>
       </CardContent>
     </Card>
