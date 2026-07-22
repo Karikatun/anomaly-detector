@@ -262,6 +262,7 @@ export function createTenderModule({
         publicContracts,
         publicFinalContract,
         publicLaboratoryResults: [],
+        publicScientificJournal: [],
         publicTheses: [],
         ratingByPlayer: {},
         round: 1,
@@ -407,6 +408,10 @@ export function createTenderModule({
             sourceSignal: command.sourceSignal,
           },
         ]
+        const publicScientificJournal = [
+          ...tender.publicScientificJournal,
+          { ...publicLaboratoryResults.at(-1)!, testId: `r${tender.round}-t${tender.publicScientificJournal.length + 1}` },
+        ]
         const laboratoryCompletedByPlayer = { ...tender.laboratoryCompletedByPlayer, [player.id]: true }
         const contractPowerRestrictionsByPlayer = {
           ...tender.contractPowerRestrictionsByPlayer,
@@ -431,6 +436,7 @@ export function createTenderModule({
           laboratoryCompletedByPlayer,
           privateMeasurementsByPlayer,
           publicLaboratoryResults,
+          publicScientificJournal,
         }
         return commitCommand({
           auditEvents: [{
@@ -726,6 +732,7 @@ export function createTenderModule({
         publicContracts: tender.publicContracts,
         publicFinalContract: tender.publicFinalContract,
         publicLaboratoryResults: tender.publicLaboratoryResults,
+        publicScientificJournal: tender.publicScientificJournal,
         round: tender.round,
         tenderId,
         version: tender.version,
@@ -752,6 +759,7 @@ export function createTenderModule({
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
+        privateTelemetry: tender.privateMeasurementsByPlayer[player.id] ?? [],
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
         publicTheses: tender.publicTheses,
         ...(tender.phase === 'complete' ? { winnerPlayerIds: tender.winnerPlayerIds } : {}),
@@ -760,7 +768,9 @@ export function createTenderModule({
             anomalyConfiguration: tender.anomalyConfiguration,
             events: await store.readAuditEvents(tenderId),
             privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
+            privateTelemetryByPlayer: tender.privateMeasurementsByPlayer,
             publicLaboratoryResults: tender.publicLaboratoryResults,
+            publicScientificJournal: tender.publicScientificJournal,
           },
         } : {}),
       }

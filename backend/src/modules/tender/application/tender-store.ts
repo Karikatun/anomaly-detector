@@ -4,6 +4,7 @@ import type {
   PowerAllocation,
   PublicContract,
   PublicLaboratoryResult,
+  ScientificJournalEntry,
   PublicThesis,
   ScientificModel,
   TenderCommand,
@@ -48,6 +49,7 @@ export type StoredTender = {
   publicContracts: PublicContract[]
   publicFinalContract: PublicContract
   publicLaboratoryResults: PublicLaboratoryResult[]
+  publicScientificJournal: ScientificJournalEntry[]
   publicTheses: PublicThesis[]
   ratingByPlayer: Record<string, number>
   round: number
