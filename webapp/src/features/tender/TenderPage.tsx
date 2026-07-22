@@ -100,7 +100,6 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
       const reconPower = myPower?.reconnaissance ?? 0
       return reconPower > 0 ? (
         <ReconnaissancePanel
-          knownSignals={view.knownSignals}
           mySamples={mySamples}
           maxSignals={reconPower}
           disabled={disabled}
