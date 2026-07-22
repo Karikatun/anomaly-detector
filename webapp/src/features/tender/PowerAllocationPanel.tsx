@@ -69,23 +69,23 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
             return (
             <div
               key={key}
-              className="flex items-center gap-4 rounded-lg border p-4"
+              className="flex flex-col gap-4 rounded-lg border p-4 lg:flex-row lg:items-center"
             >
-              <div className="grid flex-1 gap-1">
+              <div className="grid min-w-0 flex-1 gap-1">
                 <Typography variant="bodySm" className="font-medium">
                   {label}
                 </Typography>
-                <Typography variant="control" tone="muted">
+                <Typography variant="bodySm" tone="muted" className="leading-snug">
                   {t(oneEffectKey)}
                 </Typography>
-                <Typography variant="control" tone="muted">
+                <Typography variant="bodySm" tone="muted" className="leading-snug">
                   {t(twoEffectKey)}
                 </Typography>
-                <Typography variant="control" tone="muted">
+                <Typography variant="bodySm" tone="muted" className="leading-snug">
                   {t('tender.power.selected', { count: allocation[key] })}
                 </Typography>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2 self-end lg:self-center">
                 <Button
                   aria-label={t('tender.power.decrease', { category: label })}
                   type="button"
