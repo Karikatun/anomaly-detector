@@ -88,6 +88,25 @@ const ru = {
   'lobby.error.notFound.description': 'Эта комната не существует или устарела.',
   'lobby.error.loadFailed': 'Не удалось загрузить комнату',
   'lobby.button.back': 'Назад к комнатам',
+
+  // Tender: Access Slots
+  'tender.access.title': 'Выбор слота доступа',
+  'tender.access.description': 'Выберите один из шести слотов. Ранний доступ даёт приоритет в действиях, поздний — компенсацию.',
+  'tender.access.confirm': 'Подтвердить выбор',
+  'tender.access.aria': 'Слот доступа {slot}: {name}. Порядок действия: {order}. {terms}',
+  'tender.access.order': 'Порядок: {order}',
+  'tender.access.cost.emergency': 'Цена: −2 бюджета',
+  'tender.access.cost.priority': 'Цена: −1 бюджет',
+  'tender.access.neutral': 'Без цены и компенсации',
+  'tender.access.compensation.sample': 'Компенсация: 1 образец сигнала',
+  'tender.access.compensation.report': 'Компенсация: 1 аналитический отчёт',
+  'tender.access.compensation.remote': 'Компенсация: 1 бюджет и 1 образец сигнала',
+  'tender.access.slot.emergency': 'Аварийный',
+  'tender.access.slot.priority': 'Приоритетный',
+  'tender.access.slot.standard': 'Стандартный',
+  'tender.access.slot.offPeak': 'Вне пика',
+  'tender.access.slot.night': 'Ночной',
+  'tender.access.slot.remote': 'Удалённый',
 } as const
 
 export type TranslationKey = keyof typeof ru
