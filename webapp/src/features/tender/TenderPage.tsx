@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
@@ -319,13 +318,6 @@ export function TenderPage() {
           </Badge>
         )}
         <div className="ml-auto flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void navigate({ to: '/rooms' })}
-          >
-            Выйти
-          </Button>
           {connected ? (
             <Badge variant="outline">Live</Badge>
           ) : (
