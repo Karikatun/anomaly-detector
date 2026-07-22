@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Typography } from '@/components/ui/typography'
+import { useI18n } from '@/platform/i18n'
 
 const signalNames: Record<string, string> = {
   aster: 'Aster', boreal: 'Boreal', cinder: 'Cinder',
@@ -12,12 +13,6 @@ const signalNames: Record<string, string> = {
 
 const fieldTypes = ['inertial', 'electromagnetic', 'phase'] as const
 const polarities = ['positive', 'negative'] as const
-
-const fieldTypeLabels: Record<string, string> = {
-  inertial: 'Инерционное',
-  electromagnetic: 'Электромагнитное',
-  phase: 'Фазовое',
-}
 
 type ModelAnalysisPanelProps = {
   knownSignals: string[]
@@ -37,6 +32,7 @@ export function ModelAnalysisPanel({
   const [signalId, setSignalId] = useState('')
   const [fieldType, setFieldType] = useState('')
   const [polarity, setPolarity] = useState('')
+  const { t } = useI18n()
 
   const isValid = signalId && fieldType && polarity
 
@@ -51,18 +47,17 @@ export function ModelAnalysisPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Анализ модели</CardTitle>
+        <CardTitle>{t('tender.analysis.title')}</CardTitle>
         <CardDescription>
-          Выдвиньте публичный тезис о свойствах сигнала.{' '}
-          {maxTheses > 1 && 'Доступно расширенное подтверждение (2 мощности).'}
+          {t('tender.analysis.description')} {maxTheses > 1 && t('tender.analysis.extended')}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid gap-4">
           <div>
-            <Typography variant="control" tone="muted" className="mb-1">Сигнал</Typography>
-            <NativeSelect aria-label="Сигнал для тезиса" value={signalId} onChange={(e) => setSignalId(e.target.value)}>
-              <option value="">Выберите сигнал…</option>
+            <Typography variant="control" tone="muted" className="mb-1">{t('tender.analysis.signal')}</Typography>
+            <NativeSelect aria-label={t('tender.analysis.signalAria')} value={signalId} onChange={(e) => setSignalId(e.target.value)}>
+              <option value="">{t('tender.analysis.signalPlaceholder')}</option>
               {knownSignals.map((s) => (
                 <option key={s} value={s}>{signalNames[s] ?? s}</option>
               ))}
@@ -70,21 +65,21 @@ export function ModelAnalysisPanel({
           </div>
 
           <div>
-            <Typography variant="control" tone="muted" className="mb-1">Тип поля</Typography>
-            <NativeSelect aria-label="Тип поля для тезиса" value={fieldType} onChange={(e) => setFieldType(e.target.value)}>
-              <option value="">Выберите тип…</option>
+            <Typography variant="control" tone="muted" className="mb-1">{t('tender.analysis.fieldType')}</Typography>
+            <NativeSelect aria-label={t('tender.analysis.fieldTypeAria')} value={fieldType} onChange={(e) => setFieldType(e.target.value)}>
+              <option value="">{t('tender.analysis.fieldTypePlaceholder')}</option>
               {fieldTypes.map((ft) => (
-                <option key={ft} value={ft}>{fieldTypeLabels[ft]}</option>
+                <option key={ft} value={ft}>{t(`tender.field.${ft}`)}</option>
               ))}
             </NativeSelect>
           </div>
 
           <div>
-            <Typography variant="control" tone="muted" className="mb-1">Полярность</Typography>
-            <NativeSelect aria-label="Полярность для тезиса" value={polarity} onChange={(e) => setPolarity(e.target.value)}>
-              <option value="">Выберите полярность…</option>
+            <Typography variant="control" tone="muted" className="mb-1">{t('tender.analysis.polarity')}</Typography>
+            <NativeSelect aria-label={t('tender.analysis.polarityAria')} value={polarity} onChange={(e) => setPolarity(e.target.value)}>
+              <option value="">{t('tender.analysis.polarityPlaceholder')}</option>
               {polarities.map((p) => (
-                <option key={p} value={p}>{p === 'positive' ? 'Положительная' : 'Отрицательная'}</option>
+                <option key={p} value={p}>{t(`tender.polarity.${p}`)}</option>
               ))}
             </NativeSelect>
           </div>
@@ -97,7 +92,7 @@ export function ModelAnalysisPanel({
         )}
 
         <Button type="button" size="lg" className="mt-6 w-full" disabled={disabled || !isValid} onClick={handleSubmit}>
-          Выдвинуть тезис
+          {t('tender.analysis.submit')}
         </Button>
       </CardContent>
     </Card>
