@@ -25,6 +25,7 @@ export function RoomLobbyPage() {
   const [room, setRoom] = useState<RoomView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!auth.isBootstrapping && !auth.user) {
@@ -84,6 +85,16 @@ export function RoomLobbyPage() {
         void navigate({ to: '/tenders/$tenderId', params: { tenderId: room.tenderId } })
       }
     }, [room, navigate])
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(roomId)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard API not available — user can select and copy manually
+    }
+  }, [roomId])
 
   const handleJoin = useCallback(async () => {
     try {
@@ -183,7 +194,17 @@ export function RoomLobbyPage() {
               <Typography variant="control" tone="muted" className="mb-1">
                 {t('lobby.room.id')}
               </Typography>
-              <Typography variant="body" className="font-mono text-sm">{room.roomId}</Typography>
+              <div className="flex items-center gap-3">
+                <Typography variant="body" className="flex-1 select-all font-mono text-sm">{room.roomId}</Typography>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleCopy()}
+                  className="shrink-0"
+                >
+                  {copied ? t('lobby.copied') : t('lobby.copyId')}
+                </Button>
+              </div>
             </div>
 
             <Separator />

@@ -203,6 +203,10 @@ function validateCorsOrigins(env: z.infer<typeof envSchema>, ctx: z.RefinementCt
     }
 
     if ((env.COOKIE_SECURE || env.NODE_ENV === 'production') && url.protocol !== 'https:') {
+      // Allow HTTP origins from localhost and LAN IPs when the backend is behind
+      // an HTTPS tunnel (ngrok/cloudflared) — Secure cookies are set on the
+      // tunnel's HTTPS domain, not the webapp origin.
+      if (url.hostname === 'localhost' || isPrivateLanIp(url.hostname)) continue
       ctx.addIssue({
         code: 'custom',
         path: ['CORS_ORIGINS'],
@@ -234,4 +238,10 @@ function validateStorageEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx
       })
     }
   }
+}
+
+function isPrivateLanIp(hostname: string): boolean {
+  // IPv4 private ranges: 10.x, 172.16-31.x, 192.168.x
+  const ipv4Pattern = /^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})$/
+  return ipv4Pattern.test(hostname)
 }
