@@ -19,14 +19,20 @@ type AccessSlotPanelProps = {
   disabled?: boolean
   error?: string | null
   onConfirm: (slot: number) => void
+  tiePriorityOrder: Array<{ displayName?: string; playerId: string; tiePriority?: number }>
 }
 
-export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm }: AccessSlotPanelProps) {
+export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm, tiePriorityOrder }: AccessSlotPanelProps) {
   const [selected, setSelected] = useState<number | null>(null)
   const { t } = useI18n()
   const confirmedSlotInfo = accessSlots.find(({ slot }) => slot === confirmedSlot)
   const selectedSlot = confirmedSlot ?? selected
   const isConfirmed = confirmedSlotInfo !== undefined
+  const tiePriorityPlayers = tiePriorityOrder
+    .filter((player) => player.tiePriority !== undefined)
+    .sort((left, right) => (left.tiePriority ?? Number.MAX_SAFE_INTEGER) - (right.tiePriority ?? Number.MAX_SAFE_INTEGER))
+    .map((player) => player.displayName ?? player.playerId)
+    .join(' → ')
 
   return (
     <Card>
@@ -35,6 +41,11 @@ export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm }: A
         <CardDescription>{t('tender.access.description')}</CardDescription>
       </CardHeader>
       <CardContent>
+        {tiePriorityPlayers && (
+          <Typography variant="bodySm" tone="muted" className="mb-4">
+            {t('tender.access.tiePriority', { players: tiePriorityPlayers })}
+          </Typography>
+        )}
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
           {accessSlots.map(({ slot, labelKey, termsKey }) => {
             const isSelected = selectedSlot === slot

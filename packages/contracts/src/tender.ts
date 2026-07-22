@@ -162,6 +162,7 @@ export const tenderPhaseSchema = z.enum([
 export const tenderPlayerViewSchema = z.object({
   playerId: playerIdSchema,
   displayName: z.string().min(1).max(100).optional(),
+  tiePriority: z.number().int().min(1).max(4).optional(),
   accessSlot: z.number().int().min(1).max(6).optional(),
   budget: z.number().int().min(0),
   corporateTrust: z.number().int().min(0).optional(),
