@@ -3,9 +3,16 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
+import { useI18n } from '@/platform/i18n'
 
-const slotLabels = ['Emergency', 'Priority', 'Standard', 'Off-peak', 'Night', 'Remote'] as const
-const slotCosts = [-2, -1, 0, 0, 0, 1] as const
+const accessSlots = [
+  { slot: 1, labelKey: 'tender.access.slot.emergency', termsKey: 'tender.access.cost.emergency' },
+  { slot: 2, labelKey: 'tender.access.slot.priority', termsKey: 'tender.access.cost.priority' },
+  { slot: 3, labelKey: 'tender.access.slot.standard', termsKey: 'tender.access.neutral' },
+  { slot: 4, labelKey: 'tender.access.slot.offPeak', termsKey: 'tender.access.compensation.sample' },
+  { slot: 5, labelKey: 'tender.access.slot.night', termsKey: 'tender.access.compensation.report' },
+  { slot: 6, labelKey: 'tender.access.slot.remote', termsKey: 'tender.access.compensation.remote' },
+] as const
 
 type AccessSlotPanelProps = {
   disabled?: boolean
@@ -15,21 +22,22 @@ type AccessSlotPanelProps = {
 
 export function AccessSlotPanel({ disabled, error, onConfirm }: AccessSlotPanelProps) {
   const [selected, setSelected] = useState<number | null>(null)
+  const { t } = useI18n()
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Выбор слота доступа</CardTitle>
+        <CardTitle>{t('tender.access.title')}</CardTitle>
         <CardDescription>
-          Выберите один из шести слотов. Ранний доступ даёт приоритет в действиях, поздний — ресурсы.
+          {t('tender.access.description')}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-          {Array.from({ length: 6 }, (_, i) => {
-            const slot = i + 1
+          {accessSlots.map(({ slot, labelKey, termsKey }) => {
             const isSelected = selected === slot
-            const cost = slotCosts[i]
+            const label = t(labelKey)
+            const terms = t(termsKey)
 
             return (
               <Button
@@ -37,20 +45,21 @@ export function AccessSlotPanel({ disabled, error, onConfirm }: AccessSlotPanelP
                 type="button"
                 variant={isSelected ? 'default' : 'outline'}
                 size="lg"
-                aria-label={`Слот доступа ${slot}: ${slotLabels[i]}`}
-                className="flex h-auto flex-col gap-1 py-4"
+                aria-label={t('tender.access.aria', { slot, name: label, order: slot, terms })}
+                className="flex h-auto min-h-44 flex-col gap-2 py-4 text-left"
                 disabled={disabled}
                 onClick={() => setSelected(slot)}
               >
                 <Typography variant="h6">{String(slot).padStart(2, '0')}</Typography>
                 <Typography variant="control" tone="muted">
-                  {slotLabels[i]}
+                  {label}
                 </Typography>
-                {cost !== 0 && (
-                  <Typography variant="control" tone={cost > 0 ? 'default' : 'destructive'}>
-                    {cost > 0 ? `+${cost}` : cost} бюджет
-                  </Typography>
-                )}
+                <Typography variant="control" tone="muted">
+                  {t('tender.access.order', { order: slot })}
+                </Typography>
+                <Typography variant="control" className="text-center">
+                  {terms}
+                </Typography>
               </Button>
             )
           })}
@@ -74,7 +83,7 @@ export function AccessSlotPanel({ disabled, error, onConfirm }: AccessSlotPanelP
             }
           }}
         >
-          Подтвердить выбор
+          {t('tender.access.confirm')}
         </Button>
       </CardContent>
     </Card>

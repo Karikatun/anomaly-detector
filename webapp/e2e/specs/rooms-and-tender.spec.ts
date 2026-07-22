@@ -92,6 +92,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expectPhase(page, headings.access)
     await expectPhase(guestPage, headings.access)
+    await expect(page.getByText('Компенсация: 1 аналитический отчёт')).toBeVisible()
+    await expect(page.getByText('Компенсация: 1 бюджет и 1 образец сигнала')).toBeVisible()
 
     await chooseAccessSlot(page, 1)
     await expect(page.getByRole('button', { name: 'Подтвердить выбор' })).toBeDisabled()
