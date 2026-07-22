@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
+import { useI18n } from '@/platform/i18n'
 
 const signalNames: Record<string, string> = {
   aster: 'Aster',
@@ -35,6 +36,7 @@ export function ReconnaissancePanel({
   onConfirm,
 }: ReconnaissancePanelProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const { t } = useI18n()
 
   const available = availableReconnaissanceSignals(mySamples)
 
@@ -61,16 +63,16 @@ export function ReconnaissancePanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Разведка</CardTitle>
+        <CardTitle>{t('tender.recon.title')}</CardTitle>
         <CardDescription>
           {maxSignals === 1
-            ? 'Выберите один сигнал для получения образца.'
-            : 'Выберите до двух сигналов для получения образцов.'}
+            ? t('tender.recon.description.one')
+            : t('tender.recon.description.many')}
         </CardDescription>
       </CardHeader>
       <CardContent>
         {available.length === 0 && (
-          <Typography tone="muted">Нет доступных сигналов для разведки.</Typography>
+          <Typography tone="muted">{t('tender.recon.empty')}</Typography>
         )}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -78,7 +80,7 @@ export function ReconnaissancePanel({
             const isSel = selected.has(signal)
             return (
               <Button
-                aria-label={`Сигнал для разведки: ${signalNames[signal] ?? signal}`}
+                aria-label={t('tender.recon.aria', { signal: signalNames[signal] ?? signal })}
                 key={signal}
                 type="button"
                 variant={isSel ? 'default' : 'outline'}
@@ -98,7 +100,7 @@ export function ReconnaissancePanel({
 
         {mySamples.length > 0 && (
           <Typography variant="control" tone="muted" className="mt-4">
-            Уже есть образцы: {mySamples.map((s) => signalNames[s] ?? s).join(', ')}
+            {t('tender.recon.samples', { signals: mySamples.map((s) => signalNames[s] ?? s).join(', ') })}
           </Typography>
         )}
 
@@ -116,10 +118,10 @@ export function ReconnaissancePanel({
           onClick={handleConfirm}
         >
           {selected.size === 0
-            ? `Выберите ${maxSignals === 1 ? 'сигнал' : `${maxSignals} сигнала`}`
+            ? maxSignals === 1 ? t('tender.recon.choose.one') : t('tender.recon.choose.many', { count: maxSignals })
             : selected.size < maxSignals
-              ? `Выбрано ${selected.size} из ${maxSignals}`
-              : 'Исследовать'}
+              ? t('tender.recon.selected', { selected: selected.size, total: maxSignals })
+              : t('tender.recon.confirm')}
         </Button>
       </CardContent>
     </Card>
