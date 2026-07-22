@@ -51,13 +51,17 @@ export function RootLayout() {
                 </Button>
               </nav>
             )}
-            <Button type="button" variant="outline" size="sm" onClick={() => void logout()}>
-              {t('button.logout')}
-            </Button>
-            {logoutFailed && auth.user && (
-              <Typography role="alert" variant="bodySm" tone="destructive">
-                {t('logout.failed')}
-              </Typography>
+            {!isInTender && (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={() => void logout()}>
+                  {t('button.logout')}
+                </Button>
+                {logoutFailed && auth.user && (
+                  <Typography role="alert" variant="bodySm" tone="destructive">
+                    {t('logout.failed')}
+                  </Typography>
+                )}
+              </>
             )}
           </div>
         </header>

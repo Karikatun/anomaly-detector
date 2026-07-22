@@ -91,6 +91,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(page.getByRole('button', { name: 'Выйти из матча' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Выйти', exact: true })).toBeHidden()
     await expect(page.getByRole('link', { name: 'Комнаты' })).toBeHidden()
     await expect(page.getByRole('link', { name: 'Мои матчи' })).toBeHidden()
     await expectPhase(page, headings.access)
