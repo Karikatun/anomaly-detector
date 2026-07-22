@@ -61,7 +61,7 @@ export function ModelAnalysisPanel({
         <div className="grid gap-4">
           <div>
             <Typography variant="control" tone="muted" className="mb-1">Сигнал</Typography>
-            <NativeSelect value={signalId} onChange={(e) => setSignalId(e.target.value)}>
+            <NativeSelect aria-label="Сигнал для тезиса" value={signalId} onChange={(e) => setSignalId(e.target.value)}>
               <option value="">Выберите сигнал…</option>
               {knownSignals.map((s) => (
                 <option key={s} value={s}>{signalNames[s] ?? s}</option>
@@ -71,7 +71,7 @@ export function ModelAnalysisPanel({
 
           <div>
             <Typography variant="control" tone="muted" className="mb-1">Тип поля</Typography>
-            <NativeSelect value={fieldType} onChange={(e) => setFieldType(e.target.value)}>
+            <NativeSelect aria-label="Тип поля для тезиса" value={fieldType} onChange={(e) => setFieldType(e.target.value)}>
               <option value="">Выберите тип…</option>
               {fieldTypes.map((ft) => (
                 <option key={ft} value={ft}>{fieldTypeLabels[ft]}</option>
@@ -81,7 +81,7 @@ export function ModelAnalysisPanel({
 
           <div>
             <Typography variant="control" tone="muted" className="mb-1">Полярность</Typography>
-            <NativeSelect value={polarity} onChange={(e) => setPolarity(e.target.value)}>
+            <NativeSelect aria-label="Полярность для тезиса" value={polarity} onChange={(e) => setPolarity(e.target.value)}>
               <option value="">Выберите полярность…</option>
               {polarities.map((p) => (
                 <option key={p} value={p}>{p === 'positive' ? 'Положительная' : 'Отрицательная'}</option>

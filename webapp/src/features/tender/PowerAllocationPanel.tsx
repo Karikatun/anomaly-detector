@@ -85,6 +85,7 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
               </div>
               <div className="flex items-center gap-2">
                 <Button
+                  aria-label={`Уменьшить мощность: ${label}`}
                   type="button"
                   variant="outline"
                   size="sm"
@@ -98,6 +99,7 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
                   {allocation[key]}
                 </Typography>
                 <Button
+                  aria-label={`Увеличить мощность: ${label}`}
                   type="button"
                   variant="outline"
                   size="sm"

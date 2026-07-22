@@ -51,6 +51,7 @@ export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, o
         <div className="mb-4 grid grid-cols-3 gap-2">
           {mySamples.map((signal) => (
             <Button
+              aria-label={`Источник: ${signalNames[signal] ?? signal}`}
               key={`src-${signal}`}
               type="button"
               variant={source === signal ? 'default' : 'outline'}
@@ -68,6 +69,7 @@ export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, o
         <div className="mb-4 grid grid-cols-3 gap-2">
           {mySamples.filter((s) => s !== source).map((signal) => (
             <Button
+              aria-label={`Приёмник: ${signalNames[signal] ?? signal}`}
               key={`rec-${signal}`}
               type="button"
               variant={receiver === signal ? 'default' : 'outline'}

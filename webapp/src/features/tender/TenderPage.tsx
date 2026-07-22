@@ -117,6 +117,7 @@ function PhasePanel({ view, disabled, error, onCommand }: {
         <ContractsPanel
           contracts={view.publicContracts}
           maxPower={effective}
+          playerId={auth.user?.id ?? ''}
           disabled={disabled}
           error={error}
           onReserve={(contractId) => onCommand({ type: 'reserve-contract', contractId })}

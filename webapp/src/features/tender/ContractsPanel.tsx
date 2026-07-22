@@ -17,19 +17,26 @@ const resultLabels: Record<string, string> = {
 type ContractsPanelProps = {
   contracts: PublicContract[]
   maxPower: number
+  playerId: string
   disabled?: boolean
   error?: string | null
   onReserve: (contractId: string) => void
   onBid: (contractId: string, claimedPublicResult: string, requestedFunding: number) => void
 }
 
-export function ContractsPanel({ contracts, maxPower, disabled, error, onReserve, onBid }: ContractsPanelProps) {
+export function ContractsPanel({ contracts, maxPower, playerId, disabled, error, onReserve, onBid }: ContractsPanelProps) {
   type BidDraft = { claimedPublicResult: string; requestedFunding: number }
   const [bids, setBids] = useState<Record<string, BidDraft>>({})
 
-  const available = contracts.filter((c) => !c.reservedByPlayerId)
+  const available = contracts.filter((contract) =>
+    !contract.reservedByPlayerId || contract.reservedByPlayerId === playerId,
+  )
 
   const handleReserve = (contractId: string) => {
+    setBids((previous) => ({
+      ...previous,
+      [contractId]: { claimedPublicResult: '', requestedFunding: 0 },
+    }))
     onReserve(contractId)
   }
 
@@ -75,6 +82,7 @@ export function ContractsPanel({ contracts, maxPower, disabled, error, onReserve
                     type="button"
                     size="sm"
                     className="mt-3 w-full"
+                    aria-label={`Зарезервировать контракт ${contract.contractId}`}
                     disabled={disabled || maxPower === 0}
                     onClick={() => handleReserve(contract.contractId)}
                   >
@@ -85,6 +93,7 @@ export function ContractsPanel({ contracts, maxPower, disabled, error, onReserve
                 {draft && (
                   <div className="mt-3 grid gap-2">
                     <NativeSelect
+                      aria-label={`Результат заявки ${contract.contractId}`}
                       value={draft.claimedPublicResult}
                       onChange={(e) => setBids((prev) => ({
                         ...prev,
@@ -99,6 +108,7 @@ export function ContractsPanel({ contracts, maxPower, disabled, error, onReserve
                     <div className="flex items-center gap-2">
                       <Typography variant="control" tone="muted">Бюджет:</Typography>
                       <NativeSelect
+                        aria-label={`Бюджет заявки ${contract.contractId}`}
                         value={String(draft.requestedFunding)}
                         onChange={(e) => setBids((prev) => ({
                           ...prev,
@@ -114,6 +124,7 @@ export function ContractsPanel({ contracts, maxPower, disabled, error, onReserve
                       type="button"
                       size="sm"
                       className="w-full"
+                      aria-label={`Подать заявку по контракту ${contract.contractId}`}
                       disabled={disabled || !draft.claimedPublicResult}
                       onClick={() => handleBid(contract.contractId)}
                     >
