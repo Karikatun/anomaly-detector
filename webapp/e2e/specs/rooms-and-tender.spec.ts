@@ -101,7 +101,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expectPhase(page, headings.power)
     await expectPhase(guestPage, headings.power)
     await allocatePower(page, { 'Разведка': 1, 'Лаборатория': 1, 'Контракты': 2 })
-    await expect(page.getByRole('button', { name: 'Подтвердить распределение' })).toBeDisabled()
+    await expect(page.getByText('Ожидание хода')).toBeVisible()
+    await expect(page.getByText('Сейчас действует Гость E2E.')).toBeVisible()
     await allocatePower(guestPage, { 'Разведка': 1, 'Лаборатория': 1, 'Контракты': 2 })
 
     await expectPhase(page, headings.reconnaissance)

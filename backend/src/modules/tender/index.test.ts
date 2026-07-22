@@ -25,6 +25,7 @@ test('resolves an expired Access Slot selection with conservative free defaults'
     advancedTenderIds: [tenderId],
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    activePlayerId: 'player-a',
     phase: 'power-allocation',
     players: [
       { playerId: 'player-a', accessSlot: 1, budget: 0 },

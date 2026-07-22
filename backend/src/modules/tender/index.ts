@@ -128,6 +128,18 @@ export function createTenderModule({
     .filter((player) => !tender.finalScientificModelCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
+  const activePlayerIdForView = (tender: StoredTender) => {
+    switch (tender.phase) {
+      case 'power-allocation': return nextPowerAllocationPlayer(tender)?.id
+      case 'reconnaissance': return nextReconnaissancePlayer(tender)?.id
+      case 'laboratory': return nextLaboratoryPlayer(tender)?.id
+      case 'model-analysis': return nextModelAnalysisPlayer(tender)?.id
+      case 'contracts': return nextContractsPlayer(tender)?.id
+      case 'final-scientific-model': return nextScientificModelPlayer(tender)?.id
+      default: return undefined
+    }
+  }
+
   const resolveWinners = (tender: StoredTender) => {
     const highestRating = Math.max(...tender.players.map((player) => tender.ratingByPlayer[player.id] ?? 0))
     const ratingLeaders = tender.players.filter((player) => (tender.ratingByPlayer[player.id] ?? 0) === highestRating)
@@ -704,7 +716,9 @@ export function createTenderModule({
       const { tenderId, playerId } = parsedQuery.data
       const tender = await readTender(tenderId)
       const player = readPlayer(tender, playerId)
+      const activePlayerId = activePlayerIdForView(tender)
       return {
+        ...(activePlayerId ? { activePlayerId } : {}),
         knownSignals: tender.knownSignals,
         publicContracts: tender.publicContracts,
         publicFinalContract: tender.publicFinalContract,
