@@ -50,14 +50,26 @@ const reservePowerAllocation: PowerAllocation = {
   reserve: 4,
 }
 
-const createRoundContracts = (round: number, playerCount: number) => Array.from(
+const deckOffset = (seed: string) => [...seed].reduce((total, character) => (total * 31 + character.charCodeAt(0)) % 1_000_003, 0)
+
+const createRoundContracts = (round: number, playerCount: number, seed: string) => {
+  // Round one is the published onboarding deck. Later rounds rotate from the Tender
+  // seed, so the complete five-round deck is reproducible without depending on play.
+  const offset = (round - 1) * (playerCount + 1 + deckOffset(seed))
+  const publicResults = ['reflection', 'attenuation', 'transmission_gain', 'unstable_collapse'] as const
+  return Array.from(
   { length: playerCount + 1 },
   (_, index) => ({
     contractId: `round-${round}-contract-${index + 1}`,
-    requiredPublicResult: ['reflection', 'attenuation', 'transmission_gain', 'unstable_collapse'][index % 4] as 'reflection' | 'attenuation' | 'transmission_gain' | 'unstable_collapse',
-    targetSignal: signalIds[((round - 1) * (playerCount + 1) + index) % signalIds.length],
+    requiredPublicResult: publicResults[(offset + index) % publicResults.length],
+    requiredSecondaryPublicResult: publicResults[(offset + index + 1) % publicResults.length],
+    targetSignal: signalIds[(offset + index) % signalIds.length],
+    kind: index === 0 ? 'scientific' as const : index === 1 ? 'complex' as const : 'light' as const,
+    ratingReward: index === 0 ? 3 : index === 1 ? 4 : 2,
+    targetRole: (offset + index) % 2 === 0 ? 'source' as const : 'receiver' as const,
   }),
-)
+  )
+}
 
 const accessSlotBudgetDelta = (slot: number) => {
   if (slot === 1) return -2
@@ -152,7 +164,7 @@ export function createTenderModule({
     const tenderAfterGrant = { ...tender, budgetByPlayer }
     if (tender.round >= 5) return { ...tenderAfterGrant, phase: 'final-scientific-model' }
     const round = tender.round + 1
-    const publicContracts = createRoundContracts(round, tender.players.length)
+    const publicContracts = createRoundContracts(round, tender.players.length, tender.anomalyConfiguration.seed)
     return {
       ...tenderAfterGrant,
       accessSlots: {},
@@ -243,11 +255,20 @@ export function createTenderModule({
       if (!parsedInput.success) {
         throw new TenderFailure('invalid_create_tender', 'Tender creation input is invalid')
       }
-      const publicContracts = createRoundContracts(1, parsedInput.data.players.length)
-      const publicFinalContract = { contractId: finalContractId, requiredPublicResult: 'reflection' as const, targetSignal: 'ferro' as const }
+      const anomalyConfiguration = createAnomalyConfiguration(seedGenerator())
+      const publicContracts = createRoundContracts(1, parsedInput.data.players.length, anomalyConfiguration.seed)
+      const publicFinalContract = {
+        contractId: finalContractId,
+        kind: 'final' as const,
+        ratingReward: 8,
+        requiredPublicResult: 'reflection' as const,
+        requiredSecondaryPublicResult: 'attenuation' as const,
+        targetRole: 'source' as const,
+        targetSignal: 'ferro' as const,
+      }
       const tender = await store.create({
         accessSlots: {},
-        anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
+        anomalyConfiguration,
         budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
         corporateTrustByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 0])),
         corporateReviewActive: false,
@@ -271,6 +292,7 @@ export function createTenderModule({
         modelAnalysisCompletedByPlayer: {},
         privateMeasurementsByPlayer: {},
         researchCertificationsByPlayer: {},
+        usedContractEvidenceTestIds: [],
         privateWorkingModelsByPlayer: {},
         players: parsedInput.data.players,
         requestedSlots: {},
@@ -615,8 +637,42 @@ export function createTenderModule({
         if (!contract || contract.bidOutcome !== undefined || contract.reservedByPlayerId !== player.id || expectedPlayer?.id !== player.id) {
           throw new TenderFailure('invalid_tender_state', 'Contract Bid is not available to this Player')
         }
-        const hasMatchingEvidence = tender.publicLaboratoryResults.some((result) => result.playerId === player.id && result.publicResult === command.claimedPublicResult)
-        const isAwarded = command.claimedPublicResult === contract.requiredPublicResult && hasMatchingEvidence
+        const kind = contract.kind ?? (isFinalContract ? 'final' : 'light')
+        const targetRole = contract.targetRole ?? 'source'
+        const requiredSecondaryPublicResult = contract.requiredSecondaryPublicResult
+          ?? (contract.requiredPublicResult === 'reflection' ? 'attenuation' : 'reflection')
+        const evidenceTestIds = command.evidenceTestIds ?? []
+        const evidence = evidenceTestIds.map((testId) => tender.publicScientificJournal.find((entry) => entry.testId === testId))
+        const hasDistinctExistingEvidence = evidence.length === new Set(evidenceTestIds).size && evidence.every((entry) => entry !== undefined)
+        const matchesEvidence = (entry: (typeof tender.publicScientificJournal)[number] | undefined) => Boolean(
+          entry
+          && entry.playerId === player.id
+          && !tender.usedContractEvidenceTestIds.includes(entry.testId)
+          && entry.publicResult === contract.requiredPublicResult
+          && entry[targetRole === 'source' ? 'sourceSignal' : 'receiverSignal'] === contract.targetSignal,
+        )
+        const matchesTargetRole = (entry: (typeof tender.publicScientificJournal)[number] | undefined) => Boolean(
+          entry
+          && entry.playerId === player.id
+          && !tender.usedContractEvidenceTestIds.includes(entry.testId)
+          && entry[targetRole === 'source' ? 'sourceSignal' : 'receiverSignal'] === contract.targetSignal,
+        )
+        const hasLightEvidence = hasDistinctExistingEvidence && evidence.length === 1 && matchesEvidence(evidence[0])
+        const hasComplexEvidence = hasDistinctExistingEvidence && (
+          (evidence.length === 1 && evidence[0]?.protocol === 'continuous' && matchesEvidence(evidence[0]))
+          || (evidence.length === 2
+            && evidence.every(matchesTargetRole)
+            && new Set(evidence.map((entry) => entry?.publicResult)).size === 2
+            && evidence.some((entry) => entry?.publicResult === contract.requiredPublicResult)
+            && evidence.some((entry) => entry?.publicResult === requiredSecondaryPublicResult))
+        )
+        const hasScientificCertification = command.researchCertificationSignal === contract.targetSignal
+          && (tender.researchCertificationsByPlayer[player.id] ?? []).includes(contract.targetSignal!)
+        const isAwarded = kind === 'scientific'
+          ? evidence.length === 0 && hasScientificCertification
+          : kind === 'light'
+            ? hasLightEvidence
+            : hasComplexEvidence
         const publicContracts = tender.publicContracts.map((candidate) => candidate.contractId === command.contractId
           ? {
             ...candidate,
@@ -631,16 +687,22 @@ export function createTenderModule({
             bidOutcome: isAwarded ? 'awarded' as const : 'failed' as const,
           }
           : tender.publicFinalContract
-        const budgetByPlayer = isAwarded
-          ? { ...tender.budgetByPlayer, [player.id]: (tender.budgetByPlayer[player.id] ?? 0) + command.requestedFunding }
-          : tender.budgetByPlayer
         const corporateTrustByPlayer = isAwarded
           ? { ...tender.corporateTrustByPlayer, [player.id]: (tender.corporateTrustByPlayer[player.id] ?? 0) + (isFinalContract ? 0 : 1) }
           : tender.corporateTrustByPlayer
         const ratingByPlayer = isAwarded
-          ? { ...tender.ratingByPlayer, [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + (isFinalContract ? finalContractRating : normalContractRating) }
+          ? { ...tender.ratingByPlayer, [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + (contract.ratingReward ?? (isFinalContract ? finalContractRating : normalContractRating)) }
           : tender.ratingByPlayer
-        const nextTender = { ...tender, budgetByPlayer, contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [player.id]: true }, corporateTrustByPlayer, publicContracts, publicFinalContract, ratingByPlayer }
+        const researchCertificationsByPlayer = isAwarded && kind === 'scientific'
+          ? {
+            ...tender.researchCertificationsByPlayer,
+            [player.id]: (tender.researchCertificationsByPlayer[player.id] ?? []).filter((signal) => signal !== contract.targetSignal),
+          }
+          : tender.researchCertificationsByPlayer
+        const usedContractEvidenceTestIds = isAwarded && kind !== 'scientific'
+          ? [...tender.usedContractEvidenceTestIds, ...evidenceTestIds]
+          : tender.usedContractEvidenceTestIds
+        const nextTender = { ...tender, contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [player.id]: true }, corporateTrustByPlayer, publicContracts, publicFinalContract, ratingByPlayer, researchCertificationsByPlayer, usedContractEvidenceTestIds }
         return commitCommand({
           auditEvents: [{
             actorId: command.actorId,
@@ -649,12 +711,12 @@ export function createTenderModule({
             payload: {
               awarded: isAwarded,
               awardedToPlayerId: isAwarded ? player.id : undefined,
-              budgetByPlayer,
               contractId: command.contractId,
               corporateTrustByPlayer,
+              evidenceTestIds,
               playerId: player.id,
               ratingByPlayer,
-              requestedFunding: command.requestedFunding,
+              researchCertificationSignal: command.researchCertificationSignal,
             },
           }],
           command,

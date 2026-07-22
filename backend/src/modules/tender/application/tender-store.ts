@@ -61,6 +61,7 @@ export type StoredTender = {
   modelAnalysisCompletedByPlayer: Record<string, boolean>
   privateMeasurementsByPlayer: Record<string, PrivateMeasurement[]>
   researchCertificationsByPlayer: Record<string, SignalId[]>
+  usedContractEvidenceTestIds: string[]
   privateWorkingModelsByPlayer: Record<string, WorkingModel>
   samplesByPlayer: Record<string, SignalId[]>
   players: TenderPlayer[]

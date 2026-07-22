@@ -35,6 +35,7 @@ type PersistedTenderState = Pick<
   | 'modelAnalysisCompletedByPlayer'
   | 'privateMeasurementsByPlayer'
   | 'researchCertificationsByPlayer'
+  | 'usedContractEvidenceTestIds'
   | 'privateWorkingModelsByPlayer'
   | 'reconnaissanceCompletedByPlayer'
   | 'requestedSlots'
@@ -67,6 +68,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   modelAnalysisCompletedByPlayer: tender.modelAnalysisCompletedByPlayer,
   privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
   researchCertificationsByPlayer: tender.researchCertificationsByPlayer,
+  usedContractEvidenceTestIds: tender.usedContractEvidenceTestIds,
   privateWorkingModelsByPlayer: tender.privateWorkingModelsByPlayer,
   reconnaissanceCompletedByPlayer: tender.reconnaissanceCompletedByPlayer,
   players: tender.players,
@@ -105,7 +107,7 @@ const toStoredTender = (record: {
     phase: record.phase as TenderPhase,
     powerAllocations: state.powerAllocations ?? {},
     publicContracts: state.publicContracts ?? createDefaultContracts(state.players.length),
-    publicFinalContract: state.publicFinalContract ?? { contractId: 'final-contract', requiredPublicResult: 'reflection', targetSignal: 'ferro' },
+    publicFinalContract: state.publicFinalContract ?? { contractId: 'final-contract', kind: 'final', ratingReward: 8, requiredPublicResult: 'reflection', requiredSecondaryPublicResult: 'attenuation', targetRole: 'source', targetSignal: 'ferro' },
     publicLaboratoryResults: state.publicLaboratoryResults ?? [],
     publicScientificJournal: state.publicScientificJournal ?? [],
     publicTheses: state.publicTheses ?? [],
@@ -116,6 +118,7 @@ const toStoredTender = (record: {
     modelAnalysisCompletedByPlayer: state.modelAnalysisCompletedByPlayer ?? {},
     privateMeasurementsByPlayer: state.privateMeasurementsByPlayer ?? {},
     researchCertificationsByPlayer: state.researchCertificationsByPlayer ?? {},
+    usedContractEvidenceTestIds: state.usedContractEvidenceTestIds ?? [],
     privateWorkingModelsByPlayer: state.privateWorkingModelsByPlayer ?? {},
     reconnaissanceCompletedByPlayer: state.reconnaissanceCompletedByPlayer ?? {},
     players: state.players,
@@ -135,6 +138,10 @@ function createDefaultContracts(playerCount: number) {
     contractId: `round-1-contract-${index + 1}`,
     requiredPublicResult: requiredPublicResults[index % requiredPublicResults.length],
     targetSignal: defaultContractSignalIds[index % defaultContractSignalIds.length],
+    kind: index === 0 ? 'scientific' as const : index === 1 ? 'complex' as const : 'light' as const,
+    ratingReward: index === 0 ? 3 : index === 1 ? 4 : 2,
+    requiredSecondaryPublicResult: requiredPublicResults[(index + 1) % requiredPublicResults.length],
+    targetRole: index % 2 === 0 ? 'source' as const : 'receiver' as const,
   }))
 }
 

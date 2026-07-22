@@ -184,14 +184,17 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
       const effective = Math.max(0, contractPower - restriction)
       return effective > 0 ? (
         <ContractsPanel
-          contracts={view.publicContracts}
+          certifications={view.privateResearchCertifications ?? []}
+          contracts={[...view.publicContracts, ...(view.publicFinalContract ? [view.publicFinalContract] : [])]}
+          journal={view.publicScientificJournal ?? []}
           maxPower={effective}
           playerId={auth.user?.id ?? ''}
+          round={view.round}
           disabled={disabled}
           error={error}
           onReserve={(contractId) => onCommand({ type: 'reserve-contract', contractId })}
-          onBid={(contractId, claimedPublicResult, requestedFunding) =>
-            onCommand({ type: 'submit-contract-bid', contractId, claimedPublicResult, requestedFunding })
+          onBid={(contractId, bid) =>
+            onCommand({ type: 'submit-contract-bid', contractId, ...bid })
           }
         />
       ) : (
