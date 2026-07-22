@@ -36,6 +36,7 @@ export type StoredTender = {
   anomalyConfiguration: AnomalyConfiguration
   budgetByPlayer: Record<string, number>
   corporateTrustByPlayer: Record<string, number>
+  corporateReviewActive: boolean
   contractCompletedByPlayer: Record<string, boolean>
   contractPowerRestrictionsByPlayer: Record<string, number>
   dueAt: Date | null
@@ -59,6 +60,7 @@ export type StoredTender = {
   laboratoryCompletedByPlayer: Record<string, boolean>
   modelAnalysisCompletedByPlayer: Record<string, boolean>
   privateMeasurementsByPlayer: Record<string, PrivateMeasurement[]>
+  researchCertificationsByPlayer: Record<string, SignalId[]>
   privateWorkingModelsByPlayer: Record<string, WorkingModel>
   samplesByPlayer: Record<string, SignalId[]>
   players: TenderPlayer[]

@@ -242,6 +242,7 @@ export const tenderAuditViewSchema = z.object({
 
 export const tenderViewSchema = z.object({
   activePlayerId: playerIdSchema.optional(),
+  corporateReviewActive: z.boolean().optional(),
   knownSignals: z.array(signalIdSchema),
   publicContracts: z.array(publicContractSchema),
   publicFinalContract: publicContractSchema.optional(),
@@ -256,6 +257,7 @@ export const tenderViewSchema = z.object({
   privateRawTelemetrySignals: z.array(signalIdSchema),
   privateSamples: z.array(signalIdSchema),
   privateMeasurements: z.array(privateMeasurementSchema),
+  privateResearchCertifications: z.array(signalIdSchema).optional(),
   privateTelemetry: z.array(privateMeasurementSchema).optional(),
   privateWorkingModel: workingModelSchema,
   publicTheses: z.array(publicThesisSchema),

@@ -110,10 +110,7 @@ export function createTenderModule({
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
   const nextModelAnalysisPlayer = (tender: StoredTender) => tender.players.filter((player) => tender.powerAllocations[player.id]?.modelAnalysis > 0 && !tender.modelAnalysisCompletedByPlayer[player.id]).sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
-  const effectiveContractPower = (tender: StoredTender, playerId: string) => Math.max(
-    0,
-    (tender.powerAllocations[playerId]?.contracts ?? 0) - (tender.contractPowerRestrictionsByPlayer[playerId] ?? 0),
-  )
+  const effectiveContractPower = (tender: StoredTender, playerId: string) => tender.powerAllocations[playerId]?.contracts ?? 0
 
   const nextContractsPlayer = (tender: StoredTender) => tender.players
     .filter((player) => effectiveContractPower(tender, player.id) > 0)
@@ -160,6 +157,7 @@ export function createTenderModule({
       ...tenderAfterGrant,
       accessSlots: {},
       contractCompletedByPlayer: {},
+      corporateReviewActive: false,
       laboratoryCompletedByPlayer: {},
       modelAnalysisCompletedByPlayer: {},
       phase: 'access-slot-selection',
@@ -252,6 +250,7 @@ export function createTenderModule({
         anomalyConfiguration: createAnomalyConfiguration(seedGenerator()),
         budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
         corporateTrustByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 0])),
+        corporateReviewActive: false,
         contractCompletedByPlayer: {},
         contractPowerRestrictionsByPlayer: {},
         dueAt: deadlineForPhase('access-slot-selection', now()),
@@ -271,6 +270,7 @@ export function createTenderModule({
         laboratoryCompletedByPlayer: {},
         modelAnalysisCompletedByPlayer: {},
         privateMeasurementsByPlayer: {},
+        researchCertificationsByPlayer: {},
         privateWorkingModelsByPlayer: {},
         players: parsedInput.data.players,
         requestedSlots: {},
@@ -413,10 +413,6 @@ export function createTenderModule({
           { ...publicLaboratoryResults.at(-1)!, testId: `r${tender.round}-t${tender.publicScientificJournal.length + 1}` },
         ]
         const laboratoryCompletedByPlayer = { ...tender.laboratoryCompletedByPlayer, [player.id]: true }
-        const contractPowerRestrictionsByPlayer = {
-          ...tender.contractPowerRestrictionsByPlayer,
-          [player.id]: 0,
-        }
         const measurement = command.protocol === 'continuous'
           ? [{
             receiverSignal: command.receiverSignal,
@@ -432,7 +428,6 @@ export function createTenderModule({
         }
         const nextTender = {
           ...tender,
-          contractPowerRestrictionsByPlayer,
           laboratoryCompletedByPlayer,
           privateMeasurementsByPlayer,
           publicLaboratoryResults,
@@ -459,15 +454,25 @@ export function createTenderModule({
 
       if (command.type === 'submit-thesis') {
         if (tender.phase !== 'model-analysis' || nextModelAnalysisPlayer(tender)?.id !== player.id) throw new TenderFailure('invalid_tender_state', 'Model analysis is not available to this Player')
+        if (tender.corporateReviewActive && (tender.budgetByPlayer[player.id] ?? 0) < 1) {
+          const nextTender = { ...tender, modelAnalysisCompletedByPlayer: { ...tender.modelAnalysisCompletedByPlayer, [player.id]: true } }
+          return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_skipped_corporate_review', payload: { playerId: player.id } }], command, commandFingerprint, nextTender: (() => {
+            const advancedTender = nextModelAnalysisPlayer(nextTender) ? { ...nextTender, phase: 'model-analysis' as const } : advanceAfterOperationalActions(nextTender, 'model-analysis')
+            return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, now()) }
+          })(), tender })
+        }
         const actual = tender.anomalyConfiguration.signals[command.signalId]
         const correct = actual.fieldType === command.fieldType && actual.polarity === command.polarity
         const modelAnalysisCompletedByPlayer = { ...tender.modelAnalysisCompletedByPlayer, [player.id]: true }
         const ratingByPlayer = correct
           ? { ...tender.ratingByPlayer, [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + 1 }
           : tender.ratingByPlayer
-        const contractPowerRestrictionsByPlayer = correct
-          ? tender.contractPowerRestrictionsByPlayer
-          : { ...tender.contractPowerRestrictionsByPlayer, [player.id]: 1 }
+        const budgetByPlayer = tender.corporateReviewActive
+          ? { ...tender.budgetByPlayer, [player.id]: (tender.budgetByPlayer[player.id] ?? 0) - 1 }
+          : tender.budgetByPlayer
+        const researchCertificationsByPlayer = correct
+          ? { ...tender.researchCertificationsByPlayer, [player.id]: [...(tender.researchCertificationsByPlayer[player.id] ?? []), command.signalId] }
+          : tender.researchCertificationsByPlayer
         const publicTheses = [
           ...tender.publicTheses,
           {
@@ -481,9 +486,11 @@ export function createTenderModule({
         ]
         const nextTender = {
           ...tender,
-          contractPowerRestrictionsByPlayer,
+          budgetByPlayer,
+          corporateReviewActive: tender.corporateReviewActive || !correct,
           modelAnalysisCompletedByPlayer,
           publicTheses,
+          researchCertificationsByPlayer,
           ratingByPlayer,
         }
         return commitCommand({ auditEvents: [{ actorId: command.actorId, commandId: command.commandId, kind: 'thesis_checked', payload: { correct, playerId: player.id, signalId: command.signalId } }], command, commandFingerprint, nextTender: (() => {
@@ -729,6 +736,7 @@ export function createTenderModule({
       return {
         ...(activePlayerId ? { activePlayerId } : {}),
         knownSignals: tender.knownSignals,
+        corporateReviewActive: tender.corporateReviewActive,
         publicContracts: tender.publicContracts,
         publicFinalContract: tender.publicFinalContract,
         publicLaboratoryResults: tender.publicLaboratoryResults,
@@ -759,6 +767,7 @@ export function createTenderModule({
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
+        privateResearchCertifications: tender.researchCertificationsByPlayer[player.id] ?? [],
         privateTelemetry: tender.privateMeasurementsByPlayer[player.id] ?? [],
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
         publicTheses: tender.publicTheses,
