@@ -25,3 +25,13 @@ test('registers, restores the browser session, opens the profile, and logs out',
   await page.getByRole('button', { name: 'Войти' }).click()
   await expect(page.getByRole('link', { name: 'Комнаты' })).toBeVisible()
 })
+
+test('uses the configured API transport when OAuth is unavailable', async ({ page }) => {
+  await page.goto('/')
+
+  const oauthButton = page.getByRole('button', { name: 'Яндекс ID' })
+  await oauthButton.click()
+
+  await expect(page.getByText('Ошибка сервера. Попробуйте позже.')).toBeVisible()
+  await expect(page.getByText('Не удалось связаться с сервером. OAuth работает только с localhost.')).toHaveCount(0)
+})

@@ -2,10 +2,8 @@ import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
+import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
-
-// OAuth must always use localhost in dev — Yandex/VK reject LAN IPs as redirect_uri.
-const oauthApiBaseUrl = (import.meta.env?.VITE_OAUTH_API_URL ?? 'http://localhost:3000').replace(/\/$/, '')
 
 type OAuthButtonProps = {
   provider: 'yandex' | 'vk'
@@ -14,6 +12,7 @@ type OAuthButtonProps = {
 
 export function OAuthButton({ provider, label }: OAuthButtonProps) {
   const { t } = useI18n()
+  const { startOAuth } = useAuth()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -22,23 +21,12 @@ export function OAuthButton({ provider, label }: OAuthButtonProps) {
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(`${oauthApiBaseUrl}/api/auth/oauth/${provider}/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ webappOrigin: window.location.origin }),
-      })
-      if (!response.ok) {
-        setBusy(false)
-        setError(t('oauth.error.server'))
-        return
-      }
-      const data = await response.json()
-      window.location.href = data.authorizationUrl
+      await startOAuth(provider)
     } catch {
       setBusy(false)
-      setError(t('oauth.error.network'))
+      setError(t('oauth.error.server'))
     }
-  }, [busy, provider, t])
+  }, [busy, provider, startOAuth, t])
 
   return (
     <div className="grid gap-1">
