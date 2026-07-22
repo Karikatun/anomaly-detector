@@ -136,11 +136,12 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
       const reconPower = myPower?.reconnaissance ?? 0
       return reconPower > 0 ? (
         <ReconnaissancePanel
+          knownSignals={view.knownSignals}
           mySamples={mySamples}
           maxSignals={reconPower}
           disabled={disabled}
           error={error}
-          onConfirm={(signals) => onCommand({ type: 'conduct-reconnaissance', signals })}
+          onConfirm={(targets) => onCommand({ type: 'conduct-reconnaissance', targets })}
         />
       ) : (
         <Card><CardContent className="py-8"><Typography tone="muted">Вы не выделили мощность на разведку.</Typography></CardContent></Card>

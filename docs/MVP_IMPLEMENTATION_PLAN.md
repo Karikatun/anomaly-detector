@@ -32,7 +32,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 1. [ ] Replace starting Samples and Analytical Reports with the new discovery model: no starting Samples; Samples only from Access Slots or Reconnaissance; unknown Signals are revealed when acquired or named by a Contract.
 2. [x] Make Power allocation simultaneous and private after Access Slot resolution. Limit Model Analysis and Contracts to one Power; retain two-Power choices only for Reconnaissance and Laboratory.
-3. [ ] Implement Reconnaissance targets: Unknown Sector or an already revealed Signal. An acquired Sample must be usable in the same round's Laboratory phase.
+3. [x] Implement Reconnaissance targets: Unknown Sector or an already revealed Signal. An acquired Sample must be usable in the same round's Laboratory phase.
 4. [ ] Add the permanent public scientific journal and Continuous private same/different-polarity telemetry.
 5. [ ] Replace the wrong-Thesis contract-power restriction with Corporate Review and spendable Research Certifications.
 6. [ ] Replace the Contract generator and bidding model with a seeded round deck of Light, Complex, and Scientific Contracts, target-Signal roles, permanent-but-single-use Contract Evidence, Rating-only rewards, and the revised Final Contract.

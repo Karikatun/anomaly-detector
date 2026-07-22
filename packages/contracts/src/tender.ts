@@ -43,16 +43,23 @@ export const allocatePowerCommandSchema = z.object({
   type: z.literal('allocate-power'),
 }).strict()
 
+export const reconnaissanceTargetSchema = z.union([signalIdSchema, z.literal('unknown-sector')])
+
 export const conductReconnaissanceCommandSchema = z.object({
   commandId: commandIdSchema,
   tenderId: tenderIdSchema,
   actorId: playerIdSchema,
+  targets: z.array(reconnaissanceTargetSchema).min(1).max(2).refine(
+    (targets) => new Set(targets.filter((target) => target !== 'unknown-sector')).size
+      === targets.filter((target) => target !== 'unknown-sector').length,
+    'Revealed Reconnaissance Signals must be distinct',
+  ).optional(),
   signals: z.array(signalIdSchema).min(1).max(2).refine(
     (signals) => new Set(signals).size === signals.length,
     'Reconnaissance Signals must be distinct',
-  ),
+  ).optional(),
   type: z.literal('conduct-reconnaissance'),
-}).strict()
+}).strict().refine((command) => (command.targets?.length ?? command.signals?.length ?? 0) > 0, 'Reconnaissance requires targets')
 
 export const laboratoryProtocolSchema = z.enum(['impulse', 'continuous'])
 export const fieldTypeSchema = z.enum(['inertial', 'electromagnetic', 'phase'])

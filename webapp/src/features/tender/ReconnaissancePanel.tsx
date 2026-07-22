@@ -14,22 +14,18 @@ const signalNames: Record<string, string> = {
   ferro: 'Ferro',
 }
 
-const signalIds = Object.keys(signalNames)
-
-export function availableReconnaissanceSignals(mySamples: string[]) {
-  return signalIds.filter((signal) => !mySamples.includes(signal))
-}
-
 type ReconnaissancePanelProps = {
   mySamples: string[]
+  knownSignals: string[]
   maxSignals: number
   disabled?: boolean
   error?: string | null
-  onConfirm: (signals: string[]) => void
+  onConfirm: (targets: string[]) => void
 }
 
 export function ReconnaissancePanel({
   mySamples,
+  knownSignals,
   maxSignals,
   disabled,
   error,
@@ -38,7 +34,7 @@ export function ReconnaissancePanel({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const { t } = useI18n()
 
-  const available = availableReconnaissanceSignals(mySamples)
+  const available = ['unknown-sector-1', 'unknown-sector-2', ...knownSignals.filter((signal) => !mySamples.includes(signal))]
 
   const toggle = (signal: string) => {
     setSelected((prev) => {
@@ -53,9 +49,9 @@ export function ReconnaissancePanel({
   }
 
   const handleConfirm = () => {
-    const signals = [...selected]
-    if (signals.length === maxSignals) {
-      onConfirm(signals)
+    const targets = [...selected].map((target) => target.startsWith('unknown-sector-') ? 'unknown-sector' : target)
+    if (targets.length === maxSignals) {
+      onConfirm(targets)
       setSelected(new Set())
     }
   }
@@ -89,7 +85,7 @@ export function ReconnaissancePanel({
                 disabled={disabled || (!isSel && selected.size >= maxSignals)}
                 onClick={() => toggle(signal)}
               >
-                <Typography variant="h6">{signalNames[signal] ?? signal}</Typography>
+                <Typography variant="h6">{signal.startsWith('unknown-sector-') ? 'Неизвестный сектор' : signalNames[signal] ?? signal}</Typography>
                 <Typography variant="control" tone="muted">
                   {signal}
                 </Typography>

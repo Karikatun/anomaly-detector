@@ -658,23 +658,29 @@ export function createTenderModule({
         throw new TenderFailure('invalid_tender_state', 'Reconnaissance is closed')
       }
       const expectedPlayer = nextReconnaissancePlayer(tender)
-      if (expectedPlayer?.id !== player.id || command.signals.length !== tender.powerAllocations[player.id]?.reconnaissance) {
+      const targets = command.targets ?? command.signals ?? []
+      if (expectedPlayer?.id !== player.id || targets.length !== tender.powerAllocations[player.id]?.reconnaissance) {
         throw new TenderFailure('invalid_tender_state', 'Reconnaissance command is not available to this Player')
       }
       const currentSamples = tender.samplesByPlayer[player.id] ?? []
-      if (command.signals.some((signal) => currentSamples.includes(signal))) {
-        throw new TenderFailure('invalid_tender_state', 'A Player cannot acquire a Sample it already holds')
-      }
-      const samplesByPlayer = { ...tender.samplesByPlayer, [player.id]: [...currentSamples, ...command.signals] as SignalId[] }
-      const rawTelemetrySignalsByPlayer = {
-        ...tender.rawTelemetrySignalsByPlayer,
-        [player.id]: [...(tender.rawTelemetrySignalsByPlayer[player.id] ?? []), ...command.signals] as SignalId[],
-      }
-      const reconnaissanceCompletedByPlayer = { ...tender.reconnaissanceCompletedByPlayer, [player.id]: true }
       const knownSignals = [...tender.knownSignals]
-      for (const signal of command.signals) {
+      const acquiredSignals: SignalId[] = []
+      for (const target of targets) {
+        const signal = target === 'unknown-sector'
+          ? nextCompensationSample(knownSignals, [...currentSamples, ...acquiredSignals])
+          : target
+        if (!signal || (target !== 'unknown-sector' && (!knownSignals.includes(signal) || currentSamples.includes(signal)))) {
+          throw new TenderFailure('invalid_tender_state', 'Reconnaissance target is not available to this Player')
+        }
+        acquiredSignals.push(signal)
         if (!knownSignals.includes(signal)) knownSignals.push(signal)
       }
+      const samplesByPlayer = { ...tender.samplesByPlayer, [player.id]: [...currentSamples, ...acquiredSignals] as SignalId[] }
+      const rawTelemetrySignalsByPlayer = {
+        ...tender.rawTelemetrySignalsByPlayer,
+        [player.id]: [...(tender.rawTelemetrySignalsByPlayer[player.id] ?? []), ...acquiredSignals] as SignalId[],
+      }
+      const reconnaissanceCompletedByPlayer = { ...tender.reconnaissanceCompletedByPlayer, [player.id]: true }
       const nextTender = {
         ...tender,
         knownSignals,
@@ -688,7 +694,7 @@ export function createTenderModule({
           actorId: command.actorId,
           commandId: command.commandId,
           kind: 'reconnaissance_completed',
-          payload: { signals: command.signals, playerId: player.id },
+          payload: { acquiredSignals, playerId: player.id, targets },
         }],
         command,
         commandFingerprint,

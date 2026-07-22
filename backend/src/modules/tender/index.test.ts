@@ -26,6 +26,29 @@ test('starts without Samples or Analytical Reports and reveals a Night Slot Samp
   expect(playerBView.knownSignals).toContain(playerAView.privateSamples[0]!)
 })
 
+test('acquires deterministic Samples from Unknown Sectors for use in the same round Laboratory phase', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ actorId: 'player-a', commandId: 'access-slot-a-1', slot: 1, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-b', commandId: 'access-slot-b-1', slot: 2, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-a', allocation: { contracts: 0, laboratory: 2, modelAnalysis: 0, reconnaissance: 2 }, commandId: 'power-a-1', tenderId, type: 'allocate-power' })
+  await tender.execute({ actorId: 'player-b', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 }, commandId: 'power-b-1', tenderId, type: 'allocate-power' })
+
+  await tender.execute({ actorId: 'player-a', commandId: 'recon-a-1', targets: ['unknown-sector', 'unknown-sector'], tenderId, type: 'conduct-reconnaissance' } as never)
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'laboratory',
+    privateSamples: ['delta', 'eclipse'],
+  })
+  await expect(tender.execute({ actorId: 'player-a', commandId: 'lab-a-1', protocol: 'continuous', receiverSignal: 'eclipse', sourceSignal: 'delta', tenderId, type: 'run-laboratory-test' })).resolves.toMatchObject({ tenderId })
+})
+
 test('resolves an expired Access Slot selection with conservative free defaults', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })
