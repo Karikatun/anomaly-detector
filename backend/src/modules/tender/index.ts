@@ -381,9 +381,7 @@ export function createTenderModule({
           commandFingerprint,
           nextTender: {
             ...nextTender,
-            dueAt: isReadyToStartReconnaissance
-              ? deadlineForPhase(nextTender.phase, now())
-              : tender.dueAt,
+            dueAt: deadlineForPhase(nextTender.phase, now()),
           },
           tender,
         })
@@ -591,7 +589,7 @@ export function createTenderModule({
           }],
           command,
           commandFingerprint,
-          nextTender: { ...nextTender, dueAt: deadlineForPhase('contracts', now()), phase: 'contracts' },
+          nextTender: { ...nextTender, dueAt: tender.dueAt, phase: 'contracts' },
           tender,
         })
       }
@@ -772,18 +770,20 @@ export function createTenderModule({
         if (!tender || tender.dueAt === null || tender.dueAt > dueNow) continue
 
         if (tender.phase === 'power-allocation') {
-          const powerAllocations = { ...tender.powerAllocations }
-          for (const player of tender.players) {
-            if (powerAllocations[player.id] === undefined) powerAllocations[player.id] = reservePowerAllocation
+          const expectedPlayer = nextPowerAllocationPlayer(tender)
+          if (!expectedPlayer) continue
+          const powerAllocations = {
+            ...tender.powerAllocations,
+            [expectedPlayer.id]: reservePowerAllocation,
           }
-          const nextTender = beginOperationalActions({ ...tender, powerAllocations })
+          const nextTender = Object.keys(powerAllocations).length === tender.players.length
+            ? beginOperationalActions({ ...tender, powerAllocations })
+            : { ...tender, powerAllocations }
           const completed = await commitTimeout({
             auditEvents: [{
               kind: 'power_allocation_timeout_resolved',
               payload: {
-                timedOutPlayerIds: tender.players
-                  .filter((player) => tender.powerAllocations[player.id] === undefined)
-                  .map((player) => player.id),
+                timedOutPlayerIds: [expectedPlayer.id],
               },
             }],
             nextTender: { ...nextTender, dueAt: deadlineForPhase(nextTender.phase, dueNow) },
