@@ -25,9 +25,9 @@ export const requestAccessSlotCommandSchema = z.object({
 }).strict()
 
 export const powerAllocationSchema = z.object({
-  contracts: z.number().int().min(0).max(2),
+  contracts: z.number().int().min(0).max(1),
   laboratory: z.number().int().min(0).max(2),
-  modelAnalysis: z.number().int().min(0).max(2),
+  modelAnalysis: z.number().int().min(0).max(1),
   reconnaissance: z.number().int().min(0).max(2),
   reserve: z.number().int().min(0).max(4).optional(),
 }).strict().refine(

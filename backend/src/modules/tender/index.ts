@@ -100,10 +100,6 @@ export function createTenderModule({
 
   const fingerprint = (command: TenderCommand) => JSON.stringify(command)
 
-  const nextPowerAllocationPlayer = (tender: StoredTender) => tender.players
-    .filter((player) => tender.powerAllocations[player.id] === undefined)
-    .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
-
   const nextReconnaissancePlayer = (tender: StoredTender) => tender.players
     .filter((player) => tender.powerAllocations[player.id]?.reconnaissance > 0 && !tender.reconnaissanceCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
@@ -130,7 +126,6 @@ export function createTenderModule({
 
   const activePlayerIdForView = (tender: StoredTender) => {
     switch (tender.phase) {
-      case 'power-allocation': return nextPowerAllocationPlayer(tender)?.id
       case 'reconnaissance': return nextReconnaissancePlayer(tender)?.id
       case 'laboratory': return nextLaboratoryPlayer(tender)?.id
       case 'model-analysis': return nextModelAnalysisPlayer(tender)?.id
@@ -366,9 +361,8 @@ export function createTenderModule({
         if (tender.phase !== 'power-allocation') {
           throw new TenderFailure('invalid_tender_state', 'Power allocation is closed')
         }
-        const expectedPlayer = nextPowerAllocationPlayer(tender)
-        if (expectedPlayer?.id !== player.id) {
-          throw new TenderFailure('invalid_tender_state', 'It is not this Player\'s Power allocation turn')
+        if (tender.powerAllocations[player.id] !== undefined) {
+          throw new TenderFailure('invalid_tender_state', 'Power allocation is already confirmed')
         }
         const powerAllocations: Record<string, PowerAllocation> = { ...tender.powerAllocations, [player.id]: command.allocation }
         const isReadyToStartReconnaissance = Object.keys(powerAllocations).length === tender.players.length
@@ -742,7 +736,9 @@ export function createTenderModule({
           budget: tender.budgetByPlayer[player.id] ?? 0,
           corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,
           contractPowerRestriction: tender.contractPowerRestrictionsByPlayer[player.id] ?? 0,
-          ...(tender.phase !== 'access-slot-selection' && tender.powerAllocations[player.id]
+          ...(tender.phase !== 'access-slot-selection'
+            && tender.powerAllocations[player.id]
+            && (tender.phase !== 'power-allocation' || player.id === playerId)
             ? { powerAllocation: tender.powerAllocations[player.id] }
             : {}),
           rating: tender.ratingByPlayer[player.id] ?? 0,
@@ -775,20 +771,20 @@ export function createTenderModule({
         if (!tender || tender.dueAt === null || tender.dueAt > dueNow) continue
 
         if (tender.phase === 'power-allocation') {
-          const expectedPlayer = nextPowerAllocationPlayer(tender)
-          if (!expectedPlayer) continue
+          const timedOutPlayerIds = tender.players
+            .filter((player) => tender.powerAllocations[player.id] === undefined)
+            .map((player) => player.id)
+          if (timedOutPlayerIds.length === 0) continue
           const powerAllocations = {
             ...tender.powerAllocations,
-            [expectedPlayer.id]: reservePowerAllocation,
+            ...Object.fromEntries(timedOutPlayerIds.map((playerId) => [playerId, reservePowerAllocation])),
           }
-          const nextTender = Object.keys(powerAllocations).length === tender.players.length
-            ? beginOperationalActions({ ...tender, powerAllocations })
-            : { ...tender, powerAllocations }
+          const nextTender = beginOperationalActions({ ...tender, powerAllocations })
           const completed = await commitTimeout({
             auditEvents: [{
               kind: 'power_allocation_timeout_resolved',
               payload: {
-                timedOutPlayerIds: [expectedPlayer.id],
+                timedOutPlayerIds,
               },
             }],
             nextTender: { ...nextTender, dueAt: deadlineForPhase(nextTender.phase, dueNow) },

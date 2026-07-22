@@ -25,7 +25,6 @@ test('resolves an expired Access Slot selection with conservative free defaults'
     advancedTenderIds: [tenderId],
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
-    activePlayerId: 'player-a',
     phase: 'power-allocation',
     players: [
       { playerId: 'player-a', accessSlot: 1, budget: 0 },
@@ -52,7 +51,7 @@ test('keeps Access Slot compensation for a player who acted before the deadline'
   })
 })
 
-test('gives each player a full Power allocation deadline before advancing', async () => {
+test('resolves every missing Power allocation together when the shared deadline expires', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })
   const { tenderId } = await tender.createTender({
@@ -68,17 +67,7 @@ test('gives each player a full Power allocation deadline before advancing', asyn
     advancedTenderIds: [tenderId],
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
-    activePlayerId: 'player-b',
-    dueAt: '2026-07-20T12:02:45.000Z',
-    phase: 'power-allocation',
-    players: [
-      { playerId: 'player-a', powerAllocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } },
-      { playerId: 'player-b' },
-    ],
-  })
-
-  await tender.advanceDueTenders({ limit: 10, now: new Date('2026-07-20T12:02:45.000Z') })
-  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    dueAt: '2026-07-20T12:02:30.000Z',
     phase: 'access-slot-selection',
     round: 2,
     players: [
@@ -102,10 +91,8 @@ test('completes five rounds for every supported player count when all players re
     for (let round = 1; round <= 5; round += 1) {
       dueAt = new Date(dueAt.getTime() + 45_000)
       await tender.advanceDueTenders({ limit: 10, now: dueAt })
-      for (const _player of players) {
-        dueAt = new Date(dueAt.getTime() + 60_000)
-        await tender.advanceDueTenders({ limit: 10, now: dueAt })
-      }
+      dueAt = new Date(dueAt.getTime() + 60_000)
+      await tender.advanceDueTenders({ limit: 10, now: dueAt })
     }
 
     expect(await tender.readTenderView({ tenderId, playerId: players[0].id })).toMatchObject({
@@ -535,14 +522,14 @@ test('rotates Access Slot tie priority between rounds', async () => {
   })
 
   await tender.execute({
-    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 2, reconnaissance: 0 },
+    allocation: { contracts: 1, laboratory: 0, modelAnalysis: 1, reconnaissance: 0, reserve: 2 },
     actorId: 'player-a',
     commandId: 'a-1-power',
     tenderId,
     type: 'allocate-power',
   })
   await tender.execute({
-    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 2, reconnaissance: 0 },
+    allocation: { contracts: 1, laboratory: 0, modelAnalysis: 1, reconnaissance: 0, reserve: 2 },
     actorId: 'player-b',
     commandId: 'b-1-power',
     tenderId,
@@ -555,7 +542,7 @@ test('rotates Access Slot tie priority between rounds', async () => {
     type: 'submit-thesis',
     signalId: 'aster',
     fieldType: 'inertial',
-    polarity: 'positive',
+    polarity: 'negative',
   })
   await tender.execute({
     commandId: 'b-1-thesis',
@@ -652,7 +639,7 @@ test('rejects an Access Slot command after Power planning opens', async () => {
   ).rejects.toMatchObject({ kind: 'invalid_tender_state' })
 })
 
-test('opens Power allocation in Access Slot order and then opens Reconnaissance', async () => {
+test('keeps confirmed Power allocations private until every player confirms, then opens Reconnaissance', async () => {
   const tender = createTenderModule()
   const { tenderId } = await tender.createTender({
     players: [
@@ -664,18 +651,10 @@ test('opens Power allocation in Access Slot order and then opens Reconnaissance'
   await tender.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
   await tender.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
 
-  await expect(tender.execute({
+  await tender.execute({
     allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
     actorId: 'player-b',
     commandId: 'command-b-2',
-    tenderId,
-    type: 'allocate-power',
-  } as never)).rejects.toMatchObject({ kind: 'invalid_tender_state' })
-
-  await tender.execute({
-    allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
-    actorId: 'player-a',
-    commandId: 'command-a-2',
     tenderId,
     type: 'allocate-power',
   } as never)
@@ -683,19 +662,26 @@ test('opens Power allocation in Access Slot order and then opens Reconnaissance'
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     phase: 'power-allocation',
     players: [
+      { accessSlot: 1, playerId: 'player-a' },
+      { accessSlot: 2, playerId: 'player-b' },
+    ],
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    phase: 'power-allocation',
+    players: [
+      { accessSlot: 1, playerId: 'player-a' },
       {
-        accessSlot: 1,
+        accessSlot: 2,
         powerAllocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
-        playerId: 'player-a',
+        playerId: 'player-b',
       },
-      { accessSlot: 2 },
     ],
   })
 
   await tender.execute({
-    allocation: { contracts: 0, laboratory: 2, modelAnalysis: 1, reconnaissance: 1 },
-    actorId: 'player-b',
-    commandId: 'command-b-3',
+    allocation: { contracts: 1, laboratory: 2, modelAnalysis: 0, reconnaissance: 1 },
+    actorId: 'player-a',
+    commandId: 'command-a-2',
     tenderId,
     type: 'allocate-power',
   } as never)
@@ -705,12 +691,12 @@ test('opens Power allocation in Access Slot order and then opens Reconnaissance'
     players: [
       {
         accessSlot: 1,
-        powerAllocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+        powerAllocation: { contracts: 1, laboratory: 2, modelAnalysis: 0, reconnaissance: 1 },
         playerId: 'player-a',
       },
       {
         accessSlot: 2,
-        powerAllocation: { contracts: 0, laboratory: 2, modelAnalysis: 1, reconnaissance: 1 },
+        powerAllocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
         playerId: 'player-b',
       },
     ],
@@ -736,7 +722,7 @@ test('makes newly acquired Signals public while keeping Samples and Raw Telemetr
     type: 'allocate-power',
   } as never)
   await tender.execute({
-    allocation: { contracts: 2, laboratory: 1, modelAnalysis: 0, reconnaissance: 1 },
+    allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 1, reserve: 1 },
     actorId: 'player-b',
     commandId: 'command-b-2',
     tenderId,
@@ -796,13 +782,14 @@ test('resolves a continuous Laboratory test between a Player\'s Samples', async 
   await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
   await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
   await tender.execute({ commandId: 'a-2', tenderId, actorId: 'player-a', type: 'allocate-power', allocation: { contracts: 0, laboratory: 2, modelAnalysis: 0, reconnaissance: 2 } })
-  await tender.execute({ commandId: 'b-2', tenderId, actorId: 'player-b', type: 'allocate-power', allocation: { contracts: 2, laboratory: 0, modelAnalysis: 2, reconnaissance: 0 } })
+  await tender.execute({ commandId: 'b-2', tenderId, actorId: 'player-b', type: 'allocate-power', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } })
   await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
 
   await tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', sourceSignal: 'cinder', receiverSignal: 'delta', protocol: 'continuous' } as never)
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
-    phase: 'model-analysis',
+    phase: 'access-slot-selection',
+    round: 2,
     privateMeasurements: [{ receiverSignal: 'delta', sourceSignal: 'cinder', polarityRelation: expect.any(String) }],
     publicLaboratoryResults: [{
       playerId: 'player-a',
@@ -845,14 +832,14 @@ test('checks public Theses in Access Slot order and opens Contracts', async () =
     type: 'allocate-power',
   })
   await tender.execute({
-    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 },
+    allocation: { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 1 },
     actorId: 'player-b',
     commandId: 'b-2',
     tenderId,
     type: 'allocate-power',
   })
   await tender.execute({
-    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 2, reconnaissance: 2 },
+    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 1, reconnaissance: 2, reserve: 1 },
     actorId: 'player-c',
     commandId: 'c-2',
     tenderId,
@@ -923,7 +910,7 @@ test('checks public Theses in Access Slot order and opens Contracts', async () =
         playerId: 'player-c',
         polarity: 'positive',
         signalId: 'boreal',
-        verification: 'extended',
+        verification: 'standard',
       },
     ],
   })
@@ -941,14 +928,14 @@ test('applies Model Analysis Rating rewards and wrong-Thesis Contract Power rest
   await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
   await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
   await tender.execute({
-    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 1, reconnaissance: 1 },
+    allocation: { contracts: 1, laboratory: 0, modelAnalysis: 1, reconnaissance: 1, reserve: 1 },
     actorId: 'player-a',
     commandId: 'a-2',
     tenderId,
     type: 'allocate-power',
   })
   await tender.execute({
-    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 1, reconnaissance: 1 },
+    allocation: { contracts: 1, laboratory: 0, modelAnalysis: 1, reconnaissance: 1, reserve: 1 },
     actorId: 'player-b',
     commandId: 'b-2',
     tenderId,
@@ -1012,14 +999,14 @@ test('reserves public Contracts in Access Slot order', async () => {
   await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
   await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
   await tender.execute({
-    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 },
+    allocation: { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 1 },
     actorId: 'player-a',
     commandId: 'a-2',
     tenderId,
     type: 'allocate-power',
   })
   await tender.execute({
-    allocation: { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 },
+    allocation: { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 1 },
     actorId: 'player-b',
     commandId: 'b-2',
     tenderId,
@@ -1148,7 +1135,7 @@ test('awards a reserved Contract Bid with matching public Laboratory evidence', 
     type: 'allocate-power',
   })
   await tender.execute({
-    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 2, reconnaissance: 2 },
+    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 1, reconnaissance: 2, reserve: 1 },
     actorId: 'player-b',
     commandId: 'b-2',
     tenderId,
@@ -1234,8 +1221,8 @@ test('completes the Tender after Contracts in round five', async () => {
     await tender.execute({ commandId: `b-${round}-slot`, tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 4 })
     await tender.execute({
       allocation: round === 1
-        ? { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 }
-        : { contracts: 2, laboratory: 2, modelAnalysis: 0, reconnaissance: 0 },
+        ? { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 1 }
+        : { contracts: 1, laboratory: 2, modelAnalysis: 0, reconnaissance: 0, reserve: 1 },
       actorId: 'player-a',
       commandId: `a-${round}-power`,
       tenderId,
@@ -1243,8 +1230,8 @@ test('completes the Tender after Contracts in round five', async () => {
     })
     await tender.execute({
       allocation: round === 1
-        ? { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 }
-        : { contracts: 2, laboratory: 2, modelAnalysis: 0, reconnaissance: 0 },
+        ? { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 1 }
+        : { contracts: 1, laboratory: 2, modelAnalysis: 0, reconnaissance: 0, reserve: 1 },
       actorId: 'player-b',
       commandId: `b-${round}-power`,
       tenderId,
@@ -1374,8 +1361,8 @@ test('projects public Laboratory results into the participant audit view', async
     await tender.execute({ commandId: `b-${round}-slot`, tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 4 })
     await tender.execute({
       allocation: round === 1
-        ? { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 }
-        : { contracts: 2, laboratory: 2, modelAnalysis: 0, reconnaissance: 0 },
+        ? { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 1 }
+        : { contracts: 1, laboratory: 2, modelAnalysis: 0, reconnaissance: 0, reserve: 1 },
       actorId: 'player-a',
       commandId: `a-${round}-power`,
       tenderId,
@@ -1383,8 +1370,8 @@ test('projects public Laboratory results into the participant audit view', async
     })
     await tender.execute({
       allocation: round === 1
-        ? { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 }
-        : { contracts: 2, laboratory: 2, modelAnalysis: 0, reconnaissance: 0 },
+        ? { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 1 }
+        : { contracts: 1, laboratory: 2, modelAnalysis: 0, reconnaissance: 0, reserve: 1 },
       actorId: 'player-b',
       commandId: `b-${round}-power`,
       tenderId,
@@ -1484,8 +1471,8 @@ test('rejects a Final Contract reservation below two Corporate Trust', async () 
 
   await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
   await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
-  await tender.execute({ commandId: 'a-2', tenderId, actorId: 'player-a', type: 'allocate-power', allocation: { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 } })
-  await tender.execute({ commandId: 'b-2', tenderId, actorId: 'player-b', type: 'allocate-power', allocation: { contracts: 2, laboratory: 0, modelAnalysis: 0, reconnaissance: 2 } })
+  await tender.execute({ commandId: 'a-2', tenderId, actorId: 'player-a', type: 'allocate-power', allocation: { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 1 } })
+  await tender.execute({ commandId: 'b-2', tenderId, actorId: 'player-b', type: 'allocate-power', allocation: { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 1 } })
   await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
   await tender.execute({ commandId: 'b-3', tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', signals: ['cinder', 'delta'] })
 
