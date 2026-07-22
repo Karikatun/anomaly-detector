@@ -7,11 +7,11 @@ import type { AuthUserRecord } from '../domain/user'
 export type AccessTokenPayload = {
   sub: string
   sessionId: string
-  email: string
+  login: string
 }
 
 export type AuthRepository = {
-  findUserByEmail(email: string): Promise<AuthUserRecord | null>
+  findUserByLogin(login: string): Promise<AuthUserRecord | null>
   createPasswordUserWithSession(input: {
     user: RegisterPayload & { passwordHash: string }
     session: {
@@ -74,7 +74,7 @@ export type AuthRepository = {
   deleteOAuthTransaction(input: { state: string }): Promise<void>
   findUserByIdentity(input: { provider: string; subject: string }): Promise<AuthUserRecord | null>
   createOAuthUserWithSession(input: {
-    user: { email: string; displayName?: string | null }
+    user: { login: string; displayName?: string | null }
     identity: { provider: string; subject: string }
     session: {
       refreshTokenHash: string
@@ -100,7 +100,6 @@ export type OAuthProvider = {
     providerSubject: string
   }>
   getUserInfo(accessToken: string): Promise<{
-    email: string
     displayName?: string | null
     providerSubject: string
   }>

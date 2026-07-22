@@ -151,10 +151,9 @@ Accounts have match history. On account deletion, remove the profile and identit
 
 The initial audience is Russian citizens. The product operator is a Russian citizen acting as an individual. The application therefore must be designed as an operator of personal data, not as a private family-use tool.
 
-- Primary sign-in: Yandex ID and VK ID.
-- Do not use foreign email as a Russian-user registration mechanism.
+- Primary sign-in: Yandex ID and VK ID; password registration and sign-in use a unique login.
 - Do not treat Telegram OAuth as a compliant primary login method without a separate legal review.
-- Do not store passwords. Email magic links are out of the MVP.
+- Password recovery links are out of the MVP.
 - Store Russian users' personal data, identity links, and match history in Russia. The production target is Yandex Cloud through `yc`.
 - Publish an accessible personal-data processing policy before collecting user data. Before launch, obtain legal review for the Roskomnadzor notification obligation, authentication providers, consent flows, and retention policy.
 - Product age marking for the MVP: `16+`.

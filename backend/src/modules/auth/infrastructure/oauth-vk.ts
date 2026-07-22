@@ -19,7 +19,6 @@ export function createVkOAuthProvider(config: VkOAuthConfig): OAuthProvider {
       url.searchParams.set('code_challenge', codeChallenge)
       url.searchParams.set('code_challenge_method', 'S256')
       url.searchParams.set('state', state)
-      url.searchParams.set('scope', 'email')
       return url.toString()
     },
 
@@ -80,11 +79,9 @@ export function createVkOAuthProvider(config: VkOAuthConfig): OAuthProvider {
       const data = (await response.json()) as {
         user?: {
           user_id: string
-          email?: string
           name?: string
           phone?: string
         }
-        email?: string
         name?: string
         error?: string
       }
@@ -93,9 +90,8 @@ export function createVkOAuthProvider(config: VkOAuthConfig): OAuthProvider {
         throw new Error(`VK user info error: ${data.error}`)
       }
 
-      const userInfo = 'user' in data && data.user ? data.user : data as { user_id?: string; email?: string; name?: string }
+      const userInfo = 'user' in data && data.user ? data.user : data as { user_id?: string; name?: string }
       return {
-        email: userInfo.email ?? `${userInfo.user_id ?? 'unknown'}@vk.id`,
         displayName: userInfo.name ?? null,
         providerSubject: userInfo.user_id?.toString() ?? '',
       }

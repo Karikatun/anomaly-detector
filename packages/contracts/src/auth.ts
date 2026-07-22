@@ -8,7 +8,13 @@ const displayNameSchema = z
     return value
   })
 
-export const emailSchema = z.string().trim().toLowerCase().email().max(254)
+export const loginSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3)
+  .max(64)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/, 'Login may contain lowercase letters, digits, underscores, and hyphens')
 
 export const passwordSchema = z
   .string()
@@ -19,14 +25,14 @@ export const localeSchema = z.union([z.literal('ru'), z.literal('en')]).default(
 
 export const userSchema = z.object({
   id: z.string(),
-  email: emailSchema,
+  login: loginSchema,
   displayName: z.string().nullable(),
   locale: localeSchema,
   createdAt: z.string().datetime(),
 })
 
 export const registerRequestSchema = z.object({
-  email: emailSchema,
+  login: loginSchema,
   password: passwordSchema,
   displayName: displayNameSchema,
   privacyConsent: z.literal(true),
@@ -34,7 +40,7 @@ export const registerRequestSchema = z.object({
 })
 
 export const loginRequestSchema = z.object({
-  email: emailSchema,
+  login: loginSchema,
   password: passwordSchema,
 })
 

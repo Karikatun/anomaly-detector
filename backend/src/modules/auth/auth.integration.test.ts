@@ -51,7 +51,7 @@ maybeDescribe('auth API integration', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: 'user@example.com',
+        login: 'user',
         password: 'password123',
         displayName: 'User',
         privacyConsent: true,
@@ -61,7 +61,7 @@ maybeDescribe('auth API integration', () => {
     const registerBody = await register.json()
 
     expect(register.status).toBe(201)
-    expect(registerBody.user.email).toBe('user@example.com')
+    expect(registerBody.user.login).toBe('user')
     expect(registerBody.accessToken).toBeString()
     expect(registerBody.refreshToken).toBeString()
     expect(register.headers.get('set-cookie')).toBeNull()
@@ -100,7 +100,7 @@ maybeDescribe('auth API integration', () => {
     const sessionsAfterRefresh = await prisma.authSession.count({
       where: {
         user: {
-          email: 'user@example.com',
+          login: 'user',
         },
       },
     })
@@ -140,7 +140,7 @@ maybeDescribe('auth API integration', () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'ticket@example.com', password: 'password123', privacyConsent: true, ageConfirmation: true }),
+      body: JSON.stringify({ login: 'ticket', password: 'password123', privacyConsent: true, ageConfirmation: true }),
     })
     const { accessToken } = await register.json()
 
@@ -161,7 +161,7 @@ maybeDescribe('auth API integration', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'room-host@example.com',
+        login: 'room-host',
         password: 'password123',
         privacyConsent: true,
         ageConfirmation: true,
@@ -192,7 +192,7 @@ maybeDescribe('auth API integration', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'room-joiner@example.com',
+        login: 'room-joiner',
         password: 'password123',
         privacyConsent: true,
         ageConfirmation: true,
@@ -214,7 +214,7 @@ maybeDescribe('auth API integration', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'room-extra@example.com',
+        login: 'room-extra',
         password: 'password123',
         privacyConsent: true,
         ageConfirmation: true,
@@ -303,7 +303,7 @@ maybeDescribe('auth API integration', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: 'race@example.com',
+        login: 'race',
         password: 'password123',
         privacyConsent: true,
         ageConfirmation: true,
@@ -344,7 +344,7 @@ maybeDescribe('auth API integration', () => {
     const activeSessions = await prisma.authSession.count({
       where: {
         user: {
-          email: 'race@example.com',
+          login: 'race',
         },
         revokedAt: null,
       },
@@ -354,14 +354,14 @@ maybeDescribe('auth API integration', () => {
     const totalSessions = await prisma.authSession.count({
       where: {
         user: {
-          email: 'race@example.com',
+          login: 'race',
         },
       },
     })
     expect(totalSessions).toBe(1)
 
     await prisma.authSession.updateMany({
-      where: { user: { email: 'race@example.com' } },
+      where: { user: { login: 'race' } },
       data: { refreshRotatedAt: new Date(Date.now() - 60_000) },
     })
 
@@ -377,7 +377,7 @@ maybeDescribe('auth API integration', () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'reuse@example.com', password: 'password123', privacyConsent: true, ageConfirmation: true }),
+      body: JSON.stringify({ login: 'reuse', password: 'password123', privacyConsent: true, ageConfirmation: true }),
     })
     const registered = await register.json()
     const refresh = await app.request('/api/auth/token/refresh', {
@@ -396,7 +396,7 @@ maybeDescribe('auth API integration', () => {
     expect(refreshAgain.status).toBe(200)
 
     await prisma.authSession.updateMany({
-      where: { user: { email: 'reuse@example.com' } },
+      where: { user: { login: 'reuse' } },
       data: { refreshRotatedAt: new Date(Date.now() - 60_000) },
     })
 
@@ -423,7 +423,7 @@ maybeDescribe('auth API integration', () => {
         'X-Client-Platform': 'mobile',
       },
       body: JSON.stringify({
-        email: 'web-cookie@example.com',
+        login: 'web-cookie',
         password: 'password123',
         privacyConsent: true,
         ageConfirmation: true,
@@ -490,7 +490,7 @@ maybeDescribe('auth API integration', () => {
         Origin: 'https://web.example.com',
       },
       body: JSON.stringify({
-        email: 'production-cookie@example.com',
+        login: 'production-cookie',
         password: 'password123',
         privacyConsent: true,
         ageConfirmation: true,
@@ -525,7 +525,7 @@ maybeDescribe('auth API integration', () => {
         Origin: 'https://web.example.com',
       },
       body: JSON.stringify({
-        email: 'csrf-cookie@example.com',
+        login: 'csrf-cookie',
         password: 'password123',
         privacyConsent: true,
         ageConfirmation: true,
@@ -578,7 +578,7 @@ maybeDescribe('auth API integration', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'not-an-email',
+        login: 'not-an-login',
         password: 'short',
       }),
     })
@@ -591,7 +591,7 @@ maybeDescribe('auth API integration', () => {
   })
 
   test('me rejects revoked, expired, and missing sessions', async () => {
-    const revoked = await registerForMeGuard('me-revoked@example.com')
+    const revoked = await registerForMeGuard('me-revoked')
     await prisma.authSession.updateMany({
       where: {
         userId: revoked.userId,
@@ -607,7 +607,7 @@ maybeDescribe('auth API integration', () => {
     })
     expect(revokedMe.status).toBe(401)
 
-    const expired = await registerForMeGuard('me-expired@example.com')
+    const expired = await registerForMeGuard('me-expired')
     await prisma.authSession.updateMany({
       where: {
         userId: expired.userId,
@@ -623,7 +623,7 @@ maybeDescribe('auth API integration', () => {
     })
     expect(expiredMe.status).toBe(401)
 
-    const missing = await registerForMeGuard('me-missing@example.com')
+    const missing = await registerForMeGuard('me-missing')
     await prisma.authSession.deleteMany({
       where: {
         userId: missing.userId,
@@ -638,7 +638,7 @@ maybeDescribe('auth API integration', () => {
   })
 
   test('enforces absolute session lifetime in PostgreSQL for access and refresh credentials', async () => {
-    const absoluteExpired = await registerForMeGuard('absolute-expired@example.com')
+    const absoluteExpired = await registerForMeGuard('absolute-expired')
     await prisma.authSession.updateMany({
       where: { userId: absoluteExpired.userId },
       data: {
@@ -660,7 +660,7 @@ maybeDescribe('auth API integration', () => {
     expect(expiredMe.status).toBe(401)
     expect(expiredRefresh.status).toBe(401)
 
-    const nearCutoff = await registerForMeGuard('absolute-near-cutoff@example.com')
+    const nearCutoff = await registerForMeGuard('absolute-near-cutoff')
     await prisma.authSession.updateMany({
       where: { userId: nearCutoff.userId },
       data: {
@@ -683,9 +683,9 @@ maybeDescribe('auth API integration', () => {
     expect(activeRefresh.status).toBe(200)
   })
 
-  test('rejects duplicate email and invalid login', async () => {
+  test('rejects duplicate login and invalid login', async () => {
     const payload = {
-      email: 'dupe@example.com',
+      login: 'dupe',
       password: 'password123',
       privacyConsent: true,
       ageConfirmation: true,
@@ -708,7 +708,7 @@ maybeDescribe('auth API integration', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: payload.email,
+        login: payload.login,
         password: 'wrong-password',
       }),
     })
@@ -717,7 +717,7 @@ maybeDescribe('auth API integration', () => {
 
   test('returns one created user and one conflict for concurrent duplicate registration', async () => {
     const payload = {
-      email: 'register-race@example.com',
+      login: 'register-race',
       password: 'password123',
       privacyConsent: true,
       ageConfirmation: true,
@@ -741,20 +741,20 @@ maybeDescribe('auth API integration', () => {
 
     const users = await prisma.user.count({
       where: {
-        email: payload.email,
+        login: payload.login,
       },
     })
     expect(users).toBe(1)
   })
 
-  async function registerForMeGuard(email: string) {
+  async function registerForMeGuard(login: string) {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email,
+        login,
         password: 'password123',
         privacyConsent: true,
         ageConfirmation: true,
@@ -763,7 +763,7 @@ maybeDescribe('auth API integration', () => {
     const registerBody = await register.json()
     const user = await prisma.user.findUniqueOrThrow({
       where: {
-        email,
+        login,
       },
       select: {
         id: true,

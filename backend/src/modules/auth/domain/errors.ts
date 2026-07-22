@@ -1,7 +1,7 @@
 export type AuthFailureKind =
   | 'access_token_invalid'
   | 'access_token_required'
-  | 'email_already_exists'
+  | 'login_already_exists'
   | 'invalid_credentials'
   | 'oauth_not_configured'
   | 'oauth_transaction_invalid'

@@ -9,15 +9,15 @@ const ru = {
 
   // Auth page
   'auth.title': 'Вход',
-  'auth.description': 'Войдите через один из сервисов или email.',
+  'auth.description': 'Войдите через один из сервисов или логин.',
   'auth.login': 'Войти',
   'auth.register': 'Регистрация',
   'auth.switchToLogin': 'Уже есть аккаунт? Войти',
   'auth.switchToRegister': 'Нет аккаунта? Зарегистрироваться',
-  'auth.email': 'Email',
+  'auth.loginName': 'Логин',
   'auth.password': 'Пароль',
   'auth.displayName': 'Имя',
-  'auth.errors.email': 'Введите корректный email',
+  'auth.errors.loginName': 'От 3 до 64 символов: латинские буквы, цифры, «_» или «-»',
   'auth.errors.password': 'Минимум 8 символов',
   'auth.errors.displayName': 'Минимум 1 символ',
   'auth.errors.registerFailed': 'Не удалось зарегистрироваться',

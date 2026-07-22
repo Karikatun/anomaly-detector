@@ -4,7 +4,7 @@ import { registerRequestSchema } from '@anomaly-detector/contracts'
 describe('contracts', () => {
   test('normalizes auth registration payloads', () => {
     const result = registerRequestSchema.parse({
-      email: ' USER@Example.COM ',
+      login: ' USER_1 ',
       password: 'password123',
       displayName: '',
       privacyConsent: true,
@@ -12,7 +12,7 @@ describe('contracts', () => {
     })
 
     expect(result).toEqual({
-      email: 'user@example.com',
+      login: 'user_1',
       password: 'password123',
       displayName: undefined,
       privacyConsent: true,

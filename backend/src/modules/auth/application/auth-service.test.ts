@@ -5,7 +5,7 @@ import { AuthService } from './auth-service'
 
 const user = {
   id: 'user-1',
-  email: 'user@example.com',
+  login: 'user',
   passwordHash: 'password-hash',
   displayName: null,
   locale: 'ru',
@@ -16,7 +16,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
   const signedSessionIds: string[] = []
   const refreshCutoffs: Date[] = []
   const repository = {
-    findUserByEmail: async () => null,
+    findUserByLogin: async () => null,
     createPasswordUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
     createSession: async () => ({ id: 'session-created' }),
     findActiveRefreshSession: async (input) => {
@@ -49,7 +49,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
         signedSessionIds.push(payload.sessionId)
         return 'access-token'
       },
-      verify: async () => ({ sub: user.id, email: user.email, sessionId: 'session-stable' }),
+      verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-stable' }),
     },
     clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
     logoutCleanup: async () => undefined,
@@ -59,7 +59,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
     },
     projectUser: async (record) => ({
       id: record.id,
-      email: record.email,
+      login: record.login,
       displayName: record.displayName,
       locale: 'ru',
       createdAt: record.createdAt.toISOString(),
@@ -100,14 +100,14 @@ test('refresh revokes the logical session when a previous credential is reused a
   const service = new AuthService({
     accessTokens: {
       sign: async () => 'access-token',
-      verify: async () => ({ sub: user.id, email: user.email, sessionId: 'session-compromised' }),
+      verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-compromised' }),
     },
     clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
     logoutCleanup: async () => undefined,
     passwords: { hash: async () => 'hash', verify: async () => true },
     projectUser: async () => ({
       id: user.id,
-      email: user.email,
+      login: user.login,
       displayName: null,
       locale: 'ru',
       createdAt: user.createdAt.toISOString(),
@@ -152,14 +152,14 @@ test('refresh returns the winning successor when another request wins the rotati
   const service = new AuthService({
     accessTokens: {
       sign: async () => 'access-token',
-      verify: async () => ({ sub: user.id, email: user.email, sessionId: 'session-stable' }),
+      verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-stable' }),
     },
     clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
     logoutCleanup: async () => undefined,
     passwords: { hash: async () => 'hash', verify: async () => true },
     projectUser: async () => ({
       id: user.id,
-      email: user.email,
+      login: user.login,
       displayName: null,
       locale: 'ru',
       createdAt: user.createdAt.toISOString(),
@@ -187,11 +187,11 @@ test('refresh returns the winning successor when another request wins the rotati
 test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction', async () => {
   const transactions: Array<Record<string, unknown>> = []
   const dependencies: ConstructorParameters<typeof AuthService>[0] = {
-    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, email: user.email, sessionId: 'session-1' }) },
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
     clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
     logoutCleanup: async () => undefined,
     passwords: { hash: async () => 'hash', verify: async () => true },
-    projectUser: async () => ({ id: user.id, email: user.email, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
     refreshTokenTtlDays: 30,
     refreshReuseGraceSeconds: 10,
     sessionAbsoluteTtlDays: 90,
@@ -203,7 +203,7 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
       require: () => ({
         authorizationUrl: ({ state, codeChallenge }: { state: string; codeChallenge: string }) => `https://provider.example/authorize?state=${state}&code_challenge=${codeChallenge}`,
         exchangeCode: async () => ({ accessToken: 'provider-token', providerSubject: 'provider-sub-1' }),
-        getUserInfo: async () => ({ email: 'oauth@example.com', displayName: 'OAuth User', providerSubject: 'provider-sub-1' }),
+        getUserInfo: async () => ({ login: 'oauth', displayName: 'OAuth User', providerSubject: 'provider-sub-1' }),
       }),
     },
   }
@@ -233,11 +233,11 @@ test('deleteAccount anonymises the user and revokes all sessions', async () => {
     },
   } as unknown as AuthRepository
   const service = new AuthService({
-    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, email: user.email, sessionId: 'session-1' }) },
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
     clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
     logoutCleanup: async () => undefined,
     passwords: { hash: async () => 'hash', verify: async () => true },
-    projectUser: async () => ({ id: user.id, email: user.email, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
     refreshTokenTtlDays: 30,
     refreshReuseGraceSeconds: 10,
     sessionAbsoluteTtlDays: 90,

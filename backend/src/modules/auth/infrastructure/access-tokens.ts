@@ -6,7 +6,7 @@ import type { AppEnv } from '../../../env'
 const accessTokenPayloadSchema = z.object({
   sub: z.string().min(1),
   sessionId: z.string().min(1),
-  email: z.string().email(),
+  login: z.string().min(3),
 })
 
 export type AccessTokenPayload = z.infer<typeof accessTokenPayloadSchema>
@@ -18,7 +18,7 @@ function secretKey(secret: string) {
 export function signAccessToken(payload: AccessTokenPayload, env: AppEnv) {
   return new SignJWT({
     sessionId: payload.sessionId,
-    email: payload.email,
+    login: payload.login,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(payload.sub)
@@ -34,6 +34,6 @@ export async function verifyAccessToken(token: string, env: Pick<AppEnv, 'JWT_SE
   return accessTokenPayloadSchema.parse({
     sub: payload.sub,
     sessionId: payload.sessionId,
-    email: payload.email,
+    login: payload.login,
   })
 }

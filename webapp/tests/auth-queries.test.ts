@@ -11,7 +11,7 @@ import {
 
 const user = {
   id: 'user_1',
-  email: 'user@example.com',
+  login: 'user',
   displayName: null,
   locale: 'ru',
   createdAt: '2026-05-11T00:00:00.000Z',

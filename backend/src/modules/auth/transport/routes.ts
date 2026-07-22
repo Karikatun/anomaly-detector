@@ -96,7 +96,7 @@ const cookieRegisterRoute = createRoute({
       content: errorResponseContent,
       description: 'Cookie auth request came from an untrusted browser origin',
     },
-    409: { content: errorResponseContent, description: 'Email already exists' },
+    409: { content: errorResponseContent, description: 'Login already exists' },
   },
 })
 
@@ -119,7 +119,7 @@ const tokenRegisterRoute = createRoute({
       description: 'Created user and explicit token session',
     },
     400: { content: errorResponseContent, description: 'Invalid payload' },
-    409: { content: errorResponseContent, description: 'Email already exists' },
+    409: { content: errorResponseContent, description: 'Login already exists' },
   },
 })
 

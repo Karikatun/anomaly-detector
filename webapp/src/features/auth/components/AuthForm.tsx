@@ -8,7 +8,7 @@ export function AuthForm() {
   const { t } = useI18n()
 
   return (
-    <Card className="w-full" aria-label={t('auth.title')}>
+    <Card className="w-full max-w-md" aria-label={t('auth.title')}>
       <CardHeader>
         <CardTitle className="tracking-wide uppercase">{t('auth.title')}</CardTitle>
         <CardDescription>{t('auth.description')}</CardDescription>

@@ -23,7 +23,11 @@ export function HomePage() {
 
   if (auth.isBootstrapping) return <LoadingState />
   if (auth.user) return null
-  return <AuthForm />
+  return (
+    <section className="flex min-h-screen items-center justify-center px-5 py-10">
+      <AuthForm />
+    </section>
+  )
 }
 
 export function AppPage() {
@@ -56,9 +60,9 @@ export function AppPage() {
           {t('app.profile.badge')}
         </Badge>
         <Typography variant="h1">
-          {auth.user?.displayName ?? auth.user?.email}
+          {auth.user?.displayName ?? auth.user?.login}
         </Typography>
-        <Typography tone="muted">{auth.user?.email}</Typography>
+        <Typography tone="muted">{auth.user?.login}</Typography>
       </div>
 
       <Separator />

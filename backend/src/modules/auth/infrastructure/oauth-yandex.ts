@@ -73,14 +73,11 @@ export function createYandexOAuthProvider(config: YandexOAuthConfig): OAuthProvi
 
       const data = (await response.json()) as {
         id: string
-        default_email?: string
-        login?: string
         display_name?: string
         real_name?: string
       }
 
       return {
-        email: data.default_email ?? `${data.login}@yandex.ru`,
         displayName: data.display_name ?? data.real_name ?? null,
         providerSubject: data.id,
       }
