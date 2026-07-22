@@ -716,6 +716,7 @@ export function createTenderModule({
         dueAt: tender.dueAt?.toISOString() ?? null,
         players: tender.players.map((player) => ({
           playerId: player.id,
+          displayName: player.displayName ?? player.id.slice(0, 8),
           ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
           budget: tender.budgetByPlayer[player.id] ?? 0,
           corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,

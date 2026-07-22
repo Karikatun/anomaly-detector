@@ -318,7 +318,7 @@ export function TenderPage() {
                       Слот {player.accessSlot ?? '?'}
                     </Typography>
                     <Typography variant="control" tone="muted">
-                      {player.playerId.slice(0, 8)}
+                      {player.displayName ?? player.playerId.slice(0, 8)}
                     </Typography>
                   </div>
                   <Typography variant="control" tone="muted">
