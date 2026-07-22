@@ -226,6 +226,7 @@ export const tenderAuditViewSchema = z.object({
 }).strict()
 
 export const tenderViewSchema = z.object({
+  activePlayerId: playerIdSchema.optional(),
   knownSignals: z.array(signalIdSchema),
   publicContracts: z.array(publicContractSchema),
   publicFinalContract: publicContractSchema.optional(),

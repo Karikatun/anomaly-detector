@@ -33,16 +33,46 @@ const phaseLabels: Record<string, string> = {
   'complete': 'Завершён',
 }
 
-function PhasePanel({ view, disabled, error, onCommand }: {
+const sequentialPhases = new Set([
+  'power-allocation',
+  'reconnaissance',
+  'laboratory',
+  'model-analysis',
+  'contracts',
+  'final-scientific-model',
+])
+
+function WaitingForTurn({ playerName }: { playerName?: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Ожидание хода</CardTitle>
+        <CardDescription>
+          {playerName
+            ? `Сейчас действует ${playerName}. Ваша форма откроется, когда подойдёт ваш слот.`
+            : 'Сервер обрабатывает переход фазы. Ваша форма откроется после синхронизации.'}
+        </CardDescription>
+      </CardHeader>
+    </Card>
+  )
+}
+
+function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
   view: TenderView
   disabled: boolean
   error: string | null
   onCommand: (cmd: Record<string, unknown> & { type: string }) => void
+  activePlayerId?: string
 }) {
   const auth = useAuth()
   const myPlayer = view.players.find((p) => p.playerId === auth.user?.id)
   const mySamples = myPlayer ? view.privateSamples : []
   const myPower = myPlayer?.powerAllocation
+  const activePlayer = view.players.find((player) => player.playerId === activePlayerId)
+
+  if (sequentialPhases.has(view.phase) && activePlayerId !== auth.user?.id) {
+    return <WaitingForTurn playerName={activePlayer?.displayName} />
+  }
 
   switch (view.phase) {
     case 'access-slot-selection':
@@ -265,6 +295,9 @@ export function TenderPage() {
   const phase = phaseLabels[tenderView.phase] ?? tenderView.phase
   const myPlayer = tenderView.players.find((p) => p.playerId === auth.user?.id)
   const mySlot = myPlayer?.accessSlot
+  const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
+  const isSequentialPhase = sequentialPhases.has(tenderView.phase)
+  const isMyTurn = !isSequentialPhase || tenderView.activePlayerId === auth.user?.id
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-8">
@@ -274,6 +307,11 @@ export function TenderPage() {
         <Typography variant="h3">{phase}</Typography>
         <TenderTimer dueAt={tenderView.dueAt} />
         {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}
+        {isSequentialPhase && (
+          <Badge variant={isMyTurn ? 'default' : 'outline'}>
+            {isMyTurn ? 'Ваш ход' : `Ход: ${activePlayer?.displayName ?? 'игрока'}`}
+          </Badge>
+        )}
         <div className="ml-auto flex items-center gap-3">
           <Button
             variant="outline"
@@ -298,6 +336,7 @@ export function TenderPage() {
             disabled={submitting}
             error={commandError}
             onCommand={handleCommand}
+            activePlayerId={tenderView.activePlayerId}
           />
         </div>
 
@@ -321,6 +360,9 @@ export function TenderPage() {
                     <Typography variant="control" tone="muted">
                       {player.displayName ?? player.playerId.slice(0, 8)}
                     </Typography>
+                    {player.playerId === tenderView.activePlayerId && (
+                      <Badge variant="outline" className="ml-auto">Действует</Badge>
+                    )}
                   </div>
                   <Typography variant="control" tone="muted">
                     Рейтинг: {player.rating} · Бюджет: {player.budget}

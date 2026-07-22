@@ -34,6 +34,7 @@ describe('Tender contracts', () => {
 
     expect(
       tenderViewSchema.parse({
+        activePlayerId: 'player-a',
         knownSignals: ['aster', 'boreal'],
         publicContracts: [
           { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
@@ -70,6 +71,7 @@ describe('Tender contracts', () => {
         }],
       }),
     ).toEqual({
+      activePlayerId: 'player-a',
       knownSignals: ['aster', 'boreal'],
       publicContracts: [
         { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
