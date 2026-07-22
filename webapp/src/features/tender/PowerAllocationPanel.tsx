@@ -3,13 +3,14 @@ import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
+import { useI18n } from '@/platform/i18n'
 
 const categories = [
-  { key: 'reconnaissance' as const, label: 'Разведка', desc: 'Получить образцы сигналов' },
-  { key: 'laboratory' as const, label: 'Лаборатория', desc: 'Провести направленный опыт' },
-  { key: 'modelAnalysis' as const, label: 'Анализ модели', desc: 'Выдвинуть публичный тезис' },
-  { key: 'contracts' as const, label: 'Контракты', desc: 'Зарезервировать и выполнить контракт' },
-]
+  { key: 'reconnaissance' as const, labelKey: 'tender.power.category.reconnaissance', oneEffectKey: 'tender.power.reconnaissance.one', twoEffectKey: 'tender.power.reconnaissance.two' },
+  { key: 'laboratory' as const, labelKey: 'tender.power.category.laboratory', oneEffectKey: 'tender.power.laboratory.one', twoEffectKey: 'tender.power.laboratory.two' },
+  { key: 'modelAnalysis' as const, labelKey: 'tender.power.category.modelAnalysis', oneEffectKey: 'tender.power.modelAnalysis.one', twoEffectKey: 'tender.power.modelAnalysis.two' },
+  { key: 'contracts' as const, labelKey: 'tender.power.category.contracts', oneEffectKey: 'tender.power.contracts.one', twoEffectKey: 'tender.power.contracts.two' },
+] as const
 
 type Allocation = {
   reconnaissance: number
@@ -37,6 +38,7 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
     [allocation],
   )
   const isValid = total === 4
+  const { t } = useI18n()
 
   const increment = (key: keyof Allocation) => {
     setAllocation((prev) => {
@@ -55,15 +57,16 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Распределение мощности</CardTitle>
+        <CardTitle>{t('tender.power.title')}</CardTitle>
         <CardDescription>
-          Распределите 4 единицы мощности. Не более 2 на категорию.{' '}
-          Распределено: {total} / 4
+          {t('tender.power.description', { total })}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid gap-4">
-          {categories.map(({ key, label, desc }) => (
+          {categories.map(({ key, labelKey, oneEffectKey, twoEffectKey }) => {
+            const label = t(labelKey)
+            return (
             <div
               key={key}
               className="flex items-center gap-4 rounded-lg border p-4"
@@ -73,19 +76,18 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
                   {label}
                 </Typography>
                 <Typography variant="control" tone="muted">
-                  {desc}
+                  {t(oneEffectKey)}
                 </Typography>
                 <Typography variant="control" tone="muted">
-                  {allocation[key] === 0
-                    ? '—'
-                    : allocation[key] === 1
-                      ? '1 мощность'
-                      : '2 мощности'}
+                  {t(twoEffectKey)}
+                </Typography>
+                <Typography variant="control" tone="muted">
+                  {t('tender.power.selected', { count: allocation[key] })}
                 </Typography>
               </div>
               <div className="flex items-center gap-2">
                 <Button
-                  aria-label={`Уменьшить мощность: ${label}`}
+                  aria-label={t('tender.power.decrease', { category: label })}
                   type="button"
                   variant="outline"
                   size="sm"
@@ -99,7 +101,7 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
                   {allocation[key]}
                 </Typography>
                 <Button
-                  aria-label={`Увеличить мощность: ${label}`}
+                  aria-label={t('tender.power.increase', { category: label })}
                   type="button"
                   variant="outline"
                   size="sm"
@@ -111,7 +113,8 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
                 </Button>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
 
         {error && (
@@ -131,7 +134,7 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
             }
           }}
         >
-          {isValid ? 'Подтвердить распределение' : `Осталось распределить: ${4 - total}`}
+          {isValid ? t('tender.power.confirm') : t('tender.power.remaining', { count: 4 - total })}
         </Button>
       </CardContent>
     </Card>
