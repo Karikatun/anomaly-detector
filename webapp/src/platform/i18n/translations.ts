@@ -9,7 +9,19 @@ const ru = {
 
   // Auth page
   'auth.title': 'Вход',
-  'auth.description': 'Войдите через один из сервисов.',
+  'auth.description': 'Войдите через один из сервисов или email.',
+  'auth.login': 'Войти',
+  'auth.register': 'Регистрация',
+  'auth.switchToLogin': 'Уже есть аккаунт? Войти',
+  'auth.switchToRegister': 'Нет аккаунта? Зарегистрироваться',
+  'auth.email': 'Email',
+  'auth.password': 'Пароль',
+  'auth.displayName': 'Имя',
+  'auth.errors.email': 'Введите корректный email',
+  'auth.errors.password': 'Минимум 8 символов',
+  'auth.errors.displayName': 'Минимум 1 символ',
+  'auth.errors.registerFailed': 'Не удалось зарегистрироваться',
+  'auth.errors.loginFailed': 'Не удалось войти',
 
   // OAuth
   'oauth.yandex': 'Яндекс ID',
