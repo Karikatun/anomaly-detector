@@ -1,4 +1,4 @@
-import { apiErrorSchema, createRoomRequestSchema, roomIdSchema, roomViewSchema } from '@anomaly-detector/contracts'
+import { apiErrorSchema, createRoomRequestSchema, myMatchesResponseSchema, roomIdSchema, roomViewSchema } from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'
@@ -14,6 +14,15 @@ const createRoomRoute = createRoute({
   request: { body: { content: { 'application/json': { schema: createRoomRequestSchema } } } },
   responses: {
     201: { content: { 'application/json': { schema: roomViewSchema } }, description: 'Created private room' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+  },
+})
+
+const listMatchesRoute = createRoute({
+  method: 'get',
+  path: '/mine',
+  responses: {
+    200: { content: { 'application/json': { schema: myMatchesResponseSchema } }, description: 'Started Tenders for the authenticated player' },
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
   },
 })
@@ -60,6 +69,7 @@ export function createRoomRoutes(input: {
 }) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
+  routes.openapi(listMatchesRoute, async (c) => c.json({ matches: await executeRoom(() => input.service.listMatches(c.var.user.id)) }, 200))
   routes.openapi(createRoomRoute, async (c) => c.json(
     await executeRoom(() => input.service.createRoom({ ...c.req.valid('json'), hostId: c.var.user.id })),
     201,

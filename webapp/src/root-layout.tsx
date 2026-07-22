@@ -49,6 +49,9 @@ export function RootLayout() {
                 <Button type="button" variant="ghost" size="sm" asChild>
                   <Link to="/app">{t('nav.matches')}</Link>
                 </Button>
+                <Button type="button" variant="ghost" size="sm" asChild>
+                  <Link to="/profile">{t('nav.profile')}</Link>
+                </Button>
               </nav>
             )}
             {!isInTender && (

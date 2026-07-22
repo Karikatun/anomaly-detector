@@ -4,6 +4,7 @@ const ru = {
   'app.logo': 'anomaly_detector',
   'nav.rooms': 'Комнаты',
   'nav.matches': 'Мои матчи',
+  'nav.profile': 'Профиль',
   'nav.leaveMatch': 'Выйти из матча',
   'button.logout': 'Выйти',
   'logout.failed': 'Не удалось выйти. Сессия всё ещё активна, попробуйте ещё раз.',
