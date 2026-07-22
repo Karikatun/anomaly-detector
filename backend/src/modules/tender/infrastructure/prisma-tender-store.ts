@@ -131,6 +131,40 @@ function createDefaultContracts(playerCount: number) {
 
 export function createPrismaTenderStore(db: DbClient): TenderStore {
   return {
+    async anonymizeParticipant(playerId) {
+      return db.$transaction(async (tx) => {
+        const tenders = await tx.tender.findMany({
+          where: {
+            state: {
+              path: ['players'],
+              array_contains: [{ id: playerId }],
+            },
+          },
+          select: { id: true, state: true, version: true },
+        })
+        const changedTenderIds: string[] = []
+        for (const tender of tenders) {
+          const state = tender.state as PersistedTenderState
+          if (!state.players.some((player) => player.id === playerId && player.displayName !== 'Deleted participant')) continue
+          const updated = await tx.tender.updateMany({
+            where: { id: tender.id, version: tender.version },
+            data: {
+              state: {
+                ...state,
+                players: state.players.map((player) => player.id === playerId
+                  ? { ...player, displayName: 'Deleted participant' }
+                  : player),
+              } as Prisma.InputJsonValue,
+              version: { increment: 1 },
+            },
+          })
+          if (updated.count === 0) throw new TenderVersionConflict()
+          changedTenderIds.push(tender.id)
+        }
+        return changedTenderIds
+      })
+    },
+
     async create(tender) {
       const created = await db.tender.create({
         data: {

@@ -6,6 +6,7 @@ import { sessionExpiresAt, type SessionMetadata } from '../domain/session'
 import type { AuthUserRecord, AuthenticatedPrincipal } from '../domain/user'
 import { userDtoFromPrincipal } from '../domain/user'
 import type {
+  AccountDeletionCleanup,
   AccessTokens,
   AuthRepository,
   Clock,
@@ -17,6 +18,7 @@ import type {
 } from './ports'
 
 type AuthServiceDependencies = {
+  accountDeletionCleanup?: AccountDeletionCleanup
   accessTokens: AccessTokens
   clock: Clock
   logoutCleanup: LogoutCleanup
@@ -307,6 +309,7 @@ export class AuthService {
     const now = this.dependencies.clock.now()
     await this.dependencies.repository.revokeAllSessionsByUserId({ userId, now })
     await this.dependencies.repository.anonymizeUser({ userId, now })
+    await this.dependencies.accountDeletionCleanup?.({ userId })
   }
 
   async updateProfile(userId: string, input: { displayName?: string | null; locale?: 'ru' | 'en' }) {

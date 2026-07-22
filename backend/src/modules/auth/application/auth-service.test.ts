@@ -223,6 +223,7 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
 
 test('deleteAccount anonymises the user and revokes all sessions', async () => {
   const anonymizedUserIds: string[] = []
+  const cleanupUserIds: string[] = []
   const revokedSessionIds: string[] = []
   const repository = {
     anonymizeUser: async (input: { userId: string; now: Date }) => {
@@ -233,6 +234,7 @@ test('deleteAccount anonymises the user and revokes all sessions', async () => {
     },
   } as unknown as AuthRepository
   const service = new AuthService({
+    accountDeletionCleanup: async ({ userId }) => { cleanupUserIds.push(userId) },
     accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
     clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
     logoutCleanup: async () => undefined,
@@ -248,5 +250,6 @@ test('deleteAccount anonymises the user and revokes all sessions', async () => {
   await service.deleteAccount(user.id)
 
   expect(anonymizedUserIds).toEqual([user.id])
+  expect(cleanupUserIds).toEqual([user.id])
   expect(revokedSessionIds).toEqual([user.id])
 })

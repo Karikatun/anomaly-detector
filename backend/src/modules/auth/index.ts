@@ -1,7 +1,7 @@
 import type { DbClient } from '../../db'
 import type { AppEnv } from '../../env'
 import { AuthService } from './application/auth-service'
-import type { Clock, LogoutCleanup, ProjectUser } from './application/ports'
+import type { AccountDeletionCleanup, Clock, LogoutCleanup, ProjectUser } from './application/ports'
 import { toBaseUserDto } from './domain/user'
 import { createPrismaAuthRepository } from './infrastructure/auth-repository'
 import { signAccessToken, verifyAccessToken } from './infrastructure/access-tokens'
@@ -20,6 +20,7 @@ import { createVkOAuthProvider } from './infrastructure/oauth-vk'
 
 type CreateAuthModuleOptions = {
   clock?: Clock
+  accountDeletionCleanup?: AccountDeletionCleanup
   db: DbClient
   env: AppEnv
   logoutCleanup?: LogoutCleanup
@@ -31,9 +32,11 @@ const systemClock: Clock = {
 }
 
 const noLogoutCleanup: LogoutCleanup = () => undefined
+const noAccountDeletionCleanup: AccountDeletionCleanup = () => undefined
 
 export function createAuthModule({
   clock = systemClock,
+  accountDeletionCleanup = noAccountDeletionCleanup,
   db,
   env,
   logoutCleanup = noLogoutCleanup,
@@ -57,6 +60,7 @@ export function createAuthModule({
   }
 
   const service = new AuthService({
+    accountDeletionCleanup,
     accessTokens: {
       sign: (payload) => signAccessToken(payload, env),
       verify: (token) => verifyAccessToken(token, env),

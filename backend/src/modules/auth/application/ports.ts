@@ -132,3 +132,4 @@ export type Clock = {
 
 export type ProjectUser = (user: AuthUserRecord) => UserDto | Promise<UserDto>
 export type LogoutCleanup = (input: { userId: string }) => void | Promise<void>
+export type AccountDeletionCleanup = (input: { userId: string }) => void | Promise<void>
