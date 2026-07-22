@@ -79,6 +79,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
       return (
         <AccessSlotPanel
           disabled={disabled || myPlayer?.requestedAccessSlot !== undefined}
+          confirmedSlot={myPlayer?.requestedAccessSlot}
           error={error}
           onConfirm={(slot) => onCommand({ type: 'request-access-slot', slot })}
         />
