@@ -6,10 +6,10 @@ import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 
 const categories = [
-  { key: 'reconnaissance' as const, labelKey: 'tender.power.category.reconnaissance', oneEffectKey: 'tender.power.reconnaissance.one', twoEffectKey: 'tender.power.reconnaissance.two' },
-  { key: 'laboratory' as const, labelKey: 'tender.power.category.laboratory', oneEffectKey: 'tender.power.laboratory.one', twoEffectKey: 'tender.power.laboratory.two' },
-  { key: 'modelAnalysis' as const, labelKey: 'tender.power.category.modelAnalysis', oneEffectKey: 'tender.power.modelAnalysis.one', twoEffectKey: 'tender.power.modelAnalysis.two' },
-  { key: 'contracts' as const, labelKey: 'tender.power.category.contracts', oneEffectKey: 'tender.power.contracts.one', twoEffectKey: 'tender.power.contracts.two' },
+  { key: 'reconnaissance' as const, limit: 2, labelKey: 'tender.power.category.reconnaissance', oneEffectKey: 'tender.power.reconnaissance.one', twoEffectKey: 'tender.power.reconnaissance.two' },
+  { key: 'laboratory' as const, limit: 2, labelKey: 'tender.power.category.laboratory', oneEffectKey: 'tender.power.laboratory.one', twoEffectKey: 'tender.power.laboratory.two' },
+  { key: 'modelAnalysis' as const, limit: 1, labelKey: 'tender.power.category.modelAnalysis', oneEffectKey: 'tender.power.modelAnalysis.one', twoEffectKey: 'tender.power.modelAnalysis.two' },
+  { key: 'contracts' as const, limit: 1, labelKey: 'tender.power.category.contracts', oneEffectKey: 'tender.power.contracts.one', twoEffectKey: 'tender.power.contracts.two' },
 ] as const
 
 type Allocation = {
@@ -40,9 +40,9 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
   const isValid = total === 4
   const { t } = useI18n()
 
-  const increment = (key: keyof Allocation) => {
+  const increment = (key: keyof Allocation, limit: number) => {
     setAllocation((prev) => {
-      if (prev[key] >= 2 || total >= 4) return prev
+      if (prev[key] >= limit || total >= 4) return prev
       return { ...prev, [key]: prev[key] + 1 }
     })
   }
@@ -64,7 +64,7 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
       </CardHeader>
       <CardContent>
         <div className="grid gap-4">
-          {categories.map(({ key, labelKey, oneEffectKey, twoEffectKey }) => {
+          {categories.map(({ key, limit, labelKey, oneEffectKey, twoEffectKey }) => {
             const label = t(labelKey)
             return (
             <div
@@ -106,8 +106,8 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
                   variant="outline"
                   size="sm"
                   className="h-9 w-9 p-0"
-                  disabled={disabled || allocation[key] >= 2 || total >= 4}
-                  onClick={() => increment(key)}
+                  disabled={disabled || allocation[key] >= limit || total >= 4}
+                  onClick={() => increment(key, limit)}
                 >
                   +
                 </Button>

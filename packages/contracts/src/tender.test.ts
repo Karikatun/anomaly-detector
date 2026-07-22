@@ -177,8 +177,15 @@ describe('Tender contracts', () => {
     expect(() => powerAllocationSchema.parse({
       contracts: 2,
       laboratory: 2,
-      modelAnalysis: 1,
+      modelAnalysis: 0,
       reconnaissance: 0,
+    })).toThrow()
+
+    expect(() => powerAllocationSchema.parse({
+      contracts: 1,
+      laboratory: 0,
+      modelAnalysis: 2,
+      reconnaissance: 1,
     })).toThrow()
   })
 

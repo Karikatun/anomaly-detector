@@ -123,8 +123,8 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       version: 1,
       phase: 'access-slot-selection',
       players: [
-        { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-a', playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
-        { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-b', playerId: 'player-b', rating: 0 },
+        { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-a', playerId: 'player-a', rating: 0, requestedAccessSlot: 1, tiePriority: 1 },
+        { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-b', playerId: 'player-b', rating: 0, tiePriority: 2 },
       ],
       privateAnalyticalReports: 1,
       privateRawTelemetrySignals: ['aster'],
@@ -300,10 +300,10 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       version: 4,
       phase: 'power-allocation',
       players: [
-        { accessSlot: 1, budget: 0, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-a', playerId: 'player-a', rating: 0 },
-        { accessSlot: 3, budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-b', playerId: 'player-b', rating: 0 },
-        { accessSlot: 2, budget: 1, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-c', playerId: 'player-c', rating: 0 },
-        { accessSlot: 6, budget: 3, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-d', playerId: 'player-d', rating: 0 },
+        { accessSlot: 1, budget: 0, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-a', playerId: 'player-a', rating: 0, tiePriority: 1 },
+        { accessSlot: 3, budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-b', playerId: 'player-b', rating: 0, requestedAccessSlot: 1, tiePriority: 2 },
+        { accessSlot: 2, budget: 1, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-c', playerId: 'player-c', rating: 0, tiePriority: 3 },
+        { accessSlot: 6, budget: 3, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-d', playerId: 'player-d', rating: 0, tiePriority: 4 },
       ],
       privateAnalyticalReports: 1,
       privateRawTelemetrySignals: ['aster'],
@@ -331,8 +331,9 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     ])
   })
 
-  test('restores open Power allocations through a new PostgreSQL store adapter', async () => {
-    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+  test('keeps confirmed Power allocations private after a PostgreSQL restart', async () => {
+    const createdAt = new Date('2026-07-20T12:00:00.000Z')
+    const module = createTenderModule({ now: () => createdAt, store: createPrismaTenderStore(prisma) })
     const { tenderId } = await module.createTender({
       players: [
         { id: 'player-a', tiePriority: 1 },
@@ -363,6 +364,28 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         { accessSlot: 2 },
       ],
     })
+    const playerBView = await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })
+    expect(playerBView.players[0]).not.toHaveProperty('powerAllocation')
+    expect(playerBView.players[1]).not.toHaveProperty('powerAllocation')
+
+    await restartedModule.advanceDueTenders({
+      limit: 10,
+      now: new Date('2026-07-20T12:01:00.000Z'),
+    })
+
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+      phase: 'reconnaissance',
+      players: [
+        { playerId: 'player-a', powerAllocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 } },
+        { playerId: 'player-b', powerAllocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } },
+      ],
+    })
+    expect(await createPrismaTenderStore(prisma).readAuditEvents(tenderId)).toContainEqual(
+      expect.objectContaining({
+        kind: 'power_allocation_timeout_resolved',
+        payload: { timedOutPlayerIds: ['player-b'] },
+      }),
+    )
   })
 
   test('restores player-scoped Reconnaissance data through a new PostgreSQL store adapter', async () => {
@@ -384,7 +407,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       type: 'allocate-power',
     })
     await module.execute({
-      allocation: { contracts: 2, laboratory: 1, modelAnalysis: 0, reconnaissance: 1 },
+      allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 1, reserve: 1 },
       actorId: 'player-b',
       commandId: 'command-b-2',
       tenderId,

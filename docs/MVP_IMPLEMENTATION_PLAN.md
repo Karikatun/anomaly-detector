@@ -31,7 +31,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 `GAME_DESIGN_BRIEF.md` now describes the agreed target ruleset. The current Tender implementation is an older ruleset and must not be presented as matching it until this migration is complete.
 
 1. [ ] Replace starting Samples and Analytical Reports with the new discovery model: no starting Samples; Samples only from Access Slots or Reconnaissance; unknown Signals are revealed when acquired or named by a Contract.
-2. [ ] Make Power allocation simultaneous and private after Access Slot resolution. Limit Model Analysis and Contracts to one Power; retain two-Power choices only for Reconnaissance and Laboratory.
+2. [x] Make Power allocation simultaneous and private after Access Slot resolution. Limit Model Analysis and Contracts to one Power; retain two-Power choices only for Reconnaissance and Laboratory.
 3. [ ] Implement Reconnaissance targets: Unknown Sector or an already revealed Signal. An acquired Sample must be usable in the same round's Laboratory phase.
 4. [ ] Add the permanent public scientific journal and Continuous private same/different-polarity telemetry.
 5. [ ] Replace the wrong-Thesis contract-power restriction with Corporate Review and spendable Research Certifications.
