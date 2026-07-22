@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
+import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 
 export function RootLayout() {
@@ -32,15 +33,17 @@ export function RootLayout() {
               <Link to="/">{t('app.logo')}</Link>
             </Typography>
             {isInTender ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="ml-auto"
-                onClick={() => void navigate({ to: '/rooms' })}
-              >
-                {t('nav.leaveMatch')}
-              </Button>
+              <div className="ml-auto flex items-center gap-2">
+                <RulesReferenceDialog />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void navigate({ to: '/rooms' })}
+                >
+                  {t('nav.leaveMatch')}
+                </Button>
+              </div>
             ) : (
               <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
                 <Button type="button" variant="ghost" size="sm" asChild>
@@ -52,6 +55,7 @@ export function RootLayout() {
                 <Button type="button" variant="ghost" size="sm" asChild>
                   <Link to="/profile">{t('nav.profile')}</Link>
                 </Button>
+                <RulesReferenceDialog triggerVariant="ghost" />
               </nav>
             )}
             {!isInTender && (

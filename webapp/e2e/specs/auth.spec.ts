@@ -35,3 +35,15 @@ test('uses the configured API transport when OAuth is unavailable', async ({ pag
   await expect(page.getByText('Ошибка сервера. Попробуйте позже.')).toBeVisible()
   await expect(page.getByText('Не удалось связаться с сервером. OAuth работает только с localhost.')).toHaveCount(0)
 })
+
+test('opens the Rules Reference from the authenticated home page', async ({ page }) => {
+  await registerBrowserUser(page, 'Правила E2E', 'rules-home')
+
+  await expect(page.getByRole('heading', { name: 'Добро пожаловать, Правила E2E' })).toBeVisible()
+  await page.getByRole('button', { name: 'Правила' }).first().click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Справочник правил' })).toBeVisible()
+  await expect(page.getByText('Final Contract и финальная модель')).toBeVisible()
+  await page.getByRole('button', { name: 'Закрыть правила' }).click()
+  await expect(page.getByRole('dialog')).toBeHidden()
+})
