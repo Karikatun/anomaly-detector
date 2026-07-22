@@ -22,8 +22,12 @@ type CreateAppOptions = {
 }
 
 export function createApp({ env, prisma, tender: providedTender }: CreateAppOptions) {
-  const auth = createAuthModule({ db: prisma, env })
   const tender = providedTender ?? createPersistentTenderModule(prisma)
+  const auth = createAuthModule({
+    accountDeletionCleanup: ({ userId }) => tender.anonymizeParticipant(userId),
+    db: prisma,
+    env,
+  })
   const rooms = createRoomModule({
     db: prisma,
     requireAuth: auth.requireAuth,

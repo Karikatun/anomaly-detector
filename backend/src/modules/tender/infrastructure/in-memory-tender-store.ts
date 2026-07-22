@@ -20,6 +20,22 @@ export function createInMemoryTenderStore(): TenderStore {
   }
 
   return {
+    async anonymizeParticipant(playerId) {
+      const changedTenderIds: string[] = []
+      for (const [tenderId, tender] of tenders) {
+        if (!tender.players.some((player) => player.id === playerId && player.displayName !== 'Deleted participant')) continue
+        tenders.set(tenderId, {
+          ...tender,
+          players: tender.players.map((player) => player.id === playerId
+            ? { ...player, displayName: 'Deleted participant' }
+            : player),
+          version: tender.version + 1,
+        })
+        changedTenderIds.push(tenderId)
+      }
+      return changedTenderIds
+    },
+
     async create(tender) {
       const createdTender = { ...tender, id: `tender-${nextTenderId++}` }
       tenders.set(createdTender.id, cloneTender(createdTender))

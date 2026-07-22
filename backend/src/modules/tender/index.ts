@@ -237,6 +237,11 @@ export function createTenderModule({
   }
 
   return {
+    async anonymizeParticipant(playerId: string) {
+      const changedTenderIds = await store.anonymizeParticipant(playerId)
+      for (const tenderId of changedTenderIds) onTenderChanged?.(tenderId)
+    },
+
     async createTender(input: CreateTender) {
       const parsedInput = createTenderSchema.safeParse(input)
       if (!parsedInput.success) {

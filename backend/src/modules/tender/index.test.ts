@@ -222,6 +222,25 @@ test('does not return a Tender view to a non-player', async () => {
   })
 })
 
+test('anonymises a deleted participant in every Tender view', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1, displayName: 'Анна' },
+      { id: 'player-b', tiePriority: 2, displayName: 'Борис' },
+    ],
+  })
+
+  await tender.anonymizeParticipant('player-a')
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    players: [
+      { playerId: 'player-a', displayName: 'Deleted participant' },
+      { playerId: 'player-b', displayName: 'Борис' },
+    ],
+  })
+})
+
 test('does not expose the post-match audit before the Tender is complete', async () => {
   const tender = createTenderModule()
   const { tenderId } = await tender.createTender({

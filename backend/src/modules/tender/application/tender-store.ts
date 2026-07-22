@@ -80,6 +80,7 @@ export type TenderCommitResult =
   | { kind: 'version_conflict' }
 
 export type TenderStore = {
+  anonymizeParticipant(playerId: string): Promise<string[]>
   commit(change: TenderCommit): Promise<TenderCommitResult>
   create(tender: Omit<StoredTender, 'id'>): Promise<StoredTender>
   findDue(input: AdvanceDueTendersInput): Promise<string[]>

@@ -152,6 +152,26 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     ])
   })
 
+  test('persists an anonymised participant name without changing other players', async () => {
+    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await module.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1, displayName: 'Анна' },
+        { id: 'player-b', tiePriority: 2, displayName: 'Борис' },
+      ],
+    })
+
+    await module.anonymizeParticipant('player-a')
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+      players: [
+        { playerId: 'player-a', displayName: 'Deleted participant' },
+        { playerId: 'player-b', displayName: 'Борис' },
+      ],
+    })
+  })
+
   test('replays a persisted command receipt through a new PostgreSQL store adapter', async () => {
     const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
     const { tenderId } = await firstModule.createTender({
