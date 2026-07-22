@@ -37,7 +37,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 5. [x] Replace the wrong-Thesis contract-power restriction with Corporate Review and spendable Research Certifications.
 6. [x] Replace the Contract generator and bidding model with a seeded round deck of Light, Complex, and Scientific Contracts, target-Signal roles, permanent-but-single-use Contract Evidence, Rating-only rewards, and the revised Final Contract.
 7. [x] Implement the revised final Scientific Model scoring: property points, per-complete-Signal points, and complete-model bonus.
-8. [ ] Build the post-auth home page and the full Rules Reference. The reference must be reachable from the home page and as an in-game modal without leaving a Tender.
+8. [x] Build the post-auth home page and the full Rules Reference. The reference must be reachable from the home page and as an in-game modal without leaving a Tender.
 
 **Gate:** deterministic API simulations for 2, 3, and 4 players cover every new rule, including hidden Power planning, Corporate Review, one-use Contract Evidence, Contract deck reproducibility, and final scoring; browser tests cover the Rules Reference from the home page and from an active Tender.
 

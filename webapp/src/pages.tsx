@@ -16,16 +16,60 @@ import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { AuthForm, useAuth } from '@/features/auth'
+import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 
 export function HomePage() {
   const auth = useAuth()
 
   if (auth.isBootstrapping) return <LoadingState />
-  if (auth.user) return null
+  if (auth.user) return <AuthenticatedHome displayName={auth.user.displayName ?? auth.user.login} />
   return (
     <section className="flex min-h-screen items-center justify-center px-5 py-10">
       <AuthForm />
+    </section>
+  )
+}
+
+function AuthenticatedHome({ displayName }: { displayName: string }) {
+  const { t } = useI18n()
+  const navigate = useNavigate()
+
+  return (
+    <section className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-12 sm:py-16">
+      <div className="grid gap-4">
+        <Badge variant="outline" className="w-fit">{t('home.badge')}</Badge>
+        <Typography variant="h1">{t('home.title', { name: displayName })}</Typography>
+        <Typography className="max-w-2xl" tone="muted">{t('home.description')}</Typography>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('home.start.title')}</CardTitle>
+            <CardDescription>{t('home.start.description')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button type="button" className="w-full" onClick={() => void navigate({ to: '/rooms' })}>{t('home.start.action')}</Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('home.matches.title')}</CardTitle>
+            <CardDescription>{t('home.matches.description')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button type="button" variant="outline" className="w-full" onClick={() => void navigate({ to: '/app' })}>{t('home.matches.action')}</Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('home.rules.title')}</CardTitle>
+            <CardDescription>{t('home.rules.description')}</CardDescription>
+          </CardHeader>
+          <CardContent><RulesReferenceDialog /></CardContent>
+        </Card>
+      </div>
     </section>
   )
 }
