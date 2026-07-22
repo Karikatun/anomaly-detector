@@ -20,7 +20,13 @@ const indexRoute = createRoute({
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app',
-  component: lazyRouteComponent(() => import('./pages'), 'AppPage'),
+  component: lazyRouteComponent(() => import('./features/rooms'), 'MyMatchesPage'),
+})
+
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/profile',
+  component: lazyRouteComponent(() => import('./pages'), 'ProfilePage'),
 })
 
 const roomsRoute = createRoute({
@@ -41,7 +47,7 @@ const tenderRoute = createRoute({
   component: lazyRouteComponent(() => import('./features/tender'), 'TenderPage'),
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, appRoute, roomsRoute, roomLobbyRoute, tenderRoute])
+const routeTree = rootRoute.addChildren([indexRoute, appRoute, profileRoute, roomsRoute, roomLobbyRoute, tenderRoute])
 
 export const router = createRouter({ routeTree })
 

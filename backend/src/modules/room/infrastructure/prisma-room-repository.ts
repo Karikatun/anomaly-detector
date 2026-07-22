@@ -5,6 +5,22 @@ import { RoomFailure } from '../domain/errors'
 
 export function createPrismaRoomRepository(db: DbClient): RoomRepository {
   return {
+    async listStartedForMember(userId) {
+      const rooms = await db.tenderRoom.findMany({
+        where: { members: { some: { userId } }, status: 'started' },
+        include: { members: { orderBy: { seat: 'asc' } }, tender: { select: { phase: true } } },
+        orderBy: { updatedAt: 'desc' },
+      })
+      return rooms.map((room) => ({
+        capacity: room.capacity as 2 | 3 | 4,
+        hostId: room.hostId,
+        id: room.id,
+        members: room.members.map((member) => ({ seat: member.seat, userId: member.userId })),
+        status: 'started' as const,
+        tenderId: room.tenderId,
+        tenderPhase: room.tender?.phase,
+      }))
+    },
     async create(input) {
       const room = await db.tenderRoom.create({
         data: {

@@ -1,5 +1,6 @@
 import {
   createRoomRequestSchema,
+  myMatchesResponseSchema,
   roomViewSchema,
   type CreateRoomRequest,
   type RoomView,
@@ -21,6 +22,11 @@ export class RoomsApi {
       method: 'POST',
       body: payload,
     })
+  }
+
+  async listMatches(): Promise<RoomView[]> {
+    const response = await this.transport.request('/api/rooms/mine', myMatchesResponseSchema)
+    return response.matches
   }
 
   join(roomId: string): Promise<RoomView> {

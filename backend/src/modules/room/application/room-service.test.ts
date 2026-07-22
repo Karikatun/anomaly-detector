@@ -29,6 +29,36 @@ test('creates a waiting private room with its host in the first seat', async () 
   })
 })
 
+test('lists started matches for the requesting player', async () => {
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      listStartedForMember: async (userId) => [{
+        capacity: 2,
+        hostId: 'user-1',
+        id: 'room-1',
+        members: [{ seat: 1, userId }, { seat: 2, userId: 'user-2' }],
+        status: 'started',
+        tenderId: 'tender-1',
+        tenderPhase: 'complete',
+      }],
+      join: async () => { throw new Error('not used') },
+      leave: async () => { throw new Error('not used') },
+      start: async () => { throw new Error('not used') },
+    },
+  })
+
+  await expect(service.listMatches('user-1')).resolves.toEqual([{
+    capacity: 2,
+    hostId: 'user-1',
+    members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+    roomId: 'room-1',
+    status: 'started',
+    tenderId: 'tender-1',
+    tenderPhase: 'complete',
+  }])
+})
+
 test('adds a player to the next available seat in a waiting room', async () => {
   const service = new TenderRoomService({
     repository: {

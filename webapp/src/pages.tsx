@@ -30,7 +30,7 @@ export function HomePage() {
   )
 }
 
-export function AppPage() {
+export function ProfilePage() {
   const auth = useAuth()
   const { t } = useI18n()
   const navigate = useNavigate()

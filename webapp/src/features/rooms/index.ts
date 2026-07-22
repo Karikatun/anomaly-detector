@@ -7,4 +7,5 @@ export {
   roomQueryKeys,
 } from './queries'
 export { RoomListPage } from './pages/RoomListPage'
+export { MyMatchesPage } from './pages/MyMatchesPage'
 export { RoomLobbyPage } from './pages/RoomLobbyPage'

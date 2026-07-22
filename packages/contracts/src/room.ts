@@ -20,6 +20,11 @@ export const roomViewSchema = z.object({
   roomId: roomIdSchema,
   status: roomStatusSchema,
   tenderId: z.string().uuid().nullable().optional(),
+  tenderPhase: z.string().optional(),
+}).strict()
+
+export const myMatchesResponseSchema = z.object({
+  matches: z.array(roomViewSchema),
 }).strict()
 
 export type CreateRoomRequest = z.infer<typeof createRoomRequestSchema>
