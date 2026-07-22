@@ -9,6 +9,7 @@ export const signalIdSchema = z.enum(['aster', 'boreal', 'cinder', 'delta', 'ecl
 export const tenderPlayerSchema = z.object({
   id: playerIdSchema,
   tiePriority: z.number().int().min(1).max(4),
+  displayName: z.string().min(1).max(100).optional(),
 }).strict()
 
 export const createTenderSchema = z.object({
@@ -160,6 +161,7 @@ export const tenderPhaseSchema = z.enum([
 
 export const tenderPlayerViewSchema = z.object({
   playerId: playerIdSchema,
+  displayName: z.string().min(1).max(100).optional(),
   accessSlot: z.number().int().min(1).max(6).optional(),
   budget: z.number().int().min(0),
   corporateTrust: z.number().int().min(0).optional(),

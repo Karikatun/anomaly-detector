@@ -8,6 +8,7 @@ import {
   oauthStartRequestSchema,
   oauthStartResponseSchema,
   registerRequestSchema,
+  updateProfileSchema,
   type CookieAuthResponse,
   type CookieRefreshResponse,
   type LoginRequest,
@@ -15,7 +16,7 @@ import {
   type OAuthProviderId,
   type RegisterRequest,
 } from '@anomaly-detector/contracts'
-import type { z } from 'zod'
+import { z } from 'zod'
 import { ApiRequestError, HttpClient, type HttpRequestOptions } from '@/platform/api'
 import {
   coordinateBrowserAuthMutation,
@@ -142,6 +143,14 @@ export class AuthApi {
       { method: 'POST', body: payload },
     )
     window.location.href = response.authorizationUrl
+  }
+
+  async updateProfile(input: { displayName: string }): Promise<void> {
+    const payload = updateProfileSchema.parse(input)
+    await this.requestAuthenticated('/api/auth/profile', z.any(), {
+      method: 'PATCH',
+      body: payload,
+    })
   }
 
   isSessionEpochCurrent(epoch: string) {

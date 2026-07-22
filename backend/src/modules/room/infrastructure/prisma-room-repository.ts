@@ -112,9 +112,20 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room has already started')
         if (room.members.length !== room.capacity) throw new RoomFailure('room_full', 'Room needs every seat filled before starting')
 
+        const userIds = room.members.map((m) => m.userId)
+        const users = await tx.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, displayName: true },
+        })
+        const displayNameById = new Map(users.map((u) => [u.id, u.displayName]))
+
         const tender = createPersistentTenderModule(tx as DbClient)
         const { tenderId } = await tender.createTender({
-          players: room.members.map((member) => ({ id: member.userId, tiePriority: member.seat })),
+          players: room.members.map((member) => ({
+            id: member.userId,
+            tiePriority: member.seat,
+            displayName: displayNameById.get(member.userId) ?? member.userId.slice(0, 8),
+          })),
         })
         const startedRoom = await tx.tenderRoom.update({
           where: { id: room.id },

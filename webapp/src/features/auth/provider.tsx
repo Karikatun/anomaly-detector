@@ -110,6 +110,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const { mutateAsync: loginAsync } = useLoginMutation({ api, setAccessToken })
   const { mutateAsync: logoutAsync } = useLogoutMutation({ api, setAccessToken })
 
+  const updateProfile = useCallback(
+    async (input: { displayName: string }) => {
+      await api.updateProfile(input)
+      await meQuery.refetch()
+    },
+    [api, meQuery],
+  )
+
   const register = useCallback(
     async (input: RegisterRequest) => {
       await registerAsync(input)
@@ -158,8 +166,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       register,
       login,
       logout,
+      updateProfile,
     }),
-    [isBootstrapping, login, logout, meQuery.data?.user, register, retrySession, sessionError, transport],
+    [isBootstrapping, login, logout, meQuery.data?.user, register, retrySession, sessionError, transport, updateProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
