@@ -15,6 +15,8 @@ const ru = {
   'oauth.yandex': 'Яндекс ID',
   'oauth.vk': 'VK ID',
   'oauth.redirecting': 'Перенаправляем...',
+  'oauth.error.network': 'Не удалось связаться с сервером. OAuth работает только с localhost.',
+  'oauth.error.server': 'Ошибка сервера. Попробуйте позже.',
 
   // App page
   'app.profile.badge': 'Текущий пользователь',
@@ -53,6 +55,8 @@ const ru = {
   'lobby.title': 'Комната тендера',
   'lobby.description': 'Поделитесь ID комнаты с другими игроками, чтобы пригласить их.',
   'lobby.room.id': 'ID комнаты',
+  'lobby.copyId': 'Скопировать ID',
+  'lobby.copied': 'Скопировано!',
   'lobby.players': 'Игроки',
   'lobby.players.joined': '{count}/{capacity} участников',
   'lobby.players.inProgress': ' — Тендер идёт',
@@ -63,7 +67,7 @@ const ru = {
   'lobby.button.joining': 'Входим...',
   'lobby.button.leave': 'Покинуть комнату',
   'lobby.button.leaving': 'Выходим...',
-  'lobby.button.cancel': 'Отменить комнату',
+  'lobby.button.cancel': 'Выйти из комнаты',
   'lobby.button.cancelling': 'Отменяем...',
   'lobby.button.start': 'Начать Тендер',
   'lobby.button.starting': 'Запускаем...',

@@ -135,7 +135,7 @@ export class AuthApi {
   }
 
   async startOAuth(provider: OAuthProviderId): Promise<void> {
-    const payload = oauthStartRequestSchema.parse({})
+    const payload = oauthStartRequestSchema.parse({ webappOrigin: window.location.origin })
     const response = await this.http.request(
       `/api/auth/oauth/${provider}/start`,
       oauthStartResponseSchema,

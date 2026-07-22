@@ -417,11 +417,11 @@ export function createAuthRoutes({ env, requireAuth, service, webappUrl }: Creat
 
   routes.openapi(oauthStartRoute, async (c) => {
     const { provider } = c.req.valid('param')
-    const { redirectUri: bodyRedirectUri } = c.req.valid('json')
+    const { redirectUri: bodyRedirectUri, webappOrigin: bodyWebappOrigin } = c.req.valid('json')
     const redirectUri =
       bodyRedirectUri ??
       `${reqProtocol(c)}://${c.req.header('host') ?? 'localhost:3000'}/api/auth/oauth/${provider}/callback`
-    const webappOrigin = c.req.header('origin') ?? webappUrl
+    const webappOrigin = bodyWebappOrigin ?? webappUrl
     const result = await executeAuth(() => service.startOAuthSignIn({ provider, redirectUri, webappOrigin }))
     return c.json(result, 200)
   })

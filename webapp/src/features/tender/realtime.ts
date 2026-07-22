@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 
 import type { AuthenticatedTransport } from '@/platform/api'
+import { getApiBaseUrl } from '@/platform/api/api-base-url'
 
 const RealtimeTicketResponseSchema = z.object({
   expiresAt: z.string().datetime(),
@@ -39,7 +40,7 @@ export function useRealtimeTender(transport: AuthenticatedTransport, tenderId: s
         { method: 'POST' },
       )
 
-      const apiBase = (import.meta.env?.VITE_API_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+      const apiBase = getApiBaseUrl()
       const wsUrl = apiBase.replace(/^http/, 'ws')
       const ws = new WebSocket(
         `${wsUrl}/api/realtime/ws?ticket=${encodeURIComponent(ticketResponse.ticket)}&tenderId=${encodeURIComponent(tenderIdRef.current)}`,

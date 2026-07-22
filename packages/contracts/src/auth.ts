@@ -79,6 +79,7 @@ export const oauthProviderSchema = z.union([z.literal('yandex'), z.literal('vk')
 
 export const oauthStartRequestSchema = z.object({
   redirectUri: z.string().url().max(512).optional(),
+  webappOrigin: z.string().url().max(512).optional(),
 })
 
 export const oauthStartResponseSchema = z.object({
