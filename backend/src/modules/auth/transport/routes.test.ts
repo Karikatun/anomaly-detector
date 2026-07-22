@@ -33,7 +33,7 @@ describe('auth routes', () => {
     const response = await app.request('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'body@example.com', password: 'x'.repeat(64) }),
+      body: JSON.stringify({ login: 'body', password: 'x'.repeat(64) }),
     })
 
     expect(response.status).toBe(413)
@@ -48,7 +48,7 @@ describe('auth routes', () => {
         'X-Forwarded-For': '10.10.0.8',
         'Do-Connecting-Ip': '203.0.113.10',
       },
-      body: JSON.stringify({ email: 'invalid', password: 'short' }),
+      body: JSON.stringify({ login: 'invalid', password: 'short' }),
     })
 
     expect((await request()).status).toBe(400)
@@ -66,7 +66,7 @@ describe('auth routes', () => {
         'X-Forwarded-For': '10.10.0.8',
         'Do-Connecting-Ip': clientIp,
       },
-      body: JSON.stringify({ email: 'invalid', password: 'short' }),
+      body: JSON.stringify({ login: 'invalid', password: 'short' }),
     })
 
     expect((await request('203.0.113.10')).status).toBe(400)
@@ -90,7 +90,7 @@ describe('auth routes', () => {
         'Content-Type': 'application/json',
         'X-Forwarded-For': `198.51.100.99, ${clientIp}`,
       },
-      body: JSON.stringify({ email: 'invalid', password: 'short' }),
+      body: JSON.stringify({ login: 'invalid', password: 'short' }),
     })
 
     expect((await request('203.0.113.10')).status).toBe(400)
@@ -108,7 +108,7 @@ describe('auth routes', () => {
         'Content-Type': 'application/json',
         Origin: 'https://attacker.example',
       },
-      body: JSON.stringify({ email: 'user@example.com', password: 'password123' }),
+      body: JSON.stringify({ login: 'user', password: 'password123' }),
     })
     const untrustedLoginBody = await untrustedLogin.json()
 

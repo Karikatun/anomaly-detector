@@ -38,7 +38,7 @@ test('AuthApi refreshes and retries authenticated requests with the new access t
         {
           user: {
             id: 'user_1',
-            email: 'user@example.com',
+            login: 'user',
             displayName: null,
   locale: 'ru',
             createdAt: '2026-05-11T00:00:00.000Z',
@@ -61,7 +61,7 @@ test('AuthApi refreshes and retries authenticated requests with the new access t
   const response = await client.me()
   const meCalls = calls.filter((call) => call.path === '/api/auth/me')
 
-  expect(response.user.email).toBe('user@example.com')
+  expect(response.user.login).toBe('user')
   expect(meCalls).toHaveLength(2)
   expect(meCalls[0]?.authorization).toBe(`Bearer ${expiredAccessToken}`)
   expect(meCalls[1]?.authorization).toBe(`Bearer ${freshAccessToken}`)
@@ -90,7 +90,7 @@ test('AuthApi shares one refresh across concurrent unauthorized requests', async
         {
           user: {
             id: 'user_1',
-            email: 'user@example.com',
+            login: 'user',
             displayName: null,
   locale: 'ru',
             createdAt: '2026-05-11T00:00:00.000Z',
@@ -118,8 +118,8 @@ test('AuthApi shares one refresh across concurrent unauthorized requests', async
   const refreshCalls = calls.filter((call) => call.path === '/api/auth/refresh')
   const meCalls = calls.filter((call) => call.path === '/api/auth/me')
 
-  expect(first.user.email).toBe('user@example.com')
-  expect(second.user.email).toBe('user@example.com')
+  expect(first.user.login).toBe('user')
+  expect(second.user.login).toBe('user')
   expect(refreshCalls).toHaveLength(1)
   expect(meCalls).toHaveLength(4)
   expect(meCalls.filter((call) => call.authorization === `Bearer ${expiredAccessToken}`)).toHaveLength(2)
@@ -290,7 +290,7 @@ test('AuthApi discards a successful response from an older browser session epoch
       {
         user: {
           id: 'account-a',
-          email: 'account-a@example.com',
+          login: 'account-a',
           displayName: null,
   locale: 'ru',
           createdAt: '2026-05-11T00:00:00.000Z',
@@ -354,7 +354,7 @@ test('AuthApi preserves backend error status, code, and message', async () => {
         {
           error: {
             code: 'CONFLICT',
-            message: 'User with this email already exists',
+            message: 'User with this login already exists',
           },
         },
         409,
@@ -371,7 +371,7 @@ test('AuthApi preserves backend error status, code, and message', async () => {
 
   await expect(
     client.register({
-      email: 'dupe@example.com',
+      login: 'dupe',
       password: 'password123',
       privacyConsent: true,
       ageConfirmation: true,
@@ -379,7 +379,7 @@ test('AuthApi preserves backend error status, code, and message', async () => {
   ).rejects.toMatchObject({
     status: 409,
     code: 'CONFLICT',
-    message: 'User with this email already exists',
+    message: 'User with this login already exists',
   })
 })
 

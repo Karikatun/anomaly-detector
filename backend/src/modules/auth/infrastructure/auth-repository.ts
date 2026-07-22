@@ -5,8 +5,8 @@ import { AuthFailure } from '../domain/errors'
 
 export function createPrismaAuthRepository(db: DbClient): AuthRepository {
   return {
-    findUserByEmail(email) {
-      return db.user.findUnique({ where: { email } })
+    findUserByLogin(login) {
+      return db.user.findUnique({ where: { login } })
     },
 
     async createPasswordUserWithSession(input) {
@@ -14,7 +14,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
         return await db.$transaction(async (tx) => {
           const user = await tx.user.create({
             data: {
-              email: input.user.email,
+              login: input.user.login,
               passwordHash: input.user.passwordHash,
               displayName: input.user.displayName,
             },
@@ -35,7 +35,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
         })
       } catch (error) {
         if (isUniqueConstraintError(error)) {
-          throw new AuthFailure('email_already_exists', 'User with this email already exists')
+          throw new AuthFailure('login_already_exists', 'User with this login already exists')
         }
         throw error
       }
@@ -226,7 +226,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
       return await db.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
-            email: userData.email,
+            login: userData.login,
             passwordHash: 'OAUTH_USER',
             displayName: userData.displayName ?? null,
           },
@@ -257,7 +257,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
       await db.user.update({
         where: { id: userId },
         data: {
-          email: `deleted-${crypto.randomUUID()}@anonymized`,
+          login: `deleted-${crypto.randomUUID()}`,
           passwordHash: 'ANONYMIZED',
           displayName: null,
           anonymizedAt: now,

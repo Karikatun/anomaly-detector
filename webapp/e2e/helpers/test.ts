@@ -4,11 +4,11 @@ export { expect, test } from '@playwright/test'
 
 export const e2ePassword = 'password123'
 
-export function uniqueEmail(prefix = 'web-e2e') {
+export function uniqueLogin(prefix = 'web-e2e') {
   const timestamp = new Date().toISOString().replace(/[^0-9]/g, '')
   const suffix = Math.random().toString(36).slice(2, 8)
 
-  return `${prefix}-${timestamp}-${suffix}@example.com`
+  return `${prefix}-${timestamp}-${suffix}`
 }
 
 export async function registerBrowserUser(
@@ -17,11 +17,11 @@ export async function registerBrowserUser(
   prefix = 'web-e2e',
   startUrl = '/',
 ) {
-  const email = uniqueEmail(prefix)
+  const login = uniqueLogin(prefix)
   await page.goto(startUrl)
   await page.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }).click()
   await page.getByLabel('Имя').fill(displayName)
-  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль').fill(e2ePassword)
   await page.getByRole('button', { name: 'Регистрация' }).click()
   await expect(page.getByRole('link', { name: 'Комнаты' })).toBeVisible()
@@ -32,5 +32,5 @@ export async function registerBrowserUser(
       ),
     )
     .toBe(true)
-  return { email }
+  return { login }
 }

@@ -2,7 +2,7 @@ import type { UserDto } from '@anomaly-detector/contracts'
 
 export type AuthUserRecord = {
   id: string
-  email: string
+  login: string
   passwordHash: string | null
   displayName: string | null
   locale: string
@@ -16,7 +16,7 @@ export type AuthenticatedPrincipal = UserDto & {
 export function toBaseUserDto(user: AuthUserRecord): UserDto {
   return {
     id: user.id,
-    email: user.email,
+    login: user.login,
     displayName: user.displayName,
     locale: user.locale as 'ru' | 'en',
     createdAt: user.createdAt.toISOString(),

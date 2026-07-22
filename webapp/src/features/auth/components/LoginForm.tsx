@@ -12,19 +12,18 @@ export function LoginForm() {
   const { t } = useI18n()
   const auth = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [email, setEmail] = useState('')
+  const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const emailError = email.length > 0 && (email.length < 5 || !email.includes('@'))
+  const loginError = login.length > 0 && !/^[a-z0-9][a-z0-9_-]{2,63}$/i.test(login)
   const passwordError = password.length > 0 && password.length < 8
   const displayNameError = mode === 'register' && displayName.length > 0 && displayName.trim().length === 0
 
   const isValid =
-    email.length >= 5 &&
-    email.includes('@') &&
+    /^[a-z0-9][a-z0-9_-]{2,63}$/i.test(login) &&
     password.length >= 8 &&
     (mode === 'login' || displayName.trim().length >= 1)
 
@@ -35,14 +34,14 @@ export function LoginForm() {
     try {
       if (mode === 'register') {
         await auth.register({
-          email: email.trim(),
+          login: login.trim(),
           password,
           displayName: displayName.trim(),
           privacyConsent: true,
           ageConfirmation: true,
         })
       } else {
-        await auth.login({ email: email.trim(), password })
+        await auth.login({ login: login.trim(), password })
       }
     } catch (err) {
       setError(
@@ -59,16 +58,16 @@ export function LoginForm() {
     <div className="grid gap-4">
       <FieldGroup className="gap-4">
         <Field>
-          <FieldLabel htmlFor="auth-email">{t('auth.email')}</FieldLabel>
+          <FieldLabel htmlFor="auth-login">{t('auth.loginName')}</FieldLabel>
           <Input
-            id="auth-email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            placeholder="player@example.com"
-            onChange={(e) => { setEmail(e.target.value); setError(null) }}
+            id="auth-login"
+            type="text"
+            autoComplete="username"
+            value={login}
+            placeholder="player_1"
+            onChange={(e) => { setLogin(e.target.value); setError(null) }}
           />
-          {emailError && <FieldError id="auth-email-error" errors={[{ message: t('auth.errors.email') }]} />}
+          {loginError && <FieldError id="auth-login-error" errors={[{ message: t('auth.errors.loginName') }]} />}
         </Field>
 
         <Field>

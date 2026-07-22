@@ -21,7 +21,7 @@ import {
 
 const validUser = {
   id: 'user_1',
-  email: 'user@example.com',
+  login: 'user',
   displayName: null,
   locale: 'ru' as const,
   createdAt: '2026-05-11T00:00:00.000Z',
@@ -31,14 +31,14 @@ describe('auth contracts', () => {
   test('normalizes registration and login input', () => {
     expect(
       registerRequestSchema.parse({
-        email: ' USER@Example.COM ',
+        login: ' USER_1 ',
         password: 'password123',
         displayName: ' Jane ',
         privacyConsent: true,
         ageConfirmation: true,
       }),
     ).toEqual({
-      email: 'user@example.com',
+      login: 'user_1',
       password: 'password123',
       displayName: 'Jane',
       privacyConsent: true,
@@ -47,14 +47,14 @@ describe('auth contracts', () => {
 
     expect(
       registerRequestSchema.parse({
-        email: 'user@example.com',
+        login: 'user',
         password: 'password123',
         displayName: '',
         privacyConsent: true,
         ageConfirmation: true,
       }),
     ).toEqual({
-      email: 'user@example.com',
+      login: 'user',
       password: 'password123',
       displayName: undefined,
       privacyConsent: true,
@@ -63,11 +63,11 @@ describe('auth contracts', () => {
 
     expect(
       loginRequestSchema.parse({
-        email: ' USER@Example.COM ',
+        login: ' USER_1 ',
         password: 'password123',
       }),
     ).toEqual({
-      email: 'user@example.com',
+      login: 'user_1',
       password: 'password123',
     })
   })
@@ -75,7 +75,7 @@ describe('auth contracts', () => {
   test('rejects invalid auth request payloads', () => {
     expect(() =>
       registerRequestSchema.parse({
-        email: 'not-an-email',
+        login: 'not a login',
         password: 'short',
         displayName: 'A',
         privacyConsent: true,
@@ -85,7 +85,7 @@ describe('auth contracts', () => {
 
     expect(() =>
       registerRequestSchema.parse({
-        email: 'user@example.com',
+        login: 'user',
         password: 'short',
         privacyConsent: true,
         ageConfirmation: true,
@@ -94,7 +94,7 @@ describe('auth contracts', () => {
 
     expect(() =>
       loginRequestSchema.parse({
-        email: 'user@example.com',
+        login: 'user',
         password: 'short',
       }),
     ).toThrow()
@@ -102,7 +102,7 @@ describe('auth contracts', () => {
     // Rejects missing privacy consent
     expect(() =>
       registerRequestSchema.parse({
-        email: 'user@example.com',
+        login: 'user',
         password: 'password123',
         ageConfirmation: true,
       }),
@@ -111,7 +111,7 @@ describe('auth contracts', () => {
     // Rejects missing age confirmation
     expect(() =>
       registerRequestSchema.parse({
-        email: 'user@example.com',
+        login: 'user',
         password: 'password123',
         privacyConsent: true,
       }),
@@ -120,7 +120,7 @@ describe('auth contracts', () => {
     // Rejects falsy consent values
     expect(() =>
       registerRequestSchema.parse({
-        email: 'user@example.com',
+        login: 'user',
         password: 'password123',
         privacyConsent: false,
         ageConfirmation: true,
@@ -129,7 +129,7 @@ describe('auth contracts', () => {
 
     expect(() =>
       registerRequestSchema.parse({
-        email: 'user@example.com',
+        login: 'user',
         password: 'password123',
         privacyConsent: true,
         ageConfirmation: false,
@@ -206,14 +206,14 @@ describe('auth contracts', () => {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Invalid request payload',
-          details: [{ path: ['email'], message: 'Invalid email address' }],
+          details: [{ path: ['login'], message: 'Invalid login' }],
         },
       }),
     ).toEqual({
       error: {
         code: 'VALIDATION_ERROR',
         message: 'Invalid request payload',
-        details: [{ path: ['email'], message: 'Invalid email address' }],
+        details: [{ path: ['login'], message: 'Invalid login' }],
       },
     })
 

@@ -4,7 +4,7 @@ import { AuthFailure } from '../domain/errors'
 export function toAuthAppError(error: unknown) {
   if (!(error instanceof AuthFailure)) return error
 
-  if (error.kind === 'email_already_exists') {
+  if (error.kind === 'login_already_exists') {
     return new AppError(409, 'CONFLICT', error.message)
   }
 

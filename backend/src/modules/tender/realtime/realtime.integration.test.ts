@@ -66,11 +66,11 @@ maybeDescribe('realtime websocket integration', () => {
   const wsPath = '/api/realtime/ws'
   const wsUrl = `ws://127.0.0.1:${server.port}${wsPath}`
 
-  const register = async (email: string) => {
+  const register = async (login: string) => {
     const response = await fetch(`${baseUrl}/api/auth/token/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: 'password123', privacyConsent: true, ageConfirmation: true }),
+      body: JSON.stringify({ login, password: 'password123', privacyConsent: true, ageConfirmation: true }),
     })
     expect(response.status).toBe(201)
     return response.json() as Promise<{ accessToken: string; user: { id: string } }>
@@ -126,8 +126,8 @@ maybeDescribe('realtime websocket integration', () => {
   })
 
   test('streams participant-scoped tender views and burns one-time tickets', async () => {
-    const host = await register('ws-host@example.com')
-    const joiner = await register('ws-joiner@example.com')
+    const host = await register('ws-host')
+    const joiner = await register('ws-joiner')
     const { tenderId } = await tender.createTender({
       players: [
         { id: host.user.id, tiePriority: 1 },

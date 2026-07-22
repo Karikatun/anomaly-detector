@@ -26,7 +26,7 @@ describe('requireAuth middleware', () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
-      email: 'user@example.com',
+      login: 'user',
       sessionId: 'session-1',
       userId: 'user-1',
     })
@@ -42,7 +42,7 @@ function createProtectedTestApp() {
 
     return {
       id: 'user-1',
-      email: 'user@example.com',
+      login: 'user',
       displayName: null,
   locale: 'ru',
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -54,7 +54,7 @@ function createProtectedTestApp() {
   app.get('/protected', (c) => {
     const user = c.var.user
     return c.json({
-      email: user.email,
+      login: user.login,
       sessionId: user.sessionId,
       userId: user.id,
     })

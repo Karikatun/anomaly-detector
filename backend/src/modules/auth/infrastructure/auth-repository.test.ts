@@ -12,7 +12,7 @@ test('creates a password user and initial session inside one database transactio
         operations.push('user')
         return {
           id: 'user-1',
-          email: 'user@example.com',
+          login: 'user',
           passwordHash: 'password-hash',
           displayName: null,
   locale: 'ru',
@@ -34,7 +34,7 @@ test('creates a password user and initial session inside one database transactio
 
   const result = await createPrismaAuthRepository(db).createPasswordUserWithSession({
     user: {
-      email: 'user@example.com',
+      login: 'user',
       password: 'password123',
       passwordHash: 'password-hash',
       displayName: undefined,

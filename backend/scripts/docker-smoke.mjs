@@ -119,7 +119,7 @@ async function waitForHealth() {
 
 async function smokeAuthApi() {
   const baseUrl = `http://127.0.0.1:${hostPort}`
-  const email = `docker-smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
+  const login = `docker-smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
   const register = await fetch(`${baseUrl}/api/auth/token/register`, {
     method: 'POST',
@@ -127,7 +127,7 @@ async function smokeAuthApi() {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      email,
+      login,
       password: 'password123',
       displayName: 'Docker Smoke',
     }),

@@ -34,9 +34,9 @@ export class AuthService {
   constructor(private readonly dependencies: AuthServiceDependencies) {}
 
   async register(input: RegisterPayload, metadata: SessionMetadata) {
-    const existingUser = await this.dependencies.repository.findUserByEmail(input.email)
+    const existingUser = await this.dependencies.repository.findUserByLogin(input.login)
     if (existingUser) {
-      throw new AuthFailure('email_already_exists', 'User with this email already exists')
+      throw new AuthFailure('login_already_exists', 'User with this login already exists')
     }
 
     const passwordHash = await this.dependencies.passwords.hash(input.password)
@@ -131,7 +131,7 @@ export class AuthService {
     } else {
       const created = await this.dependencies.repository.createOAuthUserWithSession({
         user: {
-          email: userInfo.email,
+          login: oauthLogin(transaction.provider),
           displayName: userInfo.displayName ?? null,
         },
         identity: {
@@ -158,12 +158,12 @@ export class AuthService {
   }
 
   async login(input: LoginRequest, metadata: SessionMetadata) {
-    const user = await this.dependencies.repository.findUserByEmail(input.email)
+    const user = await this.dependencies.repository.findUserByLogin(input.login)
     if (
       !user?.passwordHash ||
       !(await this.dependencies.passwords.verify(input.password, user.passwordHash))
     ) {
-      throw new AuthFailure('invalid_credentials', 'Invalid email or password')
+      throw new AuthFailure('invalid_credentials', 'Invalid login or password')
     }
 
     return this.issueSession(user, metadata)
@@ -249,7 +249,7 @@ export class AuthService {
     return {
       accessToken: await this.dependencies.accessTokens.sign({
         sub: session.user.id,
-        email: session.user.email,
+        login: session.user.login,
         sessionId: session.id,
       }),
       refreshToken,
@@ -336,7 +336,7 @@ export class AuthService {
       user: await this.dependencies.projectUser(user),
       accessToken: await this.dependencies.accessTokens.sign({
         sub: user.id,
-        email: user.email,
+        login: user.login,
         sessionId,
       }),
       refreshToken,
@@ -374,4 +374,8 @@ function decodeWebappOrigin(state: string) {
   } catch {
     return null
   }
+}
+
+function oauthLogin(provider: OAuthProviderId) {
+  return `oauth-${provider}-${crypto.randomUUID().replaceAll('-', '')}`
 }
