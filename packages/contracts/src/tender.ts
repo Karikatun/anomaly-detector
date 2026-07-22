@@ -187,6 +187,7 @@ export const publicContractSchema = z.object({
   contractId: contractIdSchema,
   requiredPublicResult: publicResultSchema,
   reservedByPlayerId: playerIdSchema.optional(),
+  targetSignal: signalIdSchema.optional(),
 }).strict()
 
 export const publicLaboratoryResultSchema = z.object({
@@ -238,7 +239,6 @@ export const tenderViewSchema = z.object({
   phase: tenderPhaseSchema,
   dueAt: z.string().datetime().nullable().optional(),
   players: z.array(tenderPlayerViewSchema),
-  privateAnalyticalReports: z.number().int().min(0),
   privateRawTelemetrySignals: z.array(signalIdSchema),
   privateSamples: z.array(signalIdSchema),
   privateMeasurements: z.array(privateMeasurementSchema),

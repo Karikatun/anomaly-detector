@@ -13,7 +13,6 @@ import type {
 type PersistedTenderState = Pick<
   StoredTender,
   | 'accessSlots'
-  | 'analyticalReportsByPlayer'
   | 'anomalyConfiguration'
   | 'budgetByPlayer'
   | 'corporateTrustByPlayer'
@@ -43,7 +42,6 @@ type PersistedTenderState = Pick<
 
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   accessSlots: tender.accessSlots,
-  analyticalReportsByPlayer: tender.analyticalReportsByPlayer,
   anomalyConfiguration: tender.anomalyConfiguration,
   budgetByPlayer: tender.budgetByPlayer,
   corporateTrustByPlayer: tender.corporateTrustByPlayer,
@@ -87,7 +85,6 @@ const toStoredTender = (record: {
   const state = record.state as PersistedTenderState
   return {
     accessSlots: state.accessSlots,
-    analyticalReportsByPlayer: state.analyticalReportsByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 1])),
     anomalyConfiguration: state.anomalyConfiguration,
     budgetByPlayer: state.budgetByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 2])),
     corporateTrustByPlayer: state.corporateTrustByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 0])),
@@ -101,7 +98,7 @@ const toStoredTender = (record: {
     phase: record.phase as TenderPhase,
     powerAllocations: state.powerAllocations ?? {},
     publicContracts: state.publicContracts ?? createDefaultContracts(state.players.length),
-    publicFinalContract: state.publicFinalContract ?? { contractId: 'final-contract', requiredPublicResult: 'reflection' },
+    publicFinalContract: state.publicFinalContract ?? { contractId: 'final-contract', requiredPublicResult: 'reflection', targetSignal: 'ferro' },
     publicLaboratoryResults: state.publicLaboratoryResults ?? [],
     publicTheses: state.publicTheses ?? [],
     ratingByPlayer: state.ratingByPlayer ?? {},
@@ -121,11 +118,14 @@ const toStoredTender = (record: {
   }
 }
 
+const defaultContractSignalIds = ['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'] as const
+
 function createDefaultContracts(playerCount: number) {
   const requiredPublicResults = ['reflection', 'attenuation', 'transmission_gain', 'unstable_collapse'] as const
   return Array.from({ length: playerCount + 1 }, (_, index) => ({
     contractId: `round-1-contract-${index + 1}`,
     requiredPublicResult: requiredPublicResults[index % requiredPublicResults.length],
+    targetSignal: defaultContractSignalIds[index % defaultContractSignalIds.length],
   }))
 }
 
