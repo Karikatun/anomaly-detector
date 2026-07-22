@@ -63,6 +63,7 @@ const envSchema = z.object({
   YANDEX_OAUTH_CLIENT_SECRET: optionalStringSchema,
   VK_OAUTH_CLIENT_ID: optionalStringSchema,
   VK_OAUTH_CLIENT_SECRET: optionalStringSchema,
+  OAUTH_CALLBACK_BASE_URL: optionalUrlSchema,
   SPACES_REGION: optionalStringSchema,
   SPACES_BUCKET: optionalStringSchema,
   SPACES_ENDPOINT: optionalUrlSchema,
@@ -79,6 +80,7 @@ const envSchema = z.object({
   validateCorsOrigins(env, ctx)
   validateSessionTtls(env, ctx)
   validateTrustedProxy(env, ctx)
+  validateOAuth(env, ctx)
   validateStorageEnv(env, ctx)
 })
 
@@ -237,6 +239,38 @@ function validateStorageEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx
         message: `${key} is required when DigitalOcean Spaces storage is configured`,
       })
     }
+  }
+}
+
+function validateOAuth(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  const oauthConfigured = Boolean(
+    (env.YANDEX_OAUTH_CLIENT_ID && env.YANDEX_OAUTH_CLIENT_SECRET)
+      || (env.VK_OAUTH_CLIENT_ID && env.VK_OAUTH_CLIENT_SECRET),
+  )
+  if (!oauthConfigured) return
+  if (!env.OAUTH_CALLBACK_BASE_URL) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['OAUTH_CALLBACK_BASE_URL'],
+      message: 'OAUTH_CALLBACK_BASE_URL is required when an OAuth provider is configured',
+    })
+    return
+  }
+
+  const callbackBaseUrl = new URL(env.OAUTH_CALLBACK_BASE_URL)
+  if (callbackBaseUrl.origin !== env.OAUTH_CALLBACK_BASE_URL) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['OAUTH_CALLBACK_BASE_URL'],
+      message: 'OAUTH_CALLBACK_BASE_URL must contain an origin only, not a path',
+    })
+  }
+  if ((env.COOKIE_SECURE || env.NODE_ENV === 'production') && callbackBaseUrl.protocol !== 'https:') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['OAUTH_CALLBACK_BASE_URL'],
+      message: 'OAUTH_CALLBACK_BASE_URL must use HTTPS in production',
+    })
   }
 }
 

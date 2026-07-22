@@ -172,4 +172,18 @@ describe('loadEnv', () => {
       }),
     ).not.toThrow()
   })
+
+  test('requires a fixed public callback origin when OAuth is enabled', () => {
+    const oauthEnv = {
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
+      JWT_SECRET: '12345678901234567890123456789012',
+      YANDEX_OAUTH_CLIENT_ID: 'client-id',
+      YANDEX_OAUTH_CLIENT_SECRET: 'client-secret',
+    }
+
+    expect(() => loadEnv(oauthEnv)).toThrow('OAUTH_CALLBACK_BASE_URL')
+    expect(() => loadEnv({ ...oauthEnv, OAUTH_CALLBACK_BASE_URL: 'https://api.example.com/path' }))
+      .toThrow('OAUTH_CALLBACK_BASE_URL')
+    expect(() => loadEnv({ ...oauthEnv, OAUTH_CALLBACK_BASE_URL: 'https://api.example.com' })).not.toThrow()
+  })
 })
