@@ -88,12 +88,25 @@ export function RoomLobbyPage() {
 
   const handleCopy = useCallback(async () => {
     try {
+      // Try modern clipboard API first (requires secure context or localhost)
       await navigator.clipboard.writeText(roomId)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Clipboard API not available — user can select and copy manually
+      // Fallback for HTTP origins (e.g. LAN IP access)
+      const textarea = document.createElement('textarea')
+      textarea.value = roomId
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      try {
+        document.execCommand('copy')
+      } catch {
+        // Copy failed silently — user can still select the text manually
+      }
+      document.body.removeChild(textarea)
     }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }, [roomId])
 
   const handleJoin = useCallback(async () => {
