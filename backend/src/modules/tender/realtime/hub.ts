@@ -16,6 +16,7 @@ type Subscription = {
   playerId: string
   socket: RealtimeSocket
   tenderId: string
+  version: number
 }
 
 type RealtimeHubOptions = {
@@ -37,6 +38,20 @@ export function createRealtimeHub({ onTenderChanged, tender }: RealtimeHubOption
         playerId: subscription.playerId,
         tenderId: subscription.tenderId,
       })
+      subscription.version = view.version
+      deliver(subscription.socket, { type: 'tender-view', view })
+    }))
+  }
+
+  const syncActiveTenders = async () => {
+    await Promise.all([...subscriptions].map(async (subscription) => {
+      const view = await tender.readTenderView({
+        playerId: subscription.playerId,
+        tenderId: subscription.tenderId,
+      })
+      if (view.version === subscription.version) return
+
+      subscription.version = view.version
       deliver(subscription.socket, { type: 'tender-view', view })
     }))
   }
@@ -58,6 +73,7 @@ export function createRealtimeHub({ onTenderChanged, tender }: RealtimeHubOption
         playerId: input.playerId,
         socket: input.socket,
         tenderId: input.tenderId,
+        version: view.version,
       }
       subscriptions.add(subscription)
       deliver(input.socket, { type: 'tender-view', view })
@@ -69,6 +85,18 @@ export function createRealtimeHub({ onTenderChanged, tender }: RealtimeHubOption
     },
     tenderChanged(tenderId: string) {
       onTenderChanged?.(tenderId)
+    },
+    syncActiveTenders,
+    startSyncLoop(intervalMs: number = 1_000): () => void {
+      let syncing = false
+      const timer = setInterval(() => {
+        if (syncing) return
+        syncing = true
+        void syncActiveTenders()
+          .catch((error) => console.error('Realtime Tender sync failed:', error))
+          .finally(() => { syncing = false })
+      }, intervalMs)
+      return () => clearInterval(timer)
     },
   }
 }

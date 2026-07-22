@@ -23,6 +23,8 @@ type TenderModule = {
 
 `advanceDueTenders` is called by the worker for deadlines and reconnection-safe timeout resolution. It owns timer consequences and writes the corresponding audit records; adapters must not resolve timeouts themselves.
 
+The API's realtime hub synchronises the versions of actively subscribed Tenders from the shared store. This lets clients receive a timeout update when a separate worker performed the commit; it is a delivery mechanism only and does not implement or duplicate game rules.
+
 The initial in-memory implementation establishes this public interface for TDD. Milestone 1 replaces its storage with PostgreSQL and an audit log without changing the interface shape.
 
 ## Internal Persistence Seam

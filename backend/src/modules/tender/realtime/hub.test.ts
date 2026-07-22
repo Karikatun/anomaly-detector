@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { createTenderModule } from '../index'
+import { createInMemoryTenderStore } from '../infrastructure/in-memory-tender-store'
 import { createRealtimeHub, type RealtimeSocket } from './hub'
 
 const players = [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }]
@@ -85,6 +86,25 @@ describe('realtime hub', () => {
     expect(messages).toHaveLength(2)
     const view = JSON.parse(messages[1]).view
     expect(view.phase).not.toBe('access-slot-selection')
+  })
+
+  test('synchronises an externally advanced Tender without a local change callback', async () => {
+    let now = new Date('2026-07-21T12:00:00Z')
+    const store = createInMemoryTenderStore()
+    const apiTender = createTenderModule({ now: () => now, store })
+    const workerTender = createTenderModule({ now: () => now, store })
+    const { tenderId } = await apiTender.createTender({ players })
+    const hub = createRealtimeHub({ tender: apiTender })
+    const { messages, socket } = collectSocket()
+    await hub.subscribe({ playerId: 'player-a', socket, tenderId })
+
+    now = new Date(now.getTime() + 60_000)
+    expect(await workerTender.advanceDueTenders({ limit: 10, now })).toEqual({ advancedTenderIds: [tenderId] })
+
+    await hub.syncActiveTenders()
+
+    expect(messages).toHaveLength(2)
+    expect(JSON.parse(messages[1]).view.phase).toBe('power-allocation')
   })
 
   test('stops notifying an unsubscribed socket', async () => {
