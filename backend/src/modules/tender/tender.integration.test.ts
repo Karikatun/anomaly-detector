@@ -109,6 +109,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     const restartedModule = createTenderModule({ store: restartedStore })
 
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
+      dueAt: expect.any(String),
       knownSignals: ['aster', 'boreal'],
       publicContracts: [
         { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
@@ -122,8 +123,8 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       version: 1,
       phase: 'access-slot-selection',
       players: [
-        { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
-        { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-b', rating: 0 },
+        { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-a', playerId: 'player-a', rating: 0, requestedAccessSlot: 1 },
+        { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-b', playerId: 'player-b', rating: 0 },
       ],
       privateAnalyticalReports: 1,
       privateRawTelemetrySignals: ['aster'],
@@ -263,6 +264,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
 
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toEqual({
+      dueAt: expect.any(String),
       knownSignals: ['aster', 'boreal'],
       publicContracts: [
         { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
@@ -278,10 +280,10 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       version: 4,
       phase: 'power-allocation',
       players: [
-        { accessSlot: 1, budget: 0, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-a', rating: 0 },
-        { accessSlot: 3, budget: 2, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-b', rating: 0 },
-        { accessSlot: 2, budget: 1, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-c', rating: 0 },
-        { accessSlot: 6, budget: 3, contractPowerRestriction: 0, corporateTrust: 0, playerId: 'player-d', rating: 0 },
+        { accessSlot: 1, budget: 0, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-a', playerId: 'player-a', rating: 0 },
+        { accessSlot: 3, budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-b', playerId: 'player-b', rating: 0 },
+        { accessSlot: 2, budget: 1, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-c', playerId: 'player-c', rating: 0 },
+        { accessSlot: 6, budget: 3, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-d', playerId: 'player-d', rating: 0 },
       ],
       privateAnalyticalReports: 1,
       privateRawTelemetrySignals: ['aster'],
