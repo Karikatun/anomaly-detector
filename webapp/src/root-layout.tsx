@@ -1,4 +1,4 @@
-import { Link, Outlet } from '@tanstack/react-router'
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,10 @@ import { useI18n } from '@/platform/i18n'
 export function RootLayout() {
   const auth = useAuth()
   const { t } = useI18n()
+  const navigate = useNavigate()
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
   const [logoutFailed, setLogoutFailed] = useState(false)
+  const isInTender = pathname.startsWith('/tenders/')
 
   const logout = async () => {
     setLogoutFailed(false)
@@ -28,14 +31,26 @@ export function RootLayout() {
             <Typography asChild variant="h6">
               <Link to="/">{t('app.logo')}</Link>
             </Typography>
-            <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
-              <Button type="button" variant="ghost" size="sm" asChild>
-                <Link to="/rooms">{t('nav.rooms')}</Link>
+            {isInTender ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() => void navigate({ to: '/rooms' })}
+              >
+                {t('nav.leaveMatch')}
               </Button>
-              <Button type="button" variant="ghost" size="sm" asChild>
-                <Link to="/app">{t('nav.matches')}</Link>
-              </Button>
-            </nav>
+            ) : (
+              <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
+                <Button type="button" variant="ghost" size="sm" asChild>
+                  <Link to="/rooms">{t('nav.rooms')}</Link>
+                </Button>
+                <Button type="button" variant="ghost" size="sm" asChild>
+                  <Link to="/app">{t('nav.matches')}</Link>
+                </Button>
+              </nav>
+            )}
             <Button type="button" variant="outline" size="sm" onClick={() => void logout()}>
               {t('button.logout')}
             </Button>
