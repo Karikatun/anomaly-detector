@@ -329,22 +329,24 @@ export function TenderPage() {
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Badge variant="outline" className="tracking-widest uppercase">Раунд {tenderView.round} / 5</Badge>
+      <div className="grid gap-3">
         <Typography variant="h3">{phase}</Typography>
-        <TenderTimer dueAt={tenderView.dueAt} />
-        {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}
-        {isSequentialPhase && (
-          <Badge variant={isMyTurn ? 'default' : 'outline'}>
-            {isMyTurn ? 'Ваш ход' : `Ход: ${activePlayer?.displayName ?? 'игрока'}`}
-          </Badge>
-        )}
-        <div className="ml-auto flex items-center gap-3">
-          {connected ? (
-            <Badge variant="outline">Live</Badge>
-          ) : (
-            <Badge variant="outline" className="text-amber-400">Reconnecting...</Badge>
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge variant="outline" className="tracking-widest uppercase">Раунд {tenderView.round} / 5</Badge>
+          <TenderTimer dueAt={tenderView.dueAt} />
+          {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}
+          {isSequentialPhase && (
+            <Badge variant={isMyTurn ? 'default' : 'outline'}>
+              {isMyTurn ? 'Ваш ход' : `Ход: ${activePlayer?.displayName ?? 'игрока'}`}
+            </Badge>
           )}
+          <div className="ml-auto flex items-center gap-3">
+            {connected ? (
+              <Badge variant="outline">Live</Badge>
+            ) : (
+              <Badge variant="outline" className="text-amber-400">Reconnecting...</Badge>
+            )}
+          </div>
         </div>
       </div>
 
