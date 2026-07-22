@@ -37,6 +37,7 @@ export function AccessSlotPanel({ disabled, error, onConfirm }: AccessSlotPanelP
                 type="button"
                 variant={isSelected ? 'default' : 'outline'}
                 size="lg"
+                aria-label={`Слот доступа ${slot}: ${slotLabels[i]}`}
                 className="flex h-auto flex-col gap-1 py-4"
                 disabled={disabled}
                 onClick={() => setSelected(slot)}

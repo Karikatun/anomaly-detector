@@ -74,8 +74,8 @@ The webapp E2E flow:
 - starts the backend on `E2E_BACKEND_PORT`, which defaults to a repository-derived port;
 - starts Vite on `E2E_WEB_PORT`, which defaults to a repository-derived port;
 - stops its `postgres_test` compose project and removes the test volume after the run unless `E2E_KEEP_DOCKER=1` is set;
-- runs the auth smoke path: client validation visibility -> register/login mode switching -> register -> cookie refresh after reload -> protected route -> logout -> invalid login error -> successful login;
-- restores one logical browser session concurrently in two tabs, propagates confirmed logout and bootstrap-error recovery, and converges both tabs on the winning session after competing account changes.
+- runs the browser authentication journey: registration, session restoration after reload, protected profile, logout, and login;
+- runs a two-player Tender journey: room creation, joining by room ID, start, access-slot selection, and real-time transition to the next phase.
 
 Useful env:
 

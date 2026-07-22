@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { RoomView } from '@anomaly-detector/contracts'
 
@@ -26,6 +26,7 @@ export function RoomLobbyPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const initialJoinRequest = useRef<{ roomId: string; promise: Promise<RoomView> } | null>(null)
 
   useEffect(() => {
     if (!auth.isBootstrapping && !auth.user) {
@@ -41,9 +42,15 @@ export function RoomLobbyPage() {
   useEffect(() => {
     let cancelled = false
 
+    const request = initialJoinRequest.current?.roomId === roomId
+      ? initialJoinRequest.current.promise
+      : api.join(roomId)
+
+    initialJoinRequest.current = { roomId, promise: request }
+
     const fetchRoom = async () => {
       try {
-        const data = await api.join(roomId)
+        const data = await request
         if (!cancelled) {
           setRoom(data)
           setLoading(false)

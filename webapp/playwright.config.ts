@@ -31,6 +31,10 @@ const backendEnv = normalizeEnv({
     process.env.JWT_SECRET ?? 'web-e2e-secret-at-least-thirty-two-characters',
   CORS_ORIGINS: [frontendUrl, 'http://localhost:5173'].join(','),
   COOKIE_SECURE: 'false',
+  YANDEX_OAUTH_CLIENT_ID: '',
+  YANDEX_OAUTH_CLIENT_SECRET: '',
+  VK_OAUTH_CLIENT_ID: '',
+  VK_OAUTH_CLIENT_SECRET: '',
 })
 
 export default defineConfig({
