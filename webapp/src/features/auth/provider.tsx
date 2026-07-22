@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import type { LoginRequest, RegisterRequest } from '@anomaly-detector/contracts'
+import type { LoginRequest, OAuthProviderId, RegisterRequest } from '@anomaly-detector/contracts'
 import {
   type PropsWithChildren,
   useCallback,
@@ -132,6 +132,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
     [loginAsync],
   )
 
+  const startOAuth = useCallback(
+    async (provider: OAuthProviderId) => {
+      await api.startOAuth(provider)
+    },
+    [api],
+  )
+
   const logout = useCallback(async () => {
     await logoutAsync()
   }, [logoutAsync])
@@ -165,10 +172,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       transport,
       register,
       login,
+      startOAuth,
       logout,
       updateProfile,
     }),
-    [isBootstrapping, login, logout, meQuery.data?.user, register, retrySession, sessionError, transport, updateProfile],
+    [isBootstrapping, login, logout, meQuery.data?.user, register, retrySession, sessionError, startOAuth, transport, updateProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

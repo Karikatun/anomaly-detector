@@ -27,7 +27,6 @@ const ru = {
   'oauth.yandex': 'Яндекс ID',
   'oauth.vk': 'VK ID',
   'oauth.redirecting': 'Перенаправляем...',
-  'oauth.error.network': 'Не удалось связаться с сервером. OAuth работает только с localhost.',
   'oauth.error.server': 'Ошибка сервера. Попробуйте позже.',
 
   // App page

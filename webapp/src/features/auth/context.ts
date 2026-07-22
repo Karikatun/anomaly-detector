@@ -1,4 +1,4 @@
-import type { LoginRequest, RegisterRequest, UserDto } from '@anomaly-detector/contracts'
+import type { LoginRequest, OAuthProviderId, RegisterRequest, UserDto } from '@anomaly-detector/contracts'
 import { createContext } from 'react'
 import type { AuthenticatedTransport } from '@/platform/api'
 
@@ -11,6 +11,7 @@ export type AuthContextValue = {
   transport: AuthenticatedTransport
   register: (input: RegisterRequest) => Promise<void>
   login: (input: LoginRequest) => Promise<void>
+  startOAuth: (provider: OAuthProviderId) => Promise<void>
   logout: () => Promise<void>
   updateProfile: (input: { displayName: string }) => Promise<void>
 }
