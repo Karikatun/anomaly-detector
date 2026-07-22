@@ -162,6 +162,9 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await submitFinalModel(guestPage)
     await expect(page.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
+    await expect(page.getByText('Итоговый рейтинг', { exact: true })).toBeVisible()
+    await expect(page.getByText('Хост E2E', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText(/(Инерционное|Электромагнитное|Фазовое) \/ (Позитив \(\+\)|Негатив \(−\))/).first()).toBeVisible()
   } finally {
     await guestContext.close()
   }
