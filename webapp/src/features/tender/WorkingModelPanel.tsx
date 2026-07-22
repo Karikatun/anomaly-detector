@@ -4,6 +4,7 @@ import type { WorkingModel } from '@anomaly-detector/contracts'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
+import { useI18n } from '@/platform/i18n'
 
 const signals = ['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'] as const
 const signalNames: Record<string, string> = {
@@ -12,9 +13,6 @@ const signalNames: Record<string, string> = {
 }
 
 const fieldTypes = ['inertial', 'electromagnetic', 'phase'] as const
-const ftLabels: Record<string, string> = {
-  inertial: 'Инерц.', electromagnetic: 'Эл-магн.', phase: 'Фазов.',
-}
 const polarities = ['positive', 'negative'] as const
 
 type MarkerState = 'unset' | 'possible' | 'excluded'
@@ -35,6 +33,7 @@ type WorkingModelPanelProps = {
 }
 
 export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: WorkingModelPanelProps) {
+  const { t } = useI18n()
   const [draft, setDraft] = useState<WorkingModel>(model)
   const draftRef = useRef(draft)
   draftRef.current = draft
@@ -152,7 +151,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
 
               {/* Field types */}
               <div>
-                <Typography variant="control" tone="muted" className="mb-1">Тип поля</Typography>
+                <Typography variant="control" tone="muted" className="mb-1">{t('tender.model.fieldType')}</Typography>
                 <div className="flex gap-1">
                   {fieldTypes.map((ft) => {
                     const marker: MarkerState = (cell?.excludedFieldTypes?.includes(ft) ?? false)
@@ -174,7 +173,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
                         }`}
                         onClick={() => { if (!isHyp) toggleFieldType(signal, ft, marker, isExcluded) }}
                       >
-                        {ftLabels[ft]}
+                        {t(`tender.fieldShort.${ft}`)}
                       </button>
                     )
                   })}
@@ -183,7 +182,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
 
               {/* Polarities */}
               <div>
-                <Typography variant="control" tone="muted" className="mb-1">Полярность</Typography>
+                <Typography variant="control" tone="muted" className="mb-1">{t('tender.model.polarity')}</Typography>
                 <div className="flex gap-1">
                   {polarities.map((pol) => {
                     const marker: MarkerState = (cell?.excludedPolarities?.includes(pol) ?? false)
@@ -214,7 +213,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
 
               {/* Hypothesis */}
               <div>
-                <Typography variant="control" tone="muted" className="mb-1">Гипотеза</Typography>
+                <Typography variant="control" tone="muted" className="mb-1">{t('tender.model.hypothesis')}</Typography>
                 <div className="grid grid-cols-2 gap-1">
                   <div className="grid gap-0.5">
                     {fieldTypes.map((ft) => (
@@ -229,7 +228,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
                         }`}
                         onClick={() => setHypothesis(signal, 'fieldType', ft)}
                       >
-                        {ftLabels[ft]}
+                        {t(`tender.fieldShort.${ft}`)}
                       </button>
                     ))}
                   </div>
@@ -256,7 +255,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
               {/* Note */}
               <input
                 type="text"
-                placeholder="Заметка..."
+                placeholder={t('tender.model.notePlaceholder')}
                 className="w-full rounded border bg-transparent px-2 py-1 text-xs text-muted-foreground"
                 value={cell?.note ?? ''}
                 disabled={disabled}
