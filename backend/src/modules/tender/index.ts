@@ -557,12 +557,18 @@ export function createTenderModule({
             + (claim.fieldType === actual.fieldType ? 1 : 0)
             + (claim.polarity === actual.polarity ? 1 : 0)
         }, 0)
+        const correctSignals = signalIds.reduce((score, signalId) => {
+          const claim = command.scientificModel.signals[signalId]
+          const actual = tender.anomalyConfiguration.signals[signalId]
+          return score + Number(claim?.fieldType === actual.fieldType && claim.polarity === actual.polarity)
+        }, 0)
         const isCompleteModel = signalIds.every((signalId) => {
           const claim = command.scientificModel.signals[signalId]
           const actual = tender.anomalyConfiguration.signals[signalId]
           return claim?.fieldType === actual.fieldType && claim.polarity === actual.polarity
         })
-        const ratingAward = correctProperties + (isCompleteModel ? completeScientificModelBonus : 0)
+        const completeModelBonus = isCompleteModel ? completeScientificModelBonus : 0
+        const ratingAward = correctProperties + correctSignals + completeModelBonus
         const ratingByPlayer = {
           ...tender.ratingByPlayer,
           [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + ratingAward,
@@ -582,7 +588,7 @@ export function createTenderModule({
             actorId: command.actorId,
             commandId: command.commandId,
             kind: 'scientific_model_scored',
-            payload: { correctProperties, isCompleteModel, playerId: player.id, ratingAward, scientificModel: command.scientificModel },
+            payload: { completeModelBonus, correctProperties, correctSignals, isCompleteModel, playerId: player.id, ratingAward, scientificModel: command.scientificModel },
           }],
           command,
           commandFingerprint,

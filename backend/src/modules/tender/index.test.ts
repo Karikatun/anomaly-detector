@@ -249,6 +249,44 @@ test('completes five rounds for every supported player count when all players re
   }
 })
 
+test('awards property points, completed Signal points, and the complete-model bonus at final audit', async () => {
+  const now = new Date('2026-07-20T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now, seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }],
+  })
+  let dueAt = now
+  for (let round = 1; round <= 5; round += 1) {
+    dueAt = new Date(dueAt.getTime() + 45_000)
+    await tender.advanceDueTenders({ limit: 10, now: dueAt })
+    dueAt = new Date(dueAt.getTime() + 60_000)
+    await tender.advanceDueTenders({ limit: 10, now: dueAt })
+  }
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'final-model-a',
+    tenderId,
+    type: 'submit-scientific-model',
+    scientificModel: {
+      signals: {
+        aster: { fieldType: 'inertial', polarity: 'negative' },
+        boreal: { fieldType: 'inertial', polarity: 'positive' },
+        cinder: { fieldType: 'electromagnetic', polarity: 'negative' },
+        delta: { fieldType: 'phase', polarity: 'negative' },
+        eclipse: { fieldType: 'electromagnetic', polarity: 'positive' },
+        ferro: { fieldType: 'phase', polarity: 'positive' },
+      },
+    },
+  })
+
+  const finalModelView = await tender.readTenderView({ tenderId, playerId: 'player-a' })
+  expect(finalModelView).toMatchObject({
+    phase: 'final-scientific-model',
+  })
+  expect(finalModelView.players.find((player) => player.playerId === 'player-a')).toMatchObject({ rating: 21 })
+})
+
 test('skips an unresolved operational action when its deadline expires', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })
