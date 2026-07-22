@@ -49,6 +49,26 @@ test('acquires deterministic Samples from Unknown Sectors for use in the same ro
   await expect(tender.execute({ actorId: 'player-a', commandId: 'lab-a-1', protocol: 'continuous', receiverSignal: 'eclipse', sourceSignal: 'delta', tenderId, type: 'run-laboratory-test' })).resolves.toMatchObject({ tenderId })
 })
 
+test('writes Continuous tests to the public Scientific Journal while keeping private telemetry player-scoped', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({ players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }] })
+  await tender.execute({ actorId: 'player-a', commandId: 'slot-a', slot: 1, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-b', commandId: 'slot-b', slot: 2, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-a', allocation: { contracts: 0, laboratory: 2, modelAnalysis: 0, reconnaissance: 2 }, commandId: 'power-a', tenderId, type: 'allocate-power' })
+  await tender.execute({ actorId: 'player-b', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 }, commandId: 'power-b', tenderId, type: 'allocate-power' })
+  await tender.execute({ actorId: 'player-a', commandId: 'recon-a', targets: ['unknown-sector', 'unknown-sector'], tenderId, type: 'conduct-reconnaissance' } as never)
+  await tender.execute({ actorId: 'player-a', commandId: 'lab-a', protocol: 'continuous', receiverSignal: 'eclipse', sourceSignal: 'delta', tenderId, type: 'run-laboratory-test' })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    publicScientificJournal: [{ playerId: 'player-a', protocol: 'continuous', receiverSignal: 'eclipse', sourceSignal: 'delta', testId: 'r1-t1' }],
+    privateTelemetry: [{ receiverSignal: 'eclipse', sourceSignal: 'delta', polarityRelation: expect.any(String) }],
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    publicScientificJournal: [{ testId: 'r1-t1' }],
+    privateTelemetry: [],
+  })
+})
+
 test('resolves an expired Access Slot selection with conservative free defaults', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })

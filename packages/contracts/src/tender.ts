@@ -205,6 +205,10 @@ export const publicLaboratoryResultSchema = z.object({
   sourceSignal: signalIdSchema,
 }).strict()
 
+export const scientificJournalEntrySchema = publicLaboratoryResultSchema.extend({
+  testId: z.string().min(1).max(128),
+}).strict()
+
 export const privateMeasurementSchema = z.object({
   receiverSignal: signalIdSchema,
   sourceSignal: signalIdSchema,
@@ -231,7 +235,9 @@ export const tenderAuditViewSchema = z.object({
   anomalyConfiguration: anomalyConfigurationSchema,
   events: z.array(tenderAuditEventSchema),
   privateMeasurementsByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)),
+  privateTelemetryByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)).optional(),
   publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
+  publicScientificJournal: z.array(scientificJournalEntrySchema).optional(),
 }).strict()
 
 export const tenderViewSchema = z.object({
@@ -240,6 +246,7 @@ export const tenderViewSchema = z.object({
   publicContracts: z.array(publicContractSchema),
   publicFinalContract: publicContractSchema.optional(),
   publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
+  publicScientificJournal: z.array(scientificJournalEntrySchema).optional(),
   round: z.number().int().min(1).max(5),
   tenderId: tenderIdSchema,
   version: z.number().int().min(0),
@@ -249,6 +256,7 @@ export const tenderViewSchema = z.object({
   privateRawTelemetrySignals: z.array(signalIdSchema),
   privateSamples: z.array(signalIdSchema),
   privateMeasurements: z.array(privateMeasurementSchema),
+  privateTelemetry: z.array(privateMeasurementSchema).optional(),
   privateWorkingModel: workingModelSchema,
   publicTheses: z.array(publicThesisSchema),
   audit: tenderAuditViewSchema.optional(),
@@ -276,6 +284,7 @@ export type PowerAllocation = z.infer<typeof powerAllocationSchema>
 export type CommandReceipt = z.infer<typeof commandReceiptSchema>
 export type PublicContract = z.infer<typeof publicContractSchema>
 export type PublicLaboratoryResult = z.infer<typeof publicLaboratoryResultSchema>
+export type ScientificJournalEntry = z.infer<typeof scientificJournalEntrySchema>
 export type PublicThesis = z.infer<typeof publicThesisSchema>
 export type TenderAuditEvent = z.infer<typeof tenderAuditEventSchema>
 export type TenderAuditView = z.infer<typeof tenderAuditViewSchema>
