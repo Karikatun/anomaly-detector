@@ -1,13 +1,11 @@
 import { expect, test } from 'bun:test'
 
-import { availableReconnaissanceSignals } from '../src/features/tender/ReconnaissancePanel'
+import { availableReconnaissanceTargets } from '../src/features/tender/ReconnaissancePanel'
 
-test('offers every uncollected Signal for Reconnaissance, including non-public ones', () => {
-  expect(availableReconnaissanceSignals(['aster'])).toEqual([
+test('offers unknown sectors and known Signals without an owned Sample for Reconnaissance', () => {
+  expect(availableReconnaissanceTargets({ knownSignals: ['aster', 'boreal'], mySamples: ['aster'] })).toEqual([
+    'unknown-sector-1',
+    'unknown-sector-2',
     'boreal',
-    'cinder',
-    'delta',
-    'eclipse',
-    'ferro',
   ])
 })

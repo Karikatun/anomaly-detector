@@ -131,7 +131,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expectPhase(page, headings.access)
     await expectPhase(guestPage, headings.access)
     await expect(page.getByText('При равном выборе слот получает игрок по этому приоритету: Хост E2E → Гость E2E.')).toBeVisible()
-    await expect(page.getByText('Компенсация: 1 аналитический отчёт')).toBeVisible()
+    await expect(page.getByText('Компенсация: 1 образец сигнала')).toBeVisible()
     await expect(page.getByText('Компенсация: 1 бюджет и 1 образец сигнала')).toBeVisible()
 
     await chooseAccessSlot(page, 1)

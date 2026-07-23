@@ -62,7 +62,6 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       {
         payload: {
           accessSlots: { 'player-a': 1, 'player-b': 3 },
-          analyticalReportsByPlayer: { 'player-a': 1, 'player-b': 1 },
           budgetByPlayer: { 'player-a': 0, 'player-b': 2 },
           sampleCompensationByPlayer: {},
           timedOutPlayerIds: ['player-b'],
@@ -320,7 +319,6 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       {
         payload: {
           accessSlots: { 'player-a': 1, 'player-b': 3, 'player-c': 2, 'player-d': 6 },
-          analyticalReportsByPlayer: { 'player-a': 1, 'player-b': 1, 'player-c': 1, 'player-d': 1 },
           budgetByPlayer: { 'player-a': 0, 'player-b': 2, 'player-c': 1, 'player-d': 3 },
           sampleCompensationByPlayer: { 'player-d': 'boreal' },
         },
