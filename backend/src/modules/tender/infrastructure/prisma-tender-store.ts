@@ -91,6 +91,8 @@ const toStoredTender = (record: {
   commands: Array<{ commandId: string; fingerprint: string; receipt: Prisma.JsonValue }>
 }): StoredTender => {
   const state = record.state as PersistedTenderState
+  const publicContracts = state.publicContracts ?? createDefaultContracts(state.players.length)
+  const publicFinalContract = state.publicFinalContract ?? { contractId: 'final-contract', kind: 'final', ratingReward: 8, requiredPublicResult: 'reflection', requiredSecondaryPublicResult: 'attenuation', targetRole: 'source', targetSignal: 'ferro' }
   return {
     accessSlots: state.accessSlots,
     anomalyConfiguration: state.anomalyConfiguration,
@@ -103,11 +105,11 @@ const toStoredTender = (record: {
     finalScientificModelCompletedByPlayer: state.finalScientificModelCompletedByPlayer ?? {},
     finalScientificModelsByPlayer: state.finalScientificModelsByPlayer ?? {},
     id: record.id,
-    knownSignals: state.knownSignals ?? ['aster', 'boreal'],
+    knownSignals: state.knownSignals ?? [...new Set([...publicContracts.map((contract) => contract.targetSignal), publicFinalContract.targetSignal])],
     phase: record.phase as TenderPhase,
     powerAllocations: state.powerAllocations ?? {},
-    publicContracts: state.publicContracts ?? createDefaultContracts(state.players.length),
-    publicFinalContract: state.publicFinalContract ?? { contractId: 'final-contract', kind: 'final', ratingReward: 8, requiredPublicResult: 'reflection', requiredSecondaryPublicResult: 'attenuation', targetRole: 'source', targetSignal: 'ferro' },
+    publicContracts,
+    publicFinalContract,
     publicLaboratoryResults: state.publicLaboratoryResults ?? [],
     publicScientificJournal: state.publicScientificJournal ?? [],
     publicTheses: state.publicTheses ?? [],

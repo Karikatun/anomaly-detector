@@ -9,8 +9,8 @@ const accessSlots = [
   { slot: 1, labelKey: 'tender.access.slot.emergency', termsKey: 'tender.access.cost.emergency' },
   { slot: 2, labelKey: 'tender.access.slot.priority', termsKey: 'tender.access.cost.priority' },
   { slot: 3, labelKey: 'tender.access.slot.standard', termsKey: 'tender.access.neutral' },
-  { slot: 4, labelKey: 'tender.access.slot.offPeak', termsKey: 'tender.access.compensation.sample' },
-  { slot: 5, labelKey: 'tender.access.slot.night', termsKey: 'tender.access.compensation.report' },
+  { slot: 4, labelKey: 'tender.access.slot.offPeak', termsKey: 'tender.access.compensation.budget' },
+  { slot: 5, labelKey: 'tender.access.slot.night', termsKey: 'tender.access.compensation.sample' },
   { slot: 6, labelKey: 'tender.access.slot.remote', termsKey: 'tender.access.compensation.remote' },
 ] as const
 

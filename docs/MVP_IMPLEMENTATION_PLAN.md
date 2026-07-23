@@ -30,7 +30,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 `GAME_DESIGN_BRIEF.md` now describes the agreed target ruleset. The current Tender implementation is an older ruleset and must not be presented as matching it until this migration is complete.
 
-1. [ ] Replace starting Samples and Analytical Reports with the new discovery model: no starting Samples; Samples only from Access Slots or Reconnaissance; unknown Signals are revealed when acquired or named by a Contract.
+1. [x] Replace starting Samples and Analytical Reports with the new discovery model: no starting Samples; Samples only from Access Slots or Reconnaissance; unknown Signals are revealed when acquired or named by a Contract.
 2. [x] Make Power allocation simultaneous and private after Access Slot resolution. Limit Model Analysis and Contracts to one Power; retain two-Power choices only for Reconnaissance and Laboratory.
 3. [x] Implement Reconnaissance targets: Unknown Sector or an already revealed Signal. An acquired Sample must be usable in the same round's Laboratory phase.
 4. [x] Add the permanent public scientific journal and Continuous private same/different-polarity telemetry.
@@ -104,8 +104,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Assess a reserved Bid by required Public Result fit and matching public Laboratory evidence.
    - [x] Keep Contract reservation and Bid submission in Access Slot order; Challenge is out of MVP scope.
    - [x] Add starting Budget and Access Slot budget cost/Remote compensation.
-   - [x] Add Access Slot Sample compensation for slots 4 and 6.
-   - [x] Add starting Analytical Report and Access Slot analytical-report compensation for slot 5.
+   - [x] Add Access Slot Budget compensation for slot 4 and Sample compensation for slots 5 and 6.
+   - [x] Start with 2 Budget and no Samples or Analytical Reports.
    - [x] Add requested-funding Budget payout for awarded single-Bid assessment.
    - [x] Add Budget and Corporate Trust effects.
 8. [x] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.

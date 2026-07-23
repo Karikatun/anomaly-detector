@@ -23,6 +23,10 @@ type ReconnaissancePanelProps = {
   onConfirm: (targets: string[]) => void
 }
 
+export function availableReconnaissanceTargets({ knownSignals, mySamples }: Pick<ReconnaissancePanelProps, 'knownSignals' | 'mySamples'>) {
+  return ['unknown-sector-1', 'unknown-sector-2', ...knownSignals.filter((signal) => !mySamples.includes(signal))]
+}
+
 export function ReconnaissancePanel({
   mySamples,
   knownSignals,
@@ -34,7 +38,7 @@ export function ReconnaissancePanel({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const { t } = useI18n()
 
-  const available = ['unknown-sector-1', 'unknown-sector-2', ...knownSignals.filter((signal) => !mySamples.includes(signal))]
+  const available = availableReconnaissanceTargets({ knownSignals, mySamples })
 
   const toggle = (signal: string) => {
     setSelected((prev) => {

@@ -56,7 +56,7 @@ test('awards a Light Contract once and permanently consumes its journal evidence
   expect((await store.read(tenderId))?.publicContracts[0]).toMatchObject({ bidOutcome: 'failed' })
 })
 
-test('starts without Samples or Analytical Reports and reveals a Night Slot Sample publicly', async () => {
+test('starts without Samples, reveals only Contract-named Signals, and publishes a Night Slot Sample name', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
     players: [
@@ -68,6 +68,7 @@ test('starts without Samples or Analytical Reports and reveals a Night Slot Samp
   const initialView = await tender.readTenderView({ tenderId, playerId: 'player-a' })
   expect(initialView.privateSamples).toEqual([])
   expect(initialView).not.toHaveProperty('privateAnalyticalReports')
+  expect(initialView.knownSignals).toEqual(['aster', 'boreal', 'cinder', 'ferro'])
 
   await tender.execute({ actorId: 'player-a', commandId: 'access-slot-a-1', slot: 5, tenderId, type: 'request-access-slot' })
   await tender.execute({ actorId: 'player-b', commandId: 'access-slot-b-1', slot: 3, tenderId, type: 'request-access-slot' })
@@ -76,6 +77,7 @@ test('starts without Samples or Analytical Reports and reveals a Night Slot Samp
   const playerBView = await tender.readTenderView({ tenderId, playerId: 'player-b' })
   expect(playerAView.privateSamples).toHaveLength(1)
   expect(playerBView.privateSamples).toEqual([])
+  expect(playerAView.privateSamples).toEqual(['delta'])
   expect(playerBView.knownSignals).toContain(playerAView.privateSamples[0]!)
 })
 
