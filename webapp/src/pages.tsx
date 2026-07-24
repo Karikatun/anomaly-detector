@@ -1,4 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
+import { useForm } from '@tanstack/react-form'
+import type { UserDto } from '@anomaly-detector/contracts'
 import {
   Add01Icon,
   File01Icon,
@@ -7,7 +9,7 @@ import {
   UserCircleIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,41 +25,41 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
-import { AuthForm, useAuth } from '@/features/auth'
+import {
+  AuthForm,
+  parseProfileForm,
+  useAuth,
+  useLogoutAction,
+} from '@/features/auth'
 import { CreateRoomDialog, JoinRoomDialog } from '@/features/rooms'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 import styles from './pages.module.css'
 
 export function HomePage() {
-  const auth = useAuth()
-
-  if (auth.isBootstrapping) return <LoadingState />
-  if (auth.user) {
-    return (
-      <AuthenticatedHome
-        displayName={auth.user.displayName ?? auth.user.login}
-        onLogout={() => auth.logout()}
-      />
-    )
-  }
   return (
-    <AuthForm
-      footerRulesAction={(
-        <RulesReferenceDialog triggerVariant="ghost" triggerLabelKey="rules.open" />
+    <AuthSessionGate
+      anonymous={(
+        <AuthForm
+          footerRulesAction={(
+            <RulesReferenceDialog triggerVariant="ghost" triggerLabelKey="rules.open" />
+          )}
+        />
       )}
-    />
+    >
+      {(user) => <AuthenticatedHome displayName={user.displayName ?? user.login} />}
+    </AuthSessionGate>
   )
 }
 
 function AuthenticatedHome({
   displayName,
-  onLogout,
 }: {
   displayName: string
-  onLogout: () => Promise<void>
 }) {
   const navigate = useNavigate()
+  const { t } = useI18n()
+  const logoutAction = useLogoutAction()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false)
 
@@ -72,10 +74,22 @@ function AuthenticatedHome({
             <div className={styles.identity}>
               <Typography variant="bodySmMedium" className={styles.name}>{displayName}</Typography>
             </div>
-            <Button type="button" variant="ghost" className={styles.logout} onClick={() => void onLogout()} aria-label="Выйти">
+            <Button
+              type="button"
+              variant="ghost"
+              className={styles.logout}
+              disabled={logoutAction.isPending}
+              onClick={() => void logoutAction.logout()}
+              aria-label="Выйти"
+            >
               <HugeiconsIcon icon={Logout01Icon} strokeWidth={1.6} aria-hidden="true" />
               <Typography variant="control" className={styles.logoutLabel}>ВЫЙТИ</Typography>
             </Button>
+            {logoutAction.error && (
+              <Typography role="alert" variant="bodySm" tone="destructive">
+                {t('logout.failed')}
+              </Typography>
+            )}
           </div>
         </header>
 
@@ -155,33 +169,23 @@ export function ProfilePage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (!auth.isBootstrapping && !auth.user) {
+    if (!auth.isBootstrapping && !auth.sessionError && !auth.user) {
       void navigate({ to: '/', replace: true })
     }
-  }, [auth.isBootstrapping, auth.user, navigate])
-
-  if (auth.isBootstrapping) {
-    return <LoadingState />
-  }
-
-  if (!auth.isBootstrapping && !auth.user) {
-    return null
-  }
-
-  if (auth.sessionError && !auth.user) {
-    return <SessionErrorState retry={auth.retrySession} />
-  }
+  }, [auth.isBootstrapping, auth.sessionError, auth.user, navigate])
 
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-12">
+    <AuthSessionGate anonymous={null}>
+      {(user) => (
+      <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-12">
       <div className="grid gap-3">
         <Badge variant="outline" className="w-fit">
           {t('app.profile.badge')}
         </Badge>
         <Typography variant="h1">
-          {auth.user?.displayName ?? auth.user?.login}
+          {user.displayName ?? user.login}
         </Typography>
-        <Typography tone="muted">{auth.user?.login}</Typography>
+        <Typography tone="muted">{user.login}</Typography>
       </div>
 
       <Separator />
@@ -194,8 +198,8 @@ export function ProfilePage() {
         </CardHeader>
         <CardContent>
           <DisplayNameEditor
-            currentName={auth.user?.displayName ?? ''}
-            onSave={(name) => auth.updateProfile({ displayName: name })}
+            currentName={user.displayName ?? ''}
+            onSave={(input) => auth.updateProfile(input)}
           />
         </CardContent>
       </Card>
@@ -206,25 +210,27 @@ export function ProfilePage() {
         <Card size="sm">
           <CardHeader>
             <CardTitle>{t('app.profile.userId')}</CardTitle>
-            <CardDescription wrap="break">{auth.user?.id}</CardDescription>
+            <CardDescription wrap="break">{user.id}</CardDescription>
           </CardHeader>
         </Card>
         <Card size="sm">
           <CardHeader>
             <CardTitle>{t('app.profile.locale')}</CardTitle>
             <CardDescription>
-              {auth.user?.locale === 'ru' ? t('app.profile.locale.ru') : t('app.profile.locale.en')}
+              {user.locale === 'ru' ? t('app.profile.locale.ru') : t('app.profile.locale.en')}
             </CardDescription>
           </CardHeader>
         </Card>
         <Card size="sm">
           <CardHeader>
             <CardTitle>{t('app.profile.created')}</CardTitle>
-            <CardDescription>{new Date(auth.user?.createdAt ?? '').toLocaleString()}</CardDescription>
+            <CardDescription>{new Date(user.createdAt).toLocaleString()}</CardDescription>
           </CardHeader>
         </Card>
       </div>
-    </section>
+      </section>
+      )}
+    </AuthSessionGate>
   )
 }
 
@@ -233,51 +239,96 @@ function DisplayNameEditor({
   onSave,
 }: {
   currentName: string
-  onSave: (name: string) => Promise<void>
+  onSave: (input: { displayName: string }) => Promise<void>
 }) {
-  const [name, setName] = useState(currentName)
-  const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
-
-  const handleSave = async () => {
-    const trimmed = name.trim()
-    if (!trimmed || trimmed === currentName) return
-    setSaving(true)
-    try {
-      await onSave(trimmed)
-      setDone(true)
-      setTimeout(() => setDone(false), 2000)
-    } catch {
-      // Error silently — user can retry
-    } finally {
-      setSaving(false)
-    }
-  }
+  const [serverError, setServerError] = useState<string | null>(null)
+  const form = useForm({
+    defaultValues: { displayName: currentName },
+    onSubmit: async ({ value }) => {
+      const parsed = parseProfileForm(value)
+      if (!parsed.success || !parsed.data.displayName || parsed.data.displayName === currentName) return
+      setServerError(null)
+      try {
+        await onSave({ displayName: parsed.data.displayName })
+        setDone(true)
+        setTimeout(() => setDone(false), 2_000)
+      } catch (saveError) {
+        setServerError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить имя')
+      }
+    },
+  })
 
   return (
     <FieldGroup className="gap-4">
-      <Field>
-        <FieldLabel htmlFor="profile-display-name">Отображаемое имя</FieldLabel>
-        <div className="flex gap-3">
-          <Input
-            id="profile-display-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void handleSave() }}
-            className="flex-1"
-          />
-          <Button
-            type="button"
-            disabled={saving || !name.trim() || name.trim() === currentName}
-            onClick={() => void handleSave()}
-          >
-            {done ? 'Сохранено!' : saving ? 'Сохраняем...' : 'Сохранить'}
-          </Button>
-        </div>
-      </Field>
+      <form.Field name="displayName">
+        {(field) => {
+          const validation = parseProfileForm({ displayName: field.state.value })
+          return (
+            <Field>
+              <FieldLabel htmlFor="profile-display-name">Отображаемое имя</FieldLabel>
+              <div className="flex gap-3">
+                <Input
+                  id="profile-display-name"
+                  type="text"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => {
+                    field.handleChange(event.target.value)
+                    setDone(false)
+                    setServerError(null)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void form.handleSubmit()
+                  }}
+                  className="flex-1"
+                />
+                <form.Subscribe selector={(state) => state.isSubmitting}>
+                  {(isSubmitting) => (
+                    <Button
+                      type="button"
+                      disabled={isSubmitting
+                        || !validation.success
+                        || !validation.data.displayName
+                        || validation.data.displayName === currentName}
+                      onClick={() => void form.handleSubmit()}
+                    >
+                      {done ? 'Сохранено!' : isSubmitting ? 'Сохраняем...' : 'Сохранить'}
+                    </Button>
+                  )}
+                </form.Subscribe>
+              </div>
+              {!validation.success && field.state.value.length > 0 && (
+                <Typography role="alert" variant="bodySm" tone="destructive">
+                  Имя должно содержать от 2 до 80 символов.
+                </Typography>
+              )}
+              {serverError && (
+                <Typography role="alert" variant="bodySm" tone="destructive">
+                  {serverError}
+                </Typography>
+              )}
+            </Field>
+          )
+        }}
+      </form.Field>
     </FieldGroup>
   )
+}
+
+function AuthSessionGate({
+  anonymous,
+  children,
+}: {
+  anonymous: ReactNode
+  children: (user: UserDto) => ReactNode
+}) {
+  const auth = useAuth()
+
+  if (auth.isBootstrapping) return <LoadingState />
+  if (auth.sessionError) return <SessionErrorState retry={auth.retrySession} />
+  if (!auth.user) return anonymous
+  return children(auth.user)
 }
 
 function LoadingState() {
@@ -292,6 +343,19 @@ function LoadingState() {
 
 function SessionErrorState({ retry }: { retry: () => Promise<void> }) {
   const { t } = useI18n()
+  const [retryError, setRetryError] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const handleRetry = async () => {
+    setRetryError(false)
+    setIsRetrying(true)
+    try {
+      await retry()
+    } catch {
+      setRetryError(true)
+    } finally {
+      setIsRetrying(false)
+    }
+  }
   return (
     <section className="mx-auto grid w-full max-w-2xl gap-6 px-5 py-16">
       <Card>
@@ -300,10 +364,16 @@ function SessionErrorState({ retry }: { retry: () => Promise<void> }) {
           <Typography>{t('error.session.description')}</Typography>
           <Button
             className="w-fit"
-            onClick={() => void retry()}
+            disabled={isRetrying}
+            onClick={() => void handleRetry()}
           >
             {t('error.session.retry')}
           </Button>
+          {retryError && (
+            <Typography role="alert" variant="bodySm" tone="destructive">
+              {t('error.session.description')}
+            </Typography>
+          )}
         </CardContent>
       </Card>
     </section>

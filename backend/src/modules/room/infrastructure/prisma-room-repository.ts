@@ -47,6 +47,33 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         tenderPhase: room.tender?.phase,
       }))
     },
+    async readForMember(input) {
+      const room = await db.tenderRoom.findUnique({
+        where: { id: input.roomId },
+        include: {
+          members: { orderBy: { seat: 'asc' } },
+          tender: { select: { phase: true } },
+        },
+      })
+      if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+      if (!room.members.some((member) => member.userId === input.actorId)) {
+        throw new RoomFailure('room_not_member', 'Player did not join this room')
+      }
+      return {
+        capacity: room.capacity as 2 | 3 | 4,
+        hostId: room.hostId,
+        id: room.id,
+        members: room.members.map((member) => ({
+          ready: member.ready,
+          seat: member.seat,
+          userId: member.userId,
+        })),
+        status: room.status as 'waiting' | 'starting' | 'started',
+        startsAt: room.startsAt?.toISOString() ?? null,
+        tenderId: room.tenderId,
+        tenderPhase: room.tender?.phase,
+      }
+    },
     async create(input) {
       const room = await db.tenderRoom.create({
         data: {

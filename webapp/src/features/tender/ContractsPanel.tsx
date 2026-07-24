@@ -19,8 +19,8 @@ type ContractsPanelProps = {
   round: number
   disabled?: boolean
   error?: string | null
-  onReserve: (contractId: string) => void
-  onBid: (contractId: string, bid: ContractBid) => void
+  onReserve: (contractId: string) => Promise<void>
+  onBid: (contractId: string, bid: ContractBid) => Promise<void>
 }
 
 export function ContractsPanel({ certifications, contracts, journal, maxPower, playerId, round, disabled, error, onReserve, onBid }: ContractsPanelProps) {
@@ -28,9 +28,26 @@ export function ContractsPanel({ certifications, contracts, journal, maxPower, p
   const { t } = useI18n()
   const available = contracts.filter((contract) => !contract.reservedByPlayerId || contract.reservedByPlayerId === playerId)
 
-  const handleReserve = (contractId: string) => {
-    setBids((previous) => ({ ...previous, [contractId]: { evidenceTestIds: [] } }))
-    onReserve(contractId)
+  const handleReserve = async (contractId: string) => {
+    try {
+      await onReserve(contractId)
+      setBids((previous) => ({ ...previous, [contractId]: { evidenceTestIds: [] } }))
+    } catch {
+      // The parent owns the visible command error; keep the reserve action available.
+    }
+  }
+
+  const handleBid = async (contractId: string, bid: ContractBid) => {
+    try {
+      await onBid(contractId, bid)
+      setBids((previous) => {
+        const next = { ...previous }
+        delete next[contractId]
+        return next
+      })
+    } catch {
+      // The parent owns the visible command error; keep the bid for retry.
+    }
   }
 
   const toggleEvidence = (contractId: string, testId: string) => {
@@ -83,7 +100,7 @@ export function ContractsPanel({ certifications, contracts, journal, maxPower, p
                     className="mt-3 w-full"
                     aria-label={t('tender.contracts.reserveAria', { id: contract.contractId })}
                     disabled={disabled || maxPower === 0 || !canResolve}
-                    onClick={() => handleReserve(contract.contractId)}
+                    onClick={() => void handleReserve(contract.contractId)}
                   >
                     {t('tender.contracts.reserve')}
                   </Button>
@@ -114,14 +131,7 @@ export function ContractsPanel({ certifications, contracts, journal, maxPower, p
                       className="w-full"
                       aria-label={t('tender.contracts.submitAria', { id: contract.contractId })}
                       disabled={disabled || (isScientific ? !bid.researchCertificationSignal : bid.evidenceTestIds.length === 0)}
-                      onClick={() => {
-                        onBid(contract.contractId, bid)
-                        setBids((previous) => {
-                          const next = { ...previous }
-                          delete next[contract.contractId]
-                          return next
-                        })
-                      }}
+                      onClick={() => void handleBid(contract.contractId, bid)}
                     >
                       {t('tender.contracts.submit')}
                     </Button>

@@ -1,5 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
-import type { LoginRequest, OAuthProviderId, RegisterRequest } from '@anomaly-detector/contracts'
+import type {
+  LoginRequest,
+  OAuthProviderId,
+  RegisterRequest,
+  UpdateProfileRequest,
+} from '@anomaly-detector/contracts'
 import {
   type PropsWithChildren,
   useCallback,
@@ -111,7 +116,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const { mutateAsync: logoutAsync } = useLogoutMutation({ api, setAccessToken })
 
   const updateProfile = useCallback(
-    async (input: { displayName: string }) => {
+    async (input: UpdateProfileRequest) => {
       await api.updateProfile(input)
       await meQuery.refetch()
     },

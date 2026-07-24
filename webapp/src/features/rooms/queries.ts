@@ -1,5 +1,6 @@
 import {
   useMutation,
+  useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
 
@@ -18,6 +19,24 @@ export const roomQueryKeys = {
 type RoomMutationsOptions = {
   api: RoomsApi
   onRoomStarted?: (room: RoomView) => void
+}
+
+export function useRoomQuery({
+  api,
+  enabled,
+  roomId,
+}: {
+  api: RoomsApi
+  enabled: boolean
+  roomId: string
+}) {
+  return useQuery({
+    queryKey: roomQueryKeys.byId(roomId),
+    queryFn: () => api.get(roomId),
+    enabled,
+    refetchInterval: (query) => query.state.data?.status === 'starting' ? 1_000 : 3_000,
+    retry: 1,
+  })
 }
 
 export function useCreateRoomMutation({ api }: RoomMutationsOptions) {

@@ -4,6 +4,7 @@ export {
   useCancelRoomStartMutation,
   useJoinRoomMutation,
   useLeaveRoomMutation,
+  useRoomQuery,
   useSetRoomReadyMutation,
   useStartRoomMutation,
   roomQueryKeys,

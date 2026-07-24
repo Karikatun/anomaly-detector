@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
@@ -97,7 +98,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
   view: TenderView
   disabled: boolean
   error: string | null
-  onCommand: (cmd: Record<string, unknown> & { type: string }) => void
+  onCommand: (cmd: Record<string, unknown> & { type: string }) => Promise<void>
   activePlayerId?: string
 }) {
   const auth = useAuth()
@@ -292,7 +293,7 @@ export function TenderPage() {
     }
   }, [auth.isBootstrapping, auth.user, navigate])
 
-  const { connected, error, tenderView } = useRealtimeTender(auth.transport, tenderId)
+  const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
   const { execute } = useTenderCommands(auth.transport, tenderId)
   const [commandError, setCommandError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -308,6 +309,7 @@ export function TenderPage() {
         } as Parameters<typeof execute>[0])
       } catch (err) {
         setCommandError(err instanceof Error ? err.message : 'Command failed')
+        throw err
       } finally {
         setSubmitting(false)
       }
@@ -316,13 +318,16 @@ export function TenderPage() {
   )
   const saveWorkingModel = useCallback(
     async (workingModel: TenderView['privateWorkingModel']) => {
+      if (!connected) {
+        throw new Error('Соединение с игрой потеряно. Подключитесь снова перед сохранением.')
+      }
       await execute({
         actorId: auth.user!.id,
         type: 'update-working-model',
         workingModel,
       })
     },
-    [auth.user, execute],
+    [auth.user, connected, execute],
   )
 
   if (error && !tenderView) {
@@ -398,12 +403,26 @@ export function TenderPage() {
         </Card>
       )}
 
+      {!connected && (
+        <Card size="sm">
+          <CardContent className="flex flex-wrap items-center gap-3 py-4">
+            <Typography role="alert" variant="bodySm" tone="destructive">
+              Данные игры могут быть устаревшими. Действия приостановлены до восстановления realtime-соединения.
+              {error ? ` ${error}` : ''}
+            </Typography>
+            <Button type="button" variant="outline" size="sm" onClick={retry}>
+              Подключиться снова
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Phase panel + right sidebar */}
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="grid gap-6">
           <PhasePanel
             view={tenderView}
-            disabled={submitting}
+            disabled={submitting || !connected}
             error={commandError}
             onCommand={handleCommand}
             activePlayerId={tenderView.activePlayerId}
@@ -509,6 +528,7 @@ export function TenderPage() {
             key={tenderId}
             model={tenderView.privateWorkingModel}
             knownSignals={tenderView.knownSignals}
+            disabled={!connected}
             onSave={saveWorkingModel}
           />
         </div>

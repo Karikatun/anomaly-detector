@@ -14,6 +14,7 @@ import {
   type LoginRequest,
   type MeResponse,
   type OAuthProviderId,
+  type UpdateProfileRequest,
   type RegisterRequest,
 } from '@anomaly-detector/contracts'
 import { z } from 'zod'
@@ -147,7 +148,7 @@ export class AuthApi {
     window.location.href = response.authorizationUrl
   }
 
-  async updateProfile(input: { displayName: string }): Promise<void> {
+  async updateProfile(input: UpdateProfileRequest): Promise<void> {
     const payload = updateProfileSchema.parse(input)
     await this.requestAuthenticated('/api/auth/profile', z.any(), {
       method: 'PATCH',

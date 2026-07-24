@@ -1,9 +1,7 @@
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
-import { useState } from 'react'
-
 import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
-import { useAuth } from '@/features/auth'
+import { useAuth, useLogoutAction } from '@/features/auth'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 
@@ -12,19 +10,10 @@ export function RootLayout() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const [logoutFailed, setLogoutFailed] = useState(false)
+  const logoutAction = useLogoutAction()
   const isInTender = pathname.startsWith('/tenders/')
   const isInRoomLobby = pathname.startsWith('/rooms/')
   const isInMatchHistory = pathname === '/app'
-
-  const logout = async () => {
-    setLogoutFailed(false)
-    try {
-      await auth.logout()
-    } catch {
-      setLogoutFailed(true)
-    }
-  }
 
   return (
     <div className="min-h-svh bg-background/60 text-foreground">
@@ -62,10 +51,16 @@ export function RootLayout() {
             )}
             {!isInTender && (
               <>
-                <Button type="button" variant="outline" size="sm" onClick={() => void logout()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={logoutAction.isPending}
+                  onClick={() => void logoutAction.logout()}
+                >
                   {t('button.logout')}
                 </Button>
-                {logoutFailed && auth.user && (
+                {logoutAction.error && auth.user && (
                   <Typography role="alert" variant="bodySm" tone="destructive">
                     {t('logout.failed')}
                   </Typography>

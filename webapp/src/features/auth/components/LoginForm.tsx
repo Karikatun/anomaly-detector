@@ -1,5 +1,12 @@
 import { ViewIcon, ViewOffIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { useForm } from '@tanstack/react-form'
+import {
+  loginSchema,
+  loginRequestSchema,
+  passwordSchema,
+  registerRequestSchema,
+} from '@anomaly-detector/contracts'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -10,61 +17,47 @@ import { Label } from '@/components/ui/label'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
+import {
+  parseCredentialsForm,
+  type CredentialsFormValues,
+} from '../form-validation'
 import styles from './AuthForm.module.css'
 
 export function LoginForm() {
   const { t } = useI18n()
   const auth = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [login, setLogin] = useState('')
-  const [password, setPassword] = useState('')
   const [passwordVisible, setPasswordVisible] = useState(false)
-  const [displayName, setDisplayName] = useState('')
-  const [privacyConsent, setPrivacyConsent] = useState(false)
-  const [ageConfirmation, setAgeConfirmation] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const loginError = login.length > 0 && !/^[a-z0-9][a-z0-9_-]{2,63}$/i.test(login)
-  const passwordError = password.length > 0 && password.length < 8
-  const displayNameError = mode === 'register' && displayName.length > 0 && displayName.trim().length === 0
-
-  const isValid =
-    /^[a-z0-9][a-z0-9_-]{2,63}$/i.test(login) &&
-    password.length >= 8 &&
-    (mode === 'login' || (
-      displayName.trim().length >= 1 &&
-      privacyConsent &&
-      ageConfirmation
-    ))
-
-  const handleSubmit = async () => {
-    if (!isValid) return
-    setError(null)
-    setBusy(true)
-    try {
-      if (mode === 'register') {
-        if (!privacyConsent || !ageConfirmation) return
-        await auth.register({
-          login: login.trim(),
-          password,
-          displayName: displayName.trim(),
-          privacyConsent,
-          ageConfirmation,
-        })
-      } else {
-        await auth.login({ login: login.trim(), password })
+  const form = useForm({
+    defaultValues: {
+      ageConfirmation: false as boolean,
+      displayName: '',
+      login: '',
+      password: '',
+      privacyConsent: false as boolean,
+    } satisfies CredentialsFormValues,
+    onSubmit: async ({ value }) => {
+      setError(null)
+      try {
+        if (mode === 'register') {
+          const parsed = registerRequestSchema.safeParse(value)
+          if (!parsed.success) return
+          await auth.register(parsed.data)
+        } else {
+          const parsed = loginRequestSchema.safeParse(value)
+          if (!parsed.success) return
+          await auth.login(parsed.data)
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : t(mode === 'register' ? 'auth.errors.registerFailed' : 'auth.errors.loginFailed'),
+        )
       }
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : t(mode === 'register' ? 'auth.errors.registerFailed' : 'auth.errors.loginFailed'),
-      )
-    } finally {
-      setBusy(false)
-    }
-  }
+    },
+  })
 
   return (
     <div className={styles.credentials}>
@@ -72,83 +65,127 @@ export function LoginForm() {
         {mode === 'register' ? t('auth.register') : 'ВОЙТИ ЧЕРЕЗ ЛОГИН И ПАРОЛЬ'}
       </Typography>
       <FieldGroup className={styles.fields}>
-        <Field className={styles.field}>
-          <FieldLabel className={styles.fieldLabel} htmlFor="auth-login">{t('auth.loginName')}</FieldLabel>
-          <Input
-            id="auth-login"
-            type="text"
-            autoComplete="username"
-            value={login}
-            className={styles.input}
-            placeholder="Логин"
-            onChange={(e) => { setLogin(e.target.value); setError(null) }}
-          />
-          {loginError && <FieldError id="auth-login-error" errors={[{ message: t('auth.errors.loginName') }]} />}
-        </Field>
+        <form.Field name="login">
+          {(field) => {
+            const loginError = field.state.value.length > 0 && !loginSchema.safeParse(field.state.value).success
+            return (
+              <Field className={styles.field}>
+                <FieldLabel className={styles.fieldLabel} htmlFor="auth-login">{t('auth.loginName')}</FieldLabel>
+                <Input
+                  id="auth-login"
+                  type="text"
+                  autoComplete="username"
+                  value={field.state.value}
+                  className={styles.input}
+                  placeholder="Логин"
+                  onBlur={field.handleBlur}
+                  onChange={(event) => {
+                    field.handleChange(event.target.value)
+                    setError(null)
+                  }}
+                />
+                {loginError && <FieldError id="auth-login-error" errors={[{ message: t('auth.errors.loginName') }]} />}
+              </Field>
+            )
+          }}
+        </form.Field>
 
-        <Field className={styles.field}>
-          <FieldLabel className={styles.fieldLabel} htmlFor="auth-password">{t('auth.password')}</FieldLabel>
-          <div className={styles.passwordControl}>
-            <Input
-              id="auth-password"
-              type={passwordVisible ? 'text' : 'password'}
-              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-              value={password}
-              className={`${styles.input} ${styles.passwordInput}`}
-              onChange={(e) => { setPassword(e.target.value); setError(null) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit() }}
-            />
-            <button
-              type="button"
-              className={styles.passwordToggle}
-              aria-controls="auth-password"
-              aria-label={t(passwordVisible ? 'auth.password.hide' : 'auth.password.show')}
-              aria-pressed={passwordVisible}
-              onClick={() => setPasswordVisible((visible) => !visible)}
-            >
-              <HugeiconsIcon
-                icon={passwordVisible ? ViewIcon : ViewOffIcon}
-                strokeWidth={1.8}
-                aria-hidden="true"
-              />
-            </button>
-          </div>
-          {passwordError && <FieldError id="auth-password-error" errors={[{ message: t('auth.errors.password') }]} />}
-        </Field>
+        <form.Field name="password">
+          {(field) => {
+            const passwordError = field.state.value.length > 0 && !passwordSchema.safeParse(field.state.value).success
+            return (
+              <Field className={styles.field}>
+                <FieldLabel className={styles.fieldLabel} htmlFor="auth-password">{t('auth.password')}</FieldLabel>
+                <div className={styles.passwordControl}>
+                  <Input
+                    id="auth-password"
+                    type={passwordVisible ? 'text' : 'password'}
+                    autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                    value={field.state.value}
+                    className={`${styles.input} ${styles.passwordInput}`}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => {
+                      field.handleChange(event.target.value)
+                      setError(null)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void form.handleSubmit()
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className={styles.passwordToggle}
+                    aria-controls="auth-password"
+                    aria-label={t(passwordVisible ? 'auth.password.hide' : 'auth.password.show')}
+                    aria-pressed={passwordVisible}
+                    onClick={() => setPasswordVisible((visible) => !visible)}
+                  >
+                    <HugeiconsIcon
+                      icon={passwordVisible ? ViewIcon : ViewOffIcon}
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+                {passwordError && <FieldError id="auth-password-error" errors={[{ message: t('auth.errors.password') }]} />}
+              </Field>
+            )
+          }}
+        </form.Field>
 
         {mode === 'register' && (
           <>
-            <Field className={styles.field}>
-              <FieldLabel className={styles.fieldLabel} htmlFor="auth-display-name">{t('auth.displayName')}</FieldLabel>
-              <Input
-                id="auth-display-name"
-                type="text"
-                autoComplete="name"
-                value={displayName}
-                className={styles.input}
-                placeholder="Игрок 1"
-                onChange={(e) => { setDisplayName(e.target.value); setError(null) }}
-              />
-              {displayNameError && <FieldError id="auth-name-error" errors={[{ message: t('auth.errors.displayName') }]} />}
-            </Field>
+            <form.Field name="displayName">
+              {(field) => {
+                const displayNameError = field.state.value.length > 0
+                  && !registerRequestSchema.shape.displayName.safeParse(field.state.value).success
+                return (
+                  <Field className={styles.field}>
+                    <FieldLabel className={styles.fieldLabel} htmlFor="auth-display-name">{t('auth.displayName')}</FieldLabel>
+                    <Input
+                      id="auth-display-name"
+                      type="text"
+                      autoComplete="name"
+                      value={field.state.value}
+                      className={styles.input}
+                      placeholder="Игрок 1"
+                      onBlur={field.handleBlur}
+                      onChange={(event) => {
+                        field.handleChange(event.target.value)
+                        setError(null)
+                      }}
+                    />
+                    {displayNameError && <FieldError id="auth-name-error" errors={[{ message: t('auth.errors.displayName') }]} />}
+                  </Field>
+                )
+              }}
+            </form.Field>
 
             <div className={styles.consents}>
-              <div className={styles.consent}>
-                <Checkbox
-                  id="auth-privacy-consent"
-                  checked={privacyConsent}
-                  onCheckedChange={(checked) => setPrivacyConsent(checked === true)}
-                />
-                <Label htmlFor="auth-privacy-consent">{t('auth.privacyConsent')}</Label>
-              </div>
-              <div className={styles.consent}>
-                <Checkbox
-                  id="auth-age-confirmation"
-                  checked={ageConfirmation}
-                  onCheckedChange={(checked) => setAgeConfirmation(checked === true)}
-                />
-                <Label htmlFor="auth-age-confirmation">{t('auth.ageConfirmation')}</Label>
-              </div>
+              <form.Field name="privacyConsent">
+                {(field) => (
+                  <div className={styles.consent}>
+                    <Checkbox
+                      id="auth-privacy-consent"
+                      checked={field.state.value}
+                      onCheckedChange={(checked) => field.handleChange(checked === true)}
+                    />
+                    <Label htmlFor="auth-privacy-consent">{t('auth.privacyConsent')}</Label>
+                  </div>
+                )}
+              </form.Field>
+              <form.Field name="ageConfirmation">
+                {(field) => (
+                  <div className={styles.consent}>
+                    <Checkbox
+                      id="auth-age-confirmation"
+                      checked={field.state.value}
+                      onCheckedChange={(checked) => field.handleChange(checked === true)}
+                    />
+                    <Label htmlFor="auth-age-confirmation">{t('auth.ageConfirmation')}</Label>
+                  </div>
+                )}
+              </form.Field>
             </div>
           </>
         )}
@@ -159,21 +196,28 @@ export function LoginForm() {
           </Typography>
         )}
 
-        <Button
-          type="button"
-          size="lg"
-          className={styles.submit}
-          disabled={!isValid || busy}
-          onClick={() => void handleSubmit()}
-        >
-          {busy
-            ? mode === 'register'
-              ? 'Регистрируем...'
-              : 'Входим...'
-            : mode === 'register'
-              ? t('auth.register')
-              : t('auth.login')}
-        </Button>
+        <form.Subscribe selector={(state) => [state.values, state.isSubmitting] as const}>
+          {([values, isSubmitting]) => {
+            const isValid = parseCredentialsForm(mode, values).success
+            return (
+              <Button
+                type="button"
+                size="lg"
+                className={styles.submit}
+                disabled={!isValid || isSubmitting}
+                onClick={() => void form.handleSubmit()}
+              >
+                {isSubmitting
+                  ? mode === 'register'
+                    ? 'Регистрируем...'
+                    : 'Входим...'
+                  : mode === 'register'
+                    ? t('auth.register')
+                    : t('auth.login')}
+              </Button>
+            )
+          }}
+        </form.Subscribe>
       </FieldGroup>
 
       <div className={styles.switchPanel}>
@@ -188,6 +232,7 @@ export function LoginForm() {
             setMode(mode === 'login' ? 'register' : 'login')
             setPasswordVisible(false)
             setError(null)
+            form.reset()
           }}
         >
           {mode === 'login' ? t('auth.register') : t('auth.login')}

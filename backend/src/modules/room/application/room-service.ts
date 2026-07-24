@@ -19,6 +19,12 @@ export class TenderRoomService {
     return toRoomView(room)
   }
 
+  async getRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
+    const readForMember = this.dependencies.repository.readForMember
+    if (!readForMember) throw new Error('Room reading is unavailable')
+    return toRoomView(await readForMember(input))
+  }
+
   async listMatches(actorId: string): Promise<RoomView[]> {
     const rooms = await this.dependencies.repository.listStartedForMember?.(actorId) ?? []
     return rooms.map(toRoomView)

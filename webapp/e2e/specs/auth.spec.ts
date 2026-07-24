@@ -3,7 +3,7 @@ import { e2ePassword, expect, registerBrowserUser, test } from '../helpers/test'
 test('requires explicit privacy consent and age confirmation before registration', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
-  await page.getByLabel('Имя').fill('Осознанный пользователь')
+  await page.getByLabel('Имя').fill('Я')
   await page.getByLabel('Логин').fill('explicit-consent')
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
 
@@ -15,6 +15,8 @@ test('requires explicit privacy consent and age confirmation before registration
   await privacyConsent.check()
   await expect(submit).toBeDisabled()
   await ageConfirmation.check()
+  await expect(submit).toBeDisabled()
+  await page.getByLabel('Имя').fill('Ян')
   await expect(submit).toBeEnabled()
 })
 
@@ -83,4 +85,80 @@ test('opens the Rules Reference from the authenticated home page', async ({ page
   await expect(page.getByText('Финальный контракт и финальная модель')).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть правила' }).click()
   await expect(page.getByRole('dialog')).toBeHidden()
+})
+
+test('shows a retryable session error when bootstrap refresh fails transiently', async ({ page }) => {
+  await registerBrowserUser(page, 'Восстановление E2E', 'session-retry')
+  await page.route('**/api/auth/refresh', async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Временная ошибка сессии' } }),
+    })
+  })
+
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Проверка сессии временно недоступна' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Войти' })).toBeHidden()
+
+  await page.unroute('**/api/auth/refresh')
+  await page.getByRole('button', { name: 'Попробовать снова' }).click()
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
+})
+
+test('keeps the authenticated menu and allows retry when logout fails', async ({ page }) => {
+  await registerBrowserUser(page, 'Выход E2E', 'logout-retry')
+  let shouldFail = true
+  await page.route('**/api/auth/logout', async (route) => {
+    if (shouldFail) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Временная ошибка выхода' } }),
+      })
+      return
+    }
+    await route.continue()
+  })
+
+  await page.getByRole('button', { name: 'Выйти' }).click()
+  await expect(page.getByRole('alert')).toContainText('Не удалось выйти')
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
+
+  shouldFail = false
+  await page.getByRole('button', { name: 'Выйти' }).click()
+  await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible()
+})
+
+test('keeps profile input and exposes server errors until a successful retry', async ({ page }) => {
+  await registerBrowserUser(page, 'Профиль E2E', 'profile-retry')
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+
+  const name = page.getByLabel('Отображаемое имя')
+  const save = page.getByRole('button', { name: 'Сохранить' })
+  await name.fill('Я')
+  await expect(save).toBeDisabled()
+  await expect(page.getByRole('alert')).toContainText('от 2 до 80')
+
+  let shouldFail = true
+  await page.route('**/api/auth/profile', async (route) => {
+    if (shouldFail) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Профиль временно недоступен' } }),
+      })
+      return
+    }
+    await route.continue()
+  })
+
+  await name.fill('Новое имя E2E')
+  await save.click()
+  await expect(page.getByRole('alert')).toContainText('Профиль временно недоступен')
+  await expect(name).toHaveValue('Новое имя E2E')
+
+  shouldFail = false
+  await save.click()
+  await expect(page.getByRole('button', { name: 'Сохранено!' })).toBeVisible()
 })

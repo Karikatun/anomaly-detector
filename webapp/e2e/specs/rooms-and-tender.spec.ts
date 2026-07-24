@@ -63,12 +63,18 @@ async function completeContract(page: Page) {
 }
 
 async function submitFinalModel(page: Page) {
-  await page.getByRole('button', { name: 'Aster: тип поля Инерционное' }).click()
-  await page.getByRole('button', { name: 'Aster: полярность Позитив' }).click()
+  await page.getByRole('button', { name: 'Aster: тип поля Инерционное', exact: true }).click()
+  await page.getByRole('button', { name: 'Aster: полярность Позитив', exact: true }).click()
   await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
 }
 
 test('requires every lobby player to be ready before enabling the match start', async ({ browser, page }) => {
+  let hostJoinRequests = 0
+  let hostRoomReads = 0
+  page.on('request', (request) => {
+    if (/\/api\/rooms\/[0-9a-f-]+\/join$/.test(request.url())) hostJoinRequests += 1
+    if (/\/api\/rooms\/[0-9a-f-]+$/.test(request.url()) && request.method() === 'GET') hostRoomReads += 1
+  })
   await registerBrowserUser(page, 'Хост готовности E2E', 'ready-host')
   const webOrigin = new URL(page.url()).origin
   const guestContext = await browser.newContext({ baseURL: webOrigin })
@@ -86,11 +92,28 @@ test('requires every lobby player to be ready before enabling the match start', 
     await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
     await guestPage.getByLabel('ID комнаты').fill(roomId)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    await expect.poll(() => hostRoomReads).toBeGreaterThan(0)
+    expect(hostJoinRequests).toBe(1)
+    await page.route('**/api/rooms/*', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Комната временно недоступна' } }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await expect(page.getByRole('alert')).toContainText('Показаны последние полученные данные')
+    await page.unroute('**/api/rooms/*')
+    await page.getByRole('button', { name: 'Повторить обновление' }).click()
+    await expect(page.getByText('Показаны последние полученные данные')).toBeHidden()
 
     const startButton = page.getByRole('button', { name: 'Начать игру' })
     await expect(startButton).toBeDisabled()
     await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
-    await expect(startButton).toBeDisabled()
+    await expect(page.getByText('Готовы: 1/2')).toBeVisible()
     await page.getByRole('button', { name: 'Готов', exact: true }).click()
     await expect(startButton).toBeEnabled()
     await page.getByRole('button', { name: 'Отменить готовность' }).click()
@@ -121,7 +144,7 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
     await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
     await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
+    await expect(page.getByText('Готовы: 1/2')).toBeVisible()
     await page.getByRole('button', { name: 'Готов', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Начать игру' })).toBeEnabled()
     await page.getByRole('button', { name: 'Начать игру' }).click()
@@ -164,6 +187,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestPage.getByText('Готовы: 0/2')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
     await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(page.getByText('Готовы: 1/2')).toBeVisible()
     await page.getByRole('button', { name: 'Готов', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Начать игру' })).toBeEnabled()
 
@@ -185,7 +209,24 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('Компенсация: 1 образец сигнала')).toBeVisible()
     await expect(page.getByText('Компенсация: 1 бюджет и 1 образец сигнала')).toBeVisible()
 
-    await chooseAccessSlot(page, 1)
+    let rejectFirstCommand = true
+    await page.route('**/api/tenders/*/commands', async (route) => {
+      if (rejectFirstCommand) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Команда временно недоступна' } }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.getByRole('button', { name: /^Слот доступа 1:/ }).click()
+    await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
+    await expect(page.getByRole('alert')).toContainText('Команда временно недоступна')
+    await expect(page.getByRole('button', { name: 'Подтвердить выбор' })).toBeEnabled()
+    rejectFirstCommand = false
+    await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
     await expect(page.getByRole('button', { name: 'Выбор принят — ожидаем игроков' })).toBeDisabled()
     await expect(page.getByRole('status')).toContainText('Слот 1: Аварийный зафиксирован и остаётся секретным.')
     await expectPhase(guestPage, headings.access)

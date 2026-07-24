@@ -19,6 +19,15 @@ const signalNames: Record<string, string> = {
 
 const fieldTypes = ['inertial', 'electromagnetic', 'phase'] as const
 const polarities = ['positive', 'negative'] as const
+const fieldTypeLabels: Record<(typeof fieldTypes)[number], string> = {
+  inertial: 'Инерционное',
+  electromagnetic: 'Электромагнитное',
+  phase: 'Фазовое',
+}
+const polarityLabels: Record<(typeof polarities)[number], string> = {
+  positive: 'Позитивная',
+  negative: 'Негативная',
+}
 
 type MarkerState = 'unset' | 'possible' | 'excluded'
 
@@ -26,6 +35,11 @@ const markerColors: Record<MarkerState, string> = {
   unset: 'bg-muted text-muted-foreground',
   possible: 'bg-green-500/20 text-green-400 ring-1 ring-green-500/50',
   excluded: 'bg-red-500/20 text-red-400 ring-1 ring-red-500/50 line-through',
+}
+const markerLabels: Record<MarkerState, string> = {
+  unset: 'не задано',
+  possible: 'возможно',
+  excluded: 'исключено',
 }
 
 type SignalCell = NonNullable<WorkingModel['signals'][keyof WorkingModel['signals']]>
@@ -175,12 +189,12 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
         return (
           <Card key={signal} size="sm" className={!isKnown ? 'opacity-40' : ''}>
             <CardContent className="grid gap-3 py-4">
-              <Typography variant="bodySm" className="text-center font-bold">
+              <Typography variant="bodySmMedium" className="text-center">
                 {signalNames[signal]}
               </Typography>
 
               {/* Field types */}
-              <div>
+              <div role="group" aria-label={`${signalNames[signal]}: возможные типы поля`}>
                 <Typography variant="control" tone="muted" className="mb-1">{t('tender.model.fieldType')}</Typography>
                 <div className="flex gap-1">
                   {fieldTypes.map((ft) => {
@@ -193,17 +207,20 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
                     const isHyp = hyp?.fieldType === ft
                     return (
                       <button
+                        aria-label={`${signalNames[signal]}: тип поля ${fieldTypeLabels[ft]}, ${isHyp ? 'выбрано как гипотеза' : markerLabels[marker]}`}
+                        aria-pressed={isHyp || marker !== 'unset'}
+                        data-marker-state={isHyp ? 'hypothesis' : marker}
                         key={ft}
                         type="button"
                         disabled={disabled}
-                        className={`flex-1 rounded px-2 py-1 text-xs transition-colors ${
+                        className={`flex-1 rounded px-2 py-1 transition-colors ${
                           isHyp
                             ? 'bg-primary text-primary-foreground ring-2 ring-primary'
                             : markerColors[marker]
                         }`}
                         onClick={() => { if (!isHyp) toggleFieldType(signal, ft, marker, isExcluded) }}
                       >
-                        {t(`tender.fieldShort.${ft}`)}
+                        <Typography variant="control">{t(`tender.fieldShort.${ft}`)}</Typography>
                       </button>
                     )
                   })}
@@ -211,7 +228,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
               </div>
 
               {/* Polarities */}
-              <div>
+              <div role="group" aria-label={`${signalNames[signal]}: возможные полярности`}>
                 <Typography variant="control" tone="muted" className="mb-1">{t('tender.model.polarity')}</Typography>
                 <div className="flex gap-1">
                   {polarities.map((pol) => {
@@ -224,17 +241,20 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
                     const isHyp = hyp?.polarity === pol
                     return (
                       <button
+                        aria-label={`${signalNames[signal]}: полярность ${polarityLabels[pol]}, ${isHyp ? 'выбрано как гипотеза' : markerLabels[marker]}`}
+                        aria-pressed={isHyp || marker !== 'unset'}
+                        data-marker-state={isHyp ? 'hypothesis' : marker}
                         key={pol}
                         type="button"
                         disabled={disabled}
-                        className={`flex-1 rounded px-2 py-1 text-xs transition-colors ${
+                        className={`flex-1 rounded px-2 py-1 transition-colors ${
                           isHyp
                             ? 'bg-primary text-primary-foreground ring-2 ring-primary'
                             : markerColors[marker]
                         }`}
                         onClick={() => { if (!isHyp) togglePolarity(signal, pol, marker, isExcluded) }}
                       >
-                        {pol === 'positive' ? '+' : '−'}
+                        <Typography variant="control">{pol === 'positive' ? '+' : '−'}</Typography>
                       </button>
                     )
                   })}
@@ -242,40 +262,44 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
               </div>
 
               {/* Hypothesis */}
-              <div>
+              <div role="group" aria-label={`${signalNames[signal]}: гипотеза`}>
                 <Typography variant="control" tone="muted" className="mb-1">{t('tender.model.hypothesis')}</Typography>
                 <div className="grid grid-cols-2 gap-1">
                   <div className="grid gap-0.5">
                     {fieldTypes.map((ft) => (
                       <button
+                        aria-label={`${signalNames[signal]}: гипотеза, тип поля ${fieldTypeLabels[ft]}`}
+                        aria-pressed={hyp?.fieldType === ft}
                         key={ft}
                         type="button"
                         disabled={disabled}
-                        className={`h-6 rounded px-1 text-xs transition-colors ${
+                        className={`h-6 rounded px-1 transition-colors ${
                           hyp?.fieldType === ft
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-muted text-muted-foreground hover:bg-muted/80'
                         }`}
                         onClick={() => setHypothesis(signal, 'fieldType', ft)}
                       >
-                        {t(`tender.fieldShort.${ft}`)}
+                        <Typography variant="control">{t(`tender.fieldShort.${ft}`)}</Typography>
                       </button>
                     ))}
                   </div>
                   <div className="grid gap-0.5">
                     {polarities.map((pol) => (
                       <button
+                        aria-label={`${signalNames[signal]}: гипотеза, полярность ${polarityLabels[pol]}`}
+                        aria-pressed={hyp?.polarity === pol}
                         key={pol}
                         type="button"
                         disabled={disabled}
-                        className={`h-6 rounded px-1 text-xs transition-colors ${
+                        className={`h-6 rounded px-1 transition-colors ${
                           hyp?.polarity === pol
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-muted text-muted-foreground hover:bg-muted/80'
                         }`}
                         onClick={() => setHypothesis(signal, 'polarity', pol)}
                       >
-                        {pol === 'positive' ? '+' : '−'}
+                        <Typography variant="control">{pol === 'positive' ? '+' : '−'}</Typography>
                       </button>
                     ))}
                   </div>
@@ -284,9 +308,10 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
 
               {/* Note */}
               <input
+                aria-label={`${signalNames[signal]}: заметка`}
                 type="text"
                 placeholder={t('tender.model.notePlaceholder')}
-                className="w-full rounded border bg-transparent px-2 py-1 text-xs text-muted-foreground"
+                className="w-full rounded border bg-transparent px-2 py-1 text-muted-foreground"
                 value={cell?.note ?? ''}
                 disabled={disabled}
                 onChange={(e) => setNote(signal, e.target.value)}

@@ -46,6 +46,18 @@ const joinRoomRoute = createRoute({
   },
 })
 
+const getRoomRoute = createRoute({
+  method: 'get',
+  path: '/{roomId}',
+  request: { params: z.object({ roomId: roomIdSchema }) },
+  responses: {
+    200: { content: { 'application/json': { schema: roomViewSchema } }, description: 'Current room state for a member' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+    404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Player is not a room member' },
+  },
+})
+
 const leaveRoomRoute = createRoute({
   method: 'post',
   path: '/{roomId}/leave',
@@ -107,6 +119,13 @@ export function createRoomRoutes(input: {
   routes.openapi(createRoomRoute, async (c) => c.json(
     await executeRoom(() => input.service.createRoom({ ...c.req.valid('json'), hostId: c.var.user.id })),
     201,
+  ))
+  routes.openapi(getRoomRoute, async (c) => c.json(
+    await executeRoom(() => input.service.getRoom({
+      actorId: c.var.user.id,
+      roomId: c.req.valid('param').roomId,
+    })),
+    200,
   ))
   routes.openapi(joinRoomRoute, async (c) => c.json(
     await executeRoom(() => input.service.joinRoom({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId })),

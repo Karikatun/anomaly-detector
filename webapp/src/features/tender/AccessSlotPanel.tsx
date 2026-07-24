@@ -18,7 +18,7 @@ type AccessSlotPanelProps = {
   confirmedSlot?: number
   disabled?: boolean
   error?: string | null
-  onConfirm: (slot: number) => void
+  onConfirm: (slot: number) => Promise<void>
   tiePriorityOrder: Array<{ displayName?: string; playerId: string; tiePriority?: number }>
 }
 
@@ -98,12 +98,16 @@ export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm, tie
           size="lg"
           className="mt-6 w-full"
           disabled={disabled || isConfirmed || selected === null}
-          onClick={() => {
+          onClick={() => void (async () => {
             if (selected !== null) {
-              onConfirm(selected)
-              setSelected(null)
+              try {
+                await onConfirm(selected)
+                setSelected(null)
+              } catch {
+                // The parent owns the visible command error; keep the choice for retry.
+              }
             }
-          }}
+          })()}
         >
           {isConfirmed ? t('tender.access.confirmed.button') : t('tender.access.confirm')}
         </Button>

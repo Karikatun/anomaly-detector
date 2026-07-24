@@ -3,7 +3,7 @@ import {
   realtimeServerMessageSchema,
   realtimeTicketResponseSchema,
 } from '@anomaly-detector/contracts'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { AuthenticatedTransport } from '@/platform/api'
 import { getApiBaseUrl } from '@/platform/api/api-base-url'
@@ -176,6 +176,7 @@ export class TenderRealtimeSession {
 
 export function useRealtimeTender(transport: AuthenticatedTransport, tenderId: string) {
   const [state, setState] = useState<RealtimeState>(disconnectedState)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     const session = new TenderRealtimeSession({
@@ -190,7 +191,11 @@ export function useRealtimeTender(transport: AuthenticatedTransport, tenderId: s
     session.start()
 
     return () => session.stop()
-  }, [tenderId, transport])
+  }, [attempt, tenderId, transport])
 
-  return state
+  const retry = useCallback(() => {
+    setAttempt((currentAttempt) => currentAttempt + 1)
+  }, [])
+
+  return { ...state, retry }
 }
