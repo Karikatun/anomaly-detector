@@ -1,0 +1,30 @@
+.content {
+  gap: 1.4rem;
+  padding: 1.65rem;
+  border: 1px solid rgba(63, 165, 214, .68);
+  border-radius: 10px;
+  color: #eaf5ff;
+  background:
+    linear-gradient(145deg, rgba(7, 28, 49, .96), rgba(2, 10, 22, .98)),
+    url('/assets/home/expedition-desktop.webp') center / cover no-repeat;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .55), inset 0 0 36px rgba(18, 132, 204, .08);
+}
+
+.header { gap: .5rem; }
+.title { color: #ecf7ff; font-size: 1.35rem !important; font-stretch: condensed; font-weight: 500 !important; letter-spacing: -.035em !important; text-transform: uppercase; }
+.description { color: #a8c1d8; }
+.form { display: grid; gap: 1rem; }
+.field { gap: .45rem; }
+.label { color: #c2d8ea; font-size: .82rem; }
+.input { height: 3.35rem; border-color: rgba(92, 157, 198, .66); border-radius: 7px; color: #eff8ff; background: rgba(1, 13, 27, .72); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.error { color: #ffafaf; }
+.footer { display: flex; flex-direction: row; justify-content: flex-end; gap: .7rem; }
+.cancel { border-color: rgba(105, 145, 178, .55); color: #c1d4e5; background: rgba(5, 20, 36, .5); }
+.submit { border: 1px solid rgba(35, 171, 193, .74); color: #eaffff; background: linear-gradient(135deg, rgba(0, 130, 145, .94), rgba(0, 78, 97, .96)); }
+.submit:hover { background: linear-gradient(135deg, rgba(0, 157, 173, .98), rgba(0, 94, 118, .98)); }
+
+@media (max-width: 760px) {
+  .content { width: calc(100% - 2rem); padding: 1.35rem; background-image: linear-gradient(145deg, rgba(7, 28, 49, .97), rgba(2, 10, 22, .99)), url('/assets/home/expedition-mobile.webp'); }
+  .footer { flex-direction: column-reverse; }
+  .footer > * { width: 100%; }
+}

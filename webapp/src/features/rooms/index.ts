@@ -9,3 +9,4 @@ export {
 export { RoomListPage } from './pages/RoomListPage'
 export { MyMatchesPage } from './pages/MyMatchesPage'
 export { RoomLobbyPage } from './pages/RoomLobbyPage'
+export { JoinRoomDialog } from './components/JoinRoomDialog'

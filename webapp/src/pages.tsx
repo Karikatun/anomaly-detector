@@ -24,6 +24,7 @@ import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { AuthForm, useAuth } from '@/features/auth'
+import { JoinRoomDialog } from '@/features/rooms'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 import styles from './pages.module.css'
@@ -57,6 +58,7 @@ function AuthenticatedHome({
   onLogout: () => Promise<void>
 }) {
   const navigate = useNavigate()
+  const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false)
 
   return (
     <section className={styles.screen} aria-label="Главное меню">
@@ -88,7 +90,7 @@ function AuthenticatedHome({
             accent="aqua"
             title="ВОЙТИ ПО КОДУ"
             icon={Login03Icon}
-            onClick={() => void navigate({ to: '/rooms' })}
+            onClick={() => setIsJoinDialogOpen(true)}
           />
           <MenuCard
             accent="plain"
@@ -110,6 +112,7 @@ function AuthenticatedHome({
             triggerTextClassName={styles.rulesLabel}
           />
         </div>
+        <JoinRoomDialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen} />
       </div>
     </section>
   )
