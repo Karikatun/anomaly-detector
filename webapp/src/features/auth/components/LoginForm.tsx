@@ -3,10 +3,10 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
+import styles from './AuthForm.module.css'
 
 export function LoginForm() {
   const { t } = useI18n()
@@ -55,28 +55,33 @@ export function LoginForm() {
   }
 
   return (
-    <div className="grid gap-4">
-      <FieldGroup className="gap-4">
-        <Field>
-          <FieldLabel htmlFor="auth-login">{t('auth.loginName')}</FieldLabel>
+    <div className={styles.credentials}>
+      <Typography as="p" className={styles.credentialsTitle}>
+        {mode === 'register' ? t('auth.register') : 'ВОЙТИ ЧЕРЕЗ ЛОГИН И ПАРОЛЬ'}
+      </Typography>
+      <FieldGroup className={styles.fields}>
+        <Field className={styles.field}>
+          <FieldLabel className={styles.fieldLabel} htmlFor="auth-login">{t('auth.loginName')}</FieldLabel>
           <Input
             id="auth-login"
             type="text"
             autoComplete="username"
             value={login}
-            placeholder="player_1"
+            className={styles.input}
+            placeholder="Логин"
             onChange={(e) => { setLogin(e.target.value); setError(null) }}
           />
           {loginError && <FieldError id="auth-login-error" errors={[{ message: t('auth.errors.loginName') }]} />}
         </Field>
 
-        <Field>
-          <FieldLabel htmlFor="auth-password">{t('auth.password')}</FieldLabel>
+        <Field className={styles.field}>
+          <FieldLabel className={styles.fieldLabel} htmlFor="auth-password">{t('auth.password')}</FieldLabel>
           <Input
             id="auth-password"
             type="password"
             autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
             value={password}
+            className={styles.input}
             onChange={(e) => { setPassword(e.target.value); setError(null) }}
             onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit() }}
           />
@@ -84,13 +89,14 @@ export function LoginForm() {
         </Field>
 
         {mode === 'register' && (
-          <Field>
-            <FieldLabel htmlFor="auth-display-name">{t('auth.displayName')}</FieldLabel>
+          <Field className={styles.field}>
+            <FieldLabel className={styles.fieldLabel} htmlFor="auth-display-name">{t('auth.displayName')}</FieldLabel>
             <Input
               id="auth-display-name"
               type="text"
               autoComplete="name"
               value={displayName}
+              className={styles.input}
               placeholder="Игрок 1"
               onChange={(e) => { setDisplayName(e.target.value); setError(null) }}
             />
@@ -107,7 +113,7 @@ export function LoginForm() {
         <Button
           type="button"
           size="lg"
-          className="w-full"
+          className={styles.submit}
           disabled={!isValid || busy}
           onClick={() => void handleSubmit()}
         >
@@ -121,16 +127,19 @@ export function LoginForm() {
         </Button>
       </FieldGroup>
 
-      <Separator />
-
-      <Button
-        variant="link"
-        size="sm"
-        className="w-full"
-        onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null) }}
-      >
-        {mode === 'login' ? t('auth.switchToRegister') : t('auth.switchToLogin')}
-      </Button>
+      <div className={styles.switchPanel}>
+        <Typography as="span" className={styles.switchCopy}>
+          {mode === 'login' ? 'Нет аккаунта?' : 'Уже есть аккаунт?'}
+        </Typography>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={styles.switchButton}
+          onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null) }}
+        >
+          {mode === 'login' ? t('auth.register') : t('auth.login')}
+        </Button>
+      </div>
     </div>
   )
 }

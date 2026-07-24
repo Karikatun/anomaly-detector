@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
@@ -8,9 +9,10 @@ import { useI18n } from '@/platform/i18n'
 type OAuthButtonProps = {
   provider: 'yandex' | 'vk'
   label: string
+  className?: string
 }
 
-export function OAuthButton({ provider, label }: OAuthButtonProps) {
+export function OAuthButton({ provider, label, className }: OAuthButtonProps) {
   const { t } = useI18n()
   const { startOAuth } = useAuth()
   const [busy, setBusy] = useState(false)
@@ -34,7 +36,7 @@ export function OAuthButton({ provider, label }: OAuthButtonProps) {
         type="button"
         variant="outline"
         size="lg"
-        className="w-full"
+        className={cn('w-full', className)}
         disabled={busy}
         onClick={() => void handleClick()}
       >
