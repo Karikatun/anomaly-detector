@@ -1,6 +1,6 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
+import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
+import styles from './AuthForm.module.css'
 import { LoginForm } from './LoginForm'
 import { OAuthButton } from './OAuthButton'
 
@@ -8,19 +8,25 @@ export function AuthForm() {
   const { t } = useI18n()
 
   return (
-    <Card className="w-full max-w-md" aria-label={t('auth.title')}>
-      <CardHeader>
-        <CardTitle className="tracking-wide uppercase">{t('auth.title')}</CardTitle>
-        <CardDescription>{t('auth.description')}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <LoginForm />
-        <Separator />
-        <div className="grid gap-3">
-          <OAuthButton provider="yandex" label={t('oauth.yandex')} />
-          <OAuthButton provider="vk" label={t('oauth.vk')} />
+    <section className={styles.screen} aria-label={t('auth.title')}>
+      <div className={styles.background} aria-hidden="true" />
+      <div className={styles.panel}>
+        <header className={styles.brand}>
+          <Typography as="span" className={styles.wordmark}>ANOMALY</Typography>
+          <Typography as="span" className={styles.detector}>DETECTOR</Typography>
+        </header>
+
+        <div className={styles.content}>
+          <OAuthButton provider="yandex" label={t('oauth.yandex')} className={styles.yandexButton} />
+          <div className={styles.separator}>ИЛИ</div>
+          <LoginForm />
         </div>
-      </CardContent>
-    </Card>
+
+        <footer className={styles.footer}>
+          <Typography as="span">Правила игры</Typography>
+          <Typography as="span">Пользовательское соглашение</Typography>
+        </footer>
+      </div>
+    </section>
   )
 }
