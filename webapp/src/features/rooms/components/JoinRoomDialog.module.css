@@ -5,9 +5,9 @@
   border-radius: 10px;
   color: #eaf5ff;
   background:
-    linear-gradient(145deg, rgba(0, 49, 58, .96), rgba(2, 15, 27, .98)),
+    linear-gradient(145deg, rgba(0, 20, 26, .97), rgba(1, 8, 16, .99)),
     url('/assets/home/expedition-desktop.webp') center / cover no-repeat;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .55), inset 0 0 36px rgba(0, 188, 174, .13);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .6), inset 0 0 36px rgba(0, 188, 174, .025);
 }
 
 .header { gap: .5rem; }
@@ -22,12 +22,19 @@
 .cancel { border-color: rgba(105, 145, 178, .55); color: #c1d4e5; background: rgba(5, 20, 36, .5); }
 .submit { border: 1px solid rgba(0, 215, 203, .78); color: #eaffff; background: linear-gradient(135deg, rgba(0, 139, 147, .94), rgba(0, 77, 88, .96)); }
 .submit:hover { background: linear-gradient(135deg, rgba(0, 175, 180, .98), rgba(0, 102, 113, .98)); }
-.createContent { border-color: rgba(183, 92, 237, .7); box-shadow: 0 24px 64px rgba(0, 0, 0, .55), inset 0 0 36px rgba(171, 62, 224, .1); }
+.createContent {
+  border-color: rgba(183, 92, 237, .7);
+  background:
+    linear-gradient(145deg, rgba(24, 11, 37, .97), rgba(8, 4, 18, .99)),
+    url('/assets/home/expedition-desktop.webp') center / cover no-repeat;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .6), inset 0 0 36px rgba(171, 62, 224, .025);
+}
 .createSubmit { border: 1px solid rgba(192, 104, 242, .8); color: #fff0ff; background: linear-gradient(135deg, rgba(126, 42, 172, .94), rgba(77, 25, 118, .96)); }
 .createSubmit:hover { background: linear-gradient(135deg, rgba(151, 55, 205, .98), rgba(94, 30, 141, .98)); }
 
 @media (max-width: 760px) {
-  .content { width: calc(100% - 2rem); padding: 1.35rem; background-image: linear-gradient(145deg, rgba(0, 49, 58, .97), rgba(2, 15, 27, .99)), url('/assets/home/expedition-mobile.webp'); }
+  .content { width: calc(100% - 2rem); padding: 1.35rem; background-image: linear-gradient(145deg, rgba(0, 20, 26, .98), rgba(1, 8, 16, .99)), url('/assets/home/expedition-mobile.webp'); }
+  .createContent { background-image: linear-gradient(145deg, rgba(24, 11, 37, .98), rgba(8, 4, 18, .99)), url('/assets/home/expedition-mobile.webp'); }
   .footer { flex-direction: column-reverse; }
   .footer > * { width: 100%; }
 }
