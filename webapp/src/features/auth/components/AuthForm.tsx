@@ -20,7 +20,7 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
 
         <div className={styles.content}>
           <OAuthButton provider="yandex" label={t('oauth.yandex')} className={styles.yandexButton} />
-          <div className={styles.separator}>ИЛИ</div>
+          <Typography as="div" variant="control" className={styles.separator}>ИЛИ</Typography>
           <LoginForm />
         </div>
 

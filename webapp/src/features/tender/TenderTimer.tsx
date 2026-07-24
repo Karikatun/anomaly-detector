@@ -7,26 +7,17 @@ type TenderTimerProps = {
 }
 
 export function TenderTimer({ dueAt }: TenderTimerProps) {
-  const [remaining, setRemaining] = useState<number>(0)
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!dueAt) {
-      setRemaining(0)
-      return
-    }
-
-    const deadline = new Date(dueAt).getTime()
-
-    const tick = () => {
-      const diff = Math.max(0, deadline - Date.now())
-      setRemaining(Math.ceil(diff / 1000))
-    }
-
-    tick()
-    const interval = setInterval(tick, 250)
+    const interval = setInterval(() => setNow(Date.now()), 250)
 
     return () => clearInterval(interval)
-  }, [dueAt])
+  }, [])
+
+  const remaining = dueAt
+    ? Math.ceil(Math.max(0, new Date(dueAt).getTime() - now) / 1000)
+    : 0
 
   if (!dueAt || remaining <= 0) return null
 
@@ -36,8 +27,8 @@ export function TenderTimer({ dueAt }: TenderTimerProps) {
 
   return (
     <Typography
-      variant="h4"
-      className={`font-mono tabular-nums ${urgent ? 'text-red-400 animate-pulse' : 'text-primary'}`}
+      variant="timer"
+      className={urgent ? 'text-red-400 animate-pulse' : 'text-primary'}
     >
       {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
     </Typography>

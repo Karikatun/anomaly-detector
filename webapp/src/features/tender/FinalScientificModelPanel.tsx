@@ -98,7 +98,7 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
             return (
               <Card key={signal} size="sm">
                 <CardContent className="grid gap-3 py-4">
-                  <Typography variant="bodySm" className="text-center font-bold">
+                  <Typography variant="bodySmMedium" align="center">
                     {signalName}
                   </Typography>
 
@@ -114,14 +114,14 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
                           key={ft}
                           type="button"
                           disabled={disabled}
-                          className={`h-7 rounded px-2 text-xs transition-colors ${
+                          className={`h-7 rounded px-2 transition-colors ${
                             cell?.fieldType === ft
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted text-muted-foreground hover:bg-muted/80'
                           }`}
                           onClick={() => toggleFieldType(signal, ft)}
                         >
-                          {t(fieldTypeLabelKeys[ft])}
+                          <Typography variant="controlXs">{t(fieldTypeLabelKeys[ft])}</Typography>
                         </button>
                       ))}
                     </div>
@@ -139,14 +139,16 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
                           key={pol}
                           type="button"
                           disabled={disabled}
-                          className={`h-7 rounded px-2 text-xs transition-colors ${
+                          className={`h-7 rounded px-2 transition-colors ${
                             cell?.polarity === pol
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted text-muted-foreground hover:bg-muted/80'
                           }`}
                           onClick={() => togglePolarity(signal, pol)}
                         >
-                          {t(polarityLabelKeys[pol])} {pol === 'positive' ? '(+)' : '(−)'}
+                          <Typography variant="controlXs">
+                            {t(polarityLabelKeys[pol])} {pol === 'positive' ? '(+)' : '(−)'}
+                          </Typography>
                         </button>
                       ))}
                     </div>

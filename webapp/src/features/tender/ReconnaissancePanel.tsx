@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { isSignalId, signalLabelKeys } from './catalog'
+import { availableReconnaissanceTargets } from './reconnaissance-targets'
 
 type ReconnaissancePanelProps = {
   mySamples: SignalId[]
@@ -15,10 +16,6 @@ type ReconnaissancePanelProps = {
   disabled?: boolean
   error?: string | null
   onConfirm: (targets: Array<SignalId | 'unknown-sector'>) => Promise<void>
-}
-
-export function availableReconnaissanceTargets({ knownSignals, mySamples }: Pick<ReconnaissancePanelProps, 'knownSignals' | 'mySamples'>) {
-  return ['unknown-sector-1', 'unknown-sector-2', ...knownSignals.filter((signal) => !mySamples.includes(signal))]
 }
 
 export function ReconnaissancePanel({

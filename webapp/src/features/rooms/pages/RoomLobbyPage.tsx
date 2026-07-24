@@ -162,7 +162,9 @@ export function RoomLobbyPage() {
       <main className={styles.errorScreen}>
         <Typography variant="h3">{t('lobby.error.notFound')}</Typography>
         <Typography tone="muted">{error ?? t('lobby.error.notFound.description')}</Typography>
-        <Button asChild><a href="/">{t('lobby.button.back')}</a></Button>
+        <Button asChild>
+          <a href="/"><Typography as="span" variant="control">{t('lobby.button.back')}</Typography></a>
+        </Button>
       </main>
     )
   }
@@ -183,10 +185,10 @@ export function RoomLobbyPage() {
       <section className={styles.panel} aria-label={t('lobby.title')}>
         <header className={styles.header}>
           <button type="button" className={styles.roomCode} onClick={() => void handleCopy()}>
-            <span>{t('lobby.room.id')}</span>
-            <strong>{currentRoom.roomId.slice(0, 8).toUpperCase()}</strong>
+            <Typography as="span" variant="control">{t('lobby.room.id')}</Typography>
+            <Typography as="strong" variant="code">{currentRoom.roomId.slice(0, 8).toUpperCase()}</Typography>
             <span className={styles.copyIcon} aria-hidden="true" />
-            <span className="sr-only">{copied ? t('lobby.copied') : t('lobby.copyId')}</span>
+            <Typography as="span" variant="srOnly">{copied ? t('lobby.copied') : t('lobby.copyId')}</Typography>
           </button>
           <Typography as="h1" className={styles.title}>{t('lobby.title')}</Typography>
           {canLeave ? (
@@ -200,19 +202,25 @@ export function RoomLobbyPage() {
           <aside className={styles.leftColumn}>
             <section className={styles.playersPanel}>
               <Typography as="h2" className={styles.sectionTitle}>{t('lobby.players')}</Typography>
-              <div className={styles.playerList}>
-                  {Array.from({ length: currentRoom.capacity }, (_, index) => {
+              <Typography as="div" className={styles.playerList}>
+                {Array.from({ length: currentRoom.capacity }, (_, index) => {
                   const seat = index + 1
                   const member = currentRoom.members.find((candidate) => candidate.seat === seat)
                   const isPlayerHost = member?.userId === currentRoom.hostId
                   return (
                     <div className={styles.player} data-empty={!member || undefined} key={seat}>
-                      <span className={styles.avatar} aria-hidden="true">{member ? seat : '+'}</span>
+                      <Typography as="span" variant="h6" className={styles.avatar} aria-hidden="true">
+                        {member ? seat : '+'}
+                      </Typography>
                       <div className={styles.playerCopy}>
                         <Typography className={styles.playerName}>
                           {member ? t('lobby.player.label', { seat }) : t('lobby.player.waiting')}
                         </Typography>
-                        {isPlayerHost ? <span className={styles.hostLabel}>{t('lobby.player.host')}</span> : null}
+                        {isPlayerHost ? (
+                          <Typography as="span" variant="control" className={styles.hostLabel}>
+                            {t('lobby.player.host')}
+                          </Typography>
+                        ) : null}
                       </div>
                       {member && member.userId === auth.user?.id && currentRoom.status === 'waiting' ? (
                         <Button
@@ -228,23 +236,32 @@ export function RoomLobbyPage() {
                               : t('lobby.player.ready.action')}
                         </Button>
                       ) : member ? (
-                        <span className={styles.playerReadiness} data-ready={member.ready || undefined}>
+                        <Typography as="span" variant="control" className={styles.playerReadiness} data-ready={member.ready || undefined}>
                           <span className={styles.playerState} aria-hidden="true" />
                           {member.ready ? t('lobby.player.ready') : t('lobby.player.notReady')}
-                        </span>
+                        </Typography>
                       ) : null}
                     </div>
                   )
                 })}
-              </div>
+              </Typography>
             </section>
 
             <section className={styles.settingsPanel}>
               <Typography as="h2" className={styles.sectionTitle}>{t('lobby.settings.title')}</Typography>
               <dl className={styles.settingsList}>
-                <div><dt>{t('lobby.settings.mode')}</dt><dd>{t('lobby.settings.mode.value')}</dd></div>
-                <div><dt>{t('lobby.settings.players')}</dt><dd>{currentRoom.capacity}</dd></div>
-                <div><dt>{t('lobby.settings.turnTime')}</dt><dd>{t('lobby.settings.turnTime.value')}</dd></div>
+                <div>
+                  <Typography as="dt" variant="control">{t('lobby.settings.mode')}</Typography>
+                  <Typography as="dd" variant="bodySm">{t('lobby.settings.mode.value')}</Typography>
+                </div>
+                <div>
+                  <Typography as="dt" variant="control">{t('lobby.settings.players')}</Typography>
+                  <Typography as="dd" variant="bodySm">{currentRoom.capacity}</Typography>
+                </div>
+                <div>
+                  <Typography as="dt" variant="control">{t('lobby.settings.turnTime')}</Typography>
+                  <Typography as="dd" variant="bodySm">{t('lobby.settings.turnTime.value')}</Typography>
+                </div>
               </dl>
             </section>
           </aside>
@@ -255,9 +272,9 @@ export function RoomLobbyPage() {
               data-state={isCountdown ? 'starting' : allPlayersReady ? 'ready' : 'waiting'}
               aria-live="polite"
             >
-              <span className={styles.statusIndicator} aria-hidden="true">
+              <Typography as="span" variant="h3" className={styles.statusIndicator} aria-hidden="true">
                 {isCountdown ? secondsLeft : null}
-              </span>
+              </Typography>
               {isCountdown ? (
                 <>
                   <div className={styles.statusCopy}>
