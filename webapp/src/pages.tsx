@@ -40,7 +40,13 @@ export function HomePage() {
       />
     )
   }
-  return <AuthForm />
+  return (
+    <AuthForm
+      footerRulesAction={(
+        <RulesReferenceDialog triggerVariant="ghost" triggerLabelKey="rules.open" />
+      )}
+    />
+  )
 }
 
 function AuthenticatedHome({
