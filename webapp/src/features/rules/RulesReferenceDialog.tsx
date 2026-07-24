@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogClose,
@@ -22,13 +23,19 @@ const sections = [
   ['final', ['final.1', 'final.2']],
 ] as const
 
-export function RulesReferenceDialog({ triggerVariant = 'outline' }: { triggerVariant?: 'default' | 'outline' | 'ghost' }) {
+export function RulesReferenceDialog({
+  triggerVariant = 'outline',
+  triggerClassName,
+}: {
+  triggerVariant?: 'default' | 'outline' | 'ghost'
+  triggerClassName?: string
+}) {
   const { t } = useI18n()
 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button type="button" variant={triggerVariant} size="sm">{t('rules.open')}</Button>
+        <Button type="button" variant={triggerVariant} size="sm" className={cn(triggerClassName)}>{t('rules.open')}</Button>
       </DialogTrigger>
       <DialogContent showCloseButton={false} className="max-h-[calc(100svh-2rem)] max-w-3xl overflow-y-auto sm:max-w-3xl">
         <DialogHeader>

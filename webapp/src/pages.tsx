@@ -1,4 +1,13 @@
 import { useNavigate } from '@tanstack/react-router'
+import {
+  Add01Icon,
+  ArrowRight01Icon,
+  File01Icon,
+  Login03Icon,
+  Logout01Icon,
+  UserCircleIcon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
@@ -18,12 +27,20 @@ import { Typography } from '@/components/ui/typography'
 import { AuthForm, useAuth } from '@/features/auth'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
+import styles from './pages.module.css'
 
 export function HomePage() {
   const auth = useAuth()
 
   if (auth.isBootstrapping) return <LoadingState />
-  if (auth.user) return <AuthenticatedHome displayName={auth.user.displayName ?? auth.user.login} />
+  if (auth.user) {
+    return (
+      <AuthenticatedHome
+        displayName={auth.user.displayName ?? auth.user.login}
+        onLogout={() => auth.logout()}
+      />
+    )
+  }
   return (
     <section className="flex min-h-screen items-center justify-center px-5 py-10">
       <AuthForm />
@@ -31,46 +48,97 @@ export function HomePage() {
   )
 }
 
-function AuthenticatedHome({ displayName }: { displayName: string }) {
-  const { t } = useI18n()
+function AuthenticatedHome({
+  displayName,
+  onLogout,
+}: {
+  displayName: string
+  onLogout: () => Promise<void>
+}) {
   const navigate = useNavigate()
 
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-12 sm:py-16">
-      <div className="grid gap-4">
-        <Badge variant="outline" className="w-fit">{t('home.badge')}</Badge>
-        <Typography variant="h1">{t('home.title', { name: displayName })}</Typography>
-        <Typography className="max-w-2xl" tone="muted">{t('home.description')}</Typography>
-      </div>
+    <section className={styles.screen} aria-label="Главное меню">
+      <div className={styles.background} aria-hidden="true" />
+      <div className={styles.panel}>
+        <header className={styles.header}>
+          <Typography variant="h1" className={styles.title}>ГЛАВНОЕ МЕНЮ</Typography>
+          <div className={styles.account}>
+            <div className={styles.avatar} aria-hidden="true"><span className={styles.avatarCore} /></div>
+            <div className={styles.identity}>
+              <Typography variant="bodySmMedium" className={styles.name}>{displayName}</Typography>
+              <Typography variant="bodySm" className={styles.rating}>Рейтинг: 1420</Typography>
+            </div>
+            <Button type="button" variant="ghost" className={styles.logout} onClick={() => void onLogout()} aria-label="Выйти">
+              <HugeiconsIcon icon={Logout01Icon} strokeWidth={1.6} aria-hidden="true" />
+              <Typography variant="control" className={styles.logoutLabel}>ВЫЙТИ</Typography>
+            </Button>
+          </div>
+        </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('home.start.title')}</CardTitle>
-            <CardDescription>{t('home.start.description')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button type="button" className="w-full" onClick={() => void navigate({ to: '/rooms' })}>{t('home.start.action')}</Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('home.matches.title')}</CardTitle>
-            <CardDescription>{t('home.matches.description')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button type="button" variant="outline" className="w-full" onClick={() => void navigate({ to: '/app' })}>{t('home.matches.action')}</Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('home.rules.title')}</CardTitle>
-            <CardDescription>{t('home.rules.description')}</CardDescription>
-          </CardHeader>
-          <CardContent><RulesReferenceDialog /></CardContent>
-        </Card>
+        <div className={styles.divider} />
+        <div className={styles.actions}>
+          <MenuCard
+            accent="violet"
+            title="СОЗДАТЬ КОМНАТУ"
+            description="Создайте свою экспедицию и пригласите игроков"
+            icon={Add01Icon}
+            onClick={() => void navigate({ to: '/rooms' })}
+          />
+          <MenuCard
+            accent="aqua"
+            title="ВОЙТИ ПО КОДУ"
+            description="Введите код комнаты, чтобы присоединиться"
+            icon={Login03Icon}
+            onClick={() => void navigate({ to: '/rooms' })}
+          />
+          <MenuCard
+            accent="plain"
+            title="МОИ МАТЧИ"
+            description="История ваших матчей и аудит"
+            icon={File01Icon}
+            onClick={() => void navigate({ to: '/app' })}
+          />
+          <MenuCard
+            accent="plain"
+            title="ПРОФИЛЬ"
+            icon={UserCircleIcon}
+            onClick={() => void navigate({ to: '/profile' })}
+          />
+          <RulesReferenceDialog triggerVariant="ghost" triggerClassName={styles.rulesTrigger} />
+        </div>
       </div>
     </section>
+  )
+}
+
+function MenuCard({
+  accent,
+  title,
+  description,
+  icon,
+  onClick,
+}: {
+  accent: 'violet' | 'aqua' | 'plain'
+  title: string
+  description?: string
+  icon: typeof Add01Icon
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      className={`${styles.menuCard} ${styles[accent]}`}
+      onClick={onClick}
+    >
+      <span className={styles.copy}>
+        <Typography variant="h3" className={styles.cardTitle}>{title}</Typography>
+        {description && <Typography variant="body" className={styles.cardDescription}>{description}</Typography>}
+      </span>
+      <span className={styles.iconWrap} aria-hidden="true"><HugeiconsIcon icon={icon} strokeWidth={1.35} /></span>
+      {accent === 'plain' && <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={1.7} className={styles.mobileArrow} aria-hidden="true" />}
+    </Button>
   )
 }
 
