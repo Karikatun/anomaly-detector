@@ -20,7 +20,7 @@ type ReconnaissancePanelProps = {
   maxSignals: number
   disabled?: boolean
   error?: string | null
-  onConfirm: (targets: string[]) => void
+  onConfirm: (targets: string[]) => Promise<void>
 }
 
 export function availableReconnaissanceTargets({ knownSignals, mySamples }: Pick<ReconnaissancePanelProps, 'knownSignals' | 'mySamples'>) {
@@ -52,11 +52,15 @@ export function ReconnaissancePanel({
     })
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const targets = [...selected].map((target) => target.startsWith('unknown-sector-') ? 'unknown-sector' : target)
     if (targets.length === maxSignals) {
-      onConfirm(targets)
-      setSelected(new Set())
+      try {
+        await onConfirm(targets)
+        setSelected(new Set())
+      } catch {
+        // The parent owns the visible command error; keep the targets for retry.
+      }
     }
   }
 
@@ -115,7 +119,7 @@ export function ReconnaissancePanel({
           size="lg"
           className="mt-6 w-full"
           disabled={disabled || selected.size !== maxSignals}
-          onClick={handleConfirm}
+          onClick={() => void handleConfirm()}
         >
           {selected.size === 0
             ? maxSignals === 1 ? t('tender.recon.choose.one') : t('tender.recon.choose.many', { count: maxSignals })

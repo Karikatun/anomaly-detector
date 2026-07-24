@@ -21,7 +21,7 @@ const polarities = ['positive', 'negative'] as const
 type Props = {
   disabled?: boolean
   error?: string | null
-  onConfirm: (model: ScientificModel) => void
+  onConfirm: (model: ScientificModel) => Promise<void>
 }
 
 export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props) {
@@ -40,7 +40,7 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
     })
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const signals = Object.fromEntries(
       Object.entries(model)
         .filter(([, cell]) => cell.fieldType || cell.polarity)
@@ -51,7 +51,11 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
     )
 
     if (Object.keys(signals).length > 0) {
-      onConfirm({ signals } as ScientificModel)
+      try {
+        await onConfirm({ signals } as ScientificModel)
+      } catch {
+        // The parent owns the visible command error; keep the model for retry.
+      }
     }
   }
 
@@ -144,7 +148,7 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
           size="lg"
           className="mt-6 w-full"
           disabled={disabled || claimedCount === 0}
-          onClick={handleSubmit}
+          onClick={() => void handleSubmit()}
         >
           {claimedCount === 0
             ? 'Укажите хотя бы одно свойство'

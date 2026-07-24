@@ -15,7 +15,7 @@ type LaboratoryPanelProps = {
   powerAllocation: number
   disabled?: boolean
   error?: string | null
-  onConfirm: (input: { sourceSignal: string; receiverSignal: string; protocol: 'impulse' | 'continuous' }) => void
+  onConfirm: (input: { sourceSignal: string; receiverSignal: string; protocol: 'impulse' | 'continuous' }) => Promise<void>
 }
 
 export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, onConfirm }: LaboratoryPanelProps) {
@@ -26,11 +26,15 @@ export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, o
   const isValid = source && receiver && source !== receiver
   const { t } = useI18n()
 
-  const handleTest = () => {
+  const handleTest = async () => {
     if (isValid) {
-      onConfirm({ sourceSignal: source, receiverSignal: receiver, protocol })
-      setSource('')
-      setReceiver('')
+      try {
+        await onConfirm({ sourceSignal: source, receiverSignal: receiver, protocol })
+        setSource('')
+        setReceiver('')
+      } catch {
+        // The parent owns the visible command error; keep the test for retry.
+      }
     }
   }
 
@@ -85,7 +89,7 @@ export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, o
           </Typography>
         )}
 
-        <Button type="button" size="lg" className="w-full" disabled={disabled || !isValid} onClick={handleTest}>
+        <Button type="button" size="lg" className="w-full" disabled={disabled || !isValid} onClick={() => void handleTest()}>
           {t('tender.lab.confirm')}
         </Button>
       </CardContent>

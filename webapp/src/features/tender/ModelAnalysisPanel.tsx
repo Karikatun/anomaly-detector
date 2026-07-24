@@ -19,7 +19,7 @@ type ModelAnalysisPanelProps = {
   maxTheses: number
   disabled?: boolean
   error?: string | null
-  onConfirmThesis: (input: { signalId: string; fieldType: string; polarity: string }) => void
+  onConfirmThesis: (input: { signalId: string; fieldType: string; polarity: string }) => Promise<void>
 }
 
 export function ModelAnalysisPanel({
@@ -36,11 +36,15 @@ export function ModelAnalysisPanel({
 
   const isValid = signalId && fieldType && polarity
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (isValid) {
-      onConfirmThesis({ signalId, fieldType, polarity })
-      setFieldType('')
-      setPolarity('')
+      try {
+        await onConfirmThesis({ signalId, fieldType, polarity })
+        setFieldType('')
+        setPolarity('')
+      } catch {
+        // The parent owns the visible command error; keep the thesis for retry.
+      }
     }
   }
 
@@ -91,7 +95,7 @@ export function ModelAnalysisPanel({
           </Typography>
         )}
 
-        <Button type="button" size="lg" className="mt-6 w-full" disabled={disabled || !isValid} onClick={handleSubmit}>
+        <Button type="button" size="lg" className="mt-6 w-full" disabled={disabled || !isValid} onClick={() => void handleSubmit()}>
           {t('tender.analysis.submit')}
         </Button>
       </CardContent>

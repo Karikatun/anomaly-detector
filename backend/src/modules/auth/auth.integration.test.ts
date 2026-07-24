@@ -214,6 +214,18 @@ maybeDescribe('auth API integration', () => {
       roomId: room.roomId,
     })
 
+    const readRoom = await app.request(`/api/rooms/${room.roomId}`, {
+      headers: { Authorization: `Bearer ${joiner.accessToken}` },
+    })
+    expect(readRoom.status).toBe(200)
+    expect(await readRoom.json()).toMatchObject({
+      members: [
+        { userId: user.id },
+        { userId: joiner.user.id },
+      ],
+      roomId: room.roomId,
+    })
+
     const extraRegister = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

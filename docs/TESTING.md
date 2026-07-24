@@ -75,7 +75,8 @@ The webapp E2E flow:
 - starts the deadline worker after migrations and stops only that worker when Playwright finishes;
 - starts Vite on `E2E_WEB_PORT`, which defaults to a repository-derived port;
 - stops its `postgres_test` compose project and removes the test volume after the run unless `E2E_KEEP_DOCKER=1` is set;
-- runs the browser authentication journey: registration, session restoration after reload, protected profile, logout, and login;
+- runs the browser authentication journey: contract-backed registration/profile validation, transient session recovery, retryable logout/profile failures, protected profile, logout, and login;
+- verifies that lobby refresh uses a read-only request, exposes stale/error state, and recovers on demand;
 - runs a two-player Tender journey through all five rounds and the final model, including real-time phase transitions.
 
 Useful env:

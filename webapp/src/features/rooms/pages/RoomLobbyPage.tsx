@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { RoomView } from '@anomaly-detector/contracts'
 
@@ -12,6 +12,7 @@ import {
   useCancelRoomStartMutation,
   useJoinRoomMutation,
   useLeaveRoomMutation,
+  useRoomQuery,
   useSetRoomReadyMutation,
   useStartRoomMutation,
 } from '@/features/rooms'
@@ -28,7 +29,7 @@ export function RoomLobbyPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
-  const [now, setNow] = useState(Date.now())
+  const [now, setNow] = useState(() => Date.now())
   const initialJoinRequest = useRef<{ roomId: string; promise: Promise<RoomView> } | null>(null)
 
   useEffect(() => {
@@ -37,12 +38,14 @@ export function RoomLobbyPage() {
     }
   }, [auth.isBootstrapping, auth.user, navigate])
 
-  const api = new RoomsApi(auth.transport)
+  const api = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
   const { mutateAsync: joinRoom, isPending: isJoining } = useJoinRoomMutation({ api })
   const { mutateAsync: leaveRoom, isPending: isLeaving } = useLeaveRoomMutation({ api })
   const { mutateAsync: setRoomReady, isPending: isSettingReady } = useSetRoomReadyMutation({ api })
   const { mutateAsync: startRoom, isPending: isStarting } = useStartRoomMutation({ api })
   const { mutateAsync: cancelRoomStart, isPending: isCancellingStart } = useCancelRoomStartMutation({ api })
+  const roomQuery = useRoomQuery({ api, enabled: room !== null, roomId })
+  const currentRoom = roomQuery.data ?? room
 
   useEffect(() => {
     let cancelled = false
@@ -69,35 +72,16 @@ export function RoomLobbyPage() {
   }, [roomId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!room || room.status === 'started') return
-
-    let active = true
-    const interval = setInterval(async () => {
-      try {
-        const updated = await api.join(roomId)
-        if (active) setRoom(updated)
-      } catch {
-        // The next navigation or user action will surface a meaningful error.
-      }
-    }, room.status === 'starting' ? 1_000 : 3_000)
-
-    return () => {
-      active = false
-      clearInterval(interval)
-    }
-  }, [roomId, room?.status]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (room?.status !== 'starting') return
+    if (currentRoom?.status !== 'starting') return
     const interval = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(interval)
-  }, [room?.status])
+  }, [currentRoom?.status])
 
   useEffect(() => {
-    if (room?.status === 'started' && room.tenderId) {
-      void navigate({ to: '/tenders/$tenderId', params: { tenderId: room.tenderId } })
+    if (currentRoom?.status === 'started' && currentRoom.tenderId) {
+      void navigate({ to: '/tenders/$tenderId', params: { tenderId: currentRoom.tenderId } })
     }
-  }, [room, navigate])
+  }, [currentRoom, navigate])
 
   const handleCopy = useCallback(async () => {
     try {
@@ -162,7 +146,7 @@ export function RoomLobbyPage() {
     return <main className={styles.loading}><Spinner /></main>
   }
 
-  if (!room) {
+  if (!currentRoom) {
     return (
       <main className={styles.errorScreen}>
         <Typography variant="h3">{t('lobby.error.notFound')}</Typography>
@@ -172,16 +156,16 @@ export function RoomLobbyPage() {
     )
   }
 
-  const isHost = room.hostId === auth.user?.id
-  const isMember = room.members.some((member) => member.userId === auth.user?.id)
-  const isFull = room.members.length >= room.capacity
-  const readyCount = room.members.filter((member) => member.ready).length
-  const allPlayersReady = isFull && readyCount === room.capacity
-  const isCountdown = room.status === 'starting'
-  const secondsLeft = room.startsAt
-    ? Math.max(0, Math.ceil((Date.parse(room.startsAt) - now) / 1_000))
+  const isHost = currentRoom.hostId === auth.user?.id
+  const isMember = currentRoom.members.some((member) => member.userId === auth.user?.id)
+  const isFull = currentRoom.members.length >= currentRoom.capacity
+  const readyCount = currentRoom.members.filter((member) => member.ready).length
+  const allPlayersReady = isFull && readyCount === currentRoom.capacity
+  const isCountdown = currentRoom.status === 'starting'
+  const secondsLeft = currentRoom.startsAt
+    ? Math.max(0, Math.ceil((Date.parse(currentRoom.startsAt) - now) / 1_000))
     : 5
-  const canLeave = isMember && room.status === 'waiting'
+  const canLeave = isMember && currentRoom.status === 'waiting'
 
   return (
     <main className={styles.screen}>
@@ -189,7 +173,7 @@ export function RoomLobbyPage() {
         <header className={styles.header}>
           <button type="button" className={styles.roomCode} onClick={() => void handleCopy()}>
             <span>{t('lobby.room.id')}</span>
-            <strong>{room.roomId.slice(0, 8).toUpperCase()}</strong>
+            <strong>{currentRoom.roomId.slice(0, 8).toUpperCase()}</strong>
             <span className={styles.copyIcon} aria-hidden="true" />
             <span className="sr-only">{copied ? t('lobby.copied') : t('lobby.copyId')}</span>
           </button>
@@ -206,10 +190,10 @@ export function RoomLobbyPage() {
             <section className={styles.playersPanel}>
               <Typography as="h2" className={styles.sectionTitle}>{t('lobby.players')}</Typography>
               <div className={styles.playerList}>
-                {Array.from({ length: room.capacity }, (_, index) => {
+                  {Array.from({ length: currentRoom.capacity }, (_, index) => {
                   const seat = index + 1
-                  const member = room.members.find((candidate) => candidate.seat === seat)
-                  const isPlayerHost = member?.userId === room.hostId
+                  const member = currentRoom.members.find((candidate) => candidate.seat === seat)
+                  const isPlayerHost = member?.userId === currentRoom.hostId
                   return (
                     <div className={styles.player} data-empty={!member || undefined} key={seat}>
                       <span className={styles.avatar} aria-hidden="true">{member ? seat : '+'}</span>
@@ -219,7 +203,7 @@ export function RoomLobbyPage() {
                         </Typography>
                         {isPlayerHost ? <span className={styles.hostLabel}>{t('lobby.player.host')}</span> : null}
                       </div>
-                      {member && member.userId === auth.user?.id && room.status === 'waiting' ? (
+                      {member && member.userId === auth.user?.id && currentRoom.status === 'waiting' ? (
                         <Button
                           className={styles.readyButton}
                           type="button"
@@ -248,7 +232,7 @@ export function RoomLobbyPage() {
               <Typography as="h2" className={styles.sectionTitle}>{t('lobby.settings.title')}</Typography>
               <dl className={styles.settingsList}>
                 <div><dt>{t('lobby.settings.mode')}</dt><dd>{t('lobby.settings.mode.value')}</dd></div>
-                <div><dt>{t('lobby.settings.players')}</dt><dd>{room.capacity}</dd></div>
+                <div><dt>{t('lobby.settings.players')}</dt><dd>{currentRoom.capacity}</dd></div>
                 <div><dt>{t('lobby.settings.turnTime')}</dt><dd>{t('lobby.settings.turnTime.value')}</dd></div>
               </dl>
             </section>
@@ -282,8 +266,8 @@ export function RoomLobbyPage() {
                       {allPlayersReady
                         ? t('lobby.ready.title')
                         : isFull
-                          ? t('lobby.ready.progress', { count: readyCount, capacity: room.capacity })
-                          : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}
+                          ? t('lobby.ready.progress', { count: readyCount, capacity: currentRoom.capacity })
+                          : t('lobby.waiting.hint', { count: currentRoom.capacity - currentRoom.members.length })}
                     </Typography>
                     <Typography className={styles.statusHint}>
                       {allPlayersReady
@@ -297,10 +281,10 @@ export function RoomLobbyPage() {
                     {isStarting ? t('lobby.button.starting') : t('lobby.button.start')}
                   </Button>
                 </>
-              ) : !isMember && room.status === 'waiting' ? (
+              ) : !isMember && currentRoom.status === 'waiting' ? (
                 <>
                   <div className={styles.statusCopy}>
-                    <Typography className={styles.statusTitle}>{t('lobby.waiting.hint', { count: room.capacity - room.members.length })}</Typography>
+                    <Typography className={styles.statusTitle}>{t('lobby.waiting.hint', { count: currentRoom.capacity - currentRoom.members.length })}</Typography>
                     <Typography className={styles.statusHint}>{t('lobby.waiting.description')}</Typography>
                   </div>
                   <Button className={styles.joinButton} type="button" disabled={isJoining} onClick={() => void handleJoin()}>
@@ -313,8 +297,8 @@ export function RoomLobbyPage() {
                     {allPlayersReady
                       ? t('lobby.ready.title')
                       : isFull
-                        ? t('lobby.ready.progress', { count: readyCount, capacity: room.capacity })
-                        : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}
+                        ? t('lobby.ready.progress', { count: readyCount, capacity: currentRoom.capacity })
+                        : t('lobby.waiting.hint', { count: currentRoom.capacity - currentRoom.members.length })}
                   </Typography>
                   <Typography className={styles.statusHint}>
                     {allPlayersReady
@@ -326,6 +310,16 @@ export function RoomLobbyPage() {
                 </div>
               )}
               {error ? <Typography role="alert" className={styles.error}>{error}</Typography> : null}
+              {roomQuery.error ? (
+                <div className="grid gap-2">
+                  <Typography role="alert" className={styles.error}>
+                    Не удалось обновить состояние комнаты. Показаны последние полученные данные.
+                  </Typography>
+                  <Button type="button" variant="outline" onClick={() => void roomQuery.refetch()}>
+                    Повторить обновление
+                  </Button>
+                </div>
+              ) : null}
             </section>
           </div>
         </div>

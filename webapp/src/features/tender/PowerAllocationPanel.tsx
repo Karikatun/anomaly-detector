@@ -22,7 +22,7 @@ type Allocation = {
 type PowerAllocationPanelProps = {
   disabled?: boolean
   error?: string | null
-  onConfirm: (allocation: Allocation) => void
+  onConfirm: (allocation: Allocation) => Promise<void>
 }
 
 export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAllocationPanelProps) {
@@ -128,11 +128,15 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
           size="lg"
           className="mt-6 w-full"
           disabled={disabled || !isValid}
-          onClick={() => {
+          onClick={() => void (async () => {
             if (isValid) {
-              onConfirm(allocation)
+              try {
+                await onConfirm(allocation)
+              } catch {
+                // The parent owns the visible command error; keep the allocation for retry.
+              }
             }
-          }}
+          })()}
         >
           {isValid ? t('tender.power.confirm') : t('tender.power.remaining', { count: 4 - total })}
         </Button>

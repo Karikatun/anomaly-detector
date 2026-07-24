@@ -37,6 +37,10 @@ export class RoomsApi {
     })
   }
 
+  get(roomId: string): Promise<RoomView> {
+    return this.transport.request(`/api/rooms/${roomId}`, roomViewSchema)
+  }
+
   leave(roomId: string): Promise<void> {
     return this.transport
       .request(`/api/rooms/${roomId}/leave`, z.undefined(), {

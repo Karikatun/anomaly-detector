@@ -70,6 +70,37 @@ test('realtime sessions bind updates to their own Tender lifecycle', async () =>
   })
 })
 
+test('an active realtime session reports stale state and schedules recovery after disconnect', async () => {
+  const states: RealtimeState[] = []
+  const sockets: FakeSocket[] = []
+  let reconnect: (() => void) | null = null
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => {
+      const socket = new FakeSocket()
+      sockets.push(socket)
+      return socket
+    },
+    onState: (state) => states.push(state),
+    scheduleReconnect: (callback) => {
+      reconnect = callback
+      return 1
+    },
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-c',
+    transport: resolvedTicketTransport(),
+  })
+
+  session.start()
+  await Promise.resolve()
+  await Promise.resolve()
+  sockets[0]?.emitOpen()
+  sockets[0]?.emitClose()
+
+  expect(states.at(-1)?.connected).toBe(false)
+  expect(reconnect).not.toBeNull()
+})
+
 class FakeSocket {
   readonly CLOSED = 3
   readyState = 0
@@ -85,6 +116,11 @@ class FakeSocket {
   emitOpen() {
     this.readyState = 1
     this.onopen?.(new Event('open'))
+  }
+
+  emitClose() {
+    this.readyState = this.CLOSED
+    this.onclose?.({} as CloseEvent)
   }
 }
 

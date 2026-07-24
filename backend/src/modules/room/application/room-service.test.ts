@@ -85,6 +85,34 @@ test('adds a player to the next available seat in a waiting room', async () => {
   })
 })
 
+test('reads room state for an existing member without joining again', async () => {
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      readForMember: async () => ({
+        capacity: 2,
+        hostId: 'user-1',
+        id: 'room-1',
+        members: [
+          { ready: true, seat: 1, userId: 'user-1' },
+          { ready: false, seat: 2, userId: 'user-2' },
+        ],
+        status: 'waiting',
+        tenderId: null,
+      }),
+      join: async () => { throw new Error('GET must not join the room') },
+      leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
+      start: async () => { throw new Error('not used') },
+    },
+  })
+
+  await expect(service.getRoom({ actorId: 'user-2', roomId: 'room-1' })).resolves.toMatchObject({
+    roomId: 'room-1',
+    members: [{ userId: 'user-1' }, { userId: 'user-2' }],
+  })
+})
+
 test('lets a player leave a waiting room', async () => {
   const left: Array<{ actorId: string; roomId: string }> = []
   const service = new TenderRoomService({
