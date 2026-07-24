@@ -1,17 +1,20 @@
-import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
+import { useI18n } from '@/platform/i18n'
+
 import { RoomsApi } from '../api'
+import styles from './MyMatchesPage.module.css'
 
 export function MyMatchesPage() {
   const auth = useAuth()
   const navigate = useNavigate()
+  const { t } = useI18n()
   const api = new RoomsApi(auth.transport)
 
   useEffect(() => {
@@ -27,36 +30,99 @@ export function MyMatchesPage() {
   if (auth.isBootstrapping || !auth.user) return null
 
   return (
-    <section className="mx-auto grid w-full max-w-3xl gap-6 px-5 py-12">
-      <div className="grid gap-2">
-        <Typography variant="h1">Мои матчи</Typography>
-        <Typography tone="muted">Активные и завершённые Тендеры, в которых вы участвовали.</Typography>
-      </div>
+    <main className={styles.screen}>
+      <section className={styles.panel} aria-labelledby="match-history-title">
+        <header className={styles.header}>
+          <Typography as="h1" id="match-history-title" className={styles.title}>
+            {t('matches.title')}
+          </Typography>
+          <Button className={styles.backButton} type="button" onClick={() => void navigate({ to: '/' })}>
+            {t('matches.back')}
+          </Button>
+        </header>
 
-      {matches.isPending && (
-        <div className="flex items-center gap-3"><Spinner /><Typography tone="muted">Загружаем матчи...</Typography></div>
-      )}
-      {matches.isError && <Typography role="alert" tone="destructive">Не удалось загрузить историю матчей.</Typography>}
-      {matches.data?.length === 0 && (
-        <Card><CardContent className="py-8"><Typography tone="muted">У вас пока нет начатых матчей.</Typography></CardContent></Card>
-      )}
-      {matches.data?.map((match) => (
-        <Card key={match.roomId}>
-          <CardHeader>
-            <CardTitle>Тендер на {match.capacity} игрока</CardTitle>
-            <CardDescription>
-              {match.members.length} участника · {match.tenderPhase === 'complete' ? 'завершён' : 'активен'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {match.tenderId && (
-              <Button type="button" className="w-full" onClick={() => void navigate({ to: '/tenders/$tenderId', params: { tenderId: match.tenderId! } })}>
-                Открыть матч
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ))}
-    </section>
+        {matches.isPending ? (
+          <div className={styles.feedback} role="status">
+            <Spinner />
+            <Typography>{t('matches.loading')}</Typography>
+          </div>
+        ) : matches.isError ? (
+          <div className={styles.feedback} data-error>
+            <Typography role="alert">{t('matches.error')}</Typography>
+            <Button type="button" className={styles.retryButton} onClick={() => void matches.refetch()}>
+              {t('matches.retry')}
+            </Button>
+          </div>
+        ) : matches.data.length === 0 ? (
+          <div className={styles.empty}>
+            <span className={styles.emptyMark} aria-hidden="true">○</span>
+            <Typography className={styles.emptyTitle}>{t('matches.empty.title')}</Typography>
+            <Typography className={styles.emptyHint}>{t('matches.empty.description')}</Typography>
+            <Button type="button" className={styles.primaryButton} onClick={() => void navigate({ to: '/' })}>
+              {t('matches.empty.action')}
+            </Button>
+          </div>
+        ) : (
+          <div className={styles.history}>
+            <div className={styles.tableHeader} aria-hidden="true">
+              <span>{t('matches.column.date')}</span>
+              <span>{t('matches.column.players')}</span>
+              <span>{t('matches.column.status')}</span>
+              <span>{t('matches.column.details')}</span>
+            </div>
+
+            <div className={styles.rows}>
+              {matches.data.map((match) => {
+                const isComplete = match.tenderPhase === 'complete'
+                return (
+                  <article className={styles.row} key={match.roomId}>
+                    <div className={styles.cell} data-label={t('matches.column.date')}>
+                      <Typography className={styles.date}>{formatUuidV7Date(match.tenderId)}</Typography>
+                    </div>
+                    <div className={styles.cell} data-label={t('matches.column.players')}>
+                      <Typography className={styles.players}>{match.members.length}</Typography>
+                    </div>
+                    <div className={styles.cell} data-label={t('matches.column.status')}>
+                      <Typography className={styles.status} data-complete={isComplete || undefined}>
+                        <span className={styles.statusDot} aria-hidden="true" />
+                        {isComplete ? t('matches.status.complete') : t('matches.status.active')}
+                      </Typography>
+                    </div>
+                    <div className={styles.actionCell}>
+                      {match.tenderId ? (
+                        <Button
+                          type="button"
+                          className={styles.detailsButton}
+                          onClick={() => void navigate({
+                            to: '/tenders/$tenderId',
+                            params: { tenderId: match.tenderId! },
+                          })}
+                        >
+                          {t('matches.details')}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+    </main>
   )
+}
+
+function formatUuidV7Date(tenderId: string | null | undefined): string {
+  if (!tenderId || tenderId[14] !== '7') return '—'
+
+  const timestamp = Number.parseInt(tenderId.replaceAll('-', '').slice(0, 12), 16)
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return '—'
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date)
 }
