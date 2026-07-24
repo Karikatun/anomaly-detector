@@ -140,7 +140,28 @@
 
 .rulesTrigger {
   grid-column: 1 / -1;
-  display: none;
+  display: flex;
+  min-height: 4.1rem;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  border: 1px solid rgba(0, 116, 229, .6);
+  border-radius: 8px;
+  color: #3aa3ff;
+  background: rgba(2, 17, 38, .62);
+}
+
+.rulesTrigger:hover {
+  background: rgba(7, 39, 78, .86);
+}
+
+.rulesTrigger::before {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  content: '';
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 @media (max-width: 760px) {
@@ -169,7 +190,7 @@
   .iconWrap svg { width: 2.5rem; height: 2.5rem; }
   .plain .iconWrap { margin-left: auto; }
   .mobileArrow { display: block; width: 1.1rem; height: 1.1rem; flex: 0 0 auto; color: #a6b7c9; }
-  .rulesTrigger { display: flex; min-height: 5.15rem; align-items: center; justify-content: flex-start; gap: 1.1rem; padding: 1.25rem 1.4rem; border: 1px solid rgba(0, 116, 229, .6); border-radius: 7px; color: #2b9aff; background: rgba(2, 17, 38, .72); font-size: 0; }
+  .rulesTrigger { min-height: 5.15rem; justify-content: flex-start; gap: 1.1rem; padding: 1.25rem 1.4rem; border-radius: 7px; color: #2b9aff; background: rgba(2, 17, 38, .72); font-size: 0; }
   .rulesTrigger::before { width: 2.3rem; height: 2.3rem; content: ''; background: currentColor; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat; }
   .rulesTrigger::after { content: 'ПРАВИЛА ИГРЫ'; font: 600 .98rem/1 'Figtree Variable', sans-serif; letter-spacing: -.02em; }
 }
