@@ -1,3 +1,5 @@
+import { ViewIcon, ViewOffIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -14,6 +16,7 @@ export function LoginForm() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordVisible, setPasswordVisible] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -76,15 +79,31 @@ export function LoginForm() {
 
         <Field className={styles.field}>
           <FieldLabel className={styles.fieldLabel} htmlFor="auth-password">{t('auth.password')}</FieldLabel>
-          <Input
-            id="auth-password"
-            type="password"
-            autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-            value={password}
-            className={styles.input}
-            onChange={(e) => { setPassword(e.target.value); setError(null) }}
-            onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit() }}
-          />
+          <div className={styles.passwordControl}>
+            <Input
+              id="auth-password"
+              type={passwordVisible ? 'text' : 'password'}
+              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+              value={password}
+              className={`${styles.input} ${styles.passwordInput}`}
+              onChange={(e) => { setPassword(e.target.value); setError(null) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit() }}
+            />
+            <button
+              type="button"
+              className={styles.passwordToggle}
+              aria-controls="auth-password"
+              aria-label={t(passwordVisible ? 'auth.password.hide' : 'auth.password.show')}
+              aria-pressed={passwordVisible}
+              onClick={() => setPasswordVisible((visible) => !visible)}
+            >
+              <HugeiconsIcon
+                icon={passwordVisible ? ViewIcon : ViewOffIcon}
+                strokeWidth={1.8}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
           {passwordError && <FieldError id="auth-password-error" errors={[{ message: t('auth.errors.password') }]} />}
         </Field>
 
@@ -135,7 +154,11 @@ export function LoginForm() {
           variant="ghost"
           size="sm"
           className={styles.switchButton}
-          onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null) }}
+          onClick={() => {
+            setMode(mode === 'login' ? 'register' : 'login')
+            setPasswordVisible(false)
+            setError(null)
+          }}
         >
           {mode === 'login' ? t('auth.register') : t('auth.login')}
         </Button>

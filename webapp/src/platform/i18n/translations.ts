@@ -19,6 +19,8 @@ const ru = {
   'auth.switchToRegister': 'Нет аккаунта? Зарегистрироваться',
   'auth.loginName': 'Логин',
   'auth.password': 'Пароль',
+  'auth.password.show': 'Показать пароль',
+  'auth.password.hide': 'Скрыть пароль',
   'auth.displayName': 'Имя',
   'auth.errors.loginName': 'От 3 до 64 символов: латинские буквы, цифры, «_» или «-»',
   'auth.errors.password': 'Минимум 8 символов',

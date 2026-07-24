@@ -1,5 +1,24 @@
 import { e2ePassword, expect, registerBrowserUser, test } from '../helpers/test'
 
+test('shows and hides the password in login and registration modes', async ({ page }) => {
+  await page.goto('/')
+
+  const password = page.locator('#auth-password')
+  await expect(password).toHaveAttribute('type', 'password')
+
+  await page.getByRole('button', { name: 'Показать пароль' }).click()
+  await expect(password).toHaveAttribute('type', 'text')
+  await page.getByRole('button', { name: 'Скрыть пароль' }).click()
+  await expect(password).toHaveAttribute('type', 'password')
+
+  await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
+  await expect(password).toHaveAttribute('type', 'password')
+  await page.getByRole('button', { name: 'Показать пароль' }).click()
+  await expect(password).toHaveAttribute('type', 'text')
+  await page.getByRole('button', { name: 'Скрыть пароль' }).click()
+  await expect(password).toHaveAttribute('type', 'password')
+})
+
 test('registers, restores the browser session, opens the profile, and logs out', async ({ page }) => {
   const { login } = await registerBrowserUser(page, 'Пользователь E2E', 'auth')
 
