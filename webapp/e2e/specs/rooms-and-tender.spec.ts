@@ -73,6 +73,8 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
   try {
     await registerBrowserUser(guestPage, 'Гость правил E2E', 'rules-tender-guest', webOrigin)
     await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByLabel('Количество игроков').selectOption('2')
     await page.getByRole('button', { name: 'Создать команду' }).click()
     const roomId = new URL(page.url()).pathname.split('/').at(-1)
     if (!roomId) throw new Error('Room identifier is missing from the lobby URL')
@@ -105,6 +107,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await registerBrowserUser(guestPage, 'Гость E2E', 'room-guest', webOrigin)
 
     await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByLabel('Количество игроков').selectOption('2')
     await page.getByRole('button', { name: 'Создать команду' }).click()
     await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}$/)
 

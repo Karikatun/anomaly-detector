@@ -24,7 +24,7 @@ import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { AuthForm, useAuth } from '@/features/auth'
-import { JoinRoomDialog } from '@/features/rooms'
+import { CreateRoomDialog, JoinRoomDialog } from '@/features/rooms'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 import styles from './pages.module.css'
@@ -58,6 +58,7 @@ function AuthenticatedHome({
   onLogout: () => Promise<void>
 }) {
   const navigate = useNavigate()
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false)
 
   return (
@@ -84,7 +85,7 @@ function AuthenticatedHome({
             accent="violet"
             title="СОЗДАТЬ КОМНАТУ"
             icon={Add01Icon}
-            onClick={() => void navigate({ to: '/rooms' })}
+            onClick={() => setIsCreateDialogOpen(true)}
           />
           <MenuCard
             accent="aqua"
@@ -112,6 +113,7 @@ function AuthenticatedHome({
             triggerTextClassName={styles.rulesLabel}
           />
         </div>
+        <CreateRoomDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
         <JoinRoomDialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen} />
       </div>
     </section>
