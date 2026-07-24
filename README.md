@@ -35,7 +35,7 @@ bun run --cwd backend prisma:deploy
 Запустите сервисы в отдельных терминалах:
 
 ```bash
-bun run dev:backend  # API: http://localhost:3000
+bun run dev:backend  # API: http://localhost:3000 + worker дедлайнов
 bun run dev:webapp   # клиент Vite: адрес будет показан в терминале
 ```
 

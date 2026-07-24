@@ -25,7 +25,6 @@ const tender = createTenderModule({
 })
 realtime = createRealtimeHub({ tender })
 
-const stopAdvanceLoop = tender.startAdvanceLoop()
 const stopRealtimeSyncLoop = realtime.startSyncLoop()
 
 const app = createApp({ env: runtime.env, prisma: runtime.prisma, tender })
@@ -51,7 +50,6 @@ async function shutdown(signal: string) {
   shuttingDown = true
 
   console.log(`Backend received ${signal}; shutting down`)
-  stopAdvanceLoop()
   stopRealtimeSyncLoop()
   await stopServerGracefully(server, runtime.env.SHUTDOWN_GRACE_SECONDS * 1000)
   await runtime.close()

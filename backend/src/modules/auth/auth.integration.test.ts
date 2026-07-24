@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createApp } from '../../app'
 import { createPrisma } from '../../db'
 import type { AppEnv } from '../../env'
+import { createRoomStartModule } from '../room'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 
@@ -279,8 +280,9 @@ maybeDescribe('auth API integration', () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     expect(restart.status).toBe(200)
+    const restartedRoom = await restart.json()
 
-    await new Promise((resolve) => setTimeout(resolve, 5_500))
+    await createRoomStartModule(prisma).advanceDueRoomStarts({ now: new Date(restartedRoom.startsAt) })
     const startedRoomResponse = await app.request(`/api/rooms/${room.roomId}/join`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
