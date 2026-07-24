@@ -224,12 +224,20 @@ export function RoomLobbyPage() {
           </aside>
 
           <div className={styles.rightColumn}>
-            <section className={styles.startPanel} aria-live="polite">
+            <section
+              className={styles.startPanel}
+              data-state={isCountdown ? 'starting' : isFull ? 'ready' : 'waiting'}
+              aria-live="polite"
+            >
+              <span className={styles.statusIndicator} aria-hidden="true">
+                {isCountdown ? secondsLeft : null}
+              </span>
               {isCountdown ? (
                 <>
-                  <Typography className={styles.statusTitle}>{t('lobby.starting.title')}</Typography>
-                  <Typography className={styles.countdown}>{t('lobby.starting.countdown', { seconds: secondsLeft })}</Typography>
-                  <Typography className={styles.statusHint}>{t('lobby.starting.hint')}</Typography>
+                  <div className={styles.statusCopy}>
+                    <Typography className={styles.statusTitle}>{t('lobby.starting.countdown', { seconds: secondsLeft })}</Typography>
+                    <Typography className={styles.statusHint}>{t('lobby.starting.hint')}</Typography>
+                  </div>
                   {isHost ? (
                     <Button className={styles.cancelStartButton} type="button" disabled={isCancellingStart} onClick={() => void handleCancelStart()}>
                       {isCancellingStart ? t('lobby.button.cancellingStart') : t('lobby.button.cancelStart')}
@@ -238,24 +246,37 @@ export function RoomLobbyPage() {
                 </>
               ) : isHost ? (
                 <>
-                  <Typography className={styles.statusTitle}>{isFull ? t('lobby.ready.title') : t('lobby.waiting.title')}</Typography>
-                  <Typography className={styles.statusHint}>{isFull ? t('lobby.ready.hint') : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}</Typography>
+                  <div className={styles.statusCopy}>
+                    <Typography className={styles.statusTitle}>
+                      {isFull ? t('lobby.ready.title') : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}
+                    </Typography>
+                    <Typography className={styles.statusHint}>
+                      {isFull ? t('lobby.ready.hint') : t('lobby.waiting.description')}
+                    </Typography>
+                  </div>
                   <Button className={styles.startButton} type="button" disabled={!isFull || isStarting} onClick={() => void handleStart()}>
                     {isStarting ? t('lobby.button.starting') : t('lobby.button.start')}
                   </Button>
                 </>
               ) : !isMember && room.status === 'waiting' ? (
                 <>
-                  <Typography className={styles.statusTitle}>{t('lobby.waiting.title')}</Typography>
+                  <div className={styles.statusCopy}>
+                    <Typography className={styles.statusTitle}>{t('lobby.waiting.hint', { count: room.capacity - room.members.length })}</Typography>
+                    <Typography className={styles.statusHint}>{t('lobby.waiting.description')}</Typography>
+                  </div>
                   <Button className={styles.joinButton} type="button" disabled={isJoining} onClick={() => void handleJoin()}>
                     {isJoining ? t('lobby.button.joining') : t('lobby.button.join')}
                   </Button>
                 </>
               ) : (
-                <>
-                  <Typography className={styles.statusTitle}>{isFull ? t('lobby.ready.title') : t('lobby.waiting.title')}</Typography>
-                  <Typography className={styles.statusHint}>{isFull ? t('lobby.ready.hint') : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}</Typography>
-                </>
+                <div className={styles.statusCopy}>
+                  <Typography className={styles.statusTitle}>
+                    {isFull ? t('lobby.ready.title') : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}
+                  </Typography>
+                  <Typography className={styles.statusHint}>
+                    {isFull ? t('lobby.ready.hint') : t('lobby.waiting.description')}
+                  </Typography>
+                </div>
               )}
               {error ? <Typography role="alert" className={styles.error}>{error}</Typography> : null}
             </section>
