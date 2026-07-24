@@ -139,6 +139,8 @@
 .switchButton:hover { color: #87bdff; background: rgba(19, 72, 136, .22); }
 
 .footer { display: flex; width: min(100%, 34rem); justify-content: space-between; margin-top: auto; padding-top: 2.2rem; color: #98abc0; font-size: .82rem; }
+.footer :global([data-slot='button']) { min-height: 0; padding: 0; color: inherit; font: inherit; }
+.footer :global([data-slot='button']):hover { color: #d7e9fb; text-decoration: underline; text-underline-offset: .22rem; }
 
 @media (max-width: 760px) {
   .screen { display: block; padding: 0; }

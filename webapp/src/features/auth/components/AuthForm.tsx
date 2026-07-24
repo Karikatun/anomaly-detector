@@ -1,10 +1,12 @@
+import type { ReactNode } from 'react'
+
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import styles from './AuthForm.module.css'
 import { LoginForm } from './LoginForm'
 import { OAuthButton } from './OAuthButton'
 
-export function AuthForm() {
+export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode }) {
   const { t } = useI18n()
 
   return (
@@ -23,7 +25,7 @@ export function AuthForm() {
         </div>
 
         <footer className={styles.footer}>
-          <Typography as="span">Правила игры</Typography>
+          {footerRulesAction ?? <Typography as="span">Правила игры</Typography>}
           <Typography as="span">Пользовательское соглашение</Typography>
         </footer>
       </div>
