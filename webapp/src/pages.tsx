@@ -101,7 +101,12 @@ function AuthenticatedHome({
             icon={UserCircleIcon}
             onClick={() => void navigate({ to: '/profile' })}
           />
-          <RulesReferenceDialog triggerVariant="ghost" triggerClassName={styles.rulesTrigger} />
+          <RulesReferenceDialog
+            triggerVariant="ghost"
+            triggerClassName={styles.rulesTrigger}
+            triggerLabelKey="rules.menu"
+            triggerTextClassName={styles.rulesLabel}
+          />
         </div>
       </div>
     </section>

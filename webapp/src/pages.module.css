@@ -12,7 +12,7 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  opacity: .18;
+  opacity: 0;
   background: #010408 url('/assets/home/expedition-desktop.webp') center top / cover no-repeat;
   transition: opacity 180ms ease;
 }
@@ -23,9 +23,8 @@
   width: min(100%, 84rem);
   min-height: calc(100svh - clamp(2.5rem, 4.5vw, 5rem));
   padding: clamp(1.4rem, 2.4vw, 2.5rem);
-  border: 2px solid rgba(53, 92, 130, .72);
   border-radius: 10px;
-  background: linear-gradient(135deg, rgba(3, 13, 25, .88), rgba(1, 7, 15, .94));
+  background: url('/assets/home/expedition-desktop.webp') center top / cover no-repeat;
   box-shadow: inset 0 0 42px rgba(12, 110, 175, .06), 0 24px 54px rgba(0, 0, 0, .35);
 }
 
@@ -103,11 +102,12 @@
 .logoutLabel { font-size: .82rem; }
 
 .divider { height: 1px; margin: 1.25rem 0 2rem; background: linear-gradient(90deg, rgba(85, 130, 171, .24), transparent); }
-.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 1.5rem; }
 
 .menuCard {
   position: relative;
-  min-height: 15rem;
+  flex: 1 1 calc((100% - 1.5rem) / 2);
+  min-height: 10rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -121,8 +121,8 @@
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 .menuCard:hover { transform: translateY(-2px); background: rgba(9, 28, 50, .94); }
-.menuCard:nth-child(3), .menuCard:nth-child(4) { min-height: 6.2rem; }
-.menuCard:nth-child(3) { grid-column: 1 / -1; }
+.menuCard:nth-child(3) { min-height: 8.5rem; }
+.menuCard:nth-child(4) { min-height: 6.2rem; }
 
 .copy { min-width: 0; flex: 1; flex-direction: column; gap: .9rem; align-items: flex-start; }
 .cardTitle { font-size: clamp(1.15rem, 1.75vw, 1.7rem); line-height: 1.1; letter-spacing: -.035em; }
@@ -133,30 +133,44 @@
 .violet .iconWrap { color: #f07cff; text-shadow: 0 0 16px #b34bec; }
 .aqua { border-color: rgba(0, 184, 191, .64); background: linear-gradient(120deg, rgba(0, 41, 49, .8), rgba(4, 15, 27, .86)); }
 .aqua .iconWrap { color: #85f6ed; text-shadow: 0 0 16px #00bcae; }
-.plain { grid-column: 1 / -1; }
+.plain { flex: 0 0 100%; }
 .plain .iconWrap { margin-left: auto; }
 
 .rulesTrigger {
-  grid-column: 1 / -1;
+  flex: 0 0 100%;
   display: flex;
-  min-height: 4.1rem;
+  min-height: 6.2rem;
   align-items: center;
-  justify-content: center;
-  gap: .65rem;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 2.25rem 2.4rem;
   border: 1px solid rgba(0, 116, 229, .6);
   border-radius: 8px;
   color: #3aa3ff;
   background: rgba(2, 17, 38, .62);
+  font-size: clamp(1.15rem, 1.75vw, 1.7rem) !important;
+  font-weight: 500 !important;
 }
 
 .rulesTrigger:hover {
   background: rgba(7, 39, 78, .86);
 }
 
+.rulesLabel {
+  flex: 1;
+  order: 1;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  line-height: 1.1 !important;
+  letter-spacing: -.035em !important;
+  text-align: left;
+}
+
 .rulesTrigger::before {
-  width: 1.35rem;
-  height: 1.35rem;
+  width: 4.6rem;
+  height: 3rem;
   flex: 0 0 auto;
+  order: 2;
   content: '';
   background: currentColor;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat;
@@ -175,26 +189,29 @@
   .logout { min-width: 2.45rem; min-height: 2.45rem; padding: .55rem; }
   .logoutLabel { display: none; }
   .divider { display: none; }
-  .actions { margin-top: clamp(10.8rem, 28vw, 13.3rem); grid-template-columns: 1fr; gap: .7rem; }
+  .actions { margin-top: clamp(10.8rem, 28vw, 13.3rem); flex-direction: column; flex-wrap: nowrap; gap: .7rem; }
   .menuCard {
-    display: grid !important;
+    display: flex !important;
+    flex: 0 0 auto;
+    width: 100%;
     min-height: 6.1rem;
-    grid-template-columns: minmax(0, 1fr) 3.6rem;
     align-items: center;
-    column-gap: .5rem;
+    justify-content: space-between;
+    gap: .5rem;
     padding: 1.4rem .7rem 1.4rem 1.4rem;
     border-width: 1px;
     border-radius: 7px;
   }
-  .copy { display: flex; min-width: 0; grid-column: 1; gap: .65rem; }
+  .menuCard:nth-child(3), .menuCard:nth-child(4) { min-height: 6.1rem; }
+  .copy { display: flex; min-width: 0; flex: 1; gap: .65rem; }
   .cardTitle { font-size: 1.15rem; letter-spacing: -.035em; }
   .cardDescription { max-width: 100%; font-size: .83rem; line-height: 1.4; }
-  .iconWrap { width: 3.6rem; grid-column: 2; }
+  .iconWrap { width: 3.6rem; flex: 0 0 3.6rem; }
   .iconWrap svg { width: 2.5rem; height: 2.5rem; }
   .plain .iconWrap { margin-left: 0; }
-  .rulesTrigger { min-height: 5.15rem; justify-content: flex-start; gap: 1.1rem; padding: 1.25rem 1.4rem; border-radius: 7px; color: #2b9aff; background: rgba(2, 17, 38, .72); font-size: 0; }
-  .rulesTrigger::before { width: 2.3rem; height: 2.3rem; content: ''; background: currentColor; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat; }
-  .rulesTrigger::after { content: 'ПРАВИЛА ИГРЫ'; font: 600 .98rem/1 'Figtree Variable', sans-serif; letter-spacing: -.02em; }
+  .rulesTrigger { display: flex !important; flex: 0 0 auto; width: 100%; min-height: 6.1rem; align-items: center; justify-content: space-between; gap: 0rem; padding: 1.4rem .7rem 1.4rem 1.4rem; border-radius: 7px; color: #2b9aff; background: rgba(2, 17, 38, .72); }
+  .rulesLabel { align-self: center; font-size: 1.15rem !important; font-weight: 500 !important; transform: translateY(2px); }
+  .rulesTrigger::before { width: 2.5rem; height: 2.5rem; flex: 0 0 3.6rem; align-self: center; order: 2; margin-left: auto; content: ''; background: currentColor; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat; }
 }
 
 @media (max-width: 390px) {
