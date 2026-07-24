@@ -8,5 +8,6 @@ export type RoomRepository = {
   listStartedForMember?: (userId: string) => Promise<RoomRecord[]>
   join(input: { actorId: string; roomId: string }): Promise<RoomRecord>
   leave(input: { actorId: string; roomId: string }): Promise<void>
+  setReady(input: { actorId: string; ready: boolean; roomId: string }): Promise<RoomRecord>
   start(input: { actorId: string; roomId: string }): Promise<RoomRecord>
 }

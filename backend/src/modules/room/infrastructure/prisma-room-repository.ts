@@ -23,7 +23,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           capacity: waitingRoom.capacity as 2 | 3 | 4,
           hostId: waitingRoom.hostId,
           id: waitingRoom.id,
-          members: waitingRoom.members.map((member) => ({ seat: member.seat, userId: member.userId })),
+          members: waitingRoom.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
           status: 'waiting' as const,
           startsAt: null,
           tenderId: waitingRoom.tenderId,
@@ -40,7 +40,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         capacity: room.capacity as 2 | 3 | 4,
         hostId: room.hostId,
         id: room.id,
-        members: room.members.map((member) => ({ seat: member.seat, userId: member.userId })),
+        members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
         status: 'started' as const,
         startsAt: null,
         tenderId: room.tenderId,
@@ -65,7 +65,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         capacity: room.capacity as 2 | 3 | 4,
         hostId: room.hostId,
         id: room.id,
-        members: room.members.map((member) => ({ seat: member.seat, userId: member.userId })),
+        members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
         status: 'waiting',
         startsAt: null,
         tenderId: room.tenderId,
@@ -85,7 +85,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
             capacity: room.capacity as 2 | 3 | 4,
             hostId: room.hostId,
             id: room.id,
-            members: room.members.map((m) => ({ seat: m.seat, userId: m.userId })),
+            members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
             status: room.status as 'waiting' | 'starting' | 'started',
             startsAt: room.startsAt?.toISOString() ?? null,
             tenderId: room.tenderId,
@@ -99,6 +99,10 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           .find((candidate) => !occupiedSeats.has(candidate))
         if (!seat) throw new RoomFailure('room_full', 'Room is already full')
 
+        await tx.tenderRoomMember.updateMany({
+          where: { roomId: room.id },
+          data: { ready: false },
+        })
         await tx.tenderRoomMember.create({
           data: { roomId: room.id, seat, userId: input.actorId },
         })
@@ -106,9 +110,12 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           capacity: room.capacity as 2 | 3 | 4,
           hostId: room.hostId,
           id: room.id,
-          members: [...room.members, { seat, userId: input.actorId }]
+          members: [
+            ...room.members.map((member) => ({ ...member, ready: false })),
+            { ready: false, seat, userId: input.actorId },
+          ]
             .sort((left, right) => left.seat - right.seat)
-            .map((member) => ({ seat: member.seat, userId: member.userId })),
+            .map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
           status: 'waiting' as const,
           startsAt: null,
           tenderId: room.tenderId,
@@ -137,11 +144,47 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         await tx.tenderRoomMember.delete({
           where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
         })
+        await tx.tenderRoomMember.updateMany({
+          where: { roomId: room.id },
+          data: { ready: false },
+        })
         if (room.hostId === input.actorId) {
           await tx.tenderRoom.update({
             where: { id: room.id },
             data: { hostId: remainingMembers[0].userId },
           })
+        }
+      }, { isolationLevel: 'Serializable' })
+    },
+
+    async setReady(input) {
+      return db.$transaction(async (tx) => {
+        const room = await tx.tenderRoom.findUnique({
+          where: { id: input.roomId },
+          include: { members: { orderBy: { seat: 'asc' } } },
+        })
+        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
+        if (!room.members.some((member) => member.userId === input.actorId)) {
+          throw new RoomFailure('room_not_member', 'Player did not join this room')
+        }
+
+        const updatedMember = await tx.tenderRoomMember.update({
+          where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
+          data: { ready: input.ready },
+        })
+        return {
+          capacity: room.capacity as 2 | 3 | 4,
+          hostId: room.hostId,
+          id: room.id,
+          members: room.members.map((member) => ({
+            ready: member.userId === updatedMember.userId ? updatedMember.ready : member.ready,
+            seat: member.seat,
+            userId: member.userId,
+          })),
+          status: 'waiting' as const,
+          startsAt: null,
+          tenderId: room.tenderId,
         }
       }, { isolationLevel: 'Serializable' })
     },
@@ -156,6 +199,9 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         if (room.hostId !== input.actorId) throw new RoomFailure('room_not_host', 'Only the room host can start it')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room has already started')
         if (room.members.length !== room.capacity) throw new RoomFailure('room_full', 'Room needs every seat filled before starting')
+        if (room.members.some((member) => !member.ready)) {
+          throw new RoomFailure('room_not_ready', 'Every player must be ready before starting')
+        }
 
         const startsAt = new Date(Date.now() + 5_000)
         const startingRoom = await tx.tenderRoom.update({
@@ -167,7 +213,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           capacity: startingRoom.capacity as 2 | 3 | 4,
           hostId: startingRoom.hostId,
           id: startingRoom.id,
-          members: startingRoom.members.map((member) => ({ seat: member.seat, userId: member.userId })),
+          members: startingRoom.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
           status: 'starting' as const,
           startsAt: startsAt.toISOString(),
           tenderId: startingRoom.tenderId,

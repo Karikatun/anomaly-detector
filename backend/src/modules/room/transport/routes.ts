@@ -1,4 +1,11 @@
-import { apiErrorSchema, createRoomRequestSchema, myMatchesResponseSchema, roomIdSchema, roomViewSchema } from '@anomaly-detector/contracts'
+import {
+  apiErrorSchema,
+  createRoomRequestSchema,
+  myMatchesResponseSchema,
+  roomIdSchema,
+  roomViewSchema,
+  setRoomReadyRequestSchema,
+} from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'
@@ -63,6 +70,21 @@ const startRoomRoute = createRoute({
   },
 })
 
+const setRoomReadyRoute = createRoute({
+  method: 'post',
+  path: '/{roomId}/ready',
+  request: {
+    params: z.object({ roomId: roomIdSchema }),
+    body: { content: { 'application/json': { schema: setRoomReadyRequestSchema } } },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: roomViewSchema } }, description: 'Updated player readiness' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+    404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Readiness cannot be changed' },
+  },
+})
+
 const cancelRoomStartRoute = createRoute({
   method: 'post',
   path: '/{roomId}/cancel-start',
@@ -94,6 +116,14 @@ export function createRoomRoutes(input: {
     await executeRoom(() => input.service.leaveRoom({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId }))
     return c.body(null, 204)
   })
+  routes.openapi(setRoomReadyRoute, async (c) => c.json(
+    await executeRoom(() => input.service.setReady({
+      actorId: c.var.user.id,
+      ready: c.req.valid('json').ready,
+      roomId: c.req.valid('param').roomId,
+    })),
+    200,
+  ))
   routes.openapi(startRoomRoute, async (c) => c.json(
     await executeRoom(() => input.service.startRoom({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId })),
     200,
