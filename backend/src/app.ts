@@ -32,6 +32,7 @@ export function createApp({ env, prisma, tender: providedTender }: CreateAppOpti
     db: prisma,
     requireAuth: auth.requireAuth,
   })
+  rooms.startAdvanceLoop()
   const app = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
   })

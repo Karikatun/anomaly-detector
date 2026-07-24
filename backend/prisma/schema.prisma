@@ -109,6 +109,7 @@ model TenderRoom {
   hostId    String             @map("host_id") @db.Uuid
   capacity  Int
   status    String
+  startsAt  DateTime?          @map("starts_at")
   tenderId  String?            @unique @map("tender_id") @db.Uuid
   createdAt DateTime           @default(now()) @map("created_at")
   updatedAt DateTime           @updatedAt @map("updated_at")
