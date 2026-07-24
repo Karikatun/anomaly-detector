@@ -48,4 +48,10 @@ export class RoomsApi {
       method: 'POST',
     })
   }
+
+  cancelStart(roomId: string): Promise<RoomView> {
+    return this.transport.request(`/api/rooms/${roomId}/cancel-start`, roomViewSchema, {
+      method: 'POST',
+    })
+  }
 }

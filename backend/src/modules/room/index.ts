@@ -15,5 +15,6 @@ export function createRoomModule(input: {
       requireAuth: input.requireAuth,
       service,
     }),
+    startAdvanceLoop: () => service.startAdvanceLoop(),
   }
 }

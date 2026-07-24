@@ -63,6 +63,18 @@ const startRoomRoute = createRoute({
   },
 })
 
+const cancelRoomStartRoute = createRoute({
+  method: 'post',
+  path: '/{roomId}/cancel-start',
+  request: { params: z.object({ roomId: roomIdSchema }) },
+  responses: {
+    200: { content: { 'application/json': { schema: roomViewSchema } }, description: 'Cancelled Tender room start' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+    404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room start cannot be cancelled' },
+  },
+})
+
 export function createRoomRoutes(input: {
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   service: TenderRoomService
@@ -84,6 +96,10 @@ export function createRoomRoutes(input: {
   })
   routes.openapi(startRoomRoute, async (c) => c.json(
     await executeRoom(() => input.service.startRoom({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId })),
+    200,
+  ))
+  routes.openapi(cancelRoomStartRoute, async (c) => c.json(
+    await executeRoom(() => input.service.cancelRoomStart({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId })),
     200,
   ))
   return routes

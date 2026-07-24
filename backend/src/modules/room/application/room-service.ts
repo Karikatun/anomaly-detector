@@ -31,6 +31,23 @@ export class TenderRoomService {
   async startRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
     return toRoomView(await this.dependencies.repository.start(input))
   }
+
+  async cancelRoomStart(input: { actorId: string; roomId: string }): Promise<RoomView> {
+    const cancelStart = this.dependencies.repository.cancelStart
+    if (!cancelStart) throw new Error('Room start cancellation is unavailable')
+    return toRoomView(await cancelStart(input))
+  }
+
+  startAdvanceLoop(intervalMs = 250) {
+    const interval = setInterval(() => {
+      void this.dependencies.repository.advanceDueStarts?.().catch(() => {
+        // The next loop retries durable starts after a transient database failure.
+      })
+    }, intervalMs)
+    interval.unref?.()
+
+    return () => clearInterval(interval)
+  }
 }
 
 function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomView {
@@ -40,6 +57,7 @@ function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomVi
       members: room.members,
       roomId: room.id,
       status: room.status,
+      ...(room.startsAt === null || room.startsAt === undefined ? {} : { startsAt: room.startsAt }),
       ...(room.tenderId === null ? {} : { tenderId: room.tenderId }),
       ...(room.tenderPhase === undefined ? {} : { tenderPhase: room.tenderPhase }),
     }

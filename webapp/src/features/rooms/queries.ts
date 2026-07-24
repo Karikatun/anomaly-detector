@@ -61,3 +61,14 @@ export function useStartRoomMutation({ api, onRoomStarted }: RoomMutationsOption
     },
   })
 }
+
+export function useCancelRoomStartMutation({ api }: RoomMutationsOptions) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (roomId: string) => api.cancelStart(roomId),
+    onSuccess: (room) => {
+      queryClient.setQueryData(roomQueryKeys.byId(room.roomId), room)
+    },
+  })
+}

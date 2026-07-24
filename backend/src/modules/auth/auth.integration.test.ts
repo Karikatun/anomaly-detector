@@ -256,29 +256,58 @@ maybeDescribe('auth API integration', () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     expect(start.status).toBe(200)
-    const startedRoom = await start.json()
-    expect(startedRoom).toMatchObject({
+    const scheduledRoom = await start.json()
+    expect(scheduledRoom).toMatchObject({
       roomId: room.roomId,
-      status: 'started',
+      status: 'starting',
+      startsAt: expect.any(String),
     })
-    expect(startedRoom.tenderId).toBeString()
-    expect(await prisma.tender.findUnique({ where: { id: startedRoom.tenderId } })).not.toBeNull()
+    expect(scheduledRoom.tenderId).toBeUndefined()
 
-    const playerView = await app.request(`/api/tenders/${startedRoom.tenderId}`, {
+    const cancelStart = await app.request(`/api/rooms/${room.roomId}/cancel-start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(cancelStart.status).toBe(200)
+    const cancelledRoom = await cancelStart.json()
+    expect(cancelledRoom.roomId).toBe(room.roomId)
+    expect(cancelledRoom.status).toBe('waiting')
+    expect('startsAt' in cancelledRoom).toBe(false)
+
+    const restart = await app.request(`/api/rooms/${room.roomId}/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(restart.status).toBe(200)
+
+    await new Promise((resolve) => setTimeout(resolve, 5_500))
+    const startedRoomResponse = await app.request(`/api/rooms/${room.roomId}/join`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(startedRoomResponse.status).toBe(200)
+    const startedRoom = await startedRoomResponse.json()
+    expect(startedRoom.roomId).toBe(room.roomId)
+    expect(startedRoom.status).toBe('started')
+    expect(startedRoom.tenderId).toBeString()
+    const tenderId = startedRoom.tenderId as string
+    expect(await prisma.tender.findUnique({ where: { id: tenderId } })).not.toBeNull()
+
+    const playerView = await app.request(`/api/tenders/${tenderId}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     expect(playerView.status).toBe(200)
     expect(await playerView.json()).toMatchObject({
       phase: 'access-slot-selection',
-      tenderId: startedRoom.tenderId,
+      tenderId,
     })
 
-    const outsiderView = await app.request(`/api/tenders/${startedRoom.tenderId}`, {
+    const outsiderView = await app.request(`/api/tenders/${tenderId}`, {
       headers: { Authorization: `Bearer ${extra.accessToken}` },
     })
     expect(outsiderView.status).toBe(403)
 
-    const command = await app.request(`/api/tenders/${startedRoom.tenderId}/commands`, {
+    const command = await app.request(`/api/tenders/${tenderId}/commands`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -288,13 +317,13 @@ maybeDescribe('auth API integration', () => {
         actorId: user.id,
         commandId: 'access-slot-host-1',
         slot: 3,
-        tenderId: startedRoom.tenderId,
+        tenderId,
         type: 'request-access-slot',
       }),
     })
     expect(command.status).toBe(200)
-    expect(await command.json()).toEqual({ tenderId: startedRoom.tenderId, version: 1 })
-  })
+    expect(await command.json()).toEqual({ tenderId, version: 1 })
+  }, 10_000)
 
   test('returns one durable successor across three concurrent refresh requests', async () => {
     const register = await app.request('/api/auth/token/register', {

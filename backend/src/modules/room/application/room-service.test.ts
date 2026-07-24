@@ -97,7 +97,7 @@ test('lets a player leave a waiting room', async () => {
   expect(left).toEqual([{ actorId: 'user-2', roomId: 'room-1' }])
 })
 
-test('starts a full room and exposes its Tender id', async () => {
+test('schedules a full room start and exposes its server start time', async () => {
   const service = new TenderRoomService({
     repository: {
       create: async () => { throw new Error('not used') },
@@ -108,8 +108,9 @@ test('starts a full room and exposes its Tender id', async () => {
         hostId: 'user-1',
         id: 'room-1',
         members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
-        status: 'started',
-        tenderId: 'tender-1',
+        status: 'starting',
+        startsAt: '2026-07-24T12:00:05.000Z',
+        tenderId: null,
       }),
     },
   })
@@ -119,8 +120,36 @@ test('starts a full room and exposes its Tender id', async () => {
     hostId: 'user-1',
     members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
-    status: 'started',
-    tenderId: 'tender-1',
+    status: 'starting',
+    startsAt: '2026-07-24T12:00:05.000Z',
+  })
+})
+
+test('lets the host cancel a scheduled room start', async () => {
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      cancelStart: async () => ({
+        capacity: 2,
+        hostId: 'user-1',
+        id: 'room-1',
+        members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+        status: 'waiting',
+        startsAt: null,
+        tenderId: null,
+      }),
+      join: async () => { throw new Error('not used') },
+      leave: async () => { throw new Error('not used') },
+      start: async () => { throw new Error('not used') },
+    },
+  })
+
+  await expect(service.cancelRoomStart({ actorId: 'user-1', roomId: 'room-1' })).resolves.toEqual({
+    capacity: 2,
+    hostId: 'user-1',
+    members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+    roomId: 'room-1',
+    status: 'waiting',
   })
 })
 

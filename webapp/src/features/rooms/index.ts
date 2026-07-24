@@ -1,6 +1,7 @@
 export { RoomsApi } from './api'
 export {
   useCreateRoomMutation,
+  useCancelRoomStartMutation,
   useJoinRoomMutation,
   useLeaveRoomMutation,
   useStartRoomMutation,

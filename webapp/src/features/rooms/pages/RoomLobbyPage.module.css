@@ -1,0 +1,60 @@
+.screen { min-height: 100svh; padding: clamp(1rem, 2vw, 1.5rem); background: #010408; }
+.panel { width: min(100%, 110rem); min-height: calc(100svh - 2rem); margin: 0 auto; padding: clamp(1.5rem, 3vw, 3.3rem); border: 2px solid rgba(26, 100, 166, .62); border-radius: 12px; background: linear-gradient(135deg, rgba(2, 13, 25, .91), rgba(0, 7, 15, .94)), url('/assets/home/expedition-desktop.webp') center top / cover; box-shadow: inset 0 0 70px rgba(8, 99, 170, .06); }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding-bottom: 1.75rem; border-bottom: 1px solid rgba(82, 133, 179, .3); }
+.title, .sectionTitle, .statusTitle { color: #edf6ff; font-weight: 500; letter-spacing: -.045em; }
+.title { font-size: clamp(1.6rem, 2.2vw, 2.45rem); line-height: 1; }
+.roomCode { display: inline-flex; align-items: center; gap: .55rem; padding: .55rem .75rem; border: 1px solid rgba(47, 150, 230, .56); border-radius: 7px; color: #acbed1; background: rgba(0, 17, 34, .58); font-size: .72rem; letter-spacing: .08em; cursor: pointer; }
+.roomCode:hover { border-color: #31a4f2; background: rgba(8, 47, 80, .75); }
+.roomCode strong { color: #e7f3ff; font-size: .86rem; letter-spacing: .11em; }
+.copyIcon { width: 1rem; height: 1rem; border: 1.5px solid #72bcf0; border-radius: 2px; box-shadow: 3px -3px 0 -1px rgba(0, 15, 30, 1), 3px -3px 0 0 #72bcf0; }
+.layout { display: grid; grid-template-columns: minmax(19rem, .78fr) minmax(31rem, 1.22fr); gap: clamp(1rem, 2vw, 1.9rem); padding-top: clamp(1.4rem, 2.4vw, 2.4rem); }
+.leftColumn, .rightColumn { display: grid; gap: 1rem; align-content: start; }
+.playersPanel, .settingsPanel, .startPanel { border: 1px solid rgba(38, 102, 162, .62); border-radius: 9px; background: linear-gradient(135deg, rgba(2, 17, 33, .94), rgba(2, 10, 20, .83)); }
+.playersPanel, .settingsPanel { padding: clamp(1rem, 1.8vw, 1.45rem); }
+.sectionTitle { padding-bottom: .85rem; border-bottom: 1px solid rgba(80, 130, 174, .25); font-size: .95rem; text-transform: uppercase; }
+.playerList { display: grid; }
+.player { display: flex; min-height: 4.25rem; align-items: center; gap: .8rem; border-bottom: 1px solid rgba(80, 130, 174, .19); }
+.player:last-child { border-bottom: 0; }
+.player[data-empty] { opacity: .55; }
+.avatar { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 auto; place-items: center; border: 1px solid #29b2f6; border-radius: 50%; color: #9de4ff; background: radial-gradient(circle at 50% 34%, rgba(22, 129, 186, .42), rgba(2, 13, 27, .9) 65%); font-size: .8rem; }
+.playerCopy { display: grid; min-width: 0; gap: .15rem; }
+.playerName { color: #dcecfb; font-size: .95rem; line-height: 1.15; }
+.hostLabel { color: #63d7d2; font-size: .67rem; letter-spacing: .08em; text-transform: uppercase; }
+.playerState { width: .42rem; height: .42rem; margin-left: auto; border-radius: 50%; background: #4be29b; box-shadow: 0 0 9px rgba(75, 226, 155, .75); }
+.settingsList { display: grid; gap: .8rem; padding-top: .2rem; }
+.settingsList > div { display: flex; justify-content: space-between; gap: 1rem; color: #8ea5bc; font-size: .83rem; }
+.settingsList dd { color: #e6f0fa; text-align: right; }
+.stationImage { min-height: clamp(15.5rem, 28vw, 29rem); border: 1px solid rgba(47, 128, 192, .65); border-radius: 9px; background: linear-gradient(180deg, rgba(2, 11, 22, .02), rgba(0, 8, 16, .35)), url('/assets/lobby/station-background.webp') center / cover; box-shadow: inset 0 0 40px rgba(0, 0, 0, .42); }
+.startPanel { display: grid; min-height: 10.6rem; place-items: center; align-content: center; gap: .55rem; padding: 1.35rem; text-align: center; }
+.statusTitle { font-size: clamp(1.15rem, 1.7vw, 1.55rem); }
+.statusHint { color: #91a8bd; font-size: .9rem; line-height: 1.35; }
+.countdown { color: #70e8af; font-size: 1.8rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.startButton, .joinButton { min-width: min(100%, 17rem); margin-top: .35rem; border: 1px solid #4ce397 !important; border-radius: 6px !important; color: #62eaa6 !important; background: rgba(3, 27, 23, .9) !important; box-shadow: inset 0 0 18px rgba(25, 161, 103, .12); }
+.startButton:hover:not(:disabled), .joinButton:hover:not(:disabled) { background: rgba(8, 57, 43, .96) !important; }
+.joinButton { border-color: #35b6d7 !important; color: #74e5f3 !important; background: rgba(3, 26, 34, .9) !important; }
+.cancelStartButton { min-width: min(100%, 17rem); margin-top: .2rem; border: 1px solid rgba(235, 132, 132, .8) !important; border-radius: 6px !important; color: #ffadad !important; background: rgba(49, 10, 15, .72) !important; }
+.cancelStartButton:hover:not(:disabled) { background: rgba(85, 16, 23, .86) !important; }
+.leaveButton { margin-top: .25rem; border: 0; color: #819bb2; background: transparent; font-size: .75rem; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.error { color: #ff98a0; font-size: .78rem; }
+.loading, .errorScreen { display: grid; min-height: 100svh; place-items: center; gap: 1rem; padding: 2rem; background: #010408; text-align: center; }
+.errorScreen { align-content: center; color: #ecf6ff; }
+
+@media (max-width: 760px) {
+  .screen { padding: 0; background: #010408 url('/assets/home/expedition-mobile.webp') center top / 100% auto no-repeat; }
+  .panel { min-height: 100svh; padding: 1.15rem 1rem 1.8rem; border: 0; border-radius: 0; background: linear-gradient(180deg, rgba(1, 7, 15, .1), rgba(1, 7, 14, .94) 27%, #01070d 100%); box-shadow: none; }
+  .header { align-items: flex-start; gap: .8rem; padding-bottom: 1rem; }
+  .title { max-width: 12rem; font-size: 1.35rem; line-height: 1.05; }
+  .roomCode { gap: .35rem; padding: .42rem .5rem; font-size: .56rem; }
+  .roomCode strong { font-size: .66rem; }
+  .copyIcon { width: .75rem; height: .75rem; }
+  .layout { display: flex; flex-direction: column; gap: .85rem; padding-top: 1rem; }
+  .rightColumn { display: contents; }
+  .stationImage { order: -1; min-height: 13rem; }
+  .leftColumn { display: contents; }
+  .playersPanel { order: 1; }
+  .settingsPanel { order: 2; }
+  .startPanel { order: 3; min-height: 9.5rem; }
+  .playersPanel, .settingsPanel { padding: 1rem; }
+  .player { min-height: 3.65rem; }
+  .sectionTitle { font-size: .82rem; }
+}

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const roomCapacitySchema = z.union([z.literal(2), z.literal(3), z.literal(4)])
 export const roomIdSchema = z.string().uuid()
-export const roomStatusSchema = z.enum(['waiting', 'started'])
+export const roomStatusSchema = z.enum(['waiting', 'starting', 'started'])
 
 export const createRoomRequestSchema = z.object({
   capacity: roomCapacitySchema,
@@ -19,6 +19,7 @@ export const roomViewSchema = z.object({
   members: z.array(roomMemberSchema),
   roomId: roomIdSchema,
   status: roomStatusSchema,
+  startsAt: z.string().datetime().nullable().optional(),
   tenderId: z.string().uuid().nullable().optional(),
   tenderPhase: z.string().optional(),
 }).strict()
