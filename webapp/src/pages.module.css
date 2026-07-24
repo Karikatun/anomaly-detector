@@ -87,7 +87,6 @@
 
 .identity { min-width: 5.4rem; }
 .name { color: #eef5fb; font-size: 1rem; line-height: 1.15; }
-.rating { margin-top: .2rem; color: #91a5ba; font-size: .83rem; }
 
 .logout {
   display: inline-flex;
@@ -166,14 +165,13 @@
 @media (max-width: 760px) {
   .screen { display: block; padding: 0; background: #020610; }
   .background { opacity: 1; background-image: url('/assets/home/expedition-mobile.webp'); background-position: center top; background-size: 100% auto; }
-  .panel { min-height: 100svh; width: 100%; padding: 3.85rem 1.25rem 1.9rem; border-width: 1px; border-color: rgba(53, 92, 130, .72); border-radius: 0 0 14px 14px; background: linear-gradient(180deg, rgba(2, 8, 17, .1) 0, rgba(2, 8, 17, .08) 28%, rgba(2, 7, 16, .94) 35%, #020710 43%); }
+  .panel { min-height: 100svh; width: 100%; padding: 1.5rem 1.25rem 1.9rem; border-width: 1px; border-color: rgba(53, 92, 130, .72); border-radius: 0 0 14px 14px; background: linear-gradient(180deg, rgba(2, 8, 17, .1) 0, rgba(2, 8, 17, .08) 28%, rgba(2, 7, 16, .94) 35%, #020710 43%); }
   .header { align-items: center; }
   .title { padding-top: .2rem; font-size: 1.05rem; letter-spacing: -.035em; }
   .account { gap: .5rem; }
   .avatar { width: 2.7rem; }
   .identity { min-width: 4.1rem; }
   .name { font-size: .75rem; }
-  .rating { font-size: .64rem; margin-top: .08rem; }
   .logout { min-width: 2.45rem; min-height: 2.45rem; padding: .55rem; }
   .logoutLabel { display: none; }
   .divider { display: none; }
@@ -196,5 +194,5 @@
 @media (max-width: 390px) {
   .panel { padding-inline: 1rem; }
   .actions { margin-top: 9.8rem; }
-  .menuCard, .menuCard:nth-child(3), .menuCard:nth-child(4) { padding-inline: 1.15rem; }
+  .menuCard, .menuCard:nth-child(3), .menuCard:nth-child(4) { padding-left: 1.15rem; }
 }
