@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
+import type { TranslationKey } from '@/platform/i18n/translations'
 import { AccessSlotPanel } from './AccessSlotPanel'
 import { ContractsPanel } from './ContractsPanel'
 import { FinalScientificModelPanel } from './FinalScientificModelPanel'
@@ -20,8 +21,20 @@ import { PowerAllocationPanel } from './PowerAllocationPanel'
 import { ReconnaissancePanel } from './ReconnaissancePanel'
 import { TenderTimer } from './TenderTimer'
 import { WorkingModelPanel } from './WorkingModelPanel'
-import { useRealtimeTender } from './realtime'
-import { useTenderCommands } from './commands'
+import {
+  fieldTypeLabelKeys,
+  isSignalId,
+  polarityLabelKeys,
+  signalLabelKeys,
+} from './catalog'
+import {
+  useTenderCommands,
+  type TenderCommandInput,
+} from './commands'
+import {
+  useRealtimeTender,
+  type RealtimeErrorCode,
+} from './realtime'
 
 const phaseLabels: Record<string, string> = {
   'access-slot-selection': '1. Выбор слота доступа',
@@ -32,26 +45,6 @@ const phaseLabels: Record<string, string> = {
   'contracts': '6. Контракты',
   'final-scientific-model': '7. Финальная научная модель',
   'complete': 'Завершён',
-}
-
-const fieldTypeLabels: Record<string, string> = {
-  inertial: 'Инерционное',
-  electromagnetic: 'Электромагнитное',
-  phase: 'Фазовое',
-}
-
-const polarityLabels: Record<string, string> = {
-  positive: 'Позитив (+)',
-  negative: 'Негатив (−)',
-}
-
-const signalNames: Record<string, string> = {
-  aster: 'Aster',
-  boreal: 'Boreal',
-  cinder: 'Cinder',
-  delta: 'Delta',
-  eclipse: 'Eclipse',
-  ferro: 'Ferro',
 }
 
 const laboratoryResultLabels: Record<string, string> = {
@@ -79,6 +72,13 @@ const sequentialPhases = new Set([
   'final-scientific-model',
 ])
 
+const realtimeErrorKeys = {
+  'connection-failed': 'tender.realtime.error.connection-failed',
+  'ticket-failed': 'tender.realtime.error.ticket-failed',
+  'invalid-message': 'tender.realtime.error.invalid-message',
+  'server-error': 'tender.realtime.error.server-error',
+} as const satisfies Record<RealtimeErrorCode, TranslationKey>
+
 function WaitingForTurn({ playerName }: { playerName?: string }) {
   return (
     <Card>
@@ -98,10 +98,11 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
   view: TenderView
   disabled: boolean
   error: string | null
-  onCommand: (cmd: Record<string, unknown> & { type: string }) => Promise<void>
+  onCommand: (cmd: TenderCommandInput) => Promise<void>
   activePlayerId?: string
 }) {
   const auth = useAuth()
+  const { t } = useI18n()
   const myPlayer = view.players.find((p) => p.playerId === auth.user?.id)
   const mySamples = myPlayer ? view.privateSamples : []
   const myPower = myPlayer?.powerAllocation
@@ -232,13 +233,13 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
               <Typography variant="control" tone="muted">Свойства сигналов</Typography>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {Object.entries(view.audit.anomalyConfiguration.signals).map(([sig, props]) => (
-                  <Card key={sig} size="sm">
-                    <CardContent className="py-3">
-                      <Typography variant="bodySm" className="font-bold">
-                        {signalNames[sig] ?? sig}
+                    <Card key={sig} size="sm">
+                      <CardContent className="py-3">
+                        <Typography variant="bodySm" className="font-bold">
+                        {isSignalId(sig) ? t(signalLabelKeys[sig]) : sig}
                       </Typography>
                       <Typography variant="bodySm" tone="muted" className="leading-snug">
-                        {fieldTypeLabels[props.fieldType] ?? props.fieldType} / {polarityLabels[props.polarity] ?? props.polarity}
+                        {t(fieldTypeLabelKeys[props.fieldType])} / {t(polarityLabelKeys[props.polarity])}
                       </Typography>
                     </CardContent>
                   </Card>
@@ -294,19 +295,16 @@ export function TenderPage() {
   }, [auth.isBootstrapping, auth.user, navigate])
 
   const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
-  const { execute } = useTenderCommands(auth.transport, tenderId)
+  const { execute } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
   const [commandError, setCommandError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const handleCommand = useCallback(
-    async (command: Record<string, unknown> & { type: string }) => {
+    async (command: TenderCommandInput) => {
       setCommandError(null)
       setSubmitting(true)
       try {
-        await execute({
-          ...command,
-          actorId: auth.user!.id,
-        } as Parameters<typeof execute>[0])
+        await execute(command)
       } catch (err) {
         setCommandError(err instanceof Error ? err.message : 'Command failed')
         throw err
@@ -314,7 +312,7 @@ export function TenderPage() {
         setSubmitting(false)
       }
     },
-    [execute, auth.user],
+    [execute],
   )
   const saveWorkingModel = useCallback(
     async (workingModel: TenderView['privateWorkingModel']) => {
@@ -322,18 +320,17 @@ export function TenderPage() {
         throw new Error('Соединение с игрой потеряно. Подключитесь снова перед сохранением.')
       }
       await execute({
-        actorId: auth.user!.id,
         type: 'update-working-model',
         workingModel,
       })
     },
-    [auth.user, connected, execute],
+    [connected, execute],
   )
 
   if (error && !tenderView) {
     return (
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
-        <Typography variant="h4" tone="destructive">{error}</Typography>
+        <Typography variant="h4" tone="destructive">{t(realtimeErrorKeys[error])}</Typography>
       </section>
     )
   }
@@ -363,8 +360,10 @@ export function TenderPage() {
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-8">
-      {/* Header */}
-      <div className="grid gap-3">
+      <header
+        aria-label={t('tender.phase.status')}
+        className="sticky top-0 z-20 -mx-5 grid gap-3 border-y bg-background/95 px-5 py-3 shadow-sm backdrop-blur"
+      >
         <Typography variant="h3">{phase}</Typography>
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="outline" className="tracking-widest uppercase">Раунд {tenderView.round} / 5</Badge>
@@ -379,13 +378,13 @@ export function TenderPage() {
           )}
           <div className="ml-auto flex items-center gap-3">
             {connected ? (
-              <Badge variant="outline">Live</Badge>
+              <Badge variant="outline">{t('tender.realtime.live')}</Badge>
             ) : (
-              <Badge variant="outline" className="text-amber-400">Reconnecting...</Badge>
+              <Badge variant="outline" className="text-amber-400">{t('tender.realtime.reconnecting')}</Badge>
             )}
           </div>
         </div>
-      </div>
+      </header>
 
       {myPlayer?.requestedAccessSlot !== undefined && myPlayer.accessSlot !== undefined && (
         <Card size="sm">
@@ -408,7 +407,7 @@ export function TenderPage() {
           <CardContent className="flex flex-wrap items-center gap-3 py-4">
             <Typography role="alert" variant="bodySm" tone="destructive">
               Данные игры могут быть устаревшими. Действия приостановлены до восстановления realtime-соединения.
-              {error ? ` ${error}` : ''}
+              {error ? ` ${t(realtimeErrorKeys[error])}` : ''}
             </Typography>
             <Button type="button" variant="outline" size="sm" onClick={retry}>
               Подключиться снова
@@ -481,7 +480,7 @@ export function TenderPage() {
               <Card key={i} size="sm">
                 <CardContent className="py-3">
                   <Typography variant="bodySm" className="font-medium">
-                    {r.sourceSignal} → {r.receiverSignal}
+                    {t(signalLabelKeys[r.sourceSignal])} → {t(signalLabelKeys[r.receiverSignal])}
                   </Typography>
                   <Typography variant="control" tone="muted">
                     {laboratoryResultLabels[r.publicResult] ?? r.publicResult} ({protocolLabels[r.protocol] ?? r.protocol})
@@ -502,7 +501,7 @@ export function TenderPage() {
               <Card key={i} size="sm" className={thesis.correct ? 'border-green-500/50' : 'border-red-500/50'}>
                 <CardContent className="py-3">
                   <Typography variant="bodySm" className="font-medium">
-                    {signalNames[thesis.signalId] ?? thesis.signalId}: {fieldTypeLabels[thesis.fieldType] ?? thesis.fieldType} / {polarityLabels[thesis.polarity] ?? thesis.polarity}
+                    {t(signalLabelKeys[thesis.signalId])}: {t(fieldTypeLabelKeys[thesis.fieldType])} / {t(polarityLabelKeys[thesis.polarity])}
                   </Typography>
                   <Typography variant="control" tone={thesis.correct ? 'default' : 'destructive'}>
                     {thesis.correct ? 'Верно' : 'Неверно'} · {verificationLabels[thesis.verification] ?? thesis.verification}
@@ -545,13 +544,6 @@ export function TenderPage() {
         <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
       </div>
 
-      {/* Debug panel */}
-      <details className="mt-4">
-        <summary className="cursor-pointer text-sm text-muted-foreground">Debug: TenderView JSON</summary>
-        <pre className="mt-2 max-h-96 overflow-auto rounded-lg border bg-muted/50 p-4 text-xs">
-          {JSON.stringify(tenderView, null, 2)}
-        </pre>
-      </details>
     </section>
   )
 }

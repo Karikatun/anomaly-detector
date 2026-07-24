@@ -10,9 +10,15 @@ import { getApiBaseUrl } from '@/platform/api/api-base-url'
 
 export type RealtimeState = {
   connected: boolean
-  error: string | null
+  error: RealtimeErrorCode | null
   tenderView: TenderView | null
 }
+
+export type RealtimeErrorCode =
+  | 'connection-failed'
+  | 'ticket-failed'
+  | 'invalid-message'
+  | 'server-error'
 
 type RealtimeSocket = {
   close(): void
@@ -112,7 +118,7 @@ export class TenderRealtimeSession {
         if (!this.owns(socket)) return
         this.updateState({
           connected: false,
-          error: 'Realtime connection failed',
+          error: 'connection-failed',
         })
       }
 
@@ -122,11 +128,11 @@ export class TenderRealtimeSession {
         this.updateState({ connected: false })
         this.scheduleReconnect()
       }
-    } catch (error) {
+    } catch {
       if (this.stopped || generation !== this.generation) return
       this.updateState({
         connected: false,
-        error: error instanceof Error ? error.message : 'Failed to connect to realtime',
+        error: 'ticket-failed',
       })
       this.scheduleReconnect()
     } finally {
@@ -142,10 +148,10 @@ export class TenderRealtimeSession {
       if (message.type === 'tender-view') {
         this.updateState({ tenderView: message.view })
       } else {
-        this.updateState({ error: message.error.message })
+        this.updateState({ error: 'server-error' })
       }
     } catch {
-      this.updateState({ error: 'Invalid server message' })
+      this.updateState({ error: 'invalid-message' })
     }
   }
 

@@ -1,17 +1,22 @@
 import { useState } from 'react'
 
-import type { PublicContract, ScientificJournalEntry } from '@anomaly-detector/contracts'
+import type {
+  PublicContract,
+  ScientificJournalEntry,
+  SignalId,
+} from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
+import { signalLabelKeys } from './catalog'
 
-type ContractBid = { evidenceTestIds: string[]; researchCertificationSignal?: string }
+type ContractBid = { evidenceTestIds: string[]; researchCertificationSignal?: SignalId }
 
 type ContractsPanelProps = {
-  certifications: string[]
+  certifications: SignalId[]
   contracts: PublicContract[]
   journal: ScientificJournalEntry[]
   maxPower: number
@@ -82,12 +87,16 @@ export function ContractsPanel({ certifications, contracts, journal, maxPower, p
                 data-contract-kind={contract.kind ?? 'light'}
               >
                 <Typography variant="bodySm" className="font-medium">
-                  {contract.contractId} · {contract.kind ?? 'light'} · +{contract.ratingReward ?? 2} рейтинг
+                  {contract.contractId} · {t(`tender.contracts.kind.${contract.kind ?? 'light'}`)} · +{contract.ratingReward ?? 2} рейтинг
                 </Typography>
                 <Typography variant="control" tone="muted">
                   {t('tender.contracts.required', { result: t(`tender.result.${contract.requiredPublicResult}`) })}
                 </Typography>
-                {contract.targetSignal && <Typography variant="control" tone="muted">Цель: {contract.targetRole ?? 'source'} = {contract.targetSignal}</Typography>}
+                {contract.targetSignal && (
+                  <Typography variant="control" tone="muted">
+                    Цель: {t(`tender.contracts.role.${contract.targetRole ?? 'source'}`)} = {t(signalLabelKeys[contract.targetSignal])}
+                  </Typography>
+                )}
                 {contract.requiredSecondaryPublicResult && (contract.kind === 'complex' || isFinal) && (
                   <Typography variant="control" tone="muted">Альтернатива из двух тестов: {t(`tender.result.${contract.requiredSecondaryPublicResult}`)}</Typography>
                 )}
@@ -110,17 +119,25 @@ export function ContractsPanel({ certifications, contracts, journal, maxPower, p
                     {isScientific ? (
                       <NativeSelect
                         value={bid.researchCertificationSignal ?? ''}
-                        onChange={(event) => setBids((previous) => ({ ...previous, [contract.contractId]: { ...bid, researchCertificationSignal: event.target.value || undefined } }))}
+                        onChange={(event) => setBids((previous) => ({
+                          ...previous,
+                          [contract.contractId]: {
+                            ...bid,
+                            researchCertificationSignal: event.target.value
+                              ? event.target.value as SignalId
+                              : undefined,
+                          },
+                        }))}
                       >
                         <option value="">Выберите сертификат</option>
-                        {certifications.map((signal) => <option key={signal} value={signal}>{signal}</option>)}
+                        {certifications.map((signal) => <option key={signal} value={signal}>{t(signalLabelKeys[signal])}</option>)}
                       </NativeSelect>
                     ) : (
                       <>
                         <Typography variant="control" tone="muted">Выберите доказательство из собственного журнала{contract.kind === 'complex' || isFinal ? ' (одно непрерывное или два разных)' : ''}.</Typography>
                         {ownJournal.map((entry) => (
                           <Button key={entry.testId} type="button" size="sm" variant={bid.evidenceTestIds.includes(entry.testId) ? 'default' : 'outline'} onClick={() => toggleEvidence(contract.contractId, entry.testId)}>
-                            {entry.testId}: {entry.sourceSignal} → {entry.receiverSignal}, {t(`tender.result.${entry.publicResult}`)}
+                            {entry.testId}: {t(signalLabelKeys[entry.sourceSignal])} → {t(signalLabelKeys[entry.receiverSignal])}, {t(`tender.result.${entry.publicResult}`)}
                           </Button>
                         ))}
                       </>

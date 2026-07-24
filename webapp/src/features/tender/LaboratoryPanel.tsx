@@ -1,28 +1,26 @@
 import { useState } from 'react'
 
+import type { LaboratoryProtocol, SignalId } from '@anomaly-detector/contracts'
+
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
-
-const signalNames: Record<string, string> = {
-  aster: 'Aster', boreal: 'Boreal', cinder: 'Cinder',
-  delta: 'Delta', eclipse: 'Eclipse', ferro: 'Ferro',
-}
+import { signalLabelKeys } from './catalog'
 
 type LaboratoryPanelProps = {
-  mySamples: string[]
+  mySamples: SignalId[]
   powerAllocation: number
   disabled?: boolean
   error?: string | null
-  onConfirm: (input: { sourceSignal: string; receiverSignal: string; protocol: 'impulse' | 'continuous' }) => Promise<void>
+  onConfirm: (input: { sourceSignal: SignalId; receiverSignal: SignalId; protocol: LaboratoryProtocol }) => Promise<void>
 }
 
 export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, onConfirm }: LaboratoryPanelProps) {
-  const [source, setSource] = useState<string>('')
-  const [receiver, setReceiver] = useState<string>('')
+  const [source, setSource] = useState<SignalId | null>(null)
+  const [receiver, setReceiver] = useState<SignalId | null>(null)
 
-  const protocol: 'impulse' | 'continuous' = powerAllocation >= 2 ? 'continuous' : 'impulse'
+  const protocol: LaboratoryProtocol = powerAllocation >= 2 ? 'continuous' : 'impulse'
   const isValid = source && receiver && source !== receiver
   const { t } = useI18n()
 
@@ -30,8 +28,8 @@ export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, o
     if (isValid) {
       try {
         await onConfirm({ sourceSignal: source, receiverSignal: receiver, protocol })
-        setSource('')
-        setReceiver('')
+        setSource(null)
+        setReceiver(null)
       } catch {
         // The parent owns the visible command error; keep the test for retry.
       }
@@ -52,15 +50,15 @@ export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, o
         <div className="mb-4 grid grid-cols-3 gap-2">
           {mySamples.map((signal) => (
             <Button
-              aria-label={t('tender.lab.sourceAria', { signal: signalNames[signal] ?? signal })}
+              aria-label={t('tender.lab.sourceAria', { signal: t(signalLabelKeys[signal]) })}
               key={`src-${signal}`}
               type="button"
               variant={source === signal ? 'default' : 'outline'}
               size="sm"
               disabled={disabled}
-              onClick={() => { setSource(source === signal ? '' : signal); if (receiver === signal) setReceiver('') }}
+              onClick={() => { setSource(source === signal ? null : signal); if (receiver === signal) setReceiver(null) }}
             >
-              {signalNames[signal] ?? signal}
+              {t(signalLabelKeys[signal])}
             </Button>
           ))}
         </div>
@@ -70,15 +68,15 @@ export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, o
         <div className="mb-4 grid grid-cols-3 gap-2">
           {mySamples.filter((s) => s !== source).map((signal) => (
             <Button
-              aria-label={t('tender.lab.receiverAria', { signal: signalNames[signal] ?? signal })}
+              aria-label={t('tender.lab.receiverAria', { signal: t(signalLabelKeys[signal]) })}
               key={`rec-${signal}`}
               type="button"
               variant={receiver === signal ? 'default' : 'outline'}
               size="sm"
               disabled={disabled}
-              onClick={() => setReceiver(receiver === signal ? '' : signal)}
+              onClick={() => setReceiver(receiver === signal ? null : signal)}
             >
-              {signalNames[signal] ?? signal}
+              {t(signalLabelKeys[signal])}
             </Button>
           ))}
         </div>

@@ -101,6 +101,28 @@ test('an active realtime session reports stale state and schedules recovery afte
   expect(reconnect).not.toBeNull()
 })
 
+test('realtime session exposes a stable error code for an invalid server message', async () => {
+  const states: RealtimeState[] = []
+  const socket = new FakeSocket()
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => socket,
+    onState: (state) => states.push(state),
+    scheduleReconnect: () => 1,
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-invalid-message',
+    transport: resolvedTicketTransport(),
+  })
+
+  session.start()
+  await Promise.resolve()
+  await Promise.resolve()
+  socket.emitOpen()
+  socket.emitMessage('not-json')
+
+  expect(states.at(-1)?.error).toBe('invalid-message')
+})
+
 class FakeSocket {
   readonly CLOSED = 3
   readyState = 0
@@ -121,6 +143,10 @@ class FakeSocket {
   emitClose() {
     this.readyState = this.CLOSED
     this.onclose?.({} as CloseEvent)
+  }
+
+  emitMessage(data: string) {
+    this.onmessage?.({ data } as MessageEvent<string>)
   }
 }
 
