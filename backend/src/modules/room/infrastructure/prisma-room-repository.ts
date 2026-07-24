@@ -1,20 +1,9 @@
 import type { DbClient } from '../../../db'
-import { createPersistentTenderModule } from '../../tender'
 import type { RoomRepository } from '../application/ports'
 import { RoomFailure } from '../domain/errors'
 
 export function createPrismaRoomRepository(db: DbClient): RoomRepository {
   return {
-    async advanceDueStarts() {
-      const dueRooms = await db.tenderRoom.findMany({
-        where: { startsAt: { lte: new Date() }, status: 'starting' },
-        select: { id: true },
-      })
-
-      for (const room of dueRooms) {
-        await startScheduledRoom(db, room.id)
-      }
-    },
     async cancelStart(input) {
       return db.$transaction(async (tx) => {
         const room = await tx.tenderRoom.findUnique({
@@ -186,33 +175,4 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
       }, { isolationLevel: 'Serializable' })
     },
   }
-}
-
-async function startScheduledRoom(db: DbClient, roomId: string) {
-  await db.$transaction(async (tx) => {
-    const room = await tx.tenderRoom.findUnique({
-      where: { id: roomId },
-      include: { members: { orderBy: { seat: 'asc' } } },
-    })
-    if (!room || room.status !== 'starting' || !room.startsAt || room.startsAt > new Date()) return
-
-    const users = await tx.user.findMany({
-      where: { id: { in: room.members.map((member) => member.userId) } },
-      select: { id: true, displayName: true },
-    })
-    const displayNameById = new Map(users.map((user) => [user.id, user.displayName]))
-    const tender = createPersistentTenderModule(tx as DbClient)
-    const { tenderId } = await tender.createTender({
-      players: room.members.map((member) => ({
-        id: member.userId,
-        tiePriority: member.seat,
-        displayName: displayNameById.get(member.userId) ?? member.userId.slice(0, 8),
-      })),
-    })
-
-    await tx.tenderRoom.update({
-      where: { id: room.id },
-      data: { status: 'started', startsAt: null, tenderId },
-    })
-  }, { isolationLevel: 'Serializable' })
 }

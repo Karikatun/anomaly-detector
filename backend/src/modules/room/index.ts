@@ -3,6 +3,7 @@ import type { MiddlewareHandler } from 'hono'
 import type { AuthHttpEnv } from '../auth'
 import { TenderRoomService } from './application/room-service'
 import { createPrismaRoomRepository } from './infrastructure/prisma-room-repository'
+import { createRoomStartModule } from './infrastructure/prisma-room-start'
 import { createRoomRoutes } from './transport/routes'
 
 export function createRoomModule(input: {
@@ -15,6 +16,7 @@ export function createRoomModule(input: {
       requireAuth: input.requireAuth,
       service,
     }),
-    startAdvanceLoop: () => service.startAdvanceLoop(),
   }
 }
+
+export { createRoomStartModule }

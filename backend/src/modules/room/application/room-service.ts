@@ -38,16 +38,6 @@ export class TenderRoomService {
     return toRoomView(await cancelStart(input))
   }
 
-  startAdvanceLoop(intervalMs = 250) {
-    const interval = setInterval(() => {
-      void this.dependencies.repository.advanceDueStarts?.().catch(() => {
-        // The next loop retries durable starts after a transient database failure.
-      })
-    }, intervalMs)
-    interval.unref?.()
-
-    return () => clearInterval(interval)
-  }
 }
 
 function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomView {
