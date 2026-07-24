@@ -66,7 +66,6 @@ function AuthenticatedHome({
             <div className={styles.avatar} aria-hidden="true"><span className={styles.avatarCore} /></div>
             <div className={styles.identity}>
               <Typography variant="bodySmMedium" className={styles.name}>{displayName}</Typography>
-              <Typography variant="bodySm" className={styles.rating}>Рейтинг: 1420</Typography>
             </div>
             <Button type="button" variant="ghost" className={styles.logout} onClick={() => void onLogout()} aria-label="Выйти">
               <HugeiconsIcon icon={Logout01Icon} strokeWidth={1.6} aria-hidden="true" />
