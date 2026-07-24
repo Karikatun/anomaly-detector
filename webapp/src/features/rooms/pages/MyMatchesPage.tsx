@@ -9,6 +9,7 @@ import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
 
 import { RoomsApi } from '../api'
+import { roomQueryKeys } from '../queries'
 import styles from './MyMatchesPage.module.css'
 
 export function MyMatchesPage() {
@@ -22,7 +23,7 @@ export function MyMatchesPage() {
   }, [auth.isBootstrapping, auth.user, navigate])
 
   const matches = useQuery({
-    queryKey: ['rooms', 'mine'],
+    queryKey: roomQueryKeys.mine(),
     queryFn: () => api.listMatches(),
     enabled: Boolean(auth.user),
   })

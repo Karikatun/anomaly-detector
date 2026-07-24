@@ -72,10 +72,11 @@ The webapp E2E flow:
 - generates the Prisma client and applies migrations;
 - uses `TEST_DATABASE_URL` as the primary database URL, then passes that value to the backend as `DATABASE_URL` inside the test run;
 - starts the backend on `E2E_BACKEND_PORT`, which defaults to a repository-derived port;
+- starts the deadline worker after migrations and stops only that worker when Playwright finishes;
 - starts Vite on `E2E_WEB_PORT`, which defaults to a repository-derived port;
 - stops its `postgres_test` compose project and removes the test volume after the run unless `E2E_KEEP_DOCKER=1` is set;
 - runs the browser authentication journey: registration, session restoration after reload, protected profile, logout, and login;
-- runs a two-player Tender journey: room creation, joining by room ID, start, access-slot selection, and real-time transition to the next phase.
+- runs a two-player Tender journey through all five rounds and the final model, including real-time phase transitions.
 
 Useful env:
 

@@ -11,11 +11,11 @@ import type {
   RegisterRequest,
 } from '@anomaly-detector/contracts'
 
+import { sessionQueryKeys } from '@/platform/query'
+
 import type { AuthApi } from './api'
 
-export const sessionQueryKeys = {
-  all: ['session'] as const,
-}
+export { sessionQueryKeys }
 
 export const authQueryKeys = {
   all: [...sessionQueryKeys.all, 'auth'] as const,

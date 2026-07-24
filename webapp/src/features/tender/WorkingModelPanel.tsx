@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { WorkingModel } from '@anomaly-detector/contracts'
 
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
+import {
+  WorkingModelDraftController,
+  type WorkingModelSaveStatus,
+} from './working-model-draft'
 
 const signals = ['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'] as const
 const signalNames: Record<string, string> = {
@@ -29,41 +34,45 @@ type WorkingModelPanelProps = {
   model: WorkingModel
   knownSignals: string[]
   disabled?: boolean
-  onSave: (model: WorkingModel) => void
+  onSave: (model: WorkingModel) => Promise<void>
 }
 
 export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: WorkingModelPanelProps) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<WorkingModel>(model)
-  const draftRef = useRef(draft)
-  draftRef.current = draft
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-
-  const scheduleSave = useCallback(() => {
-    clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      onSave(draftRef.current)
-    }, 800)
-  }, [onSave])
+  const [saveStatus, setSaveStatus] = useState<WorkingModelSaveStatus>({ state: 'idle' })
+  const [draftController] = useState(() => new WorkingModelDraftController({
+    cancel: clearTimeout,
+    initialModel: model,
+    onDraft: setDraft,
+    onStatus: setSaveStatus,
+    save: onSave,
+    schedule: setTimeout,
+  }))
 
   useEffect(() => {
-    return () => clearTimeout(saveTimer.current)
-  }, [])
+    draftController.setSave(onSave)
+  }, [draftController, onSave])
 
-  // Sync from parent if model changes externally
   useEffect(() => {
-    setDraft(model)
-  }, [model])
+    draftController.receiveServerModel(model)
+  }, [draftController, model])
+
+  useEffect(
+    () => () => {
+      void draftController.dispose()
+    },
+    [draftController],
+  )
 
   const updateSignal = (signal: string, cell: SignalCell) => {
-    setDraft((prev) => ({
-      ...prev,
+    draftController.update({
+      ...draft,
       signals: {
-        ...prev.signals,
+        ...draft.signals,
         [signal]: cell,
       },
-    }))
-    scheduleSave()
+    })
   }
 
   const getCell = (signal: string): NonNullable<SignalCell> => {
@@ -136,8 +145,29 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {signals.map((signal) => {
+    <div className="grid gap-3">
+      {saveStatus.state === 'saving' && (
+        <Typography role="status" variant="control" tone="muted">
+          Сохраняем рабочую модель…
+        </Typography>
+      )}
+      {saveStatus.state === 'error' && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Typography role="alert" variant="bodySm" tone="destructive">
+            {saveStatus.message}
+          </Typography>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void draftController.retry()}
+          >
+            Повторить сохранение
+          </Button>
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {signals.map((signal) => {
         const isKnown = knownSignals.includes(signal)
         const cell = draft.signals?.[signal]
         const hyp = cell?.hypothesis
@@ -264,7 +294,8 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
             </CardContent>
           </Card>
         )
-      })}
+        })}
+      </div>
     </div>
   )
 }

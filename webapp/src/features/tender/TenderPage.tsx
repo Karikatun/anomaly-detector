@@ -71,7 +71,6 @@ const verificationLabels: Record<string, string> = {
 }
 
 const sequentialPhases = new Set([
-  'power-allocation',
   'reconnaissance',
   'laboratory',
   'model-analysis',
@@ -315,6 +314,16 @@ export function TenderPage() {
     },
     [execute, auth.user],
   )
+  const saveWorkingModel = useCallback(
+    async (workingModel: TenderView['privateWorkingModel']) => {
+      await execute({
+        actorId: auth.user!.id,
+        type: 'update-working-model',
+        workingModel,
+      })
+    },
+    [auth.user, execute],
+  )
 
   if (error && !tenderView) {
     return (
@@ -497,9 +506,10 @@ export function TenderPage() {
         </summary>
         <div className="mt-4">
           <WorkingModelPanel
+            key={tenderId}
             model={tenderView.privateWorkingModel}
             knownSignals={tenderView.knownSignals}
-            onSave={(wm) => handleCommand({ type: 'update-working-model', workingModel: wm })}
+            onSave={saveWorkingModel}
           />
         </div>
       </details>

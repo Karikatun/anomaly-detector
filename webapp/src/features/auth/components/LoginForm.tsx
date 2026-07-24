@@ -3,8 +3,10 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
@@ -18,6 +20,8 @@ export function LoginForm() {
   const [password, setPassword] = useState('')
   const [passwordVisible, setPasswordVisible] = useState(false)
   const [displayName, setDisplayName] = useState('')
+  const [privacyConsent, setPrivacyConsent] = useState(false)
+  const [ageConfirmation, setAgeConfirmation] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -28,7 +32,11 @@ export function LoginForm() {
   const isValid =
     /^[a-z0-9][a-z0-9_-]{2,63}$/i.test(login) &&
     password.length >= 8 &&
-    (mode === 'login' || displayName.trim().length >= 1)
+    (mode === 'login' || (
+      displayName.trim().length >= 1 &&
+      privacyConsent &&
+      ageConfirmation
+    ))
 
   const handleSubmit = async () => {
     if (!isValid) return
@@ -36,12 +44,13 @@ export function LoginForm() {
     setBusy(true)
     try {
       if (mode === 'register') {
+        if (!privacyConsent || !ageConfirmation) return
         await auth.register({
           login: login.trim(),
           password,
           displayName: displayName.trim(),
-          privacyConsent: true,
-          ageConfirmation: true,
+          privacyConsent,
+          ageConfirmation,
         })
       } else {
         await auth.login({ login: login.trim(), password })
@@ -108,19 +117,40 @@ export function LoginForm() {
         </Field>
 
         {mode === 'register' && (
-          <Field className={styles.field}>
-            <FieldLabel className={styles.fieldLabel} htmlFor="auth-display-name">{t('auth.displayName')}</FieldLabel>
-            <Input
-              id="auth-display-name"
-              type="text"
-              autoComplete="name"
-              value={displayName}
-              className={styles.input}
-              placeholder="Игрок 1"
-              onChange={(e) => { setDisplayName(e.target.value); setError(null) }}
-            />
-            {displayNameError && <FieldError id="auth-name-error" errors={[{ message: t('auth.errors.displayName') }]} />}
-          </Field>
+          <>
+            <Field className={styles.field}>
+              <FieldLabel className={styles.fieldLabel} htmlFor="auth-display-name">{t('auth.displayName')}</FieldLabel>
+              <Input
+                id="auth-display-name"
+                type="text"
+                autoComplete="name"
+                value={displayName}
+                className={styles.input}
+                placeholder="Игрок 1"
+                onChange={(e) => { setDisplayName(e.target.value); setError(null) }}
+              />
+              {displayNameError && <FieldError id="auth-name-error" errors={[{ message: t('auth.errors.displayName') }]} />}
+            </Field>
+
+            <div className={styles.consents}>
+              <div className={styles.consent}>
+                <Checkbox
+                  id="auth-privacy-consent"
+                  checked={privacyConsent}
+                  onCheckedChange={(checked) => setPrivacyConsent(checked === true)}
+                />
+                <Label htmlFor="auth-privacy-consent">{t('auth.privacyConsent')}</Label>
+              </div>
+              <div className={styles.consent}>
+                <Checkbox
+                  id="auth-age-confirmation"
+                  checked={ageConfirmation}
+                  onCheckedChange={(checked) => setAgeConfirmation(checked === true)}
+                />
+                <Label htmlFor="auth-age-confirmation">{t('auth.ageConfirmation')}</Label>
+              </div>
+            </div>
+          </>
         )}
 
         {error && (

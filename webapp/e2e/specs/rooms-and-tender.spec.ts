@@ -30,14 +30,17 @@ async function allocatePower(page: Page, allocation: Record<string, number>) {
   await page.getByRole('button', { name: 'Подтвердить распределение' }).click()
 }
 
-async function runReconnaissance(page: Page) {
-  await page.getByRole('button', { name: 'Сигнал для разведки: Boreal' }).click()
+async function runReconnaissance(page: Page, signalCount = 2) {
+  const targets = page.getByRole('button', { name: /^Сигнал для разведки:/ })
+  for (let index = 0; index < signalCount; index += 1) {
+    await targets.nth(index).click()
+  }
   await page.getByRole('button', { name: 'Исследовать' }).click()
 }
 
 async function runLaboratory(page: Page) {
-  await page.getByRole('button', { name: 'Источник: Aster' }).click()
-  await page.getByRole('button', { name: 'Приёмник: Boreal' }).click()
+  await page.getByRole('button', { name: /^Источник:/ }).first().click()
+  await page.getByRole('button', { name: /^Приёмник:/ }).first().click()
   await page.getByRole('button', { name: 'Провести опыт' }).click()
 }
 
@@ -49,14 +52,14 @@ async function submitThesis(page: Page) {
 }
 
 async function completeContract(page: Page) {
-  const reserve = page.getByRole('button', { name: /^Зарезервировать контракт / }).first()
+  const contract = page.locator('[data-contract-kind="complex"], [data-contract-kind="light"]').first()
+  const reserve = contract.getByRole('button', { name: /^Зарезервировать контракт / })
   const contractId = (await reserve.getAttribute('aria-label'))?.replace('Зарезервировать контракт ', '')
   if (!contractId) throw new Error('Contract identifier is missing')
 
   await reserve.click()
-  await page.getByRole('combobox', { name: `Результат заявки ${contractId}` }).selectOption('attenuation')
-  await page.getByRole('combobox', { name: `Бюджет заявки ${contractId}` }).selectOption('1')
-  await page.getByRole('button', { name: `Подать заявку по контракту ${contractId}` }).click()
+  await contract.getByRole('button', { name: /→/ }).first().click()
+  await contract.getByRole('button', { name: `Подать заявку по контракту ${contractId}` }).click()
 }
 
 async function submitFinalModel(page: Page) {
@@ -136,6 +139,7 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
 })
 
 test('two players complete every Tender stage and receive each realtime phase transition', async ({ browser, page }) => {
+  test.setTimeout(180_000)
   await registerBrowserUser(page, 'Хост E2E', 'room-host')
   const webOrigin = new URL(page.url()).origin
 
@@ -157,7 +161,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestPage.getByRole('dialog')).toBeVisible()
     await guestPage.getByLabel('ID комнаты').fill(roomId)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
-    await expect(guestPage.getByText('2/2 участников')).toBeVisible()
+    await expect(guestPage.getByText('Готовы: 0/2')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
     await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
     await page.getByRole('button', { name: 'Готов', exact: true }).click()
@@ -193,10 +197,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('2 мощности: сохраните 1 мощность для заявки, если штраф заблокирует другую.')).toBeVisible()
     await expect(page.getByText('Результат выбора слота')).toBeVisible()
     await expect(page.getByText('Вы выбрали слот 1 и получили его.')).toBeVisible()
-    await allocatePower(page, { 'Разведка': 1, 'Лаборатория': 1, 'Контракты': 2 })
-    await expect(page.getByText('Ожидание хода')).toBeVisible()
-    await expect(page.getByText('Сейчас действует Гость E2E.')).toBeVisible()
-    await allocatePower(guestPage, { 'Разведка': 1, 'Лаборатория': 1, 'Контракты': 2 })
+    await allocatePower(page, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
+    await allocatePower(guestPage, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
 
     await expectPhase(page, headings.reconnaissance)
     await runReconnaissance(page)
@@ -218,12 +220,16 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await expectPhase(guestPage, headings.access)
       await chooseAccessSlot(page, 1)
       await chooseAccessSlot(guestPage, 2)
-      await expect(guestPage.getByRole('button', { name: 'Подтвердить выбор' })).toBeDisabled()
 
       await expectPhase(page, headings.power)
       await expectPhase(guestPage, headings.power)
-      await allocatePower(page, { 'Лаборатория': 2, 'Анализ модели': 2 })
-      await allocatePower(guestPage, { 'Лаборатория': 2, 'Анализ модели': 2 })
+      await allocatePower(page, { 'Разведка': 1, 'Лаборатория': 2, 'Анализ модели': 1 })
+      await allocatePower(guestPage, { 'Разведка': 1, 'Лаборатория': 2, 'Анализ модели': 1 })
+
+      await expectPhase(page, headings.reconnaissance)
+      await runReconnaissance(page, 1)
+      await expectPhase(guestPage, headings.reconnaissance)
+      await runReconnaissance(guestPage, 1)
 
       await expectPhase(page, headings.laboratory)
       await expectPhase(guestPage, headings.laboratory)
