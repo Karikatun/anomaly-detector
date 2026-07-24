@@ -174,13 +174,18 @@ export function RoomLobbyPage() {
     <main className={styles.screen}>
       <section className={styles.panel} aria-label={t('lobby.title')}>
         <header className={styles.header}>
-          <Typography as="h1" className={styles.title}>{t('lobby.title')}</Typography>
           <button type="button" className={styles.roomCode} onClick={() => void handleCopy()}>
             <span>{t('lobby.room.id')}</span>
             <strong>{room.roomId.slice(0, 8).toUpperCase()}</strong>
             <span className={styles.copyIcon} aria-hidden="true" />
             <span className="sr-only">{copied ? t('lobby.copied') : t('lobby.copyId')}</span>
           </button>
+          <Typography as="h1" className={styles.title}>{t('lobby.title')}</Typography>
+          {canLeave ? (
+            <Button className={styles.exitButton} type="button" disabled={isLeaving} onClick={() => void handleLeave()}>
+              {isLeaving ? t('lobby.button.leaving') : t('lobby.button.exit')}
+            </Button>
+          ) : <span className={styles.headerSpacer} aria-hidden="true" />}
         </header>
 
         <div className={styles.layout}>
@@ -219,7 +224,6 @@ export function RoomLobbyPage() {
           </aside>
 
           <div className={styles.rightColumn}>
-            <div className={styles.stationImage} role="img" aria-label={t('lobby.station.alt')} />
             <section className={styles.startPanel} aria-live="polite">
               {isCountdown ? (
                 <>
@@ -254,11 +258,6 @@ export function RoomLobbyPage() {
                 </>
               )}
               {error ? <Typography role="alert" className={styles.error}>{error}</Typography> : null}
-              {canLeave ? (
-                <button type="button" className={styles.leaveButton} disabled={isLeaving} onClick={() => void handleLeave()}>
-                  {isLeaving ? t('lobby.button.leaving') : isHost ? t('lobby.button.cancel') : t('lobby.button.leave')}
-                </button>
-              ) : null}
             </section>
           </div>
         </div>

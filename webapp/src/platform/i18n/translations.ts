@@ -113,9 +113,9 @@ const ru = {
   'rooms.join.error.required': 'Введите ID комнаты',
 
   // Room lobby
-  'lobby.title': 'Лобби экспедиции',
+  'lobby.title': 'Лобби',
   'lobby.description': 'Поделитесь ID комнаты с другими игроками, чтобы пригласить их.',
-  'lobby.room.id': 'ID комнаты',
+  'lobby.room.id': 'ID:',
   'lobby.copyId': 'Скопировать ID',
   'lobby.copied': 'Скопировано!',
   'lobby.players': 'Игроки',
@@ -128,6 +128,7 @@ const ru = {
   'lobby.button.join': 'Войти в комнату',
   'lobby.button.joining': 'Входим...',
   'lobby.button.leave': 'Покинуть комнату',
+  'lobby.button.exit': 'Выйти',
   'lobby.button.leaving': 'Выходим...',
   'lobby.button.cancel': 'Выйти из комнаты',
   'lobby.button.cancelling': 'Отменяем...',
@@ -142,7 +143,7 @@ const ru = {
   'lobby.button.back': 'Назад к комнатам',
   'lobby.settings.title': 'Настройки экспедиции',
   'lobby.settings.mode': 'Режим',
-  'lobby.settings.mode.value': 'Закрытая экспедиция',
+  'lobby.settings.mode.value': 'Закрытый',
   'lobby.settings.players': 'Игроков',
   'lobby.settings.turnTime': 'Время на ход',
   'lobby.settings.turnTime.value': '60 секунд',
