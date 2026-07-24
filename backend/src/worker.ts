@@ -10,23 +10,42 @@ export async function runWorker() {
   const roomStart = createRoomStartModule(runtime.prisma)
 
   console.log('Worker: starting advance loops for due Tenders and Rooms')
-  const stopTenderAdvanceLoop = tender.startAdvanceLoop(2_000)
-  const roomStartInterval = setInterval(() => {
-    void roomStart.advanceDueRoomStarts({ now: new Date() }).catch(() => {
-      // The next loop retries an unstarted Room after a transient database failure.
-    })
-  }, 250)
-  roomStartInterval.unref?.()
+  const stopTenderAdvanceLoop = startPollingLoop({
+    intervalMs: 2_000,
+    label: 'Tender advancement',
+    task: () => tender.advanceDueTenders({ limit: 50, now: new Date() }),
+  })
+  const stopRoomStartLoop = startPollingLoop({
+    intervalMs: 250,
+    label: 'Room start',
+    task: () => roomStart.advanceDueRoomStarts({ now: new Date() }),
+  })
 
   const shutdown = (signal: string) => {
     console.log(`Worker: received ${signal}; shutting down`)
     stopTenderAdvanceLoop()
-    clearInterval(roomStartInterval)
+    stopRoomStartLoop()
     void runtime.close()
   }
 
   process.on('SIGINT', () => shutdown('SIGINT'))
   process.on('SIGTERM', () => shutdown('SIGTERM'))
+}
+
+function startPollingLoop(input: {
+  intervalMs: number
+  label: string
+  task: () => Promise<unknown>
+}) {
+  let running = false
+  const timer = setInterval(() => {
+    if (running) return
+    running = true
+    void input.task()
+      .catch((error) => console.error(`Worker: ${input.label} failed`, error))
+      .finally(() => { running = false })
+  }, input.intervalMs)
+  return () => clearInterval(timer)
 }
 
 export async function main() {

@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createPrisma } from '../../db'
 import { createPersistentTenderModule } from '../tender'
@@ -11,11 +11,14 @@ maybeDescribe('Room start integration', () => {
   if (!databaseUrl) return
   const prisma = createPrisma(databaseUrl)
 
-  beforeEach(async () => {
+  const cleanDatabase = async () => {
     await prisma.tenderRoom.deleteMany()
     await prisma.tender.deleteMany()
     await prisma.user.deleteMany()
-  })
+  }
+
+  beforeEach(cleanDatabase)
+  afterEach(cleanDatabase)
 
   afterAll(async () => {
     await prisma.$disconnect()

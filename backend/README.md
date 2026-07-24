@@ -39,7 +39,7 @@ bun run --cwd backend prisma:deploy
 
 On Windows PowerShell, use `Copy-Item backend/.env.example backend/.env` instead of `cp`. Workspace aliases are also available from the repository root: `bun run dev:backend`, `bun run build:backend`, `bun run typecheck:backend`, and `bun run test:backend`.
 
-`bun run test:integration` starts `postgres_test` from `../docker-compose.yml`, applies Prisma migrations to `anomaly_detector_test`, and runs DB-backed auth API tests. If Docker is managed separately, set `TEST_SKIP_DOCKER=1` and `TEST_DATABASE_URL`. The test database name must end with `_test` unless `TEST_ALLOW_NON_TEST_DATABASE=1` is set intentionally.
+`bun run test:integration` starts `postgres_test` from `../docker-compose.yml`, applies Prisma migrations to `anomaly_detector_test`, and runs DB-backed auth, Room, Tender, and realtime tests. If Docker is managed separately, set `TEST_SKIP_DOCKER=1` and `TEST_DATABASE_URL`. The test database name must end with `_test` unless `TEST_ALLOW_NON_TEST_DATABASE=1` is set intentionally.
 
 `bun run smoke:docker` builds the backend Docker image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created.
 
@@ -68,7 +68,7 @@ DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product ne
 The backend is one workspace with one Prisma schema and one Dockerfile, but it has separate runtime entrypoints:
 
 - API: `bun run start:api`, backed by `src/index.ts`.
-- Worker: `bun run start:worker`, backed by `src/worker.ts`. It advances due Tender phases and scheduled Room starts; deploy it only when the product needs those background deadlines resolved independently of the API process.
+- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases and scheduled Room starts. `bun run dev` starts both API and worker locally; production runs them as separate processes.
 - Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, and `auth:sessions:cleanup`.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
