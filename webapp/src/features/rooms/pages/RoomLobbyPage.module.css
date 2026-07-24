@@ -11,7 +11,7 @@
 .exitButton:hover:not(:disabled) { background: rgba(17, 47, 75, .85) !important; }
 .headerSpacer { grid-column: 3; justify-self: end; min-width: 4.4rem; }
 .layout { display: grid; grid-template-columns: minmax(19rem, .78fr) minmax(31rem, 1.22fr); gap: clamp(1rem, 2vw, 1.9rem); padding-top: clamp(1.4rem, 2.4vw, 2.4rem); }
-.leftColumn, .rightColumn { display: grid; gap: 1rem; align-content: start; }
+.leftColumn, .rightColumn { display: grid; min-width: 0; gap: 1rem; align-content: start; }
 .playersPanel, .settingsPanel, .startPanel { border: 1px solid rgba(38, 102, 162, .62); border-radius: 9px; background: linear-gradient(135deg, rgba(2, 17, 33, .94), rgba(2, 10, 20, .83)); }
 .playersPanel, .settingsPanel { padding: clamp(1rem, 1.8vw, 1.45rem); }
 .sectionTitle { padding-bottom: .85rem; border-bottom: 1px solid rgba(80, 130, 174, .25); font-size: .95rem; text-transform: uppercase; }
@@ -27,16 +27,22 @@
 .settingsList { display: grid; gap: .8rem; padding-top: .2rem; }
 .settingsList > div { display: flex; justify-content: space-between; gap: 1rem; color: #8ea5bc; font-size: .83rem; }
 .settingsList dd { color: #e6f0fa; text-align: right; }
-.startPanel { display: grid; min-height: 10.6rem; place-items: center; align-content: center; gap: .55rem; padding: 1.35rem; text-align: center; }
-.statusTitle { font-size: clamp(1.15rem, 1.7vw, 1.55rem); }
-.statusHint { color: #91a8bd; font-size: .9rem; line-height: 1.35; }
-.countdown { color: #70e8af; font-size: 1.8rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-.startButton, .joinButton { min-width: min(100%, 17rem); margin-top: .35rem; border: 1px solid #4ce397 !important; border-radius: 6px !important; color: #62eaa6 !important; background: rgba(3, 27, 23, .9) !important; box-shadow: inset 0 0 18px rgba(25, 161, 103, .12); }
+.startPanel { display: grid; min-height: 7.4rem; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding: 1.15rem 1.35rem; text-align: left; }
+.statusIndicator { position: relative; display: grid; width: 2.8rem; height: 2.8rem; flex: 0 0 auto; place-items: center; border: 1px solid rgba(81, 231, 151, .5); border-radius: 50%; color: #76edae; background: rgba(7, 41, 31, .62); box-shadow: 0 0 18px rgba(69, 219, 137, .12); font-size: .85rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.startPanel[data-state='waiting'] .statusIndicator { border-color: rgba(76, 161, 218, .5); background: rgba(4, 29, 48, .7); box-shadow: 0 0 18px rgba(47, 157, 227, .12); }
+.startPanel[data-state='waiting'] .statusIndicator::before { width: .55rem; height: .55rem; border-radius: 50%; background: #60bceb; box-shadow: 0 0 12px rgba(96, 188, 235, .65); content: ''; }
+.startPanel[data-state='ready'] .statusIndicator::before { width: 1rem; height: .55rem; border-bottom: 2px solid #78ecaa; border-left: 2px solid #78ecaa; content: ''; transform: translateY(-.12rem) rotate(-45deg); }
+.statusCopy { display: grid; min-width: 0; gap: .28rem; }
+.statusTitle { color: #72e49e; font-size: clamp(.98rem, 1.4vw, 1.18rem); letter-spacing: -.02em; }
+.startPanel[data-state='waiting'] .statusTitle { color: #b7d7ed; }
+.statusHint { color: #91a8bd; font-size: .84rem; line-height: 1.35; }
+.startButton, .joinButton { min-width: 10.5rem; border: 1px solid #4ce397 !important; border-radius: 6px !important; color: #62eaa6 !important; background: rgba(3, 27, 23, .9) !important; box-shadow: inset 0 0 18px rgba(25, 161, 103, .12); }
 .startButton:hover:not(:disabled), .joinButton:hover:not(:disabled) { background: rgba(8, 57, 43, .96) !important; }
+.startButton:disabled { border-color: rgba(70, 126, 105, .5) !important; color: rgba(112, 171, 144, .55) !important; background: rgba(5, 21, 20, .72) !important; }
 .joinButton { border-color: #35b6d7 !important; color: #74e5f3 !important; background: rgba(3, 26, 34, .9) !important; }
-.cancelStartButton { min-width: min(100%, 17rem); margin-top: .2rem; border: 1px solid rgba(235, 132, 132, .8) !important; border-radius: 6px !important; color: #ffadad !important; background: rgba(49, 10, 15, .72) !important; }
+.cancelStartButton { min-width: 10.5rem; border: 1px solid rgba(235, 132, 132, .8) !important; border-radius: 6px !important; color: #ffadad !important; background: rgba(49, 10, 15, .72) !important; }
 .cancelStartButton:hover:not(:disabled) { background: rgba(85, 16, 23, .86) !important; }
-.error { color: #ff98a0; font-size: .78rem; }
+.error { grid-column: 2 / -1; color: #ff98a0; font-size: .78rem; }
 .loading, .errorScreen { display: grid; min-height: 100svh; place-items: center; gap: 1rem; padding: 2rem; background: #010408; text-align: center; }
 .errorScreen { align-content: center; color: #ecf6ff; }
 
@@ -55,8 +61,14 @@
   .leftColumn { display: contents; }
   .playersPanel { order: 1; }
   .settingsPanel { order: 2; }
-  .startPanel { order: 3; min-height: 9.5rem; }
+  .startPanel { order: 3; min-height: 7rem; padding: 1rem; }
   .playersPanel, .settingsPanel { padding: 1rem; }
   .player { min-height: 3.65rem; }
   .sectionTitle { font-size: .82rem; }
+}
+
+@media (max-width: 520px) {
+  .startPanel { grid-template-columns: auto minmax(0, 1fr); }
+  .startButton, .joinButton, .cancelStartButton { grid-column: 1 / -1; width: 100%; }
+  .error { grid-column: 1 / -1; }
 }
