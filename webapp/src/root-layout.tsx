@@ -36,7 +36,7 @@ export function RootLayout() {
                 </Button>
               </div>
             ) : (
-              <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
+              <nav className="ml-auto flex items-center gap-2" aria-label={t('nav.primary')}>
                 <Button type="button" variant="ghost" size="sm" asChild>
                   <Link to="/">{t('nav.rooms')}</Link>
                 </Button>

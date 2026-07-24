@@ -1,11 +1,14 @@
 import type { CommandReceipt, TenderCommand } from '@anomaly-detector/contracts'
-import { commandReceiptSchema } from '@anomaly-detector/contracts'
+import {
+  commandReceiptSchema,
+  tenderCommandSchema,
+} from '@anomaly-detector/contracts'
 import { useCallback } from 'react'
 
 import type { AuthenticatedTransport } from '@/platform/api'
 
 type WithoutCommandEnvelope<T> = T extends unknown
-  ? Omit<T, 'commandId' | 'tenderId'>
+  ? Omit<T, 'actorId' | 'commandId' | 'tenderId'>
   : never
 
 export type TenderCommandInput = WithoutCommandEnvelope<TenderCommand>
@@ -22,14 +25,19 @@ function randomUUID(): string {
   })
 }
 
-export function useTenderCommands(transport: AuthenticatedTransport, tenderId: string) {
+export function useTenderCommands(
+  transport: AuthenticatedTransport,
+  tenderId: string,
+  actorId: string,
+) {
   const execute = useCallback(
     async (command: TenderCommandInput): Promise<CommandReceipt> => {
-      const fullCommand = {
+      const fullCommand = tenderCommandSchema.parse({
         ...command,
+        actorId,
         commandId: randomUUID(),
         tenderId,
-      } as TenderCommand
+      })
 
       return transport.request(
         `/api/tenders/${tenderId}/commands`,
@@ -37,7 +45,7 @@ export function useTenderCommands(transport: AuthenticatedTransport, tenderId: s
         { method: 'POST', body: fullCommand },
       )
     },
-    [transport, tenderId],
+    [actorId, transport, tenderId],
   )
 
   return { execute }

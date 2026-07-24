@@ -1,35 +1,32 @@
 import { useEffect, useState } from 'react'
 
-import type { WorkingModel } from '@anomaly-detector/contracts'
+import type {
+  FieldType,
+  Polarity,
+  SignalId,
+  WorkingModel,
+} from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import {
+  fieldTypeLabelKeys,
+  fieldTypes,
+  polarities,
+  polarityLabelKeys,
+  signalIds,
+  signalLabelKeys,
+} from './catalog'
+import {
   WorkingModelDraftController,
   type WorkingModelSaveStatus,
 } from './working-model-draft'
-
-const signals = ['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'] as const
-const signalNames: Record<string, string> = {
-  aster: 'Aster', boreal: 'Boreal', cinder: 'Cinder',
-  delta: 'Delta', eclipse: 'Eclipse', ferro: 'Ferro',
-}
-
-const fieldTypes = ['inertial', 'electromagnetic', 'phase'] as const
-const polarities = ['positive', 'negative'] as const
-const fieldTypeLabels: Record<(typeof fieldTypes)[number], string> = {
-  inertial: 'Инерционное',
-  electromagnetic: 'Электромагнитное',
-  phase: 'Фазовое',
-}
-const polarityLabels: Record<(typeof polarities)[number], string> = {
-  positive: 'Позитивная',
-  negative: 'Негативная',
-}
-
-type MarkerState = 'unset' | 'possible' | 'excluded'
+import {
+  transitionMarkerValue,
+  type MarkerState,
+} from './working-model-marker'
 
 const markerColors: Record<MarkerState, string> = {
   unset: 'bg-muted text-muted-foreground',
@@ -46,7 +43,7 @@ type SignalCell = NonNullable<WorkingModel['signals'][keyof WorkingModel['signal
 
 type WorkingModelPanelProps = {
   model: WorkingModel
-  knownSignals: string[]
+  knownSignals: SignalId[]
   disabled?: boolean
   onSave: (model: WorkingModel) => Promise<void>
 }
@@ -79,7 +76,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
     [draftController],
   )
 
-  const updateSignal = (signal: string, cell: SignalCell) => {
+  const updateSignal = (signal: SignalId, cell: SignalCell) => {
     draftController.update({
       ...draft,
       signals: {
@@ -89,71 +86,69 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
     })
   }
 
-  const getCell = (signal: string): NonNullable<SignalCell> => {
-    const all = (draft.signals ?? {}) as Record<string, SignalCell | undefined>
-    return all[signal] ?? {}
+  const getCell = (signal: SignalId): NonNullable<SignalCell> => {
+    return draft.signals?.[signal] ?? {}
   }
 
-  const toggleFieldType = (signal: string, ft: string, current: MarkerState, isExcluded: boolean) => {
+  const toggleFieldType = (signal: SignalId, ft: FieldType, current: MarkerState) => {
     const cell = getCell(signal)
-    const possible: string[] = cell.possibleFieldTypes ?? []
-    const excluded: string[] = cell.excludedFieldTypes ?? []
-    let nextPossible = possible.filter((f) => f !== ft)
-    let nextExcluded = excluded.filter((f) => f !== ft)
+    const next = transitionMarkerValue(
+      ft,
+      current,
+      cell.possibleFieldTypes ?? [],
+      cell.excludedFieldTypes ?? [],
+    )
     const isHypothesis = cell.hypothesis?.fieldType === ft
-
-    if ((current === 'unset' && !isExcluded) || (isExcluded && !nextExcluded.includes(ft))) {
-      // Move from excluded/unset to possible
-      nextPossible = [...nextPossible, ft]
-    } else if (current === 'possible' || isExcluded) {
-      // Move to excluded
-      nextExcluded = [...nextExcluded, ft]
-    }
 
     updateSignal(signal, {
       ...cell,
-      possibleFieldTypes: nextPossible.length > 0 ? (nextPossible as typeof cell.possibleFieldTypes) : undefined,
-      excludedFieldTypes: nextExcluded.length > 0 ? (nextExcluded as typeof cell.excludedFieldTypes) : undefined,
+      possibleFieldTypes: next.possible.length > 0 ? next.possible : undefined,
+      excludedFieldTypes: next.excluded.length > 0 ? next.excluded : undefined,
       ...(isHypothesis ? { hypothesis: { ...cell.hypothesis!, fieldType: undefined } } : {}),
     })
   }
 
-  const togglePolarity = (signal: string, pol: string, current: MarkerState, isExcluded: boolean) => {
+  const togglePolarity = (signal: SignalId, pol: Polarity, current: MarkerState) => {
     const cell = getCell(signal)
-    const possible: string[] = cell.possiblePolarities ?? []
-    const excluded: string[] = cell.excludedPolarities ?? []
-    let nextPossible = possible.filter((p) => p !== pol)
-    let nextExcluded = excluded.filter((p) => p !== pol)
+    const next = transitionMarkerValue(
+      pol,
+      current,
+      cell.possiblePolarities ?? [],
+      cell.excludedPolarities ?? [],
+    )
     const isHypothesis = cell.hypothesis?.polarity === pol
-
-    if ((current === 'unset' && !isExcluded) || (isExcluded && !nextExcluded.includes(pol))) {
-      nextPossible = [...nextPossible, pol]
-    } else if (current === 'possible' || isExcluded) {
-      nextExcluded = [...nextExcluded, pol]
-    }
 
     updateSignal(signal, {
       ...cell,
-      possiblePolarities: nextPossible.length > 0 ? (nextPossible as typeof cell.possiblePolarities) : undefined,
-      excludedPolarities: nextExcluded.length > 0 ? (nextExcluded as typeof cell.excludedPolarities) : undefined,
+      possiblePolarities: next.possible.length > 0 ? next.possible : undefined,
+      excludedPolarities: next.excluded.length > 0 ? next.excluded : undefined,
       ...(isHypothesis ? { hypothesis: { ...cell.hypothesis!, polarity: undefined } } : {}),
     })
   }
 
-  const setHypothesis = (signal: string, key: 'fieldType' | 'polarity', value: string) => {
+  const setHypothesis = (
+    signal: SignalId,
+    key: 'fieldType' | 'polarity',
+    value: FieldType | Polarity,
+  ) => {
     const cell = getCell(signal)
     const hyp = cell.hypothesis
-    const current = hyp?.[key]
+    const hypothesis = key === 'fieldType'
+      ? {
+          ...hyp,
+          fieldType: hyp?.fieldType === value ? undefined : value as FieldType,
+        }
+      : {
+          ...hyp,
+          polarity: hyp?.polarity === value ? undefined : value as Polarity,
+        }
     updateSignal(signal, {
       ...cell,
-      hypothesis: {
-        ...hyp,
-        [key]: current === value ? undefined : value,
-      },
+      hypothesis,
     })
   }
 
-  const setNote = (signal: string, note: string) => {
+  const setNote = (signal: SignalId, note: string) => {
     const cell = getCell(signal)
     updateSignal(signal, { ...cell, note: note.slice(0, 1000) })
   }
@@ -181,20 +176,21 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
         </div>
       )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {signals.map((signal) => {
+        {signalIds.map((signal) => {
         const isKnown = knownSignals.includes(signal)
         const cell = draft.signals?.[signal]
         const hyp = cell?.hypothesis
+        const signalName = t(signalLabelKeys[signal])
 
         return (
           <Card key={signal} size="sm" className={!isKnown ? 'opacity-40' : ''}>
             <CardContent className="grid gap-3 py-4">
               <Typography variant="bodySmMedium" className="text-center">
-                {signalNames[signal]}
+                {signalName}
               </Typography>
 
               {/* Field types */}
-              <div role="group" aria-label={`${signalNames[signal]}: возможные типы поля`}>
+              <div role="group" aria-label={`${signalName}: возможные типы поля`}>
                 <Typography variant="control" tone="muted" className="mb-1">{t('tender.model.fieldType')}</Typography>
                 <div className="flex gap-1">
                   {fieldTypes.map((ft) => {
@@ -203,11 +199,10 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
                       : (cell?.possibleFieldTypes?.includes(ft) ?? false)
                         ? 'possible'
                         : 'unset'
-                    const isExcluded = marker === 'excluded'
                     const isHyp = hyp?.fieldType === ft
                     return (
                       <button
-                        aria-label={`${signalNames[signal]}: тип поля ${fieldTypeLabels[ft]}, ${isHyp ? 'выбрано как гипотеза' : markerLabels[marker]}`}
+                        aria-label={`${signalName}: тип поля ${t(fieldTypeLabelKeys[ft])}, ${isHyp ? 'выбрано как гипотеза' : markerLabels[marker]}`}
                         aria-pressed={isHyp || marker !== 'unset'}
                         data-marker-state={isHyp ? 'hypothesis' : marker}
                         key={ft}
@@ -218,7 +213,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
                             ? 'bg-primary text-primary-foreground ring-2 ring-primary'
                             : markerColors[marker]
                         }`}
-                        onClick={() => { if (!isHyp) toggleFieldType(signal, ft, marker, isExcluded) }}
+                        onClick={() => { if (!isHyp) toggleFieldType(signal, ft, marker) }}
                       >
                         <Typography variant="control">{t(`tender.fieldShort.${ft}`)}</Typography>
                       </button>
@@ -228,7 +223,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
               </div>
 
               {/* Polarities */}
-              <div role="group" aria-label={`${signalNames[signal]}: возможные полярности`}>
+              <div role="group" aria-label={`${signalName}: возможные полярности`}>
                 <Typography variant="control" tone="muted" className="mb-1">{t('tender.model.polarity')}</Typography>
                 <div className="flex gap-1">
                   {polarities.map((pol) => {
@@ -237,11 +232,10 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
                       : (cell?.possiblePolarities?.includes(pol) ?? false)
                         ? 'possible'
                         : 'unset'
-                    const isExcluded = marker === 'excluded'
                     const isHyp = hyp?.polarity === pol
                     return (
                       <button
-                        aria-label={`${signalNames[signal]}: полярность ${polarityLabels[pol]}, ${isHyp ? 'выбрано как гипотеза' : markerLabels[marker]}`}
+                        aria-label={`${signalName}: полярность ${t(polarityLabelKeys[pol])}, ${isHyp ? 'выбрано как гипотеза' : markerLabels[marker]}`}
                         aria-pressed={isHyp || marker !== 'unset'}
                         data-marker-state={isHyp ? 'hypothesis' : marker}
                         key={pol}
@@ -252,7 +246,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
                             ? 'bg-primary text-primary-foreground ring-2 ring-primary'
                             : markerColors[marker]
                         }`}
-                        onClick={() => { if (!isHyp) togglePolarity(signal, pol, marker, isExcluded) }}
+                        onClick={() => { if (!isHyp) togglePolarity(signal, pol, marker) }}
                       >
                         <Typography variant="control">{pol === 'positive' ? '+' : '−'}</Typography>
                       </button>
@@ -262,13 +256,13 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
               </div>
 
               {/* Hypothesis */}
-              <div role="group" aria-label={`${signalNames[signal]}: гипотеза`}>
+              <div role="group" aria-label={`${signalName}: гипотеза`}>
                 <Typography variant="control" tone="muted" className="mb-1">{t('tender.model.hypothesis')}</Typography>
                 <div className="grid grid-cols-2 gap-1">
                   <div className="grid gap-0.5">
                     {fieldTypes.map((ft) => (
                       <button
-                        aria-label={`${signalNames[signal]}: гипотеза, тип поля ${fieldTypeLabels[ft]}`}
+                        aria-label={`${signalName}: гипотеза, тип поля ${t(fieldTypeLabelKeys[ft])}`}
                         aria-pressed={hyp?.fieldType === ft}
                         key={ft}
                         type="button"
@@ -287,7 +281,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
                   <div className="grid gap-0.5">
                     {polarities.map((pol) => (
                       <button
-                        aria-label={`${signalNames[signal]}: гипотеза, полярность ${polarityLabels[pol]}`}
+                        aria-label={`${signalName}: гипотеза, полярность ${t(polarityLabelKeys[pol])}`}
                         aria-pressed={hyp?.polarity === pol}
                         key={pol}
                         type="button"
@@ -308,7 +302,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
 
               {/* Note */}
               <input
-                aria-label={`${signalNames[signal]}: заметка`}
+                aria-label={`${signalName}: заметка`}
                 type="text"
                 placeholder={t('tender.model.notePlaceholder')}
                 className="w-full rounded border bg-transparent px-2 py-1 text-muted-foreground"

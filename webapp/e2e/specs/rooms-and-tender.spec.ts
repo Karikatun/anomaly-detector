@@ -64,7 +64,7 @@ async function completeContract(page: Page) {
 
 async function submitFinalModel(page: Page) {
   await page.getByRole('button', { name: 'Aster: тип поля Инерционное', exact: true }).click()
-  await page.getByRole('button', { name: 'Aster: полярность Позитив', exact: true }).click()
+  await page.getByRole('button', { name: 'Aster: полярность Положительная', exact: true }).click()
   await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
 }
 
@@ -114,10 +114,42 @@ test('requires every lobby player to be ready before enabling the match start', 
     await expect(startButton).toBeDisabled()
     await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
     await expect(page.getByText('Готовы: 1/2')).toBeVisible()
+    let rejectReady = true
+    await page.route('**/api/rooms/*/ready', async (route) => {
+      if (rejectReady) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Готовность временно недоступна' } }),
+        })
+        return
+      }
+      await route.continue()
+    })
     await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText('Готовность временно недоступна')
+    rejectReady = false
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(page.getByText('Готовность временно недоступна')).toBeHidden()
     await expect(startButton).toBeEnabled()
-    await page.getByRole('button', { name: 'Отменить готовность' }).click()
-    await expect(startButton).toBeDisabled()
+    let rejectStart = true
+    await page.route('**/api/rooms/*/start', async (route) => {
+      if (rejectStart) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Старт временно недоступен' } }),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await startButton.click()
+    await expect(page.getByRole('alert')).toContainText('Старт временно недоступен')
+    rejectStart = false
+    await startButton.click()
+    await expect(page.getByText('Старт временно недоступен')).toBeHidden()
+    await page.getByRole('button', { name: 'Отменить старт' }).click()
   } finally {
     await guestContext.close()
   }
@@ -292,7 +324,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(page.getByText('Итоговый рейтинг', { exact: true })).toBeVisible()
     await expect(page.getByText('Хост E2E', { exact: true }).first()).toBeVisible()
-    await expect(page.getByText(/(Инерционное|Электромагнитное|Фазовое) \/ (Позитив \(\+\)|Негатив \(−\))/).first()).toBeVisible()
+    await expect(page.getByText(/(Инерционное|Электромагнитное|Фазовое) \/ (Положительная|Отрицательная)/).first()).toBeVisible()
   } finally {
     await guestContext.close()
   }

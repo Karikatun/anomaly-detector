@@ -1,26 +1,20 @@
 import { useState } from 'react'
 
+import type { SignalId } from '@anomaly-detector/contracts'
+
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
-
-const signalNames: Record<string, string> = {
-  aster: 'Aster',
-  boreal: 'Boreal',
-  cinder: 'Cinder',
-  delta: 'Delta',
-  eclipse: 'Eclipse',
-  ferro: 'Ferro',
-}
+import { isSignalId, signalLabelKeys } from './catalog'
 
 type ReconnaissancePanelProps = {
-  mySamples: string[]
-  knownSignals: string[]
+  mySamples: SignalId[]
+  knownSignals: SignalId[]
   maxSignals: number
   disabled?: boolean
   error?: string | null
-  onConfirm: (targets: string[]) => Promise<void>
+  onConfirm: (targets: Array<SignalId | 'unknown-sector'>) => Promise<void>
 }
 
 export function availableReconnaissanceTargets({ knownSignals, mySamples }: Pick<ReconnaissancePanelProps, 'knownSignals' | 'mySamples'>) {
@@ -37,6 +31,7 @@ export function ReconnaissancePanel({
 }: ReconnaissancePanelProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const { t } = useI18n()
+  const signalName = (signal: string) => isSignalId(signal) ? t(signalLabelKeys[signal]) : signal
 
   const available = availableReconnaissanceTargets({ knownSignals, mySamples })
 
@@ -53,7 +48,9 @@ export function ReconnaissancePanel({
   }
 
   const handleConfirm = async () => {
-    const targets = [...selected].map((target) => target.startsWith('unknown-sector-') ? 'unknown-sector' : target)
+    const targets = [...selected].map((target): SignalId | 'unknown-sector' => (
+      target.startsWith('unknown-sector-') ? 'unknown-sector' : target as SignalId
+    ))
     if (targets.length === maxSignals) {
       try {
         await onConfirm(targets)
@@ -84,7 +81,7 @@ export function ReconnaissancePanel({
             const isSel = selected.has(signal)
             return (
               <Button
-                aria-label={t('tender.recon.aria', { signal: signalNames[signal] ?? signal })}
+                aria-label={t('tender.recon.aria', { signal: signalName(signal) })}
                 key={signal}
                 type="button"
                 variant={isSel ? 'default' : 'outline'}
@@ -93,7 +90,7 @@ export function ReconnaissancePanel({
                 disabled={disabled || (!isSel && selected.size >= maxSignals)}
                 onClick={() => toggle(signal)}
               >
-                <Typography variant="h6">{signal.startsWith('unknown-sector-') ? 'Неизвестный сектор' : signalNames[signal] ?? signal}</Typography>
+                <Typography variant="h6">{signal.startsWith('unknown-sector-') ? 'Неизвестный сектор' : signalName(signal)}</Typography>
                 <Typography variant="control" tone="muted">
                   {signal}
                 </Typography>
@@ -104,7 +101,7 @@ export function ReconnaissancePanel({
 
         {mySamples.length > 0 && (
           <Typography variant="control" tone="muted" className="mt-4">
-            {t('tender.recon.samples', { signals: mySamples.map((s) => signalNames[s] ?? s).join(', ') })}
+            {t('tender.recon.samples', { signals: mySamples.map(signalName).join(', ') })}
           </Typography>
         )}
 

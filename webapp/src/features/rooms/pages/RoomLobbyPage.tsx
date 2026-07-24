@@ -58,6 +58,7 @@ export function RoomLobbyPage() {
       .then((data) => {
         if (!cancelled) {
           setRoom(data)
+          setError(null)
           setLoading(false)
         }
       })
@@ -100,47 +101,57 @@ export function RoomLobbyPage() {
     setTimeout(() => setCopied(false), 2_000)
   }, [roomId])
 
-  const handleJoin = useCallback(async () => {
+  const runRoomAction = useCallback(async <T,>(
+    action: () => Promise<T>,
+    onSuccess: (result: T) => void | Promise<void>,
+  ) => {
+    setError(null)
     try {
-      setRoom(await joinRoom(roomId))
+      await onSuccess(await action())
     } catch (err) {
       setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
     }
-  }, [joinRoom, roomId, t])
+  }, [t])
 
-  const handleLeave = useCallback(async () => {
-    try {
-      await leaveRoom(roomId)
-      await navigate({ to: '/' })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
-    }
-  }, [leaveRoom, navigate, roomId, t])
+  const handleJoin = useCallback(
+    () => runRoomAction(
+      () => joinRoom(roomId),
+      (nextRoom) => setRoom(nextRoom),
+    ),
+    [joinRoom, roomId, runRoomAction],
+  )
 
-  const handleStart = useCallback(async () => {
-    try {
-      setRoom(await startRoom(roomId))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
-    }
-  }, [startRoom, roomId, t])
+  const handleLeave = useCallback(
+    () => runRoomAction(
+      () => leaveRoom(roomId),
+      () => navigate({ to: '/' }),
+    ),
+    [leaveRoom, navigate, roomId, runRoomAction],
+  )
 
-  const handleReadyChange = useCallback(async (ready: boolean) => {
-    try {
-      setError(null)
-      setRoom(await setRoomReady({ ready, roomId }))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
-    }
-  }, [roomId, setRoomReady, t])
+  const handleStart = useCallback(
+    () => runRoomAction(
+      () => startRoom(roomId),
+      (nextRoom) => setRoom(nextRoom),
+    ),
+    [roomId, runRoomAction, startRoom],
+  )
 
-  const handleCancelStart = useCallback(async () => {
-    try {
-      setRoom(await cancelRoomStart(roomId))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
-    }
-  }, [cancelRoomStart, roomId, t])
+  const handleReadyChange = useCallback(
+    (ready: boolean) => runRoomAction(
+      () => setRoomReady({ ready, roomId }),
+      (nextRoom) => setRoom(nextRoom),
+    ),
+    [roomId, runRoomAction, setRoomReady],
+  )
+
+  const handleCancelStart = useCallback(
+    () => runRoomAction(
+      () => cancelRoomStart(roomId),
+      (nextRoom) => setRoom(nextRoom),
+    ),
+    [cancelRoomStart, roomId, runRoomAction],
+  )
 
   if (loading) {
     return <main className={styles.loading}><Spinner /></main>

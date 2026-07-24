@@ -1,22 +1,24 @@
 import { useState } from 'react'
 
-import type { ScientificModel } from '@anomaly-detector/contracts'
+import type {
+  FieldType,
+  Polarity,
+  ScientificModel,
+  SignalId,
+} from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
-
-const signals = ['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'] as const
-const signalNames: Record<string, string> = {
-  aster: 'Aster', boreal: 'Boreal', cinder: 'Cinder',
-  delta: 'Delta', eclipse: 'Eclipse', ferro: 'Ferro',
-}
-
-const fieldTypes = ['inertial', 'electromagnetic', 'phase'] as const
-const ftLabels: Record<string, string> = {
-  inertial: 'Инерционное', electromagnetic: 'Электромагнитное', phase: 'Фазовое',
-}
-const polarities = ['positive', 'negative'] as const
+import { useI18n } from '@/platform/i18n'
+import {
+  fieldTypeLabelKeys,
+  fieldTypes,
+  polarities,
+  polarityLabelKeys,
+  signalIds,
+  signalLabelKeys,
+} from './catalog'
 
 type Props = {
   disabled?: boolean
@@ -25,34 +27,51 @@ type Props = {
 }
 
 export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props) {
-  const [model, setModel] = useState<Record<string, { fieldType?: string; polarity?: string }>>({})
+  const { t } = useI18n()
+  const [model, setModel] = useState<ScientificModel['signals']>({})
 
-  const toggle = (signal: string, key: 'fieldType' | 'polarity', value: string) => {
+  const toggleFieldType = (signal: SignalId, value: FieldType) => {
     setModel((prev) => {
       const current = prev[signal] ?? {}
+      const fieldType = current.fieldType === value ? undefined : value
+      if (!fieldType && !current.polarity) {
+        const next = { ...prev }
+        delete next[signal]
+        return next
+      }
       return {
         ...prev,
         [signal]: {
           ...current,
-          [key]: current[key] === value ? undefined : value,
+          fieldType,
+        },
+      }
+    })
+  }
+
+  const togglePolarity = (signal: SignalId, value: Polarity) => {
+    setModel((prev) => {
+      const current = prev[signal] ?? {}
+      const polarity = current.polarity === value ? undefined : value
+      if (!current.fieldType && !polarity) {
+        const next = { ...prev }
+        delete next[signal]
+        return next
+      }
+      return {
+        ...prev,
+        [signal]: {
+          ...current,
+          polarity,
         },
       }
     })
   }
 
   const handleSubmit = async () => {
-    const signals = Object.fromEntries(
-      Object.entries(model)
-        .filter(([, cell]) => cell.fieldType || cell.polarity)
-        .map(([sig, cell]) => [sig, {
-          ...(cell.fieldType ? { fieldType: cell.fieldType } : {}),
-          ...(cell.polarity ? { polarity: cell.polarity } : {}),
-        }]),
-    )
-
-    if (Object.keys(signals).length > 0) {
+    if (Object.keys(model).length > 0) {
       try {
-        await onConfirm({ signals } as ScientificModel)
+        await onConfirm({ signals: model })
       } catch {
         // The parent owns the visible command error; keep the model for retry.
       }
@@ -73,13 +92,14 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {signals.map((signal) => {
+          {signalIds.map((signal) => {
             const cell = model[signal]
+            const signalName = t(signalLabelKeys[signal])
             return (
               <Card key={signal} size="sm">
                 <CardContent className="grid gap-3 py-4">
                   <Typography variant="bodySm" className="text-center font-bold">
-                    {signalNames[signal]}
+                    {signalName}
                   </Typography>
 
                   {/* Field type */}
@@ -90,7 +110,7 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
                     <div className="grid gap-0.5">
                       {fieldTypes.map((ft) => (
                         <button
-                          aria-label={`${signalNames[signal]}: тип поля ${ftLabels[ft]}`}
+                          aria-label={`${signalName}: тип поля ${t(fieldTypeLabelKeys[ft])}`}
                           key={ft}
                           type="button"
                           disabled={disabled}
@@ -99,9 +119,9 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted text-muted-foreground hover:bg-muted/80'
                           }`}
-                          onClick={() => toggle(signal, 'fieldType', ft)}
+                          onClick={() => toggleFieldType(signal, ft)}
                         >
-                          {ftLabels[ft]}
+                          {t(fieldTypeLabelKeys[ft])}
                         </button>
                       ))}
                     </div>
@@ -115,7 +135,7 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
                     <div className="grid grid-cols-2 gap-1">
                       {polarities.map((pol) => (
                         <button
-                          aria-label={`${signalNames[signal]}: полярность ${pol === 'positive' ? 'Позитив' : 'Негатив'}`}
+                          aria-label={`${signalName}: полярность ${t(polarityLabelKeys[pol])}`}
                           key={pol}
                           type="button"
                           disabled={disabled}
@@ -124,9 +144,9 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted text-muted-foreground hover:bg-muted/80'
                           }`}
-                          onClick={() => toggle(signal, 'polarity', pol)}
+                          onClick={() => togglePolarity(signal, pol)}
                         >
-                          {pol === 'positive' ? 'Позитив (+)' : 'Негатив (−)'}
+                          {t(polarityLabelKeys[pol])} {pol === 'positive' ? '(+)' : '(−)'}
                         </button>
                       ))}
                     </div>
