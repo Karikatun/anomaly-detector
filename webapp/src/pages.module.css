@@ -125,9 +125,9 @@
 .menuCard:nth-child(3), .menuCard:nth-child(4) { min-height: 8.8rem; }
 .menuCard:nth-child(3) { grid-column: 1 / -1; }
 
-.copy { flex: 1; flex-direction: column; gap: .9rem; align-items: flex-start; }
+.copy { min-width: 0; flex: 1; flex-direction: column; gap: .9rem; align-items: flex-start; }
 .cardTitle { font-size: clamp(1.15rem, 1.75vw, 1.7rem); line-height: 1.1; letter-spacing: -.035em; }
-.cardDescription { max-width: 18rem; color: #a5b6ca; font-size: 1rem; line-height: 1.48; }
+.cardDescription { max-width: 18rem; overflow-wrap: anywhere; color: #a5b6ca; font-size: 1rem; line-height: 1.48; }
 .iconWrap { display: grid; width: 4.6rem; aspect-ratio: 1; flex: 0 0 auto; place-items: center; color: #c7dbed; }
 .iconWrap svg { width: 3rem; height: 3rem; }
 .violet { border-color: rgba(175, 74, 231, .72); background: linear-gradient(120deg, rgba(22, 11, 49, .92), rgba(5, 12, 28, .84)); }
@@ -136,7 +136,6 @@
 .aqua .iconWrap { color: #85f6ed; text-shadow: 0 0 16px #00bcae; }
 .plain { grid-column: 1 / -1; }
 .plain .iconWrap { margin-left: auto; }
-.mobileArrow { display: none; }
 
 .rulesTrigger {
   grid-column: 1 / -1;
@@ -168,7 +167,7 @@
   .screen { display: block; padding: 0; background: #020610; }
   .background { opacity: 1; background-image: url('/assets/home/expedition-mobile.webp'); background-position: center top; background-size: 100% auto; }
   .panel { min-height: 100svh; width: 100%; padding: 3.85rem 1.25rem 1.9rem; border-width: 1px; border-color: rgba(53, 92, 130, .72); border-radius: 0 0 14px 14px; background: linear-gradient(180deg, rgba(2, 8, 17, .1) 0, rgba(2, 8, 17, .08) 28%, rgba(2, 7, 16, .94) 35%, #020710 43%); }
-  .header { align-items: flex-start; }
+  .header { align-items: center; }
   .title { padding-top: .2rem; font-size: 1.05rem; letter-spacing: -.035em; }
   .account { gap: .5rem; }
   .avatar { width: 2.7rem; }
@@ -185,11 +184,10 @@
   .menuCard:nth-child(4) { min-height: 5.15rem; }
   .copy { gap: .65rem; }
   .cardTitle { font-size: 1.15rem; letter-spacing: -.035em; }
-  .cardDescription { max-width: 15.8rem; font-size: .83rem; line-height: 1.4; }
+  .cardDescription { max-width: calc(100% - 4.4rem); font-size: .83rem; line-height: 1.4; }
   .iconWrap { width: 3.6rem; }
   .iconWrap svg { width: 2.5rem; height: 2.5rem; }
   .plain .iconWrap { margin-left: auto; }
-  .mobileArrow { display: block; width: 1.1rem; height: 1.1rem; flex: 0 0 auto; color: #a6b7c9; }
   .rulesTrigger { min-height: 5.15rem; justify-content: flex-start; gap: 1.1rem; padding: 1.25rem 1.4rem; border-radius: 7px; color: #2b9aff; background: rgba(2, 17, 38, .72); font-size: 0; }
   .rulesTrigger::before { width: 2.3rem; height: 2.3rem; content: ''; background: currentColor; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat; }
   .rulesTrigger::after { content: 'ПРАВИЛА ИГРЫ'; font: 600 .98rem/1 'Figtree Variable', sans-serif; letter-spacing: -.02em; }
