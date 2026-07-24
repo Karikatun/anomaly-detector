@@ -10,12 +10,13 @@ test('creates a waiting private room with its host in the first seat', async () 
         capacity: input.capacity,
         hostId: input.hostId,
         id: 'room-1',
-        members: [{ seat: 1, userId: input.hostId }],
+        members: [{ ready: false, seat: 1, userId: input.hostId }],
         status: 'waiting',
         tenderId: null,
       }),
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new Error('not used') },
     },
   })
@@ -23,7 +24,7 @@ test('creates a waiting private room with its host in the first seat', async () 
   await expect(service.createRoom({ capacity: 3, hostId: 'user-1' })).resolves.toEqual({
     capacity: 3,
     hostId: 'user-1',
-    members: [{ seat: 1, userId: 'user-1' }],
+    members: [{ ready: false, seat: 1, userId: 'user-1' }],
     roomId: 'room-1',
     status: 'waiting',
   })
@@ -37,13 +38,14 @@ test('lists started matches for the requesting player', async () => {
         capacity: 2,
         hostId: 'user-1',
         id: 'room-1',
-        members: [{ seat: 1, userId }, { seat: 2, userId: 'user-2' }],
+        members: [{ ready: true, seat: 1, userId }, { ready: true, seat: 2, userId: 'user-2' }],
         status: 'started',
         tenderId: 'tender-1',
         tenderPhase: 'complete',
       }],
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new Error('not used') },
     },
   })
@@ -51,7 +53,7 @@ test('lists started matches for the requesting player', async () => {
   await expect(service.listMatches('user-1')).resolves.toEqual([{
     capacity: 2,
     hostId: 'user-1',
-    members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+    members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
     status: 'started',
     tenderId: 'tender-1',
@@ -67,17 +69,18 @@ test('adds a player to the next available seat in a waiting room', async () => {
         capacity: 3,
         hostId: 'user-1',
         id: 'room-1',
-        members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+        members: [{ ready: false, seat: 1, userId: 'user-1' }, { ready: false, seat: 2, userId: 'user-2' }],
         status: 'waiting',
         tenderId: null,
       }),
       leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new Error('not used') },
     },
   })
 
   await expect(service.joinRoom({ actorId: 'user-2', roomId: 'room-1' })).resolves.toMatchObject({
-    members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+    members: [{ ready: false, seat: 1, userId: 'user-1' }, { ready: false, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
   })
 })
@@ -89,6 +92,7 @@ test('lets a player leave a waiting room', async () => {
       create: async () => { throw new Error('not used') },
       join: async () => { throw new Error('not used') },
       leave: async (input) => { left.push(input) },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new Error('not used') },
     },
   })
@@ -107,18 +111,19 @@ test('schedules a full room start and exposes its server start time', async () =
         capacity: 2,
         hostId: 'user-1',
         id: 'room-1',
-        members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+        members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
         status: 'starting',
         startsAt: '2026-07-24T12:00:05.000Z',
         tenderId: null,
       }),
+      setReady: async () => { throw new Error('not used') },
     },
   })
 
   await expect(service.startRoom({ actorId: 'user-1', roomId: 'room-1' })).resolves.toEqual({
     capacity: 2,
     hostId: 'user-1',
-    members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+    members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
     status: 'starting',
     startsAt: '2026-07-24T12:00:05.000Z',
@@ -133,13 +138,14 @@ test('lets the host cancel a scheduled room start', async () => {
         capacity: 2,
         hostId: 'user-1',
         id: 'room-1',
-        members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+        members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
         status: 'waiting',
         startsAt: null,
         tenderId: null,
       }),
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new Error('not used') },
     },
   })
@@ -147,7 +153,7 @@ test('lets the host cancel a scheduled room start', async () => {
   await expect(service.cancelRoomStart({ actorId: 'user-1', roomId: 'room-1' })).resolves.toEqual({
     capacity: 2,
     hostId: 'user-1',
-    members: [{ seat: 1, userId: 'user-1' }, { seat: 2, userId: 'user-2' }],
+    members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
     status: 'waiting',
   })
@@ -160,19 +166,20 @@ test('allows creating a room with the minimum capacity of two', async () => {
         capacity: input.capacity,
         hostId: input.hostId,
         id: 'room-2',
-        members: [{ seat: 1, userId: input.hostId }],
+        members: [{ ready: false, seat: 1, userId: input.hostId }],
         status: 'waiting',
         tenderId: null,
       }),
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new Error('not used') },
     },
   })
 
   await expect(service.createRoom({ capacity: 2, hostId: 'user-1' })).resolves.toMatchObject({
     capacity: 2,
-    members: [{ seat: 1, userId: 'user-1' }],
+    members: [{ ready: false, seat: 1, userId: 'user-1' }],
   })
 })
 
@@ -183,19 +190,20 @@ test('allows creating a room with the maximum capacity of four', async () => {
         capacity: input.capacity,
         hostId: input.hostId,
         id: 'room-4',
-        members: [{ seat: 1, userId: input.hostId }],
+        members: [{ ready: false, seat: 1, userId: input.hostId }],
         status: 'waiting',
         tenderId: null,
       }),
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new Error('not used') },
     },
   })
 
   await expect(service.createRoom({ capacity: 4, hostId: 'user-1' })).resolves.toMatchObject({
     capacity: 4,
-    members: [{ seat: 1, userId: 'user-1' }],
+    members: [{ ready: false, seat: 1, userId: 'user-1' }],
   })
 })
 
@@ -205,6 +213,7 @@ test('propagates a repository error when a non-host tries to start a room', asyn
       create: async () => { throw new Error('not used') },
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new RoomFailure('room_not_host', 'Only the host can start') },
     },
   })
@@ -220,6 +229,7 @@ test('propagates a repository error when starting a room that is not full', asyn
       create: async () => { throw new Error('not used') },
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new RoomFailure('room_full', 'Room needs every seat filled') },
     },
   })
@@ -235,6 +245,7 @@ test('propagates a repository error when joining a full room', async () => {
       create: async () => { throw new Error('not used') },
       join: async () => { throw new RoomFailure('room_full', 'Room full') },
       leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
       start: async () => { throw new Error('not used') },
     },
   })

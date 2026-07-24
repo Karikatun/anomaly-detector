@@ -2,8 +2,10 @@ import {
   createRoomRequestSchema,
   myMatchesResponseSchema,
   roomViewSchema,
+  setRoomReadyRequestSchema,
   type CreateRoomRequest,
   type RoomView,
+  type SetRoomReadyRequest,
 } from '@anomaly-detector/contracts'
 import { z } from 'zod'
 
@@ -41,6 +43,14 @@ export class RoomsApi {
         method: 'POST',
       })
       .then(() => undefined)
+  }
+
+  setReady(roomId: string, input: SetRoomReadyRequest): Promise<RoomView> {
+    const payload = setRoomReadyRequestSchema.parse(input)
+    return this.transport.request(`/api/rooms/${roomId}/ready`, roomViewSchema, {
+      method: 'POST',
+      body: payload,
+    })
   }
 
   start(roomId: string): Promise<RoomView> {

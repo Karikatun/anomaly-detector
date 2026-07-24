@@ -185,7 +185,7 @@ maybeDescribe('auth API integration', () => {
       capacity: 2,
       hostId: user.id,
       roomId: expect.any(String),
-      members: [{ seat: 1, userId: user.id }],
+      members: [{ ready: false, seat: 1, userId: user.id }],
       status: 'waiting',
     })
 
@@ -207,7 +207,10 @@ maybeDescribe('auth API integration', () => {
 
     expect(join.status).toBe(200)
     expect(await join.json()).toMatchObject({
-      members: [{ seat: 1, userId: user.id }, { seat: 2, userId: joiner.user.id }],
+      members: [
+        { ready: false, seat: 1, userId: user.id },
+        { ready: false, seat: 2, userId: joiner.user.id },
+      ],
       roomId: room.roomId,
     })
 
@@ -251,6 +254,44 @@ maybeDescribe('auth API integration', () => {
       headers: { Authorization: `Bearer ${joiner.accessToken}` },
     })
     expect(nonHostStart.status).toBe(409)
+
+    const unreadyStart = await app.request(`/api/rooms/${room.roomId}/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(unreadyStart.status).toBe(409)
+
+    const hostReady = await app.request(`/api/rooms/${room.roomId}/ready`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ready: true }),
+    })
+    expect(hostReady.status).toBe(200)
+    expect(await hostReady.json()).toMatchObject({
+      members: [
+        { ready: true, userId: user.id },
+        { ready: false, userId: joiner.user.id },
+      ],
+    })
+
+    const joinerReady = await app.request(`/api/rooms/${room.roomId}/ready`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${joiner.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ready: true }),
+    })
+    expect(joinerReady.status).toBe(200)
+    expect(await joinerReady.json()).toMatchObject({
+      members: [
+        { ready: true, userId: user.id },
+        { ready: true, userId: joiner.user.id },
+      ],
+    })
 
     const start = await app.request(`/api/rooms/${room.roomId}/start`, {
       method: 'POST',

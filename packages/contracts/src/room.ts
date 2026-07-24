@@ -8,7 +8,12 @@ export const createRoomRequestSchema = z.object({
   capacity: roomCapacitySchema,
 }).strict()
 
+export const setRoomReadyRequestSchema = z.object({
+  ready: z.boolean(),
+}).strict()
+
 export const roomMemberSchema = z.object({
+  ready: z.boolean(),
   seat: z.number().int().positive(),
   userId: z.string().uuid(),
 }).strict()
@@ -31,3 +36,4 @@ export const myMatchesResponseSchema = z.object({
 export type CreateRoomRequest = z.infer<typeof createRoomRequestSchema>
 export type RoomMember = z.infer<typeof roomMemberSchema>
 export type RoomView = z.infer<typeof roomViewSchema>
+export type SetRoomReadyRequest = z.infer<typeof setRoomReadyRequestSchema>

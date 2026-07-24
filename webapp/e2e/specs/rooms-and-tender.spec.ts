@@ -65,6 +65,38 @@ async function submitFinalModel(page: Page) {
   await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
 }
 
+test('requires every lobby player to be ready before enabling the match start', async ({ browser, page }) => {
+  await registerBrowserUser(page, 'Хост готовности E2E', 'ready-host')
+  const webOrigin = new URL(page.url()).origin
+  const guestContext = await browser.newContext({ baseURL: webOrigin })
+  const guestPage = await guestContext.newPage()
+
+  try {
+    await registerBrowserUser(guestPage, 'Гость готовности E2E', 'ready-guest', webOrigin)
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await page.getByLabel('Количество игроков').selectOption('2')
+    await page.getByRole('button', { name: 'Создать команду' }).click()
+    await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)
+    const roomId = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
+    if (!roomId) throw new Error('Room identifier is missing from the lobby URL')
+
+    await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
+    await guestPage.getByLabel('ID комнаты').fill(roomId)
+    await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+
+    const startButton = page.getByRole('button', { name: 'Начать игру' })
+    await expect(startButton).toBeDisabled()
+    await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(startButton).toBeDisabled()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(startButton).toBeEnabled()
+    await page.getByRole('button', { name: 'Отменить готовность' }).click()
+    await expect(startButton).toBeDisabled()
+  } finally {
+    await guestContext.close()
+  }
+})
+
 test('opens the Rules Reference inside an active Tender without leaving it', async ({ browser, page }) => {
   await registerBrowserUser(page, 'Хост правил E2E', 'rules-tender-host')
   const webOrigin = new URL(page.url()).origin
@@ -76,14 +108,20 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByLabel('Количество игроков').selectOption('2')
     await page.getByRole('button', { name: 'Создать команду' }).click()
-    const roomId = new URL(page.url()).pathname.split('/').at(-1)
+    await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)
+    const roomId = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
     if (!roomId) throw new Error('Room identifier is missing from the lobby URL')
 
     await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
     await expect(guestPage.getByRole('dialog')).toBeVisible()
     await guestPage.getByLabel('ID комнаты').fill(roomId)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
-    await page.getByRole('button', { name: 'Начать Тендер' }).click()
+    await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
+    await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Начать игру' })).toBeEnabled()
+    await page.getByRole('button', { name: 'Начать игру' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
 
     await page.getByRole('button', { name: 'Правила' }).click()
@@ -112,7 +150,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await page.getByRole('button', { name: 'Создать команду' }).click()
     await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}$/)
 
-    const roomId = new URL(page.url()).pathname.split('/').at(-1)
+    const roomId = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
     if (!roomId) throw new Error('Room identifier is missing from the lobby URL')
 
     await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
@@ -120,9 +158,12 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await guestPage.getByLabel('ID комнаты').fill(roomId)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
     await expect(guestPage.getByText('2/2 участников')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Начать Тендер' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
+    await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Начать игру' })).toBeEnabled()
 
-    await page.getByRole('button', { name: 'Начать Тендер' }).click()
+    await page.getByRole('button', { name: 'Начать игру' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(page.getByRole('button', { name: 'Выйти из матча' })).toBeVisible()

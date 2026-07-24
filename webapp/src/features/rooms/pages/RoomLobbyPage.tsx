@@ -12,6 +12,7 @@ import {
   useCancelRoomStartMutation,
   useJoinRoomMutation,
   useLeaveRoomMutation,
+  useSetRoomReadyMutation,
   useStartRoomMutation,
 } from '@/features/rooms'
 import { useI18n } from '@/platform/i18n'
@@ -39,6 +40,7 @@ export function RoomLobbyPage() {
   const api = new RoomsApi(auth.transport)
   const { mutateAsync: joinRoom, isPending: isJoining } = useJoinRoomMutation({ api })
   const { mutateAsync: leaveRoom, isPending: isLeaving } = useLeaveRoomMutation({ api })
+  const { mutateAsync: setRoomReady, isPending: isSettingReady } = useSetRoomReadyMutation({ api })
   const { mutateAsync: startRoom, isPending: isStarting } = useStartRoomMutation({ api })
   const { mutateAsync: cancelRoomStart, isPending: isCancellingStart } = useCancelRoomStartMutation({ api })
 
@@ -139,6 +141,15 @@ export function RoomLobbyPage() {
     }
   }, [startRoom, roomId, t])
 
+  const handleReadyChange = useCallback(async (ready: boolean) => {
+    try {
+      setError(null)
+      setRoom(await setRoomReady({ ready, roomId }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
+    }
+  }, [roomId, setRoomReady, t])
+
   const handleCancelStart = useCallback(async () => {
     try {
       setRoom(await cancelRoomStart(roomId))
@@ -164,6 +175,8 @@ export function RoomLobbyPage() {
   const isHost = room.hostId === auth.user?.id
   const isMember = room.members.some((member) => member.userId === auth.user?.id)
   const isFull = room.members.length >= room.capacity
+  const readyCount = room.members.filter((member) => member.ready).length
+  const allPlayersReady = isFull && readyCount === room.capacity
   const isCountdown = room.status === 'starting'
   const secondsLeft = room.startsAt
     ? Math.max(0, Math.ceil((Date.parse(room.startsAt) - now) / 1_000))
@@ -206,7 +219,25 @@ export function RoomLobbyPage() {
                         </Typography>
                         {isPlayerHost ? <span className={styles.hostLabel}>{t('lobby.player.host')}</span> : null}
                       </div>
-                      {member ? <span className={styles.playerState} aria-label={t('lobby.player.ready')} /> : null}
+                      {member && member.userId === auth.user?.id && room.status === 'waiting' ? (
+                        <Button
+                          className={styles.readyButton}
+                          type="button"
+                          disabled={isSettingReady}
+                          onClick={() => void handleReadyChange(!member.ready)}
+                        >
+                          {isSettingReady
+                            ? t('lobby.player.ready.updating')
+                            : member.ready
+                              ? t('lobby.player.ready.cancel')
+                              : t('lobby.player.ready.action')}
+                        </Button>
+                      ) : member ? (
+                        <span className={styles.playerReadiness} data-ready={member.ready || undefined}>
+                          <span className={styles.playerState} aria-hidden="true" />
+                          {member.ready ? t('lobby.player.ready') : t('lobby.player.notReady')}
+                        </span>
+                      ) : null}
                     </div>
                   )
                 })}
@@ -226,7 +257,7 @@ export function RoomLobbyPage() {
           <div className={styles.rightColumn}>
             <section
               className={styles.startPanel}
-              data-state={isCountdown ? 'starting' : isFull ? 'ready' : 'waiting'}
+              data-state={isCountdown ? 'starting' : allPlayersReady ? 'ready' : 'waiting'}
               aria-live="polite"
             >
               <span className={styles.statusIndicator} aria-hidden="true">
@@ -248,13 +279,21 @@ export function RoomLobbyPage() {
                 <>
                   <div className={styles.statusCopy}>
                     <Typography className={styles.statusTitle}>
-                      {isFull ? t('lobby.ready.title') : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}
+                      {allPlayersReady
+                        ? t('lobby.ready.title')
+                        : isFull
+                          ? t('lobby.ready.progress', { count: readyCount, capacity: room.capacity })
+                          : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}
                     </Typography>
                     <Typography className={styles.statusHint}>
-                      {isFull ? t('lobby.ready.hint') : t('lobby.waiting.description')}
+                      {allPlayersReady
+                        ? t('lobby.ready.hint')
+                        : isFull
+                          ? t('lobby.ready.description')
+                          : t('lobby.waiting.description')}
                     </Typography>
                   </div>
-                  <Button className={styles.startButton} type="button" disabled={!isFull || isStarting} onClick={() => void handleStart()}>
+                  <Button className={styles.startButton} type="button" disabled={!allPlayersReady || isStarting} onClick={() => void handleStart()}>
                     {isStarting ? t('lobby.button.starting') : t('lobby.button.start')}
                   </Button>
                 </>
@@ -271,10 +310,18 @@ export function RoomLobbyPage() {
               ) : (
                 <div className={styles.statusCopy}>
                   <Typography className={styles.statusTitle}>
-                    {isFull ? t('lobby.ready.title') : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}
+                    {allPlayersReady
+                      ? t('lobby.ready.title')
+                      : isFull
+                        ? t('lobby.ready.progress', { count: readyCount, capacity: room.capacity })
+                        : t('lobby.waiting.hint', { count: room.capacity - room.members.length })}
                   </Typography>
                   <Typography className={styles.statusHint}>
-                    {isFull ? t('lobby.ready.hint') : t('lobby.waiting.description')}
+                    {allPlayersReady
+                      ? t('lobby.ready.hint')
+                      : isFull
+                        ? t('lobby.ready.description')
+                        : t('lobby.waiting.description')}
                   </Typography>
                 </div>
               )}

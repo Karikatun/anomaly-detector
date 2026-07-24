@@ -137,7 +137,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Allow an authenticated host to create a waiting room and occupy the first seat.
    - [x] Allow authenticated players to join open rooms in seat order and reject a full room.
    - [x] Allow a participant to leave a waiting room and join it again while a seat is free.
-   - [x] Allow only the host to start a full room and atomically create its Tender.
+   - [x] Allow only the host to start a full room after every player confirms readiness and atomically create its Tender.
 5. [x] Add authenticated HTTP endpoints and WebSocket updates that only deliver each participant's authorised TenderView.
    - [x] Add authenticated HTTP reads and command submission through participant-scoped TenderView projections.
    - [x] Issue one-time, session-bound realtime tickets without exposing access tokens in WebSocket URLs.
@@ -165,7 +165,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Skills:** `prototype` for the Working Model and dense mobile interactions; `browser:control-in-app-browser` for mobile and desktop verification; `imagegen` only when original raster assets are needed; `tdd` for client state that affects correctness; `code-review` for each completed journey.
 
-**Gate:** Playwright covers sign-in, room creation, full room start, each action family, reconnection, final score, and participant-only audit access on mobile and desktop viewports.
+**Gate:** Playwright covers sign-in, room creation, player readiness, full room start, each action family, reconnection, final score, and participant-only audit access on mobile and desktop viewports.
 
 ## Milestone 5: Operations, Delivery, And Beta
 
