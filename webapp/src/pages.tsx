@@ -79,14 +79,12 @@ function AuthenticatedHome({
           <MenuCard
             accent="violet"
             title="СОЗДАТЬ КОМНАТУ"
-            description="Создайте свою экспедицию и пригласите игроков"
             icon={Add01Icon}
             onClick={() => void navigate({ to: '/rooms' })}
           />
           <MenuCard
             accent="aqua"
             title="ВОЙТИ ПО КОДУ"
-            description="Введите код комнаты, чтобы присоединиться"
             icon={Login03Icon}
             onClick={() => void navigate({ to: '/rooms' })}
           />

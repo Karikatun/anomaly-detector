@@ -121,7 +121,7 @@
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 .menuCard:hover { transform: translateY(-2px); background: rgba(9, 28, 50, .94); }
-.menuCard:nth-child(3), .menuCard:nth-child(4) { min-height: 8.8rem; }
+.menuCard:nth-child(3), .menuCard:nth-child(4) { min-height: 6.2rem; }
 .menuCard:nth-child(3) { grid-column: 1 / -1; }
 
 .copy { min-width: 0; flex: 1; flex-direction: column; gap: .9rem; align-items: flex-start; }
@@ -176,16 +176,22 @@
   .logoutLabel { display: none; }
   .divider { display: none; }
   .actions { margin-top: clamp(10.8rem, 28vw, 13.3rem); grid-template-columns: 1fr; gap: .7rem; }
-  .menuCard { min-height: 8.55rem; padding: 1.4rem; border-width: 1px; border-radius: 7px; }
-  .menuCard:nth-child(1), .menuCard:nth-child(2) { min-height: 8.9rem; }
-  .menuCard:nth-child(3) { min-height: 6.1rem; }
-  .menuCard:nth-child(4) { min-height: 5.15rem; }
-  .copy { gap: .65rem; }
+  .menuCard {
+    display: grid !important;
+    min-height: 6.1rem;
+    grid-template-columns: minmax(0, 1fr) 3.6rem;
+    align-items: center;
+    column-gap: .5rem;
+    padding: 1.4rem .7rem 1.4rem 1.4rem;
+    border-width: 1px;
+    border-radius: 7px;
+  }
+  .copy { display: flex; min-width: 0; grid-column: 1; gap: .65rem; }
   .cardTitle { font-size: 1.15rem; letter-spacing: -.035em; }
-  .cardDescription { max-width: calc(100% - 4.4rem); font-size: .83rem; line-height: 1.4; }
-  .iconWrap { width: 3.6rem; }
+  .cardDescription { max-width: 100%; font-size: .83rem; line-height: 1.4; }
+  .iconWrap { width: 3.6rem; grid-column: 2; }
   .iconWrap svg { width: 2.5rem; height: 2.5rem; }
-  .plain .iconWrap { margin-left: auto; }
+  .plain .iconWrap { margin-left: 0; }
   .rulesTrigger { min-height: 5.15rem; justify-content: flex-start; gap: 1.1rem; padding: 1.25rem 1.4rem; border-radius: 7px; color: #2b9aff; background: rgba(2, 17, 38, .72); font-size: 0; }
   .rulesTrigger::before { width: 2.3rem; height: 2.3rem; content: ''; background: currentColor; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat; }
   .rulesTrigger::after { content: 'ПРАВИЛА ИГРЫ'; font: 600 .98rem/1 'Figtree Variable', sans-serif; letter-spacing: -.02em; }
