@@ -40,7 +40,7 @@ export function RootLayout() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => void navigate({ to: '/rooms' })}
+                  onClick={() => void navigate({ to: '/' })}
                 >
                   {t('nav.leaveMatch')}
                 </Button>
@@ -48,7 +48,7 @@ export function RootLayout() {
             ) : (
               <nav className="ml-auto flex items-center gap-2" aria-label="Primary">
                 <Button type="button" variant="ghost" size="sm" asChild>
-                  <Link to="/rooms">{t('nav.rooms')}</Link>
+                  <Link to="/">{t('nav.rooms')}</Link>
                 </Button>
                 <Button type="button" variant="ghost" size="sm" asChild>
                   <Link to="/app">{t('nav.matches')}</Link>

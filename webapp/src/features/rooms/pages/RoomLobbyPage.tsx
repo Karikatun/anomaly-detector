@@ -125,7 +125,7 @@ export function RoomLobbyPage() {
   const handleLeave = useCallback(async () => {
     try {
       await leaveRoom(roomId)
-      await navigate({ to: '/rooms' })
+      await navigate({ to: '/' })
     } catch (err) {
       setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
     }
@@ -156,7 +156,7 @@ export function RoomLobbyPage() {
       <main className={styles.errorScreen}>
         <Typography variant="h3">{t('lobby.error.notFound')}</Typography>
         <Typography tone="muted">{error ?? t('lobby.error.notFound.description')}</Typography>
-        <Button asChild><a href="/rooms">{t('lobby.button.back')}</a></Button>
+        <Button asChild><a href="/">{t('lobby.button.back')}</a></Button>
       </main>
     )
   }
