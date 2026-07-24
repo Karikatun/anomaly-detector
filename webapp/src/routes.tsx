@@ -3,6 +3,7 @@ import {
   createRoute,
   createRouter,
   lazyRouteComponent,
+  redirect,
 } from '@tanstack/react-router'
 
 import { RootLayout } from './root-layout'
@@ -32,7 +33,9 @@ const profileRoute = createRoute({
 const roomsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/rooms',
-  component: lazyRouteComponent(() => import('./features/rooms'), 'RoomListPage'),
+  beforeLoad: () => {
+    throw redirect({ to: '/', replace: true })
+  },
 })
 
 const roomLobbyRoute = createRoute({
