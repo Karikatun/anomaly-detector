@@ -130,6 +130,12 @@
 .field { gap: .35rem; }
 .fieldLabel { color: #aabdd0; font-size: .8rem; }
 .input { height: 3.35rem; border-color: rgba(94, 139, 174, .6); border-radius: 7px; color: #e9f2fb; background: rgba(2, 14, 27, .68); font-size: .98rem; }
+.passwordControl { position: relative; }
+.passwordInput { padding-right: 3.25rem; }
+.passwordToggle { position: absolute; top: 50%; right: .65rem; display: grid; width: 2.35rem; height: 2.35rem; place-items: center; border: 0; border-radius: 6px; color: #8ba4bb; background: transparent; cursor: pointer; transform: translateY(-50%); }
+.passwordToggle:hover { color: #d7e9f8; background: rgba(68, 132, 182, .16); }
+.passwordToggle:focus-visible { outline: 2px solid #4e9dff; outline-offset: 1px; }
+.passwordToggle svg { width: 1.2rem; height: 1.2rem; }
 .submit { min-height: 3.35rem; border: 1px solid rgba(68, 151, 255, .75); border-radius: 7px; background: linear-gradient(135deg, rgba(39, 94, 163, .95), rgba(24, 61, 112, .96)); font-size: 1rem !important; font-weight: 500 !important; }
 .submit:hover { background: linear-gradient(135deg, rgba(52, 117, 200, .98), rgba(32, 80, 148, .98)); }
 
