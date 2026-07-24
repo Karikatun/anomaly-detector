@@ -109,6 +109,8 @@ const ru = {
   'rooms.join.description': 'Введите ID комнаты, чтобы присоединиться.',
   'rooms.join.placeholder': 'ID комнаты',
   'rooms.join.submit': 'Войти по коду',
+  'rooms.join.cancel': 'Отмена',
+  'rooms.join.error.required': 'Введите ID комнаты',
 
   // Room lobby
   'lobby.title': 'Комната тендера',

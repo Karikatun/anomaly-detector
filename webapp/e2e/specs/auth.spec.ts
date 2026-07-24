@@ -4,7 +4,7 @@ test('registers, restores the browser session, opens the profile, and logs out',
   const { login } = await registerBrowserUser(page, 'Пользователь E2E', 'auth')
 
   await page.reload()
-  await expect(page.getByRole('link', { name: 'Комнаты' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
   await expect
     .poll(async () =>
       (await page.context().cookies()).some(
@@ -13,7 +13,7 @@ test('registers, restores the browser session, opens the profile, and logs out',
     )
     .toBe(true)
 
-  await page.getByRole('link', { name: 'Мои матчи' }).click()
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
   await expect(page.getByRole('heading', { name: 'Пользователь E2E' })).toBeVisible()
   await expect(page.getByText(login)).toBeVisible()
 
@@ -23,7 +23,7 @@ test('registers, restores the browser session, opens the profile, and logs out',
   await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль').fill(e2ePassword)
   await page.getByRole('button', { name: 'Войти' }).click()
-  await expect(page.getByRole('link', { name: 'Комнаты' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
 })
 
 test('uses the configured API transport when OAuth is unavailable', async ({ page }) => {
@@ -43,7 +43,7 @@ test('opens the Rules Reference from the authenticated home page', async ({ page
   await page.getByRole('button', { name: 'Правила' }).first().click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Справочник правил' })).toBeVisible()
-  await expect(page.getByText('Final Contract и финальная модель')).toBeVisible()
+  await expect(page.getByText('Финальный контракт и финальная модель')).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть правила' }).click()
   await expect(page.getByRole('dialog')).toBeHidden()
 })

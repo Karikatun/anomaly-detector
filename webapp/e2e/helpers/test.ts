@@ -19,12 +19,12 @@ export async function registerBrowserUser(
 ) {
   const login = uniqueLogin(prefix)
   await page.goto(startUrl)
-  await page.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }).click()
+  await page.getByRole('button', { name: 'Регистрация' }).click()
   await page.getByLabel('Имя').fill(displayName)
   await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль').fill(e2ePassword)
   await page.getByRole('button', { name: 'Регистрация' }).click()
-  await expect(page.getByRole('link', { name: 'Комнаты' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
   await expect
     .poll(async () =>
       (await page.context().cookies()).some(
