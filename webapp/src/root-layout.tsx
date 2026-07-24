@@ -14,6 +14,7 @@ export function RootLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const [logoutFailed, setLogoutFailed] = useState(false)
   const isInTender = pathname.startsWith('/tenders/')
+  const isInRoomLobby = pathname.startsWith('/rooms/')
 
   const logout = async () => {
     setLogoutFailed(false)
@@ -26,7 +27,7 @@ export function RootLayout() {
 
   return (
     <div className="min-h-svh bg-background/60 text-foreground">
-      {auth.isAuthenticated && pathname !== '/' && (
+      {auth.isAuthenticated && pathname !== '/' && !isInRoomLobby && (
         <header className="border-b bg-background/95 backdrop-blur">
           <div className="mx-auto flex min-h-16 w-full max-w-6xl flex-wrap items-center gap-3 px-5 py-3">
             <Typography asChild variant="h6">
