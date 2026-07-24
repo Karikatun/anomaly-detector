@@ -77,9 +77,9 @@ Use the local `shadcn` devDependency pinned in `webapp/package.json` and `bun.lo
 
 ## E2E
 
-The Playwright smoke tests live in `e2e/specs/auth.spec.ts` and verify client-side auth validation visibility, register/login mode switching, register, refresh after reload, protected UI, logout, invalid login error rendering, successful login after logout, concurrent session restoration, cross-tab logout/error recovery, and convergence after competing account changes in two tabs.
+The Playwright tests cover explicit registration consent, auth/session recovery, room readiness, and a two-player Tender through all five rounds and the final model.
 
-The run starts Docker Compose `postgres_test`, applies migrations to `anomaly_detector_test`, starts the backend with `TEST_DATABASE_URL` as its `DATABASE_URL`, starts Vite, and removes the test database volume after the run by default.
+The run starts Docker Compose `postgres_test`, applies migrations to `anomaly_detector_test`, starts the backend API and deadline worker with `TEST_DATABASE_URL` as their `DATABASE_URL`, starts Vite, and removes the test database volume after the run by default.
 
 First run:
 

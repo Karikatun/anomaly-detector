@@ -4,6 +4,12 @@ import { useCallback } from 'react'
 
 import type { AuthenticatedTransport } from '@/platform/api'
 
+type WithoutCommandEnvelope<T> = T extends unknown
+  ? Omit<T, 'commandId' | 'tenderId'>
+  : never
+
+export type TenderCommandInput = WithoutCommandEnvelope<TenderCommand>
+
 function randomUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -18,10 +24,7 @@ function randomUUID(): string {
 
 export function useTenderCommands(transport: AuthenticatedTransport, tenderId: string) {
   const execute = useCallback(
-    async (command: Omit<TenderCommand, 'commandId' | 'tenderId' | 'actorId'> & {
-      type: TenderCommand['type']
-      actorId: string
-    }): Promise<CommandReceipt> => {
+    async (command: TenderCommandInput): Promise<CommandReceipt> => {
       const fullCommand = {
         ...command,
         commandId: randomUUID(),

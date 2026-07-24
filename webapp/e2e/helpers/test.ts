@@ -22,7 +22,9 @@ export async function registerBrowserUser(
   await page.getByRole('button', { name: 'Регистрация' }).click()
   await page.getByLabel('Имя').fill(displayName)
   await page.getByLabel('Логин').fill(login)
-  await page.getByLabel('Пароль').fill(e2ePassword)
+  await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
+  await page.getByRole('checkbox', { name: 'Я согласен на обработку персональных данных' }).check()
+  await page.getByRole('checkbox', { name: 'Мне исполнилось 18 лет' }).check()
   await page.getByRole('button', { name: 'Регистрация' }).click()
   await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
   await expect

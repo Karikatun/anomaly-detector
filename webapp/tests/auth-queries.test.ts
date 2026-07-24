@@ -8,6 +8,7 @@ import {
   logoutAuthenticatedSession,
   sessionQueryKeys,
 } from '../src/features/auth/queries'
+import { roomQueryKeys } from '../src/features/rooms/queries'
 
 const user = {
   id: 'user_1',
@@ -22,6 +23,7 @@ test('auth query helpers keep access token and session-scoped cache in sync', as
   let accessToken: string | null = null
 
   queryClient.setQueryData([...sessionQueryKeys.all, 'orders'], [{ id: 'old-order' }])
+  queryClient.setQueryData(roomQueryKeys.mine(), [{ id: 'old-room' }])
   queryClient.setQueryData(['public', 'plans'], [{ id: 'free' }])
 
   applyAuthenticatedSession(
@@ -39,6 +41,7 @@ test('auth query helpers keep access token and session-scoped cache in sync', as
   expect(queryClient.getQueryData(authQueryKeys.me())).toEqual({ user })
 
   expect(queryClient.getQueryData([...sessionQueryKeys.all, 'orders'])).toBeUndefined()
+  expect(queryClient.getQueryData(roomQueryKeys.mine())).toBeUndefined()
 
   await clearAuthenticatedSession(queryClient, (nextAccessToken) => {
     accessToken = nextAccessToken

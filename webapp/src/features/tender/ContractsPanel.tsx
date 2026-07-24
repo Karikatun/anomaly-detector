@@ -59,7 +59,11 @@ export function ContractsPanel({ certifications, contracts, journal, maxPower, p
             const canResolve = !isFinal || round === 5
             const ownJournal = journal.filter((entry) => entry.playerId === playerId)
             return (
-              <div key={contract.contractId} className="rounded-lg border p-4">
+              <div
+                key={contract.contractId}
+                className="rounded-lg border p-4"
+                data-contract-kind={contract.kind ?? 'light'}
+              >
                 <Typography variant="bodySm" className="font-medium">
                   {contract.contractId} · {contract.kind ?? 'light'} · +{contract.ratingReward ?? 2} рейтинг
                 </Typography>
@@ -73,7 +77,14 @@ export function ContractsPanel({ certifications, contracts, journal, maxPower, p
                 {isFinal && !canResolve && <Typography variant="control" tone="muted">Финальный контракт станет доступен в пятом раунде.</Typography>}
 
                 {!bid && (
-                  <Button type="button" size="sm" className="mt-3 w-full" disabled={disabled || maxPower === 0 || !canResolve} onClick={() => handleReserve(contract.contractId)}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-3 w-full"
+                    aria-label={t('tender.contracts.reserveAria', { id: contract.contractId })}
+                    disabled={disabled || maxPower === 0 || !canResolve}
+                    onClick={() => handleReserve(contract.contractId)}
+                  >
                     {t('tender.contracts.reserve')}
                   </Button>
                 )}
@@ -101,6 +112,7 @@ export function ContractsPanel({ certifications, contracts, journal, maxPower, p
                       type="button"
                       size="sm"
                       className="w-full"
+                      aria-label={t('tender.contracts.submitAria', { id: contract.contractId })}
                       disabled={disabled || (isScientific ? !bid.researchCertificationSignal : bid.evidenceTestIds.length === 0)}
                       onClick={() => {
                         onBid(contract.contractId, bid)

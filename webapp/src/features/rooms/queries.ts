@@ -5,11 +5,14 @@ import {
 
 import type { CreateRoomRequest, RoomView, SetRoomReadyRequest } from '@anomaly-detector/contracts'
 
+import { sessionQueryKeys } from '@/platform/query'
+
 import type { RoomsApi } from './api'
 
 export const roomQueryKeys = {
-  all: ['rooms'] as const,
+  all: [...sessionQueryKeys.all, 'rooms'] as const,
   byId: (roomId: string) => [...roomQueryKeys.all, roomId] as const,
+  mine: () => [...roomQueryKeys.all, 'mine'] as const,
 }
 
 type RoomMutationsOptions = {
