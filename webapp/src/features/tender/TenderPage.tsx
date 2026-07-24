@@ -235,10 +235,10 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
                 {Object.entries(view.audit.anomalyConfiguration.signals).map(([sig, props]) => (
                     <Card key={sig} size="sm">
                       <CardContent className="py-3">
-                        <Typography variant="bodySm" className="font-bold">
+                        <Typography variant="bodySmMedium">
                         {isSignalId(sig) ? t(signalLabelKeys[sig]) : sig}
                       </Typography>
-                      <Typography variant="bodySm" tone="muted" className="leading-snug">
+                      <Typography variant="bodySmSnug" tone="muted">
                         {t(fieldTypeLabelKeys[props.fieldType])} / {t(polarityLabelKeys[props.polarity])}
                       </Typography>
                     </CardContent>
@@ -250,11 +250,11 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
               <Typography variant="control" tone="muted">Итоговый рейтинг</Typography>
               {view.players.map((p) => (
                 <div key={p.playerId} className="grid gap-2 rounded-lg border p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center">
-                  <Typography variant="bodySm" className="font-medium">Слот {p.accessSlot}</Typography>
+                  <Typography variant="bodySmMedium">Слот {p.accessSlot}</Typography>
                   <Typography variant="bodySm" tone="muted" className="min-w-0 break-words">
                     {p.displayName ?? p.playerId.slice(0, 8)}
                   </Typography>
-                  <Typography variant="bodySm" className="font-bold">
+                  <Typography variant="bodySmMedium">
                     Рейтинг: {p.rating} · Бюджет: {p.budget}
                   </Typography>
                   {view.winnerPlayerIds?.includes(p.playerId) && (
@@ -366,7 +366,9 @@ export function TenderPage() {
       >
         <Typography variant="h3">{phase}</Typography>
         <div className="flex flex-wrap items-center gap-3">
-          <Badge variant="outline" className="tracking-widest uppercase">Раунд {tenderView.round} / 5</Badge>
+          <Badge variant="outline">
+            <Typography variant="shortcut" className="uppercase">Раунд {tenderView.round} / 5</Typography>
+          </Badge>
           <TenderTimer dueAt={tenderView.dueAt} />
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -442,7 +444,7 @@ export function TenderPage() {
               >
                 <CardContent className="grid gap-1 py-3">
                   <div className="flex items-center gap-2">
-                    <Typography variant="bodySm" className="font-medium">
+                    <Typography variant="bodySmMedium">
                       Слот {player.accessSlot ?? '?'}
                     </Typography>
                     <Typography variant="control" tone="muted">
@@ -479,7 +481,7 @@ export function TenderPage() {
             {tenderView.publicLaboratoryResults.map((r, i) => (
               <Card key={i} size="sm">
                 <CardContent className="py-3">
-                  <Typography variant="bodySm" className="font-medium">
+                  <Typography variant="bodySmMedium">
                     {t(signalLabelKeys[r.sourceSignal])} → {t(signalLabelKeys[r.receiverSignal])}
                   </Typography>
                   <Typography variant="control" tone="muted">
@@ -500,7 +502,7 @@ export function TenderPage() {
             {tenderView.publicTheses.map((thesis, i) => (
               <Card key={i} size="sm" className={thesis.correct ? 'border-green-500/50' : 'border-red-500/50'}>
                 <CardContent className="py-3">
-                  <Typography variant="bodySm" className="font-medium">
+                  <Typography variant="bodySmMedium">
                     {t(signalLabelKeys[thesis.signalId])}: {t(fieldTypeLabelKeys[thesis.fieldType])} / {t(polarityLabelKeys[thesis.polarity])}
                   </Typography>
                   <Typography variant="control" tone={thesis.correct ? 'default' : 'destructive'}>
@@ -516,10 +518,10 @@ export function TenderPage() {
       {/* Working Model */}
       <Separator />
       <details open className="mt-4">
-        <summary className="cursor-pointer text-sm font-medium">
+        <summary className="cursor-pointer">
           <span className="flex items-center gap-3">
             <img src="/assets/icons.webp" alt="" className="h-8 w-12 rounded object-cover opacity-70" />
-            Рабочая модель
+            <Typography as="span" variant="bodySmMedium">Рабочая модель</Typography>
           </span>
         </summary>
         <div className="mt-4">

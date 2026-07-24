@@ -86,7 +86,7 @@ export function ContractsPanel({ certifications, contracts, journal, maxPower, p
                 className="rounded-lg border p-4"
                 data-contract-kind={contract.kind ?? 'light'}
               >
-                <Typography variant="bodySm" className="font-medium">
+                <Typography variant="bodySmMedium">
                   {contract.contractId} · {t(`tender.contracts.kind.${contract.kind ?? 'light'}`)} · +{contract.ratingReward ?? 2} рейтинг
                 </Typography>
                 <Typography variant="control" tone="muted">

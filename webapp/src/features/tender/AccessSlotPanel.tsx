@@ -64,13 +64,13 @@ export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm, tie
                 onClick={() => setSelected(slot)}
               >
                 <Typography variant="h6">{String(slot).padStart(2, '0')}</Typography>
-                <Typography variant="control" tone="muted" className="w-full whitespace-normal leading-snug">
+                <Typography variant="controlWrap" tone="muted" className="w-full">
                   {label}
                 </Typography>
-                <Typography variant="control" tone="muted" className="w-full whitespace-normal leading-snug">
+                <Typography variant="controlWrap" tone="muted" className="w-full">
                   {t('tender.access.order', { order: slot })}
                 </Typography>
-                <Typography variant="control" className="w-full whitespace-normal text-center leading-snug">
+                <Typography variant="controlWrap" align="center" className="w-full">
                   {terms}
                 </Typography>
               </Button>

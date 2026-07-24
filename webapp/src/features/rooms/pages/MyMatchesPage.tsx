@@ -56,7 +56,7 @@ export function MyMatchesPage() {
           </div>
         ) : matches.data.length === 0 ? (
           <div className={styles.empty}>
-            <span className={styles.emptyMark} aria-hidden="true">○</span>
+            <Typography as="span" variant="h3" className={styles.emptyMark} aria-hidden="true">○</Typography>
             <Typography className={styles.emptyTitle}>{t('matches.empty.title')}</Typography>
             <Typography className={styles.emptyHint}>{t('matches.empty.description')}</Typography>
             <Button type="button" className={styles.primaryButton} onClick={() => void navigate({ to: '/' })}>
@@ -66,10 +66,10 @@ export function MyMatchesPage() {
         ) : (
           <div className={styles.history}>
             <div className={styles.tableHeader} aria-hidden="true">
-              <span>{t('matches.column.date')}</span>
-              <span>{t('matches.column.players')}</span>
-              <span>{t('matches.column.status')}</span>
-              <span>{t('matches.column.details')}</span>
+              <Typography as="span" variant="control">{t('matches.column.date')}</Typography>
+              <Typography as="span" variant="control">{t('matches.column.players')}</Typography>
+              <Typography as="span" variant="control">{t('matches.column.status')}</Typography>
+              <Typography as="span" variant="control">{t('matches.column.details')}</Typography>
             </div>
 
             <div className={styles.rows}>
