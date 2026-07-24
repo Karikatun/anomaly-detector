@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { Typography } from '@/components/ui/typography'
-import { useI18n } from '@/platform/i18n'
+import { type TranslationKey, useI18n } from '@/platform/i18n'
 
 const sections = [
   ['overview', ['overview.1', 'overview.2']],
@@ -26,16 +26,22 @@ const sections = [
 export function RulesReferenceDialog({
   triggerVariant = 'outline',
   triggerClassName,
+  triggerLabelKey = 'rules.open',
+  triggerTextClassName,
 }: {
   triggerVariant?: 'default' | 'outline' | 'ghost'
   triggerClassName?: string
+  triggerLabelKey?: TranslationKey
+  triggerTextClassName?: string
 }) {
   const { t } = useI18n()
 
   return (
-    <Dialog>
+      <Dialog>
       <DialogTrigger asChild>
-        <Button type="button" variant={triggerVariant} size="sm" className={cn(triggerClassName)}>{t('rules.open')}</Button>
+        <Button type="button" variant={triggerVariant} size="sm" className={cn(triggerClassName)}>
+          <Typography as="span" variant="control" className={cn(triggerTextClassName)}>{t(triggerLabelKey)}</Typography>
+        </Button>
       </DialogTrigger>
       <DialogContent showCloseButton={false} className="max-h-[calc(100svh-2rem)] max-w-3xl overflow-y-auto sm:max-w-3xl">
         <DialogHeader>

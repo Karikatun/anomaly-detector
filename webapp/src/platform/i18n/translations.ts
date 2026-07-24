@@ -56,6 +56,7 @@ const ru = {
 
   // Rules reference
   'rules.open': 'Правила',
+  'rules.menu': 'ПРАВИЛА ИГРЫ',
   'rules.close': 'Закрыть правила',
   'rules.title': 'Справочник правил',
   'rules.description': 'Полная справка по исследованию аномалии и правилам корпоративного Тендера.',
