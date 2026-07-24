@@ -1,7 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import {
   Add01Icon,
-  ArrowRight01Icon,
   File01Icon,
   Login03Icon,
   Logout01Icon,
@@ -137,7 +136,6 @@ function MenuCard({
         {description && <Typography variant="body" className={styles.cardDescription}>{description}</Typography>}
       </span>
       <span className={styles.iconWrap} aria-hidden="true"><HugeiconsIcon icon={icon} strokeWidth={1.35} /></span>
-      {accent === 'plain' && <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={1.7} className={styles.mobileArrow} aria-hidden="true" />}
     </Button>
   )
 }
