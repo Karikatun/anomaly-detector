@@ -942,8 +942,8 @@ test('keeps confirmed Power allocations private until every player confirms, the
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     phase: 'power-allocation',
     players: [
-      { accessSlot: 1, playerId: 'player-a' },
-      { accessSlot: 2, playerId: 'player-b' },
+      { accessSlot: 1, playerId: 'player-a', powerAllocationConfirmed: false },
+      { accessSlot: 2, playerId: 'player-b', powerAllocationConfirmed: true },
     ],
   })
   expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
@@ -953,6 +953,7 @@ test('keeps confirmed Power allocations private until every player confirms, the
       {
         accessSlot: 2,
         powerAllocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 2 },
+        powerAllocationConfirmed: true,
         playerId: 'player-b',
       },
     ],

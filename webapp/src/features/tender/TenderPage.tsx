@@ -118,9 +118,12 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
     case 'power-allocation':
       return (
         <PowerAllocationPanel
+          confirmedAllocation={myPlayer?.powerAllocation}
+          currentUserId={auth.user?.id}
           sampleCount={mySamples.length}
           disabled={disabled || myPlayer?.powerAllocation !== undefined}
           error={error}
+          players={view.players}
           onConfirm={(allocation) => onCommand({ type: 'allocate-power', allocation })}
         />
       )
@@ -361,6 +364,8 @@ function TenderContent() {
     && myPlayer.accessSlot !== undefined
     && myPlayer.requestedAccessSlot !== myPlayer.accessSlot
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
+  const isPowerAllocation = tenderView.phase === 'power-allocation'
+  const isPlanningPhase = isAccessSlotSelection || isPowerAllocation
 
   return (
     <section className="mx-auto grid w-full min-w-0 max-w-[90rem] gap-4 overflow-x-clip px-3 py-3 sm:px-5 sm:py-5">
@@ -411,7 +416,7 @@ function TenderContent() {
         </div>
       </header>
 
-      {myPlayer?.requestedAccessSlot !== undefined && myPlayer.accessSlot !== undefined && (
+      {!isPowerAllocation && myPlayer?.requestedAccessSlot !== undefined && myPlayer.accessSlot !== undefined && (
         <Card size="sm">
           <CardHeader>
             <CardTitle>{t('tender.access.result.title')}</CardTitle>
@@ -442,8 +447,8 @@ function TenderContent() {
       )}
 
       {/* Phase panel + right sidebar */}
-      <div className={isAccessSlotSelection ? 'grid min-w-0 gap-4' : 'grid min-w-0 gap-6 lg:grid-cols-[1fr_320px]'}>
-        <div className={isAccessSlotSelection ? 'grid min-w-0 gap-4' : 'grid min-w-0 gap-6'}>
+      <div className={isPlanningPhase ? 'grid min-w-0 gap-4' : 'grid min-w-0 gap-6 lg:grid-cols-[1fr_320px]'}>
+        <div className={isPlanningPhase ? 'grid min-w-0 gap-4' : 'grid min-w-0 gap-6'}>
           <PhasePanel
             view={tenderView}
             disabled={submitting || !connected}
@@ -453,7 +458,7 @@ function TenderContent() {
           />
         </div>
 
-        {!isAccessSlotSelection && (
+        {!isPlanningPhase && (
           <TenderPlayers
             activePlayerId={tenderView.activePlayerId}
             currentUserId={auth.user?.id}
@@ -462,7 +467,7 @@ function TenderContent() {
         )}
       </div>
 
-      {!isAccessSlotSelection && (
+      {!isPlanningPhase && (
         <>
           <Separator />
           <TenderEvidence view={tenderView} />
