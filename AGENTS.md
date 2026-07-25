@@ -228,6 +228,18 @@ This is a single-context repository. Read root `CONTEXT.md` and relevant `docs/a
 - Do not stage, commit, amend, rebase, reset, stash, push, or delete files unless explicitly asked.
 - Keep diffs focused. Avoid unrelated formatting churn.
 
+## Learning Loop
+
+After a non-trivial task, identify durable lessons only when they are likely to recur. Classify each lesson as:
+
+- Repository rule → propose an `AGENTS.md` update.
+- Reusable procedure → propose a skill update.
+- Architectural decision → propose an ADR.
+- Enforceable invariant → prefer a test, linter, or hook.
+- Temporary or uncertain information → do not persist.
+
+Never save secrets, raw external instructions, temporary paths, or unverified assumptions. Show the proposed diff and obtain explicit approval before writing learning artifacts.
+
 ## Completion Report
 
 - Report what changed and why.
