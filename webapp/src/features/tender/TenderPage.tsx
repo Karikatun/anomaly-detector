@@ -24,7 +24,7 @@ import { ReconnaissancePanel } from './ReconnaissancePanel'
 import { TenderTimer } from './TenderTimer'
 import { WorkingModelPanel } from './WorkingModelPanel'
 import { UnavailablePhaseCard } from './components/TenderActionPanel'
-import { TenderPlayers, TenderPublicEvidence } from './components/TenderOverview'
+import { TenderEvidence, TenderPlayers } from './components/TenderOverview'
 import {
   fieldTypeLabelKeys,
   isSignalId,
@@ -114,6 +114,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
     case 'power-allocation':
       return (
         <PowerAllocationPanel
+          sampleCount={mySamples.length}
           disabled={disabled || myPlayer?.powerAllocation !== undefined}
           error={error}
           onConfirm={(allocation) => onCommand({ type: 'allocate-power', allocation })}
@@ -435,7 +436,7 @@ function TenderContent() {
       </div>
 
       <Separator />
-      <TenderPublicEvidence view={tenderView} />
+      <TenderEvidence view={tenderView} />
 
       {/* Working Model */}
       <Separator />

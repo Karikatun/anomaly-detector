@@ -78,7 +78,7 @@ describe('realtime hub', () => {
     const { messages, socket } = collectSocket()
     await hub.subscribe({ playerId: 'player-a', socket, tenderId })
 
-    now = new Date(now.getTime() + 60_000)
+    now = new Date(now.getTime() + 90_000)
     const result = await tender.advanceDueTenders({ limit: 10, now })
     await hub.handleTenderChanged(tenderId)
 
@@ -98,7 +98,7 @@ describe('realtime hub', () => {
     const { messages, socket } = collectSocket()
     await hub.subscribe({ playerId: 'player-a', socket, tenderId })
 
-    now = new Date(now.getTime() + 60_000)
+    now = new Date(now.getTime() + 90_000)
     expect(await workerTender.advanceDueTenders({ limit: 10, now })).toEqual({ advancedTenderIds: [tenderId] })
 
     await hub.syncActiveTenders()
@@ -149,7 +149,7 @@ describe('realtime hub', () => {
     await sub1.close()
 
     // Timeout resolves — deadline passes, tender advances
-    now = new Date('2026-07-21T12:01:00Z')
+    now = new Date('2026-07-21T12:01:30Z')
     const result = await tender.advanceDueTenders({ limit: 10, now })
     expect(result.advancedTenderIds).toContain(tenderId)
     await hub.handleTenderChanged(tenderId)

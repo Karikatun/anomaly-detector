@@ -46,7 +46,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
 
     expect(await restartedModule.advanceDueTenders({
       limit: 10,
-      now: new Date('2026-07-20T12:00:45.000Z'),
+      now: new Date('2026-07-20T12:01:30.000Z'),
     })).toEqual({ advancedTenderIds: [tenderId] })
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
       phase: 'power-allocation',
@@ -107,9 +107,9 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     const restartedStore = createPrismaTenderStore(prisma)
     const restartedModule = createTenderModule({ store: restartedStore })
 
-    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toEqual({
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
       dueAt: expect.any(String),
-      knownSignals: ['aster', 'boreal'],
+      knownSignals: ['aster', 'boreal', 'cinder', 'ferro'],
       publicContracts: [
         { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
         { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
@@ -125,9 +125,9 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-a', playerId: 'player-a', rating: 0, requestedAccessSlot: 1, tiePriority: 1 },
         { budget: 2, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-b', playerId: 'player-b', rating: 0, tiePriority: 2 },
       ],
-      privateRawTelemetrySignals: ['aster'],
+      privateRawTelemetrySignals: [],
       privateMeasurements: [],
-      privateSamples: ['aster'],
+      privateSamples: [],
       privateWorkingModel: { signals: {} },
       publicTheses: [],
     })
@@ -281,9 +281,9 @@ maybeDescribe('Tender PostgreSQL integration', () => {
 
     const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
 
-    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toEqual({
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
       dueAt: expect.any(String),
-      knownSignals: ['aster', 'boreal'],
+      knownSignals: ['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'],
       publicContracts: [
         { contractId: 'round-1-contract-1', requiredPublicResult: 'reflection' },
         { contractId: 'round-1-contract-2', requiredPublicResult: 'attenuation' },
@@ -303,9 +303,9 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         { accessSlot: 2, budget: 1, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-c', playerId: 'player-c', rating: 0, tiePriority: 3 },
         { accessSlot: 6, budget: 3, contractPowerRestriction: 0, corporateTrust: 0, displayName: 'player-d', playerId: 'player-d', rating: 0, tiePriority: 4 },
       ],
-      privateRawTelemetrySignals: ['aster'],
+      privateRawTelemetrySignals: [],
       privateMeasurements: [],
-      privateSamples: ['aster'],
+      privateSamples: [],
       privateWorkingModel: { signals: {} },
       publicTheses: [],
     })
@@ -320,7 +320,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         payload: {
           accessSlots: { 'player-a': 1, 'player-b': 3, 'player-c': 2, 'player-d': 6 },
           budgetByPlayer: { 'player-a': 0, 'player-b': 2, 'player-c': 1, 'player-d': 3 },
-          sampleCompensationByPlayer: { 'player-d': 'boreal' },
+          sampleCompensationByPlayer: { 'player-d': 'aster' },
         },
         sequence: 5,
       },
@@ -366,7 +366,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
 
     await restartedModule.advanceDueTenders({
       limit: 10,
-      now: new Date('2026-07-20T12:01:00.000Z'),
+      now: new Date('2026-07-20T12:01:30.000Z'),
     })
 
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
@@ -396,14 +396,14 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     await module.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
     await module.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
     await module.execute({
-      allocation: { contracts: 1, laboratory: 1, modelAnalysis: 1, reconnaissance: 1 },
+      allocation: { contracts: 1, laboratory: 0, modelAnalysis: 1, reconnaissance: 1, reserve: 1 },
       actorId: 'player-a',
       commandId: 'command-a-2',
       tenderId,
       type: 'allocate-power',
     })
     await module.execute({
-      allocation: { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 1, reserve: 1 },
+      allocation: { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 1, reserve: 2 },
       actorId: 'player-b',
       commandId: 'command-b-2',
       tenderId,
@@ -420,15 +420,15 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
 
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
-      knownSignals: ['aster', 'boreal', 'cinder'],
-      privateRawTelemetrySignals: ['aster', 'cinder'],
-      privateSamples: ['aster', 'cinder'],
+      knownSignals: ['aster', 'boreal', 'cinder', 'ferro'],
+      privateRawTelemetrySignals: ['cinder'],
+      privateSamples: ['cinder'],
     })
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
-      knownSignals: ['aster', 'boreal', 'cinder'],
-      privateRawTelemetrySignals: ['aster'],
+      knownSignals: ['aster', 'boreal', 'cinder', 'ferro'],
+      privateRawTelemetrySignals: [],
       privateMeasurements: [],
-      privateSamples: ['aster'],
+      privateSamples: [],
     })
   })
 })

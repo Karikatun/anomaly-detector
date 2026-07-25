@@ -27,6 +27,11 @@ const verificationLabels: Record<string, string> = {
   extended: 'Расширенная проверка',
 }
 
+const polarityRelationLabels: Record<string, string> = {
+  same: 'Одинаковая полярность',
+  different: 'Разная полярность',
+}
+
 export function TenderPlayers({
   activePlayerId,
   currentUserId,
@@ -78,14 +83,14 @@ export function TenderPlayers({
   )
 }
 
-export function TenderPublicEvidence({ view }: { view: TenderView }) {
+export function TenderEvidence({ view }: { view: TenderView }) {
   const { t } = useI18n()
 
   return (
     <>
       {view.publicLaboratoryResults.length > 0 && (
         <div className="grid gap-2">
-          <Typography variant="control" tone="muted">Результаты лаборатории</Typography>
+          <Typography variant="control" tone="muted">Публичные результаты лаборатории</Typography>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {view.publicLaboratoryResults.map((result, index) => (
               <Card key={index} size="sm">
@@ -96,6 +101,26 @@ export function TenderPublicEvidence({ view }: { view: TenderView }) {
                   <Typography variant="control" tone="muted">
                     {laboratoryResultLabels[result.publicResult] ?? result.publicResult}{' '}
                     ({protocolLabels[result.protocol] ?? result.protocol})
+                  </Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {view.privateMeasurements.length > 0 && (
+        <div className="grid gap-2">
+          <Typography variant="control" tone="muted">Ваши приватные измерения</Typography>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {view.privateMeasurements.map((measurement, index) => (
+              <Card key={index} size="sm">
+                <CardContent className="py-3">
+                  <Typography variant="bodySmMedium">
+                    {t(signalLabelKeys[measurement.sourceSignal])} → {t(signalLabelKeys[measurement.receiverSignal])}
+                  </Typography>
+                  <Typography variant="control" tone="muted">
+                    {polarityRelationLabels[measurement.polarityRelation] ?? measurement.polarityRelation}
                   </Typography>
                 </CardContent>
               </Card>

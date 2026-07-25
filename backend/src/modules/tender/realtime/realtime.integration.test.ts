@@ -114,6 +114,8 @@ maybeDescribe('realtime websocket integration', () => {
   })
 
   beforeEach(async () => {
+    await prisma.tenderRoomMember.deleteMany()
+    await prisma.tenderRoom.deleteMany()
     await prisma.tender.deleteMany()
     await prisma.realtimeTicket.deleteMany()
     await prisma.authSession.deleteMany()

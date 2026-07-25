@@ -291,7 +291,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expectPhase(page, headings.power)
     await expectPhase(guestPage, headings.power)
     await expect(page.getByText('2 мощности: непрерывный опыт с публичным результатом и приватным измерением полярности.')).toBeVisible()
-    await expect(page.getByText('2 мощности: сохраните 1 мощность для заявки, если штраф заблокирует другую.')).toBeVisible()
+    await expect(page.getByText('1 мощность: зарезервируйте и подайте одну заявку по контракту.')).toBeVisible()
     await expect(page.getByText('Результат выбора слота')).toBeVisible()
     await expect(page.getByText('Вы выбрали слот 1 и получили его.')).toBeVisible()
     await allocatePower(page, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
