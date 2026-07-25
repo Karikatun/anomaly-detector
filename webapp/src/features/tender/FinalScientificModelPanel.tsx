@@ -1,3 +1,6 @@
+import { Alert01Icon, InformationCircleIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
+import type { CSSProperties } from 'react'
 import { useState } from 'react'
 
 import type {
@@ -8,7 +11,6 @@ import type {
 } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import {
@@ -19,7 +21,9 @@ import {
   signalIds,
   signalLabelKeys,
 } from './catalog'
-import { TenderActionPanel } from './components/TenderActionPanel'
+import styles from './components/PhasePanel.module.css'
+import { SignalGlyph } from './components/SignalGlyph'
+import { signalAccent } from './components/signal-visuals'
 import { runTenderAction } from './run-tender-action'
 
 type Props = {
@@ -28,45 +32,48 @@ type Props = {
   onConfirm: (model: ScientificModel) => Promise<void>
 }
 
+const rowStyle = (signal: SignalId) => ({
+  '--signal-accent': signalAccent(signal),
+} as CSSProperties)
+
+const compactFieldTypeLabels: Record<FieldType, string> = {
+  inertial: 'Инерц.',
+  electromagnetic: 'ЭМ',
+  phase: 'Фаза',
+}
+
+const compactPolarityLabels: Record<Polarity, string> = {
+  positive: '+ Полож.',
+  negative: '− Отриц.',
+}
+
 export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props) {
   const { t } = useI18n()
   const [model, setModel] = useState<ScientificModel['signals']>({})
 
   const toggleFieldType = (signal: SignalId, value: FieldType) => {
-    setModel((prev) => {
-      const current = prev[signal] ?? {}
+    setModel((previous) => {
+      const current = previous[signal] ?? {}
       const fieldType = current.fieldType === value ? undefined : value
       if (!fieldType && !current.polarity) {
-        const next = { ...prev }
+        const next = { ...previous }
         delete next[signal]
         return next
       }
-      return {
-        ...prev,
-        [signal]: {
-          ...current,
-          fieldType,
-        },
-      }
+      return { ...previous, [signal]: { ...current, fieldType } }
     })
   }
 
   const togglePolarity = (signal: SignalId, value: Polarity) => {
-    setModel((prev) => {
-      const current = prev[signal] ?? {}
+    setModel((previous) => {
+      const current = previous[signal] ?? {}
       const polarity = current.polarity === value ? undefined : value
       if (!current.fieldType && !polarity) {
-        const next = { ...prev }
+        const next = { ...previous }
         delete next[signal]
         return next
       }
-      return {
-        ...prev,
-        [signal]: {
-          ...current,
-          polarity,
-        },
-      }
+      return { ...previous, [signal]: { ...current, polarity } }
     })
   }
 
@@ -76,100 +83,135 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
     }
   }
 
-  const claimedCount = Object.values(model).filter((c) => c.fieldType || c.polarity).length
+  const claimedCount = Object.values(model).filter((claim) => claim.fieldType || claim.polarity).length
+  const completeCount = Object.values(model).filter((claim) => claim.fieldType && claim.polarity).length
+  const propertyCount = Object.values(model).reduce(
+    (total, claim) => total + Number(Boolean(claim.fieldType)) + Number(Boolean(claim.polarity)),
+    0,
+  )
 
   return (
-    <TenderActionPanel
-      title="Финальная научная модель"
-      description={(
-        <>
-          Финальный раунд. Укажите свойства каждого сигнала — тип поля и полярность.
-          За каждый верный параметр +1 рейтинг, за полностью верную модель +3 бонус.
-          Заявлено сигналов: {claimedCount} / 6.
-        </>
-      )}
-      error={error}
-      footer={(
-        <Button
-          type="button"
-          size="lg"
-          className="mt-6 w-full"
-          disabled={disabled || claimedCount === 0}
-          onClick={() => void handleSubmit()}
-        >
-          {claimedCount === 0
-            ? 'Укажите хотя бы одно свойство'
-            : 'Отправить финальную модель'}
-        </Button>
-      )}
-    >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <section className={styles.panel} aria-labelledby="final-model-heading">
+      <div className={styles.surface}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.intro}>
+            <Typography id="final-model-heading" as="h2" variant="bodySmMedium" className={styles.title}>
+              Финальная научная модель
+            </Typography>
+            <Typography variant="bodySm" className={styles.description}>
+              Зафиксируйте тип поля и полярность известных сигналов.
+            </Typography>
+          </span>
+          <span className={styles.modelProgress} aria-label={`Заполнено параметров: ${propertyCount} из 12`}>
+            <Typography as="strong" variant="bodySmMedium">{propertyCount}</Typography>
+            <Typography as="span" variant="caption">/ 12</Typography>
+          </span>
+        </div>
+
+        <div className={styles.finalModelTable}>
+          <div className={styles.finalModelHead} aria-hidden="true">
+            <Typography as="span" variant="caption">Сигнал</Typography>
+            <Typography as="span" variant="caption">Тип поля</Typography>
+            <Typography as="span" variant="caption">Полярность</Typography>
+          </div>
+
           {signalIds.map((signal) => {
-            const cell = model[signal]
+            const claim = model[signal]
             const signalName = t(signalLabelKeys[signal])
             return (
-              <Card key={signal} size="sm">
-                <CardContent className="grid gap-3 py-4">
-                  <Typography variant="bodySmMedium" align="center">
-                    {signalName}
-                  </Typography>
+              <div key={signal} className={styles.modelRow} style={rowStyle(signal)}>
+                <span className={styles.modelSignal}>
+                  <SignalGlyph signal={signal} className={styles.signalGlyph} />
+                  <Typography as="strong" variant="bodySmMedium">{signalName}</Typography>
+                </span>
 
-                  {/* Field type */}
-                  <div>
-                    <Typography variant="control" tone="muted" className="mb-1">
-                      Тип поля
-                    </Typography>
-                    <div className="grid gap-0.5">
-                      {fieldTypes.map((ft) => (
-                        <button
-                          aria-label={`${signalName}: тип поля ${t(fieldTypeLabelKeys[ft])}`}
-                          key={ft}
-                          type="button"
-                          disabled={disabled}
-                          className={`h-7 rounded px-2 transition-colors ${
-                            cell?.fieldType === ft
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                          }`}
-                          onClick={() => toggleFieldType(signal, ft)}
-                        >
-                          <Typography variant="controlXs">{t(fieldTypeLabelKeys[ft])}</Typography>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                <div className={styles.segmented}>
+                  {fieldTypes.map((fieldType) => (
+                    <button
+                      aria-label={`${signalName}: тип поля ${t(fieldTypeLabelKeys[fieldType])}`}
+                      key={fieldType}
+                      type="button"
+                      disabled={disabled}
+                      data-selected={claim?.fieldType === fieldType ? '' : undefined}
+                      onClick={() => toggleFieldType(signal, fieldType)}
+                    >
+                      <Typography as="span" variant="caption" className={styles.finalOptionLong}>
+                        {t(fieldTypeLabelKeys[fieldType])}
+                      </Typography>
+                      <Typography as="span" variant="caption" className={styles.finalOptionShort} aria-hidden="true">
+                        {compactFieldTypeLabels[fieldType]}
+                      </Typography>
+                    </button>
+                  ))}
+                </div>
 
-                  {/* Polarity */}
-                  <div>
-                    <Typography variant="control" tone="muted" className="mb-1">
-                      Полярность
-                    </Typography>
-                    <div className="grid grid-cols-2 gap-1">
-                      {polarities.map((pol) => (
-                        <button
-                          aria-label={`${signalName}: полярность ${t(polarityLabelKeys[pol])}`}
-                          key={pol}
-                          type="button"
-                          disabled={disabled}
-                          className={`h-7 rounded px-2 transition-colors ${
-                            cell?.polarity === pol
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                          }`}
-                          onClick={() => togglePolarity(signal, pol)}
-                        >
-                          <Typography variant="controlXs">
-                            {t(polarityLabelKeys[pol])} {pol === 'positive' ? '(+)' : '(−)'}
-                          </Typography>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                <div className={styles.segmented} data-options="2">
+                  {polarities.map((polarity) => (
+                    <button
+                      aria-label={`${signalName}: полярность ${t(polarityLabelKeys[polarity])}`}
+                      key={polarity}
+                      type="button"
+                      disabled={disabled}
+                      data-selected={claim?.polarity === polarity ? '' : undefined}
+                      onClick={() => togglePolarity(signal, polarity)}
+                    >
+                      <Typography as="span" variant="caption" className={styles.finalOptionLong}>
+                        {`${polarity === 'positive' ? '+' : '−'} ${t(polarityLabelKeys[polarity])}`}
+                      </Typography>
+                      <Typography as="span" variant="caption" className={styles.finalOptionShort} aria-hidden="true">
+                        {compactPolarityLabels[polarity]}
+                      </Typography>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )
           })}
         </div>
-    </TenderActionPanel>
+      </div>
+
+      <div className={styles.finalSummary}>
+        <div className={styles.scoreList}>
+          <span className={styles.scoreItem}>
+            <Typography as="strong" variant="bodySmMedium">{claimedCount} / 6</Typography>
+            <Typography as="span" variant="caption" tone="muted">сигналов заявлено</Typography>
+          </span>
+          <span className={styles.scoreItem}>
+            <Typography as="strong" variant="bodySmMedium">{completeCount}</Typography>
+            <Typography as="span" variant="caption" tone="muted">полных описаний</Typography>
+          </span>
+          <span className={styles.scoreItem}>
+            <Typography as="strong" variant="bodySmMedium">+1</Typography>
+            <Typography as="span" variant="caption" tone="muted">за верный параметр</Typography>
+          </span>
+        </div>
+        <div className={styles.warning}>
+          <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
+          <Typography variant="bodySm">
+            Отправка необратима. Незаполненные параметры не принесут рейтинг.
+          </Typography>
+        </div>
+      </div>
+
+      {error && <div className={styles.error} role="alert"><Typography variant="bodySm">{error}</Typography></div>}
+
+      <footer className={styles.footer}>
+        <div className={styles.info}>
+          <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
+          <Typography variant="bodySm">
+            Полностью верная модель даёт дополнительный бонус +3.
+          </Typography>
+        </div>
+        <Button
+          type="button"
+          size="lg"
+          className={styles.actionButton}
+          disabled={disabled || claimedCount === 0}
+          onClick={() => void handleSubmit()}
+        >
+          {claimedCount === 0 ? 'Укажите хотя бы одно свойство' : 'Отправить финальную модель'}
+        </Button>
+      </footer>
+    </section>
   )
 }

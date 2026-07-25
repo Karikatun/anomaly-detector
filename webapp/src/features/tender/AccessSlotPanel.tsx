@@ -242,7 +242,13 @@ export function AccessSlotPanel({
               })}
             </Typography>
           </span>
-          <Button type="button" variant="outline" disabled className={styles.confirmedButton}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled
+            aria-label="Выбор принят — ожидаем игроков"
+            className={styles.confirmedButton}
+          >
             {t('tender.access.confirmed.button')}
           </Button>
         </div>
