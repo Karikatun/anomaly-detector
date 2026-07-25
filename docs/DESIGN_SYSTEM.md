@@ -1,8 +1,7 @@
 # Anomaly Detector: Design System
 
 Статус: утверждённый визуальный референс. Источник: комплект экранов
-`docs/ui/*-desktop.png` и `docs/ui/*-mobile.png`; базовые экраны раунда перечислены
-в `docs/ROUND_UI_REVIEW_AND_PROMPTS.md`.
+`docs/ui/*-desktop.png` и `docs/ui/*-mobile.png`.
 Этот документ — программно-читаемый контракт для реализации UI.
 
 ## Визуальная идентичность
