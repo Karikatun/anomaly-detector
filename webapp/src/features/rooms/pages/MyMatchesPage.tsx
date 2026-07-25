@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { ArrowLeft01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useMemo } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -33,12 +35,19 @@ function MyMatchesContent() {
 
   return (
     <main className={styles.screen}>
+      <div className={styles.background} aria-hidden="true" />
       <section className={styles.panel} aria-labelledby="match-history-title">
         <header className={styles.header}>
-          <Typography as="h1" id="match-history-title" className={styles.title}>
+          <Typography variant="h1" id="match-history-title" className={styles.title}>
             {t('matches.title')}
           </Typography>
-          <Button className={styles.backButton} type="button" onClick={() => void navigate({ to: '/' })}>
+          <Button
+            className={styles.backButton}
+            type="button"
+            variant="ghost"
+            onClick={() => void navigate({ to: '/' })}
+          >
+            <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={1.7} aria-hidden="true" />
             {t('matches.back')}
           </Button>
         </header>
