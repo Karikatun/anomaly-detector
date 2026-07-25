@@ -11,7 +11,7 @@ export function getApiBaseUrl(): string {
   const override = import.meta.env?.VITE_API_URL
   if (override) return override.replace(/\/$/, '')
 
-  const hostname = window.location.hostname
+  const hostname = typeof window === 'undefined' ? 'localhost' : window.location.hostname
   const port = 3000
   return `http://${hostname}:${port}`
 }

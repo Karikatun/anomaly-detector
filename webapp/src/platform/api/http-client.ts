@@ -3,8 +3,6 @@ import type { z } from 'zod'
 
 import { getApiBaseUrl } from './api-base-url'
 
-const defaultApiBaseUrl = getApiBaseUrl()
-
 export type HttpRequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
@@ -27,7 +25,7 @@ export class ApiRequestError extends Error {
 export class HttpClient {
   private readonly baseUrl: string
 
-  constructor(baseUrl = defaultApiBaseUrl) {
+  constructor(baseUrl = getApiBaseUrl()) {
     this.baseUrl = baseUrl
   }
 
