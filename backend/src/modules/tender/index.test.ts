@@ -762,6 +762,27 @@ test('resolves Access Slots and opens Power planning after every player chooses'
   expect(playerDView.players.find((player) => player.playerId === 'player-a')).not.toHaveProperty('requestedAccessSlot')
 })
 
+test('grants the documented budget compensation for Access Slot 4', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'command-a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 4 })
+  await tender.execute({ commandId: 'command-b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 3 })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'power-allocation',
+    players: [
+      { accessSlot: 4, budget: 3, playerId: 'player-a' },
+      { accessSlot: 3, budget: 2, playerId: 'player-b' },
+    ],
+  })
+})
+
 test('rotates Access Slot tie priority between rounds', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
@@ -1569,8 +1590,12 @@ test('completes the Tender after Contracts in round five', async () => {
   const completedView = await tender.readTenderView({ tenderId, playerId: 'player-a' })
   expect(completedView).toMatchObject({
     phase: 'complete',
+    players: [
+      { budget: 7, playerId: 'player-a' },
+      { budget: 12, playerId: 'player-b' },
+    ],
     round: 5,
-    winnerPlayerIds: ['player-a', 'player-b'],
+    winnerPlayerIds: ['player-b'],
   })
   expect(completedView.audit).toMatchObject({
     anomalyConfiguration: {
