@@ -7,6 +7,7 @@ import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createAuthSecurity } from './http/security'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
+import { createProfileModule } from './modules/profile'
 import { createRoomModule } from './modules/room'
 import {
   createPersistentTenderModule,
@@ -29,6 +30,10 @@ export function createApp({ env, prisma, tender: providedTender }: CreateAppOpti
     env,
   })
   const rooms = createRoomModule({
+    db: prisma,
+    requireAuth: auth.requireAuth,
+  })
+  const profile = createProfileModule({
     db: prisma,
     requireAuth: auth.requireAuth,
   })
@@ -89,6 +94,7 @@ export function createApp({ env, prisma, tender: providedTender }: CreateAppOpti
   })
 
   app.route('/api/auth', auth.routes)
+  app.route('/api/profile', profile.routes)
   app.route('/api/rooms', rooms.routes)
   app.route('/api/tenders', createTenderRoutes({ requireAuth: auth.requireAuth, tender }))
   app.route('/api/realtime', createRealtimeTicketRoutes({ db: prisma, requireAuth: auth.requireAuth }))

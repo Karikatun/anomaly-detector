@@ -78,9 +78,12 @@ test('registers, restores the browser session, opens the profile, and logs out',
     .toBe(true)
 
   await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await expect(page.getByRole('heading', { name: 'ПРОФИЛЬ' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Пользователь E2E' })).toBeVisible()
-  await expect(page.getByText(login)).toBeVisible()
+  await expect(page.getByText(login)).toHaveCount(0)
+  await expect(page.getByText('Завершите первый матч, чтобы появилась статистика.')).toBeVisible()
 
+  await page.getByRole('button', { name: 'Назад' }).click()
   await page.getByRole('button', { name: 'Выйти' }).click()
   await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible()
 
@@ -160,6 +163,7 @@ test('keeps the authenticated menu and allows retry when logout fails', async ({
 test('keeps profile input and exposes server errors until a successful retry', async ({ page }) => {
   await registerBrowserUser(page, 'Профиль E2E', 'profile-retry')
   await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await page.getByRole('button', { name: 'Редактировать имя' }).click()
 
   const name = page.getByLabel('Отображаемое имя')
   const save = page.getByRole('button', { name: 'Сохранить' })
@@ -187,5 +191,5 @@ test('keeps profile input and exposes server errors until a successful retry', a
 
   shouldFail = false
   await save.click()
-  await expect(page.getByRole('button', { name: 'Сохранено!' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Новое имя E2E' })).toBeVisible()
 })

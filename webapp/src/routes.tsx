@@ -27,7 +27,7 @@ const appRoute = createRoute({
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile',
-  component: lazyRouteComponent(() => import('./features/auth/public/profile'), 'ProfileRoute'),
+  component: lazyRouteComponent(() => import('./features/profile/public/profile'), 'ProfileRoute'),
 })
 
 const roomsRoute = createRoute({
