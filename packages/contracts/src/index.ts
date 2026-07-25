@@ -1,5 +1,6 @@
 export * from './auth'
 export * from './errors'
+export * from './profile'
 export * from './room'
 export * from './realtime'
 export * from './tender'

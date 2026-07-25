@@ -1,5 +1,6 @@
 import { useParams } from '@tanstack/react-router'
-import { useCallback, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { TenderView } from '@anomaly-detector/contracts'
 
@@ -10,6 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
+import { profileQueryKeys } from '@/features/profile'
 import { useI18n } from '@/platform/i18n'
 import type { TranslationKey } from '@/platform/i18n/translations'
 import { AccessSlotPanel } from './AccessSlotPanel'
@@ -279,11 +281,20 @@ function TenderContent() {
   const { tenderId } = useParams({ strict: false }) as { tenderId: string }
   const auth = useAuth()
   const { t } = useI18n()
+  const queryClient = useQueryClient()
 
   const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
   const { execute } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
   const [commandError, setCommandError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (tenderView?.phase !== 'complete') return
+    void queryClient.invalidateQueries({
+      exact: true,
+      queryKey: profileQueryKeys.statistics(),
+    })
+  }, [queryClient, tenderView?.phase, tenderId])
 
   const handleCommand = useCallback(
     async (command: TenderCommandInput) => {

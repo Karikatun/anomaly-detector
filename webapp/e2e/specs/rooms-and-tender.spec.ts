@@ -342,6 +342,13 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('Итоговый рейтинг', { exact: true })).toBeVisible()
     await expect(page.getByText('Хост E2E', { exact: true }).first()).toBeVisible()
     await expect(page.getByText(/(Инерционное|Электромагнитное|Фазовое) \/ (Положительная|Отрицательная)/).first()).toBeVisible()
+
+    await page.getByRole('button', { name: 'Выйти из матча' }).click()
+    await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+    await expect(
+      page.getByText('Сыграно матчей').locator('..').getByText('1', { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText('Завершите первый матч, чтобы появилась статистика.')).toHaveCount(0)
   } finally {
     await guestContext.close()
   }

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none">
+  <defs>
+    <linearGradient id="frame" x1="42" y1="35" x2="198" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DF79FF"/>
+      <stop offset=".5" stop-color="#A64BEB"/>
+      <stop offset="1" stop-color="#6B3ACB"/>
+    </linearGradient>
+    <radialGradient id="core" cx="0" cy="0" r="1" gradientTransform="translate(120 120) rotate(90) scale(72)">
+      <stop stop-color="#EDB4FF" stop-opacity=".32"/>
+      <stop offset=".62" stop-color="#9B48DC" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#36135A" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <path d="M120 18 207 68v104l-87 50-87-50V68l87-50Z" fill="#120821" fill-opacity=".66" stroke="url(#frame)" stroke-width="3"/>
+  <path d="m120 31 76 44v90l-76 44-76-44V75l76-44Z" stroke="#8D55D2" stroke-opacity=".66" stroke-width="2"/>
+  <circle cx="120" cy="120" r="70" fill="url(#core)"/>
+  <g filter="url(#glow)" stroke="#E582FF" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="120" cy="120" r="28" stroke-width="4"/>
+    <circle cx="120" cy="120" r="12" stroke-width="3"/>
+    <path d="m120 61 10 31-10-7-10 7 10-31Zm0 118-10-31 10 7 10-7-10 31ZM61 120l31-10-7 10 7 10-31-10Zm118 0-31 10 7-10-7-10 31 10Z" stroke-width="3"/>
+    <path d="m82 82 21 15-12 1-1 12-8-28Zm76 76-21-15 12-1 1-12 8 28Zm0-76-8 28-1-12-12-1 21-15ZM82 158l8-28 1 12 12 1-21 15Z" stroke-width="2.5" opacity=".82"/>
+  </g>
+</svg>
