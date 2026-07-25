@@ -1,3 +1,6 @@
+import { InformationCircleIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
+
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -26,11 +29,13 @@ const sections = [
 export function RulesReferenceDialog({
   triggerVariant = 'outline',
   triggerClassName,
+  triggerIconOnly = false,
   triggerLabelKey = 'rules.open',
   triggerTextClassName,
 }: {
   triggerVariant?: 'default' | 'outline' | 'ghost'
   triggerClassName?: string
+  triggerIconOnly?: boolean
   triggerLabelKey?: TranslationKey
   triggerTextClassName?: string
 }) {
@@ -39,8 +44,23 @@ export function RulesReferenceDialog({
   return (
       <Dialog>
       <DialogTrigger asChild>
-        <Button type="button" variant={triggerVariant} size="sm" className={cn(triggerClassName)}>
-          <Typography as="span" variant="control" className={cn(triggerTextClassName)}>{t(triggerLabelKey)}</Typography>
+        <Button
+          type="button"
+          variant={triggerVariant}
+          size={triggerIconOnly ? 'icon-sm' : 'sm'}
+          className={cn(triggerClassName)}
+          title={triggerIconOnly ? t(triggerLabelKey) : undefined}
+        >
+          {triggerIconOnly && (
+            <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
+          )}
+          <Typography
+            as="span"
+            variant="control"
+            className={cn(triggerIconOnly && 'sr-only', triggerTextClassName)}
+          >
+            {t(triggerLabelKey)}
+          </Typography>
         </Button>
       </DialogTrigger>
       <DialogContent showCloseButton={false} className="max-h-[calc(100svh-2rem)] max-w-3xl overflow-y-auto sm:max-w-3xl">

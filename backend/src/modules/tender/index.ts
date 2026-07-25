@@ -70,7 +70,7 @@ const createRoundContracts = (round: number, playerCount: number, seed: string) 
 const accessSlotBudgetDelta = (slot: number) => {
   if (slot === 1) return -2
   if (slot === 2) return -1
-  if (slot === 6) return 1
+  if (slot === 4 || slot === 6) return 1
   return 0
 }
 

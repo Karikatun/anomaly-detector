@@ -1,0 +1,489 @@
+.panel {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: .6rem;
+}
+
+.playerBar {
+  display: flex;
+  min-width: 0;
+  min-height: 3.25rem;
+  align-items: center;
+  gap: .8rem;
+  padding: .45rem .7rem;
+  border: 1px solid rgba(72, 139, 183, .32);
+  border-radius: .75rem;
+  background: rgba(1, 12, 26, .88);
+}
+
+.currentPlayer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .65rem;
+}
+
+.playerAvatar {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  place-items: center;
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  color: #e8f7ff;
+  background: rgba(7, 32, 54, .86);
+}
+
+.playerStrip {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.playerChip {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .4rem;
+  padding: .3rem .55rem;
+  border-left: 1px solid rgba(101, 151, 183, .25);
+  color: rgba(236, 247, 255, .82);
+}
+
+.priorityIndex {
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  color: #071521;
+  background: var(--primary);
+}
+
+.playerCount {
+  display: none;
+  min-width: 0;
+  align-items: center;
+  gap: .5rem;
+  margin-left: auto;
+}
+
+.playerCount > svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: none;
+  color: var(--success);
+}
+
+.stationBackdrop {
+  height: 7rem;
+  margin-top: -.75rem;
+  background:
+    linear-gradient(90deg, rgba(1, 10, 22, .98), transparent 18%, transparent 82%, rgba(1, 10, 22, .98)),
+    linear-gradient(180deg, rgba(1, 10, 22, .12), rgba(1, 10, 22, .92)),
+    url('/assets/lobby/station-background.webp') center 42% / cover no-repeat;
+  opacity: .8;
+}
+
+.slotGrid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .6rem;
+}
+
+.slotCard {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 7.75rem;
+  flex-direction: column;
+  align-items: center;
+  gap: .2rem;
+  overflow: hidden;
+  padding: .5rem .45rem;
+  border: 1px solid color-mix(in srgb, var(--slot-accent) 46%, #345069);
+  border-radius: .7rem;
+  outline: none;
+  color: #eff8ff;
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--slot-accent) 10%, transparent), transparent 48%),
+    linear-gradient(180deg, rgba(3, 20, 35, .97), rgba(2, 13, 25, .99));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.slotCard:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--slot-accent) 82%, white);
+  transform: translateY(-2px);
+}
+
+.slotCard:focus-visible {
+  border-color: var(--slot-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--slot-accent) 24%, transparent);
+}
+
+.slotCard[data-selected] {
+  border-color: var(--slot-accent);
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--slot-accent) 22%, transparent), transparent 58%),
+    linear-gradient(180deg, rgba(7, 26, 42, .98), rgba(2, 14, 27, .98));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--slot-accent) 42%, transparent),
+    0 0 1.25rem color-mix(in srgb, var(--slot-accent) 28%, transparent);
+}
+
+.slotCard:disabled {
+  cursor: default;
+}
+
+.slotCard:disabled:not([data-selected]) {
+  opacity: .58;
+}
+
+.selectedBadge {
+  position: absolute;
+  top: .45rem;
+  right: .45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  padding: .2rem .35rem;
+  border: 1px solid var(--slot-accent);
+  border-radius: .35rem;
+  color: var(--slot-accent);
+  background: rgba(2, 13, 25, .84);
+  line-height: 1;
+}
+
+.selectedBadge svg {
+  width: .72rem;
+  height: .72rem;
+}
+
+.slotNumber {
+  color: var(--slot-accent);
+  font-size: 1.8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1;
+  text-shadow: 0 0 .8rem color-mix(in srgb, var(--slot-accent) 30%, transparent);
+}
+
+.slotName {
+  display: grid;
+  width: 100%;
+  min-height: 1.2rem;
+  flex: 1;
+  place-items: center;
+  font-size: .82rem;
+  line-height: 1.2;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.effects {
+  display: grid;
+  width: 100%;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: .1rem;
+  padding-top: .3rem;
+  border-top: 1px solid rgba(139, 178, 204, .14);
+}
+
+.effect {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: .3rem;
+  color: var(--slot-accent);
+}
+
+.effect > svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: none;
+}
+
+.effect > strong {
+  color: var(--slot-accent);
+  font-size: .88rem;
+  line-height: 1.15;
+}
+
+.effects[data-multiple] .effect {
+  gap: .2rem;
+}
+
+.neutralEffect {
+  align-self: center;
+  justify-self: center;
+  color: var(--slot-accent);
+  font-size: .88rem;
+  line-height: 1.15;
+}
+
+.rule,
+.error,
+.confirmed {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: .6rem;
+  overflow: hidden;
+  padding: .7rem .8rem;
+  border: 1px solid rgba(72, 139, 183, .27);
+  border-radius: .7rem;
+  background: rgba(2, 15, 29, .9);
+}
+
+.rule::after {
+  position: absolute;
+  z-index: 0;
+  content: '';
+  right: -1rem;
+  bottom: -1rem;
+  width: 8rem;
+  height: 5rem;
+  background: url('/assets/lobby/station-background.webp') center / cover no-repeat;
+  opacity: .18;
+  mask-image: linear-gradient(90deg, transparent, black 45%);
+  pointer-events: none;
+}
+
+.rule > *,
+.error > *,
+.confirmed > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rule > svg,
+.error > svg,
+.confirmed > svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  margin-top: .05rem;
+}
+
+.rule > svg {
+  color: var(--primary);
+}
+
+.priorityNames {
+  color: #65d8ff;
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--destructive) 52%, transparent);
+  background: color-mix(in srgb, var(--destructive) 10%, rgba(2, 15, 29, .94));
+}
+
+.error > svg {
+  color: var(--destructive);
+}
+
+.confirmed {
+  border-color: color-mix(in srgb, var(--success) 48%, transparent);
+  background: color-mix(in srgb, var(--success) 9%, rgba(2, 15, 29, .94));
+}
+
+.confirmed > svg {
+  color: var(--success);
+}
+
+.confirmed > span {
+  display: grid;
+  gap: .2rem;
+}
+
+.confirmedButton {
+  width: 100%;
+}
+
+.footer {
+  position: sticky;
+  z-index: 10;
+  bottom: 0;
+  display: grid;
+  gap: .45rem;
+  padding-top: .45rem;
+  background: linear-gradient(180deg, transparent, var(--background) 22%);
+}
+
+.confirmButton {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: .55rem;
+  box-shadow: 0 .45rem 1.25rem rgba(13, 126, 255, .2);
+}
+
+.lockWarning {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  text-align: center;
+}
+
+.lockWarning > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--warning);
+}
+
+@media (max-width: 47.999rem) {
+  .playerStrip {
+    display: none;
+  }
+
+  .playerCount {
+    display: flex;
+  }
+
+  .stationBackdrop {
+    display: none;
+  }
+
+  .rule {
+    font-size: .75rem;
+  }
+
+  .rule > div {
+    gap: 0;
+  }
+
+  .rule p {
+    font-size: .72rem;
+    line-height: 1.3;
+  }
+
+  .lockWarning p {
+    font-size: .72rem;
+  }
+}
+
+@media (min-width: 48rem) {
+  .panel {
+    gap: 1rem;
+  }
+
+  .playerCount {
+    display: none;
+  }
+
+  .slotGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .85rem;
+  }
+
+  .slotCard {
+    min-height: 14rem;
+    gap: .75rem;
+    padding: 1.35rem .85rem 1rem;
+    border-radius: .8rem;
+  }
+
+  .slotNumber {
+    font-size: 2.75rem;
+  }
+
+  .slotName {
+    min-height: 2.2rem;
+    font-size: 1.05rem;
+  }
+
+  .effects {
+    gap: .55rem;
+    padding-top: 1rem;
+  }
+
+  .effect {
+    gap: .55rem;
+  }
+
+  .effect > svg {
+    width: 1.45rem;
+    height: 1.45rem;
+  }
+
+  .effect > strong {
+    font-size: 1rem;
+  }
+
+  .neutralEffect {
+    font-size: 1rem;
+  }
+
+  .rule,
+  .error,
+  .confirmed {
+    padding: 1rem 1.1rem;
+  }
+
+  .footer {
+    position: static;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding: .9rem 1.5rem;
+    border: 1px solid rgba(72, 139, 183, .27);
+    border-radius: .8rem;
+    background: rgba(2, 15, 29, .86);
+  }
+
+  .confirmButton {
+    min-width: min(50rem, 70vw);
+  }
+
+  .lockWarning {
+    grid-column: 2;
+    grid-row: 1;
+    max-width: 16rem;
+    justify-self: end;
+    text-align: left;
+  }
+
+  .confirmed {
+    align-items: center;
+  }
+
+  .confirmedButton {
+    width: auto;
+    margin-left: auto;
+  }
+}
+
+@media (min-width: 80rem) {
+  .slotGrid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .slotCard {
+    min-height: clamp(18rem, 25vw, 22rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slotCard {
+    transition: none;
+  }
+
+  .slotCard:hover:not(:disabled) {
+    transform: none;
+  }
+}

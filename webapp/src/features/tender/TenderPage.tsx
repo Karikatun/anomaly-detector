@@ -1,4 +1,6 @@
-import { useParams } from '@tanstack/react-router'
+import { Logout01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { useNavigate, useParams } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -12,6 +14,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
 import { profileQueryKeys } from '@/features/profile'
+import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 import type { TranslationKey } from '@/platform/i18n/translations'
 import { AccessSlotPanel } from './AccessSlotPanel'
@@ -105,6 +108,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
         <AccessSlotPanel
           disabled={disabled || myPlayer?.requestedAccessSlot !== undefined}
           confirmedSlot={myPlayer?.requestedAccessSlot}
+          currentUserId={auth.user?.id}
           error={error}
           onConfirm={(slot) => onCommand({ type: 'request-access-slot', slot })}
           tiePriorityOrder={view.players}
@@ -282,6 +286,7 @@ function TenderContent() {
   const { tenderId } = useParams({ strict: false }) as { tenderId: string }
   const auth = useAuth()
   const { t } = useI18n()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
@@ -355,34 +360,54 @@ function TenderContent() {
   const accessSlotWasDisplaced = myPlayer?.requestedAccessSlot !== undefined
     && myPlayer.accessSlot !== undefined
     && myPlayer.requestedAccessSlot !== myPlayer.accessSlot
+  const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
 
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-8">
+    <section className="mx-auto grid w-full min-w-0 max-w-[90rem] gap-4 overflow-x-clip px-3 py-3 sm:px-5 sm:py-5">
       <header
         aria-label={t('tender.phase.status')}
-        className="sticky top-0 z-20 -mx-5 grid gap-3 border-y bg-background/95 px-5 py-3 shadow-sm backdrop-blur"
+        className="sticky top-0 z-20 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-xl border bg-background/95 px-3 py-2 shadow-sm backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:px-5 sm:py-3"
       >
-        <Typography variant="h3">{phase}</Typography>
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge variant="outline">
-            <Typography variant="shortcut" className="uppercase">Раунд {tenderView.round} / 5</Typography>
-          </Badge>
+        <div className="grid min-w-0 gap-0.5">
+          <Typography variant="shortcut" tone="muted" className="uppercase">
+            Раунд {tenderView.round} / 5
+          </Typography>
+          <Typography as="h3" variant="bodySmMedium" className="truncate">{phase}</Typography>
+        </div>
+        <div className="justify-self-end">
           <TenderTimer dueAt={tenderView.dueAt} />
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}
+          {isAccessSlotSelection && (
+            <Badge variant="outline">Бюджет: {myPlayer?.budget ?? 0} M</Badge>
+          )}
           {isSequentialPhase && (
             <Badge variant={isMyTurn ? 'default' : 'outline'}>
               {isMyTurn ? 'Ваш ход' : `Ход: ${activePlayer?.displayName ?? 'игрока'}`}
             </Badge>
           )}
-          <div className="ml-auto flex items-center gap-3">
-            {connected ? (
-              <Badge variant="outline">{t('tender.realtime.live')}</Badge>
-            ) : (
-              <Badge variant="outline" className="text-amber-400">{t('tender.realtime.reconnecting')}</Badge>
-            )}
-          </div>
+        </div>
+        <div className="flex items-center justify-self-end gap-1">
+          {connected ? (
+            <Badge variant="outline" className="text-emerald-400">{t('tender.realtime.live')}</Badge>
+          ) : (
+            <Badge variant="outline" className="text-amber-400">{t('tender.realtime.reconnecting')}</Badge>
+          )}
+          <RulesReferenceDialog
+            triggerIconOnly
+            triggerClassName="border-border/70 bg-input/20"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label={t('nav.leaveMatch')}
+            title={t('nav.leaveMatch')}
+            onClick={() => void navigate({ to: '/' })}
+          >
+            <HugeiconsIcon icon={Logout01Icon} strokeWidth={1.7} aria-hidden="true" />
+          </Button>
         </div>
       </header>
 
@@ -417,8 +442,8 @@ function TenderContent() {
       )}
 
       {/* Phase panel + right sidebar */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="grid gap-6">
+      <div className={isAccessSlotSelection ? 'grid min-w-0 gap-4' : 'grid min-w-0 gap-6 lg:grid-cols-[1fr_320px]'}>
+        <div className={isAccessSlotSelection ? 'grid min-w-0 gap-4' : 'grid min-w-0 gap-6'}>
           <PhasePanel
             view={tenderView}
             disabled={submitting || !connected}
@@ -428,46 +453,52 @@ function TenderContent() {
           />
         </div>
 
-        <TenderPlayers
-          activePlayerId={tenderView.activePlayerId}
-          currentUserId={auth.user?.id}
-          players={tenderView.players}
-        />
-      </div>
-
-      <Separator />
-      <TenderEvidence view={tenderView} />
-
-      {/* Working Model */}
-      <Separator />
-      <details open className="mt-4">
-        <summary className="cursor-pointer">
-          <span className="flex items-center gap-3">
-            <img src="/assets/icons.webp" alt="" className="h-8 w-12 rounded object-cover opacity-70" />
-            <Typography as="span" variant="bodySmMedium">Рабочая модель</Typography>
-          </span>
-        </summary>
-        <div className="mt-4">
-          <WorkingModelPanel
-            key={tenderId}
-            model={tenderView.privateWorkingModel}
-            knownSignals={tenderView.knownSignals}
-            disabled={!connected}
-            onSave={saveWorkingModel}
+        {!isAccessSlotSelection && (
+          <TenderPlayers
+            activePlayerId={tenderView.activePlayerId}
+            currentUserId={auth.user?.id}
+            players={tenderView.players}
           />
-        </div>
-      </details>
-
-      {/* Anomaly visual */}
-      <Separator />
-      <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-lg">
-        <img
-          src="/assets/anomaly-display.webp"
-          alt="Аномалия"
-          className="w-full object-cover opacity-80"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
+        )}
       </div>
+
+      {!isAccessSlotSelection && (
+        <>
+          <Separator />
+          <TenderEvidence view={tenderView} />
+
+          {/* Working Model */}
+          <Separator />
+          <details open className="mt-4">
+            <summary className="cursor-pointer">
+              <span className="flex items-center gap-3">
+                <img src="/assets/icons.webp" alt="" className="h-8 w-12 rounded object-cover opacity-70" />
+                <Typography as="span" variant="bodySmMedium">Рабочая модель</Typography>
+              </span>
+            </summary>
+            <div className="mt-4">
+              <WorkingModelPanel
+                key={tenderId}
+                model={tenderView.privateWorkingModel}
+                knownSignals={tenderView.knownSignals}
+                disabled={!connected}
+                onSave={saveWorkingModel}
+              />
+            </div>
+          </details>
+
+          {/* Anomaly visual */}
+          <Separator />
+          <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-lg">
+            <img
+              src="/assets/anomaly-display.webp"
+              alt="Аномалия"
+              className="w-full object-cover opacity-80"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
+          </div>
+        </>
+      )}
 
     </section>
   )

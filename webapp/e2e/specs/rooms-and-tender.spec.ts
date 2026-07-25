@@ -261,9 +261,13 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByRole('button', { name: 'МОИ МАТЧИ' })).toBeHidden()
     await expectPhase(page, headings.access)
     await expectPhase(guestPage, headings.access)
-    await expect(page.getByText('При равном выборе слот получает игрок по этому приоритету: Хост E2E → Гость E2E.')).toBeVisible()
-    await expect(page.getByText('Компенсация: 1 образец сигнала')).toBeVisible()
-    await expect(page.getByText('Компенсация: 1 бюджет и 1 образец сигнала')).toBeVisible()
+    await expect(page.getByText('Хост E2E → Гость E2E', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', {
+      name: 'Слот доступа 5: Ночной. Порядок действия: 5. Компенсация: 1 образец сигнала',
+    })).toBeVisible()
+    await expect(page.getByRole('button', {
+      name: 'Слот доступа 6: Удалённый. Порядок действия: 6. Компенсация: 1 бюджет и 1 образец сигнала',
+    })).toBeVisible()
 
     let rejectFirstCommand = true
     await page.route('**/api/tenders/*/commands', async (route) => {
