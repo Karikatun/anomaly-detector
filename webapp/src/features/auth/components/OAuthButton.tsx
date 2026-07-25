@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { type ReactNode, useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -10,9 +10,10 @@ type OAuthButtonProps = {
   provider: 'yandex' | 'vk'
   label: string
   className?: string
+  icon?: ReactNode
 }
 
-export function OAuthButton({ provider, label, className }: OAuthButtonProps) {
+export function OAuthButton({ provider, label, className, icon }: OAuthButtonProps) {
   const { t } = useI18n()
   const { startOAuth } = useAuth()
   const [busy, setBusy] = useState(false)
@@ -40,6 +41,7 @@ export function OAuthButton({ provider, label, className }: OAuthButtonProps) {
         disabled={busy}
         onClick={() => void handleClick()}
       >
+        {icon}
         {busy ? t('oauth.redirecting') : label}
       </Button>
       {error && (

@@ -23,10 +23,9 @@ import {
 import { useAuth } from '../use-auth'
 import styles from './AuthForm.module.css'
 
-export function LoginForm() {
+export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
   const { t } = useI18n()
   const auth = useAuth()
-  const [mode, setMode] = useState<'login' | 'register'>('login')
   const [passwordVisible, setPasswordVisible] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const form = useForm({
@@ -225,25 +224,6 @@ export function LoginForm() {
           }}
         </form.Subscribe>
       </FieldGroup>
-
-      <div className={styles.switchPanel}>
-        <Typography as="span" className={styles.switchCopy}>
-          {mode === 'login' ? 'Нет аккаунта?' : 'Уже есть аккаунт?'}
-        </Typography>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={styles.switchButton}
-          onClick={() => {
-            setMode(mode === 'login' ? 'register' : 'login')
-            setPasswordVisible(false)
-            setError(null)
-            form.reset()
-          }}
-        >
-          {mode === 'login' ? t('auth.register') : t('auth.login')}
-        </Button>
-      </div>
     </div>
   )
 }

@@ -1,5 +1,28 @@
 import { e2ePassword, expect, registerBrowserUser, test } from '../helpers/test'
 
+test('opens login and registration forms from the anonymous choice screen', async ({ page }) => {
+  await page.goto('/')
+
+  await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Регистрация', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Яндекс ID' })).toHaveCount(0)
+  await expect(page.getByLabel('Логин')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Правила' })).toBeVisible()
+  await expect(page.getByText('Пользовательское соглашение', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Правила' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByRole('button', { name: 'Закрыть правила' }).click()
+
+  await page.getByRole('button', { name: 'Войти', exact: true }).click()
+  await expect(page.getByLabel('Логин')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
+  await page.getByRole('button', { name: 'Назад' }).click()
+
+  await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
+  await expect(page.getByLabel('Имя')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
+})
+
 test('requires explicit privacy consent and age confirmation before registration', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
@@ -9,7 +32,7 @@ test('requires explicit privacy consent and age confirmation before registration
 
   const submit = page.getByRole('button', { name: 'Регистрация', exact: true })
   const privacyConsent = page.getByRole('checkbox', { name: 'Я согласен на обработку персональных данных' })
-  const ageConfirmation = page.getByRole('checkbox', { name: 'Мне исполнилось 18 лет' })
+  const ageConfirmation = page.getByRole('checkbox', { name: 'Мне исполнилось 16 лет' })
 
   await expect(submit).toBeDisabled()
   await privacyConsent.check()
@@ -22,6 +45,7 @@ test('requires explicit privacy consent and age confirmation before registration
 
 test('shows and hides the password in login and registration modes', async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('button', { name: 'Войти', exact: true }).click()
 
   const password = page.locator('#auth-password')
   await expect(password).toHaveAttribute('type', 'password')
@@ -31,6 +55,7 @@ test('shows and hides the password in login and registration modes', async ({ pa
   await page.getByRole('button', { name: 'Скрыть пароль' }).click()
   await expect(password).toHaveAttribute('type', 'password')
 
+  await page.getByRole('button', { name: 'Назад' }).click()
   await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
   await expect(password).toHaveAttribute('type', 'password')
   await page.getByRole('button', { name: 'Показать пароль' }).click()
@@ -59,6 +84,7 @@ test('registers, restores the browser session, opens the profile, and logs out',
   await page.getByRole('button', { name: 'Выйти' }).click()
   await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible()
 
+  await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
   await page.getByRole('button', { name: 'Войти' }).click()
@@ -67,6 +93,7 @@ test('registers, restores the browser session, opens the profile, and logs out',
 
 test('uses the configured API transport when OAuth is unavailable', async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('button', { name: 'Войти', exact: true }).click()
 
   const oauthButton = page.getByRole('button', { name: 'Яндекс ID' })
   await oauthButton.click()
