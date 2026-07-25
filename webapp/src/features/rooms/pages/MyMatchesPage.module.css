@@ -1,59 +1,81 @@
 .screen {
+  position: relative;
+  display: grid;
   min-height: 100svh;
-  padding: clamp(1rem, 2vw, 1.5rem);
+  place-items: center;
+  overflow: hidden;
+  padding: clamp(1.25rem, 2.25vw, 2.5rem);
   background: #010408;
 }
 
+.background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  background: #010408 url('/assets/home/expedition-desktop.webp') center top / cover no-repeat;
+}
+
 .panel {
-  width: min(100%, 110rem);
-  min-height: calc(100svh - 2rem);
-  margin: 0 auto;
-  padding: clamp(1.5rem, 4vw, 4rem);
-  border: 1px solid rgba(53, 104, 145, .72);
-  border-radius: 12px;
-  background:
-    linear-gradient(135deg, rgba(1, 12, 23, .97), rgba(1, 7, 14, .94)),
-    url('/assets/home/expedition-desktop.webp') center top / cover;
-  box-shadow: inset 0 0 70px rgba(8, 99, 170, .07);
+  position: relative;
+  z-index: 1;
+  width: min(100%, 84rem);
+  min-height: calc(100svh - clamp(2.5rem, 4.5vw, 5rem));
+  padding: clamp(1.4rem, 2.4vw, 2.5rem);
+  border-radius: 10px;
+  background: url('/assets/home/expedition-desktop.webp') center top / cover no-repeat;
+  box-shadow:
+    inset 0 0 42px rgba(12, 110, 175, .06),
+    0 24px 54px rgba(0, 0, 0, .35);
 }
 
 .header {
   display: flex;
+  min-height: 3.65rem;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
-  margin-bottom: clamp(2.4rem, 4vw, 4.2rem);
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .title {
-  color: #edf6ff;
-  font-size: clamp(1.9rem, 3.3vw, 3.2rem);
+  color: #eef6ff;
+  font-size: clamp(1.45rem, 2.05vw, 2.1rem);
+  font-stretch: condensed;
   font-weight: 500;
-  line-height: 1;
-  letter-spacing: -.035em;
+  letter-spacing: -.045em;
   text-transform: uppercase;
 }
 
 .backButton,
 .retryButton {
-  border: 1px solid rgba(69, 129, 181, .68) !important;
-  border-radius: 6px !important;
-  color: #afc6da !important;
-  background: rgba(2, 17, 31, .76) !important;
+  border: 1px solid rgba(91, 127, 160, .52) !important;
+  color: #c5d7e7 !important;
+  background: rgba(4, 19, 34, .64) !important;
+}
+
+.backButton {
+  min-height: 2.7rem;
+  gap: .55rem;
+}
+
+.backButton svg {
+  width: 1.2rem;
+  height: 1.2rem;
 }
 
 .backButton:hover:not(:disabled),
 .retryButton:hover:not(:disabled) {
-  border-color: #3f98dd !important;
-  color: #e1effa !important;
-  background: rgba(9, 42, 69, .9) !important;
+  color: #eff7ff !important;
+  background: rgba(15, 47, 73, .72) !important;
 }
 
 .history {
   overflow: hidden;
-  border: 1px solid rgba(49, 93, 131, .62);
-  border-radius: 10px;
-  background: rgba(1, 12, 23, .66);
+  border: 1px solid rgba(102, 116, 129, .42);
+  border-radius: 16px;
+  background: rgba(2, 7, 12, .76);
+  box-shadow: inset 0 0 42px rgba(255, 255, 255, .018);
 }
 
 .tableHeader,
@@ -64,16 +86,16 @@
 }
 
 .tableHeader {
-  min-height: 6.2rem;
-  padding: 0 clamp(1.4rem, 3vw, 3rem);
+  min-height: 4.5rem;
+  padding: 0 clamp(1.25rem, 3vw, 2.25rem);
   border-bottom: 1px solid rgba(50, 94, 132, .55);
   color: #8fa6bb;
-  font-size: clamp(.85rem, 1.4vw, 1.18rem);
+  font-size: clamp(.82rem, 1.2vw, 1rem);
 }
 
 .row {
-  min-height: 8.2rem;
-  padding: 0 clamp(1.4rem, 3vw, 3rem);
+  min-height: 5.5rem;
+  padding: 0 clamp(1.25rem, 3vw, 2.25rem);
   border-bottom: 1px solid rgba(42, 80, 112, .48);
 }
 
@@ -89,7 +111,7 @@
 .date,
 .players {
   color: #b9cad9;
-  font-size: clamp(1rem, 1.5vw, 1.28rem);
+  font-size: clamp(.95rem, 1.3vw, 1.1rem);
   font-variant-numeric: tabular-nums;
 }
 
@@ -102,7 +124,7 @@
   align-items: center;
   gap: .55rem;
   color: #6dbce9;
-  font-size: clamp(.86rem, 1.3vw, 1.08rem);
+  font-size: clamp(.82rem, 1.2vw, 1rem);
 }
 
 .status[data-complete] {
@@ -145,10 +167,11 @@
   place-items: center;
   align-content: center;
   gap: 1rem;
-  border: 1px solid rgba(49, 93, 131, .62);
-  border-radius: 10px;
+  border: 1px solid rgba(102, 116, 129, .42);
+  border-radius: 16px;
   color: #9eb4c7;
-  background: rgba(1, 12, 23, .66);
+  background: rgba(2, 7, 12, .76);
+  box-shadow: inset 0 0 42px rgba(255, 255, 255, .018);
   text-align: center;
 }
 
@@ -178,30 +201,43 @@
   line-height: 1.5;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 760px) {
   .screen {
+    display: block;
     padding: 0;
+    background: #020610;
+  }
+
+  .background {
+    opacity: 1;
+    background-image: url('/assets/home/expedition-mobile.webp');
+    background-position: center top;
+    background-size: 100% auto;
   }
 
   .panel {
     min-height: 100svh;
-    padding: 1.25rem 1rem 2rem;
+    width: 100%;
+    padding: 1.5rem 1.25rem;
     border: 0;
     border-radius: 0;
+    background: linear-gradient(180deg, rgba(2, 8, 17, .1) 0, rgba(2, 8, 17, .08) 28%, rgba(2, 7, 16, .94) 35%, #020710 43%);
   }
 
   .header {
-    margin-bottom: 1.5rem;
+    min-height: auto;
+    margin-bottom: .9rem;
   }
 
   .title {
-    font-size: 1.55rem;
+    padding-top: .2rem;
+    font-size: 1.05rem;
+    letter-spacing: -.035em;
   }
 
   .backButton {
-    min-height: 2.2rem !important;
-    padding: .45rem .65rem !important;
-    font-size: .72rem !important;
+    min-height: 2.45rem !important;
+    padding-inline: .7rem !important;
   }
 
   .history {
@@ -225,7 +261,7 @@
     padding: 1rem;
     border: 1px solid rgba(49, 93, 131, .62);
     border-radius: 8px;
-    background: rgba(1, 13, 25, .82);
+    background: rgba(2, 7, 12, .82);
   }
 
   .row:last-child {
@@ -248,5 +284,11 @@
 
   .detailsButton {
     width: 100%;
+  }
+}
+
+@media (max-width: 390px) {
+  .panel {
+    padding-inline: 1rem;
   }
 }
