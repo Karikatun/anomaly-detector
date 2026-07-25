@@ -26,9 +26,7 @@ type CreateTenderModuleOptions = {
   onTenderChanged?: (tenderId: string) => void
 }
 
-const accessSlotSelectionDurationMs = 45_000
-const powerAllocationDurationMs = 60_000
-const operationalActionDurationMs = 20_000
+const phaseDurationMs = 90_000
 const operationalGrantBudget = 1
 const normalContractRating = 4
 const finalContractRating = 8
@@ -36,10 +34,8 @@ const completeScientificModelBonus = 3
 const finalContractId = 'final-contract'
 
 const deadlineForPhase = (phase: string, at: Date) => {
-  if (phase === 'access-slot-selection') return new Date(at.getTime() + accessSlotSelectionDurationMs)
-  if (phase === 'power-allocation') return new Date(at.getTime() + powerAllocationDurationMs)
   if (phase === 'complete') return null
-  return new Date(at.getTime() + operationalActionDurationMs)
+  return new Date(at.getTime() + phaseDurationMs)
 }
 
 const reservePowerAllocation: PowerAllocation = {
@@ -383,6 +379,14 @@ export function createTenderModule({
         }
         if (tender.powerAllocations[player.id] !== undefined) {
           throw new TenderFailure('invalid_tender_state', 'Power allocation is already confirmed')
+        }
+        const currentSampleCount = new Set(tender.samplesByPlayer[player.id] ?? []).size
+        const missingSampleCount = signalIds.length - currentSampleCount
+        if (command.allocation.reconnaissance > missingSampleCount) {
+          throw new TenderFailure('invalid_tender_state', 'Reconnaissance Power exceeds the number of missing Samples')
+        }
+        if (command.allocation.laboratory > 0 && currentSampleCount + command.allocation.reconnaissance < 2) {
+          throw new TenderFailure('invalid_tender_state', 'Laboratory Power requires access to two distinct Samples')
         }
         const powerAllocations: Record<string, PowerAllocation> = { ...tender.powerAllocations, [player.id]: command.allocation }
         const isReadyToStartReconnaissance = Object.keys(powerAllocations).length === tender.players.length
@@ -748,7 +752,7 @@ export function createTenderModule({
       const acquiredSignals: SignalId[] = []
       for (const target of targets) {
         const signal = target === 'unknown-sector'
-          ? nextCompensationSample(knownSignals, [...currentSamples, ...acquiredSignals])
+          ? signalIds.find((signalId) => !knownSignals.includes(signalId))
           : target
         if (!signal || (target !== 'unknown-sector' && (!knownSignals.includes(signal) || currentSamples.includes(signal)))) {
           throw new TenderFailure('invalid_tender_state', 'Reconnaissance target is not available to this Player')

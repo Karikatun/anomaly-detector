@@ -7,9 +7,9 @@ export function availableReconnaissanceTargets({
   knownSignals: SignalId[]
   mySamples: SignalId[]
 }) {
+  const unknownSectorCount = Math.min(2, 6 - new Set(knownSignals).size)
   return [
-    'unknown-sector-1',
-    'unknown-sector-2',
+    ...Array.from({ length: unknownSectorCount }, (_, index) => `unknown-sector-${index + 1}`),
     ...knownSignals.filter((signal) => !mySamples.includes(signal)),
   ]
 }

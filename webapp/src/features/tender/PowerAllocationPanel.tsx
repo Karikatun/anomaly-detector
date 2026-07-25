@@ -4,30 +4,29 @@ import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { TenderActionPanel } from './components/TenderActionPanel'
+import {
+  powerAllocationLimits,
+  powerAllocationProblem,
+  type PowerAllocationDraft,
+} from './power-allocation-constraints'
 import { runTenderAction } from './run-tender-action'
 
 const categories = [
-  { key: 'reconnaissance' as const, limit: 2, labelKey: 'tender.power.category.reconnaissance', oneEffectKey: 'tender.power.reconnaissance.one', twoEffectKey: 'tender.power.reconnaissance.two' },
-  { key: 'laboratory' as const, limit: 2, labelKey: 'tender.power.category.laboratory', oneEffectKey: 'tender.power.laboratory.one', twoEffectKey: 'tender.power.laboratory.two' },
-  { key: 'modelAnalysis' as const, limit: 1, labelKey: 'tender.power.category.modelAnalysis', oneEffectKey: 'tender.power.modelAnalysis.one', twoEffectKey: 'tender.power.modelAnalysis.two' },
-  { key: 'contracts' as const, limit: 1, labelKey: 'tender.power.category.contracts', oneEffectKey: 'tender.power.contracts.one', twoEffectKey: 'tender.power.contracts.two' },
+  { key: 'reconnaissance' as const, labelKey: 'tender.power.category.reconnaissance', oneEffectKey: 'tender.power.reconnaissance.one', twoEffectKey: 'tender.power.reconnaissance.two' },
+  { key: 'laboratory' as const, labelKey: 'tender.power.category.laboratory', oneEffectKey: 'tender.power.laboratory.one', twoEffectKey: 'tender.power.laboratory.two' },
+  { key: 'modelAnalysis' as const, labelKey: 'tender.power.category.modelAnalysis', oneEffectKey: 'tender.power.modelAnalysis.one', twoEffectKey: 'tender.power.modelAnalysis.two' },
+  { key: 'contracts' as const, labelKey: 'tender.power.category.contracts', oneEffectKey: 'tender.power.contracts.one', twoEffectKey: 'tender.power.contracts.two' },
 ] as const
 
-type Allocation = {
-  reconnaissance: number
-  laboratory: number
-  modelAnalysis: number
-  contracts: number
-}
-
 type PowerAllocationPanelProps = {
+  sampleCount: number
   disabled?: boolean
   error?: string | null
-  onConfirm: (allocation: Allocation) => Promise<void>
+  onConfirm: (allocation: PowerAllocationDraft) => Promise<void>
 }
 
-export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAllocationPanelProps) {
-  const [allocation, setAllocation] = useState<Allocation>({
+export function PowerAllocationPanel({ sampleCount, disabled, error, onConfirm }: PowerAllocationPanelProps) {
+  const [allocation, setAllocation] = useState<PowerAllocationDraft>({
     reconnaissance: 0,
     laboratory: 0,
     modelAnalysis: 0,
@@ -38,17 +37,19 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
     () => Object.values(allocation).reduce((sum, v) => sum + v, 0),
     [allocation],
   )
-  const isValid = total === 4
   const { t } = useI18n()
+  const limits = powerAllocationLimits(sampleCount)
+  const problem = powerAllocationProblem({ allocation, sampleCount })
+  const isValid = total === 4 && problem === null
 
-  const increment = (key: keyof Allocation, limit: number) => {
+  const increment = (key: keyof PowerAllocationDraft, limit: number) => {
     setAllocation((prev) => {
       if (prev[key] >= limit || total >= 4) return prev
       return { ...prev, [key]: prev[key] + 1 }
     })
   }
 
-  const decrement = (key: keyof Allocation) => {
+  const decrement = (key: keyof PowerAllocationDraft) => {
     setAllocation((prev) => {
       if (prev[key] <= 0) return prev
       return { ...prev, [key]: prev[key] - 1 }
@@ -59,7 +60,7 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
     <TenderActionPanel
       title={t('tender.power.title')}
       description={t('tender.power.description', { total })}
-      error={error}
+      error={error ?? (problem ? t(`tender.power.problem.${problem}`) : null)}
       footer={(
         <Button
           type="button"
@@ -73,8 +74,9 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
       )}
     >
         <div className="grid gap-4">
-          {categories.map(({ key, limit, labelKey, oneEffectKey, twoEffectKey }) => {
+          {categories.map(({ key, labelKey, oneEffectKey, twoEffectKey }) => {
             const label = t(labelKey)
+            const limit = limits[key]
             return (
             <div
               key={key}
@@ -87,9 +89,11 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
                 <Typography variant="bodySmSnug" tone="muted">
                   {t(oneEffectKey)}
                 </Typography>
-                <Typography variant="bodySmSnug" tone="muted">
-                  {t(twoEffectKey)}
-                </Typography>
+                {limit > 1 && (
+                  <Typography variant="bodySmSnug" tone="muted">
+                    {t(twoEffectKey)}
+                  </Typography>
+                )}
                 <Typography variant="bodySmSnug" tone="muted">
                   {t('tender.power.selected', { count: allocation[key] })}
                 </Typography>

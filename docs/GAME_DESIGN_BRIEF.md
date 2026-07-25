@@ -143,11 +143,7 @@ Successful ordinary Contracts grant one Corporate Trust but never Budget. Each p
 
 ## Timing And Failure Handling
 
-For a four-player game:
-
-- 45 seconds: secret access-slot choice.
-- 60 seconds: power allocation.
-- Up to 90 seconds per operational phase, with up to 20 seconds per player's choice and unused time passing to the next player.
+Every live phase has a 90-second server deadline. Access Slot selection and Power allocation use one shared deadline because players act simultaneously. In ordered operational phases and the final Scientific Model, each active player receives a fresh 90 seconds when their choice opens.
 
 If a player times out or disconnects, the server takes conservative, non-beneficial defaults: a standard or later free slot without budget spend, unallocated power to reserve, and a skipped unresolved target. The player may reconnect and continue. A missing player never blocks a match.
 
