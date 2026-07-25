@@ -9,7 +9,6 @@ import type { TenderView } from '@anomaly-detector/contracts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
@@ -26,6 +25,7 @@ import { PowerAllocationPanel } from './PowerAllocationPanel'
 import { ReconnaissancePanel } from './ReconnaissancePanel'
 import { TenderTimer } from './TenderTimer'
 import { WorkingModelPanel } from './WorkingModelPanel'
+import { ReconnectOverlay } from './components/ReconnectOverlay'
 import { UnavailablePhaseCard } from './components/TenderActionPanel'
 import { TenderEvidence, TenderPlayers } from './components/TenderOverview'
 import {
@@ -165,6 +165,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
         <ModelAnalysisPanel
           knownSignals={view.knownSignals}
           maxTheses={maPower}
+          publicTheses={view.publicTheses}
           disabled={disabled}
           error={error}
           onConfirmThesis={(input) => onCommand({ type: 'submit-thesis', ...input })}
@@ -360,9 +361,6 @@ function TenderContent() {
   const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
   const isSequentialPhase = sequentialPhases.has(tenderView.phase)
   const isMyTurn = !isSequentialPhase || tenderView.activePlayerId === auth.user?.id
-  const accessSlotWasDisplaced = myPlayer?.requestedAccessSlot !== undefined
-    && myPlayer.accessSlot !== undefined
-    && myPlayer.requestedAccessSlot !== myPlayer.accessSlot
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
   const isPowerAllocation = tenderView.phase === 'power-allocation'
   const isPlanningPhase = isAccessSlotSelection || isPowerAllocation
@@ -416,39 +414,16 @@ function TenderContent() {
         </div>
       </header>
 
-      {!isPowerAllocation && myPlayer?.requestedAccessSlot !== undefined && myPlayer.accessSlot !== undefined && (
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>{t('tender.access.result.title')}</CardTitle>
-            <CardDescription>
-              {accessSlotWasDisplaced
-                ? t('tender.access.result.displaced', {
-                    requested: myPlayer.requestedAccessSlot,
-                    assigned: myPlayer.accessSlot,
-                  })
-                : t('tender.access.result.same', { slot: myPlayer.accessSlot })}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-
       {!connected && (
-        <Card size="sm">
-          <CardContent className="flex flex-wrap items-center gap-3 py-4">
-            <Typography role="alert" variant="bodySm" tone="destructive">
-              Данные игры могут быть устаревшими. Действия приостановлены до восстановления realtime-соединения.
-              {error ? ` ${t(realtimeErrorKeys[error])}` : ''}
-            </Typography>
-            <Button type="button" variant="outline" size="sm" onClick={retry}>
-              Подключиться снова
-            </Button>
-          </CardContent>
-        </Card>
+        <ReconnectOverlay
+          errorText={error ? t(realtimeErrorKeys[error]) : undefined}
+          onRetry={retry}
+        />
       )}
 
       {/* Phase panel + right sidebar */}
-      <div className={isPlanningPhase ? 'grid min-w-0 gap-4' : 'grid min-w-0 gap-6 lg:grid-cols-[1fr_320px]'}>
-        <div className={isPlanningPhase ? 'grid min-w-0 gap-4' : 'grid min-w-0 gap-6'}>
+      <div className={isPlanningPhase ? 'grid min-w-0 items-start gap-4' : 'grid min-w-0 items-start gap-6 lg:grid-cols-[1fr_320px]'}>
+        <div className={isPlanningPhase ? 'grid min-w-0 self-start gap-4' : 'grid min-w-0 self-start gap-6'}>
           <PhasePanel
             view={tenderView}
             disabled={submitting || !connected}
@@ -456,54 +431,56 @@ function TenderContent() {
             onCommand={handleCommand}
             activePlayerId={tenderView.activePlayerId}
           />
+
+          {!isPlanningPhase && (
+            <div className="grid gap-2">
+              <details className="rounded-lg border border-border/70 bg-card/80 px-3 py-2">
+                <summary className="cursor-pointer list-none">
+                  <span className="flex items-center justify-between gap-3">
+                    <Typography as="span" variant="bodySmMedium">Данные исследования</Typography>
+                    <Badge variant="outline">
+                      {tenderView.publicLaboratoryResults.length
+                        + tenderView.privateMeasurements.length
+                        + tenderView.publicTheses.length}
+                    </Badge>
+                  </span>
+                </summary>
+                <div className="mt-3 grid gap-4">
+                  <TenderEvidence view={tenderView} />
+                </div>
+              </details>
+
+              <details className="rounded-lg border border-border/70 bg-card/80 px-3 py-2">
+                <summary className="cursor-pointer list-none">
+                  <span className="flex items-center justify-between gap-3">
+                    <Typography as="span" variant="bodySmMedium">Рабочая модель</Typography>
+                    <Badge variant="outline">{tenderView.knownSignals.length} / 6</Badge>
+                  </span>
+                </summary>
+                <div className="mt-3">
+                  <WorkingModelPanel
+                    key={tenderId}
+                    model={tenderView.privateWorkingModel}
+                    knownSignals={tenderView.knownSignals}
+                    disabled={!connected}
+                    onSave={saveWorkingModel}
+                  />
+                </div>
+              </details>
+            </div>
+          )}
         </div>
 
         {!isPlanningPhase && (
-          <TenderPlayers
-            activePlayerId={tenderView.activePlayerId}
-            currentUserId={auth.user?.id}
-            players={tenderView.players}
-          />
+          <aside className="hidden lg:block">
+            <TenderPlayers
+              activePlayerId={tenderView.activePlayerId}
+              currentUserId={auth.user?.id}
+              players={tenderView.players}
+            />
+          </aside>
         )}
       </div>
-
-      {!isPlanningPhase && (
-        <>
-          <Separator />
-          <TenderEvidence view={tenderView} />
-
-          {/* Working Model */}
-          <Separator />
-          <details open className="mt-4">
-            <summary className="cursor-pointer">
-              <span className="flex items-center gap-3">
-                <img src="/assets/icons.webp" alt="" className="h-8 w-12 rounded object-cover opacity-70" />
-                <Typography as="span" variant="bodySmMedium">Рабочая модель</Typography>
-              </span>
-            </summary>
-            <div className="mt-4">
-              <WorkingModelPanel
-                key={tenderId}
-                model={tenderView.privateWorkingModel}
-                knownSignals={tenderView.knownSignals}
-                disabled={!connected}
-                onSave={saveWorkingModel}
-              />
-            </div>
-          </details>
-
-          {/* Anomaly visual */}
-          <Separator />
-          <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-lg">
-            <img
-              src="/assets/anomaly-display.webp"
-              alt="Аномалия"
-              className="w-full object-cover opacity-80"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
-          </div>
-        </>
-      )}
 
     </section>
   )

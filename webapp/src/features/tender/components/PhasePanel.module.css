@@ -1,0 +1,956 @@
+.panel {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: .65rem;
+}
+
+.surface {
+  min-width: 0;
+  padding: .7rem;
+  border: 1px solid rgba(65, 127, 169, .32);
+  border-radius: .72rem;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(31, 157, 218, .06), transparent 42%),
+    rgba(1, 13, 27, .9);
+}
+
+.intro {
+  display: grid;
+  gap: .18rem;
+}
+
+.title {
+  color: #f2f8fc;
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
+.description {
+  color: rgba(218, 233, 242, .62);
+  font-size: .72rem;
+  line-height: 1.28;
+}
+
+.sectionHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: .65rem;
+  margin-bottom: .55rem;
+}
+
+.sectionTitle {
+  color: rgba(221, 236, 246, .76);
+  font-size: .78rem;
+  letter-spacing: .025em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.sectionMeta {
+  color: var(--primary);
+  font-size: .7rem;
+}
+
+.info,
+.warning,
+.error {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .55rem;
+  padding: .55rem .65rem;
+  border: 1px solid rgba(67, 132, 174, .28);
+  border-radius: .58rem;
+  background: rgba(3, 20, 35, .8);
+}
+
+.info > svg,
+.warning > svg,
+.error > svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+}
+
+.info > svg {
+  color: var(--primary);
+}
+
+.warning {
+  border-color: color-mix(in srgb, var(--warning) 48%, transparent);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, rgba(3, 20, 35, .9));
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--destructive) 52%, transparent);
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 9%, rgba(3, 20, 35, .9));
+}
+
+.info p,
+.warning p,
+.error p {
+  font-size: .7rem;
+  line-height: 1.25;
+}
+
+.signalGrid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .5rem;
+}
+
+.signalCard {
+  --signal-accent: var(--primary);
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 5.8rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: .5rem;
+  overflow: hidden;
+  padding: .55rem;
+  border: 1px solid rgba(73, 127, 163, .4);
+  border-radius: .58rem;
+  outline: none;
+  color: #eaf6fd;
+  background:
+    radial-gradient(circle at 25% 50%, color-mix(in srgb, var(--signal-accent) 13%, transparent), transparent 46%),
+    rgba(2, 16, 30, .92);
+  text-align: left;
+  cursor: pointer;
+}
+
+.signalCard:hover:not(:disabled),
+.signalCard:focus-visible {
+  border-color: color-mix(in srgb, var(--signal-accent) 70%, white);
+}
+
+.signalCard[data-selected] {
+  border-color: var(--primary);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--primary) 50%, transparent),
+    0 0 .9rem rgba(30, 158, 255, .12);
+}
+
+.signalCard:disabled:not([data-selected]) {
+  opacity: .48;
+  cursor: default;
+}
+
+.signalGlyph {
+  width: 3.2rem;
+  height: 3.2rem;
+  flex: none;
+}
+
+.signalCopy {
+  display: grid;
+  min-width: 0;
+  gap: .12rem;
+}
+
+.signalName {
+  min-width: 0;
+  color: #f2f8fc;
+  font-size: .82rem;
+  line-height: 1.1;
+}
+
+.signalDetail {
+  color: rgba(210, 228, 239, .58);
+  font-size: .65rem;
+  line-height: 1.2;
+}
+
+.selectionIndex {
+  position: absolute;
+  top: .32rem;
+  left: .32rem;
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--primary);
+  font-size: .65rem;
+  font-weight: 700;
+}
+
+.selectedTag {
+  position: absolute;
+  right: .4rem;
+  bottom: .35rem;
+  padding: .15rem .35rem;
+  border-radius: .3rem;
+  color: white;
+  background: var(--primary);
+  font-size: .6rem;
+}
+
+.compactList {
+  display: grid;
+  gap: .4rem;
+}
+
+.compactSignal {
+  --signal-accent: var(--primary);
+  display: flex;
+  min-width: 0;
+  min-height: 3rem;
+  align-items: center;
+  gap: .55rem;
+  padding: .42rem .55rem;
+  border: 1px solid rgba(69, 126, 163, .32);
+  border-radius: .48rem;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--signal-accent) 7%, transparent), transparent 40%),
+    rgba(3, 18, 31, .78);
+}
+
+.compactSignal .signalGlyph {
+  width: 2.15rem;
+  height: 2.15rem;
+}
+
+.compactSignal > :last-child {
+  margin-left: auto;
+}
+
+.footer {
+  display: grid;
+  gap: .4rem;
+  padding-top: .15rem;
+}
+
+.actionButton {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: .55rem;
+  box-shadow: 0 .45rem 1.25rem rgba(13, 126, 255, .18);
+}
+
+.selectionSummary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  color: rgba(214, 230, 240, .62);
+}
+
+.selectionSummary strong {
+  color: var(--primary);
+}
+
+.split {
+  display: grid;
+  min-width: 0;
+  gap: .65rem;
+}
+
+.controlGrid {
+  display: grid;
+  min-width: 0;
+  gap: .45rem;
+}
+
+.modelRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(5.5rem, .7fr) minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: center;
+  gap: .4rem;
+  padding: .4rem;
+  border-bottom: 1px solid rgba(70, 128, 164, .2);
+}
+
+.modelRow:last-child {
+  border-bottom: 0;
+}
+
+.modelSignal {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .35rem;
+}
+
+.modelSignal .signalGlyph {
+  width: 2rem;
+  height: 2rem;
+}
+
+.modelRow select {
+  min-width: 0;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(69, 126, 163, .36);
+  border-radius: .45rem;
+}
+
+.segmented[data-options='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.segmented button {
+  min-height: 2rem;
+  border: 0;
+  border-right: 1px solid rgba(69, 126, 163, .25);
+  outline: none;
+  color: rgba(219, 234, 243, .65);
+  background: rgba(2, 16, 29, .75);
+}
+
+.segmented button:last-child {
+  border-right: 0;
+}
+
+.segmented button[data-selected] {
+  color: var(--primary);
+  background: rgba(17, 117, 178, .22);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.segmented button span {
+  font-size: .7rem;
+}
+
+.choiceMatrix {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .4rem;
+}
+
+.sampleChoice {
+  --signal-accent: var(--primary);
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: .5rem;
+  padding: .4rem .5rem;
+  border: 1px solid rgba(69, 126, 163, .3);
+  border-radius: .5rem;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--signal-accent) 7%, transparent), transparent 42%),
+    rgba(3, 18, 31, .76);
+}
+
+.sampleChoice .signalGlyph {
+  width: 2.15rem;
+  height: 2.15rem;
+}
+
+.roleButtons {
+  display: grid;
+  width: 100%;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: .25rem;
+}
+
+.roleButton {
+  display: grid;
+  min-width: 2rem;
+  min-height: 1.9rem;
+  place-items: center;
+  border: 1px solid rgba(72, 133, 173, .36);
+  border-radius: .35rem;
+  outline: none;
+  color: rgba(218, 233, 242, .62);
+  background: rgba(2, 14, 27, .8);
+}
+
+.roleButton[data-selected] {
+  border-color: var(--signal-accent);
+  color: var(--signal-accent);
+  background: color-mix(in srgb, var(--signal-accent) 12%, rgba(2, 14, 27, .88));
+}
+
+.roleButton span {
+  font-size: .62rem;
+}
+
+.experiment {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: .45rem;
+}
+
+.experimentNode {
+  --signal-accent: #64788c;
+  display: grid;
+  min-width: 0;
+  min-height: 6.5rem;
+  place-items: center;
+  align-content: center;
+  gap: .2rem;
+  padding: .55rem;
+  border: 1px solid color-mix(in srgb, var(--signal-accent) 62%, #38536a);
+  border-radius: .58rem;
+  background: color-mix(in srgb, var(--signal-accent) 7%, rgba(2, 16, 29, .92));
+  text-align: center;
+}
+
+.experimentNode .signalGlyph {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.experimentArrow {
+  color: var(--primary);
+  font-size: 1.55rem;
+}
+
+.protocol {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .55rem;
+  margin-top: .6rem;
+  padding: .55rem .65rem;
+  border: 1px solid rgba(69, 126, 163, .3);
+  border-radius: .5rem;
+  background: rgba(3, 18, 31, .78);
+}
+
+.protocol > svg {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: none;
+  color: var(--primary);
+}
+
+.protocolCopy {
+  display: grid;
+  min-width: 0;
+  gap: .08rem;
+}
+
+.formGrid {
+  display: grid;
+  min-width: 0;
+  gap: .55rem;
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  gap: .25rem;
+}
+
+.preview {
+  --signal-accent: var(--primary);
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .7rem;
+  padding: .7rem;
+  border: 1px solid color-mix(in srgb, var(--signal-accent) 48%, #37536b);
+  border-radius: .58rem;
+  background:
+    radial-gradient(circle at 12% 50%, color-mix(in srgb, var(--signal-accent) 14%, transparent), transparent 38%),
+    rgba(2, 16, 29, .88);
+}
+
+.preview .signalGlyph {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.previewCopy {
+  display: grid;
+  min-width: 0;
+  gap: .12rem;
+}
+
+.journalList {
+  display: grid;
+  gap: .35rem;
+}
+
+.journalEntry {
+  --signal-accent: var(--primary);
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .45rem;
+  padding: .4rem .45rem;
+  border: 1px solid rgba(69, 126, 163, .28);
+  border-radius: .45rem;
+  background: rgba(3, 18, 31, .72);
+}
+
+.journalEntry .signalGlyph {
+  width: 2rem;
+  height: 2rem;
+}
+
+.journalMeta {
+  display: grid;
+  justify-items: end;
+  color: rgba(209, 226, 237, .5);
+}
+
+.journalMeta span {
+  font-size: .58rem;
+}
+
+.contractGrid {
+  display: grid;
+  min-width: 0;
+  gap: .5rem;
+}
+
+.contractCard {
+  --contract-accent: var(--primary);
+  display: grid;
+  min-width: 0;
+  gap: .5rem;
+  padding: .65rem;
+  border: 1px solid color-mix(in srgb, var(--contract-accent) 44%, #39556d);
+  border-radius: .58rem;
+  background:
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--contract-accent) 9%, transparent), transparent 42%),
+    rgba(2, 16, 29, .9);
+}
+
+.contractCard[data-active] {
+  border-color: var(--contract-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--contract-accent) 38%, transparent);
+}
+
+.contractHeader {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .55rem;
+}
+
+.contractHeader .signalGlyph {
+  width: 3rem;
+  height: 3rem;
+}
+
+.contractKind {
+  width: fit-content;
+  padding: .12rem .35rem;
+  border: 1px solid currentColor;
+  border-radius: .28rem;
+  color: var(--contract-accent);
+  font-size: .58rem;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.contractReward {
+  display: grid;
+  justify-items: end;
+  color: var(--contract-accent);
+  white-space: nowrap;
+}
+
+.contractReward strong {
+  font-size: .95rem;
+}
+
+.contractFacts {
+  display: grid;
+  gap: .25rem;
+  padding-top: .45rem;
+  border-top: 1px solid rgba(72, 128, 164, .22);
+}
+
+.contractFact {
+  display: grid;
+  grid-template-columns: minmax(5rem, .45fr) minmax(0, 1fr);
+  gap: .45rem;
+  color: rgba(216, 231, 240, .7);
+}
+
+.contractFact span {
+  font-size: .66rem;
+}
+
+.contractFact span:first-child {
+  color: rgba(194, 214, 227, .46);
+}
+
+.evidencePanel {
+  display: grid;
+  gap: .4rem;
+  padding-top: .5rem;
+  border-top: 1px solid rgba(72, 128, 164, .22);
+}
+
+.evidenceButton {
+  justify-content: flex-start;
+  height: auto;
+  min-height: 2.2rem;
+  white-space: normal;
+}
+
+.finalContract {
+  border-color: color-mix(in srgb, var(--warning) 48%, #39556d);
+  background:
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--warning) 10%, transparent), transparent 42%),
+    rgba(2, 16, 29, .9);
+}
+
+.modelProgress {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: .15rem;
+  color: var(--primary);
+}
+
+.modelProgress strong {
+  font-size: 1.05rem;
+}
+
+.finalModelTable {
+  display: grid;
+  min-width: 0;
+  gap: .1rem;
+}
+
+.finalModelHead {
+  display: none;
+}
+
+.finalModelTable .modelRow {
+  grid-template-columns: minmax(5rem, .7fr) minmax(0, 1.25fr);
+}
+
+.finalModelTable .modelRow > :last-child {
+  grid-column: 2;
+}
+
+.finalModelTable .modelSignal {
+  grid-row: 1 / span 2;
+}
+
+.finalModelTable .modelSignal strong {
+  overflow: hidden;
+  font-size: .72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finalModelTable .segmented button {
+  min-height: 2rem;
+  padding-inline: .25rem;
+}
+
+.finalModelTable .segmented button span {
+  font-size: .66rem;
+  white-space: nowrap;
+}
+
+.finalOptionLong {
+  display: none;
+}
+
+.finalOptionShort {
+  display: inline;
+}
+
+.finalSummary {
+  display: grid;
+  min-width: 0;
+  gap: .5rem;
+}
+
+.scoreList {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .4rem;
+}
+
+.scoreItem {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: .08rem;
+  padding: .45rem .3rem;
+  border: 1px solid rgba(65, 127, 169, .28);
+  border-radius: .5rem;
+  background: rgba(2, 16, 29, .82);
+  text-align: center;
+}
+
+.scoreItem strong {
+  color: var(--primary);
+}
+
+.scoreItem span {
+  font-size: .57rem;
+  line-height: 1.15;
+}
+
+.connectionBanner {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .45rem;
+  padding: .48rem .65rem;
+  border: 1px solid color-mix(in srgb, var(--warning) 42%, #39556d);
+  border-radius: .58rem;
+  background: color-mix(in srgb, var(--warning) 7%, rgba(2, 16, 29, .94));
+}
+
+.connectionBanner > :last-child {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connectionPulse {
+  width: .55rem;
+  height: .55rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--warning);
+  box-shadow: 0 0 .65rem color-mix(in srgb, var(--warning) 60%, transparent);
+  animation: connection-pulse 1.2s ease-in-out infinite;
+}
+
+.reconnectBackdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 7, 16, .76);
+  backdrop-filter: blur(.32rem);
+}
+
+.reconnectDialog {
+  display: grid;
+  width: min(100%, 27rem);
+  min-width: 0;
+  justify-items: center;
+  gap: .85rem;
+  padding: 1.1rem;
+  border: 1px solid rgba(72, 145, 190, .55);
+  border-radius: .82rem;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(34, 160, 226, .12), transparent 45%),
+    rgba(1, 14, 28, .97);
+  box-shadow: 0 1rem 4rem rgba(0, 0, 0, .58);
+  text-align: center;
+}
+
+.reconnectIcon {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  place-items: center;
+  border: 1px solid var(--warning);
+  border-radius: 50%;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  box-shadow: 0 0 1.4rem color-mix(in srgb, var(--warning) 16%, transparent);
+}
+
+.reconnectIcon svg {
+  width: 1.65rem;
+  height: 1.65rem;
+}
+
+.reconnectCopy {
+  display: grid;
+  gap: .35rem;
+}
+
+@keyframes connection-pulse {
+  50% {
+    opacity: .45;
+    transform: scale(.78);
+  }
+}
+
+@media (min-width: 48rem) {
+  .panel {
+    gap: .85rem;
+  }
+
+  .surface {
+    padding: 1rem;
+  }
+
+  .title {
+    font-size: 1.3rem;
+  }
+
+  .description {
+    font-size: .82rem;
+  }
+
+  .sectionTitle {
+    font-size: .9rem;
+  }
+
+  .split {
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, .38fr);
+    gap: .85rem;
+  }
+
+  .signalGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .7rem;
+  }
+
+  .signalCard {
+    min-height: 8.5rem;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: .8rem;
+    text-align: center;
+  }
+
+  .signalGlyph {
+    width: 4.6rem;
+    height: 4.6rem;
+  }
+
+  .signalName {
+    font-size: .95rem;
+  }
+
+  .footer {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 42rem);
+    align-items: center;
+    padding: .75rem 1rem;
+    border: 1px solid rgba(65, 127, 169, .3);
+    border-radius: .72rem;
+    background: rgba(1, 13, 27, .9);
+  }
+
+  .selectionSummary {
+    justify-content: flex-start;
+  }
+
+  .choiceMatrix {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sampleChoice {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: .65rem;
+    text-align: center;
+  }
+
+  .sampleChoice .signalGlyph {
+    width: 3.6rem;
+    height: 3.6rem;
+  }
+
+  .sampleChoice .roleButtons {
+    grid-column: auto;
+  }
+
+  .experimentNode {
+    min-height: 11rem;
+  }
+
+  .experimentNode .signalGlyph {
+    width: 5.2rem;
+    height: 5.2rem;
+  }
+
+  .formGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .contractGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .7rem;
+  }
+
+  .finalModelHead {
+    display: grid;
+    grid-template-columns: minmax(9rem, .7fr) minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: .65rem;
+    padding: 0 .65rem .35rem;
+    color: rgba(194, 214, 227, .48);
+    text-transform: uppercase;
+  }
+
+  .finalModelTable .modelRow {
+    grid-template-columns: minmax(9rem, .7fr) minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: .65rem;
+    padding: .5rem .65rem;
+  }
+
+  .finalModelTable .modelRow > :last-child {
+    grid-column: auto;
+  }
+
+  .finalModelTable .modelSignal {
+    grid-row: auto;
+  }
+
+  .finalModelTable .modelSignal strong {
+    font-size: .82rem;
+  }
+
+  .finalModelTable .segmented button {
+    min-height: 2.1rem;
+  }
+
+  .finalModelTable .segmented button span {
+    font-size: .68rem;
+  }
+
+  .finalOptionLong {
+    display: inline;
+  }
+
+  .finalOptionShort {
+    display: none;
+  }
+
+  .finalSummary {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, .45fr);
+  }
+
+  .reconnectDialog {
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: stretch;
+    gap: 1rem;
+    padding: 1.35rem;
+    text-align: left;
+  }
+
+  .reconnectIcon {
+    grid-row: 1 / span 2;
+  }
+
+  .reconnectDialog .actionButton {
+    grid-column: 2;
+    width: fit-content;
+    min-width: 13rem;
+  }
+}
