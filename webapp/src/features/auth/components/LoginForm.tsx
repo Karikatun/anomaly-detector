@@ -84,7 +84,9 @@ export function LoginForm() {
                     setError(null)
                   }}
                 />
-                {loginError && <FieldError id="auth-login-error" errors={[{ message: t('auth.errors.loginName') }]} />}
+                <div className={styles.fieldErrorSlot}>
+                  {loginError && <FieldError id="auth-login-error" errors={[{ message: t('auth.errors.loginName') }]} />}
+                </div>
               </Field>
             )
           }}
@@ -127,7 +129,9 @@ export function LoginForm() {
                     />
                   </button>
                 </div>
-                {passwordError && <FieldError id="auth-password-error" errors={[{ message: t('auth.errors.password') }]} />}
+                <div className={styles.fieldErrorSlot}>
+                  {passwordError && <FieldError id="auth-password-error" errors={[{ message: t('auth.errors.password') }]} />}
+                </div>
               </Field>
             )
           }}
@@ -155,7 +159,9 @@ export function LoginForm() {
                         setError(null)
                       }}
                     />
-                    {displayNameError && <FieldError id="auth-name-error" errors={[{ message: t('auth.errors.displayName') }]} />}
+                    <div className={styles.fieldErrorSlot}>
+                      {displayNameError && <FieldError id="auth-name-error" errors={[{ message: t('auth.errors.displayName') }]} />}
+                    </div>
                   </Field>
                 )
               }}
