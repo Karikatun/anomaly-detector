@@ -8,7 +8,7 @@ import type {
 } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import {
@@ -19,6 +19,8 @@ import {
   signalIds,
   signalLabelKeys,
 } from './catalog'
+import { TenderActionPanel } from './components/TenderActionPanel'
+import { runTenderAction } from './run-tender-action'
 
 type Props = {
   disabled?: boolean
@@ -70,27 +72,37 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
 
   const handleSubmit = async () => {
     if (Object.keys(model).length > 0) {
-      try {
-        await onConfirm({ signals: model })
-      } catch {
-        // The parent owns the visible command error; keep the model for retry.
-      }
+      await runTenderAction(() => onConfirm({ signals: model }))
     }
   }
 
   const claimedCount = Object.values(model).filter((c) => c.fieldType || c.polarity).length
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Финальная научная модель</CardTitle>
-        <CardDescription>
+    <TenderActionPanel
+      title="Финальная научная модель"
+      description={(
+        <>
           Финальный раунд. Укажите свойства каждого сигнала — тип поля и полярность.
           За каждый верный параметр +1 рейтинг, за полностью верную модель +3 бонус.
           Заявлено сигналов: {claimedCount} / 6.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </>
+      )}
+      error={error}
+      footer={(
+        <Button
+          type="button"
+          size="lg"
+          className="mt-6 w-full"
+          disabled={disabled || claimedCount === 0}
+          onClick={() => void handleSubmit()}
+        >
+          {claimedCount === 0
+            ? 'Укажите хотя бы одно свойство'
+            : 'Отправить финальную модель'}
+        </Button>
+      )}
+    >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {signalIds.map((signal) => {
             const cell = model[signal]
@@ -158,25 +170,6 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
             )
           })}
         </div>
-
-        {error && (
-          <Typography role="alert" variant="bodySm" tone="destructive" className="mt-4">
-            {error}
-          </Typography>
-        )}
-
-        <Button
-          type="button"
-          size="lg"
-          className="mt-6 w-full"
-          disabled={disabled || claimedCount === 0}
-          onClick={() => void handleSubmit()}
-        >
-          {claimedCount === 0
-            ? 'Укажите хотя бы одно свойство'
-            : 'Отправить финальную модель'}
-        </Button>
-      </CardContent>
-    </Card>
+    </TenderActionPanel>
   )
 }

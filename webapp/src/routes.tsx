@@ -15,19 +15,19 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: lazyRouteComponent(() => import('./pages'), 'HomePage'),
+  component: lazyRouteComponent(() => import('./home-page'), 'HomePage'),
 })
 
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app',
-  component: lazyRouteComponent(() => import('./features/rooms'), 'MyMatchesPage'),
+  component: lazyRouteComponent(() => import('./features/rooms/public/my-matches'), 'MyMatchesRoute'),
 })
 
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile',
-  component: lazyRouteComponent(() => import('./pages'), 'ProfilePage'),
+  component: lazyRouteComponent(() => import('./features/auth/public/profile'), 'ProfileRoute'),
 })
 
 const roomsRoute = createRoute({
@@ -41,13 +41,13 @@ const roomsRoute = createRoute({
 const roomLobbyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/rooms/$roomId',
-  component: lazyRouteComponent(() => import('./features/rooms'), 'RoomLobbyPage'),
+  component: lazyRouteComponent(() => import('./features/rooms/public/room-lobby'), 'RoomLobbyRoute'),
 })
 
 const tenderRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tenders/$tenderId',
-  component: lazyRouteComponent(() => import('./features/tender'), 'TenderPage'),
+  component: lazyRouteComponent(() => import('./features/tender/public/tender'), 'TenderRoute'),
 })
 
 const routeTree = rootRoute.addChildren([indexRoute, appRoute, profileRoute, roomsRoute, roomLobbyRoute, tenderRoute])

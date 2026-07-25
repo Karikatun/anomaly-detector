@@ -160,6 +160,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [accessToken, meQuery])
 
   const sessionError = bootstrapError ?? (accessToken ? toOptionalError(meQuery.error) : null)
+  const isSessionLoading = isBootstrapping || Boolean(accessToken && meQuery.isPending)
   const transport = useMemo(
     () => ({
       request: api.requestAuthenticated.bind(api),
@@ -170,7 +171,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user: meQuery.data?.user ?? null,
-      isBootstrapping,
+      isBootstrapping: isSessionLoading,
       isAuthenticated: Boolean(meQuery.data?.user),
       sessionError,
       retrySession,
@@ -181,7 +182,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       logout,
       updateProfile,
     }),
-    [isBootstrapping, login, logout, meQuery.data?.user, register, retrySession, sessionError, startOAuth, transport, updateProfile],
+    [isSessionLoading, login, logout, meQuery.data?.user, register, retrySession, sessionError, startOAuth, transport, updateProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

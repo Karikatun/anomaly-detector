@@ -14,7 +14,7 @@ import {
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/platform/i18n'
-import styles from './JoinRoomDialog.module.css'
+import styles from './RoomDialog.module.css'
 
 export function JoinRoomDialog({
   open,

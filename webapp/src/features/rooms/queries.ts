@@ -23,17 +23,19 @@ type RoomMutationsOptions = {
 
 export function useRoomQuery({
   api,
-  enabled,
   roomId,
 }: {
   api: RoomsApi
-  enabled: boolean
   roomId: string
 }) {
+  const queryClient = useQueryClient()
+  const queryKey = roomQueryKeys.byId(roomId)
+
   return useQuery({
-    queryKey: roomQueryKeys.byId(roomId),
-    queryFn: () => api.get(roomId),
-    enabled,
+    queryKey,
+    queryFn: () => queryClient.getQueryData(queryKey)
+      ? api.get(roomId)
+      : api.join(roomId),
     refetchInterval: (query) => query.state.data?.status === 'starting' ? 1_000 : 3_000,
     retry: 1,
   })
@@ -44,17 +46,6 @@ export function useCreateRoomMutation({ api }: RoomMutationsOptions) {
 
   return useMutation({
     mutationFn: (input: CreateRoomRequest) => api.create(input),
-    onSuccess: (room) => {
-      queryClient.setQueryData(roomQueryKeys.byId(room.roomId), room)
-    },
-  })
-}
-
-export function useJoinRoomMutation({ api }: RoomMutationsOptions) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (roomId: string) => api.join(roomId),
     onSuccess: (room) => {
       queryClient.setQueryData(roomQueryKeys.byId(room.roomId), room)
     },

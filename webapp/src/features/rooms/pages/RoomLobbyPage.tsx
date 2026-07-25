@@ -1,80 +1,50 @@
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-import type { RoomView } from '@anomaly-detector/contracts'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
-import { useAuth } from '@/features/auth'
+import { ProtectedPage, useAuth } from '@/features/auth'
+import { useI18n } from '@/platform/i18n'
+
+import { RoomsApi } from '../api'
 import {
-  RoomsApi,
   useCancelRoomStartMutation,
-  useJoinRoomMutation,
   useLeaveRoomMutation,
   useRoomQuery,
   useSetRoomReadyMutation,
   useStartRoomMutation,
-} from '@/features/rooms'
-import { useI18n } from '@/platform/i18n'
-
+} from '../queries'
 import styles from './RoomLobbyPage.module.css'
 
 export function RoomLobbyPage() {
+  return (
+    <ProtectedPage>
+      <RoomLobbyContent />
+    </ProtectedPage>
+  )
+}
+
+function RoomLobbyContent() {
   const { t } = useI18n()
   const { roomId } = useParams({ from: '/rooms/$roomId' })
   const auth = useAuth()
   const navigate = useNavigate()
-  const [room, setRoom] = useState<RoomView | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [now, setNow] = useState(() => Date.now())
-  const initialJoinRequest = useRef<{ roomId: string; promise: Promise<RoomView> } | null>(null)
-
-  useEffect(() => {
-    if (!auth.isBootstrapping && !auth.user) {
-      void navigate({ to: '/', replace: true })
-    }
-  }, [auth.isBootstrapping, auth.user, navigate])
 
   const api = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
-  const { mutateAsync: joinRoom, isPending: isJoining } = useJoinRoomMutation({ api })
   const { mutateAsync: leaveRoom, isPending: isLeaving } = useLeaveRoomMutation({ api })
   const { mutateAsync: setRoomReady, isPending: isSettingReady } = useSetRoomReadyMutation({ api })
   const { mutateAsync: startRoom, isPending: isStarting } = useStartRoomMutation({ api })
   const { mutateAsync: cancelRoomStart, isPending: isCancellingStart } = useCancelRoomStartMutation({ api })
-  const roomQuery = useRoomQuery({ api, enabled: room !== null, roomId })
-  const currentRoom = roomQuery.data ?? room
-
-  useEffect(() => {
-    let cancelled = false
-    const request = initialJoinRequest.current?.roomId === roomId
-      ? initialJoinRequest.current.promise
-      : api.join(roomId)
-    initialJoinRequest.current = { roomId, promise: request }
-
-    void request
-      .then((data) => {
-        if (!cancelled) {
-          setRoom(data)
-          setError(null)
-          setLoading(false)
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : t('lobby.error.loadFailed'))
-          setLoading(false)
-        }
-      })
-
-    return () => { cancelled = true }
-  }, [roomId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const roomQuery = useRoomQuery({ api, roomId })
+  const currentRoom = roomQuery.data
 
   useEffect(() => {
     if (currentRoom?.status !== 'starting') return
-    const interval = setInterval(() => setNow(Date.now()), 250)
+    const interval = setInterval(() => setNow(Date.now()), 1_000)
     return () => clearInterval(interval)
   }, [currentRoom?.status])
 
@@ -103,23 +73,16 @@ export function RoomLobbyPage() {
 
   const runRoomAction = useCallback(async <T,>(
     action: () => Promise<T>,
-    onSuccess: (result: T) => void | Promise<void>,
+    onSuccess?: (result: T) => void | Promise<void>,
   ) => {
-    setError(null)
+    setActionError(null)
     try {
-      await onSuccess(await action())
+      const result = await action()
+      await onSuccess?.(result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
+      setActionError(err instanceof Error ? err.message : t('rooms.create.error.generic'))
     }
   }, [t])
-
-  const handleJoin = useCallback(
-    () => runRoomAction(
-      () => joinRoom(roomId),
-      (nextRoom) => setRoom(nextRoom),
-    ),
-    [joinRoom, roomId, runRoomAction],
-  )
 
   const handleLeave = useCallback(
     () => runRoomAction(
@@ -130,38 +93,32 @@ export function RoomLobbyPage() {
   )
 
   const handleStart = useCallback(
-    () => runRoomAction(
-      () => startRoom(roomId),
-      (nextRoom) => setRoom(nextRoom),
-    ),
+    () => runRoomAction(() => startRoom(roomId)),
     [roomId, runRoomAction, startRoom],
   )
 
   const handleReadyChange = useCallback(
-    (ready: boolean) => runRoomAction(
-      () => setRoomReady({ ready, roomId }),
-      (nextRoom) => setRoom(nextRoom),
-    ),
+    (ready: boolean) => runRoomAction(() => setRoomReady({ ready, roomId })),
     [roomId, runRoomAction, setRoomReady],
   )
 
   const handleCancelStart = useCallback(
-    () => runRoomAction(
-      () => cancelRoomStart(roomId),
-      (nextRoom) => setRoom(nextRoom),
-    ),
+    () => runRoomAction(() => cancelRoomStart(roomId)),
     [cancelRoomStart, roomId, runRoomAction],
   )
 
-  if (loading) {
+  if (roomQuery.isPending) {
     return <main className={styles.loading}><Spinner /></main>
   }
 
   if (!currentRoom) {
+    const loadError = roomQuery.error instanceof Error
+      ? roomQuery.error.message
+      : t('lobby.error.loadFailed')
     return (
       <main className={styles.errorScreen}>
         <Typography variant="h3">{t('lobby.error.notFound')}</Typography>
-        <Typography tone="muted">{error ?? t('lobby.error.notFound.description')}</Typography>
+        <Typography tone="muted">{loadError}</Typography>
         <Button asChild>
           <a href="/"><Typography as="span" variant="control">{t('lobby.button.back')}</Typography></a>
         </Button>
@@ -309,16 +266,6 @@ export function RoomLobbyPage() {
                     {isStarting ? t('lobby.button.starting') : t('lobby.button.start')}
                   </Button>
                 </>
-              ) : !isMember && currentRoom.status === 'waiting' ? (
-                <>
-                  <div className={styles.statusCopy}>
-                    <Typography className={styles.statusTitle}>{t('lobby.waiting.hint', { count: currentRoom.capacity - currentRoom.members.length })}</Typography>
-                    <Typography className={styles.statusHint}>{t('lobby.waiting.description')}</Typography>
-                  </div>
-                  <Button className={styles.joinButton} type="button" disabled={isJoining} onClick={() => void handleJoin()}>
-                    {isJoining ? t('lobby.button.joining') : t('lobby.button.join')}
-                  </Button>
-                </>
               ) : (
                 <div className={styles.statusCopy}>
                   <Typography className={styles.statusTitle}>
@@ -337,7 +284,7 @@ export function RoomLobbyPage() {
                   </Typography>
                 </div>
               )}
-              {error ? <Typography role="alert" className={styles.error}>{error}</Typography> : null}
+              {actionError ? <Typography role="alert" className={styles.error}>{actionError}</Typography> : null}
               {roomQuery.error ? (
                 <div className="grid gap-2">
                   <Typography role="alert" className={styles.error}>

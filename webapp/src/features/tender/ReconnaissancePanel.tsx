@@ -3,11 +3,12 @@ import { useState } from 'react'
 import type { SignalId } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { isSignalId, signalLabelKeys } from './catalog'
+import { TenderActionPanel } from './components/TenderActionPanel'
 import { availableReconnaissanceTargets } from './reconnaissance-targets'
+import { runTenderAction } from './run-tender-action'
 
 type ReconnaissancePanelProps = {
   mySamples: SignalId[]
@@ -49,26 +50,40 @@ export function ReconnaissancePanel({
       target.startsWith('unknown-sector-') ? 'unknown-sector' : target as SignalId
     ))
     if (targets.length === maxSignals) {
-      try {
-        await onConfirm(targets)
+      const succeeded = await runTenderAction(() => onConfirm(targets))
+      if (succeeded) {
         setSelected(new Set())
-      } catch {
-        // The parent owns the visible command error; keep the targets for retry.
       }
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('tender.recon.title')}</CardTitle>
-        <CardDescription>
+    <TenderActionPanel
+      title={t('tender.recon.title')}
+      description={(
+        <>
           {maxSignals === 1
             ? t('tender.recon.description.one')
             : t('tender.recon.description.many')}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </>
+      )}
+      error={error}
+      footer={(
+        <Button
+          type="button"
+          size="lg"
+          className="mt-6 w-full"
+          disabled={disabled || selected.size !== maxSignals}
+          onClick={() => void handleConfirm()}
+        >
+          {selected.size === 0
+            ? maxSignals === 1 ? t('tender.recon.choose.one') : t('tender.recon.choose.many', { count: maxSignals })
+            : selected.size < maxSignals
+              ? t('tender.recon.selected', { selected: selected.size, total: maxSignals })
+              : t('tender.recon.confirm')}
+        </Button>
+      )}
+    >
         {available.length === 0 && (
           <Typography tone="muted">{t('tender.recon.empty')}</Typography>
         )}
@@ -101,27 +116,6 @@ export function ReconnaissancePanel({
             {t('tender.recon.samples', { signals: mySamples.map(signalName).join(', ') })}
           </Typography>
         )}
-
-        {error && (
-          <Typography role="alert" variant="bodySm" tone="destructive" className="mt-4">
-            {error}
-          </Typography>
-        )}
-
-        <Button
-          type="button"
-          size="lg"
-          className="mt-6 w-full"
-          disabled={disabled || selected.size !== maxSignals}
-          onClick={() => void handleConfirm()}
-        >
-          {selected.size === 0
-            ? maxSignals === 1 ? t('tender.recon.choose.one') : t('tender.recon.choose.many', { count: maxSignals })
-            : selected.size < maxSignals
-              ? t('tender.recon.selected', { selected: selected.size, total: maxSignals })
-              : t('tender.recon.confirm')}
-        </Button>
-      </CardContent>
-    </Card>
+    </TenderActionPanel>
   )
 }

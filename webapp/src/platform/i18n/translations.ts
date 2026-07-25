@@ -39,23 +39,10 @@ const ru = {
 
   // App page
   'app.profile.badge': 'Текущий пользователь',
-  'app.profile.title': 'Профиль',
   'app.profile.userId': 'ID пользователя',
-  'app.profile.locale': 'Язык',
   'app.profile.created': 'Создан',
-  'app.profile.locale.ru': 'Русский',
-  'app.profile.locale.en': 'English',
 
-  // Authenticated home
-  'home.badge': 'Корпоративная исследовательская сеть',
-  'home.title': 'Добро пожаловать, {name}',
-  'home.description': 'Соберите команду, исследуйте аномалию и заработайте наибольший Rating за пять раундов Тендера.',
-  'home.start.title': 'Новый Тендер',
-  'home.start.description': 'Создайте приватную комнату и пригласите от одного до трёх коллег.',
-  'home.start.action': 'Открыть комнаты',
-  'home.matches.title': 'Мои матчи',
-  'home.matches.description': 'Вернитесь в активный Тендер или посмотрите завершённые матчи.',
-  'home.matches.action': 'Открыть матчи',
+  // Match history
   'matches.title': 'История матчей',
   'matches.back': 'Назад',
   'matches.loading': 'Загружаем историю...',
@@ -71,9 +58,6 @@ const ru = {
   'matches.status.active': 'Активен',
   'matches.status.complete': 'Завершён',
   'matches.details': 'Детали',
-  'home.rules.title': 'Правила Тендера',
-  'home.rules.description': 'Краткая справка доступна до матча и прямо во время него.',
-
   // Rules reference
   'rules.open': 'Правила',
   'rules.menu': 'ПРАВИЛА ИГРЫ',
@@ -113,8 +97,6 @@ const ru = {
   'error.session.retry': 'Попробовать снова',
 
   // Room list
-  'rooms.title': 'Комнаты тендера',
-  'rooms.description': 'Создайте приватную комнату и пригласите других игроков для начала Тендера.',
   'rooms.create.title': 'Создать команду',
   'rooms.create.description': 'Выберите количество игроков для этого Тендера.',
   'rooms.create.capacity': 'Количество игроков',
@@ -134,13 +116,10 @@ const ru = {
 
   // Room lobby
   'lobby.title': 'Лобби',
-  'lobby.description': 'Поделитесь ID комнаты с другими игроками, чтобы пригласить их.',
   'lobby.room.id': 'ID:',
   'lobby.copyId': 'Скопировать ID',
   'lobby.copied': 'Скопировано!',
   'lobby.players': 'Игроки',
-  'lobby.players.joined': '{count}/{capacity} участников',
-  'lobby.players.inProgress': ' — Тендер идёт',
   'lobby.player.label': 'Игрок {seat}',
   'lobby.player.host': 'Лидер экспедиции',
   'lobby.player.ready': 'Готов',
@@ -149,13 +128,8 @@ const ru = {
   'lobby.player.ready.cancel': 'Отменить готовность',
   'lobby.player.ready.updating': 'Сохраняем...',
   'lobby.player.waiting': 'Ожидание игрока...',
-  'lobby.button.join': 'Войти в комнату',
-  'lobby.button.joining': 'Входим...',
-  'lobby.button.leave': 'Покинуть комнату',
   'lobby.button.exit': 'Выйти',
   'lobby.button.leaving': 'Выходим...',
-  'lobby.button.cancel': 'Выйти из комнаты',
-  'lobby.button.cancelling': 'Отменяем...',
   'lobby.button.start': 'Начать игру',
   'lobby.button.starting': 'Запускаем...',
   'lobby.button.cancelStart': 'Отменить старт',
@@ -309,6 +283,4 @@ const ru = {
 
 export type TranslationKey = keyof typeof ru
 
-export const translations = { ru } as const
-export const defaultLocale = 'ru' as const
-export type Locale = keyof typeof translations
+export const messages = ru

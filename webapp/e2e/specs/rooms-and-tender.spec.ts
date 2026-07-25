@@ -68,6 +68,23 @@ async function submitFinalModel(page: Page) {
   await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
 }
 
+test('restores the authenticated lobby before joining again after a direct reload', async ({ page }) => {
+  await registerBrowserUser(page, 'Хост перезагрузки E2E', 'reload-lobby-host')
+  await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+  await page.getByLabel('Количество игроков').selectOption('2')
+  await page.getByRole('button', { name: 'Создать команду' }).click()
+  await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)
+
+  await page.route('**/api/auth/refresh', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await route.continue()
+  })
+  await page.reload()
+
+  await expect(page.getByRole('heading', { name: 'Лобби' })).toBeVisible()
+  await expect(page.getByText('Комната не найдена')).toBeHidden()
+})
+
 test('requires every lobby player to be ready before enabling the match start', async ({ browser, page }) => {
   let hostJoinRequests = 0
   let hostRoomReads = 0
@@ -93,7 +110,7 @@ test('requires every lobby player to be ready before enabling the match start', 
     await guestPage.getByLabel('ID комнаты').fill(roomId)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
     await expect.poll(() => hostRoomReads).toBeGreaterThan(0)
-    expect(hostJoinRequests).toBe(1)
+    expect(hostJoinRequests).toBe(0)
     await page.route('**/api/rooms/*', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({

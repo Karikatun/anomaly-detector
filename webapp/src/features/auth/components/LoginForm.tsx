@@ -15,12 +15,12 @@ import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Typography } from '@/components/ui/typography'
-import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
 import {
   parseCredentialsForm,
   type CredentialsFormValues,
 } from '../form-validation'
+import { useAuth } from '../use-auth'
 import styles from './AuthForm.module.css'
 
 export function LoginForm() {

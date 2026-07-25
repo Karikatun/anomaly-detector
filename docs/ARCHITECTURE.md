@@ -77,7 +77,7 @@ The webapp follows these client rules:
 - Zod schemas come from `@anomaly-detector/contracts`.
 - `src/platform/api` owns endpoint-agnostic fetch, base URL handling, response parsing, and the shared API error.
 - `src/features/<context>` owns endpoint paths, schemas, server-state adapters, providers, and product UI for that context.
-- Routes and `src/main.tsx` are thin composition files and import features through their public `index.ts`.
+- Routes and `src/main.tsx` are thin composition files and import features through their public `index.ts`. Lazy route components may use explicit `features/<context>/public/*` entry points so unrelated screens do not collapse into one browser chunk.
 - `src/components/ui` and `src/platform` never import product features. Features may use platform code and UI primitives; cross-feature imports must use the target feature's public index.
 
 Auth in `src/features/auth` is the client golden path: its API adapter owns auth endpoints and refresh/retry, its provider exposes only auth behavior, and pages never receive a universal API service locator. Future providers should receive narrow context APIs such as `BillingApi` or `NotificationsApi` from composition.

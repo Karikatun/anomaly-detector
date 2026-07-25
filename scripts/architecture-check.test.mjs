@@ -65,6 +65,20 @@ describe('public module and feature indexes', () => {
       'code outside module auth must import it through its public index',
     )
   })
+
+  test('rejects imports through a feature own public index', () => {
+    const violation = check([
+      file('webapp/src/features/auth/components/LoginForm.tsx', "import { useAuth } from '@/features/auth'"),
+    ])[0]
+
+    expect(violation?.rule).toBe('client-feature-self-import')
+  })
+
+  test('accepts explicit feature public entry points for lazy routes', () => {
+    expect(check([
+      file('webapp/src/routes.tsx', "const page = import('./features/rooms/public/my-matches')"),
+    ])).toEqual([])
+  })
 })
 
 describe('dependency direction', () => {

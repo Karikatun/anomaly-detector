@@ -18,7 +18,7 @@ import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
 import { RoomsApi } from '../api'
 import { useCreateRoomMutation } from '../queries'
-import styles from './JoinRoomDialog.module.css'
+import styles from './RoomDialog.module.css'
 
 export function CreateRoomDialog({
   open,

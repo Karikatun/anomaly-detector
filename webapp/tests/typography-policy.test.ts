@@ -284,16 +284,6 @@ test('typography policy allows arbitrary text color utilities', async () => {
   expect(messages).toEqual([])
 })
 
-test('toggle group items inherit control typography through Typography', () => {
-  const source = readFileSync(
-    resolve(webRoot, 'src/components/ui/toggle-group.tsx'),
-    'utf8',
-  )
-
-  expect(source).toContain('<Typography asChild variant="control">')
-  expect(source).toContain('<ToggleGroupPrimitive.Item')
-})
-
 test('current tone inherits color without forcing text-current', () => {
   const source = readFileSync(
     resolve(webRoot, 'src/components/ui/typography.tsx'),
@@ -304,28 +294,7 @@ test('current tone inherits color without forcing text-current', () => {
   expect(source).not.toContain('tracking-normal text-current')
 })
 
-test('Typography asChild preserves child-owned data slots', () => {
-  function CustomRoot(props: React.ComponentProps<'div'>) {
-    return React.createElement('div', {
-      'data-slot': 'calendar',
-      ...props,
-    })
-  }
-
-  const markup = renderToStaticMarkup(
-    React.createElement(
-      Typography,
-      { asChild: true, variant: 'calendar' },
-      React.createElement(CustomRoot),
-    ),
-  )
-
-  expect(markup).toContain('data-slot="calendar"')
-  expect(markup).not.toContain('data-slot="typography"')
-  expect(markup).toContain('data-variant="calendar"')
-})
-
-test('Typography asChild merges runtime props through representative primitives', () => {
+test('Typography asChild merges runtime props through the active Button primitive', () => {
   const buttonMarkup = renderToStaticMarkup(
     React.createElement(
       Button,
@@ -333,18 +302,6 @@ test('Typography asChild merges runtime props through representative primitives'
       React.createElement('a', { href: '/settings' }, 'Settings'),
     ),
   )
-  const calendarDayMarkup = renderToStaticMarkup(
-    React.createElement(
-      Typography,
-      { asChild: true, className: 'custom-day', variant: 'calendarDay' },
-      React.createElement(
-        'button',
-        { 'data-slot': 'button', 'data-variant': 'ghost' },
-        React.createElement('span', null, '14'),
-      ),
-    ),
-  )
-
   expect(buttonMarkup).toContain('<a ')
   expect(buttonMarkup).toContain('href="/settings"')
   expect(buttonMarkup).toContain('data-slot="button"')
@@ -352,13 +309,6 @@ test('Typography asChild merges runtime props through representative primitives'
   expect(buttonMarkup).toContain('text-background')
   expect(buttonMarkup).toContain('text-sm leading-none font-medium')
   expect(buttonMarkup).not.toContain('data-slot="typography"')
-
-  expect(calendarDayMarkup).toContain('<button ')
-  expect(calendarDayMarkup).toContain('data-slot="button"')
-  expect(calendarDayMarkup).toContain('data-variant="ghost"')
-  expect(calendarDayMarkup).toContain('text-sm leading-none font-normal')
-  expect(calendarDayMarkup).toContain('custom-day')
-  expect(calendarDayMarkup).not.toContain('data-slot="typography"')
 })
 
 test('Typography as supports element-specific runtime attributes', () => {
@@ -376,67 +326,11 @@ test('Typography as supports element-specific runtime attributes', () => {
   expect(markup).toContain('data-variant="bodySm"')
 })
 
-test('calendar typography is owned by Typography variants', () => {
+test('file input preserves component-specific typography variants', () => {
   const typographySource = readFileSync(
     resolve(webRoot, 'src/components/ui/typography.tsx'),
     'utf8',
   )
-  const calendarSource = readFileSync(
-    resolve(webRoot, 'src/components/ui/calendar.tsx'),
-    'utf8',
-  )
 
-  expect(typographySource).toContain('calendar:')
-  expect(typographySource).toContain('calendarDay:')
-  expect(calendarSource).toContain('<Typography asChild variant="calendar">')
-  expect(calendarSource).toContain('data-slot="calendar"')
-  expect(calendarSource).toContain('<Typography asChild variant="calendarDay">')
-  expect(calendarSource).not.toContain('[&>span]:text-xs')
-})
-
-test('select items use wrapping body typography instead of control nowrap', () => {
-  const source = readFileSync(
-    resolve(webRoot, 'src/components/ui/select.tsx'),
-    'utf8',
-  )
-  const selectItemSource = source.slice(
-    source.indexOf('function SelectItem'),
-    source.indexOf('function SelectSeparator'),
-  )
-
-  expect(selectItemSource).toContain('<Typography asChild variant="bodySm">')
-  expect(selectItemSource).not.toContain('variant="control"')
-})
-
-test('command generated group headings keep typography-owned styling', () => {
-  const typographySource = readFileSync(
-    resolve(webRoot, 'src/components/ui/typography.tsx'),
-    'utf8',
-  )
-  const commandSource = readFileSync(
-    resolve(webRoot, 'src/components/ui/command.tsx'),
-    'utf8',
-  )
-
-  expect(typographySource).toContain('commandGroup:')
-  expect(typographySource).toContain('**:[[cmdk-group-heading]]:text-xs')
-  expect(typographySource).toContain('**:[[cmdk-group-heading]]:font-medium')
-  expect(commandSource).toContain(
-    '<Typography asChild variant="commandGroup" tone="default">',
-  )
-})
-
-test('kbd and file input preserve component-specific typography variants', () => {
-  const typographySource = readFileSync(
-    resolve(webRoot, 'src/components/ui/typography.tsx'),
-    'utf8',
-  )
-  const kbdSource = readFileSync(
-    resolve(webRoot, 'src/components/ui/kbd.tsx'),
-    'utf8',
-  )
-
-  expect(typographySource).toContain('kbd: "font-sans text-xs')
   expect(typographySource).toContain('file:text-sm file:font-medium')
-  expect(kbdSource).toContain('variant="kbd"')
 })

@@ -3,7 +3,6 @@ import { useState } from 'react'
 import type { FieldType, Polarity, SignalId } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
@@ -12,6 +11,8 @@ import {
   polarities,
   signalLabelKeys,
 } from './catalog'
+import { TenderActionPanel } from './components/TenderActionPanel'
+import { runTenderAction } from './run-tender-action'
 
 type ModelAnalysisPanelProps = {
   knownSignals: SignalId[]
@@ -37,25 +38,31 @@ export function ModelAnalysisPanel({
 
   const handleSubmit = async () => {
     if (isValid) {
-      try {
-        await onConfirmThesis({ signalId, fieldType, polarity })
+      const succeeded = await runTenderAction(
+        () => onConfirmThesis({ signalId, fieldType, polarity }),
+      )
+      if (succeeded) {
         setFieldType('')
         setPolarity('')
-      } catch {
-        // The parent owns the visible command error; keep the thesis for retry.
       }
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('tender.analysis.title')}</CardTitle>
-        <CardDescription>
+    <TenderActionPanel
+      title={t('tender.analysis.title')}
+      description={(
+        <>
           {t('tender.analysis.description')} {maxTheses > 1 && t('tender.analysis.extended')}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </>
+      )}
+      error={error}
+      footer={(
+        <Button type="button" size="lg" className="mt-6 w-full" disabled={disabled || !isValid} onClick={() => void handleSubmit()}>
+          {t('tender.analysis.submit')}
+        </Button>
+      )}
+    >
         <div className="grid gap-4">
           <div>
             <Typography variant="control" tone="muted" className="mb-1">{t('tender.analysis.signal')}</Typography>
@@ -87,17 +94,6 @@ export function ModelAnalysisPanel({
             </NativeSelect>
           </div>
         </div>
-
-        {error && (
-          <Typography role="alert" variant="bodySm" tone="destructive" className="mt-4">
-            {error}
-          </Typography>
-        )}
-
-        <Button type="button" size="lg" className="mt-6 w-full" disabled={disabled || !isValid} onClick={() => void handleSubmit()}>
-          {t('tender.analysis.submit')}
-        </Button>
-      </CardContent>
-    </Card>
+    </TenderActionPanel>
   )
 }
