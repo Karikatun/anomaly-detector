@@ -826,6 +826,9 @@ export function createTenderModule({
           budget: tender.budgetByPlayer[player.id] ?? 0,
           corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,
           contractPowerRestriction: tender.contractPowerRestrictionsByPlayer[player.id] ?? 0,
+          ...(tender.phase === 'power-allocation'
+            ? { powerAllocationConfirmed: tender.powerAllocations[player.id] !== undefined }
+            : {}),
           ...(tender.phase !== 'access-slot-selection'
             && tender.powerAllocations[player.id]
             && (tender.phase !== 'power-allocation' || player.id === playerId)

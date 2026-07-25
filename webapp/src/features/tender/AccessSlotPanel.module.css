@@ -297,6 +297,8 @@
 }
 
 .confirmed {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   border-color: color-mix(in srgb, var(--success) 48%, transparent);
   background: color-mix(in srgb, var(--success) 9%, rgba(2, 15, 29, .94));
 }
@@ -307,10 +309,13 @@
 
 .confirmed > span {
   display: grid;
+  min-width: 0;
   gap: .2rem;
 }
 
 .confirmedButton {
+  min-width: 0;
+  grid-column: 1 / -1;
   width: 100%;
 }
 
@@ -379,7 +384,12 @@
 
 @media (min-width: 48rem) {
   .panel {
-    gap: 1rem;
+    gap: .75rem;
+  }
+
+  .stationBackdrop {
+    height: 3.5rem;
+    margin-top: -.5rem;
   }
 
   .playerCount {
@@ -437,33 +447,37 @@
 
   .footer {
     position: static;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    padding: .9rem 1.5rem;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: .55rem;
+    padding: .75rem 1rem;
     border: 1px solid rgba(72, 139, 183, .27);
     border-radius: .8rem;
     background: rgba(2, 15, 29, .86);
   }
 
   .confirmButton {
-    min-width: min(50rem, 70vw);
+    width: min(100%, 44rem);
+    min-width: 0;
   }
 
   .lockWarning {
-    grid-column: 2;
-    grid-row: 1;
-    max-width: 16rem;
-    justify-self: end;
-    text-align: left;
+    max-width: none;
+    justify-self: center;
+    text-align: center;
   }
 
   .confirmed {
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
   }
 
   .confirmedButton {
+    grid-column: auto;
+    min-width: 10rem;
     width: auto;
     margin-left: auto;
+    white-space: nowrap;
   }
 }
 
