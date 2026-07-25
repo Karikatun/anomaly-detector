@@ -8,6 +8,7 @@ import { ProtectedPage, useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
 
 import { RoomsApi } from '../api'
+import { getRoomStartCountdownSeconds } from '../countdown'
 import {
   useCancelRoomStartMutation,
   useLeaveRoomMutation,
@@ -44,7 +45,9 @@ function RoomLobbyContent() {
 
   useEffect(() => {
     if (currentRoom?.status !== 'starting') return
-    const interval = setInterval(() => setNow(Date.now()), 1_000)
+    const updateNow = () => setNow(Date.now())
+    updateNow()
+    const interval = setInterval(updateNow, 1_000)
     return () => clearInterval(interval)
   }, [currentRoom?.status])
 
@@ -132,9 +135,7 @@ function RoomLobbyContent() {
   const readyCount = currentRoom.members.filter((member) => member.ready).length
   const allPlayersReady = isFull && readyCount === currentRoom.capacity
   const isCountdown = currentRoom.status === 'starting'
-  const secondsLeft = currentRoom.startsAt
-    ? Math.max(0, Math.ceil((Date.parse(currentRoom.startsAt) - now) / 1_000))
-    : 5
+  const secondsLeft = getRoomStartCountdownSeconds(currentRoom.startsAt, now)
   const canLeave = isMember && currentRoom.status === 'waiting'
 
   return (
