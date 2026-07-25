@@ -83,7 +83,7 @@ maybeDescribe('profile statistics API integration', () => {
           budgetByPlayer: { [guest.id]: 4, [user.id]: 3 },
           players: [{ id: user.id }, { id: guest.id }],
           publicTheses: [{ correct: true, playerId: user.id }],
-          ratingByPlayer: { [guest.id]: 7, [user.id]: 11 },
+          ratingByPlayer: { [user.id]: 11 },
           winnerPlayerIds: [user.id],
         },
         version: 1,

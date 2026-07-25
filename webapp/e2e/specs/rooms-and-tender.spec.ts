@@ -216,6 +216,12 @@ test('two players complete every Tender stage and receive each realtime phase tr
   await registerBrowserUser(page, 'Хост E2E', 'room-host')
   const webOrigin = new URL(page.url()).origin
 
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await expect(
+    page.getByText('Сыграно матчей').locator('..').getByText('0', { exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Назад' }).click()
+
   const guestContext = await browser.newContext({ baseURL: webOrigin })
   const guestPage = await guestContext.newPage()
   try {
