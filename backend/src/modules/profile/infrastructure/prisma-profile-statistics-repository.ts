@@ -75,8 +75,7 @@ export function createPrismaProfileStatisticsRepository(db: DbClient): ProfileSt
           playerIds.size !== state.players.length
           || !playerIds.has(userId)
           || !state.players.every((player) =>
-            state.ratingByPlayer[player.id] !== undefined
-            && state.budgetByPlayer[player.id] !== undefined)
+            state.budgetByPlayer[player.id] !== undefined)
           || state.winnerPlayerIds.length === 0
           || !state.winnerPlayerIds.every((playerId) => playerIds.has(playerId))
           || !state.publicTheses.every((thesis) => playerIds.has(thesis.playerId))
