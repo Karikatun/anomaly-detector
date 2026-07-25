@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { useMemo } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
-import { useAuth } from '@/features/auth'
+import { ProtectedPage, useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
 
 import { RoomsApi } from '../api'
@@ -13,22 +13,23 @@ import { roomQueryKeys } from '../queries'
 import styles from './MyMatchesPage.module.css'
 
 export function MyMatchesPage() {
+  return (
+    <ProtectedPage>
+      <MyMatchesContent />
+    </ProtectedPage>
+  )
+}
+
+function MyMatchesContent() {
   const auth = useAuth()
   const navigate = useNavigate()
   const { t } = useI18n()
-  const api = new RoomsApi(auth.transport)
-
-  useEffect(() => {
-    if (!auth.isBootstrapping && !auth.user) void navigate({ to: '/', replace: true })
-  }, [auth.isBootstrapping, auth.user, navigate])
+  const api = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
 
   const matches = useQuery({
     queryKey: roomQueryKeys.mine(),
     queryFn: () => api.listMatches(),
-    enabled: Boolean(auth.user),
   })
-
-  if (auth.isBootstrapping || !auth.user) return null
 
   return (
     <main className={styles.screen}>
@@ -121,9 +122,11 @@ function formatUuidV7Date(tenderId: string | null | undefined): string {
   const date = new Date(timestamp)
   if (Number.isNaN(date.getTime())) return '—'
 
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date)
+  return matchDateFormatter.format(date)
 }
+
+const matchDateFormatter = new Intl.DateTimeFormat('ru-RU', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+})

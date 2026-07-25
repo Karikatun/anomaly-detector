@@ -12,6 +12,7 @@ test-results/
 webapp/e2e/.artifacts/
 mobile/.expo/
 mobile/.maestro/reports/
+docs/ui/*
 
 # Runtime and logs
 *.log

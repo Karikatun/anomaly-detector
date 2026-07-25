@@ -1,5 +1,5 @@
-import { useParams, useNavigate } from '@tanstack/react-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useParams } from '@tanstack/react-router'
+import { useCallback, useState } from 'react'
 
 import type { TenderView } from '@anomaly-detector/contracts'
 
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
-import { useAuth } from '@/features/auth'
+import { ProtectedPage, useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
 import type { TranslationKey } from '@/platform/i18n/translations'
 import { AccessSlotPanel } from './AccessSlotPanel'
@@ -21,6 +21,8 @@ import { PowerAllocationPanel } from './PowerAllocationPanel'
 import { ReconnaissancePanel } from './ReconnaissancePanel'
 import { TenderTimer } from './TenderTimer'
 import { WorkingModelPanel } from './WorkingModelPanel'
+import { UnavailablePhaseCard } from './components/TenderActionPanel'
+import { TenderPlayers, TenderPublicEvidence } from './components/TenderOverview'
 import {
   fieldTypeLabelKeys,
   isSignalId,
@@ -45,23 +47,6 @@ const phaseLabels: Record<string, string> = {
   'contracts': '6. Контракты',
   'final-scientific-model': '7. Финальная научная модель',
   'complete': 'Завершён',
-}
-
-const laboratoryResultLabels: Record<string, string> = {
-  transmission_gain: 'Усиление',
-  attenuation: 'Ослабление',
-  reflection: 'Отражение',
-  unstable_collapse: 'Нестабильный срыв',
-}
-
-const protocolLabels: Record<string, string> = {
-  impulse: 'Импульсный',
-  continuous: 'Непрерывный',
-}
-
-const verificationLabels: Record<string, string> = {
-  standard: 'Стандартная проверка',
-  extended: 'Расширенная проверка',
 }
 
 const sequentialPhases = new Set([
@@ -145,7 +130,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
           onConfirm={(targets) => onCommand({ type: 'conduct-reconnaissance', targets })}
         />
       ) : (
-        <Card><CardContent className="py-8"><Typography tone="muted">Вы не выделили мощность на разведку.</Typography></CardContent></Card>
+        <UnavailablePhaseCard>Вы не выделили мощность на разведку.</UnavailablePhaseCard>
       )
     }
 
@@ -160,7 +145,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
           onConfirm={(input) => onCommand({ type: 'run-laboratory-test', ...input })}
         />
       ) : (
-        <Card><CardContent className="py-8"><Typography tone="muted">Вы не выделили мощность на лабораторию.</Typography></CardContent></Card>
+        <UnavailablePhaseCard>Вы не выделили мощность на лабораторию.</UnavailablePhaseCard>
       )
     }
 
@@ -175,7 +160,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
           onConfirmThesis={(input) => onCommand({ type: 'submit-thesis', ...input })}
         />
       ) : (
-        <Card><CardContent className="py-8"><Typography tone="muted">Вы не выделили мощность на анализ модели.</Typography></CardContent></Card>
+        <UnavailablePhaseCard>Вы не выделили мощность на анализ модели.</UnavailablePhaseCard>
       )
     }
 
@@ -199,7 +184,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
           }
         />
       ) : (
-        <Card><CardContent className="py-8"><Typography tone="muted">Нет доступной мощности для контрактов.</Typography></CardContent></Card>
+        <UnavailablePhaseCard>Нет доступной мощности для контрактов.</UnavailablePhaseCard>
       )
     }
 
@@ -283,16 +268,17 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
 }
 
 export function TenderPage() {
+  return (
+    <ProtectedPage>
+      <TenderContent />
+    </ProtectedPage>
+  )
+}
+
+function TenderContent() {
   const { tenderId } = useParams({ strict: false }) as { tenderId: string }
   const auth = useAuth()
   const { t } = useI18n()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!auth.isBootstrapping && !auth.user) {
-      void navigate({ to: '/', replace: true })
-    }
-  }, [auth.isBootstrapping, auth.user, navigate])
 
   const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
   const { execute } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
@@ -430,90 +416,15 @@ export function TenderPage() {
           />
         </div>
 
-        {/* Right sidebar: players */}
-        <div className="grid gap-3 self-start">
-          <Typography variant="control" tone="muted">Игроки</Typography>
-          {tenderView.players
-            .slice()
-            .sort((a, b) => (a.accessSlot ?? 99) - (b.accessSlot ?? 99))
-            .map((player) => (
-              <Card
-                key={player.playerId}
-                size="sm"
-                className={player.playerId === auth.user?.id ? 'ring-2 ring-primary' : ''}
-              >
-                <CardContent className="grid gap-1 py-3">
-                  <div className="flex items-center gap-2">
-                    <Typography variant="bodySmMedium">
-                      Слот {player.accessSlot ?? '?'}
-                    </Typography>
-                    <Typography variant="control" tone="muted">
-                      {player.displayName ?? player.playerId.slice(0, 8)}
-                    </Typography>
-                    {player.playerId === tenderView.activePlayerId && (
-                      <Badge variant="outline" className="ml-auto">Действует</Badge>
-                    )}
-                  </div>
-                  <Typography variant="control" tone="muted">
-                    Рейтинг: {player.rating} · Бюджет: {player.budget}
-                  </Typography>
-                  {player.powerAllocation && (
-                    <Typography variant="control" tone="muted">
-                      Р: {player.powerAllocation.reconnaissance}{' '}
-                      Л: {player.powerAllocation.laboratory}{' '}
-                      М: {player.powerAllocation.modelAnalysis}{' '}
-                      К: {player.powerAllocation.contracts}
-                    </Typography>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-        </div>
+        <TenderPlayers
+          activePlayerId={tenderView.activePlayerId}
+          currentUserId={auth.user?.id}
+          players={tenderView.players}
+        />
       </div>
 
       <Separator />
-
-      {/* Public lab results */}
-      {tenderView.publicLaboratoryResults.length > 0 && (
-        <div className="grid gap-2">
-          <Typography variant="control" tone="muted">Результаты лаборатории</Typography>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {tenderView.publicLaboratoryResults.map((r, i) => (
-              <Card key={i} size="sm">
-                <CardContent className="py-3">
-                  <Typography variant="bodySmMedium">
-                    {t(signalLabelKeys[r.sourceSignal])} → {t(signalLabelKeys[r.receiverSignal])}
-                  </Typography>
-                  <Typography variant="control" tone="muted">
-                    {laboratoryResultLabels[r.publicResult] ?? r.publicResult} ({protocolLabels[r.protocol] ?? r.protocol})
-                  </Typography>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Public theses */}
-      {tenderView.publicTheses.length > 0 && (
-        <div className="grid gap-2">
-          <Typography variant="control" tone="muted">Публичные тезисы</Typography>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {tenderView.publicTheses.map((thesis, i) => (
-              <Card key={i} size="sm" className={thesis.correct ? 'border-green-500/50' : 'border-red-500/50'}>
-                <CardContent className="py-3">
-                  <Typography variant="bodySmMedium">
-                    {t(signalLabelKeys[thesis.signalId])}: {t(fieldTypeLabelKeys[thesis.fieldType])} / {t(polarityLabelKeys[thesis.polarity])}
-                  </Typography>
-                  <Typography variant="control" tone={thesis.correct ? 'default' : 'destructive'}>
-                    {thesis.correct ? 'Верно' : 'Неверно'} · {verificationLabels[thesis.verification] ?? thesis.verification}
-                  </Typography>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
+      <TenderPublicEvidence view={tenderView} />
 
       {/* Working Model */}
       <Separator />

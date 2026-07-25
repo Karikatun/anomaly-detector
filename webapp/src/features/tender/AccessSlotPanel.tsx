@@ -1,9 +1,10 @@
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
+import { TenderActionPanel } from './components/TenderActionPanel'
+import { runTenderAction } from './run-tender-action'
 
 const accessSlots = [
   { slot: 1, labelKey: 'tender.access.slot.emergency', termsKey: 'tender.access.cost.emergency' },
@@ -35,12 +36,26 @@ export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm, tie
     .join(' → ')
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('tender.access.title')}</CardTitle>
-        <CardDescription>{t('tender.access.description')}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <TenderActionPanel
+      title={t('tender.access.title')}
+      description={t('tender.access.description')}
+      error={error}
+      footer={(
+        <Button
+          type="button"
+          size="lg"
+          className="mt-6 w-full"
+          disabled={disabled || isConfirmed || selected === null}
+          onClick={() => void (async () => {
+            if (selected === null) return
+            const succeeded = await runTenderAction(() => onConfirm(selected))
+            if (succeeded) setSelected(null)
+          })()}
+        >
+          {isConfirmed ? t('tender.access.confirmed.button') : t('tender.access.confirm')}
+        </Button>
+      )}
+    >
         {tiePriorityPlayers && (
           <Typography variant="bodySm" tone="muted" className="mb-4">
             {t('tender.access.tiePriority', { players: tiePriorityPlayers })}
@@ -86,32 +101,6 @@ export function AccessSlotPanel({ confirmedSlot, disabled, error, onConfirm, tie
             })}
           </Typography>
         )}
-
-        {error && (
-          <Typography role="alert" variant="bodySm" tone="destructive" className="mt-4">
-            {error}
-          </Typography>
-        )}
-
-        <Button
-          type="button"
-          size="lg"
-          className="mt-6 w-full"
-          disabled={disabled || isConfirmed || selected === null}
-          onClick={() => void (async () => {
-            if (selected !== null) {
-              try {
-                await onConfirm(selected)
-                setSelected(null)
-              } catch {
-                // The parent owns the visible command error; keep the choice for retry.
-              }
-            }
-          })()}
-        >
-          {isConfirmed ? t('tender.access.confirmed.button') : t('tender.access.confirm')}
-        </Button>
-      </CardContent>
-    </Card>
+    </TenderActionPanel>
   )
 }

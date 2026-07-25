@@ -41,10 +41,9 @@
 .statusTitle { color: #72e49e; font-size: clamp(.98rem, 1.4vw, 1.18rem); letter-spacing: -.02em; }
 .startPanel[data-state='waiting'] .statusTitle { color: #b7d7ed; }
 .statusHint { color: #91a8bd; font-size: .84rem; line-height: 1.35; }
-.startButton, .joinButton { min-width: 10.5rem; border: 1px solid #4ce397 !important; border-radius: 6px !important; color: #62eaa6 !important; background: rgba(3, 27, 23, .9) !important; box-shadow: inset 0 0 18px rgba(25, 161, 103, .12); }
-.startButton:hover:not(:disabled), .joinButton:hover:not(:disabled) { background: rgba(8, 57, 43, .96) !important; }
+.startButton { min-width: 10.5rem; border: 1px solid #4ce397 !important; border-radius: 6px !important; color: #62eaa6 !important; background: rgba(3, 27, 23, .9) !important; box-shadow: inset 0 0 18px rgba(25, 161, 103, .12); }
+.startButton:hover:not(:disabled) { background: rgba(8, 57, 43, .96) !important; }
 .startButton:disabled { border-color: rgba(70, 126, 105, .5) !important; color: rgba(112, 171, 144, .55) !important; background: rgba(5, 21, 20, .72) !important; }
-.joinButton { border-color: #35b6d7 !important; color: #74e5f3 !important; background: rgba(3, 26, 34, .9) !important; }
 .cancelStartButton { min-width: 10.5rem; border: 1px solid rgba(235, 132, 132, .8) !important; border-radius: 6px !important; color: #ffadad !important; background: rgba(49, 10, 15, .72) !important; }
 .cancelStartButton:hover:not(:disabled) { background: rgba(85, 16, 23, .86) !important; }
 .error { grid-column: 2 / -1; color: #ff98a0; font-size: .78rem; }
@@ -75,6 +74,6 @@
 
 @media (max-width: 520px) {
   .startPanel { grid-template-columns: auto minmax(0, 1fr); }
-  .startButton, .joinButton, .cancelStartButton { grid-column: 1 / -1; width: 100%; }
+  .startButton, .cancelStartButton { grid-column: 1 / -1; width: 100%; }
   .error { grid-column: 1 / -1; }
 }

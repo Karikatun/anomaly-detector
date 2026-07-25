@@ -3,10 +3,11 @@ import { useState } from 'react'
 import type { LaboratoryProtocol, SignalId } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { signalLabelKeys } from './catalog'
+import { TenderActionPanel } from './components/TenderActionPanel'
+import { runTenderAction } from './run-tender-action'
 
 type LaboratoryPanelProps = {
   mySamples: SignalId[]
@@ -26,25 +27,27 @@ export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, o
 
   const handleTest = async () => {
     if (isValid) {
-      try {
-        await onConfirm({ sourceSignal: source, receiverSignal: receiver, protocol })
+      const succeeded = await runTenderAction(
+        () => onConfirm({ sourceSignal: source, receiverSignal: receiver, protocol }),
+      )
+      if (succeeded) {
         setSource(null)
         setReceiver(null)
-      } catch {
-        // The parent owns the visible command error; keep the test for retry.
       }
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('tender.lab.title')}</CardTitle>
-        <CardDescription>
-          {t('tender.lab.description', { protocol: t(`tender.lab.protocol.${protocol}`) })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <TenderActionPanel
+      title={t('tender.lab.title')}
+      description={t('tender.lab.description', { protocol: t(`tender.lab.protocol.${protocol}`) })}
+      error={error}
+      footer={(
+        <Button type="button" size="lg" className="mt-6 w-full" disabled={disabled || !isValid} onClick={() => void handleTest()}>
+          {t('tender.lab.confirm')}
+        </Button>
+      )}
+    >
         {/* Source */}
         <Typography variant="control" tone="muted" className="mb-2">{t('tender.lab.source')}</Typography>
         <div className="mb-4 grid grid-cols-3 gap-2">
@@ -81,16 +84,6 @@ export function LaboratoryPanel({ mySamples, powerAllocation, disabled, error, o
           ))}
         </div>
 
-        {error && (
-          <Typography role="alert" variant="bodySm" tone="destructive" className="mb-4">
-            {error}
-          </Typography>
-        )}
-
-        <Button type="button" size="lg" className="w-full" disabled={disabled || !isValid} onClick={() => void handleTest()}>
-          {t('tender.lab.confirm')}
-        </Button>
-      </CardContent>
-    </Card>
+    </TenderActionPanel>
   )
 }

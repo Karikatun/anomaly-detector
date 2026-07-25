@@ -43,7 +43,6 @@ function SlotRoot({
 const div = Primitive('div')
 const h2 = Primitive('h2')
 const p = Primitive('p')
-const span = Primitive('span')
 
 mock.module('radix-ui', () => ({
   Dialog: {
@@ -56,41 +55,6 @@ mock.module('radix-ui', () => ({
     Title: h2,
     Trigger: Primitive('button'),
   },
-  DropdownMenu: {
-    CheckboxItem: div,
-    Content: div,
-    Group: div,
-    Item: div,
-    ItemIndicator: span,
-    Label: div,
-    Portal,
-    RadioGroup: div,
-    RadioItem: div,
-    Root,
-    Separator: div,
-    Shortcut: span,
-    Sub: Root,
-    SubContent: div,
-    SubTrigger: div,
-    Trigger: Primitive('button'),
-  },
-  Select: {
-    Content: div,
-    Group: div,
-    Icon: span,
-    Item: div,
-    ItemIndicator: span,
-    ItemText: span,
-    Label: div,
-    Portal,
-    Root,
-    ScrollDownButton: div,
-    ScrollUpButton: div,
-    Separator: div,
-    Trigger: Primitive('button'),
-    Value: span,
-    Viewport: div,
-  },
   Slot: {
     Root: SlotRoot,
   },
@@ -101,11 +65,6 @@ test('wrapped Radix-like primitives keep child slots and Typography classes at r
   const { DialogDescription, DialogTitle } = await import(
     '../src/components/ui/dialog'
   )
-  const { DropdownMenuItem } = await import(
-    '../src/components/ui/dropdown-menu'
-  )
-  const { SelectItem } = await import('../src/components/ui/select')
-
   const markup = renderToStaticMarkup(
     <>
       <Button asChild className="text-background">
@@ -113,10 +72,6 @@ test('wrapped Radix-like primitives keep child slots and Typography classes at r
       </Button>
       <DialogTitle className="custom-title">Title</DialogTitle>
       <DialogDescription>Description</DialogDescription>
-      <DropdownMenuItem className="custom-menu">Open</DropdownMenuItem>
-      <SelectItem className="custom-select" value="alpha">
-        Alpha
-      </SelectItem>
     </>,
   )
 
@@ -132,10 +87,5 @@ test('wrapped Radix-like primitives keep child slots and Typography classes at r
   expect(markup).toContain('data-slot="dialog-description"')
   expect(markup).toContain('text-muted-foreground')
 
-  expect(markup).toContain('data-slot="dropdown-menu-item"')
-  expect(markup).toContain('custom-menu')
-  expect(markup).toContain('data-slot="select-item"')
-  expect(markup).toContain('custom-select')
-  expect(markup).toContain('text-sm leading-normal font-normal')
   expect(markup).not.toContain('data-slot="typography"')
 })

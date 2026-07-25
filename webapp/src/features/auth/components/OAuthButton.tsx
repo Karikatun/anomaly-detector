@@ -3,8 +3,8 @@ import { useCallback, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Typography } from '@/components/ui/typography'
-import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
+import { useAuth } from '../use-auth'
 
 type OAuthButtonProps = {
   provider: 'yandex' | 'vk'

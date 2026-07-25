@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
+import { TenderActionPanel } from './components/TenderActionPanel'
+import { runTenderAction } from './run-tender-action'
 
 const categories = [
   { key: 'reconnaissance' as const, limit: 2, labelKey: 'tender.power.category.reconnaissance', oneEffectKey: 'tender.power.reconnaissance.one', twoEffectKey: 'tender.power.reconnaissance.two' },
@@ -55,14 +56,22 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('tender.power.title')}</CardTitle>
-        <CardDescription>
-          {t('tender.power.description', { total })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <TenderActionPanel
+      title={t('tender.power.title')}
+      description={t('tender.power.description', { total })}
+      error={error}
+      footer={(
+        <Button
+          type="button"
+          size="lg"
+          className="mt-6 w-full"
+          disabled={disabled || !isValid}
+          onClick={() => void runTenderAction(() => onConfirm(allocation))}
+        >
+          {isValid ? t('tender.power.confirm') : t('tender.power.remaining', { count: 4 - total })}
+        </Button>
+      )}
+    >
         <div className="grid gap-4">
           {categories.map(({ key, limit, labelKey, oneEffectKey, twoEffectKey }) => {
             const label = t(labelKey)
@@ -116,31 +125,6 @@ export function PowerAllocationPanel({ disabled, error, onConfirm }: PowerAlloca
             )
           })}
         </div>
-
-        {error && (
-          <Typography role="alert" variant="bodySm" tone="destructive" className="mt-4">
-            {error}
-          </Typography>
-        )}
-
-        <Button
-          type="button"
-          size="lg"
-          className="mt-6 w-full"
-          disabled={disabled || !isValid}
-          onClick={() => void (async () => {
-            if (isValid) {
-              try {
-                await onConfirm(allocation)
-              } catch {
-                // The parent owns the visible command error; keep the allocation for retry.
-              }
-            }
-          })()}
-        >
-          {isValid ? t('tender.power.confirm') : t('tender.power.remaining', { count: 4 - total })}
-        </Button>
-      </CardContent>
-    </Card>
+    </TenderActionPanel>
   )
 }

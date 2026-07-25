@@ -165,7 +165,26 @@ function checkClientBoundary(filePath, specifier, report) {
 
   const sourceFeature = filePath.match(new RegExp(`^${client}/src/features/([^/]+)/`))?.[1]
   const targetFeature = target.match(new RegExp(`^${client}/src/features/([^/]+)(?:/(.*))?$`))
-  if (targetFeature && targetFeature[2] && targetFeature[2] !== 'index' && targetFeature[2] !== 'index.ts') {
+  const targetFeaturePath = targetFeature?.[2]
+  const importsOwnPublicIndex =
+    sourceFeature &&
+    targetFeature?.[1] === sourceFeature &&
+    (!targetFeaturePath || targetFeaturePath === 'index' || targetFeaturePath === 'index.ts')
+  if (importsOwnPublicIndex) {
+    report(
+      'client-feature-self-import',
+      `feature ${sourceFeature} must use relative imports internally instead of its own public index (${specifier}).`,
+    )
+  }
+
+  const isExplicitPublicEntry = targetFeaturePath?.startsWith('public/')
+  if (
+    targetFeature &&
+    targetFeature[2] &&
+    targetFeature[2] !== 'index' &&
+    targetFeature[2] !== 'index.ts' &&
+    !isExplicitPublicEntry
+  ) {
     const crossesPublicBoundary = !sourceFeature || targetFeature[1] !== sourceFeature
     if (crossesPublicBoundary) {
       report(
