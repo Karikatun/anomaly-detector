@@ -166,6 +166,7 @@ test('requires every lobby player to be ready before enabling the match start', 
     rejectStart = false
     await startButton.click()
     await expect(page.getByText('Старт временно недоступен')).toBeHidden()
+    await expect(page.getByText('Старт через 5 сек.')).toBeVisible()
     await page.getByRole('button', { name: 'Отменить старт' }).click()
   } finally {
     await guestContext.close()
