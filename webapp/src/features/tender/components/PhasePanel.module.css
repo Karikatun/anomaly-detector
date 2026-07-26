@@ -441,6 +441,58 @@
   gap: .08rem;
 }
 
+.laboratoryActions {
+  display: grid;
+  min-width: 0;
+  gap: .55rem;
+  margin-top: .6rem;
+}
+
+.privateMeasurement {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: .45rem;
+  padding: .6rem;
+  border: 1px solid rgba(40, 197, 181, .42);
+  border-radius: .5rem;
+  background: rgba(4, 34, 40, .42);
+}
+
+.privateMeasurementHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .35rem;
+  color: #42d9ca;
+  text-transform: uppercase;
+}
+
+.privateMeasurementHeader > :last-child {
+  margin-left: auto;
+  text-transform: none;
+}
+
+.privateMeasurementResult {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .45rem;
+}
+
+.privateMeasurementResult .signalGlyph {
+  width: 2.35rem;
+  height: 2.35rem;
+  flex: none;
+}
+
+.laboratoryActionButton {
+  width: 100%;
+  min-height: 3.25rem;
+  border-radius: .5rem;
+  box-shadow: 0 .5rem 1.4rem rgba(13, 126, 255, .2);
+}
+
 .formGrid {
   display: grid;
   min-width: 0;
@@ -816,6 +868,14 @@
     gap: .85rem;
   }
 
+  .laboratorySplit {
+    grid-template-columns: minmax(16rem, .65fr) minmax(22rem, 1fr);
+  }
+
+  .laboratoryActions {
+    grid-template-columns: minmax(0, .75fr) minmax(17rem, 1.25fr);
+  }
+
   .signalGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: .7rem;
@@ -952,5 +1012,17 @@
     grid-column: 2;
     width: fit-content;
     min-width: 13rem;
+  }
+}
+
+@media (min-width: 64rem) and (max-width: 74.99rem) {
+  .laboratorySplit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 75rem) {
+  .laboratorySplit {
+    grid-template-columns: minmax(18rem, .7fr) minmax(27rem, 1fr);
   }
 }

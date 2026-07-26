@@ -1,9 +1,9 @@
-import { InformationCircleIcon, TestTube01Icon } from '@hugeicons/core-free-icons'
+import { InformationCircleIcon, LockIcon, TestTube01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
 import { useState } from 'react'
 
-import type { LaboratoryProtocol, SignalId } from '@anomaly-detector/contracts'
+import type { LaboratoryProtocol, SignalId, TenderView } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
@@ -16,6 +16,7 @@ import { runTenderAction } from './run-tender-action'
 
 type LaboratoryPanelProps = {
   mySamples: SignalId[]
+  privateMeasurements: TenderView['privateMeasurements']
   powerAllocation: number
   disabled?: boolean
   error?: string | null
@@ -28,6 +29,7 @@ const signalStyle = (signal?: SignalId) => ({
 
 export function LaboratoryPanel({
   mySamples,
+  privateMeasurements,
   powerAllocation,
   disabled,
   error,
@@ -39,6 +41,7 @@ export function LaboratoryPanel({
   const isValid = source !== null && receiver !== null && source !== receiver
   const { t } = useI18n()
   const signalName = (signal: SignalId) => t(signalLabelKeys[signal])
+  const latestMeasurement = privateMeasurements.at(-1)
 
   const handleTest = async () => {
     if (!isValid) return
@@ -53,7 +56,7 @@ export function LaboratoryPanel({
 
   return (
     <section className={styles.panel} aria-labelledby="laboratory-heading">
-      <div className={styles.split}>
+      <div className={`${styles.split} ${styles.laboratorySplit}`}>
         <section className={styles.surface}>
           <div className={styles.sectionHeader}>
             <Typography id="laboratory-heading" as="h2" variant="bodySmMedium" className={styles.sectionTitle}>
@@ -136,26 +139,48 @@ export function LaboratoryPanel({
               </Typography>
             </span>
           </div>
+
+          <div className={styles.laboratoryActions}>
+            <div className={styles.privateMeasurement}>
+              <span className={styles.privateMeasurementHeader}>
+                <HugeiconsIcon icon={LockIcon} strokeWidth={1.7} aria-hidden="true" />
+                <Typography as="strong" variant="caption">Личное измерение</Typography>
+                <Typography as="span" variant="caption" tone="muted">Видите только вы</Typography>
+              </span>
+              {latestMeasurement ? (
+                <span className={styles.privateMeasurementResult}>
+                  <SignalGlyph signal={latestMeasurement.sourceSignal} className={styles.signalGlyph} />
+                  <span>
+                    <Typography variant="caption" tone="muted">
+                      {signalName(latestMeasurement.sourceSignal)} относительно {signalName(latestMeasurement.receiverSignal)}
+                    </Typography>
+                    <Typography variant="bodySmMedium" className={styles.sectionMeta}>
+                      {latestMeasurement.polarityRelation === 'same' ? 'одинаковая полярность' : 'противоположная полярность'}
+                    </Typography>
+                  </span>
+                </span>
+              ) : (
+                <Typography variant="caption" tone="muted">Появится после первого проведённого опыта.</Typography>
+              )}
+            </div>
+
+            <Button
+              type="button"
+              size="lg"
+              className={styles.laboratoryActionButton}
+              disabled={disabled || !isValid}
+              onClick={() => void handleTest()}
+            >
+              <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
+              {source && receiver
+                ? `Провести опыт: ${signalName(source)} → ${signalName(receiver)}`
+                : t('tender.lab.confirm')}
+            </Button>
+          </div>
         </section>
       </div>
 
       {error && <div className={styles.error} role="alert"><Typography variant="bodySm">{error}</Typography></div>}
-
-      <footer className={styles.footer}>
-        <div className={styles.info}>
-          <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-          <Typography variant="bodySm">Результат опыта станет публичным.</Typography>
-        </div>
-        <Button
-          type="button"
-          size="lg"
-          className={styles.actionButton}
-          disabled={disabled || !isValid}
-          onClick={() => void handleTest()}
-        >
-          {t('tender.lab.confirm')}
-        </Button>
-      </footer>
     </section>
   )
 }

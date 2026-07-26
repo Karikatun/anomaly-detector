@@ -1,0 +1,221 @@
+.panel {
+  display: grid;
+  min-width: 0;
+  gap: .55rem;
+}
+
+.table {
+  overflow: hidden;
+  border: 1px solid rgba(67, 132, 174, .32);
+  border-radius: .58rem;
+  background: rgba(1, 13, 27, .82);
+}
+
+.tableHeader {
+  display: none;
+}
+
+.row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: .38rem;
+  padding: .45rem;
+  border-bottom: 1px solid rgba(70, 128, 164, .22);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.row[data-unknown] {
+  opacity: .42;
+}
+
+.signal {
+  display: flex;
+  min-width: 0;
+  grid-row: 1 / span 2;
+  align-items: center;
+  gap: .35rem;
+}
+
+.signal svg {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+}
+
+.signal strong {
+  overflow: hidden;
+  font-size: .7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segmented {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(69, 126, 163, .34);
+  border-radius: .4rem;
+}
+
+.segmented[data-options='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.segmented button {
+  min-width: 0;
+  min-height: 1.85rem;
+  padding: .15rem .2rem;
+  border: 0;
+  border-right: 1px solid rgba(69, 126, 163, .24);
+  color: rgba(215, 231, 241, .58);
+  background: rgba(4, 18, 31, .8);
+}
+
+.segmented button:last-child {
+  border-right: 0;
+}
+
+.segmented button[data-selected] {
+  color: var(--primary);
+  background: rgba(17, 117, 178, .2);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.segmented button span {
+  overflow: hidden;
+  font-size: .57rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advancedToggle {
+  min-height: 1.85rem;
+  grid-column: 1;
+  border: 1px solid rgba(69, 126, 163, .32);
+  border-radius: .4rem;
+  color: rgba(215, 231, 241, .54);
+  background: rgba(4, 18, 31, .78);
+  font-size: .58rem;
+}
+
+.advancedToggle[aria-expanded='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.advanced {
+  display: none;
+  min-width: 0;
+  grid-column: 1 / -1;
+  gap: .55rem;
+  padding: .55rem;
+  border: 1px solid rgba(69, 126, 163, .28);
+  border-radius: .45rem;
+  background: rgba(2, 15, 27, .88);
+}
+
+.advanced[data-open] {
+  display: grid;
+}
+
+.markerGroup {
+  display: grid;
+  min-width: 0;
+  gap: .28rem;
+}
+
+.markerButtons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .25rem;
+}
+
+.markerButtons[data-options='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.markerButtons button {
+  min-height: 1.8rem;
+  border: 1px solid transparent;
+  border-radius: .35rem;
+  color: rgba(215, 231, 241, .54);
+  background: rgba(72, 91, 110, .18);
+}
+
+.markerButtons button[data-marker-state='possible'] {
+  border-color: rgba(76, 203, 117, .52);
+  color: #69d78c;
+  background: rgba(37, 152, 77, .14);
+}
+
+.markerButtons button[data-marker-state='excluded'] {
+  border-color: rgba(235, 83, 83, .52);
+  color: #ff7676;
+  background: rgba(181, 48, 48, .14);
+  text-decoration: line-through;
+}
+
+.note {
+  width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  padding: .35rem .5rem;
+  border: 1px solid rgba(69, 126, 163, .34);
+  border-radius: .38rem;
+  outline: none;
+  color: rgba(224, 237, 245, .78);
+  background: rgba(2, 14, 26, .78);
+  font-size: .7rem;
+}
+
+.note:focus {
+  border-color: var(--primary);
+}
+
+@media (min-width: 48rem) {
+  .tableHeader {
+    display: grid;
+    grid-template-columns: minmax(8rem, .62fr) minmax(19rem, 1.35fr) minmax(14rem, 1fr) 5rem;
+    gap: .55rem;
+    padding: .55rem .65rem;
+    border-bottom: 1px solid rgba(70, 128, 164, .26);
+    color: rgba(194, 214, 227, .48);
+    text-transform: uppercase;
+  }
+
+  .row {
+    grid-template-columns: minmax(8rem, .62fr) minmax(19rem, 1.35fr) minmax(14rem, 1fr) 5rem;
+    gap: .55rem;
+    padding: .48rem .65rem;
+  }
+
+  .signal {
+    grid-row: auto;
+  }
+
+  .signal strong {
+    font-size: .78rem;
+  }
+
+  .segmented button {
+    min-height: 2rem;
+  }
+
+  .segmented button span {
+    font-size: .65rem;
+  }
+
+  .advancedToggle {
+    grid-column: auto;
+  }
+
+  .advanced {
+    grid-template-columns: minmax(0, 1fr) minmax(0, .7fr) minmax(12rem, 1fr);
+  }
+}

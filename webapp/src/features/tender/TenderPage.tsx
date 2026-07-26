@@ -27,7 +27,11 @@ import { TenderTimer } from './TenderTimer'
 import { WorkingModelPanel } from './WorkingModelPanel'
 import { ReconnectOverlay } from './components/ReconnectOverlay'
 import { UnavailablePhaseCard } from './components/TenderActionPanel'
-import { TenderEvidence, TenderPlayers } from './components/TenderOverview'
+import {
+  TenderEvidence,
+  TenderLaboratoryJournal,
+  TenderPlayers,
+} from './components/TenderOverview'
 import {
   fieldTypeLabelKeys,
   isSignalId,
@@ -149,6 +153,7 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
       return labPower > 0 ? (
         <LaboratoryPanel
           mySamples={mySamples}
+          privateMeasurements={view.privateMeasurements}
           powerAllocation={labPower}
           disabled={disabled}
           error={error}
@@ -363,6 +368,7 @@ function TenderContent() {
   const isMyTurn = !isSequentialPhase || tenderView.activePlayerId === auth.user?.id
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
   const isPowerAllocation = tenderView.phase === 'power-allocation'
+  const isLaboratoryPhase = tenderView.phase === 'laboratory'
   const isPlanningPhase = isAccessSlotSelection || isPowerAllocation
 
   return (
@@ -432,7 +438,16 @@ function TenderContent() {
             activePlayerId={tenderView.activePlayerId}
           />
 
-          {!isPlanningPhase && (
+          {isLaboratoryPhase && (
+            <div className="lg:hidden">
+              <TenderLaboratoryJournal
+                players={tenderView.players}
+                results={tenderView.publicLaboratoryResults}
+              />
+            </div>
+          )}
+
+          {!isPlanningPhase && !isLaboratoryPhase && (
             <div className="grid gap-2">
               <details className="rounded-lg border border-border/70 bg-card/80 px-3 py-2">
                 <summary className="cursor-pointer list-none">
@@ -472,12 +487,18 @@ function TenderContent() {
         </div>
 
         {!isPlanningPhase && (
-          <aside className="hidden lg:block">
+          <aside className="hidden self-start gap-4 lg:grid">
             <TenderPlayers
               activePlayerId={tenderView.activePlayerId}
               currentUserId={auth.user?.id}
               players={tenderView.players}
             />
+            {isLaboratoryPhase && (
+              <TenderLaboratoryJournal
+                players={tenderView.players}
+                results={tenderView.publicLaboratoryResults}
+              />
+            )}
           </aside>
         )}
       </div>

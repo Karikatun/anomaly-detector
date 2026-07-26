@@ -1,0 +1,159 @@
+.playersPanel {
+  display: grid;
+  min-width: 0;
+  gap: .55rem;
+  padding: .7rem;
+  border: 1px solid rgba(65, 127, 169, .3);
+  border-radius: .68rem;
+  background:
+    radial-gradient(circle at 0 0, rgba(31, 157, 218, .06), transparent 44%),
+    rgba(1, 13, 27, .88);
+}
+
+.playersTitle {
+  color: rgba(220, 235, 245, .72);
+  font-size: .72rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.playerList {
+  overflow: hidden;
+  border: 1px solid rgba(72, 132, 170, .34);
+  border-radius: .46rem;
+  background: rgba(2, 16, 29, .72);
+}
+
+.playerRow {
+  --player-accent: var(--primary);
+  display: grid;
+  min-width: 0;
+  min-height: 2.45rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .55rem;
+  padding: .45rem .6rem;
+  border-bottom: 1px solid rgba(72, 132, 170, .28);
+}
+
+.playerRow:last-child {
+  border-bottom: 0;
+}
+
+.playerRow[data-active] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--player-accent) 9%, transparent), transparent 68%);
+}
+
+.playerDot {
+  width: .48rem;
+  height: .48rem;
+  border-radius: 50%;
+  background: var(--player-accent);
+  box-shadow: 0 0 .6rem color-mix(in srgb, var(--player-accent) 58%, transparent);
+}
+
+.playerName {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(231, 241, 247, .82);
+  font-size: .72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playerRow[data-active] .playerName {
+  color: #f4f9fc;
+}
+
+.playerStatus {
+  color: rgba(194, 214, 227, .48);
+  font-size: .62rem;
+  white-space: nowrap;
+}
+
+.playerRow[data-active] .playerStatus {
+  color: var(--player-accent);
+}
+
+.journalPanel {
+  display: grid;
+  min-width: 0;
+  gap: .65rem;
+  padding: .7rem;
+  border: 1px solid rgba(65, 127, 169, .3);
+  border-radius: .68rem;
+  background: rgba(1, 13, 27, .88);
+}
+
+.journalHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: .55rem;
+}
+
+.latestResult {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .55rem;
+  padding: .65rem;
+  border: 1px solid rgba(84, 128, 164, .34);
+  border-radius: .5rem;
+  background: rgba(3, 18, 31, .76);
+}
+
+.journalGlyph {
+  width: 2.8rem;
+  height: 2.8rem;
+  flex: none;
+}
+
+.latestResultCopy {
+  display: grid;
+  min-width: 0;
+  gap: .12rem;
+}
+
+.latestResultCopy strong {
+  color: #d26df2;
+  font-size: .72rem;
+  line-height: 1.25;
+}
+
+.journalHistory {
+  border: 1px solid rgba(72, 132, 170, .3);
+  border-radius: .46rem;
+}
+
+.journalHistory summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .55rem;
+  padding: .55rem .65rem;
+  color: var(--primary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.journalHistoryList {
+  display: grid;
+  gap: .4rem;
+  padding: 0 .65rem .65rem;
+}
+
+@media (min-width: 75rem) {
+  .playersPanel {
+    padding: .8rem;
+  }
+
+  .playerRow {
+    min-height: 2.65rem;
+  }
+
+  .playerName {
+    font-size: .78rem;
+  }
+}
