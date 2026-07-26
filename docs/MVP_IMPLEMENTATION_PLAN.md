@@ -14,7 +14,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 - **Milestone 2 (Game Core)** — ✅ целевой набор правил реализован на авторитетном сервере и защищён симуляциями для 2-4 игроков
 - **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 основной путь готов; единый активный матч и корректное досрочное завершение реализованы, остаются VK ID и production-защита auth
 - **Milestone 4 (Game Interface)** — 🔶 целевой игровой поток и визуальная переработка в активной разработке; не завершены справочник правил, полный аудит/replay, i18n и обучение
-- **Milestone 5 (Operations, Beta)** — 🔶 health/readiness, env-проверки и runbook Yandex Cloud существуют; production-развёртывание, мониторинг и recovery drill не выполнялись
+- **Milestone 5 (Operations, Public Test)** — 🔶 подтверждён Compute Cloud runtime, добавлены worker health/readiness и локальный recovery drill; production-развёртывание и облачный мониторинг ещё не выполнялись
 
 ## Delivery Rules
 
@@ -58,7 +58,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 ### P0. Защита Входа И Регистрации
 
-Текущий bounded in-process limiter (`AUTH_RATE_LIMIT_*`) и body limit остаются первой линией защиты, но не считаются глобальным production-лимитом: Yandex Serverless Containers может обслуживать запросы несколькими экземплярами.
+Текущий bounded in-process limiter (`AUTH_RATE_LIMIT_*`) и body limit остаются первой линией защиты, но не считаются глобальным production-лимитом: после масштабирования Compute instance group запросы могут обслуживаться несколькими API-процессами.
 
 1. [x] Разделить auth budgets по маршрутам: register, login и refresh/logout не должны съедать бюджет друг друга.
 2. [x] Для password login хранить два независимых общих счётчика:
@@ -66,7 +66,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - по доверенному адресу клиента — отдельный более широкий предел до вызова Argon2id против credential stuffing и CPU DoS.
 3. [x] Не вводить бессрочную блокировку аккаунта. Верный пароль должен сбрасывать счётчик логина; ответ при неверном логине, неверном пароле и активном throttling остаётся обобщённым и не раскрывает существование аккаунта.
 4. [x] Выполнять dummy Argon2id verify для неизвестного логина/аккаунта без пароля, чтобы ранний выход не создавал заметную разницу времени.
-5. [-] Хранить счётчики в PostgreSQL с атомарным обновлением, TTL и плановой очисткой. На API Gateway при production-развёртывании ещё нужно подключить Yandex Smart Web Security Advanced Rate Limiter как независимую edge-защиту.
+5. [-] Хранить счётчики в PostgreSQL с атомарным обновлением, TTL и плановой очисткой. На Application Load Balancer при production-развёртывании ещё нужно подключить Yandex Smart Web Security Advanced Rate Limiter как независимую edge-защиту.
 6. [x] После пяти ошибок показывать понятное нейтральное сообщение и приблизительное время повторной попытки, не раскрывая внутренний bucket или точный алгоритм ограничения.
 
 **Gate:** интеграционные тесты покрывают пять ошибок, шестую ограниченную попытку, успешный сброс, независимые login/IP buckets, конкурентные запросы и одинаковый внешний ответ для существующего/несуществующего логина.
@@ -93,7 +93,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 3. [x] При успешном входе определять устаревшие параметры PHC и делать opportunistic rehash через compare-and-set, чтобы усиление настроек не требовало сброса паролей и параллельные входы не перезаписывали более новый hash.
 4. [x] Проверить, что пароль и его производные не попадают в серверные логи, ответы, audit или аналитику; тестовые данные используют только синтетические значения. Сохранить общий ответ «неверный логин или пароль».
 5. [x] Оставить длину 8-128 как текущий минимум MVP, разрешить password managers и вставку, не вводить периодическую смену или искусственные composition rules.
-6. [ ] Перед публичным запуском решить путь восстановления password-аккаунта через подтверждённую внешнюю identity или явно принять отсутствие recovery для закрытой beta.
+6. [ ] Перед публичным тестовым запуском решить путь восстановления password-аккаунта через подтверждённую внешнюю identity или документированный support-процесс. Публичная доступность не допускает неоговорённого отсутствия recovery.
 
 **Gate:** security-тест проверяет формат и параметры нового хеша, verify старого хеша и rehash; нагрузочный тест доказывает, что публичный login нельзя использовать для неконтролируемого исчерпания CPU/памяти.
 
@@ -268,12 +268,13 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Gate:** Playwright covers sign-in, room creation, player readiness, full room start, each action family, reconnection, final score, and participant-only audit access on mobile and desktop viewports.
 
-## Milestone 5: Operations, Delivery, And Beta
+## Milestone 5: Operations, Delivery, And Public Test
 
-**Outcome:** a secure Russian beta deployment runs on Yandex Cloud and provides actionable match evidence.
+**Outcome:** a secure Russian public test deployment runs on Yandex Cloud and provides actionable match evidence. The site is publicly reachable without an allowlist; the first audience arrives through direct links sent to known testers, without a marketing campaign.
 
-1. [-] Configure Yandex Cloud using `yc`: Serverless Containers, Managed PostgreSQL, Object Storage only if required, Lockbox/secrets, logs, backups, and monitoring.
-   - [x] Document the target topology, environment, private container/API Gateway path, custom-domain auth requirements, and Smart Web Security.
+1. [-] Configure Yandex Cloud using `yc`: Compute Cloud instance group, Application Load Balancer, Managed PostgreSQL, Container Registry, Object Storage only if required, Lockbox/secrets, logs, backups, and monitoring.
+   - [x] Document the target topology, environment, private backend network, custom-domain auth requirements, WebSocket ingress, and Smart Web Security.
+   - [x] Replace the incompatible long-running Serverless API/worker topology with a fixed-size Compute Cloud instance group, separate API/worker containers, Application Load Balancer WebSocket ingress, private worker health checks, and Smart Web Security.
    - [ ] Provision and verify the production-like environment; deployment has not started.
 2. [-] Keep production data and operational configuration within the Russian launch boundary.
    - [x] Record the Russian data-location decision and Yandex Cloud target.
@@ -283,20 +284,22 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [-] Run migrations against a production-like copy, document rollback/forward-fix ownership, and perform a real PostgreSQL backup/restore drill.
      - [x] Add and pass an isolated PostgreSQL 18 migration plus `pg_dump`/`pg_restore` rehearsal that cannot touch development data.
      - [ ] Repeat the drill on a production-like Yandex Managed PostgreSQL cluster and record recovery evidence and ownership.
-   - [ ] Verify that API and worker are both deployed, monitored, and restart-safe; alert on worker lag, overdue Tenders, auth throttling, elevated 5xx, DB saturation, and abnormal realtime reconnects.
+   - [-] Verify that API and worker are both deployed, monitored, and restart-safe; alert on worker lag, overdue Tenders, auth throttling, elevated 5xx, DB saturation, and abnormal realtime reconnects.
+     - [x] Add internal worker liveness/readiness with per-loop success, failure, and stale-heartbeat tracking.
+     - [ ] Connect API and worker health checks to Compute instance-group autohealing and production alerts.
 4. [ ] Add production abuse and performance validation: auth/login load with Argon2id, registration quota races, WebSocket connection/message limits, 2-4 player Tender load, request-size limits, and log redaction.
 5. [ ] Run the complete release acceptance matrix on current mobile Safari/Chrome and desktop Chrome/Firefox, including reconnect, refresh, multi-tab session, active-match return, all-player abandonment, audit privacy, and account deletion.
 6. [ ] Measure real matches with 2, 3, and 4 players; tune deadlines only when data shows the five-round target is materially missed.
-7. [ ] Run a closed beta. Capture audit-derived defects, balance observations, accessibility problems, rules misunderstandings, and operational incidents as GitHub issues.
+7. [ ] Run a public test without marketing, distributing links directly to known testers. Capture audit-derived defects, balance observations, accessibility problems, rules misunderstandings, support requests, abuse, and operational incidents as GitHub issues.
 8. [ ] Decide and document support ownership before public MVP: account recovery, incident contact, privacy requests, match disputes, and the response when a worker/deployment interrupts an active match.
 
-**Skills:** `tdd` for deployment configuration and privacy-sensitive deletion paths; `diagnosing-bugs` for nondeterminism, concurrency, or performance regressions; `improve-codebase-architecture` after several working verticals and before beta; `triage` for beta reports; `code-review` before release.
+**Skills:** `tdd` for deployment configuration and privacy-sensitive deletion paths; `diagnosing-bugs` for nondeterminism, concurrency, or performance regressions; `improve-codebase-architecture` after several working verticals and before the public test; `triage` for tester reports; `code-review` before release.
 
 **Gate:** a production-like environment passes health, migration, backup/restore, access control, and end-to-end Tender acceptance checks.
 
 ## Release Acceptance
 
-MVP is ready for closed beta only when all of the following hold:
+MVP is ready for the public test only when all of the following hold:
 
 - Two to four authenticated players can create a full private room and complete five live rounds.
 - A player cannot create or join a second unfinished match and can reliably return to the current one from the home page or match history.
