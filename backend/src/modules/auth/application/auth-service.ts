@@ -182,7 +182,7 @@ export class AuthService {
     const user = await this.dependencies.repository.findUserByLogin(input.login)
     const passwordMatches = await this.dependencies.passwords.verify(
       input.password,
-      user?.passwordHash ?? dummyPasswordHash,
+      user?.passwordHash,
     )
     if (!user?.passwordHash || !passwordMatches) {
       const failure = await this.dependencies.abuseProtection?.recordLoginFailure({
@@ -193,6 +193,15 @@ export class AuthService {
         throw new AuthFailure('login_throttled', 'Invalid login or password. Try again later.')
       }
       throw new AuthFailure('invalid_credentials', 'Invalid login or password')
+    }
+
+    if (this.dependencies.passwords.needsRehash(user.passwordHash)) {
+      const nextPasswordHash = await this.dependencies.passwords.hash(input.password)
+      await this.dependencies.repository.updatePasswordHash({
+        userId: user.id,
+        currentPasswordHash: user.passwordHash,
+        nextPasswordHash,
+      })
     }
 
     await this.dependencies.abuseProtection?.recordLoginSuccess({ login: input.login })
@@ -382,8 +391,6 @@ export class AuthService {
     return new Date(now.getTime() - this.dependencies.sessionAbsoluteTtlDays * 24 * 60 * 60 * 1000)
   }
 }
-
-const dummyPasswordHash = '$argon2id$v=19$m=65536,t=2,p=1$POtlkAZkJ6MESoUj6hp8X7wL+1nupU1zyt2DDsyj7k0$EoTM08qhB7JueGAIA3VrvrFHkJGNlWrYVWHOmgoGdwE'
 
 async function createPkcePair() {
   const codeVerifier = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll('-', '')

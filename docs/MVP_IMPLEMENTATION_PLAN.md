@@ -86,13 +86,14 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 ### P0. Хранение Паролей
 
-**Текущее состояние:** password-аккаунты сохраняют только PHC-строку Argon2id в `users.password_hash`; соль генерируется `Bun.password.hash` автоматически, plaintext не пишется в БД, а `Bun.password.verify` определяет алгоритм и параметры из PHC-строки. Проверка на закреплённом в репозитории Bun 1.3.14 создаёт `m=65536`, `t=2`, `p=1`, то есть 64 MiB памяти, две итерации и parallelism 1 — выше текущего минимального OWASP baseline `19 MiB / 2 / 1`. Это надёжная базовая схема. Риск перед production — параметры зависят от runtime defaults, не закреплены явно в коде и не проверены на производственном размере контейнера.
+**Текущее состояние:** password-аккаунты сохраняют только PHC-строку Argon2id в `users.password_hash`; уникальная соль генерируется `Bun.password.hash` автоматически, plaintext не пишется в БД, а `Bun.password.verify` определяет алгоритм и параметры из PHC-строки. Новые хеши явно закреплены на `m=65536`, `t=2`, `p=1`, то есть 64 MiB памяти, две итерации и parallelism 1 — выше текущего минимального OWASP baseline `19 MiB / 2 / 1`. При успешном входе более слабый или устаревший PHC атомарно заменяется новым. Непарольные и повреждённые значения проверяются через фиктивный Argon2id-хеш и получают общий ответ без 500 или раскрытия типа аккаунта.
 
-1. [ ] Зафиксировать явные `memoryCost` и `timeCost` не ниже актуального OWASP baseline и проверять `p=1` в итоговой PHC-строке. Начальная проверяемая точка: текущие `64 MiB / 2 / 1`, если benchmark целевого контейнера подтверждает допустимую нагрузку.
+1. [x] Зафиксировать явные `memoryCost=65536` и `timeCost=2` не ниже актуального OWASP baseline и проверять `p=1` в итоговой PHC-строке.
 2. [ ] Провести benchmark на целевом Yandex-контейнере и выбрать стоимость, которая остаётся в допустимом latency/памяти под контролируемой параллельной нагрузкой; зафиксировать ожидаемый диапазон в тесте/runbook.
-3. [ ] При успешном входе определять устаревшие параметры PHC и делать opportunistic rehash, чтобы усиление настроек не требовало сброса паролей.
-4. [ ] Проверить, что пароль и его производные не попадают в логи, traces, audit, ошибки, аналитику и тестовые fixtures. Сохранить общий ответ «неверный логин или пароль».
-5. [ ] Оставить длину 8-128 как текущий минимум MVP, разрешить password managers и вставку, не вводить периодическую смену или искусственные composition rules. Перед публичным запуском решить путь восстановления аккаунта через подтверждённую внешнюю identity или явно принять отсутствие recovery для закрытой beta.
+3. [x] При успешном входе определять устаревшие параметры PHC и делать opportunistic rehash через compare-and-set, чтобы усиление настроек не требовало сброса паролей и параллельные входы не перезаписывали более новый hash.
+4. [x] Проверить, что пароль и его производные не попадают в серверные логи, ответы, audit или аналитику; тестовые данные используют только синтетические значения. Сохранить общий ответ «неверный логин или пароль».
+5. [x] Оставить длину 8-128 как текущий минимум MVP, разрешить password managers и вставку, не вводить периодическую смену или искусственные composition rules.
+6. [ ] Перед публичным запуском решить путь восстановления password-аккаунта через подтверждённую внешнюю identity или явно принять отсутствие recovery для закрытой beta.
 
 **Gate:** security-тест проверяет формат и параметры нового хеша, verify старого хеша и rehash; нагрузочный тест доказывает, что публичный login нельзя использовать для неконтролируемого исчерпания CPU/памяти.
 
@@ -237,10 +238,12 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 9. [-] Complete auth abuse protection.
    - [x] Bound auth request bodies.
    - [x] Add a bounded per-instance client-address limiter and trusted-proxy configuration.
-   - [ ] Add shared password-attempt counters, unknown-user dummy verification, Yandex edge limits, and registration device quota.
+   - [x] Add shared password-attempt counters, unknown-user dummy verification, and registration device quota.
+   - [ ] Configure and validate Yandex edge limits on the production ingress.
 10. [-] Verify password storage and account recovery posture.
-   - [x] Use salted PHC Argon2id hashes and verify without storing plaintext.
-   - [ ] Pin and benchmark Argon2id parameters, support rehash on login, and decide the recovery path before public launch.
+   - [x] Use salted PHC Argon2id hashes with explicit parameters and verify without storing plaintext.
+   - [x] Support opportunistic compare-and-set rehash on successful login.
+   - [ ] Benchmark Argon2id on the target Yandex container and decide the recovery path before public launch.
 
 **Skills:** `tdd` for authorization, room capacity, reconnect, and deadline behavior; `design-an-interface` before OAuth-provider and realtime protocol boundaries; `context7-mcp` when consulting Hono, Prisma, OAuth, or WebSocket documentation; `triage` and `code-review` for security-sensitive work.
 

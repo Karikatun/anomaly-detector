@@ -12,6 +12,11 @@ export type AccessTokenPayload = {
 
 export type AuthRepository = {
   findUserByLogin(login: string): Promise<AuthUserRecord | null>
+  updatePasswordHash(input: {
+    userId: string
+    currentPasswordHash: string
+    nextPasswordHash: string
+  }): Promise<void>
   createPasswordUserWithSession(input: {
     registration?: {
       deviceId?: string
@@ -121,7 +126,8 @@ export type AccessTokens = {
 
 export type Passwords = {
   hash(password: string): Promise<string>
-  verify(password: string, passwordHash: string): Promise<boolean>
+  needsRehash(passwordHash: string): boolean
+  verify(password: string, passwordHash: string | null | undefined): Promise<boolean>
 }
 
 export type AuthAbuseProtection = {
