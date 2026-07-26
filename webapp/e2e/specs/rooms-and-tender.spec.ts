@@ -59,21 +59,30 @@ async function runLaboratory(page: Page) {
 }
 
 async function submitThesis(page: Page) {
+  const submit = page.getByRole('button', { name: 'Выдвинуть тезис' })
   await page.getByRole('combobox', { name: 'Сигнал для тезиса' }).selectOption('aster')
   await page.getByRole('combobox', { name: 'Тип поля для тезиса' }).selectOption('inertial')
   await page.getByRole('combobox', { name: 'Полярность для тезиса' }).selectOption('positive')
-  await page.getByRole('button', { name: 'Выдвинуть тезис' }).click()
+  await expect(submit).toBeEnabled()
+  const commandResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && response.url().includes('/api/tenders/') && response.url().endsWith('/commands'))
+  await submit.click()
+  expect((await commandResponse).ok()).toBe(true)
 }
 
 async function completeContract(page: Page) {
-  const contract = page.locator('[data-contract-kind="complex"], [data-contract-kind="light"]').first()
-  const reserve = contract.getByRole('button', { name: /^Зарезервировать контракт / })
+  const reserve = page
+    .locator('[data-contract-kind="complex"], [data-contract-kind="light"]')
+    .getByRole('button', { name: /^Зарезервировать контракт / })
+    .first()
   const contractId = (await reserve.getAttribute('aria-label'))?.replace('Зарезервировать контракт ', '')
   if (!contractId) throw new Error('Contract identifier is missing')
 
   await reserve.click()
-  await contract.getByRole('button', { name: /→/ }).first().click()
-  await contract.getByRole('button', { name: `Подать заявку по контракту ${contractId}` }).click()
+  await expect(page.getByText('Зафиксирован · доказательства справа')).toBeVisible()
+  await page.locator('button[data-evidence]:not(:disabled)').first().click()
+  const submit = page.getByRole('button', { name: /^Подать заявку по контракту / })
+  await submit.click()
 }
 
 async function submitFinalModel(page: Page) {

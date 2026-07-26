@@ -8,6 +8,7 @@ import type {
   Polarity,
   PublicThesis,
   SignalId,
+  WorkingModel,
 } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
@@ -24,15 +25,20 @@ import {
 import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
+import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import { runTenderAction } from './run-tender-action'
 
 type ModelAnalysisPanelProps = {
   knownSignals: SignalId[]
   maxTheses: number
+  model: WorkingModel
   publicTheses: PublicThesis[]
+  dueAt?: string | null
+  serverTime: string
   disabled?: boolean
   error?: string | null
   onConfirmThesis: (input: { signalId: SignalId; fieldType: FieldType; polarity: Polarity }) => Promise<void>
+  onSaveWorkingModel: (model: WorkingModel) => Promise<void>
 }
 
 const previewStyle = (signal?: SignalId) => ({
@@ -42,10 +48,14 @@ const previewStyle = (signal?: SignalId) => ({
 export function ModelAnalysisPanel({
   knownSignals,
   maxTheses,
+  model,
   publicTheses,
+  dueAt,
+  serverTime,
   disabled,
   error,
   onConfirmThesis,
+  onSaveWorkingModel,
 }: ModelAnalysisPanelProps) {
   const [signalId, setSignalId] = useState<SignalId | ''>('')
   const [fieldType, setFieldType] = useState<FieldType | ''>('')
@@ -66,20 +76,39 @@ export function ModelAnalysisPanel({
 
   return (
     <section className={styles.panel} aria-labelledby="analysis-heading">
-      <div className={styles.split}>
-        <section className={styles.surface}>
+      <div className={styles.analysisSplit}>
+        <section className={`${styles.surface} ${styles.analysisModel}`}>
           <div className={styles.sectionHeader}>
             <Typography id="analysis-heading" as="h2" variant="bodySmMedium" className={styles.sectionTitle}>
+              Рабочая модель
+            </Typography>
+            <Typography as="span" variant="caption" className={styles.sectionMeta}>Видите только вы</Typography>
+          </div>
+          <WorkingModelWorkspace
+            disabled={disabled}
+            dueAt={dueAt}
+            inlineOnDesktop
+            knownSignals={knownSignals}
+            model={model}
+            onSave={onSaveWorkingModel}
+            serverTime={serverTime}
+          />
+        </section>
+
+        <section className={`${styles.surface} ${styles.analysisThesis}`}>
+          <div className={styles.sectionHeader}>
+            <Typography as="h2" variant="bodySmMedium" className={styles.sectionTitle}>
               Публичный тезис
             </Typography>
             <Typography as="span" variant="caption" className={styles.sectionMeta}>Видят все</Typography>
           </div>
 
-          <div className={styles.formGrid}>
+          <div className={styles.analysisFormGrid}>
             <label className={styles.field}>
               <Typography as="span" variant="caption" tone="muted">{t('tender.analysis.signal')}</Typography>
               <NativeSelect
                 aria-label={t('tender.analysis.signalAria')}
+                disabled={disabled}
                 value={signalId}
                 onChange={(event) => setSignalId(event.target.value as SignalId | '')}
               >
@@ -94,6 +123,7 @@ export function ModelAnalysisPanel({
               <Typography as="span" variant="caption" tone="muted">{t('tender.analysis.fieldType')}</Typography>
               <NativeSelect
                 aria-label={t('tender.analysis.fieldTypeAria')}
+                disabled={disabled}
                 value={fieldType}
                 onChange={(event) => setFieldType(event.target.value as FieldType | '')}
               >
@@ -108,6 +138,7 @@ export function ModelAnalysisPanel({
               <Typography as="span" variant="caption" tone="muted">{t('tender.analysis.polarity')}</Typography>
               <NativeSelect
                 aria-label={t('tender.analysis.polarityAria')}
+                disabled={disabled}
                 value={polarity}
                 onChange={(event) => setPolarity(event.target.value as Polarity | '')}
               >
@@ -119,7 +150,7 @@ export function ModelAnalysisPanel({
             </label>
           </div>
 
-          <div className={`${styles.preview} mt-3`} style={previewStyle(signalId || undefined)}>
+          <div className={styles.preview} style={previewStyle(signalId || undefined)}>
             <SignalGlyph signal={signalId || undefined} className={styles.signalGlyph} />
             <span className={styles.previewCopy}>
               <Typography as="strong" variant="bodySmMedium">
@@ -133,40 +164,39 @@ export function ModelAnalysisPanel({
             </span>
           </div>
 
-          <div className={`${styles.warning} mt-3`}>
+          <div className={styles.warning}>
             <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
             <Typography variant="bodySm">
               Верный тезис: +1 рейтинг и сертификация. Неверный запускает корпоративную проверку.
             </Typography>
           </div>
-        </section>
-
-        <aside className={styles.surface}>
-          <div className={styles.sectionHeader}>
-            <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Публичные тезисы</Typography>
-            <Typography as="span" variant="caption" className={styles.sectionMeta}>{publicTheses.length}</Typography>
-          </div>
-          {publicTheses.length === 0 ? (
-            <Typography variant="bodySm" tone="muted">В этом тендере тезисов ещё нет.</Typography>
-          ) : (
-            <div className={styles.journalList}>
-              {publicTheses.slice(-4).reverse().map((thesis, index) => (
-                <div key={`${thesis.playerId}-${thesis.signalId}-${index}`} className={styles.journalEntry} style={previewStyle(thesis.signalId)}>
-                  <SignalGlyph signal={thesis.signalId} className={styles.signalGlyph} />
-                  <span className={styles.signalCopy}>
-                    <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[thesis.signalId])}</Typography>
-                    <Typography as="span" variant="caption" tone="muted">
-                      {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
-                    </Typography>
-                  </span>
-                  <span className={styles.journalMeta}>
-                    <Typography as="span" variant="caption">{thesis.correct ? 'Верно' : 'Неверно'}</Typography>
-                  </span>
-                </div>
-              ))}
+          <div className={styles.analysisHistory}>
+            <div className={styles.sectionHeader}>
+              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>История тезисов</Typography>
+              <Typography as="span" variant="caption" className={styles.sectionMeta}>{publicTheses.length}</Typography>
             </div>
-          )}
-        </aside>
+            {publicTheses.length === 0 ? (
+              <Typography variant="bodySm" tone="muted">В этом тендере тезисов ещё нет.</Typography>
+            ) : (
+              <div className={styles.journalList}>
+                {publicTheses.slice(-3).reverse().map((thesis, index) => (
+                  <div key={`${thesis.playerId}-${thesis.signalId}-${index}`} className={styles.journalEntry} style={previewStyle(thesis.signalId)}>
+                    <SignalGlyph signal={thesis.signalId} className={styles.signalGlyph} />
+                    <span className={styles.signalCopy}>
+                      <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[thesis.signalId])}</Typography>
+                      <Typography as="span" variant="caption" tone="muted">
+                        {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
+                      </Typography>
+                    </span>
+                    <span className={styles.journalMeta}>
+                      <Typography as="span" variant="caption">{thesis.correct ? 'Верно' : 'Неверно'}</Typography>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
 
       {error && <div className={styles.error} role="alert"><Typography variant="bodySm">{error}</Typography></div>}

@@ -39,10 +39,12 @@ const polarityRelationLabels: Record<string, string> = {
 
 export function TenderPlayers({
   activePlayerId,
+  compact = false,
   currentUserId,
   players,
 }: {
   activePlayerId?: string
+  compact?: boolean
   currentUserId?: string
   players: TenderView['players']
 }) {
@@ -51,7 +53,7 @@ export function TenderPlayers({
     .sort((left, right) => (left.accessSlot ?? 99) - (right.accessSlot ?? 99))
 
   return (
-    <section className={styles.playersPanel} aria-labelledby="tender-players-heading">
+    <section className={styles.playersPanel} data-compact={compact || undefined} aria-labelledby="tender-players-heading">
       <Typography id="tender-players-heading" as="h2" variant="control" className={styles.playersTitle}>
         Игроки
       </Typography>
@@ -59,7 +61,8 @@ export function TenderPlayers({
         {orderedPlayers.map((player, index) => {
           const isCurrent = player.playerId === currentUserId
           const isActive = player.playerId === activePlayerId
-          const accentIndex = ((player.accessSlot ?? index + 1) - 1) % playerAccents.length
+          const stableIndex = players.findIndex((candidate) => candidate.playerId === player.playerId)
+          const accentIndex = (stableIndex >= 0 ? stableIndex : index) % playerAccents.length
           const playerName = player.displayName ?? player.playerId.slice(0, 8)
           return (
             <div

@@ -75,6 +75,37 @@
   color: var(--player-accent);
 }
 
+.playersPanel[data-compact] {
+  padding: .45rem .55rem;
+}
+
+.playersPanel[data-compact] .playersTitle {
+  display: none;
+}
+
+.playersPanel[data-compact] .playerList {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+
+.playersPanel[data-compact] .playerRow {
+  min-height: 2.2rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .35rem;
+  padding: .35rem .45rem;
+  border-right: 1px solid rgba(72, 132, 170, .28);
+  border-bottom: 0;
+}
+
+.playersPanel[data-compact] .playerRow:last-child {
+  border-right: 0;
+}
+
+.playersPanel[data-compact] .playerStatus {
+  display: none;
+}
+
 .journalPanel {
   display: grid;
   min-width: 0;
