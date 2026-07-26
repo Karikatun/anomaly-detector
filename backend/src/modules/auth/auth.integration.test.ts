@@ -58,7 +58,6 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         displayName: 'User',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()
@@ -143,7 +142,7 @@ maybeDescribe('auth API integration', () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login: 'ticket', password: 'password123', privacyConsent: true, ageConfirmation: true }),
+      body: JSON.stringify({ login: 'ticket', password: 'password123', privacyConsent: true }),
     })
     const { accessToken } = await register.json()
 
@@ -167,7 +166,6 @@ maybeDescribe('auth API integration', () => {
         login: 'room-host',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const { accessToken, user } = await register.json()
@@ -199,7 +197,6 @@ maybeDescribe('auth API integration', () => {
         login: 'room-joiner',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const joiner = await joinerRegister.json()
@@ -236,7 +233,6 @@ maybeDescribe('auth API integration', () => {
         login: 'room-extra',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const extra = await extraRegister.json()
@@ -393,7 +389,6 @@ maybeDescribe('auth API integration', () => {
         login: 'single-current-room',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const { accessToken } = await register.json()
@@ -436,7 +431,6 @@ maybeDescribe('auth API integration', () => {
         login: 'single-current-other-host',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const other = await otherRegister.json()
@@ -484,7 +478,6 @@ maybeDescribe('auth API integration', () => {
         login: 'concurrent-current-room',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const { accessToken } = await register.json()
@@ -517,7 +510,6 @@ maybeDescribe('auth API integration', () => {
         login: 'race',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()
@@ -588,7 +580,7 @@ maybeDescribe('auth API integration', () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login: 'reuse', password: 'password123', privacyConsent: true, ageConfirmation: true }),
+      body: JSON.stringify({ login: 'reuse', password: 'password123', privacyConsent: true }),
     })
     const registered = await register.json()
     const refresh = await app.request('/api/auth/token/refresh', {
@@ -637,7 +629,6 @@ maybeDescribe('auth API integration', () => {
         login: 'web-cookie',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()
@@ -704,7 +695,6 @@ maybeDescribe('auth API integration', () => {
         login: 'production-cookie',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()
@@ -739,7 +729,6 @@ maybeDescribe('auth API integration', () => {
         login: 'csrf-cookie',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const cookie = register.headers.get('set-cookie')!.split(';')[0]
@@ -899,7 +888,6 @@ maybeDescribe('auth API integration', () => {
       login: 'dupe',
       password: 'password123',
       privacyConsent: true,
-      ageConfirmation: true,
     }
 
     await app.request('/api/auth/register', {
@@ -989,7 +977,6 @@ maybeDescribe('auth API integration', () => {
         login,
         password,
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     expect(register.status).toBe(201)
@@ -1042,7 +1029,6 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const attempts = await Promise.all(Array.from({ length: 6 }, () =>
@@ -1082,7 +1068,6 @@ maybeDescribe('auth API integration', () => {
       login: 'register-race',
       password: 'password123',
       privacyConsent: true,
-      ageConfirmation: true,
     }
 
     const [first, second] = await Promise.all([
@@ -1120,7 +1105,6 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
 
@@ -1180,7 +1164,6 @@ maybeDescribe('auth API integration', () => {
           login: `registration-ip-budget-${index}`,
           password: 'password123',
           privacyConsent: true,
-          ageConfirmation: true,
         }),
       })
       expect(response.status).toBe(201)
@@ -1196,7 +1179,6 @@ maybeDescribe('auth API integration', () => {
         login: 'registration-ip-budget-limited',
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     expect(limited.status).toBe(429)
@@ -1212,7 +1194,6 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     })
     const registerBody = await register.json()

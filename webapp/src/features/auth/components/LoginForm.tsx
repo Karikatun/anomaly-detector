@@ -31,7 +31,6 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
   const [error, setError] = useState<string | null>(null)
   const form = useForm({
     defaultValues: {
-      ageConfirmation: false as boolean,
       displayName: '',
       login: '',
       password: '',
@@ -174,6 +173,9 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
             </form.Field>
 
             <div className={styles.consents}>
+              <Typography variant="bodyXs" className={styles.ageNotice}>
+                {t('auth.ageNotice')}
+              </Typography>
               <form.Field name="privacyConsent">
                 {(field) => (
                   <div className={styles.consent}>
@@ -183,18 +185,6 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                       onCheckedChange={(checked) => field.handleChange(checked === true)}
                     />
                     <Label htmlFor="auth-privacy-consent">{t('auth.privacyConsent')}</Label>
-                  </div>
-                )}
-              </form.Field>
-              <form.Field name="ageConfirmation">
-                {(field) => (
-                  <div className={styles.consent}>
-                    <Checkbox
-                      id="auth-age-confirmation"
-                      checked={field.state.value}
-                      onCheckedChange={(checked) => field.handleChange(checked === true)}
-                    />
-                    <Label htmlFor="auth-age-confirmation">{t('auth.ageConfirmation')}</Label>
                   </div>
                 )}
               </form.Field>

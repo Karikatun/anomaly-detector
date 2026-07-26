@@ -39,7 +39,6 @@ test('creates a password user and initial session inside one database transactio
       passwordHash: 'password-hash',
       displayName: undefined,
       privacyConsent: true,
-      ageConfirmation: true,
     },
     session: {
       refreshTokenHash: 'refresh-hash',

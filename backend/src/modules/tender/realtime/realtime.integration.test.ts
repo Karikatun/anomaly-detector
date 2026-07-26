@@ -70,7 +70,7 @@ maybeDescribe('realtime websocket integration', () => {
     const response = await fetch(`${baseUrl}/api/auth/token/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, password: 'password123', privacyConsent: true, ageConfirmation: true }),
+      body: JSON.stringify({ login, password: 'password123', privacyConsent: true }),
     })
     expect(response.status).toBe(201)
     return response.json() as Promise<{ accessToken: string; user: { id: string } }>

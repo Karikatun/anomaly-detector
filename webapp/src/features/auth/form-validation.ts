@@ -5,7 +5,6 @@ import {
 } from '@anomaly-detector/contracts'
 
 export type CredentialsFormValues = {
-  ageConfirmation: boolean
   displayName: string
   login: string
   password: string

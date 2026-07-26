@@ -6,7 +6,6 @@ import {
 } from '../src/features/auth/form-validation'
 
 const registration = {
-  ageConfirmation: true,
   displayName: 'Игрок',
   login: 'player-one',
   password: 'password123',

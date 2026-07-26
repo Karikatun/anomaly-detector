@@ -36,7 +36,6 @@ export const registerRequestSchema = z.object({
   password: passwordSchema,
   displayName: displayNameSchema,
   privacyConsent: z.literal(true),
-  ageConfirmation: z.literal(true),
 })
 
 export const loginRequestSchema = z.object({

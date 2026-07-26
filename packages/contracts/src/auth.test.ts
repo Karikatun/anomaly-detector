@@ -35,14 +35,12 @@ describe('auth contracts', () => {
         password: 'password123',
         displayName: ' Jane ',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     ).toEqual({
       login: 'user_1',
       password: 'password123',
       displayName: 'Jane',
       privacyConsent: true,
-      ageConfirmation: true,
     })
 
     expect(
@@ -51,14 +49,12 @@ describe('auth contracts', () => {
         password: 'password123',
         displayName: '',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     ).toEqual({
       login: 'user',
       password: 'password123',
       displayName: undefined,
       privacyConsent: true,
-      ageConfirmation: true,
     })
 
     expect(
@@ -79,7 +75,6 @@ describe('auth contracts', () => {
         password: 'short',
         displayName: 'A',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     ).toThrow()
 
@@ -88,7 +83,6 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'short',
         privacyConsent: true,
-        ageConfirmation: true,
       }),
     ).toThrow()
 
@@ -104,16 +98,6 @@ describe('auth contracts', () => {
       registerRequestSchema.parse({
         login: 'user',
         password: 'password123',
-        ageConfirmation: true,
-      }),
-    ).toThrow()
-
-    // Rejects missing age confirmation
-    expect(() =>
-      registerRequestSchema.parse({
-        login: 'user',
-        password: 'password123',
-        privacyConsent: true,
       }),
     ).toThrow()
 
@@ -123,16 +107,6 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'password123',
         privacyConsent: false,
-        ageConfirmation: true,
-      }),
-    ).toThrow()
-
-    expect(() =>
-      registerRequestSchema.parse({
-        login: 'user',
-        password: 'password123',
-        privacyConsent: true,
-        ageConfirmation: false,
       }),
     ).toThrow()
   })
