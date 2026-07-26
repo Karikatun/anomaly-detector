@@ -8,6 +8,7 @@ import { userDtoFromPrincipal } from '../domain/user'
 import type {
   AccountDeletionCleanup,
   AccessTokens,
+  AuthAbuseProtection,
   AuthRepository,
   Clock,
   LogoutCleanup,
@@ -20,6 +21,7 @@ import type {
 type AuthServiceDependencies = {
   accountDeletionCleanup?: AccountDeletionCleanup
   accessTokens: AccessTokens
+  abuseProtection?: AuthAbuseProtection
   clock: Clock
   logoutCleanup: LogoutCleanup
   oauthProviders?: OAuthProviderRegistry
@@ -35,7 +37,11 @@ type AuthServiceDependencies = {
 export class AuthService {
   constructor(private readonly dependencies: AuthServiceDependencies) {}
 
-  async register(input: RegisterPayload, metadata: SessionMetadata) {
+  async register(
+    input: RegisterPayload,
+    metadata: SessionMetadata,
+    registration?: { deviceId?: string },
+  ) {
     const existingUser = await this.dependencies.repository.findUserByLogin(input.login)
     if (existingUser) {
       throw new AuthFailure('login_already_exists', 'User with this login already exists')
@@ -45,6 +51,13 @@ export class AuthService {
     const now = this.dependencies.clock.now()
     const refreshToken = this.dependencies.refreshTokens.create()
     const { user, session } = await this.dependencies.repository.createPasswordUserWithSession({
+      ...(registration ? {
+        registration: {
+          ...(registration.deviceId ? { deviceId: registration.deviceId } : {}),
+          ipAddress: metadata.ipAddress,
+          now,
+        },
+      } : {}),
       user: { ...input, passwordHash },
       session: {
         refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
@@ -160,14 +173,29 @@ export class AuthService {
   }
 
   async login(input: LoginRequest, metadata: SessionMetadata) {
+    const now = this.dependencies.clock.now()
+    await this.dependencies.abuseProtection?.beginLoginAttempt({
+      ipAddress: metadata.ipAddress,
+      login: input.login,
+      now,
+    })
     const user = await this.dependencies.repository.findUserByLogin(input.login)
-    if (
-      !user?.passwordHash ||
-      !(await this.dependencies.passwords.verify(input.password, user.passwordHash))
-    ) {
+    const passwordMatches = await this.dependencies.passwords.verify(
+      input.password,
+      user?.passwordHash ?? dummyPasswordHash,
+    )
+    if (!user?.passwordHash || !passwordMatches) {
+      const failure = await this.dependencies.abuseProtection?.recordLoginFailure({
+        login: input.login,
+        now,
+      })
+      if (failure?.limited) {
+        throw new AuthFailure('login_throttled', 'Invalid login or password. Try again later.')
+      }
       throw new AuthFailure('invalid_credentials', 'Invalid login or password')
     }
 
+    await this.dependencies.abuseProtection?.recordLoginSuccess({ login: input.login })
     return this.issueSession(user, metadata)
   }
 
@@ -354,6 +382,8 @@ export class AuthService {
     return new Date(now.getTime() - this.dependencies.sessionAbsoluteTtlDays * 24 * 60 * 60 * 1000)
   }
 }
+
+const dummyPasswordHash = '$argon2id$v=19$m=65536,t=2,p=1$POtlkAZkJ6MESoUj6hp8X7wL+1nupU1zyt2DDsyj7k0$EoTM08qhB7JueGAIA3VrvrFHkJGNlWrYVWHOmgoGdwE'
 
 async function createPkcePair() {
   const codeVerifier = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll('-', '')

@@ -94,6 +94,25 @@ test('registers, restores the browser session, opens the profile, and logs out',
   await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
 })
 
+test('shows a neutral retry window after five failed password attempts', async ({ page }) => {
+  const { login } = await registerBrowserUser(page, 'Лимит входа E2E', 'login-limit')
+  await page.getByRole('button', { name: 'Выйти' }).click()
+  await page.getByRole('button', { name: 'Войти', exact: true }).click()
+  await page.getByLabel('Логин').fill(login)
+  await page.getByLabel('Пароль', { exact: true }).fill('wrong-password')
+
+  for (let index = 0; index < 6; index += 1) {
+    const response = page.waitForResponse((candidate) =>
+      candidate.url().endsWith('/api/auth/login') && candidate.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Войти', exact: true }).click()
+    await response
+  }
+
+  await expect(page.getByRole('alert')).toContainText(
+    'Подождите от одной до пятнадцати минут',
+  )
+})
+
 test('uses the configured API transport when OAuth is unavailable', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Войти', exact: true }).click()

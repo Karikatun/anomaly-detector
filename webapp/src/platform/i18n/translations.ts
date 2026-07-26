@@ -30,6 +30,8 @@ const ru = {
   'auth.errors.displayName': 'Минимум 1 символ',
   'auth.errors.registerFailed': 'Не удалось зарегистрироваться',
   'auth.errors.loginFailed': 'Не удалось войти',
+  'auth.errors.loginLimited': 'Слишком много неудачных попыток. Подождите от одной до пятнадцати минут и попробуйте снова.',
+  'auth.errors.registrationLimited': 'Достигнут лимит регистраций. Попробуйте войти в существующий аккаунт или повторите попытку позже.',
 
   // OAuth
   'oauth.yandex': 'Яндекс ID',

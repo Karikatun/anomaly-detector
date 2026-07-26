@@ -2,6 +2,16 @@
 
 The shared language for the competitive research game in `docs/GAME_DESIGN_BRIEF.md`. Use these terms consistently in game rules, API contracts, tests, and player-facing copy.
 
+## Identity And Abuse Protection
+
+**Anti-Abuse Device Token**:
+A random, signed browser cookie used only to enforce the password-registration quota. It is not an account credential, does not use browser or hardware fingerprinting, and is stored server-side only as an HMAC-derived key.
+_Avoid_: device fingerprint, trusted device, device identity
+
+**Login Attempt Budget**:
+The temporary server-side allowance for password verification, maintained independently for a normalised login and a trusted client address. It expires automatically and never permanently locks an account.
+_Avoid_: account ban, password lock, captcha score
+
 ## Anomaly Research
 
 **Anomaly Configuration**:

@@ -21,10 +21,11 @@ maybeDescribe('auth API integration', () => {
     SESSION_ABSOLUTE_TTL_DAYS: 90,
     SESSION_RETENTION_DAYS: 7,
     AUTH_BODY_LIMIT_BYTES: 64 * 1024,
-    AUTH_RATE_LIMIT_MAX: 60,
+    AUTH_RATE_LIMIT_MAX: 1_000,
     AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
     SHUTDOWN_GRACE_SECONDS: 20,
-    TRUST_PROXY: false,
+    TRUST_PROXY: true,
+    TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-test-client-ip',
     COOKIE_SECURE: false,
     SPACES_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
     SPACES_UPLOAD_URL_TTL_SECONDS: 900,
@@ -35,6 +36,7 @@ maybeDescribe('auth API integration', () => {
   const app = createApp({ env, prisma })
 
   beforeEach(async () => {
+    await prisma.authAbuseBucket.deleteMany()
     await prisma.tenderRoomMember.deleteMany()
     await prisma.tenderRoom.deleteMany()
     await prisma.authSession.deleteMany()
@@ -924,6 +926,104 @@ maybeDescribe('auth API integration', () => {
     expect(invalidLogin.status).toBe(401)
   })
 
+  test('limits password login after five failures and resets the login budget on success', async () => {
+    const login = 'password-attempt-budget'
+    const password = 'password123'
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login,
+        password,
+        privacyConsent: true,
+        ageConfirmation: true,
+      }),
+    })
+    expect(register.status).toBe(201)
+
+    const attempt = (attemptPassword: string) => app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password: attemptPassword }),
+    })
+
+    for (let index = 0; index < 4; index += 1) {
+      const failure = await attempt('wrong-password')
+      expect(failure.status).toBe(401)
+      expect(await failure.json()).toEqual({
+        error: { code: 'UNAUTHORIZED', message: 'Invalid login or password' },
+      })
+    }
+
+    expect((await attempt(password)).status).toBe(200)
+
+    for (let index = 0; index < 5; index += 1) {
+      expect((await attempt('wrong-password')).status).toBe(401)
+    }
+    const limited = await attempt('wrong-password')
+    expect(limited.status).toBe(429)
+    expect(await limited.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Invalid login or password. Try again later.',
+      },
+    })
+
+    const unknown = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'unknown-password-budget', password: 'wrong-password' }),
+    })
+    expect(unknown.status).toBe(401)
+    expect(await unknown.json()).toEqual({
+      error: { code: 'UNAUTHORIZED', message: 'Invalid login or password' },
+    })
+  })
+
+  test('atomically limits six concurrent password failures for one login', async () => {
+    const login = 'concurrent-password-budget'
+    await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login,
+        password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
+      }),
+    })
+    const attempts = await Promise.all(Array.from({ length: 6 }, () =>
+      app.request('/api/auth/token/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, password: 'wrong-password' }),
+      })))
+
+    expect(attempts.map((response) => response.status).sort()).toEqual([
+      401, 401, 401, 401, 401, 429,
+    ])
+  })
+
+  test('limits password verification by client address independently from login buckets', async () => {
+    const attempt = (index: number, ipAddress: string) => app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-client-ip': ipAddress,
+      },
+      body: JSON.stringify({
+        login: `unknown-ip-budget-${index}`,
+        password: 'wrong-password',
+      }),
+    })
+
+    for (let index = 1; index <= 30; index += 1) {
+      expect((await attempt(index, '203.0.113.20')).status).toBe(401)
+    }
+    expect((await attempt(31, '203.0.113.20')).status).toBe(429)
+    expect((await attempt(31, '203.0.113.21')).status).toBe(401)
+  }, 10_000)
+
   test('returns one created user and one conflict for concurrent duplicate registration', async () => {
     const payload = {
       login: 'register-race',
@@ -954,6 +1054,99 @@ maybeDescribe('auth API integration', () => {
       },
     })
     expect(users).toBe(1)
+  })
+
+  test('allows only three password registrations for one signed browser device token', async () => {
+    const register = (login: string, cookie?: string) => app.request('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      body: JSON.stringify({
+        login,
+        password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
+      }),
+    })
+
+    const first = await register('device-quota-1')
+    expect(first.status).toBe(201)
+    const firstBody = await first.json()
+    const deviceCookie = first.headers
+      .getSetCookie()
+      .map((cookie) => cookie.split(';')[0])
+      .find((cookie) => cookie.startsWith('anomaly_detector_device='))
+    expect(deviceCookie).toBeString()
+    expect(first.headers.getSetCookie().find((cookie) =>
+      cookie.startsWith('anomaly_detector_device='))).toContain('HttpOnly')
+
+    expect((await register('device-quota-2', deviceCookie)).status).toBe(201)
+    const concurrent = await Promise.all([
+      register('device-quota-3', deviceCookie),
+      register('device-quota-4', deviceCookie),
+    ])
+    expect(concurrent.map((response) => response.status).sort()).toEqual([201, 429])
+
+    const fourth = await register('device-quota-5', deviceCookie)
+    expect(fourth.status).toBe(429)
+    expect(await fourth.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Registration limit reached. Try again later.',
+      },
+    })
+
+    const deleteFirstAccount = await app.request('/api/auth/account', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${firstBody.accessToken}` },
+    })
+    expect(deleteFirstAccount.status).toBe(204)
+    expect((await register('device-quota-after-delete', deviceCookie)).status).toBe(429)
+
+    const forged = await register(
+      'device-quota-forged',
+      'anomaly_detector_device=forged.invalid',
+    )
+    expect(forged.status).toBe(201)
+    expect(forged.headers.getSetCookie().some((cookie) =>
+      cookie.startsWith('anomaly_detector_device=')
+      && !cookie.startsWith('anomaly_detector_device=forged.invalid'))).toBe(true)
+  })
+
+  test('applies an independent wider IP budget to password registrations', async () => {
+    for (let index = 1; index <= 20; index += 1) {
+      const response = await app.request('/api/auth/token/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-test-client-ip': '203.0.113.10',
+        },
+        body: JSON.stringify({
+          login: `registration-ip-budget-${index}`,
+          password: 'password123',
+          privacyConsent: true,
+          ageConfirmation: true,
+        }),
+      })
+      expect(response.status).toBe(201)
+    }
+
+    const limited = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '203.0.113.10',
+      },
+      body: JSON.stringify({
+        login: 'registration-ip-budget-limited',
+        password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
+      }),
+    })
+    expect(limited.status).toBe(429)
   })
 
   async function registerForMeGuard(login: string) {

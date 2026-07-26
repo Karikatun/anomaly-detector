@@ -17,6 +17,8 @@ import { createAuthRoutes } from './transport/routes'
 import { OAuthProviderRegistry } from './infrastructure/oauth-registry'
 import { createYandexOAuthProvider } from './infrastructure/oauth-yandex'
 import { createVkOAuthProvider } from './infrastructure/oauth-vk'
+import { createPrismaAuthAbuseProtection } from './infrastructure/auth-abuse-protection'
+import { createDeviceTokens } from './infrastructure/device-token'
 
 type CreateAuthModuleOptions = {
   clock?: Clock
@@ -65,6 +67,7 @@ export function createAuthModule({
       sign: (payload) => signAccessToken(payload, env),
       verify: (token) => verifyAccessToken(token, env),
     },
+    abuseProtection: createPrismaAuthAbuseProtection(db, env.JWT_SECRET),
     clock,
     logoutCleanup,
     oauthProviders: oauthProviders.hasAny() ? oauthProviders : undefined,
@@ -82,7 +85,7 @@ export function createAuthModule({
       familyHash: (token) => hashRefreshTokenFamily(token, env.JWT_SECRET),
       rotate: (token) => deriveRotatedRefreshToken(token, env.JWT_SECRET),
     },
-    repository: createPrismaAuthRepository(db),
+    repository: createPrismaAuthRepository(db, env.JWT_SECRET),
   })
   const requireAuth = createRequireAuth((accessToken) => service.authenticateAccessToken(accessToken))
 
@@ -91,6 +94,7 @@ export function createAuthModule({
       service.authenticateAccessToken(accessToken),
     requireAuth,
     routes: createAuthRoutes({
+      deviceTokens: createDeviceTokens(env.JWT_SECRET),
       env,
       oauthCallbackBaseUrl: env.OAUTH_CALLBACK_BASE_URL,
       requireAuth,

@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
+import { ApiRequestError } from '@/platform/api'
 import {
   parseCredentialsForm,
   type CredentialsFormValues,
@@ -49,11 +50,17 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
           await auth.login(parsed.data)
         }
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : t(mode === 'register' ? 'auth.errors.registerFailed' : 'auth.errors.loginFailed'),
-        )
+        if (err instanceof ApiRequestError && err.code === 'RATE_LIMITED') {
+          setError(t(mode === 'register'
+            ? 'auth.errors.registrationLimited'
+            : 'auth.errors.loginLimited'))
+        } else {
+          setError(
+            err instanceof Error
+              ? err.message
+              : t(mode === 'register' ? 'auth.errors.registerFailed' : 'auth.errors.loginFailed'),
+          )
+        }
       }
     },
   })
