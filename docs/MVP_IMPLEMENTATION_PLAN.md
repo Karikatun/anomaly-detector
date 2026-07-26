@@ -278,8 +278,10 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [ ] Provision and verify the production-like environment; deployment has not started.
 2. [-] Keep production data and operational configuration within the Russian launch boundary.
    - [x] Record the Russian data-location decision and Yandex Cloud target.
-   - [ ] Complete legal review, Roskomnadzor notification decision, consent text, retention schedule, and anti-abuse cookie disclosure before collecting production users.
-   - [-] Configure and test `support@anomaly-detector.ru`; the address is chosen, but its Yandex 360 mailbox and DNS records are not active yet.
+   - [-] Complete legal readiness before collecting production users.
+     - [x] Prepare a comprehensive legal-review draft personal-data processing policy tied to the current data model, authentication providers, Russian hosting target, retention periods, support mailbox, and anti-abuse cookies.
+     - [ ] Fill in the individual operator's full name and legal contact address, complete legal review, file the Roskomnadzor notification, publish a separate consent text, and align account deletion plus transient-auth cleanup with the policy.
+   - [-] Configure and test `support@anomaly-detector.ru`; the REG.RU mailbox and MX records are created, while end-to-end delivery, SPF, DKIM, and DMARC verification remain.
 3. [-] Complete the release-safety path.
    - [x] Validate environment at startup and expose liveness/readiness endpoints.
    - [-] Run migrations against a production-like copy, document rollback/forward-fix ownership, and perform a real PostgreSQL backup/restore drill.
