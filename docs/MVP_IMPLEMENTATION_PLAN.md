@@ -12,7 +12,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 - **Milestone 0 (Contracts)** — ✅ 100% завершён
 - **Milestone 1 (Tender Foundation)** — ✅ 100% завершён
 - **Milestone 2 (Game Core)** — ✅ целевой набор правил реализован на авторитетном сервере и защищён симуляциями для 2-4 игроков
-- **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 основной путь готов; единый активный матч и корректное досрочное завершение реализованы, остаются VK ID и production-защита auth
+- **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 основной путь готов; единый активный матч и корректное досрочное завершение реализованы, остаётся production-защита auth
 - **Milestone 4 (Game Interface)** — 🔶 возврат в активный матч, справочник правил и Chromium E2E полного пятираундового матча готовы; остаются полный аудит/replay, финальная проверка i18n, обучение и браузерная матрица
 - **Milestone 5 (Operations, Public Test)** — 🔶 юридические тексты и доказательство согласия реализованы, входящая почта и DNS-защита домена проверены, добавлены worker health/readiness и локальный recovery drill; production-развёртывание, исходящая почта и облачный мониторинг ещё не проверены
 
@@ -208,9 +208,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** real players can securely form and play a private live Tender.
 
-1. [-] Implement Yandex ID and VK ID authentication. Keep Telegram outside MVP until a separate legal review permits it.
+1. [x] Implement Yandex ID authentication. Keep VK ID and Telegram outside MVP until a separate product and legal review permits them.
    - [x] Add provider-agnostic OAuth identities, PKCE transaction storage, application ports, and Yandex ID start/callback flow.
-   - [ ] Complete and validate the VK ID start/callback flow.
 2. [x] Enforce Russian-launch data policy: non-blocking 16+ product marking, versioned legal acceptance, unlinking deleted identities from history, and password registration through a unique login.
    - [x] Add `DELETE /api/auth/account`: remove OAuth identities and sessions, prevent repeat login, and replace the deleted internal ID in Tender state, audit, commands, and receipts
    - [x] Require a separate versioned personal-data consent for password and OAuth registration and persist the accepted version and timestamp
