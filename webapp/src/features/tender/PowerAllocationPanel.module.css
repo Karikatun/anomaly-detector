@@ -516,6 +516,38 @@
 }
 
 @media (max-width: 47.999rem) {
+  .panel {
+    gap: .5rem;
+  }
+
+  .playerBar {
+    min-height: 2.75rem;
+    padding: .35rem .55rem;
+  }
+
+  .sampleBar {
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.45fr);
+    gap: .4rem;
+    padding: .45rem .55rem;
+  }
+
+  .sampleIcon {
+    width: 1.7rem;
+    height: 1.7rem;
+  }
+
+  .sampleRule {
+    grid-column: 3;
+    padding-top: 0;
+    padding-left: .45rem;
+    border-top: 0;
+    border-left: 1px solid rgba(101, 151, 183, .2);
+  }
+
+  .sampleRule p {
+    font-size: .62rem;
+  }
+
   .playerStatuses {
     display: none;
   }
@@ -529,15 +561,106 @@
   }
 
   .categoryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     order: 4;
+    gap: .5rem;
+  }
+
+  .categoryCard {
+    min-height: 10.2rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(2.4rem, 1fr) auto auto;
+    gap: .3rem;
+    padding: .5rem;
+  }
+
+  .categoryIntro {
+    gap: .35rem;
+  }
+
+  .categoryIcon {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .categoryIcon > svg {
+    width: 1.2rem;
+    height: 1.2rem;
+  }
+
+  .categoryTitle h3 {
+    font-size: .78rem;
+  }
+
+  .categoryTitle > span > span,
+  .categoryTitle strong {
+    font-size: .62rem;
+  }
+
+  .effects {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    gap: .1rem;
+    padding: 0 0 0 .7rem;
+  }
+
+  .effects span {
+    font-size: .56rem;
+    line-height: 1.16;
+  }
+
+  .effects li::before {
+    top: .32rem;
+    left: -.55rem;
+    width: .2rem;
+    height: .2rem;
+  }
+
+  .stepper,
+  .lockedValue {
+    min-height: 2.35rem;
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .stepper button {
+    min-height: 2.35rem;
+  }
+
+  .stepper strong,
+  .lockedValue strong {
+    font-size: 1.35rem;
+  }
+
+  .stepper button span {
+    font-size: 1.1rem;
+  }
+
+  .limitNote {
+    grid-column: 1;
+    grid-row: 4;
+    font-size: .55rem;
   }
 
   .allocationSummary {
     order: 5;
+    padding: .45rem .55rem;
   }
 
   .footer {
+    position: static;
     order: 6;
+    padding-top: 0;
+    background: none;
+  }
+
+  .confirmButton {
+    min-height: 2.6rem;
+  }
+
+  .lockWarning p {
+    font-size: .62rem;
   }
 }
 

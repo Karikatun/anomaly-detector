@@ -2,7 +2,7 @@ import { Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
 import type { TenderView } from '@anomaly-detector/contracts'
 
@@ -24,14 +24,15 @@ import { ModelAnalysisPanel } from './ModelAnalysisPanel'
 import { PowerAllocationPanel } from './PowerAllocationPanel'
 import { ReconnaissancePanel } from './ReconnaissancePanel'
 import { TenderTimer } from './TenderTimer'
-import { WorkingModelPanel } from './WorkingModelPanel'
 import { ReconnectOverlay } from './components/ReconnectOverlay'
 import { UnavailablePhaseCard } from './components/TenderActionPanel'
+import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import {
   TenderEvidence,
   TenderLaboratoryJournal,
   TenderPlayers,
 } from './components/TenderOverview'
+import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import {
   fieldTypeLabelKeys,
   isSignalId,
@@ -88,11 +89,12 @@ function WaitingForTurn({ playerName }: { playerName?: string }) {
   )
 }
 
-function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
+function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, activePlayerId }: {
   view: TenderView
   disabled: boolean
   error: string | null
   onCommand: (cmd: TenderCommandInput) => Promise<void>
+  onSaveWorkingModel: (workingModel: TenderView['privateWorkingModel']) => Promise<void>
   activePlayerId?: string
 }) {
   const auth = useAuth()
@@ -101,10 +103,13 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
   const mySamples = myPlayer ? view.privateSamples : []
   const myPower = myPlayer?.powerAllocation
   const activePlayer = view.players.find((player) => player.playerId === activePlayerId)
-
-  if (sequentialPhases.has(view.phase) && activePlayerId !== auth.user?.id) {
-    return <WaitingForTurn playerName={activePlayer?.displayName} />
-  }
+  const isWaitingForTurn = sequentialPhases.has(view.phase) && activePlayerId !== auth.user?.id
+  const withWaitingState = (content: ReactNode) => (
+    <>
+      {isWaitingForTurn && <WaitingForTurn playerName={activePlayer?.displayName} />}
+      {content}
+    </>
+  )
 
   switch (view.phase) {
     case 'access-slot-selection':
@@ -134,15 +139,15 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
 
     case 'reconnaissance': {
       const reconPower = myPower?.reconnaissance ?? 0
-      return reconPower > 0 ? (
+      return reconPower > 0 ? withWaitingState(
         <ReconnaissancePanel
           knownSignals={view.knownSignals}
           mySamples={mySamples}
           maxSignals={reconPower}
-          disabled={disabled}
+          disabled={disabled || isWaitingForTurn}
           error={error}
           onConfirm={(targets) => onCommand({ type: 'conduct-reconnaissance', targets })}
-        />
+        />,
       ) : (
         <UnavailablePhaseCard>Вы не выделили мощность на разведку.</UnavailablePhaseCard>
       )
@@ -150,15 +155,15 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
 
     case 'laboratory': {
       const labPower = myPower?.laboratory ?? 0
-      return labPower > 0 ? (
+      return labPower > 0 ? withWaitingState(
         <LaboratoryPanel
           mySamples={mySamples}
           privateMeasurements={view.privateMeasurements}
           powerAllocation={labPower}
-          disabled={disabled}
+          disabled={disabled || isWaitingForTurn}
           error={error}
           onConfirm={(input) => onCommand({ type: 'run-laboratory-test', ...input })}
-        />
+        />,
       ) : (
         <UnavailablePhaseCard>Вы не выделили мощность на лабораторию.</UnavailablePhaseCard>
       )
@@ -166,15 +171,19 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
 
     case 'model-analysis': {
       const maPower = myPower?.modelAnalysis ?? 0
-      return maPower > 0 ? (
+      return maPower > 0 ? withWaitingState(
         <ModelAnalysisPanel
+          dueAt={view.dueAt}
           knownSignals={view.knownSignals}
           maxTheses={maPower}
+          model={view.privateWorkingModel}
           publicTheses={view.publicTheses}
-          disabled={disabled}
+          serverTime={view.serverTime}
+          disabled={disabled || isWaitingForTurn}
           error={error}
           onConfirmThesis={(input) => onCommand({ type: 'submit-thesis', ...input })}
-        />
+          onSaveWorkingModel={onSaveWorkingModel}
+        />,
       ) : (
         <UnavailablePhaseCard>Вы не выделили мощность на анализ модели.</UnavailablePhaseCard>
       )
@@ -184,33 +193,35 @@ function PhasePanel({ view, disabled, error, onCommand, activePlayerId }: {
       const contractPower = myPower?.contracts ?? 0
       const restriction = myPlayer?.contractPowerRestriction ?? 0
       const effective = Math.max(0, contractPower - restriction)
-      return effective > 0 ? (
+      return effective > 0 ? withWaitingState(
         <ContractsPanel
+          activePlayerId={view.activePlayerId}
           certifications={view.privateResearchCertifications ?? []}
           contracts={[...view.publicContracts, ...(view.publicFinalContract ? [view.publicFinalContract] : [])]}
           journal={view.publicScientificJournal ?? []}
           maxPower={effective}
           playerId={auth.user?.id ?? ''}
+          players={view.players}
           round={view.round}
-          disabled={disabled}
+          disabled={disabled || isWaitingForTurn}
           error={error}
           onReserve={(contractId) => onCommand({ type: 'reserve-contract', contractId })}
           onBid={(contractId, bid) =>
             onCommand({ type: 'submit-contract-bid', contractId, ...bid })
           }
-        />
+        />,
       ) : (
         <UnavailablePhaseCard>Нет доступной мощности для контрактов.</UnavailablePhaseCard>
       )
     }
 
     case 'final-scientific-model': {
-      return (
+      return withWaitingState(
         <FinalScientificModelPanel
-          disabled={disabled}
+          disabled={disabled || isWaitingForTurn}
           error={error}
           onConfirm={(scientificModel) => onCommand({ type: 'submit-scientific-model', scientificModel })}
-        />
+        />,
       )
     }
 
@@ -370,6 +381,11 @@ function TenderContent() {
   const isPowerAllocation = tenderView.phase === 'power-allocation'
   const isLaboratoryPhase = tenderView.phase === 'laboratory'
   const isPlanningPhase = isAccessSlotSelection || isPowerAllocation
+  const isEmbeddedWorkspacePhase = tenderView.phase === 'model-analysis'
+    || tenderView.phase === 'contracts'
+    || tenderView.phase === 'final-scientific-model'
+  const showRightSidebar = !isPlanningPhase && !isEmbeddedWorkspacePhase
+  const showGenericTools = !isPlanningPhase && !isLaboratoryPhase && !isEmbeddedWorkspacePhase
 
   return (
     <section className="mx-auto grid w-full min-w-0 max-w-[90rem] gap-4 overflow-x-clip px-3 py-3 sm:px-5 sm:py-5">
@@ -427,14 +443,29 @@ function TenderContent() {
         />
       )}
 
-      {/* Phase panel + right sidebar */}
-      <div className={isPlanningPhase ? 'grid min-w-0 items-start gap-4' : 'grid min-w-0 items-start gap-6 lg:grid-cols-[1fr_320px]'}>
+      {isSequentialPhase && tenderView.phase !== 'complete' && (
+        <TenderPhaseProgress phase={tenderView.phase} />
+      )}
+
+      {isSequentialPhase && (
+        <div className="lg:hidden">
+          <TenderPlayers
+            activePlayerId={tenderView.activePlayerId}
+            compact
+            currentUserId={auth.user?.id}
+            players={tenderView.players}
+          />
+        </div>
+      )}
+
+      <div className={showRightSidebar ? 'grid min-w-0 items-start gap-6 lg:grid-cols-[1fr_320px]' : 'grid min-w-0 items-start gap-4'}>
         <div className={isPlanningPhase ? 'grid min-w-0 self-start gap-4' : 'grid min-w-0 self-start gap-6'}>
           <PhasePanel
             view={tenderView}
             disabled={submitting || !connected}
             error={commandError}
             onCommand={handleCommand}
+            onSaveWorkingModel={saveWorkingModel}
             activePlayerId={tenderView.activePlayerId}
           />
 
@@ -447,7 +478,7 @@ function TenderContent() {
             </div>
           )}
 
-          {!isPlanningPhase && !isLaboratoryPhase && (
+          {showGenericTools && (
             <div className="grid gap-2">
               <details className="rounded-lg border border-border/70 bg-card/80 px-3 py-2">
                 <summary className="cursor-pointer list-none">
@@ -465,28 +496,30 @@ function TenderContent() {
                 </div>
               </details>
 
-              <details className="rounded-lg border border-border/70 bg-card/80 px-3 py-2">
-                <summary className="cursor-pointer list-none">
-                  <span className="flex items-center justify-between gap-3">
-                    <Typography as="span" variant="bodySmMedium">Рабочая модель</Typography>
-                    <Badge variant="outline">{tenderView.knownSignals.length} / 6</Badge>
-                  </span>
-                </summary>
-                <div className="mt-3">
-                  <WorkingModelPanel
-                    key={tenderId}
-                    model={tenderView.privateWorkingModel}
-                    knownSignals={tenderView.knownSignals}
-                    disabled={!connected}
-                    onSave={saveWorkingModel}
-                  />
-                </div>
-              </details>
+              <WorkingModelWorkspace
+                disabled={!connected}
+                dueAt={tenderView.dueAt}
+                knownSignals={tenderView.knownSignals}
+                model={tenderView.privateWorkingModel}
+                onSave={saveWorkingModel}
+                serverTime={tenderView.serverTime}
+              />
+            </div>
+          )}
+
+          {(tenderView.phase === 'model-analysis' || tenderView.phase === 'final-scientific-model') && (
+            <div className="hidden lg:block">
+              <TenderPlayers
+                activePlayerId={tenderView.activePlayerId}
+                compact
+                currentUserId={auth.user?.id}
+                players={tenderView.players}
+              />
             </div>
           )}
         </div>
 
-        {!isPlanningPhase && (
+        {showRightSidebar && (
           <aside className="hidden self-start gap-4 lg:grid">
             <TenderPlayers
               activePlayerId={tenderView.activePlayerId}
