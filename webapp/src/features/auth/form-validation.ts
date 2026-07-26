@@ -9,6 +9,8 @@ export type CredentialsFormValues = {
   login: string
   password: string
   privacyConsent: boolean
+  privacyConsentVersion: '1.0'
+  termsVersion: '1.0'
 }
 
 export function parseCredentialsForm(

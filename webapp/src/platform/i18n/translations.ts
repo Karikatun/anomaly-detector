@@ -23,7 +23,7 @@ const ru = {
   'auth.password.show': 'Показать пароль',
   'auth.password.hide': 'Скрыть пароль',
   'auth.displayName': 'Имя',
-  'auth.privacyConsent': 'Я согласен на обработку персональных данных',
+  'auth.privacyConsent': 'Я даю согласие на обработку персональных данных',
   'auth.ageNotice': 'Игра имеет возрастную маркировку 16+.',
   'auth.errors.loginName': 'От 3 до 64 символов: латинские буквы, цифры, «_» или «-»',
   'auth.errors.password': 'Минимум 8 символов',

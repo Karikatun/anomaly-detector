@@ -53,6 +53,8 @@ maybeDescribe('profile statistics API integration', () => {
         login: 'profile-player',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const { accessToken, user } = await registration.json()

@@ -13,7 +13,14 @@ async function registerUser(login: string, password: string, displayName: string
   const res = await fetch(`${API}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Origin': 'http://localhost:5173' },
-    body: JSON.stringify({ login, password, displayName, privacyConsent: true }),
+    body: JSON.stringify({
+      displayName,
+      login,
+      password,
+      privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
+    }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }))

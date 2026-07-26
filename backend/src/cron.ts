@@ -27,11 +27,19 @@ const cronTasks = {
         ],
       },
     })
-    const abuseBuckets = await prisma.authAbuseBucket.deleteMany({
-      where: { expiresAt: { lt: now } },
-    })
+    const [abuseBuckets, oauthTransactions, realtimeTickets] = await Promise.all([
+      prisma.authAbuseBucket.deleteMany({
+        where: { expiresAt: { lt: now } },
+      }),
+      prisma.oAuthTransaction.deleteMany({
+        where: { expiresAt: { lt: now } },
+      }),
+      prisma.realtimeTicket.deleteMany({
+        where: { expiresAt: { lt: now } },
+      }),
+    ])
     console.log(
-      `Cron auth:sessions:cleanup removed ${count} stale sessions and ${abuseBuckets.count} expired abuse buckets.`,
+      `Cron auth:sessions:cleanup removed ${count} stale sessions, ${abuseBuckets.count} expired abuse buckets, ${oauthTransactions.count} OAuth transactions, and ${realtimeTickets.count} realtime tickets.`,
     )
   },
 } satisfies Record<string, CronTask>

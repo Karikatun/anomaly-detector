@@ -35,12 +35,16 @@ describe('auth contracts', () => {
         password: 'password123',
         displayName: ' Jane ',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     ).toEqual({
       login: 'user_1',
       password: 'password123',
       displayName: 'Jane',
       privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
     })
 
     expect(
@@ -49,12 +53,16 @@ describe('auth contracts', () => {
         password: 'password123',
         displayName: '',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     ).toEqual({
       login: 'user',
       password: 'password123',
       displayName: undefined,
       privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
     })
 
     expect(
@@ -75,6 +83,8 @@ describe('auth contracts', () => {
         password: 'short',
         displayName: 'A',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     ).toThrow()
 
@@ -83,6 +93,8 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'short',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     ).toThrow()
 
@@ -107,6 +119,18 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'password123',
         privacyConsent: false,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    ).toThrow()
+
+    expect(() =>
+      registerRequestSchema.parse({
+        login: 'user',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: 'outdated',
+        termsVersion: '1.0',
       }),
     ).toThrow()
   })
@@ -203,12 +227,29 @@ describe('auth contracts', () => {
 
   test('validates OAuth start request and response', () => {
     const start = oauthStartRequestSchema.parse({
+      registration: {
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      },
       webappOrigin: 'http://localhost:5173',
     })
     expect(start.webappOrigin).toBe('http://localhost:5173')
+    expect(start.registration).toEqual({
+      privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
+    })
 
     // webappOrigin is optional — the backend falls back to its configured origin.
     expect(oauthStartRequestSchema.parse({}).webappOrigin).toBeUndefined()
+    expect(() => oauthStartRequestSchema.parse({
+      registration: {
+        privacyConsent: true,
+        privacyConsentVersion: 'outdated',
+        termsVersion: '1.0',
+      },
+    })).toThrow()
 
     expect(() => oauthStartRequestSchema.parse({ redirectUri: 'https://attacker.example/callback' })).toThrow()
 

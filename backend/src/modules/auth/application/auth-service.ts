@@ -58,7 +58,7 @@ export class AuthService {
           now,
         },
       } : {}),
-      user: { ...input, passwordHash },
+      user: { ...input, legalAcceptedAt: now, passwordHash },
       session: {
         refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
         refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
@@ -70,9 +70,19 @@ export class AuthService {
     return this.sessionResponse(user, session.id, refreshToken)
   }
 
-  async startOAuthSignIn(input: { provider: OAuthProviderId; redirectUri: string; webappOrigin: string }) {
+  async startOAuthSignIn(input: {
+    provider: OAuthProviderId
+    redirectUri: string
+    registration?: {
+      privacyConsent: true
+      privacyConsentVersion: string
+      termsVersion: string
+    }
+    webappOrigin: string
+  }) {
     const { codeChallenge, codeVerifier } = await createPkcePair()
     const state = `${encodeWebappOrigin(input.webappOrigin)}::${crypto.randomUUID()}${crypto.randomUUID()}`
+    const now = this.dependencies.clock.now()
     const oauthProviders = this.dependencies.oauthProviders
     if (!oauthProviders) {
       throw new AuthFailure('oauth_not_configured', 'OAuth sign-in is not configured')
@@ -80,7 +90,14 @@ export class AuthService {
     const provider = oauthProviders.require(input.provider)
     await this.dependencies.repository.createOAuthTransaction({
       codeVerifier,
-      expiresAt: new Date(this.dependencies.clock.now().getTime() + 10 * 60 * 1000),
+      expiresAt: new Date(now.getTime() + 10 * 60 * 1000),
+      ...(input.registration ? {
+        legalAcceptance: {
+          acceptedAt: now,
+          privacyConsentVersion: input.registration.privacyConsentVersion,
+          termsVersion: input.registration.termsVersion,
+        },
+      } : {}),
       provider: input.provider,
       redirectUri: input.redirectUri,
       state,
@@ -144,10 +161,17 @@ export class AuthService {
       })
       session = createdSession
     } else {
+      if (!transaction.legalAcceptance) {
+        throw new AuthFailure(
+          'oauth_registration_consent_required',
+          'Personal data consent is required to create an account',
+        )
+      }
       const created = await this.dependencies.repository.createOAuthUserWithSession({
         user: {
           login: oauthLogin(transaction.provider),
           displayName: userInfo.displayName ?? null,
+          legalAcceptance: transaction.legalAcceptance,
         },
         identity: {
           provider: transaction.provider,
@@ -344,9 +368,8 @@ export class AuthService {
 
   async deleteAccount(userId: string) {
     const now = this.dependencies.clock.now()
-    await this.dependencies.repository.revokeAllSessionsByUserId({ userId, now })
-    await this.dependencies.repository.anonymizeUser({ userId, now })
     await this.dependencies.accountDeletionCleanup?.({ userId })
+    await this.dependencies.repository.eraseUserIdentity({ userId, now })
   }
 
   async updateProfile(userId: string, input: { displayName?: string | null; locale?: 'ru' | 'en' }) {

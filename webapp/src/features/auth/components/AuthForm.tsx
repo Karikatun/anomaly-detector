@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 
@@ -6,7 +7,6 @@ import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import styles from './AuthForm.module.css'
 import { LoginForm } from './LoginForm'
-import { OAuthButton } from './OAuthButton'
 
 export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode }) {
   const { t } = useI18n()
@@ -51,27 +51,13 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
             >
               Назад
             </Button>
-            <OAuthButton
-              provider="yandex"
-              label={t('oauth.yandex')}
-              className={styles.yandexButton}
-              icon={(
-                <img
-                  src="/assets/auth/yandex-logo.svg"
-                  className={styles.yandexLogo}
-                  alt=""
-                  aria-hidden="true"
-                />
-              )}
-            />
-            <Typography as="div" variant="control" className={styles.separator}>ИЛИ</Typography>
             <LoginForm key={mode} mode={mode} />
           </div>
         )}
 
         <footer className={styles.footer}>
           {footerRulesAction ?? <Typography as="span">Правила игры</Typography>}
-          <Typography as="span">Пользовательское соглашение</Typography>
+          <Link className={styles.legalLink} to="/terms">Пользовательское соглашение</Link>
         </footer>
       </div>
     </section>

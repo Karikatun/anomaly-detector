@@ -23,6 +23,15 @@ export const passwordSchema = z
 
 export const localeSchema = z.union([z.literal('ru'), z.literal('en')]).default('ru')
 
+export const personalDataConsentVersion = '1.0' as const
+export const termsVersion = '1.0' as const
+
+const registrationLegalAcceptanceSchema = z.object({
+  privacyConsent: z.literal(true),
+  privacyConsentVersion: z.literal(personalDataConsentVersion),
+  termsVersion: z.literal(termsVersion),
+})
+
 export const userSchema = z.object({
   id: z.string(),
   login: loginSchema,
@@ -31,11 +40,10 @@ export const userSchema = z.object({
   createdAt: z.string().datetime(),
 })
 
-export const registerRequestSchema = z.object({
+export const registerRequestSchema = registrationLegalAcceptanceSchema.extend({
   login: loginSchema,
   password: passwordSchema,
   displayName: displayNameSchema,
-  privacyConsent: z.literal(true),
 })
 
 export const loginRequestSchema = z.object({
@@ -83,6 +91,7 @@ export const meResponseSchema = z.object({
 export const oauthProviderSchema = z.union([z.literal('yandex'), z.literal('vk')])
 
 export const oauthStartRequestSchema = z.object({
+  registration: registrationLegalAcceptanceSchema.optional(),
   webappOrigin: z.string().url().max(512).optional(),
 }).strict()
 

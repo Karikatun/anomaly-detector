@@ -38,7 +38,7 @@ test('opens login and registration forms from the anonymous choice screen', asyn
   await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
 })
 
-test('requires privacy consent and shows a non-blocking 16+ registration notice', async ({ page }) => {
+test('requires separate personal-data consent and links both registration documents', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
   await page.getByLabel('Имя').fill('Ян')
@@ -46,10 +46,17 @@ test('requires privacy consent and shows a non-blocking 16+ registration notice'
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
 
   const submit = page.getByRole('button', { name: 'Регистрация', exact: true })
-  const privacyConsent = page.getByRole('checkbox', { name: 'Я согласен на обработку персональных данных' })
+  const privacyConsent = page.getByRole('checkbox', { name: 'Я даю согласие на обработку персональных данных' })
 
   await expect(page.getByRole('checkbox', { name: 'Мне исполнилось 16 лет' })).toHaveCount(0)
   await expect(page.getByText('Игра имеет возрастную маркировку 16+.')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'обработку персональных данных' }))
+    .toHaveAttribute('href', '/personal-data-consent')
+  await expect(page.locator('p')
+    .filter({ hasText: 'Нажимая «Регистрация», вы принимаете' })
+    .getByRole('link', { name: 'Пользовательское соглашение' }))
+    .toHaveAttribute('href', '/terms')
+  await expect(page.getByText('Нажимая «Регистрация», вы принимаете')).toBeVisible()
   await expect(submit).toBeDisabled()
   await privacyConsent.check()
   await expect(submit).toBeEnabled()

@@ -553,12 +553,17 @@ test('anonymises a deleted participant in every Tender view', async () => {
 
   await tender.anonymizeParticipant('player-a')
 
-  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
-    players: [
-      { playerId: 'player-a', displayName: 'Deleted participant' },
-      { playerId: 'player-b', displayName: 'Борис' },
-    ],
-  })
+  const view = await tender.readTenderView({ tenderId, playerId: 'player-b' })
+  expect(view.players).toContainEqual(expect.objectContaining({
+    playerId: expect.stringMatching(/^deleted-participant-/),
+    displayName: 'Deleted participant',
+    rating: 0,
+  }))
+  expect(view.players).toContainEqual(expect.objectContaining({
+    playerId: 'player-b',
+    displayName: 'Борис',
+  }))
+  expect(JSON.stringify(view)).not.toContain('player-a')
 })
 
 test('does not expose the post-match audit before the Tender is complete', async () => {

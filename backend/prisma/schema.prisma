@@ -13,6 +13,10 @@ model User {
   passwordHash String        @map("password_hash")
   displayName  String?       @map("display_name")
   locale       String        @default("ru") @map("locale")
+  privacyConsentVersion String? @map("privacy_consent_version")
+  privacyConsentAt DateTime? @map("privacy_consent_at")
+  termsVersion String? @map("terms_version")
+  termsAcceptedAt DateTime? @map("terms_accepted_at")
   anonymizedAt DateTime?     @map("anonymized_at")
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
@@ -45,6 +49,9 @@ model OAuthTransaction {
   codeVerifier String   @map("code_verifier")
   provider     String
   redirectUri  String   @map("redirect_uri")
+  privacyConsentVersion String? @map("privacy_consent_version")
+  termsVersion String? @map("terms_version")
+  legalAcceptedAt DateTime? @map("legal_accepted_at")
   expiresAt    DateTime @map("expires_at")
   createdAt    DateTime @default(now()) @map("created_at")
 

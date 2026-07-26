@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useState } from 'react'
+import type { OAuthStartRequest } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -11,9 +12,18 @@ type OAuthButtonProps = {
   label: string
   className?: string
   icon?: ReactNode
+  registration?: OAuthStartRequest['registration']
+  requireRegistrationConsent?: boolean
 }
 
-export function OAuthButton({ provider, label, className, icon }: OAuthButtonProps) {
+export function OAuthButton({
+  provider,
+  label,
+  className,
+  icon,
+  registration,
+  requireRegistrationConsent = false,
+}: OAuthButtonProps) {
   const { t } = useI18n()
   const { startOAuth } = useAuth()
   const [busy, setBusy] = useState(false)
@@ -24,12 +34,12 @@ export function OAuthButton({ provider, label, className, icon }: OAuthButtonPro
     setBusy(true)
     setError(null)
     try {
-      await startOAuth(provider)
+      await startOAuth(provider, registration)
     } catch {
       setBusy(false)
       setError(t('oauth.error.server'))
     }
-  }, [busy, provider, startOAuth, t])
+  }, [busy, provider, registration, startOAuth, t])
 
   return (
     <div className="grid gap-1">
@@ -38,7 +48,7 @@ export function OAuthButton({ provider, label, className, icon }: OAuthButtonPro
         variant="outline"
         size="lg"
         className={cn('w-full', className)}
-        disabled={busy}
+        disabled={busy || (requireRegistrationConsent && !registration)}
         onClick={() => void handleClick()}
       >
         {icon}

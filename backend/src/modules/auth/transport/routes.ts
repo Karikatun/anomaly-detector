@@ -425,6 +425,7 @@ export function createAuthRoutes({
   protectedRoutes.openapi(deleteAccountRoute, async (c) => {
     const userId = c.var.user.id
     await executeAuth(() => service.deleteAccount(userId))
+    deleteRefreshCookie(c, env)
     return c.body(null, 204)
   })
   protectedRoutes.use('/profile', requireAuth)
@@ -439,13 +440,18 @@ export function createAuthRoutes({
 
   routes.openapi(oauthStartRoute, async (c) => {
     const { provider } = c.req.valid('param')
-    const { webappOrigin: bodyWebappOrigin } = c.req.valid('json')
+    const { registration, webappOrigin: bodyWebappOrigin } = c.req.valid('json')
     const webappOrigin = trustedOAuthWebappOrigin(bodyWebappOrigin ?? webappUrl, env)
     if (!oauthCallbackBaseUrl) {
       throw new AppError(500, 'INTERNAL_ERROR', 'OAuth callback URL is not configured')
     }
     const redirectUri = new URL(`/api/auth/oauth/${provider}/callback`, oauthCallbackBaseUrl).toString()
-    const result = await executeAuth(() => service.startOAuthSignIn({ provider, redirectUri, webappOrigin }))
+    const result = await executeAuth(() => service.startOAuthSignIn({
+      provider,
+      redirectUri,
+      registration,
+      webappOrigin,
+    }))
     return c.json(result, 200)
   })
 

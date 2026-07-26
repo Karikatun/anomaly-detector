@@ -68,6 +68,10 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
                 login: input.user.login,
                 passwordHash: input.user.passwordHash,
                 displayName: input.user.displayName,
+                privacyConsentAt: input.user.legalAcceptedAt,
+                privacyConsentVersion: input.user.privacyConsentVersion,
+                termsAcceptedAt: input.user.legalAcceptedAt,
+                termsVersion: input.user.termsVersion,
               },
             })
             const session = await tx.authSession.create({
@@ -239,9 +243,12 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
         data: {
           codeVerifier: transaction.codeVerifier,
           expiresAt: transaction.expiresAt,
+          legalAcceptedAt: transaction.legalAcceptance?.acceptedAt,
+          privacyConsentVersion: transaction.legalAcceptance?.privacyConsentVersion,
           provider: transaction.provider,
           redirectUri: transaction.redirectUri,
           stateHash: await sha256(transaction.state),
+          termsVersion: transaction.legalAcceptance?.termsVersion,
         },
       })
     },
@@ -256,6 +263,13 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
       return {
         codeVerifier: transaction.codeVerifier,
         expiresAt: transaction.expiresAt,
+        ...(transaction.legalAcceptedAt && transaction.privacyConsentVersion && transaction.termsVersion ? {
+          legalAcceptance: {
+            acceptedAt: transaction.legalAcceptedAt,
+            privacyConsentVersion: transaction.privacyConsentVersion,
+            termsVersion: transaction.termsVersion,
+          },
+        } : {}),
         provider: transaction.provider as 'yandex' | 'vk',
         redirectUri: transaction.redirectUri,
         state,
@@ -283,6 +297,10 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
             login: userData.login,
             passwordHash: 'OAUTH_USER',
             displayName: userData.displayName ?? null,
+            privacyConsentAt: userData.legalAcceptance.acceptedAt,
+            privacyConsentVersion: userData.legalAcceptance.privacyConsentVersion,
+            termsAcceptedAt: userData.legalAcceptance.acceptedAt,
+            termsVersion: userData.legalAcceptance.termsVersion,
           },
         })
         await tx.authIdentity.create({
@@ -307,22 +325,26 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
       })
     },
 
-    async anonymizeUser({ userId, now }) {
-      await db.user.update({
-        where: { id: userId },
-        data: {
-          login: `deleted-${crypto.randomUUID()}`,
-          passwordHash: 'ANONYMIZED',
-          displayName: null,
-          anonymizedAt: now,
-        },
-      })
-    },
-
-    async revokeAllSessionsByUserId({ userId, now }) {
-      await db.authSession.updateMany({
-        where: { userId, revokedAt: null },
-        data: { revokedAt: now },
+    async eraseUserIdentity({ userId, now }) {
+      await db.$transaction(async (tx) => {
+        await tx.authIdentity.deleteMany({ where: { userId } })
+        await tx.authSession.deleteMany({ where: { userId } })
+        await tx.currentMatch.deleteMany({ where: { userId } })
+        await tx.tenderRoomMember.deleteMany({ where: { userId } })
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            anonymizedAt: now,
+            displayName: null,
+            locale: 'ru',
+            login: `deleted-${crypto.randomUUID()}`,
+            passwordHash: 'ANONYMIZED',
+            privacyConsentAt: null,
+            privacyConsentVersion: null,
+            termsAcceptedAt: null,
+            termsVersion: null,
+          },
+        })
       })
     },
 
