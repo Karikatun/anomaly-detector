@@ -23,6 +23,19 @@ marketing campaign: links are distributed directly to known testers.
 - Real-time Pub/Sub: Yandex Managed Service for Valkey only when horizontally scaled WebSocket features need cross-instance fanout.
 - CLI: Yandex Cloud CLI, `yc`.
 
+## Confirmed Public Hosts
+
+- Webapp: `https://anomaly-detector.ru`.
+- API and WebSocket: `https://api.anomaly-detector.ru`.
+- Redirect only: `https://www.anomaly-detector.ru` to `https://anomaly-detector.ru`.
+- Support: `support@anomaly-detector.ru`; do not publish legal/support pages until
+  inbound and outbound delivery has been verified.
+
+The DNS zone is currently hosted by REG.RU. Before cutover, lower the affected records'
+TTL, preserve mail records, and replace only the web/API address records with the
+Application Load Balancer/CDN targets. Do not delegate the whole zone merely to set up
+mail.
+
 ## Intake
 
 Ask only product and release questions:
@@ -114,7 +127,7 @@ PORT=3000
 WORKER_HEALTH_PORT=3001
 DATABASE_URL=postgresql://...
 JWT_SECRET=<64-or-more-hex-characters>
-CORS_ORIGINS=https://app.example.com
+CORS_ORIGINS=https://anomaly-detector.ru
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 REFRESH_REUSE_GRACE_SECONDS=10
@@ -165,8 +178,30 @@ client heartbeat/reconnect window. The load balancer must never target worker po
 
 Attach Smart Web Security and Advanced Rate Limiter to the API virtual host before DNS
 is switched. Enable access logs with redaction and alerts for elevated `4xx`, `5xx`, and
-backend latency. Use `https://api.<site-domain>` as `VITE_API_URL` and the exact
-`https://app.<site-domain>` origin in `CORS_ORIGINS`.
+backend latency. Use `https://api.anomaly-detector.ru` as `VITE_API_URL` and the exact
+`https://anomaly-detector.ru` origin in `CORS_ORIGINS`.
+
+## Support Mailbox
+
+Use one real mailbox, `support@anomaly-detector.ru`, rather than forwarding to a
+personal address. The minimal Yandex 360 for Business plan is sufficient for the initial
+single-user support workflow.
+
+1. Create a Yandex 360 organisation and choose the minimal plan for one employee.
+2. Add and verify `anomaly-detector.ru` without delegating its name servers away from
+   REG.RU.
+3. In REG.RU DNS, add the verification TXT record supplied by Yandex 360.
+4. Add `MX @ mx.yandex.net.` with priority `10`.
+5. Add `TXT @ "v=spf1 redirect=_spf.yandex.net"`.
+6. Copy the domain-specific DKIM value from Yandex 360 and add it at
+   `mail._domainkey`.
+7. Create the employee/mailbox with login `support`.
+8. Send test messages in both directions to unrelated providers and verify SPF and DKIM
+   pass before placing the address in the UI, privacy policy, or terms.
+
+Add a DMARC policy after SPF and DKIM pass. Start in monitoring mode, review reports,
+then tighten the policy; do not publish a copied DKIM key or a guessed DMARC reporting
+address.
 
 ## Managed PostgreSQL
 
@@ -207,7 +242,7 @@ yc serverless container revision deploy \
   --memory 256MB \
   --execution-timeout 60s \
   --service-account-id <cleanup_runtime_service_account_ID> \
-  --environment DATABASE_URL='<production_database_url>',JWT_SECRET='<production_jwt_secret>',CORS_ORIGINS=https://app.example.com,COOKIE_SECURE=true,SESSION_ABSOLUTE_TTL_DAYS=90,SESSION_RETENTION_DAYS=7
+  --environment DATABASE_URL='<production_database_url>',JWT_SECRET='<production_jwt_secret>',CORS_ORIGINS=https://anomaly-detector.ru,COOKIE_SECURE=true,SESSION_ABSOLUTE_TTL_DAYS=90,SESSION_RETENTION_DAYS=7
 ```
 
 Configure the cleanup revision with the same production `DATABASE_URL`, `JWT_SECRET`, session TTL, retention, network, and Lockbox policy as the API revision. Prefer Lockbox or the console instead of putting real secrets into shell history. Do not make the cleanup container public.
@@ -256,8 +291,8 @@ Use shared CDN caching only for anonymous, public-equivalent website responses. 
 Build locally or in CI:
 
 ```bash
-VITE_API_URL=https://api.example.com bun run build:webapp
-PUBLIC_WEBSITE_URL=https://www.example.com bun run build:website
+VITE_API_URL=https://api.anomaly-detector.ru bun run build:webapp
+PUBLIC_WEBSITE_URL=https://anomaly-detector.ru bun run build:website
 ```
 
 Both values are embedded at build time. `VITE_API_URL` must point to the Application Load Balancer custom host. `PUBLIC_WEBSITE_URL` must be the public canonical origin of the website; without it, the generated pages intentionally omit canonical and `og:url` metadata. Rebuild after either origin changes. Add `PUBLIC_WEBAPP_URL` only when the public website intentionally links to the authenticated webapp.
