@@ -48,8 +48,14 @@
 }
 
 .copy {
+  position: relative;
+  z-index: 1;
   display: grid;
   min-width: 0;
+  width: fit-content;
+  padding: .12rem .24rem;
+  border-radius: .2rem;
+  background: rgba(1, 13, 27, .98);
   line-height: 1;
 }
 

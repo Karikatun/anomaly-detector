@@ -1,4 +1,4 @@
-import { InformationCircleIcon, TestTube01Icon } from '@hugeicons/core-free-icons'
+import { InformationCircleIcon, SignalFullIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
 import { useState } from 'react'
@@ -14,6 +14,7 @@ import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
 import { availableReconnaissanceTargets } from './reconnaissance-targets'
 import { runTenderAction } from './run-tender-action'
+import { PhaseNotice } from './components/TenderActionPanel'
 
 type ReconnaissancePanelProps = {
   mySamples: SignalId[]
@@ -27,6 +28,43 @@ type ReconnaissancePanelProps = {
 const targetStyle = (signal?: SignalId) => ({
   '--signal-accent': signal ? signalAccent(signal) : '#75879c',
 } as CSSProperties)
+
+function SampleInventory({ mySamples }: { mySamples: SignalId[] }) {
+  const { t } = useI18n()
+
+  return (
+    <aside className={styles.surface}>
+      <div className={styles.sectionHeader}>
+        <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Ваши образцы</Typography>
+        <Typography as="span" variant="caption" className={styles.sectionMeta}>{mySamples.length} / 6</Typography>
+      </div>
+      {mySamples.length === 0 ? (
+        <Typography variant="bodySm" tone="muted">Пока нет образцов.</Typography>
+      ) : (
+        <div className={styles.compactList}>
+          {mySamples.map((signal) => (
+            <div key={signal} className={styles.compactSignal} style={targetStyle(signal)}>
+              <SignalGlyph signal={signal} className={styles.signalGlyph} />
+              <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
+              <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} aria-label="Образец сигнала получен" />
+            </div>
+          ))}
+        </div>
+      )}
+    </aside>
+  )
+}
+
+export function ReconnaissanceUnavailable({ mySamples }: { mySamples: SignalId[] }) {
+  return (
+    <section className={styles.panel} aria-label="Разведка недоступна">
+      <PhaseNotice description="Цели выбирать не нужно — ход будет пропущен.">
+        Мощность на разведку не выделена
+      </PhaseNotice>
+      <SampleInventory mySamples={mySamples} />
+    </section>
+  )
+}
 
 export function ReconnaissancePanel({
   mySamples,
@@ -135,25 +173,7 @@ export function ReconnaissancePanel({
           )}
         </div>
 
-        <aside className={styles.surface}>
-          <div className={styles.sectionHeader}>
-            <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Ваши образцы</Typography>
-            <Typography as="span" variant="caption" className={styles.sectionMeta}>{mySamples.length} / 6</Typography>
-          </div>
-          {mySamples.length === 0 ? (
-            <Typography variant="bodySm" tone="muted">Пока нет образцов.</Typography>
-          ) : (
-            <div className={styles.compactList}>
-              {mySamples.map((signal) => (
-                <div key={signal} className={styles.compactSignal} style={targetStyle(signal)}>
-                  <SignalGlyph signal={signal} className={styles.signalGlyph} />
-                  <Typography as="strong" variant="bodySmMedium">{signalName(signal)}</Typography>
-                  <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-label="Образец получен" />
-                </div>
-              ))}
-            </div>
-          )}
-        </aside>
+        <SampleInventory mySamples={mySamples} />
       </div>
 
       {error && (

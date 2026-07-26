@@ -50,12 +50,12 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
   const [expandedSignal, setExpandedSignal] = useState<SignalId | null>(null)
   const [saveStatus, setSaveStatus] = useState<WorkingModelSaveStatus>({ state: 'idle' })
   const [draftController] = useState(() => new WorkingModelDraftController({
-    cancel: clearTimeout,
+    cancel: (timer) => clearTimeout(timer),
     initialModel: model,
     onDraft: setDraft,
     onStatus: setSaveStatus,
     save: onSave,
-    schedule: setTimeout,
+    schedule: (callback, delayMs) => setTimeout(callback, delayMs),
   }))
 
   useEffect(() => {
@@ -66,12 +66,12 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
     draftController.receiveServerModel(model)
   }, [draftController, model])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    draftController.resume()
+    return () => {
       void draftController.dispose()
-    },
-    [draftController],
-  )
+    }
+  }, [draftController])
 
   const updateSignal = (signal: SignalId, cell: SignalCell) => {
     draftController.update({

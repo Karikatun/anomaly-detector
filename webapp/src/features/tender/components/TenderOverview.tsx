@@ -2,7 +2,6 @@ import type { CSSProperties } from 'react'
 
 import type { TenderView } from '@anomaly-detector/contracts'
 
-import { Card, CardContent } from '@/components/ui/card'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import {
@@ -145,71 +144,113 @@ export function TenderLaboratoryJournal({
   )
 }
 
-export function TenderEvidence({ view }: { view: TenderView }) {
+type EvidenceData = Pick<TenderView, 'privateMeasurements' | 'publicLaboratoryResults' | 'publicTheses'>
+
+export function TenderEvidence({ data }: { data: EvidenceData }) {
   const { t } = useI18n()
+  const isEmpty = data.publicLaboratoryResults.length === 0
+    && data.privateMeasurements.length === 0
+    && data.publicTheses.length === 0
 
   return (
-    <>
-      {view.publicLaboratoryResults.length > 0 && (
-        <div className="grid gap-2">
-          <Typography variant="control" tone="muted">Публичные результаты лаборатории</Typography>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {view.publicLaboratoryResults.map((result, index) => (
-              <Card key={index} size="sm">
-                <CardContent className="py-3">
-                  <Typography variant="bodySmMedium">
-                    {t(signalLabelKeys[result.sourceSignal])} → {t(signalLabelKeys[result.receiverSignal])}
-                  </Typography>
-                  <Typography variant="control" tone="muted">
-                    {laboratoryResultLabels[result.publicResult] ?? result.publicResult}{' '}
-                    ({protocolLabels[result.protocol] ?? result.protocol})
-                  </Typography>
-                </CardContent>
-              </Card>
+    <div className={styles.evidence}>
+      {isEmpty && (
+        <Typography variant="bodySm" tone="muted">Данные появятся после лабораторных опытов и тезисов.</Typography>
+      )}
+      {data.publicLaboratoryResults.length > 0 && (
+        <section className={styles.evidenceSection}>
+          <div className={styles.evidenceHeading}>
+            <Typography as="h3" variant="control">Результаты лаборатории</Typography>
+            <Typography as="span" variant="caption">Публично · {data.publicLaboratoryResults.length}</Typography>
+          </div>
+          <div className={styles.evidenceGrid}>
+            {data.publicLaboratoryResults.map((result, index) => (
+              <div key={index} className={styles.evidenceCard}>
+                <span className={styles.evidenceRoute}>
+                  <SignalGlyph signal={result.sourceSignal} />
+                  <Typography as="strong" variant="caption">{t(signalLabelKeys[result.sourceSignal])}</Typography>
+                  <Typography as="span" variant="bodySmMedium">→</Typography>
+                  <SignalGlyph signal={result.receiverSignal} />
+                  <Typography as="strong" variant="caption">{t(signalLabelKeys[result.receiverSignal])}</Typography>
+                </span>
+                <Typography variant="bodySmMedium">
+                  {laboratoryResultLabels[result.publicResult] ?? result.publicResult}
+                </Typography>
+                <Typography variant="caption" tone="muted">{protocolLabels[result.protocol] ?? result.protocol}</Typography>
+              </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {view.privateMeasurements.length > 0 && (
-        <div className="grid gap-2">
-          <Typography variant="control" tone="muted">Ваши приватные измерения</Typography>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {view.privateMeasurements.map((measurement, index) => (
-              <Card key={index} size="sm">
-                <CardContent className="py-3">
-                  <Typography variant="bodySmMedium">
-                    {t(signalLabelKeys[measurement.sourceSignal])} → {t(signalLabelKeys[measurement.receiverSignal])}
-                  </Typography>
-                  <Typography variant="control" tone="muted">
-                    {polarityRelationLabels[measurement.polarityRelation] ?? measurement.polarityRelation}
-                  </Typography>
-                </CardContent>
-              </Card>
+      {data.privateMeasurements.length > 0 && (
+        <section className={styles.evidenceSection}>
+          <div className={styles.evidenceHeading}>
+            <Typography as="h3" variant="control">Личные измерения</Typography>
+            <Typography as="span" variant="caption">Только вы · {data.privateMeasurements.length}</Typography>
+          </div>
+          <div className={styles.evidenceGrid}>
+            {data.privateMeasurements.slice().reverse().map((measurement, index) => (
+              <div key={index} className={styles.evidenceCard} data-private>
+                <span className={styles.evidenceRoute}>
+                  <SignalGlyph signal={measurement.sourceSignal} />
+                  <Typography as="strong" variant="caption">{t(signalLabelKeys[measurement.sourceSignal])}</Typography>
+                  <Typography as="span" variant="bodySmMedium">→</Typography>
+                  <SignalGlyph signal={measurement.receiverSignal} />
+                  <Typography as="strong" variant="caption">{t(signalLabelKeys[measurement.receiverSignal])}</Typography>
+                </span>
+                <Typography variant="bodySmMedium">
+                  {polarityRelationLabels[measurement.polarityRelation] ?? measurement.polarityRelation}
+                </Typography>
+              </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {view.publicTheses.length > 0 && (
-        <div className="grid gap-2">
-          <Typography variant="control" tone="muted">Публичные тезисы</Typography>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {view.publicTheses.map((thesis, index) => (
-              <Card key={index} size="sm" className={thesis.correct ? 'border-green-500/50' : 'border-red-500/50'}>
-                <CardContent className="py-3">
-                  <Typography variant="bodySmMedium">
-                    {t(signalLabelKeys[thesis.signalId])}: {t(fieldTypeLabelKeys[thesis.fieldType])} / {t(polarityLabelKeys[thesis.polarity])}
-                  </Typography>
-                  <Typography variant="control" tone={thesis.correct ? 'default' : 'destructive'}>
-                    {thesis.correct ? 'Верно' : 'Неверно'} · {verificationLabels[thesis.verification] ?? thesis.verification}
-                  </Typography>
-                </CardContent>
-              </Card>
+      {data.publicTheses.length > 0 && (
+        <section className={styles.evidenceSection}>
+          <div className={styles.evidenceHeading}>
+            <Typography as="h3" variant="control">Публичные тезисы</Typography>
+            <Typography as="span" variant="caption">{data.publicTheses.length}</Typography>
+          </div>
+          <div className={styles.evidenceGrid}>
+            {data.publicTheses.map((thesis, index) => (
+              <div key={index} className={styles.evidenceCard} data-correct={thesis.correct}>
+                <span className={styles.evidenceSignal}>
+                  <SignalGlyph signal={thesis.signalId} />
+                  <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[thesis.signalId])}</Typography>
+                </span>
+                <Typography variant="caption" tone="muted">
+                  {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
+                </Typography>
+                <Typography variant="caption" tone={thesis.correct ? 'default' : 'destructive'}>
+                  {thesis.correct ? 'Верно' : 'Неверно'} · {verificationLabels[thesis.verification] ?? thesis.verification}
+                </Typography>
+              </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
-    </>
+    </div>
+  )
+}
+
+export function TenderResearchData({ view }: { view: TenderView }) {
+  const count = view.publicLaboratoryResults.length
+    + view.privateMeasurements.length
+    + view.publicTheses.length
+
+  return (
+    <details className={styles.researchData}>
+      <summary>
+        <span>
+          <Typography as="strong" variant="bodySmMedium">Данные исследования</Typography>
+          <Typography as="small" variant="caption" tone="muted">Лаборатория, личные измерения и тезисы</Typography>
+        </span>
+        <Typography as="span" variant="caption" className={styles.researchCount}>{count}</Typography>
+      </summary>
+      <TenderEvidence data={view} />
+    </details>
   )
 }
