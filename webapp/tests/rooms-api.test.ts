@@ -13,6 +13,7 @@ test('room refresh reads current state without repeating the join mutation', asy
         hostId: '019be000-0000-7000-8000-000000000002',
         members: [{ ready: false, seat: 1, userId: '019be000-0000-7000-8000-000000000002' }],
         roomId: '019be000-0000-7000-8000-000000000001',
+        serverTime: '2026-07-26T12:00:00.000Z',
         status: 'waiting',
       })
     },

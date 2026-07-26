@@ -384,7 +384,7 @@ function TenderContent() {
           <Typography as="h3" variant="bodySmMedium" className="truncate">{phase}</Typography>
         </div>
         <div className="justify-self-end">
-          <TenderTimer dueAt={tenderView.dueAt} />
+          <TenderTimer dueAt={tenderView.dueAt} serverTime={tenderView.serverTime} />
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}

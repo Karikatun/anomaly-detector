@@ -1,6 +1,6 @@
 import type { RoomView } from '@anomaly-detector/contracts'
 
-export type RoomRecord = Omit<RoomView, 'roomId'> & { id: string }
+export type RoomRecord = Omit<RoomView, 'roomId' | 'serverTime'> & { id: string }
 
 export type RoomRepository = {
   create(input: { capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>

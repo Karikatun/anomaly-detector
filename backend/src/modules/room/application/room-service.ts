@@ -56,6 +56,7 @@ function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomVi
       hostId: room.hostId,
       members: room.members,
       roomId: room.id,
+      serverTime: new Date().toISOString(),
       status: room.status,
       ...(room.startsAt === null || room.startsAt === undefined ? {} : { startsAt: room.startsAt }),
       ...(room.tenderId === null ? {} : { tenderId: room.tenderId }),

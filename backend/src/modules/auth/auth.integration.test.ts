@@ -186,6 +186,7 @@ maybeDescribe('auth API integration', () => {
       hostId: user.id,
       roomId: expect.any(String),
       members: [{ ready: false, seat: 1, userId: user.id }],
+      serverTime: expect.any(String),
       status: 'waiting',
     })
 
@@ -313,6 +314,7 @@ maybeDescribe('auth API integration', () => {
     const scheduledRoom = await start.json()
     expect(scheduledRoom).toMatchObject({
       roomId: room.roomId,
+      serverTime: expect.any(String),
       status: 'starting',
       startsAt: expect.any(String),
     })
@@ -354,6 +356,7 @@ maybeDescribe('auth API integration', () => {
     expect(playerView.status).toBe(200)
     expect(await playerView.json()).toMatchObject({
       phase: 'access-slot-selection',
+      serverTime: expect.any(String),
       tenderId,
     })
 
