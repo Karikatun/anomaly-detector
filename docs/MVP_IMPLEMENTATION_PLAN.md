@@ -280,7 +280,9 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [ ] Complete legal review, Roskomnadzor notification decision, consent text, retention schedule, and anti-abuse cookie disclosure before collecting production users.
 3. [-] Complete the release-safety path.
    - [x] Validate environment at startup and expose liveness/readiness endpoints.
-   - [ ] Run migrations against a production-like copy, document rollback/forward-fix ownership, and perform a real PostgreSQL backup/restore drill.
+   - [-] Run migrations against a production-like copy, document rollback/forward-fix ownership, and perform a real PostgreSQL backup/restore drill.
+     - [x] Add and pass an isolated PostgreSQL 18 migration plus `pg_dump`/`pg_restore` rehearsal that cannot touch development data.
+     - [ ] Repeat the drill on a production-like Yandex Managed PostgreSQL cluster and record recovery evidence and ownership.
    - [ ] Verify that API and worker are both deployed, monitored, and restart-safe; alert on worker lag, overdue Tenders, auth throttling, elevated 5xx, DB saturation, and abnormal realtime reconnects.
 4. [ ] Add production abuse and performance validation: auth/login load with Argon2id, registration quota races, WebSocket connection/message limits, 2-4 player Tender load, request-size limits, and log redaction.
 5. [ ] Run the complete release acceptance matrix on current mobile Safari/Chrome and desktop Chrome/Firefox, including reconnect, refresh, multi-tab session, active-match return, all-player abandonment, audit privacy, and account deletion.

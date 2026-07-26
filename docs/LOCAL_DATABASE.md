@@ -73,6 +73,26 @@ Then apply Prisma migrations:
 bun run --cwd backend prisma:deploy
 ```
 
+## Backup/Restore Drill
+
+Before a production release, verify the PostgreSQL backup path from the repository root:
+
+```bash
+bun run drill:postgres:backup-restore
+```
+
+The drill creates its own temporary Docker Compose project and volume, applies every
+Prisma migration to a clean PostgreSQL 18 database, writes a control record, creates a
+custom-format `pg_dump`, restores it into a second database, and checks both the control
+record and Prisma migration history. It always removes only the temporary project it
+created. It does not read, modify, dump, or restore the normal development and test
+databases.
+
+This local drill proves the repository procedure. Before production, repeat the recovery
+exercise against a production-like Yandex Managed PostgreSQL cluster and record the
+backup identifier, restore target, start/end time, recovery point, validation result, and
+operator. Do not restore a drill over the production database.
+
 ## Optional Port Overrides
 
 If `54329` is already in use, create a repository-root `.env` from `.env.example` and change `POSTGRES_PORT`:
