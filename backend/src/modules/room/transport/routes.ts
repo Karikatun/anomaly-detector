@@ -1,6 +1,7 @@
 import {
   apiErrorSchema,
   createRoomRequestSchema,
+  currentMatchResponseSchema,
   myMatchesResponseSchema,
   roomIdSchema,
   roomViewSchema,
@@ -30,6 +31,18 @@ const listMatchesRoute = createRoute({
   path: '/mine',
   responses: {
     200: { content: { 'application/json': { schema: myMatchesResponseSchema } }, description: 'Started Tenders for the authenticated player' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+  },
+})
+
+const currentMatchRoute = createRoute({
+  method: 'get',
+  path: '/current',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: currentMatchResponseSchema } },
+      description: 'Current unfinished Room for the authenticated player',
+    },
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
   },
 })
@@ -116,6 +129,9 @@ export function createRoomRoutes(input: {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
   routes.openapi(listMatchesRoute, async (c) => c.json({ matches: await executeRoom(() => input.service.listMatches(c.var.user.id)) }, 200))
+  routes.openapi(currentMatchRoute, async (c) => c.json({
+    match: await executeRoom(() => input.service.getCurrentMatch(c.var.user.id)),
+  }, 200))
   routes.openapi(createRoomRoute, async (c) => c.json(
     await executeRoom(() => input.service.createRoom({ ...c.req.valid('json'), hostId: c.var.user.id })),
     201,

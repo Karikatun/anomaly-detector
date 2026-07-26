@@ -13,7 +13,11 @@ export async function runWorker() {
   const stopTenderAdvanceLoop = startPollingLoop({
     intervalMs: 2_000,
     label: 'Tender advancement',
-    task: () => tender.advanceDueTenders({ limit: 50, now: new Date() }),
+    task: async () => {
+      const result = await tender.advanceDueTenders({ limit: 50, now: new Date() })
+      await roomStart.releaseCompletedCurrentMatches()
+      return result
+    },
   })
   const stopRoomStartLoop = startPollingLoop({
     intervalMs: 250,

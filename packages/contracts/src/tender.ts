@@ -145,6 +145,20 @@ export const submitScientificModelCommandSchema = z.object({
   type: z.literal('submit-scientific-model'),
 }).strict()
 
+export const leaveTenderCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  type: z.literal('leave-tender'),
+}).strict()
+
+export const resumeTenderCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  type: z.literal('resume-tender'),
+}).strict()
+
 export const tenderCommandSchema = z.discriminatedUnion('type', [
   requestAccessSlotCommandSchema,
   allocatePowerCommandSchema,
@@ -155,6 +169,8 @@ export const tenderCommandSchema = z.discriminatedUnion('type', [
   reserveContractCommandSchema,
   submitContractBidCommandSchema,
   submitScientificModelCommandSchema,
+  leaveTenderCommandSchema,
+  resumeTenderCommandSchema,
 ])
 
 export const commandReceiptSchema = z.object({
@@ -254,7 +270,10 @@ export const tenderAuditViewSchema = z.object({
 
 export const tenderViewSchema = z.object({
   activePlayerId: playerIdSchema.optional(),
+  abandonmentDueAt: z.string().datetime().nullable().optional(),
+  completionReason: z.enum(['all_players_left']).optional(),
   corporateReviewActive: z.boolean().optional(),
+  hasLeft: z.boolean().optional(),
   knownSignals: z.array(signalIdSchema),
   publicContracts: z.array(publicContractSchema),
   publicFinalContract: publicContractSchema.optional(),

@@ -55,5 +55,18 @@ maybeDescribe('Room start integration', () => {
       ],
     })
     await expect(roomStart.advanceDueRoomStarts({ now: new Date('2026-07-24T12:00:05.000Z') })).resolves.toEqual({ started: [] })
+
+    await prisma.currentMatch.createMany({
+      data: [
+        { roomId: room.id, userId: host.id },
+        { roomId: room.id, userId: guest.id },
+      ],
+    })
+    await prisma.tender.update({
+      where: { id: tenderId },
+      data: { phase: 'complete' },
+    })
+    await expect(roomStart.releaseCompletedCurrentMatches()).resolves.toBe(2)
+    expect(await prisma.currentMatch.count({ where: { roomId: room.id } })).toBe(0)
   })
 })

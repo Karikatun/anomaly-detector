@@ -72,8 +72,10 @@ export function createInMemoryTenderStore(): TenderStore {
 
     async findDue({ limit, now }) {
       return [...tenders.values()]
-        .filter((tender) => tender.dueAt !== null && tender.dueAt <= now)
-        .sort((left, right) => left.dueAt!.getTime() - right.dueAt!.getTime())
+        .filter((tender) =>
+          (tender.dueAt !== null && tender.dueAt <= now)
+          || (tender.abandonmentDueAt !== null && tender.abandonmentDueAt <= now))
+        .sort((left, right) => earliestDeadline(left).getTime() - earliestDeadline(right).getTime())
         .slice(0, limit)
         .map((tender) => tender.id)
     },
@@ -82,4 +84,9 @@ export function createInMemoryTenderStore(): TenderStore {
       return structuredClone(auditEvents.get(tenderId) ?? [])
     },
   }
+}
+
+function earliestDeadline(tender: StoredTender) {
+  const deadlines = [tender.dueAt, tender.abandonmentDueAt].filter((value): value is Date => value !== null)
+  return new Date(Math.min(...deadlines.map((deadline) => deadline.getTime())))
 }

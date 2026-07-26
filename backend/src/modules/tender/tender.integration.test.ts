@@ -21,6 +21,50 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     await prisma.$disconnect()
   })
 
+  test('persists an all-player leave deadline and completes it after a restart', async () => {
+    const leftAt = new Date('2026-07-26T12:00:00.000Z')
+    const firstModule = createTenderModule({
+      now: () => leftAt,
+      store: createPrismaTenderStore(prisma),
+    })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'leave-a',
+      tenderId,
+      type: 'leave-tender',
+    })
+    await firstModule.execute({
+      actorId: 'player-b',
+      commandId: 'leave-b',
+      tenderId,
+      type: 'leave-tender',
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+      abandonmentDueAt: '2026-07-26T12:00:05.000Z',
+      hasLeft: true,
+      phase: 'access-slot-selection',
+    })
+    expect(await restartedModule.advanceDueTenders({
+      limit: 10,
+      now: new Date('2026-07-26T12:00:05.000Z'),
+    })).toEqual({ advancedTenderIds: [tenderId] })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+      abandonmentDueAt: null,
+      completionReason: 'all_players_left',
+      phase: 'complete',
+      winnerPlayerIds: [],
+    })
+  })
+
   test('persists a due Access Slot deadline and resolves it after a restart', async () => {
     const createdAt = new Date('2026-07-20T12:00:00.000Z')
     const firstModule = createTenderModule({

@@ -27,6 +27,75 @@ test('gives every live phase a 90-second deadline', async () => {
   })
 })
 
+test('abandons a Tender five seconds after every player explicitly leaves and cancels when one resumes', async () => {
+  let now = new Date('2026-07-26T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'leave-a-1',
+    tenderId,
+    type: 'leave-tender',
+  } as never)
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    abandonmentDueAt: null,
+    hasLeft: true,
+    phase: 'access-slot-selection',
+  })
+
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'leave-b-1',
+    tenderId,
+    type: 'leave-tender',
+  } as never)
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    abandonmentDueAt: '2026-07-26T12:00:05.000Z',
+    hasLeft: true,
+    phase: 'access-slot-selection',
+  })
+
+  now = new Date('2026-07-26T12:00:04.999Z')
+  expect(await tender.advanceDueTenders({ limit: 10, now })).toEqual({ advancedTenderIds: [] })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'resume-a-1',
+    tenderId,
+    type: 'resume-tender',
+  } as never)
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    abandonmentDueAt: null,
+    hasLeft: false,
+    phase: 'access-slot-selection',
+  })
+
+  now = new Date('2026-07-26T12:00:10.000Z')
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'leave-a-2',
+    tenderId,
+    type: 'leave-tender',
+  } as never)
+  expect(await tender.advanceDueTenders({
+    limit: 10,
+    now: new Date('2026-07-26T12:00:15.000Z'),
+  })).toEqual({ advancedTenderIds: [tenderId] })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    abandonmentDueAt: null,
+    completionReason: 'all_players_left',
+    phase: 'complete',
+    winnerPlayerIds: [],
+  })
+})
+
 test('rejects Power allocations with more Reconnaissance than missing Samples', async () => {
   const store = createInMemoryTenderStore()
   const tender = createTenderModule({ store })

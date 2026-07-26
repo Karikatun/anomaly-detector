@@ -1,4 +1,5 @@
 import type { DbClient } from '../../../db'
+import type { Prisma } from '../../../generated/prisma/client'
 import type { RoomRepository } from '../application/ports'
 import { RoomFailure } from '../domain/errors'
 
@@ -33,7 +34,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
     async listStartedForMember(userId) {
       const rooms = await db.tenderRoom.findMany({
         where: { members: { some: { userId } }, status: 'started' },
-        include: { members: { orderBy: { seat: 'asc' } }, tender: { select: { phase: true } } },
+        include: { members: { orderBy: { seat: 'asc' } }, tender: { select: { phase: true, state: true } } },
         orderBy: { updatedAt: 'desc' },
       })
       return rooms.map((room) => ({
@@ -44,15 +45,51 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         status: 'started' as const,
         startsAt: null,
         tenderId: room.tenderId,
+        tenderCompletionReason: readTenderCompletionReason(room.tender?.state),
         tenderPhase: room.tender?.phase,
       }))
+    },
+    async readCurrentForMember(userId) {
+      return db.$transaction(async (tx) => {
+        const current = await tx.currentMatch.findUnique({
+          where: { userId },
+          include: {
+            room: {
+              include: {
+                members: { orderBy: { seat: 'asc' } },
+                tender: { select: { phase: true, state: true } },
+              },
+            },
+          },
+        })
+        if (!current) return null
+        if (current.room.tender?.phase === 'complete') {
+          await tx.currentMatch.delete({ where: { userId } })
+          return null
+        }
+        return {
+          capacity: current.room.capacity as 2 | 3 | 4,
+          hostId: current.room.hostId,
+          id: current.room.id,
+          members: current.room.members.map((member) => ({
+            ready: member.ready,
+            seat: member.seat,
+            userId: member.userId,
+          })),
+          status: current.room.status as 'waiting' | 'starting' | 'started',
+          startsAt: current.room.startsAt?.toISOString() ?? null,
+          tenderId: current.room.tenderId,
+          tenderCompletionReason: readTenderCompletionReason(current.room.tender?.state),
+          tenderPhase: current.room.tender?.phase,
+        }
+      }, { isolationLevel: 'Serializable' })
     },
     async readForMember(input) {
       const room = await db.tenderRoom.findUnique({
         where: { id: input.roomId },
         include: {
           members: { orderBy: { seat: 'asc' } },
-          tender: { select: { phase: true } },
+          tender: { select: { phase: true, state: true } },
         },
       })
       if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
@@ -71,42 +108,73 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         status: room.status as 'waiting' | 'starting' | 'started',
         startsAt: room.startsAt?.toISOString() ?? null,
         tenderId: room.tenderId,
+        tenderCompletionReason: readTenderCompletionReason(room.tender?.state),
         tenderPhase: room.tender?.phase,
       }
     },
     async create(input) {
-      const room = await db.tenderRoom.create({
-        data: {
-          capacity: input.capacity,
-          hostId: input.hostId,
-          status: 'waiting',
-          members: {
-            create: { seat: 1, userId: input.hostId },
-          },
-        },
-        include: {
-          members: { orderBy: { seat: 'asc' } },
-        },
-      })
-      return {
-        capacity: room.capacity as 2 | 3 | 4,
-        hostId: room.hostId,
-        id: room.id,
-        members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
-        status: 'waiting',
-        startsAt: null,
-        tenderId: room.tenderId,
+      try {
+        return await db.$transaction(async (tx) => {
+          await releaseCompletedCurrentMatch(tx, input.hostId)
+          if (await tx.currentMatch.findUnique({ where: { userId: input.hostId } })) {
+            throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
+          }
+          const room = await tx.tenderRoom.create({
+            data: {
+              capacity: input.capacity,
+              hostId: input.hostId,
+              status: 'waiting',
+              members: {
+                create: { seat: 1, userId: input.hostId },
+              },
+            },
+            include: {
+              members: { orderBy: { seat: 'asc' } },
+            },
+          })
+          await tx.currentMatch.create({
+            data: { roomId: room.id, userId: input.hostId },
+          })
+          return {
+            capacity: room.capacity as 2 | 3 | 4,
+            hostId: room.hostId,
+            id: room.id,
+            members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
+            status: 'waiting' as const,
+            startsAt: null,
+            tenderId: room.tenderId,
+          }
+        }, { isolationLevel: 'Serializable' })
+      } catch (error) {
+        if (isCurrentMatchUniqueConstraintError(error)) {
+          throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
+        }
+        throw error
       }
     },
 
     async join(input) {
-      return db.$transaction(async (tx) => {
-        const room = await tx.tenderRoom.findUnique({
-          where: { id: input.roomId },
-          include: { members: { orderBy: { seat: 'asc' } } },
-        })
+      try {
+        return await db.$transaction(async (tx) => {
+          await releaseCompletedCurrentMatch(tx, input.actorId)
+          const currentMatch = await tx.currentMatch.findUnique({
+            where: { userId: input.actorId },
+            select: { roomId: true },
+          })
+          if (currentMatch && currentMatch.roomId !== input.roomId) {
+            throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
+          }
+          const room = await tx.tenderRoom.findUnique({
+            where: { id: input.roomId },
+            include: { members: { orderBy: { seat: 'asc' } } },
+          })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.members.some((member) => member.userId === input.actorId)) {
+          if (!currentMatch) {
+            await tx.currentMatch.create({
+              data: { roomId: room.id, userId: input.actorId },
+            })
+          }
           // Already joined — return current room state (idempotent poll)
           return {
             capacity: room.capacity as 2 | 3 | 4,
@@ -133,6 +201,9 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         await tx.tenderRoomMember.create({
           data: { roomId: room.id, seat, userId: input.actorId },
         })
+        await tx.currentMatch.create({
+          data: { roomId: room.id, userId: input.actorId },
+        })
         return {
           capacity: room.capacity as 2 | 3 | 4,
           hostId: room.hostId,
@@ -147,7 +218,13 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           startsAt: null,
           tenderId: room.tenderId,
         }
-      }, { isolationLevel: 'Serializable' })
+        }, { isolationLevel: 'Serializable' })
+      } catch (error) {
+        if (isCurrentMatchUniqueConstraintError(error)) {
+          throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
+        }
+        throw error
+      }
     },
 
     async leave(input) {
@@ -168,6 +245,9 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           return
         }
 
+        await tx.currentMatch.deleteMany({
+          where: { roomId: room.id, userId: input.actorId },
+        })
         await tx.tenderRoomMember.delete({
           where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
         })
@@ -248,4 +328,38 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
       }, { isolationLevel: 'Serializable' })
     },
   }
+}
+
+async function releaseCompletedCurrentMatch(tx: Prisma.TransactionClient, userId: string) {
+  const current = await tx.currentMatch.findUnique({
+    where: { userId },
+    include: { room: { include: { tender: { select: { phase: true } } } } },
+  })
+  if (current?.room.tender?.phase === 'complete') {
+    await tx.currentMatch.delete({ where: { userId } })
+  }
+}
+
+function isCurrentMatchUniqueConstraintError(error: unknown) {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error.code === 'P2002' || error.code === 'P2034')
+    && 'meta' in error
+    && typeof error.meta === 'object'
+    && error.meta !== null
+    && 'modelName' in error.meta
+    && error.meta.modelName === 'CurrentMatch'
+}
+
+function readTenderCompletionReason(state: Prisma.JsonValue | undefined) {
+  if (
+    typeof state === 'object'
+    && state !== null
+    && !Array.isArray(state)
+    && state.completionReason === 'all_players_left'
+  ) {
+    return state.completionReason
+  }
+  return undefined
 }

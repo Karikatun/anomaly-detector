@@ -31,6 +31,9 @@ function MyMatchesContent() {
   const matches = useQuery({
     queryKey: roomQueryKeys.mine(),
     queryFn: () => api.listMatches(),
+    refetchInterval: (query) => query.state.data?.some((match) => match.tenderPhase !== 'complete')
+      ? 2_000
+      : false,
   })
 
   return (
@@ -85,6 +88,11 @@ function MyMatchesContent() {
             <div className={styles.rows}>
               {matches.data.map((match) => {
                 const isComplete = match.tenderPhase === 'complete'
+                const status = match.tenderCompletionReason === 'all_players_left'
+                  ? 'Завершён досрочно'
+                  : isComplete
+                    ? t('matches.status.complete')
+                    : t('matches.status.active')
                 return (
                   <article className={styles.row} key={match.roomId}>
                     <div className={styles.cell} data-label={t('matches.column.date')}>
@@ -96,7 +104,7 @@ function MyMatchesContent() {
                     <div className={styles.cell} data-label={t('matches.column.status')}>
                       <Typography className={styles.status} data-complete={isComplete || undefined}>
                         <span className={styles.statusDot} aria-hidden="true" />
-                        {isComplete ? t('matches.status.complete') : t('matches.status.active')}
+                        {status}
                       </Typography>
                     </div>
                     <div className={styles.actionCell}>

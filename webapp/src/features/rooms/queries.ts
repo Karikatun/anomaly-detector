@@ -14,12 +14,21 @@ import { getRoomPollingIntervalMs } from './countdown'
 export const roomQueryKeys = {
   all: [...sessionQueryKeys.all, 'rooms'] as const,
   byId: (roomId: string) => [...roomQueryKeys.all, roomId] as const,
+  current: () => [...roomQueryKeys.all, 'current'] as const,
   mine: () => [...roomQueryKeys.all, 'mine'] as const,
 }
 
 type RoomMutationsOptions = {
   api: RoomsApi
   onRoomStarted?: (room: RoomView) => void
+}
+
+export function useCurrentMatchQuery(api: RoomsApi) {
+  return useQuery({
+    queryKey: roomQueryKeys.current(),
+    queryFn: () => api.getCurrentMatch(),
+    refetchInterval: (query) => query.state.data ? 2_000 : false,
+  })
 }
 
 export function useRoomQuery({
@@ -49,6 +58,7 @@ export function useCreateRoomMutation({ api }: RoomMutationsOptions) {
     mutationFn: (input: CreateRoomRequest) => api.create(input),
     onSuccess: (room) => {
       queryClient.setQueryData(roomQueryKeys.byId(room.roomId), room)
+      queryClient.setQueryData(roomQueryKeys.current(), room)
     },
   })
 }
@@ -60,6 +70,7 @@ export function useLeaveRoomMutation({ api }: RoomMutationsOptions) {
     mutationFn: (roomId: string) => api.leave(roomId),
     onSuccess: (_data, roomId) => {
       queryClient.removeQueries({ queryKey: roomQueryKeys.byId(roomId) })
+      queryClient.setQueryData(roomQueryKeys.current(), null)
     },
   })
 }
