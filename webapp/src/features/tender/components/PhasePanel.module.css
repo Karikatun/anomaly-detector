@@ -460,25 +460,36 @@
 }
 
 .privateMeasurementHeader {
-  display: flex;
+  display: grid;
   min-width: 0;
-  align-items: center;
-  gap: .35rem;
+  justify-items: start;
+  gap: .12rem;
   color: #42d9ca;
   text-transform: uppercase;
 }
 
+.privateMeasurementTitle {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: .35rem;
+}
+
+.privateMeasurementTitle > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
 .privateMeasurementHeader > :last-child {
-  margin-left: auto;
+  padding-left: 1.35rem;
   text-transform: none;
 }
 
 .privateMeasurementResult {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: .45rem;
+  gap: .3rem;
 }
 
 .privateMeasurementResult .signalGlyph {
@@ -487,16 +498,19 @@
   flex: none;
 }
 
-.measurementSignal {
-  display: flex;
+.measurementRoute {
+  display: grid;
   min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+  grid-template-columns: auto auto auto auto auto;
   align-items: center;
-  gap: .3rem;
+  gap: .28rem;
 }
 
-.measurementSignal strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.measurementRoute strong {
+  min-width: max-content;
+  white-space: nowrap;
 }
 
 .measurementArrow {
@@ -504,7 +518,6 @@
 }
 
 .measurementRelation {
-  grid-column: 1 / -1;
   color: #42d9ca;
   font-size: .72rem;
 }
@@ -536,12 +549,21 @@
 }
 
 .measurementHistory > div > span {
-  display: flex;
+  display: grid;
   min-width: 0;
-  justify-content: space-between;
-  gap: .5rem;
+  gap: .18rem;
   padding-top: .3rem;
   border-top: 1px solid rgba(40, 197, 181, .16);
+}
+
+.measurementHistoryGlyph {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+}
+
+.measurementHistoryEntry > :last-child {
+  padding-left: 1.38rem;
 }
 
 .laboratoryActionButton {

@@ -13,18 +13,15 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Typography } from '@/components/ui/typography'
-import { TenderTimer } from '../TenderTimer'
 import { WorkingModelPanel } from '../WorkingModelPanel'
 import styles from './WorkingModelWorkspace.module.css'
 
 type Props = {
   disabled?: boolean
-  dueAt?: string | null
   inlineOnDesktop?: boolean
   knownSignals: SignalId[]
   model: WorkingModel
   onSave: (model: WorkingModel) => Promise<void>
-  serverTime: string
 }
 
 function WorkspaceModelPanel({
@@ -45,12 +42,10 @@ function WorkspaceModelPanel({
 
 export function WorkingModelWorkspace({
   disabled,
-  dueAt,
   inlineOnDesktop = false,
   knownSignals,
   model,
   onSave,
-  serverTime,
 }: Props) {
   return (
     <>
@@ -73,7 +68,6 @@ export function WorkingModelWorkspace({
               <DialogTitle>Рабочая модель</DialogTitle>
               <DialogDescription>Ваши приватные гипотезы и метки</DialogDescription>
             </span>
-            <TenderTimer dueAt={dueAt} serverTime={serverTime} />
           </DialogHeader>
           <div className={styles.content}>
             <WorkspaceModelPanel disabled={disabled} knownSignals={knownSignals} model={model} onSave={onSave} />

@@ -186,7 +186,7 @@ const ru = {
   'tender.power.playerConfirmed': 'Подтверждено',
   'tender.power.playerChoosing': 'Выбирает',
   'tender.power.playerStatusTitle': 'Статус игроков',
-  'tender.power.samples': 'Ваши Образцы: {count} из 6',
+  'tender.power.samples': 'Ваши образцы: {count} из 6',
   'tender.power.laboratoryRequirement': 'Для лаборатории к началу фазы нужны два разных Образца',
   'tender.power.unit.one': 'мощность',
   'tender.power.unit.many': 'мощности',

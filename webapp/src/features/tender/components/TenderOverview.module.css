@@ -311,3 +311,76 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.planningContext {
+  display: grid;
+  min-width: 0;
+  gap: .55rem;
+}
+
+.sampleInventory {
+  display: grid;
+  min-width: 0;
+  gap: .45rem;
+  padding: .6rem .7rem;
+  border: 1px solid rgba(65, 127, 169, .34);
+  border-radius: .65rem;
+  background:
+    radial-gradient(circle at 0 0, rgba(31, 157, 218, .08), transparent 42%),
+    rgba(1, 13, 27, .9);
+}
+
+.sampleInventoryHeading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: .55rem;
+}
+
+.sampleInventoryCount {
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.sampleInventoryList {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+
+.sampleInventoryChip {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: .28rem;
+  padding: .22rem .42rem .22rem .28rem;
+  border: 1px solid rgba(74, 137, 176, .36);
+  border-radius: 999px;
+  background: rgba(3, 20, 35, .82);
+  white-space: nowrap;
+}
+
+.sampleInventoryChip svg {
+  width: 1.45rem;
+  height: 1.45rem;
+  flex: none;
+}
+
+.sampleInventoryChip strong {
+  font-size: .68rem;
+}
+
+@media (min-width: 48rem) {
+  .planningContext {
+    grid-template-columns: minmax(18rem, .65fr) minmax(0, 1.35fr);
+    align-items: stretch;
+    gap: .75rem;
+  }
+
+  .sampleInventory {
+    align-content: center;
+    padding: .7rem .85rem;
+  }
+}

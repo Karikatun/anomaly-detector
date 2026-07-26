@@ -7,7 +7,7 @@ import {
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -73,6 +73,7 @@ const accessSlots = [
 ] as const
 
 type AccessSlotPanelProps = {
+  children?: ReactNode
   confirmedSlot?: number
   currentUserId?: string
   disabled?: boolean
@@ -86,6 +87,7 @@ const slotStyle = (accent: string) => ({
 } as CSSProperties)
 
 export function AccessSlotPanel({
+  children,
   confirmedSlot,
   currentUserId,
   disabled,
@@ -112,7 +114,11 @@ export function AccessSlotPanel({
   ).slice(0, 2).toUpperCase()
 
   return (
-    <section className={styles.panel} aria-labelledby="access-slot-heading">
+    <section
+      className={styles.panel}
+      data-with-context={children ? true : undefined}
+      aria-labelledby="access-slot-heading"
+    >
       <Typography id="access-slot-heading" variant="h3" className="sr-only">
         {t('tender.access.title')}
       </Typography>
@@ -149,6 +155,12 @@ export function AccessSlotPanel({
       </div>
 
       <div className={styles.stationBackdrop} aria-hidden="true" />
+
+      {children && (
+        <div className={styles.researchContext}>
+          {children}
+        </div>
+      )}
 
       <div className={styles.slotGrid} role="group" aria-label={t('tender.access.gridLabel')}>
         {accessSlots.map(({ accent, effects, labelKey, slot, termsKey }) => {

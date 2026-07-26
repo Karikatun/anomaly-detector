@@ -1,0 +1,14 @@
+.belowTenderHeader {
+  top: calc(var(--tender-sticky-header-height, 5.75rem) + .75rem) !important;
+  bottom: .75rem !important;
+  height: auto;
+  max-height: none !important;
+  translate: -50% 0 !important;
+}
+
+@media (min-width: 48rem) {
+  .belowTenderHeader {
+    top: calc(var(--tender-sticky-header-height, 4.5rem) + 1.5rem) !important;
+    bottom: 1rem !important;
+  }
+}

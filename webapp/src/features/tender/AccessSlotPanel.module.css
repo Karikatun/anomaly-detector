@@ -92,6 +92,10 @@
   opacity: .8;
 }
 
+.researchContext {
+  min-width: 0;
+}
+
 .slotGrid {
   display: grid;
   width: 100%;

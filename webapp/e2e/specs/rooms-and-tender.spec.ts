@@ -64,14 +64,24 @@ async function verifyWorkingModelModal(page: Page) {
   page.on('pageerror', collectPageError)
   await page.setViewportSize({ width: 390, height: 844 })
   try {
+    const stickyHeader = page.locator('header[aria-label="Текущая фаза игры"]')
+    const sharedTimer = stickyHeader.locator('[role="timer"]')
+    await expect(sharedTimer).toBeVisible()
+    const initialTime = await sharedTimer.textContent()
+
     await page.getByRole('button', { name: /Рабочая модель/ }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
 
-    const timers = page.getByRole('timer', { name: 'До конца фазы' })
-    await expect(timers).toHaveCount(1)
-    const initialModalTime = await timers.textContent()
-    await expect.poll(() => timers.textContent()).not.toBe(initialModalTime)
+    await expect(sharedTimer).toBeVisible()
+    await expect(dialog.locator('[role="timer"]')).toHaveCount(0)
+    await expect.poll(() => sharedTimer.textContent()).not.toBe(initialTime)
+
+    const headerBox = await stickyHeader.boundingBox()
+    const dialogBox = await dialog.boundingBox()
+    expect(headerBox).not.toBeNull()
+    expect(dialogBox).not.toBeNull()
+    expect(dialogBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height)
 
     const fieldButton = dialog.getByRole('button', {
       name: 'Aster: гипотеза, тип поля Инерционное',
@@ -316,7 +326,14 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(page.getByRole('button', { name: 'Выйти из матча' })).toBeVisible()
     await page.getByRole('button', { name: 'Правила' }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
+    const rulesDialog = page.getByRole('dialog')
+    await expect(rulesDialog).toBeVisible()
+    const tenderHeader = page.locator('header[aria-label="Текущая фаза игры"]')
+    const tenderHeaderBox = await tenderHeader.boundingBox()
+    const rulesDialogBox = await rulesDialog.boundingBox()
+    expect(tenderHeaderBox).not.toBeNull()
+    expect(rulesDialogBox).not.toBeNull()
+    expect(rulesDialogBox!.y).toBeGreaterThanOrEqual(tenderHeaderBox!.y + tenderHeaderBox!.height)
     await expect(page.getByText('Контракты и доказательства')).toBeVisible()
     await page.getByRole('button', { name: 'Закрыть правила' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
@@ -326,6 +343,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expectPhase(page, headings.access)
     await expectPhase(guestPage, headings.access)
     await expectSynchronizedTimers(page, guestPage)
+    await expect(page.getByRole('heading', { name: 'Ваши образцы' })).toHaveCount(0)
+    await expect(page.getByText('Данные исследования', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Хост E2E → Гость E2E', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', {
       name: 'Слот доступа 5: Ночной. Порядок действия: 5. Компенсация: 1 образец сигнала',
@@ -385,6 +404,9 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await expectPhase(page, headings.access)
       await expectPhase(guestPage, headings.access)
       await expectSynchronizedTimers(page, guestPage)
+      await expect(page.getByRole('heading', { name: 'Ваши образцы' })).toBeVisible()
+      await expect(page.getByText('Данные исследования', { exact: true })).toBeVisible()
+      await expect(page.getByText('Лаборатория, личные измерения и тезисы', { exact: true })).toBeVisible()
       await chooseAccessSlot(page, 1)
       await chooseAccessSlot(guestPage, 2)
 
@@ -401,7 +423,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await expectPhase(page, headings.laboratory)
       await expectPhase(guestPage, headings.laboratory)
       await runLaboratory(page)
-      await expect(page.getByText('История личных измерений')).toBeVisible()
+      await expect(page.getByText('История', { exact: true })).toBeVisible()
       await runLaboratory(guestPage)
 
       await expectPhase(page, headings.analysis)
@@ -421,7 +443,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(page.getByText('Итоговый рейтинг', { exact: true })).toBeVisible()
     await expect(page.getByText('Хост E2E', { exact: true }).first()).toBeVisible()
-    await expect(page.getByText(/(Инерционное|Электромагнитное|Фазовое) \/ (Положительная|Отрицательная)/).first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Конфигурация аномалии' })).toBeVisible()
+    await expect(page.getByText('Раскрытые свойства шести сигналов', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Выйти из матча' }).click()
     await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()

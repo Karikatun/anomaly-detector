@@ -88,6 +88,26 @@
   box-shadow: 0 0 .8rem color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
+@media (max-width: 24rem) {
+  .stage {
+    gap: .2rem;
+  }
+
+  .marker {
+    width: 1.45rem;
+    height: 1.45rem;
+  }
+
+  .copy {
+    padding-inline: .08rem;
+  }
+
+  .copy > .shortLabel {
+    font-size: .5rem;
+    letter-spacing: -.025em;
+  }
+}
+
 @media (min-width: 48rem) {
   .progress {
     gap: 1rem;
