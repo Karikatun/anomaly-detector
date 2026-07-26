@@ -4,9 +4,12 @@ import { useForm } from '@tanstack/react-form'
 import {
   loginSchema,
   loginRequestSchema,
+  personalDataConsentVersion,
   passwordSchema,
   registerRequestSchema,
+  termsVersion,
 } from '@anomaly-detector/contracts'
+import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -23,6 +26,7 @@ import {
 } from '../form-validation'
 import { useAuth } from '../use-auth'
 import styles from './AuthForm.module.css'
+import { OAuthButton } from './OAuthButton'
 
 export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
   const { t } = useI18n()
@@ -35,6 +39,8 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
       login: '',
       password: '',
       privacyConsent: false as boolean,
+      privacyConsentVersion: personalDataConsentVersion,
+      termsVersion,
     } satisfies CredentialsFormValues,
     onSubmit: async ({ value }) => {
       setError(null)
@@ -66,6 +72,30 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
 
   return (
     <div className={styles.credentials}>
+      <form.Subscribe selector={(state) => state.values.privacyConsent}>
+        {(privacyConsent) => (
+          <OAuthButton
+            provider="yandex"
+            label={t('oauth.yandex')}
+            className={styles.yandexButton}
+            icon={(
+              <img
+                src="/assets/auth/yandex-logo.svg"
+                className={styles.yandexLogo}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
+            registration={mode === 'register' && privacyConsent ? {
+              privacyConsent: true,
+              privacyConsentVersion: personalDataConsentVersion,
+              termsVersion,
+            } : undefined}
+            requireRegistrationConsent={mode === 'register'}
+          />
+        )}
+      </form.Subscribe>
+      <Typography as="div" variant="control" className={styles.separator}>ИЛИ</Typography>
       <Typography as="p" className={styles.credentialsTitle}>
         {mode === 'register' ? t('auth.register') : 'ВОЙТИ ЧЕРЕЗ ЛОГИН И ПАРОЛЬ'}
       </Typography>
@@ -184,10 +214,26 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                       checked={field.state.value}
                       onCheckedChange={(checked) => field.handleChange(checked === true)}
                     />
-                    <Label htmlFor="auth-privacy-consent">{t('auth.privacyConsent')}</Label>
+                    <Label htmlFor="auth-privacy-consent">
+                      Я даю согласие на{' '}
+                      <Link
+                        className={styles.inlineLegalLink}
+                        to="/personal-data-consent"
+                        target="_blank"
+                      >
+                        обработку персональных данных
+                      </Link>
+                    </Label>
                   </div>
                 )}
               </form.Field>
+              <Typography variant="bodyXs" className={styles.termsNotice}>
+                Нажимая «Регистрация», вы принимаете{' '}
+                <Link className={styles.inlineLegalLink} to="/terms" target="_blank">
+                  Пользовательское соглашение
+                </Link>
+                .
+              </Typography>
             </div>
           </>
         )}

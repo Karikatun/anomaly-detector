@@ -1,0 +1,79 @@
+.page {
+  min-height: 100svh;
+  background:
+    radial-gradient(circle at 10% 0%, rgb(42 95 105 / 18%), transparent 34rem),
+    var(--background);
+  padding: 2rem 1rem 4rem;
+}
+
+.document {
+  width: min(100%, 54rem);
+  margin: 0 auto;
+  color: var(--foreground);
+}
+
+.back {
+  display: inline-flex;
+  margin-bottom: 1.5rem;
+  color: var(--muted-foreground);
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--foreground);
+}
+
+.surface {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  padding: clamp(1.25rem, 4vw, 3rem);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 18%);
+}
+
+.surface h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.75rem, 5vw, 2.75rem);
+  line-height: 1.1;
+}
+
+.surface h2 {
+  margin: 1.4rem 0 .2rem;
+  font-size: clamp(1.25rem, 3vw, 1.6rem);
+}
+
+.surface h3 {
+  margin: 1rem 0 0;
+  font-size: 1.08rem;
+}
+
+.surface p,
+.surface li {
+  line-height: 1.65;
+}
+
+.surface p {
+  margin: 0;
+}
+
+.surface ul {
+  display: grid;
+  gap: .45rem;
+  margin: 0;
+  padding-left: 1.35rem;
+}
+
+.surface hr {
+  width: 100%;
+  margin: 1rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 40rem) {
+  .page {
+    padding-inline: .75rem;
+  }
+}

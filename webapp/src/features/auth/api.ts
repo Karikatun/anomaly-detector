@@ -14,6 +14,7 @@ import {
   type LoginRequest,
   type MeResponse,
   type OAuthProviderId,
+  type OAuthStartRequest,
   type UpdateProfileRequest,
   type RegisterRequest,
 } from '@anomaly-detector/contracts'
@@ -138,8 +139,14 @@ export class AuthApi {
     return this.authCoordinator(() => this.expireSessionWithinMutation(this.sessionEpoch))
   }
 
-  async startOAuth(provider: OAuthProviderId): Promise<void> {
-    const payload = oauthStartRequestSchema.parse({ webappOrigin: window.location.origin })
+  async startOAuth(
+    provider: OAuthProviderId,
+    registration?: OAuthStartRequest['registration'],
+  ): Promise<void> {
+    const payload = oauthStartRequestSchema.parse({
+      registration,
+      webappOrigin: window.location.origin,
+    })
     const response = await this.oauthHttp.request(
       `/api/auth/oauth/${provider}/start`,
       oauthStartResponseSchema,

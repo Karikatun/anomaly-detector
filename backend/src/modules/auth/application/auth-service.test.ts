@@ -89,8 +89,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
     revokeSessionById: async () => false,
     revokeSession: async () => null,
     updateUser: async () => undefined,
-    anonymizeUser: async () => undefined,
-    revokeAllSessionsByUserId: async () => undefined,
+    eraseUserIdentity: async () => undefined,
     createOAuthTransaction: async () => undefined,
     findOAuthTransactionByState: async () => null,
     deleteOAuthTransaction: async () => undefined,
@@ -266,31 +265,85 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
   const service = new AuthService(dependencies)
 
   const result = await (service as unknown as {
-    startOAuthSignIn(input: { provider: 'yandex'; redirectUri: string; webappOrigin: string }): Promise<{ authorizationUrl: string }>
+    startOAuthSignIn(input: {
+      provider: 'yandex'
+      redirectUri: string
+      registration?: {
+        privacyConsent: true
+        privacyConsentVersion: string
+        termsVersion: string
+      }
+      webappOrigin: string
+    }): Promise<{ authorizationUrl: string }>
   }).startOAuthSignIn({
     provider: 'yandex',
     redirectUri: 'https://app.example.ru/api/auth/oauth/yandex/callback',
+    registration: {
+      privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
+    },
     webappOrigin: 'https://app.example.ru',
   })
 
   expect(result.authorizationUrl).toContain('https://provider.example/authorize')
-  expect(transactions).toEqual([expect.objectContaining({ provider: 'yandex' })])
+  expect(transactions).toEqual([expect.objectContaining({
+    legalAcceptance: {
+      acceptedAt: new Date('2026-07-20T12:00:00.000Z'),
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
+    },
+    provider: 'yandex',
+  })])
 })
 
-test('deleteAccount anonymises the user and revokes all sessions', async () => {
-  const anonymizedUserIds: string[] = []
-  const cleanupUserIds: string[] = []
-  const revokedSessionIds: string[] = []
-  const repository = {
-    anonymizeUser: async (input: { userId: string; now: Date }) => {
-      anonymizedUserIds.push(input.userId)
+test('refuses to create an OAuth user without a separately confirmed legal acceptance', async () => {
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    oauthProviders: {
+      require: () => ({
+        authorizationUrl: () => 'https://provider.example/authorize',
+        exchangeCode: async () => ({ accessToken: 'provider-token', providerSubject: 'new-provider-user' }),
+        getUserInfo: async () => ({ displayName: 'OAuth User', providerSubject: 'new-provider-user' }),
+      }),
     },
-    revokeAllSessionsByUserId: async (input: { userId: string; now: Date }) => {
-      revokedSessionIds.push(input.userId)
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: {
+      deleteOAuthTransaction: async () => undefined,
+      findOAuthTransactionByState: async () => ({
+        codeVerifier: 'verifier',
+        expiresAt: new Date('2026-07-20T12:10:00.000Z'),
+        provider: 'yandex',
+        redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
+        state: 'state',
+      }),
+      findUserByIdentity: async () => null,
+    } as unknown as AuthRepository,
+  })
+
+  await expect(service.completeOAuthSignIn({
+    code: 'authorization-code',
+    metadata: {},
+    state: 'state',
+  })).rejects.toMatchObject({ kind: 'oauth_registration_consent_required' })
+})
+
+test('deleteAccount removes identity links only after Tender history is anonymised', async () => {
+  const operations: string[] = []
+  const repository = {
+    eraseUserIdentity: async (input: { userId: string; now: Date }) => {
+      operations.push(`erase:${input.userId}`)
     },
   } as unknown as AuthRepository
   const service = new AuthService({
-    accountDeletionCleanup: async ({ userId }) => { cleanupUserIds.push(userId) },
+    accountDeletionCleanup: async ({ userId }) => { operations.push(`history:${userId}`) },
     accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
     clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
     logoutCleanup: async () => undefined,
@@ -305,7 +358,8 @@ test('deleteAccount anonymises the user and revokes all sessions', async () => {
 
   await service.deleteAccount(user.id)
 
-  expect(anonymizedUserIds).toEqual([user.id])
-  expect(cleanupUserIds).toEqual([user.id])
-  expect(revokedSessionIds).toEqual([user.id])
+  expect(operations).toEqual([
+    `history:${user.id}`,
+    `erase:${user.id}`,
+  ])
 })

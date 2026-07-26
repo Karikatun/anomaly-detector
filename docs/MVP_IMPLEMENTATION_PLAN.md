@@ -280,7 +280,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Record the Russian data-location decision and Yandex Cloud target.
    - [-] Complete legal readiness before collecting production users.
      - [x] Prepare a comprehensive legal-review draft personal-data processing policy tied to the current data model, authentication providers, Russian hosting target, retention periods, support mailbox, and anti-abuse cookies.
-     - [ ] Fill in the individual operator's full name and legal contact address, complete legal review, file the Roskomnadzor notification, publish a separate consent text, and align account deletion plus transient-auth cleanup with the policy.
+     - [x] Prepare separate versioned personal-data consent and User Agreement texts, expose public legal routes, persist acceptance evidence for password and OAuth registration, unlink deleted identities from Tender JSON/audit, and clean expired OAuth/realtime records.
+     - [ ] Fill in the individual operator's full name and legal contact address, complete legal review, file the Roskomnadzor notification, and verify the published legal texts against production processors and retention operations.
    - [-] Configure and test `support@anomaly-detector.ru`; the REG.RU mailbox and MX records are created, while end-to-end delivery, SPF, DKIM, and DMARC verification remain.
 3. [-] Complete the release-safety path.
    - [x] Validate environment at startup and expose liveness/readiness endpoints.

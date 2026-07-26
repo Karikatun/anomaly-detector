@@ -5,6 +5,7 @@ import type {
   StoredTender,
   StoredTenderAuditEvent,
 } from '../application/tender-store'
+import { anonymizeParticipantInValue } from '../domain/participant-anonymization'
 
 const cloneTender = (tender: StoredTender) => structuredClone(tender)
 
@@ -24,13 +25,23 @@ export function createInMemoryTenderStore(): TenderStore {
       const changedTenderIds: string[] = []
       for (const [tenderId, tender] of tenders) {
         if (!tender.players.some((player) => player.id === playerId && player.displayName !== 'Deleted participant')) continue
+        const anonymousPlayerId = `deleted-participant-${crypto.randomUUID()}`
+        const anonymized = anonymizeParticipantInValue(tender, playerId, anonymousPlayerId)
         tenders.set(tenderId, {
-          ...tender,
-          players: tender.players.map((player) => player.id === playerId
+          ...anonymized,
+          players: anonymized.players.map((player) => player.id === anonymousPlayerId
             ? { ...player, displayName: 'Deleted participant' }
             : player),
           version: tender.version + 1,
         })
+        auditEvents.set(
+          tenderId,
+          anonymizeParticipantInValue(
+            auditEvents.get(tenderId) ?? [],
+            playerId,
+            anonymousPlayerId,
+          ),
+        )
         changedTenderIds.push(tenderId)
       }
       return changedTenderIds

@@ -218,7 +218,7 @@ Do not run `prisma migrate dev` in production and do not hand-write Prisma migra
 
 ## Auth Session Cleanup Timer
 
-Production must run `auth:sessions:cleanup` on a schedule; setting `SESSION_RETENTION_DAYS` alone does not delete rows. The same task also removes expired login and registration anti-abuse buckets after their TTL. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+Production must run `auth:sessions:cleanup` on a schedule; setting `SESSION_RETENTION_DAYS` alone does not delete rows. The same task also removes expired login and registration anti-abuse buckets, unfinished OAuth transactions, and one-time realtime tickets after their TTL. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
 
 Create the cleanup container and deploy its revision. The image `WORKDIR` is already `/app/backend`, so the command can call the existing cron runner directly:
 
@@ -265,7 +265,7 @@ yc serverless trigger create timer \
   --retry-interval 30s
 ```
 
-After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-auth-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron auth:sessions:cleanup removed ... stale sessions and ... expired abuse buckets.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
+After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-auth-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron auth:sessions:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, and ... realtime tickets.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
 
 ## Real-Time Pub/Sub
 

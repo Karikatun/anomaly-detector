@@ -142,6 +142,11 @@
 .ageNotice { color: #98abc0; text-align: center; }
 .consent { display: flex; align-items: center; gap: .75rem; color: #c4d2e0; }
 .consent :global([data-slot='label']) { cursor: pointer; line-height: 1.35; }
+.inlineLegalLink,
+.legalLink { color: inherit; text-underline-offset: .2rem; }
+.inlineLegalLink:hover,
+.legalLink:hover { color: #d7e9fb; }
+.termsNotice { color: #98abc0; line-height: 1.45; text-align: center; }
 .submit { min-height: 3.35rem; border: 1px solid rgba(68, 151, 255, .75); border-radius: 7px; background: linear-gradient(135deg, rgba(39, 94, 163, .95), rgba(24, 61, 112, .96)); font-size: 1rem !important; font-weight: 500 !important; }
 .submit:hover { background: linear-gradient(135deg, rgba(52, 117, 200, .98), rgba(32, 80, 148, .98)); }
 

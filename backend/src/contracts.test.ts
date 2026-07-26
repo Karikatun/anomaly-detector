@@ -8,6 +8,8 @@ describe('contracts', () => {
       password: 'password123',
       displayName: '',
       privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
     })
 
     expect(result).toEqual({
@@ -15,6 +17,8 @@ describe('contracts', () => {
       password: 'password123',
       displayName: undefined,
       privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
     })
   })
 })

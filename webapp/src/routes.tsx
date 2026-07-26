@@ -50,7 +50,38 @@ const tenderRoute = createRoute({
   component: lazyRouteComponent(() => import('./features/tender/public/tender'), 'TenderRoute'),
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, appRoute, profileRoute, roomsRoute, roomLobbyRoute, tenderRoute])
+const privacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/privacy',
+  component: lazyRouteComponent(() => import('./features/legal/public/privacy'), 'PrivacyRoute'),
+})
+
+const personalDataConsentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/personal-data-consent',
+  component: lazyRouteComponent(
+    () => import('./features/legal/public/personal-data-consent'),
+    'PersonalDataConsentRoute',
+  ),
+})
+
+const termsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/terms',
+  component: lazyRouteComponent(() => import('./features/legal/public/terms'), 'TermsRoute'),
+})
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  appRoute,
+  profileRoute,
+  roomsRoute,
+  roomLobbyRoute,
+  tenderRoute,
+  privacyRoute,
+  personalDataConsentRoute,
+  termsRoute,
+])
 
 export const router = createRouter({ routeTree })
 

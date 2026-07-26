@@ -23,7 +23,7 @@ export type AuthRepository = {
       ipAddress?: string
       now: Date
     }
-    user: RegisterPayload & { passwordHash: string }
+    user: RegisterPayload & { legalAcceptedAt: Date; passwordHash: string }
     session: {
       refreshTokenHash: string
       refreshTokenFamilyHash: string
@@ -77,14 +77,21 @@ export type AuthRepository = {
     displayName?: string | null
     locale?: string
   }): Promise<void>
-  anonymizeUser(input: { userId: string; now: Date }): Promise<void>
-  revokeAllSessionsByUserId(input: { userId: string; now: Date }): Promise<void>
+  eraseUserIdentity(input: { userId: string; now: Date }): Promise<void>
   createOAuthTransaction(transaction: OAuthTransaction): Promise<void>
   findOAuthTransactionByState(input: { state: string }): Promise<OAuthTransaction | null>
   deleteOAuthTransaction(input: { state: string }): Promise<void>
   findUserByIdentity(input: { provider: string; subject: string }): Promise<AuthUserRecord | null>
   createOAuthUserWithSession(input: {
-    user: { login: string; displayName?: string | null }
+    user: {
+      displayName?: string | null
+      legalAcceptance: {
+        acceptedAt: Date
+        privacyConsentVersion: string
+        termsVersion: string
+      }
+      login: string
+    }
     identity: { provider: string; subject: string }
     session: {
       refreshTokenHash: string

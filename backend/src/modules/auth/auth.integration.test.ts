@@ -4,6 +4,7 @@ import { createApp } from '../../app'
 import { createPrisma } from '../../db'
 import type { AppEnv } from '../../env'
 import { createRoomStartModule } from '../room'
+import { createPersistentTenderModule } from '../tender'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 
@@ -58,6 +59,8 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         displayName: 'User',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const registerBody = await register.json()
@@ -67,6 +70,20 @@ maybeDescribe('auth API integration', () => {
     expect(registerBody.accessToken).toBeString()
     expect(registerBody.refreshToken).toBeString()
     expect(register.headers.get('set-cookie')).toBeNull()
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { login: 'user' },
+      select: {
+        privacyConsentAt: true,
+        privacyConsentVersion: true,
+        termsAcceptedAt: true,
+        termsVersion: true,
+      },
+    })).toEqual({
+      privacyConsentAt: expect.any(Date),
+      privacyConsentVersion: '1.0',
+      termsAcceptedAt: expect.any(Date),
+      termsVersion: '1.0',
+    })
 
     const me = await app.request('/api/auth/me', {
       headers: {
@@ -142,7 +159,13 @@ maybeDescribe('auth API integration', () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login: 'ticket', password: 'password123', privacyConsent: true }),
+      body: JSON.stringify({
+        login: 'ticket',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
     })
     const { accessToken } = await register.json()
 
@@ -166,6 +189,8 @@ maybeDescribe('auth API integration', () => {
         login: 'room-host',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const { accessToken, user } = await register.json()
@@ -197,6 +222,8 @@ maybeDescribe('auth API integration', () => {
         login: 'room-joiner',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const joiner = await joinerRegister.json()
@@ -233,6 +260,8 @@ maybeDescribe('auth API integration', () => {
         login: 'room-extra',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const extra = await extraRegister.json()
@@ -389,6 +418,8 @@ maybeDescribe('auth API integration', () => {
         login: 'single-current-room',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const { accessToken } = await register.json()
@@ -431,6 +462,8 @@ maybeDescribe('auth API integration', () => {
         login: 'single-current-other-host',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const other = await otherRegister.json()
@@ -478,6 +511,8 @@ maybeDescribe('auth API integration', () => {
         login: 'concurrent-current-room',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const { accessToken } = await register.json()
@@ -510,6 +545,8 @@ maybeDescribe('auth API integration', () => {
         login: 'race',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const registerBody = await register.json()
@@ -580,7 +617,13 @@ maybeDescribe('auth API integration', () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login: 'reuse', password: 'password123', privacyConsent: true }),
+      body: JSON.stringify({
+        login: 'reuse',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
     })
     const registered = await register.json()
     const refresh = await app.request('/api/auth/token/refresh', {
@@ -629,6 +672,8 @@ maybeDescribe('auth API integration', () => {
         login: 'web-cookie',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const registerBody = await register.json()
@@ -695,6 +740,8 @@ maybeDescribe('auth API integration', () => {
         login: 'production-cookie',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const registerBody = await register.json()
@@ -729,6 +776,8 @@ maybeDescribe('auth API integration', () => {
         login: 'csrf-cookie',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const cookie = register.headers.get('set-cookie')!.split(';')[0]
@@ -888,6 +937,8 @@ maybeDescribe('auth API integration', () => {
       login: 'dupe',
       password: 'password123',
       privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
     }
 
     await app.request('/api/auth/register', {
@@ -967,6 +1018,85 @@ maybeDescribe('auth API integration', () => {
     })
   })
 
+  test('deleting an account removes auth links and its identifier from Tender history', async () => {
+    const register = async (login: string, displayName: string) => {
+      const response = await app.request('/api/auth/token/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          displayName,
+          login,
+          password: 'password123',
+          privacyConsent: true,
+          privacyConsentVersion: '1.0',
+          termsVersion: '1.0',
+        }),
+      })
+      expect(response.status).toBe(201)
+      return response.json()
+    }
+    const deletedAccount = await register('delete-me', 'Анна')
+    const remainingAccount = await register('keep-me', 'Борис')
+    const deletedUserId = deletedAccount.user.id as string
+    const remainingUserId = remainingAccount.user.id as string
+    const tender = createPersistentTenderModule(prisma)
+    const { tenderId } = await tender.createTender({
+      players: [
+        { displayName: 'Анна', id: deletedUserId, tiePriority: 1 },
+        { displayName: 'Борис', id: remainingUserId, tiePriority: 2 },
+      ],
+    })
+    await prisma.authIdentity.create({
+      data: {
+        provider: 'yandex',
+        subject: 'deleted-provider-subject',
+        userId: deletedUserId,
+      },
+    })
+
+    const deleted = await app.request('/api/auth/account', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${deletedAccount.accessToken}` },
+    })
+
+    expect(deleted.status).toBe(204)
+    expect(await prisma.authIdentity.count({ where: { userId: deletedUserId } })).toBe(0)
+    expect(await prisma.authSession.count({ where: { userId: deletedUserId } })).toBe(0)
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: deletedUserId },
+      select: {
+        displayName: true,
+        privacyConsentAt: true,
+        privacyConsentVersion: true,
+        termsAcceptedAt: true,
+        termsVersion: true,
+      },
+    })).toEqual({
+      displayName: null,
+      privacyConsentAt: null,
+      privacyConsentVersion: null,
+      termsAcceptedAt: null,
+      termsVersion: null,
+    })
+
+    const oldPasswordLogin = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'delete-me', password: 'password123' }),
+    })
+    expect(oldPasswordLogin.status).toBe(401)
+
+    const remainingView = await tender.readTenderView({
+      playerId: remainingUserId,
+      tenderId,
+    })
+    expect(JSON.stringify(remainingView)).not.toContain(deletedUserId)
+    expect(remainingView.players).toContainEqual(expect.objectContaining({
+      displayName: 'Deleted participant',
+      playerId: expect.stringMatching(/^deleted-participant-/),
+    }))
+  })
+
   test('limits password login after five failures and resets the login budget on success', async () => {
     const login = 'password-attempt-budget'
     const password = 'password123'
@@ -977,6 +1107,8 @@ maybeDescribe('auth API integration', () => {
         login,
         password,
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     expect(register.status).toBe(201)
@@ -1029,6 +1161,8 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const attempts = await Promise.all(Array.from({ length: 6 }, () =>
@@ -1068,6 +1202,8 @@ maybeDescribe('auth API integration', () => {
       login: 'register-race',
       password: 'password123',
       privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
     }
 
     const [first, second] = await Promise.all([
@@ -1105,6 +1241,8 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
 
@@ -1164,6 +1302,8 @@ maybeDescribe('auth API integration', () => {
           login: `registration-ip-budget-${index}`,
           password: 'password123',
           privacyConsent: true,
+          privacyConsentVersion: '1.0',
+          termsVersion: '1.0',
         }),
       })
       expect(response.status).toBe(201)
@@ -1179,6 +1319,8 @@ maybeDescribe('auth API integration', () => {
         login: 'registration-ip-budget-limited',
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     expect(limited.status).toBe(429)
@@ -1194,6 +1336,8 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
       }),
     })
     const registerBody = await register.json()

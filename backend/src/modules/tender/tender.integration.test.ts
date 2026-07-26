@@ -202,16 +202,40 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         { id: 'player-b', tiePriority: 2, displayName: 'Борис' },
       ],
     })
+    await module.execute({
+      actorId: 'player-a',
+      commandId: 'delete-history-command',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
 
     await module.anonymizeParticipant('player-a')
 
     const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
-    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
-      players: [
-        { playerId: 'player-a', displayName: 'Deleted participant' },
-        { playerId: 'player-b', displayName: 'Борис' },
-      ],
+    const view = await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })
+    expect(JSON.stringify(view)).not.toContain('player-a')
+    expect(view.players).toContainEqual(expect.objectContaining({
+      displayName: 'Deleted participant',
+      playerId: expect.stringMatching(/^deleted-participant-/),
+    }))
+    const auditEvents = await prisma.tenderAuditEvent.findMany({
+      where: { tenderId },
+      select: { actorId: true, payload: true },
     })
+    expect(JSON.stringify(auditEvents)).not.toContain('player-a')
+    expect(auditEvents).toContainEqual({
+      actorId: expect.stringMatching(/^deleted-participant-/),
+      payload: {
+        playerId: expect.stringMatching(/^deleted-participant-/),
+        slot: 1,
+      },
+    })
+    const persistedCommands = await prisma.tenderCommand.findMany({
+      where: { tenderId },
+      select: { fingerprint: true, receipt: true },
+    })
+    expect(JSON.stringify(persistedCommands)).not.toContain('player-a')
   })
 
   test('replays a persisted command receipt through a new PostgreSQL store adapter', async () => {

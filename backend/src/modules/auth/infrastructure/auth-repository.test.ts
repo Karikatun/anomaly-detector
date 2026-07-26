@@ -35,10 +35,13 @@ test('creates a password user and initial session inside one database transactio
   const result = await createPrismaAuthRepository(db, 'test-abuse-secret').createPasswordUserWithSession({
     user: {
       login: 'user',
+      legalAcceptedAt: createdAt,
       password: 'password123',
       passwordHash: 'password-hash',
       displayName: undefined,
       privacyConsent: true,
+      privacyConsentVersion: '1.0',
+      termsVersion: '1.0',
     },
     session: {
       refreshTokenHash: 'refresh-hash',

@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type {
   LoginRequest,
   OAuthProviderId,
+  OAuthStartRequest,
   RegisterRequest,
   UpdateProfileRequest,
 } from '@anomaly-detector/contracts'
@@ -138,8 +139,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
   )
 
   const startOAuth = useCallback(
-    async (provider: OAuthProviderId) => {
-      await api.startOAuth(provider)
+    async (
+      provider: OAuthProviderId,
+      registration?: OAuthStartRequest['registration'],
+    ) => {
+      await api.startOAuth(provider, registration)
     },
     [api],
   )

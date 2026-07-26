@@ -1,6 +1,7 @@
 import type {
   LoginRequest,
   OAuthProviderId,
+  OAuthStartRequest,
   RegisterRequest,
   UpdateProfileRequest,
   UserDto,
@@ -17,7 +18,10 @@ export type AuthContextValue = {
   transport: AuthenticatedTransport
   register: (input: RegisterRequest) => Promise<void>
   login: (input: LoginRequest) => Promise<void>
-  startOAuth: (provider: OAuthProviderId) => Promise<void>
+  startOAuth: (
+    provider: OAuthProviderId,
+    registration?: OAuthStartRequest['registration'],
+  ) => Promise<void>
   logout: () => Promise<void>
   updateProfile: (input: UpdateProfileRequest) => Promise<void>
 }

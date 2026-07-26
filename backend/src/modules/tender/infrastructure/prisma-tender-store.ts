@@ -9,6 +9,10 @@ import type {
   TenderCommitResult,
   TenderStore,
 } from '../application/tender-store'
+import {
+  anonymizeParticipantInJsonString,
+  anonymizeParticipantInValue,
+} from '../domain/participant-anonymization'
 
 type PersistedTenderState = Pick<
   StoredTender,
@@ -172,12 +176,18 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
         for (const tender of tenders) {
           const state = tender.state as PersistedTenderState
           if (!state.players.some((player) => player.id === playerId && player.displayName !== 'Deleted participant')) continue
+          const anonymousPlayerId = `deleted-participant-${crypto.randomUUID()}`
+          const anonymizedState = anonymizeParticipantInValue(
+            state,
+            playerId,
+            anonymousPlayerId,
+          )
           const updated = await tx.tender.updateMany({
             where: { id: tender.id, version: tender.version },
             data: {
               state: {
-                ...state,
-                players: state.players.map((player) => player.id === playerId
+                ...anonymizedState,
+                players: anonymizedState.players.map((player) => player.id === anonymousPlayerId
                   ? { ...player, displayName: 'Deleted participant' }
                   : player),
               } as Prisma.InputJsonValue,
@@ -185,6 +195,44 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
             },
           })
           if (updated.count === 0) throw new TenderVersionConflict()
+          const auditEvents = await tx.tenderAuditEvent.findMany({
+            where: { tenderId: tender.id },
+            select: { actorId: true, id: true, payload: true },
+          })
+          for (const event of auditEvents) {
+            await tx.tenderAuditEvent.update({
+              where: { id: event.id },
+              data: {
+                actorId: event.actorId === playerId ? anonymousPlayerId : event.actorId,
+                payload: anonymizeParticipantInValue(
+                  event.payload,
+                  playerId,
+                  anonymousPlayerId,
+                ) as Prisma.InputJsonValue,
+              },
+            })
+          }
+          const commands = await tx.tenderCommand.findMany({
+            where: { tenderId: tender.id },
+            select: { fingerprint: true, id: true, receipt: true },
+          })
+          for (const command of commands) {
+            await tx.tenderCommand.update({
+              where: { id: command.id },
+              data: {
+                fingerprint: anonymizeParticipantInJsonString(
+                  command.fingerprint,
+                  playerId,
+                  anonymousPlayerId,
+                ),
+                receipt: anonymizeParticipantInValue(
+                  command.receipt,
+                  playerId,
+                  anonymousPlayerId,
+                ) as Prisma.InputJsonValue,
+              },
+            })
+          }
           changedTenderIds.push(tender.id)
         }
         return changedTenderIds
