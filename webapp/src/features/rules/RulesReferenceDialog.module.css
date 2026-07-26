@@ -1,3 +1,234 @@
+.content {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(54rem, calc(100% - 1rem));
+  max-width: 54rem !important;
+  max-height: calc(100svh - 1rem);
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 1.25rem;
+}
+
+.header {
+  padding: 1.25rem 1.25rem 1rem;
+  border-bottom: 1px solid rgba(126, 166, 198, .18);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(48, 139, 207, .13), transparent 40%),
+    var(--popover);
+}
+
+.scrollArea {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 1rem 1.25rem;
+}
+
+.accordion {
+  display: grid;
+  gap: .65rem;
+}
+
+.section {
+  overflow: clip;
+  border: 1px solid rgba(126, 166, 198, .18);
+  border-radius: .85rem;
+  background: rgba(10, 27, 42, .34);
+}
+
+.sectionTrigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
+  align-items: center;
+  gap: 1rem;
+  padding: .95rem 1rem;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sectionTrigger:hover {
+  background: rgba(73, 143, 195, .09);
+}
+
+.sectionTrigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.sectionHeading,
+.termCopy,
+.phaseCopy {
+  display: grid;
+  gap: .25rem;
+}
+
+.chevron {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  color: var(--muted-foreground);
+  transition: transform 160ms ease;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.sectionPanel {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid rgba(126, 166, 198, .12);
+}
+
+.sectionPanel[hidden] {
+  display: none;
+}
+
+.ruleList {
+  display: grid;
+  gap: .7rem;
+  padding: .9rem 0 0 1.15rem;
+  list-style: disc;
+}
+
+.termGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+  padding-top: .9rem;
+}
+
+.term {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: .65rem;
+  padding: .75rem;
+  border-radius: .65rem;
+  background: rgba(68, 132, 182, .08);
+}
+
+.termIcon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: .55rem;
+  color: #91cfff;
+  background: rgba(62, 149, 216, .14);
+}
+
+.termIcon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.phaseList {
+  display: grid;
+  gap: .75rem;
+  padding-top: .9rem;
+  list-style: none;
+}
+
+.phase {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: .75rem;
+}
+
+.phaseNumber {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border: 1px solid rgba(93, 171, 229, .28);
+  border-radius: 999px;
+  color: #a9dcff;
+  background: rgba(61, 143, 205, .1);
+}
+
+.laboratory {
+  display: grid;
+  gap: .9rem;
+  padding-top: .9rem;
+}
+
+.protocolGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+}
+
+.protocol {
+  display: grid;
+  gap: .3rem;
+  padding: .75rem;
+  border: 1px solid rgba(126, 166, 198, .14);
+  border-radius: .65rem;
+  background: rgba(68, 132, 182, .06);
+}
+
+.tableScroll {
+  overflow-x: auto;
+  border: 1px solid rgba(126, 166, 198, .16);
+  border-radius: .65rem;
+}
+
+.resultTable {
+  width: 100%;
+  min-width: 32rem;
+  border-collapse: collapse;
+  font-size: .75rem;
+  line-height: 1.4;
+}
+
+.resultTable th,
+.resultTable td {
+  padding: .6rem .7rem;
+  border-bottom: 1px solid rgba(126, 166, 198, .11);
+  text-align: left;
+}
+
+.resultTable th {
+  color: var(--muted-foreground);
+  font-weight: 500;
+  background: rgba(68, 132, 182, .08);
+}
+
+.resultTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.resultTable strong {
+  color: #b9e2ff;
+  font-weight: 500;
+}
+
+.example {
+  display: grid;
+  gap: .3rem;
+  padding: .8rem;
+  border-left: 3px solid rgba(79, 164, 226, .75);
+  border-radius: 0 .65rem .65rem 0;
+  background: rgba(55, 135, 196, .09);
+}
+
+.footer {
+  padding: .85rem 1.25rem;
+  border-top: 1px solid rgba(126, 166, 198, .18);
+  background: var(--popover);
+}
+
+.closeButton {
+  min-width: 10rem;
+}
+
 .belowTenderHeader {
   top: calc(var(--tender-sticky-header-height, 5.75rem) + .75rem) !important;
   bottom: .75rem !important;
@@ -6,9 +237,50 @@
   translate: -50% 0 !important;
 }
 
+@media (max-width: 47.999rem) {
+  .content {
+    width: calc(100% - 1rem);
+  }
+
+  .header {
+    padding: 1rem 1rem .85rem;
+  }
+
+  .scrollArea {
+    padding: .75rem 1rem;
+  }
+
+  .sectionTrigger {
+    padding: .85rem;
+  }
+
+  .sectionPanel {
+    padding: 0 .85rem .85rem;
+  }
+
+  .termGrid,
+  .protocolGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .footer {
+    padding: .75rem 1rem;
+  }
+
+  .closeButton {
+    width: 100%;
+  }
+}
+
 @media (min-width: 48rem) {
   .belowTenderHeader {
     top: calc(var(--tender-sticky-header-height, 4.5rem) + 1.5rem) !important;
     bottom: 1rem !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
   }
 }
