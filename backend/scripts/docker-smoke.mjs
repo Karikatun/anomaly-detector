@@ -1,6 +1,10 @@
 import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:net'
 import {
+  personalDataConsentVersion,
+  termsVersion,
+} from '@anomaly-detector/contracts'
+import {
   assertTestDatabaseUrl,
   composeEnv,
   composeProjectName,
@@ -130,6 +134,9 @@ async function smokeAuthApi() {
       login,
       password: 'password123',
       displayName: 'Docker Smoke',
+      privacyConsent: true,
+      privacyConsentVersion: personalDataConsentVersion,
+      termsVersion,
     }),
   })
 
@@ -167,6 +174,15 @@ try {
   })
 
   run('docker', ['build', '-f', 'backend/Dockerfile', '-t', imageName, '.'])
+  run('docker', [
+    'run',
+    '--rm',
+    '--entrypoint',
+    'sh',
+    imageName,
+    '-c',
+    'test ! -f /app/backend/.env',
+  ])
   spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' })
 
   run('docker', [
