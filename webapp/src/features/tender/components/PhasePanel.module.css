@@ -474,16 +474,74 @@
 }
 
 .privateMeasurementResult {
-  display: flex;
+  display: grid;
   min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: .45rem;
 }
 
 .privateMeasurementResult .signalGlyph {
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 2.05rem;
+  height: 2.05rem;
   flex: none;
+}
+
+.measurementSignal {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .3rem;
+}
+
+.measurementSignal strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.measurementArrow {
+  color: var(--primary);
+}
+
+.measurementRelation {
+  grid-column: 1 / -1;
+  color: #42d9ca;
+  font-size: .72rem;
+}
+
+.measurementHistory {
+  overflow: hidden;
+  border: 1px solid rgba(40, 197, 181, .24);
+  border-radius: .4rem;
+  background: rgba(2, 18, 28, .42);
+}
+
+.measurementHistory summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .42rem .5rem;
+  color: #42d9ca;
+  cursor: pointer;
+  list-style: none;
+}
+
+.measurementHistory > div {
+  display: grid;
+  max-height: 8rem;
+  gap: .25rem;
+  overflow: auto;
+  padding: 0 .5rem .5rem;
+}
+
+.measurementHistory > div > span {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: .5rem;
+  padding-top: .3rem;
+  border-top: 1px solid rgba(40, 197, 181, .16);
 }
 
 .laboratoryActionButton {
@@ -588,6 +646,28 @@
 
 .analysisHistory .sectionHeader {
   margin-bottom: 0;
+}
+
+.analysisEvidence {
+  overflow: hidden;
+  border: 1px solid rgba(65, 127, 169, .3);
+  border-radius: .55rem;
+  background: rgba(2, 15, 28, .68);
+}
+
+.analysisEvidence > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .55rem;
+  padding: .55rem .65rem;
+  color: rgba(222, 236, 245, .78);
+  cursor: pointer;
+  list-style: none;
+}
+
+.analysisEvidence > summary > :last-child {
+  color: var(--primary);
 }
 
 .contractsWorkspace {

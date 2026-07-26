@@ -51,6 +51,21 @@ test('Working Model flushes the latest pending draft when its UI is disposed', a
   expect(scheduledSave).toBeNull()
 })
 
+test('Working Model controller resumes after a React development effect replay', async () => {
+  const drafts: WorkingModel[] = []
+  const controller = createController(emptyModel(), {
+    onDraft: (draft) => drafts.push(draft),
+  })
+  const resumedDraft = modelWithNote('изменение после повторного эффекта')
+
+  await controller.dispose()
+  controller.resume()
+  controller.update(resumedDraft)
+
+  expect(drafts.at(-1)).toEqual(resumedDraft)
+  await controller.dispose()
+})
+
 function createController(
   initialModel: WorkingModel,
   overrides: Partial<ConstructorParameters<typeof WorkingModelDraftController>[0]>,

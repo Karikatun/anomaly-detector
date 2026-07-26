@@ -2,7 +2,7 @@ import {
   Alert01Icon,
   CheckmarkCircle02Icon,
   InformationCircleIcon,
-  TestTube01Icon,
+  SignalFullIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
@@ -327,7 +327,7 @@ export function ContractsPanel({
         <div className={styles.info}>
           <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
           <Typography variant="bodySm">Успех обычного контракта: +1 Corporate Trust, без Бюджета.</Typography>
-          <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
+          <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} aria-hidden="true" />
         </div>
       </aside>
     </section>

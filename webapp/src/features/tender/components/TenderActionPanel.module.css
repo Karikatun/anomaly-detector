@@ -1,0 +1,46 @@
+.notice {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .65rem;
+  padding: .62rem .75rem;
+  border: 1px solid color-mix(in srgb, var(--notice-accent, var(--primary)) 48%, transparent);
+  border-radius: .62rem;
+  color: rgba(224, 238, 246, .78);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--notice-accent, var(--primary)) 12%, transparent), transparent 60%),
+    rgba(2, 15, 28, .9);
+}
+
+.notice > svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: none;
+  color: var(--notice-accent, var(--primary));
+}
+
+.noticeCopy {
+  display: grid;
+  min-width: 0;
+  gap: .08rem;
+}
+
+.noticeCopy strong {
+  color: var(--notice-accent, var(--primary));
+  font-size: .75rem;
+}
+
+.noticeCopy p {
+  overflow: hidden;
+  font-size: .68rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 48rem) {
+  .notice {
+    width: fit-content;
+    max-width: min(100%, 42rem);
+    padding: .65rem .85rem;
+  }
+}

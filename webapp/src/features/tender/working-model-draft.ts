@@ -41,6 +41,10 @@ export class WorkingModelDraftController {
     this.save = save
   }
 
+  resume() {
+    this.disposed = false
+  }
+
   update(draft: WorkingModel) {
     if (this.disposed) return
     this.draft = draft

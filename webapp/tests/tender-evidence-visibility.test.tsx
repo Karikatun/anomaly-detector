@@ -25,11 +25,11 @@ const view = {
 test('labels Laboratory results as public and the current player measurement as private', () => {
   const html = renderToStaticMarkup(
     <I18nProvider>
-      <TenderEvidence view={view} />
+      <TenderEvidence data={view} />
     </I18nProvider>,
   )
 
-  expect(html).toContain('Публичные результаты лаборатории')
-  expect(html).toContain('Ваши приватные измерения')
+  expect(html).toContain('Результаты лаборатории')
+  expect(html).toContain('Личные измерения')
   expect(html).toContain('Одинаковая полярность')
 })

@@ -148,17 +148,40 @@ export function LaboratoryPanel({
                 <Typography as="span" variant="caption" tone="muted">Видите только вы</Typography>
               </span>
               {latestMeasurement ? (
-                <span className={styles.privateMeasurementResult}>
-                  <SignalGlyph signal={latestMeasurement.sourceSignal} className={styles.signalGlyph} />
-                  <span>
-                    <Typography variant="caption" tone="muted">
-                      {signalName(latestMeasurement.sourceSignal)} относительно {signalName(latestMeasurement.receiverSignal)}
-                    </Typography>
-                    <Typography variant="bodySmMedium" className={styles.sectionMeta}>
+                <>
+                  <span className={styles.privateMeasurementResult}>
+                    <span className={styles.measurementSignal}>
+                      <SignalGlyph signal={latestMeasurement.sourceSignal} className={styles.signalGlyph} />
+                      <Typography as="strong" variant="caption">{signalName(latestMeasurement.sourceSignal)}</Typography>
+                    </span>
+                    <Typography as="span" variant="h5" className={styles.measurementArrow}>→</Typography>
+                    <span className={styles.measurementSignal}>
+                      <SignalGlyph signal={latestMeasurement.receiverSignal} className={styles.signalGlyph} />
+                      <Typography as="strong" variant="caption">{signalName(latestMeasurement.receiverSignal)}</Typography>
+                    </span>
+                    <Typography variant="bodySmMedium" className={styles.measurementRelation}>
                       {latestMeasurement.polarityRelation === 'same' ? 'одинаковая полярность' : 'противоположная полярность'}
                     </Typography>
                   </span>
-                </span>
+                  <details className={styles.measurementHistory}>
+                    <summary>
+                      <Typography as="span" variant="caption">История личных измерений</Typography>
+                      <Typography as="span" variant="caption">{privateMeasurements.length}</Typography>
+                    </summary>
+                    <div>
+                      {privateMeasurements.slice().reverse().map((measurement, index) => (
+                        <span key={`${measurement.sourceSignal}-${measurement.receiverSignal}-${index}`}>
+                          <Typography as="strong" variant="caption">
+                            {signalName(measurement.sourceSignal)} → {signalName(measurement.receiverSignal)}
+                          </Typography>
+                          <Typography as="span" variant="caption" tone="muted">
+                            {measurement.polarityRelation === 'same' ? 'одинаковая' : 'противоположная'}
+                          </Typography>
+                        </span>
+                      ))}
+                    </div>
+                  </details>
+                </>
               ) : (
                 <Typography variant="caption" tone="muted">Появится после первого проведённого опыта.</Typography>
               )}

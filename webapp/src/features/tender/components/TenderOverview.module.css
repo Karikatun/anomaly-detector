@@ -188,3 +188,126 @@
     font-size: .78rem;
   }
 }
+
+.researchData {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(65, 127, 169, .34);
+  border-radius: .65rem;
+  background:
+    radial-gradient(circle at 0 0, rgba(31, 157, 218, .07), transparent 34%),
+    rgba(1, 13, 27, .9);
+}
+
+.researchData > summary {
+  display: flex;
+  min-height: 3.2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .62rem .75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.researchData > summary > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: .06rem;
+}
+
+.researchCount {
+  display: grid;
+  min-width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  border: 1px solid rgba(87, 145, 181, .4);
+  border-radius: 50%;
+  color: var(--primary);
+  background: rgba(4, 22, 37, .8);
+}
+
+.evidence {
+  display: grid;
+  min-width: 0;
+  gap: .75rem;
+  padding: 0 .75rem .75rem;
+}
+
+.evidenceSection {
+  display: grid;
+  min-width: 0;
+  gap: .45rem;
+  padding-top: .65rem;
+  border-top: 1px solid rgba(72, 132, 170, .22);
+}
+
+.evidenceHeading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.evidenceHeading h3 {
+  color: rgba(224, 237, 245, .78);
+  font-size: .72rem;
+  text-transform: uppercase;
+}
+
+.evidenceHeading > span {
+  color: var(--primary);
+}
+
+.evidenceGrid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: .45rem;
+}
+
+.evidenceCard {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: .2rem;
+  padding: .55rem;
+  border: 1px solid rgba(75, 133, 169, .3);
+  border-radius: .5rem;
+  background: rgba(3, 18, 31, .76);
+}
+
+.evidenceCard[data-private] {
+  border-color: rgba(40, 197, 181, .34);
+  background: rgba(4, 34, 40, .28);
+}
+
+.evidenceCard[data-correct='true'] {
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+}
+
+.evidenceCard[data-correct='false'] {
+  border-color: color-mix(in srgb, var(--destructive) 45%, transparent);
+}
+
+.evidenceRoute,
+.evidenceSignal {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .3rem;
+}
+
+.evidenceRoute svg,
+.evidenceSignal svg {
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: none;
+}
+
+.evidenceRoute strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

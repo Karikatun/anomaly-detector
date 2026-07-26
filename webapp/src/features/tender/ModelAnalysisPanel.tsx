@@ -1,4 +1,4 @@
-import { Alert01Icon, InformationCircleIcon, TestTube01Icon } from '@hugeicons/core-free-icons'
+import { Alert01Icon, InformationCircleIcon, SignalFullIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
 import { useState } from 'react'
@@ -9,6 +9,7 @@ import type {
   PublicThesis,
   SignalId,
   WorkingModel,
+  TenderView,
 } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,7 @@ import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
+import { TenderEvidence } from './components/TenderOverview'
 import { runTenderAction } from './run-tender-action'
 
 type ModelAnalysisPanelProps = {
@@ -33,9 +35,12 @@ type ModelAnalysisPanelProps = {
   maxTheses: number
   model: WorkingModel
   publicTheses: PublicThesis[]
+  publicLaboratoryResults: TenderView['publicLaboratoryResults']
+  privateMeasurements: TenderView['privateMeasurements']
   dueAt?: string | null
   serverTime: string
   disabled?: boolean
+  workingModelDisabled?: boolean
   error?: string | null
   onConfirmThesis: (input: { signalId: SignalId; fieldType: FieldType; polarity: Polarity }) => Promise<void>
   onSaveWorkingModel: (model: WorkingModel) => Promise<void>
@@ -50,9 +55,12 @@ export function ModelAnalysisPanel({
   maxTheses,
   model,
   publicTheses,
+  publicLaboratoryResults,
+  privateMeasurements,
   dueAt,
   serverTime,
   disabled,
+  workingModelDisabled,
   error,
   onConfirmThesis,
   onSaveWorkingModel,
@@ -85,7 +93,7 @@ export function ModelAnalysisPanel({
             <Typography as="span" variant="caption" className={styles.sectionMeta}>Видите только вы</Typography>
           </div>
           <WorkingModelWorkspace
-            disabled={disabled}
+            disabled={workingModelDisabled}
             dueAt={dueAt}
             inlineOnDesktop
             knownSignals={knownSignals}
@@ -170,6 +178,21 @@ export function ModelAnalysisPanel({
               Верный тезис: +1 рейтинг и сертификация. Неверный запускает корпоративную проверку.
             </Typography>
           </div>
+          <details className={styles.analysisEvidence}>
+            <summary>
+              <Typography as="span" variant="bodySmMedium">История лаборатории</Typography>
+              <Typography as="span" variant="caption">
+                {publicLaboratoryResults.length + privateMeasurements.length}
+              </Typography>
+            </summary>
+            <TenderEvidence
+              data={{
+                privateMeasurements,
+                publicLaboratoryResults,
+                publicTheses: [],
+              }}
+            />
+          </details>
           <div className={styles.analysisHistory}>
             <div className={styles.sectionHeader}>
               <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>История тезисов</Typography>
@@ -215,7 +238,7 @@ export function ModelAnalysisPanel({
           disabled={disabled || !isValid}
           onClick={() => void handleSubmit()}
         >
-          <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
+          <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} aria-hidden="true" />
           {t('tender.analysis.submit')}
         </Button>
       </footer>

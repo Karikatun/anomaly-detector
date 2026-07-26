@@ -58,6 +58,38 @@ async function runLaboratory(page: Page) {
   await page.getByRole('button', { name: 'Провести опыт' }).click()
 }
 
+async function verifyWorkingModelModal(page: Page) {
+  const pageErrors: Error[] = []
+  const collectPageError = (error: Error) => pageErrors.push(error)
+  page.on('pageerror', collectPageError)
+  await page.setViewportSize({ width: 390, height: 844 })
+  try {
+    await page.getByRole('button', { name: /Рабочая модель/ }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+
+    const timers = page.getByRole('timer', { name: 'До конца фазы' })
+    await expect(timers).toHaveCount(1)
+    const initialModalTime = await timers.textContent()
+    await expect.poll(() => timers.textContent()).not.toBe(initialModalTime)
+
+    const fieldButton = dialog.getByRole('button', {
+      name: 'Aster: гипотеза, тип поля Инерционное',
+    })
+    await expect(fieldButton).toBeEnabled()
+    await fieldButton.click()
+    await expect(fieldButton).toHaveAttribute('aria-pressed', 'true')
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+    expect(pageErrors).toEqual([])
+  } finally {
+    page.off('pageerror', collectPageError)
+    await page.setViewportSize({ width: 1280, height: 720 })
+  }
+}
+
 async function submitThesis(page: Page) {
   const submit = page.getByRole('button', { name: 'Выдвинуть тезис' })
   await page.getByRole('combobox', { name: 'Сигнал для тезиса' }).selectOption('aster')
@@ -369,10 +401,13 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await expectPhase(page, headings.laboratory)
       await expectPhase(guestPage, headings.laboratory)
       await runLaboratory(page)
+      await expect(page.getByText('История личных измерений')).toBeVisible()
       await runLaboratory(guestPage)
 
       await expectPhase(page, headings.analysis)
       await expectPhase(guestPage, headings.analysis)
+      await expect(guestPage.getByText('История лаборатории')).toBeVisible()
+      if (round === 2) await verifyWorkingModelModal(guestPage)
       await submitThesis(page)
       await submitThesis(guestPage)
     }

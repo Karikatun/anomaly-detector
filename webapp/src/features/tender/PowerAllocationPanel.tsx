@@ -7,7 +7,7 @@ import {
   InformationCircleIcon,
   LockIcon,
   Radar02Icon,
-  TestTube01Icon,
+  SignalFullIcon,
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -180,7 +180,7 @@ export function PowerAllocationPanel({
 
       <div className={styles.sampleBar}>
         <span className={styles.sampleIcon} aria-hidden="true">
-          <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} />
+          <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} />
         </span>
         <Typography variant="bodySm" className={styles.sampleCount}>
           {t('tender.power.samples', { count: sampleCount })}
@@ -250,8 +250,9 @@ export function PowerAllocationPanel({
 
               {isConfirmed ? (
                 <div className={styles.lockedValue}>
+                  <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={1.8} aria-hidden="true" />
                   <Typography as="strong" variant="h3">{value}</Typography>
-                  <HugeiconsIcon icon={LockIcon} strokeWidth={1.7} aria-hidden="true" />
+                  <Typography as="span" variant="caption">выбрано</Typography>
                 </div>
               ) : (
                 <div className={styles.stepper}>

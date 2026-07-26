@@ -22,15 +22,15 @@ import { FinalScientificModelPanel } from './FinalScientificModelPanel'
 import { LaboratoryPanel } from './LaboratoryPanel'
 import { ModelAnalysisPanel } from './ModelAnalysisPanel'
 import { PowerAllocationPanel } from './PowerAllocationPanel'
-import { ReconnaissancePanel } from './ReconnaissancePanel'
+import { ReconnaissancePanel, ReconnaissanceUnavailable } from './ReconnaissancePanel'
 import { TenderTimer } from './TenderTimer'
 import { ReconnectOverlay } from './components/ReconnectOverlay'
-import { UnavailablePhaseCard } from './components/TenderActionPanel'
+import { PhaseNotice, UnavailablePhaseCard } from './components/TenderActionPanel'
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import {
-  TenderEvidence,
   TenderLaboratoryJournal,
   TenderPlayers,
+  TenderResearchData,
 } from './components/TenderOverview'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import {
@@ -76,16 +76,14 @@ const realtimeErrorKeys = {
 
 function WaitingForTurn({ playerName }: { playerName?: string }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Ожидание хода</CardTitle>
-        <CardDescription>
-          {playerName
-            ? `Сейчас действует ${playerName}. Ваша форма откроется, когда подойдёт ваш слот.`
-            : 'Сервер обрабатывает переход фазы. Ваша форма откроется после синхронизации.'}
-        </CardDescription>
-      </CardHeader>
-    </Card>
+    <PhaseNotice
+      kind="waiting"
+      description={playerName
+        ? `Сейчас действует ${playerName}. Форма откроется в ваш слот.`
+        : 'Ожидаем синхронизацию следующего хода.'}
+    >
+      Ожидание хода
+    </PhaseNotice>
   )
 }
 
@@ -149,7 +147,7 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           onConfirm={(targets) => onCommand({ type: 'conduct-reconnaissance', targets })}
         />,
       ) : (
-        <UnavailablePhaseCard>Вы не выделили мощность на разведку.</UnavailablePhaseCard>
+        <ReconnaissanceUnavailable mySamples={mySamples} />
       )
     }
 
@@ -178,8 +176,11 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           maxTheses={maPower}
           model={view.privateWorkingModel}
           publicTheses={view.publicTheses}
+          publicLaboratoryResults={view.publicLaboratoryResults}
+          privateMeasurements={view.privateMeasurements}
           serverTime={view.serverTime}
           disabled={disabled || isWaitingForTurn}
+          workingModelDisabled={disabled}
           error={error}
           onConfirmThesis={(input) => onCommand({ type: 'submit-thesis', ...input })}
           onSaveWorkingModel={onSaveWorkingModel}
@@ -480,21 +481,7 @@ function TenderContent() {
 
           {showGenericTools && (
             <div className="grid gap-2">
-              <details className="rounded-lg border border-border/70 bg-card/80 px-3 py-2">
-                <summary className="cursor-pointer list-none">
-                  <span className="flex items-center justify-between gap-3">
-                    <Typography as="span" variant="bodySmMedium">Данные исследования</Typography>
-                    <Badge variant="outline">
-                      {tenderView.publicLaboratoryResults.length
-                        + tenderView.privateMeasurements.length
-                        + tenderView.publicTheses.length}
-                    </Badge>
-                  </span>
-                </summary>
-                <div className="mt-3 grid gap-4">
-                  <TenderEvidence view={tenderView} />
-                </div>
-              </details>
+              <TenderResearchData view={tenderView} />
 
               <WorkingModelWorkspace
                 disabled={!connected}
