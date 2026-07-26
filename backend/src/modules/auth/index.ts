@@ -5,7 +5,11 @@ import type { AccountDeletionCleanup, Clock, LogoutCleanup, ProjectUser } from '
 import { toBaseUserDto } from './domain/user'
 import { createPrismaAuthRepository } from './infrastructure/auth-repository'
 import { signAccessToken, verifyAccessToken } from './infrastructure/access-tokens'
-import { hashPassword, verifyPassword } from './infrastructure/passwords'
+import {
+  hashPassword,
+  passwordHashNeedsRehash,
+  verifyPassword,
+} from './infrastructure/passwords'
 import {
   createRefreshToken,
   deriveRotatedRefreshToken,
@@ -73,6 +77,7 @@ export function createAuthModule({
     oauthProviders: oauthProviders.hasAny() ? oauthProviders : undefined,
     passwords: {
       hash: hashPassword,
+      needsRehash: passwordHashNeedsRehash,
       verify: verifyPassword,
     },
     projectUser,

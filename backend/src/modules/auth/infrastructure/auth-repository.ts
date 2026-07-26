@@ -14,6 +14,13 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
       return db.user.findUnique({ where: { login } })
     },
 
+    async updatePasswordHash({ userId, currentPasswordHash, nextPasswordHash }) {
+      await db.user.updateMany({
+        where: { id: userId, passwordHash: currentPasswordHash },
+        data: { passwordHash: nextPasswordHash },
+      })
+    },
+
     async createPasswordUserWithSession(input) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {

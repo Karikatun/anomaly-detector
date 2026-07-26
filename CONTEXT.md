@@ -12,6 +12,10 @@ _Avoid_: device fingerprint, trusted device, device identity
 The temporary server-side allowance for password verification, maintained independently for a normalised login and a trusted client address. It expires automatically and never permanently locks an account.
 _Avoid_: account ban, password lock, captcha score
 
+**Password Hash Policy**:
+The minimum accepted PHC parameters for password credentials. New password hashes use explicit Argon2id `m=65536`, `t=2`, `p=1`; a successful login atomically replaces a verified hash that no longer meets this policy.
+_Avoid_: password encryption, reversible password, runtime-default hash
+
 ## Anomaly Research
 
 **Anomaly Configuration**:

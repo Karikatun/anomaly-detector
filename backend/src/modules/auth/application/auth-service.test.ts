@@ -12,11 +12,66 @@ const user = {
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
 }
 
+test('login opportunistically replaces a verified password hash that no longer meets policy', async () => {
+  const passwordHashUpdates: Array<{
+    userId: string
+    currentPasswordHash: string
+    nextPasswordHash: string
+  }> = []
+  const repository = {
+    findUserByLogin: async () => user,
+    updatePasswordHash: async (input: {
+      userId: string
+      currentPasswordHash: string
+      nextPasswordHash: string
+    }) => {
+      passwordHashUpdates.push(input)
+    },
+    createSession: async () => ({ id: 'session-created' }),
+  } as unknown as AuthRepository
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-created' }) },
+    clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: {
+      hash: async () => 'current-policy-hash',
+      needsRehash: () => true,
+      verify: async () => true,
+    },
+    projectUser: async () => ({
+      id: user.id,
+      login: user.login,
+      displayName: null,
+      locale: 'ru',
+      createdAt: user.createdAt.toISOString(),
+    }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: {
+      create: () => 'refresh-token',
+      hash: (token) => `hash:${token}`,
+      familyHash: (token) => `family:${token}`,
+      rotate: (token) => token,
+    },
+    repository,
+  })
+
+  await service.login({ login: user.login, password: 'password123' }, {})
+
+  expect(passwordHashUpdates).toEqual([{
+    userId: user.id,
+    currentPasswordHash: user.passwordHash,
+    nextPasswordHash: 'current-policy-hash',
+  }])
+})
+
 test('refresh keeps the logical session id stable while rotating its credential', async () => {
   const signedSessionIds: string[] = []
   const refreshCutoffs: Date[] = []
   const repository = {
     findUserByLogin: async () => null,
+    updatePasswordHash: async () => undefined,
     createPasswordUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
     createSession: async () => ({ id: 'session-created' }),
     findActiveRefreshSession: async (input) => {
@@ -55,6 +110,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
     logoutCleanup: async () => undefined,
     passwords: {
       hash: async () => 'password-hash',
+      needsRehash: () => false,
       verify: async () => true,
     },
     projectUser: async (record) => ({
@@ -104,7 +160,7 @@ test('refresh revokes the logical session when a previous credential is reused a
     },
     clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
     logoutCleanup: async () => undefined,
-    passwords: { hash: async () => 'hash', verify: async () => true },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
     projectUser: async () => ({
       id: user.id,
       login: user.login,
@@ -156,7 +212,7 @@ test('refresh returns the winning successor when another request wins the rotati
     },
     clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
     logoutCleanup: async () => undefined,
-    passwords: { hash: async () => 'hash', verify: async () => true },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
     projectUser: async () => ({
       id: user.id,
       login: user.login,
@@ -190,7 +246,7 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
     accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
     clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
     logoutCleanup: async () => undefined,
-    passwords: { hash: async () => 'hash', verify: async () => true },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
     projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
     refreshTokenTtlDays: 30,
     refreshReuseGraceSeconds: 10,
@@ -238,7 +294,7 @@ test('deleteAccount anonymises the user and revokes all sessions', async () => {
     accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
     clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
     logoutCleanup: async () => undefined,
-    passwords: { hash: async () => 'hash', verify: async () => true },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
     projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
     refreshTokenTtlDays: 30,
     refreshReuseGraceSeconds: 10,

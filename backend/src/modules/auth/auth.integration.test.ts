@@ -926,6 +926,59 @@ maybeDescribe('auth API integration', () => {
     expect(invalidLogin.status).toBe(401)
   })
 
+  test('rehashes a verified legacy password and never exposes password material', async () => {
+    const password = 'correct horse battery staple'
+    const legacyHash = await Bun.password.hash(password, {
+      algorithm: 'argon2id',
+      memoryCost: 19_456,
+      timeCost: 2,
+    })
+    await prisma.user.create({
+      data: {
+        login: 'legacy-password',
+        passwordHash: legacyHash,
+      },
+    })
+
+    const login = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'legacy-password', password }),
+    })
+    const responseText = await login.text()
+    const storedUser = await prisma.user.findUniqueOrThrow({
+      where: { login: 'legacy-password' },
+    })
+
+    expect(login.status).toBe(200)
+    expect(storedUser.passwordHash).toStartWith('$argon2id$v=19$m=65536,t=2,p=1$')
+    expect(storedUser.passwordHash).not.toBe(legacyHash)
+    expect(await Bun.password.verify(password, storedUser.passwordHash)).toBe(true)
+    expect(responseText).not.toContain(password)
+    expect(responseText).not.toContain(legacyHash)
+    expect(responseText).not.toContain(storedUser.passwordHash)
+  })
+
+  test('treats a non-password account record as invalid credentials', async () => {
+    await prisma.user.create({
+      data: {
+        login: 'oauth-only',
+        passwordHash: 'OAUTH_USER',
+      },
+    })
+
+    const login = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'oauth-only', password: 'password123' }),
+    })
+
+    expect(login.status).toBe(401)
+    expect(await login.json()).toEqual({
+      error: { code: 'UNAUTHORIZED', message: 'Invalid login or password' },
+    })
+  })
+
   test('limits password login after five failures and resets the login budget on success', async () => {
     const login = 'password-attempt-budget'
     const password = 'password123'
