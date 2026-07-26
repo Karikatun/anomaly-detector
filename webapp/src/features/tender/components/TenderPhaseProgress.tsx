@@ -6,9 +6,9 @@ import styles from './TenderPhaseProgress.module.css'
 
 const operationalStages = [
   { phase: 'reconnaissance', shortLabel: 'Разведка', label: 'Разведка' },
-  { phase: 'laboratory', shortLabel: 'Лаб.', label: 'Лаборатория' },
+  { phase: 'laboratory', shortLabel: 'Лаборатория', label: 'Лаборатория' },
   { phase: 'model-analysis', shortLabel: 'Модель', label: 'Анализ модели' },
-  { phase: 'contracts', shortLabel: 'Контр.', label: 'Контракты' },
+  { phase: 'contracts', shortLabel: 'Контракты', label: 'Контракты' },
 ] as const
 
 export function TenderPhaseProgress({ phase }: { phase: string }) {

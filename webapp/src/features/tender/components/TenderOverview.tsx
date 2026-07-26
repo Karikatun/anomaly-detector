@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-import type { TenderView } from '@anomaly-detector/contracts'
+import type { SignalId, TenderView } from '@anomaly-detector/contracts'
 
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
@@ -252,5 +252,42 @@ export function TenderResearchData({ view }: { view: TenderView }) {
       </summary>
       <TenderEvidence data={view} />
     </details>
+  )
+}
+
+export function TenderPlanningContext({
+  samples,
+  view,
+}: {
+  samples: SignalId[]
+  view: TenderView
+}) {
+  const { t } = useI18n()
+
+  return (
+    <div className={styles.planningContext}>
+      <section className={styles.sampleInventory} aria-labelledby="planning-samples-heading">
+        <div className={styles.sampleInventoryHeading}>
+          <Typography id="planning-samples-heading" as="h2" variant="bodySmMedium">
+            Ваши образцы
+          </Typography>
+          <Typography as="span" variant="caption" className={styles.sampleInventoryCount}>
+            {samples.length} / 6
+          </Typography>
+        </div>
+        <div className={styles.sampleInventoryList}>
+          {samples.length > 0 ? samples.map((signal) => (
+            <span key={signal} className={styles.sampleInventoryChip}>
+              <SignalGlyph signal={signal} />
+              <Typography as="strong" variant="caption">{t(signalLabelKeys[signal])}</Typography>
+            </span>
+          )) : (
+            <Typography variant="caption" tone="muted">Образцов пока нет</Typography>
+          )}
+        </div>
+      </section>
+
+      <TenderResearchData view={view} />
+    </div>
   )
 }

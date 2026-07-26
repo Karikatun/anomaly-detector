@@ -1,0 +1,21 @@
+.page {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.header {
+  flex: none;
+  z-index: 60;
+}
+
+.content {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+}

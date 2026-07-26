@@ -16,6 +16,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Typography } from '@/components/ui/typography'
 import { type TranslationKey, useI18n } from '@/platform/i18n'
+import styles from './RulesReferenceDialog.module.css'
 
 const sections = [
   ['overview', ['overview.1', 'overview.2']],
@@ -32,7 +33,9 @@ export function RulesReferenceDialog({
   triggerIconOnly = false,
   triggerLabelKey = 'rules.open',
   triggerTextClassName,
+  belowTenderHeader = false,
 }: {
+  belowTenderHeader?: boolean
   triggerVariant?: 'default' | 'outline' | 'ghost'
   triggerClassName?: string
   triggerIconOnly?: boolean
@@ -63,7 +66,13 @@ export function RulesReferenceDialog({
           </Typography>
         </Button>
       </DialogTrigger>
-      <DialogContent showCloseButton={false} className="max-h-[calc(100svh-2rem)] max-w-3xl overflow-y-auto sm:max-w-3xl">
+      <DialogContent
+        showCloseButton={false}
+        className={cn(
+          'max-h-[calc(100svh-2rem)] max-w-3xl overflow-y-auto sm:max-w-3xl',
+          belowTenderHeader && styles.belowTenderHeader,
+        )}
+      >
         <DialogHeader>
           <DialogTitle>{t('rules.title')}</DialogTitle>
           <DialogDescription>{t('rules.description')}</DialogDescription>

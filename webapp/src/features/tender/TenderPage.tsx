@@ -2,13 +2,13 @@ import { Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
@@ -29,16 +29,12 @@ import { PhaseNotice, UnavailablePhaseCard } from './components/TenderActionPane
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import {
   TenderLaboratoryJournal,
+  TenderPlanningContext,
   TenderPlayers,
   TenderResearchData,
 } from './components/TenderOverview'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
-import {
-  fieldTypeLabelKeys,
-  isSignalId,
-  polarityLabelKeys,
-  signalLabelKeys,
-} from './catalog'
+import { CompletedTenderPanel } from './components/CompletedTenderPanel'
 import {
   useTenderCommands,
   type TenderCommandInput,
@@ -47,6 +43,7 @@ import {
   useRealtimeTender,
   type RealtimeErrorCode,
 } from './realtime'
+import styles from './TenderPage.module.css'
 
 const phaseLabels: Record<string, string> = {
   'access-slot-selection': '1. Выбор слота доступа',
@@ -96,7 +93,6 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
   activePlayerId?: string
 }) {
   const auth = useAuth()
-  const { t } = useI18n()
   const myPlayer = view.players.find((p) => p.playerId === auth.user?.id)
   const mySamples = myPlayer ? view.privateSamples : []
   const myPower = myPlayer?.powerAllocation
@@ -119,7 +115,11 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           error={error}
           onConfirm={(slot) => onCommand({ type: 'request-access-slot', slot })}
           tiePriorityOrder={view.players}
-        />
+        >
+          {view.round > 1 && (
+            <TenderPlanningContext samples={mySamples} view={view} />
+          )}
+        </AccessSlotPanel>
       )
 
     case 'power-allocation':
@@ -171,14 +171,12 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
       const maPower = myPower?.modelAnalysis ?? 0
       return maPower > 0 ? withWaitingState(
         <ModelAnalysisPanel
-          dueAt={view.dueAt}
           knownSignals={view.knownSignals}
           maxTheses={maPower}
           model={view.privateWorkingModel}
           publicTheses={view.publicTheses}
           publicLaboratoryResults={view.publicLaboratoryResults}
           privateMeasurements={view.privateMeasurements}
-          serverTime={view.serverTime}
           disabled={disabled || isWaitingForTurn}
           workingModelDisabled={disabled}
           error={error}
@@ -228,56 +226,7 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
 
     case 'complete':
       return view.audit ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Тендер завершён</CardTitle>
-            <CardDescription>
-              Победитель{view.winnerPlayerIds && view.winnerPlayerIds.length > 1 ? 'и' : ''}:{' '}
-              {view.winnerPlayerIds
-                ?.map((playerId) => view.players.find((player) => player.playerId === playerId)?.displayName ?? playerId.slice(0, 8))
-                .join(', ') ?? '—'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Typography variant="bodySm" tone="muted">
-              Аномалия раскрыта. Ниже — полная конфигурация и журнал событий.
-            </Typography>
-            <div className="mt-4 grid gap-2">
-              <Typography variant="control" tone="muted">Свойства сигналов</Typography>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {Object.entries(view.audit.anomalyConfiguration.signals).map(([sig, props]) => (
-                    <Card key={sig} size="sm">
-                      <CardContent className="py-3">
-                        <Typography variant="bodySmMedium">
-                        {isSignalId(sig) ? t(signalLabelKeys[sig]) : sig}
-                      </Typography>
-                      <Typography variant="bodySmSnug" tone="muted">
-                        {t(fieldTypeLabelKeys[props.fieldType])} / {t(polarityLabelKeys[props.polarity])}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-            <div className="mt-4 grid gap-2">
-              <Typography variant="control" tone="muted">Итоговый рейтинг</Typography>
-              {view.players.map((p) => (
-                <div key={p.playerId} className="grid gap-2 rounded-lg border p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center">
-                  <Typography variant="bodySmMedium">Слот {p.accessSlot}</Typography>
-                  <Typography variant="bodySm" tone="muted" className="min-w-0 break-words">
-                    {p.displayName ?? p.playerId.slice(0, 8)}
-                  </Typography>
-                  <Typography variant="bodySmMedium">
-                    Рейтинг: {p.rating} · Бюджет: {p.budget}
-                  </Typography>
-                  {view.winnerPlayerIds?.includes(p.playerId) && (
-                    <Badge variant="outline" className="justify-self-start sm:justify-self-auto">Победитель</Badge>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <CompletedTenderPanel view={{ ...view, audit: view.audit }} />
       ) : (
         <Card>
           <CardHeader><CardTitle>Тендер завершён</CardTitle></CardHeader>
@@ -314,6 +263,27 @@ function TenderContent() {
   const { execute } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
   const [commandError, setCommandError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const headerRef = useRef<HTMLElement>(null)
+
+  useLayoutEffect(() => {
+    const header = headerRef.current
+    if (!header) return
+
+    const updateHeaderHeight = () => {
+      document.documentElement.style.setProperty(
+        '--tender-sticky-header-height',
+        `${header.getBoundingClientRect().height}px`,
+      )
+    }
+    const observer = new ResizeObserver(updateHeaderHeight)
+    observer.observe(header)
+    updateHeaderHeight()
+
+    return () => {
+      observer.disconnect()
+      document.documentElement.style.removeProperty('--tender-sticky-header-height')
+    }
+  }, [tenderView?.phase])
 
   useEffect(() => {
     if (tenderView?.phase !== 'complete') return
@@ -353,7 +323,7 @@ function TenderContent() {
 
   if (error && !tenderView) {
     return (
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
+      <section className="mx-auto grid min-h-dvh w-full max-w-6xl content-center gap-6 px-5 py-16">
         <Typography variant="h4" tone="destructive">{t(realtimeErrorKeys[error])}</Typography>
       </section>
     )
@@ -361,7 +331,7 @@ function TenderContent() {
 
   if (!tenderView) {
     return (
-      <section className="mx-auto flex w-full max-w-6xl items-center justify-center px-5 py-16">
+      <section className="mx-auto flex min-h-dvh w-full max-w-6xl items-center justify-center px-5 py-16">
         <div className="flex items-center gap-3">
           <Spinner />
           <Typography variant="bodySm" tone="muted">
@@ -381,18 +351,20 @@ function TenderContent() {
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
   const isPowerAllocation = tenderView.phase === 'power-allocation'
   const isLaboratoryPhase = tenderView.phase === 'laboratory'
+  const isComplete = tenderView.phase === 'complete'
   const isPlanningPhase = isAccessSlotSelection || isPowerAllocation
   const isEmbeddedWorkspacePhase = tenderView.phase === 'model-analysis'
     || tenderView.phase === 'contracts'
     || tenderView.phase === 'final-scientific-model'
-  const showRightSidebar = !isPlanningPhase && !isEmbeddedWorkspacePhase
-  const showGenericTools = !isPlanningPhase && !isLaboratoryPhase && !isEmbeddedWorkspacePhase
+  const showRightSidebar = !isPlanningPhase && !isEmbeddedWorkspacePhase && !isComplete
+  const showGenericTools = !isPlanningPhase && !isLaboratoryPhase && !isEmbeddedWorkspacePhase && !isComplete
 
   return (
-    <section className="mx-auto grid w-full min-w-0 max-w-[90rem] gap-4 overflow-x-clip px-3 py-3 sm:px-5 sm:py-5">
+    <section className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}>
       <header
+        ref={headerRef}
         aria-label={t('tender.phase.status')}
-        className="sticky top-0 z-20 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-xl border bg-background/95 px-3 py-2 shadow-sm backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:px-5 sm:py-3"
+        className={`${styles.header} sticky top-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-xl border bg-background/95 px-3 py-2 shadow-sm backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:px-5 sm:py-3`}
       >
         <div className="grid min-w-0 gap-0.5">
           <Typography variant="shortcut" tone="muted" className="uppercase">
@@ -421,6 +393,7 @@ function TenderContent() {
             <Badge variant="outline" className="text-amber-400">{t('tender.realtime.reconnecting')}</Badge>
           )}
           <RulesReferenceDialog
+            belowTenderHeader
             triggerIconOnly
             triggerClassName="border-border/70 bg-input/20"
           />
@@ -437,92 +410,91 @@ function TenderContent() {
         </div>
       </header>
 
-      {!connected && (
-        <ReconnectOverlay
-          errorText={error ? t(realtimeErrorKeys[error]) : undefined}
-          onRetry={retry}
-        />
-      )}
-
-      {isSequentialPhase && tenderView.phase !== 'complete' && (
-        <TenderPhaseProgress phase={tenderView.phase} />
-      )}
-
-      {isSequentialPhase && (
-        <div className="lg:hidden">
-          <TenderPlayers
-            activePlayerId={tenderView.activePlayerId}
-            compact
-            currentUserId={auth.user?.id}
-            players={tenderView.players}
+      <div className={styles.content}>
+        {!connected && (
+          <ReconnectOverlay
+            errorText={error ? t(realtimeErrorKeys[error]) : undefined}
+            onRetry={retry}
           />
-        </div>
-      )}
+        )}
 
-      <div className={showRightSidebar ? 'grid min-w-0 items-start gap-6 lg:grid-cols-[1fr_320px]' : 'grid min-w-0 items-start gap-4'}>
-        <div className={isPlanningPhase ? 'grid min-w-0 self-start gap-4' : 'grid min-w-0 self-start gap-6'}>
-          <PhasePanel
-            view={tenderView}
-            disabled={submitting || !connected}
-            error={commandError}
-            onCommand={handleCommand}
-            onSaveWorkingModel={saveWorkingModel}
-            activePlayerId={tenderView.activePlayerId}
-          />
+        {isSequentialPhase && tenderView.phase !== 'complete' && (
+          <TenderPhaseProgress phase={tenderView.phase} />
+        )}
 
-          {isLaboratoryPhase && (
-            <div className="lg:hidden">
-              <TenderLaboratoryJournal
-                players={tenderView.players}
-                results={tenderView.publicLaboratoryResults}
-              />
-            </div>
-          )}
-
-          {showGenericTools && (
-            <div className="grid gap-2">
-              <TenderResearchData view={tenderView} />
-
-              <WorkingModelWorkspace
-                disabled={!connected}
-                dueAt={tenderView.dueAt}
-                knownSignals={tenderView.knownSignals}
-                model={tenderView.privateWorkingModel}
-                onSave={saveWorkingModel}
-                serverTime={tenderView.serverTime}
-              />
-            </div>
-          )}
-
-          {(tenderView.phase === 'model-analysis' || tenderView.phase === 'final-scientific-model') && (
-            <div className="hidden lg:block">
-              <TenderPlayers
-                activePlayerId={tenderView.activePlayerId}
-                compact
-                currentUserId={auth.user?.id}
-                players={tenderView.players}
-              />
-            </div>
-          )}
-        </div>
-
-        {showRightSidebar && (
-          <aside className="hidden self-start gap-4 lg:grid">
+        {isSequentialPhase && (
+          <div className="lg:hidden">
             <TenderPlayers
               activePlayerId={tenderView.activePlayerId}
+              compact
               currentUserId={auth.user?.id}
               players={tenderView.players}
             />
-            {isLaboratoryPhase && (
-              <TenderLaboratoryJournal
-                players={tenderView.players}
-                results={tenderView.publicLaboratoryResults}
-              />
-            )}
-          </aside>
+          </div>
         )}
-      </div>
 
+        <div className={showRightSidebar ? 'grid min-w-0 items-start gap-6 lg:grid-cols-[1fr_320px]' : 'grid min-w-0 items-start gap-4'}>
+          <div className={isPlanningPhase ? 'grid min-w-0 self-start gap-4' : 'grid min-w-0 self-start gap-6'}>
+            <PhasePanel
+              view={tenderView}
+              disabled={submitting || !connected}
+              error={commandError}
+              onCommand={handleCommand}
+              onSaveWorkingModel={saveWorkingModel}
+              activePlayerId={tenderView.activePlayerId}
+            />
+
+            {isLaboratoryPhase && (
+              <div className="lg:hidden">
+                <TenderLaboratoryJournal
+                  players={tenderView.players}
+                  results={tenderView.publicLaboratoryResults}
+                />
+              </div>
+            )}
+
+            {showGenericTools && (
+              <div className="grid gap-2">
+                <TenderResearchData view={tenderView} />
+
+                <WorkingModelWorkspace
+                  disabled={!connected}
+                  knownSignals={tenderView.knownSignals}
+                  model={tenderView.privateWorkingModel}
+                  onSave={saveWorkingModel}
+                />
+              </div>
+            )}
+
+            {(tenderView.phase === 'model-analysis' || tenderView.phase === 'final-scientific-model') && (
+              <div className="hidden lg:block">
+                <TenderPlayers
+                  activePlayerId={tenderView.activePlayerId}
+                  compact
+                  currentUserId={auth.user?.id}
+                  players={tenderView.players}
+                />
+              </div>
+            )}
+          </div>
+
+          {showRightSidebar && (
+            <aside className="hidden self-start gap-4 lg:grid">
+              <TenderPlayers
+                activePlayerId={tenderView.activePlayerId}
+                currentUserId={auth.user?.id}
+                players={tenderView.players}
+              />
+              {isLaboratoryPhase && (
+                <TenderLaboratoryJournal
+                  players={tenderView.players}
+                  results={tenderView.publicLaboratoryResults}
+                />
+              )}
+            </aside>
+          )}
+        </div>
+      </div>
     </section>
   )
 }

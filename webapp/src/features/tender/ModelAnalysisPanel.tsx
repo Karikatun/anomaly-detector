@@ -37,8 +37,6 @@ type ModelAnalysisPanelProps = {
   publicTheses: PublicThesis[]
   publicLaboratoryResults: TenderView['publicLaboratoryResults']
   privateMeasurements: TenderView['privateMeasurements']
-  dueAt?: string | null
-  serverTime: string
   disabled?: boolean
   workingModelDisabled?: boolean
   error?: string | null
@@ -57,8 +55,6 @@ export function ModelAnalysisPanel({
   publicTheses,
   publicLaboratoryResults,
   privateMeasurements,
-  dueAt,
-  serverTime,
   disabled,
   workingModelDisabled,
   error,
@@ -94,12 +90,10 @@ export function ModelAnalysisPanel({
           </div>
           <WorkingModelWorkspace
             disabled={workingModelDisabled}
-            dueAt={dueAt}
             inlineOnDesktop
             knownSignals={knownSignals}
             model={model}
             onSave={onSaveWorkingModel}
-            serverTime={serverTime}
           />
         </section>
 

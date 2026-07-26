@@ -143,19 +143,19 @@ export function LaboratoryPanel({
           <div className={styles.laboratoryActions}>
             <div className={styles.privateMeasurement}>
               <span className={styles.privateMeasurementHeader}>
-                <HugeiconsIcon icon={LockIcon} strokeWidth={1.7} aria-hidden="true" />
-                <Typography as="strong" variant="caption">Личное измерение</Typography>
+                <span className={styles.privateMeasurementTitle}>
+                  <HugeiconsIcon icon={LockIcon} strokeWidth={1.7} aria-hidden="true" />
+                  <Typography as="strong" variant="caption">Личные измерения</Typography>
+                </span>
                 <Typography as="span" variant="caption" tone="muted">Видите только вы</Typography>
               </span>
               {latestMeasurement ? (
                 <>
                   <span className={styles.privateMeasurementResult}>
-                    <span className={styles.measurementSignal}>
+                    <span className={styles.measurementRoute}>
                       <SignalGlyph signal={latestMeasurement.sourceSignal} className={styles.signalGlyph} />
                       <Typography as="strong" variant="caption">{signalName(latestMeasurement.sourceSignal)}</Typography>
-                    </span>
-                    <Typography as="span" variant="h5" className={styles.measurementArrow}>→</Typography>
-                    <span className={styles.measurementSignal}>
+                      <Typography as="span" variant="h5" className={styles.measurementArrow}>→</Typography>
                       <SignalGlyph signal={latestMeasurement.receiverSignal} className={styles.signalGlyph} />
                       <Typography as="strong" variant="caption">{signalName(latestMeasurement.receiverSignal)}</Typography>
                     </span>
@@ -165,17 +165,24 @@ export function LaboratoryPanel({
                   </span>
                   <details className={styles.measurementHistory}>
                     <summary>
-                      <Typography as="span" variant="caption">История личных измерений</Typography>
+                      <Typography as="span" variant="caption">История</Typography>
                       <Typography as="span" variant="caption">{privateMeasurements.length}</Typography>
                     </summary>
                     <div>
                       {privateMeasurements.slice().reverse().map((measurement, index) => (
-                        <span key={`${measurement.sourceSignal}-${measurement.receiverSignal}-${index}`}>
-                          <Typography as="strong" variant="caption">
-                            {signalName(measurement.sourceSignal)} → {signalName(measurement.receiverSignal)}
-                          </Typography>
+                        <span
+                          key={`${measurement.sourceSignal}-${measurement.receiverSignal}-${index}`}
+                          className={styles.measurementHistoryEntry}
+                        >
+                          <span className={styles.measurementRoute}>
+                            <SignalGlyph signal={measurement.sourceSignal} className={styles.measurementHistoryGlyph} />
+                            <Typography as="strong" variant="caption">{signalName(measurement.sourceSignal)}</Typography>
+                            <Typography as="span" variant="bodySmMedium" className={styles.measurementArrow}>→</Typography>
+                            <SignalGlyph signal={measurement.receiverSignal} className={styles.measurementHistoryGlyph} />
+                            <Typography as="strong" variant="caption">{signalName(measurement.receiverSignal)}</Typography>
+                          </span>
                           <Typography as="span" variant="caption" tone="muted">
-                            {measurement.polarityRelation === 'same' ? 'одинаковая' : 'противоположная'}
+                            {measurement.polarityRelation === 'same' ? 'одинаковая полярность' : 'противоположная полярность'}
                           </Typography>
                         </span>
                       ))}
