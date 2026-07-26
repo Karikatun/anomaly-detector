@@ -1,25 +1,15 @@
-import { useEffect, useState } from 'react'
-
 import { Typography } from '@/components/ui/typography'
+import { useSynchronizedCountdown } from '@/platform/time/synchronized-countdown'
 
 type TenderTimerProps = {
   dueAt: string | null | undefined
+  serverTime: string
 }
 
-export function TenderTimer({ dueAt }: TenderTimerProps) {
-  const [now, setNow] = useState(() => Date.now())
+export function TenderTimer({ dueAt, serverTime }: TenderTimerProps) {
+  const remaining = useSynchronizedCountdown(dueAt, serverTime)
 
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 250)
-
-    return () => clearInterval(interval)
-  }, [])
-
-  const remaining = dueAt
-    ? Math.ceil(Math.max(0, new Date(dueAt).getTime() - now) / 1000)
-    : 0
-
-  if (!dueAt || remaining <= 0) return null
+  if (!dueAt) return null
 
   const minutes = Math.floor(remaining / 60)
   const seconds = remaining % 60
@@ -27,6 +17,8 @@ export function TenderTimer({ dueAt }: TenderTimerProps) {
 
   return (
     <Typography
+      aria-label="До конца фазы"
+      role="timer"
       variant="timer"
       className={urgent ? 'text-red-400 animate-pulse' : 'text-primary'}
     >

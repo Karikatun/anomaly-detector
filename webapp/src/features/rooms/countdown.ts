@@ -1,8 +1,21 @@
+import { getSynchronizedCountdownSeconds } from '@/platform/time/synchronized-countdown'
+
 const ROOM_START_COUNTDOWN_SECONDS = 5
 
-export function getRoomStartCountdownSeconds(startsAt: string | null | undefined, now: number) {
+export function getRoomPollingIntervalMs(status: 'waiting' | 'starting' | 'started' | undefined) {
+  if (status === 'started') return false
+  return status === 'starting' ? 250 : 1_000
+}
+
+export function getRoomStartCountdownSeconds(
+  startsAt: string | null | undefined,
+  serverTime: string | null | undefined,
+  elapsedMs: number,
+) {
   if (!startsAt) return ROOM_START_COUNTDOWN_SECONDS
 
-  const secondsLeft = Math.ceil((Date.parse(startsAt) - now) / 1_000)
-  return Math.min(ROOM_START_COUNTDOWN_SECONDS, Math.max(0, secondsLeft))
+  return getSynchronizedCountdownSeconds(startsAt, serverTime, elapsedMs, {
+    fallbackSeconds: ROOM_START_COUNTDOWN_SECONDS,
+    maximumSeconds: ROOM_START_COUNTDOWN_SECONDS,
+  })
 }

@@ -261,6 +261,7 @@ export const tenderViewSchema = z.object({
   publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
   publicScientificJournal: z.array(scientificJournalEntrySchema).optional(),
   round: z.number().int().min(1).max(5),
+  serverTime: z.string().datetime(),
   tenderId: tenderIdSchema,
   version: z.number().int().min(0),
   phase: tenderPhaseSchema,

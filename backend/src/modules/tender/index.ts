@@ -814,6 +814,7 @@ export function createTenderModule({
         publicLaboratoryResults: tender.publicLaboratoryResults,
         publicScientificJournal: tender.publicScientificJournal,
         round: tender.round,
+        serverTime: now().toISOString(),
         tenderId,
         version: tender.version,
         phase: tender.phase,

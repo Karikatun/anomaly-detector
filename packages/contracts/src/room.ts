@@ -23,6 +23,7 @@ export const roomViewSchema = z.object({
   hostId: z.string().uuid(),
   members: z.array(roomMemberSchema),
   roomId: roomIdSchema,
+  serverTime: z.string().datetime(),
   status: roomStatusSchema,
   startsAt: z.string().datetime().nullable().optional(),
   tenderId: z.string().uuid().nullable().optional(),

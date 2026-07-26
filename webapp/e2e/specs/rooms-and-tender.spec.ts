@@ -16,6 +16,20 @@ async function expectPhase(page: Page, heading: string) {
   await expect(page.getByRole('heading', { name: heading })).toBeVisible()
 }
 
+async function expectSynchronizedTimers(first: Page, second: Page) {
+  const firstTimer = first.getByRole('timer', { name: 'До конца фазы' })
+  const secondTimer = second.getByRole('timer', { name: 'До конца фазы' })
+  await expect(firstTimer).toBeVisible()
+  await expect(secondTimer).toBeVisible()
+  await expect.poll(async () => {
+    const toSeconds = (value: string | null) => {
+      const [minutes = 0, seconds = 0] = (value ?? '').split(':').map(Number)
+      return minutes * 60 + seconds
+    }
+    return Math.abs(toSeconds(await firstTimer.textContent()) - toSeconds(await secondTimer.textContent()))
+  }).toBeLessThanOrEqual(1)
+}
+
 async function chooseAccessSlot(page: Page, slot: number) {
   await page.getByRole('button', { name: new RegExp(`^Слот доступа ${slot}:`) }).click()
   await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
@@ -164,9 +178,14 @@ test('requires every lobby player to be ready before enabling the match start', 
     await startButton.click()
     await expect(page.getByRole('alert')).toContainText('Старт временно недоступен')
     rejectStart = false
+    await guestPage.evaluate(() => {
+      const browserNow = Date.now.bind(Date)
+      Date.now = () => browserNow() + 5 * 60_000
+    })
     await startButton.click()
     await expect(page.getByText('Старт временно недоступен')).toBeHidden()
     await expect(page.getByText('Старт через 5 сек.')).toBeVisible()
+    await expect(guestPage.getByText(/Старт через [4-5] сек\./)).toBeVisible()
     await page.getByRole('button', { name: 'Отменить старт' }).click()
   } finally {
     await guestContext.close()
@@ -247,6 +266,10 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await page.getByRole('button', { name: 'Готов', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Начать игру' })).toBeEnabled()
 
+    await guestPage.evaluate(() => {
+      const browserNow = Date.now.bind(Date)
+      Date.now = () => browserNow() - 7 * 60_000
+    })
     await page.getByRole('button', { name: 'Начать игру' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
@@ -261,6 +284,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByRole('button', { name: 'МОИ МАТЧИ' })).toBeHidden()
     await expectPhase(page, headings.access)
     await expectPhase(guestPage, headings.access)
+    await expectSynchronizedTimers(page, guestPage)
     await expect(page.getByText('Хост E2E → Гость E2E', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', {
       name: 'Слот доступа 5: Ночной. Порядок действия: 5. Компенсация: 1 образец сигнала',
@@ -294,6 +318,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
 
     await expectPhase(page, headings.power)
     await expectPhase(guestPage, headings.power)
+    await expectSynchronizedTimers(page, guestPage)
     await expect(page.getByText('2: непрерывный опыт с публичным результатом и приватным измерением полярности.')).toBeVisible()
     await expect(page.getByText('1: зарезервируйте и подайте одну заявку по контракту.')).toBeVisible()
     await expect(page.getByText('Слот 1', { exact: true })).toBeVisible()
@@ -318,6 +343,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     for (let round = 2; round <= 5; round += 1) {
       await expectPhase(page, headings.access)
       await expectPhase(guestPage, headings.access)
+      await expectSynchronizedTimers(page, guestPage)
       await chooseAccessSlot(page, 1)
       await chooseAccessSlot(guestPage, 2)
 

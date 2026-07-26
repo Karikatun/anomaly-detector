@@ -95,16 +95,32 @@ describe('realtime hub', () => {
     const workerTender = createTenderModule({ now: () => now, store })
     const { tenderId } = await apiTender.createTender({ players })
     const hub = createRealtimeHub({ tender: apiTender })
-    const { messages, socket } = collectSocket()
-    await hub.subscribe({ playerId: 'player-a', socket, tenderId })
+    const first = collectSocket()
+    const second = collectSocket()
+    await hub.subscribe({ playerId: 'player-a', socket: first.socket, tenderId })
+    await hub.subscribe({ playerId: 'player-b', socket: second.socket, tenderId })
 
     now = new Date(now.getTime() + 90_000)
     expect(await workerTender.advanceDueTenders({ limit: 10, now })).toEqual({ advancedTenderIds: [tenderId] })
 
     await hub.syncActiveTenders()
 
-    expect(messages).toHaveLength(2)
-    expect(JSON.parse(messages[1]).view.phase).toBe('power-allocation')
+    expect(first.messages).toHaveLength(2)
+    expect(second.messages).toHaveLength(2)
+    const firstView = JSON.parse(first.messages[1]).view
+    const secondView = JSON.parse(second.messages[1]).view
+    expect(firstView).toMatchObject({
+      dueAt: '2026-07-21T12:03:00.000Z',
+      phase: 'power-allocation',
+      round: 1,
+      serverTime: '2026-07-21T12:01:30.000Z',
+    })
+    expect(secondView).toMatchObject({
+      dueAt: firstView.dueAt,
+      phase: firstView.phase,
+      round: firstView.round,
+      serverTime: firstView.serverTime,
+    })
   })
 
   test('stops notifying an unsubscribed socket', async () => {

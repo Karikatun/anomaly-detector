@@ -6,9 +6,9 @@ import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
+import { useSynchronizedCountdown } from '@/platform/time/synchronized-countdown'
 
 import { RoomsApi } from '../api'
-import { getRoomStartCountdownSeconds } from '../countdown'
 import {
   useCancelRoomStartMutation,
   useLeaveRoomMutation,
@@ -33,7 +33,6 @@ function RoomLobbyContent() {
   const navigate = useNavigate()
   const [actionError, setActionError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [now, setNow] = useState(() => Date.now())
 
   const api = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
   const { mutateAsync: leaveRoom, isPending: isLeaving } = useLeaveRoomMutation({ api })
@@ -42,14 +41,11 @@ function RoomLobbyContent() {
   const { mutateAsync: cancelRoomStart, isPending: isCancellingStart } = useCancelRoomStartMutation({ api })
   const roomQuery = useRoomQuery({ api, roomId })
   const currentRoom = roomQuery.data
-
-  useEffect(() => {
-    if (currentRoom?.status !== 'starting') return
-    const updateNow = () => setNow(Date.now())
-    updateNow()
-    const interval = setInterval(updateNow, 1_000)
-    return () => clearInterval(interval)
-  }, [currentRoom?.status])
+  const secondsLeft = useSynchronizedCountdown(
+    currentRoom?.startsAt,
+    currentRoom?.serverTime,
+    { fallbackSeconds: 5, maximumSeconds: 5 },
+  )
 
   useEffect(() => {
     if (currentRoom?.status === 'started' && currentRoom.tenderId) {
@@ -135,7 +131,6 @@ function RoomLobbyContent() {
   const readyCount = currentRoom.members.filter((member) => member.ready).length
   const allPlayersReady = isFull && readyCount === currentRoom.capacity
   const isCountdown = currentRoom.status === 'starting'
-  const secondsLeft = getRoomStartCountdownSeconds(currentRoom.startsAt, now)
   const canLeave = isMember && currentRoom.status === 'waiting'
 
   return (

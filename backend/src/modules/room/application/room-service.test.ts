@@ -26,6 +26,7 @@ test('creates a waiting private room with its host in the first seat', async () 
     hostId: 'user-1',
     members: [{ ready: false, seat: 1, userId: 'user-1' }],
     roomId: 'room-1',
+    serverTime: expect.any(String),
     status: 'waiting',
   })
 })
@@ -55,6 +56,7 @@ test('lists started matches for the requesting player', async () => {
     hostId: 'user-1',
     members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
+    serverTime: expect.any(String),
     status: 'started',
     tenderId: 'tender-1',
     tenderPhase: 'complete',
@@ -153,6 +155,7 @@ test('schedules a full room start and exposes its server start time', async () =
     hostId: 'user-1',
     members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
+    serverTime: expect.any(String),
     status: 'starting',
     startsAt: '2026-07-24T12:00:05.000Z',
   })
@@ -183,6 +186,7 @@ test('lets the host cancel a scheduled room start', async () => {
     hostId: 'user-1',
     members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
+    serverTime: expect.any(String),
     status: 'waiting',
   })
 })

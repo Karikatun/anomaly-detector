@@ -9,6 +9,7 @@ import type { CreateRoomRequest, RoomView, SetRoomReadyRequest } from '@anomaly-
 import { sessionQueryKeys } from '@/platform/query'
 
 import type { RoomsApi } from './api'
+import { getRoomPollingIntervalMs } from './countdown'
 
 export const roomQueryKeys = {
   all: [...sessionQueryKeys.all, 'rooms'] as const,
@@ -36,7 +37,7 @@ export function useRoomQuery({
     queryFn: () => queryClient.getQueryData(queryKey)
       ? api.get(roomId)
       : api.join(roomId),
-    refetchInterval: (query) => query.state.data?.status === 'starting' ? 1_000 : 3_000,
+    refetchInterval: (query) => getRoomPollingIntervalMs(query.state.data?.status),
     retry: 1,
   })
 }
