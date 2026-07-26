@@ -35,6 +35,7 @@ const stringWithDefault = (defaultValue: string) =>
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
+  WORKER_HEALTH_PORT: z.coerce.number().int().positive().optional(),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   CORS_ORIGINS: z

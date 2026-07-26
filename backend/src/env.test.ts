@@ -11,6 +11,7 @@ describe('loadEnv', () => {
     })
 
     expect(env.PORT).toBe(3000)
+    expect(env.WORKER_HEALTH_PORT).toBeUndefined()
     expect(env.ACCESS_TOKEN_TTL_SECONDS).toBe(900)
     expect(env.REFRESH_REUSE_GRACE_SECONDS).toBe(10)
     expect(env.SESSION_ABSOLUTE_TTL_DAYS).toBe(90)
@@ -21,6 +22,16 @@ describe('loadEnv', () => {
     expect(env.SPACES_UPLOAD_URL_TTL_SECONDS).toBe(900)
     expect(env.SPACES_DOWNLOAD_URL_TTL_SECONDS).toBe(300)
     expect(env.SPACES_PUBLIC_CACHE_CONTROL).toBe('public, max-age=31536000, immutable')
+  })
+
+  test('accepts a dedicated worker health port', () => {
+    const env = loadEnv({
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+      WORKER_HEALTH_PORT: '3001',
+    })
+
+    expect(env.WORKER_HEALTH_PORT).toBe(3001)
   })
 
   test('requires complete DigitalOcean Spaces configuration when storage is enabled', () => {

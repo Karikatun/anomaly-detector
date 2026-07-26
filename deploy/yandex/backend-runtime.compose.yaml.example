@@ -1,0 +1,67 @@
+name: anomaly-detector-backend
+
+services:
+  api:
+    image: "${BACKEND_IMAGE:?Set BACKEND_IMAGE to an immutable Yandex Container Registry tag}"
+    pull_policy: always
+    command: ["bun", "run", "start:api"]
+    restart: always
+    init: true
+    env_file:
+      - "${BACKEND_ENV_FILE:-/run/anomaly-detector/backend.env}"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "const response = await fetch('http://127.0.0.1:3000/health/ready'); process.exit(response.ok ? 0 : 1)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-file: "5"
+        max-size: 10m
+
+  worker:
+    image: "${BACKEND_IMAGE:?Set BACKEND_IMAGE to an immutable Yandex Container Registry tag}"
+    pull_policy: always
+    command: ["bun", "run", "start:worker"]
+    restart: always
+    init: true
+    env_file:
+      - "${BACKEND_ENV_FILE:-/run/anomaly-detector/backend.env}"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      WORKER_HEALTH_PORT: "3001"
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "const response = await fetch('http://127.0.0.1:3001/health/ready'); process.exit(response.ok ? 0 : 1)",
+        ]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-file: "5"
+        max-size: 10m

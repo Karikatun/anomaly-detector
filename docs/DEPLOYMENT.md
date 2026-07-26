@@ -13,7 +13,7 @@ The default production path is DigitalOcean App Platform plus DigitalOcean Manag
 
 Local setup from `README.md` and [LOCAL_DATABASE.md](LOCAL_DATABASE.md) does not require cloud credentials.
 
-If the user explicitly asks for Yandex Cloud, use [YANDEX_CLOUD.md](YANDEX_CLOUD.md) as the provider runbook. The supported Yandex Cloud alternative is Serverless Containers for backend/API, Managed Service for PostgreSQL for production data, Object Storage for files and static websites, and Cloud CDN for public static/media delivery.
+If the user explicitly asks for Yandex Cloud, use [YANDEX_CLOUD.md](YANDEX_CLOUD.md) as the provider runbook. Anomaly Detector's confirmed Yandex topology is a Compute Cloud instance group with separate API and worker containers, Application Load Balancer for HTTPS/WebSocket ingress, Managed Service for PostgreSQL for production data, Object Storage for files and static websites, and Cloud CDN for public static/media delivery. Serverless Containers remain appropriate only for bounded one-shot tasks such as scheduled auth cleanup.
 
 ## Release Source Preflight
 

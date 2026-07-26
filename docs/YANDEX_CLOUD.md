@@ -1,13 +1,21 @@
-# Yandex Cloud Alternative
+# Yandex Cloud Production
 
-Use this document only when the user explicitly asks for Yandex Cloud or the product has a clear regional, compliance, or commercial reason to avoid the default DigitalOcean path.
-
-DigitalOcean remains the default provider in this template. Do not ask the user to compare providers during first-run setup.
+Anomaly Detector uses this runbook for its Russian public test and production
+environment. The application is publicly reachable, but the first test launch has no
+marketing campaign: links are distributed directly to known testers.
 
 ## Service Map
 
-- Browser API ingress: Yandex API Gateway on a custom `api.<site-domain>` host.
-- Backend runtime: a private Yandex Serverless Container, running a Docker image from Yandex Container Registry and invoked through the gateway's `serverless_containers` integration.
+- Browser API and WebSocket ingress: Yandex Application Load Balancer on a custom
+  `api.<site-domain>` host, with TLS from Certificate Manager and WebSocket enabled.
+- Backend runtime: a fixed-size Compute Cloud instance group. Each VM runs two
+  containers from the same immutable backend image: `api` and `worker`.
+- Runtime recovery: instance-group health checks cover API readiness on port `3000`
+  and worker readiness on its private health port `3001`; failed instances are restarted
+  or recreated.
+- Edge protection: Smart Web Security and Advanced Rate Limiter attach to the
+  Application Load Balancer virtual host.
+- Images: immutable backend images live in Yandex Container Registry.
 - Production database: Yandex Managed Service for PostgreSQL.
 - Uploads and media: Yandex Object Storage.
 - Static `webapp` and fully prerendered `website` output: Yandex Object Storage static website hosting.
@@ -21,11 +29,11 @@ Ask only product and release questions:
 
 - which surfaces are being deployed now: backend/API, webapp, website, or full-stack;
 - production domains for API, webapp, website, and media/CDN;
-- whether mobile is active; if yes, switch to the `mobile` branch before mobile release planning;
-- whether backend/database traffic may stay private inside a Yandex Cloud network or must be reachable from the internet;
+- expected simultaneous testers and the acceptable monthly infrastructure budget;
+- support contact for account recovery, incidents, and privacy requests;
 - whether uploads/media are public, private, or mixed;
-- whether real-time chat, presence, collaboration, live notifications, or WebSocket-style updates must work across multiple backend instances;
-- whether images need fixed-size generated variants, dynamic transformations, compression, cropping, or moderation.
+- whether images need fixed-size generated variants, dynamic transformations,
+  compression, cropping, or moderation.
 
 ## Prerequisites
 
@@ -34,7 +42,7 @@ Manual prerequisites for the user:
 - Yandex Cloud account with billing enabled.
 - Cloud and folder selected.
 - Production domains and DNS access for the authenticated webapp and API. Browser auth requires same-site custom hosts such as `app.example.com` and `api.example.com`.
-- A Certificate Manager certificate for the API Gateway custom domain.
+- A Certificate Manager certificate for the Application Load Balancer custom domain.
 - Docker running locally if the backend image will be built from this machine.
 - AWS CLI when uploading static build output or media through the S3-compatible Object Storage API.
 - `jq` when using the shell snippets below that parse `yc --format json` output.
@@ -48,7 +56,7 @@ yc config list
 
 Use `yc config set folder-id <folder_ID>` when the active folder must be changed.
 
-## Backend API
+## Backend Image
 
 Use `backend/Dockerfile` from the monorepo root as the Docker build path, the same as the DigitalOcean path.
 
@@ -67,30 +75,46 @@ docker build -f backend/Dockerfile -t cr.yandex/$REGISTRY_ID/<project>-backend:<
 docker push cr.yandex/$REGISTRY_ID/<project>-backend:<tag>
 ```
 
-Create a private Serverless Container and deploy a revision:
+Use an immutable tag containing the release commit SHA. Do not deploy `latest`.
 
-```bash
-yc serverless container create --name <project>-api
-yc serverless container revision deploy \
-  --container-name <project>-api \
-  --image cr.yandex/$REGISTRY_ID/<project>-backend:<tag> \
-  --cores 1 \
-  --memory 1GB \
-  --concurrency 1 \
-  --execution-timeout 30s \
-  --service-account-id <service_account_ID>
+## Compute Runtime
+
+Create a service account that can pull only the backend image and read only the
+application's Lockbox secrets. The instance group uses a Container Optimized Image and
+starts both processes from the committed
+[`backend-runtime.compose.yaml.example`](../deploy/yandex/backend-runtime.compose.yaml.example)
+definition:
+
+- API: `bun run start:api`, public to the load balancer on port `3000`;
+- worker: `bun run start:worker`, no public application routes;
+- worker health: `GET /health/live` and `GET /health/ready` on private port `3001`;
+- both containers: `restart: always`, the same immutable image and production env.
+
+Do not combine API and worker into one process. A failed worker must be visible even when
+the API remains healthy. Do not publish port `3001` to the internet; allow it only from
+the instance-group health-check address ranges/security group.
+
+Start with a fixed-size group of one non-preemptible VM for the public test. Enable
+instance autohealing and use health checks for both:
+
+```text
+API:    GET http://<instance>:3000/health/ready
+Worker: GET http://<instance>:3001/health/ready
 ```
 
-Before you deploy the revision, configure the full runtime environment for that revision. The container must receive `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`, and `COOKIE_SECURE` before it starts, either through the console or by passing `--environment` with the revision deploy command.
-
-Serverless Containers set `PORT` automatically. The backend must continue reading `PORT` from the environment and exposing `/health/live` and `/health/ready`.
+The worker readiness endpoint stays unavailable until both deadline loops complete
+successfully. It becomes unavailable after a loop error or stale heartbeat and recovers
+after the next successful pass.
 
 Production env must include:
 
 ```bash
+NODE_ENV=production
+PORT=3000
+WORKER_HEALTH_PORT=3001
 DATABASE_URL=postgresql://...
 JWT_SECRET=<64-or-more-hex-characters>
-CORS_ORIGINS=https://webapp.example.com,https://website.example.com
+CORS_ORIGINS=https://app.example.com
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 REFRESH_REUSE_GRACE_SECONDS=10
@@ -102,80 +126,47 @@ AUTH_RATE_LIMIT_WINDOW_SECONDS=60
 SHUTDOWN_GRACE_SECONDS=20
 TRUST_PROXY=true
 TRUSTED_PROXY_CLIENT_IP_HEADER=x-forwarded-for
-TRUSTED_PROXY_CLIENT_IP_POSITION=last
+TRUSTED_PROXY_CLIENT_IP_POSITION=first
 COOKIE_SECURE=true
 ```
 
-Yandex Serverless Containers append the invoking user's address to `X-Forwarded-For`, including after any values supplied by the caller. Selecting the last value avoids trusting a caller-controlled first entry. Recheck this provider contract if the backend moves behind a different Yandex ingress product.
+Yandex Application Load Balancer places the source client address first in
+`X-Forwarded-For`. Validate this in the production-like smoke test before relying on IP
+budgets, and keep backend ports reachable only from the load balancer and health checks.
 
-`AUTH_RATE_LIMIT_*` configures an in-process `Map`, so it is only a per-instance backstop. `--concurrency 1` limits simultaneous calls inside one instance; it does not keep Serverless Containers on one instance, and the platform can start instances in multiple availability zones. For meaningful production protection of login/register/refresh/logout, attach Yandex Smart Web Security with an Advanced Rate Limiter profile to the API Gateway, or replace the backend limiter with shared cross-instance state. Do not use the older API Gateway `x-yc-apigateway-rate-limit` extension for a new deployment: Yandex marks it deprecated and directs users to Smart Web Security. A container instance cap is a capacity/cost control, not a security boundary.
+`AUTH_RATE_LIMIT_*` remains only a per-process backstop. Attach Smart Web Security with
+an Advanced Rate Limiter profile to the load balancer before exposing auth routes. Scope
+rules independently to register, login, refresh, and logout.
 
-Container environment variables are part of a revision. When deploying with `yc serverless container revision deploy --environment`, include the full required environment for that revision because changing environment variables creates a new revision. Prefer the console, Terraform, or Yandex Lockbox for sensitive values when shell quoting becomes risky.
+Keep secrets in Lockbox and materialise them only at instance startup into a root-owned,
+mode `0600` runtime env file outside the repository. Never put secret values in instance
+metadata, committed Compose files, build arguments, logs, or shell history.
+
+Before provisioning, validate the template without printing a resolved secret-bearing
+configuration:
+
+```bash
+BACKEND_IMAGE=cr.yandex/<registry_ID>/anomaly-detector-backend:<commit_SHA> \
+BACKEND_ENV_FILE=/dev/null \
+docker compose \
+  -f deploy/yandex/backend-runtime.compose.yaml.example \
+  config --quiet
+```
 
 Generate `JWT_SECRET` with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
 
-### Browser API Gateway
+### Application Load Balancer
 
-Do not point the webapp at the direct `containers.yandexcloud.net` URL. Direct Serverless Container invocation removes incoming `Authorization` and `Cookie` headers, so bearer-token `/me` calls and HttpOnly refresh/logout flows cannot work there. The supported browser path is Yandex API Gateway's `serverless_containers` integration, which hands the original gateway request to the container.
+Create an HTTPS listener using Certificate Manager, an HTTP router for
+`api.<site-domain>`, and a backend group targeting API port `3000`. Enable WebSocket on
+the route used by `/api/realtime/ws` and set connection and idle timeouts above the
+client heartbeat/reconnect window. The load balancer must never target worker port
+`3001`.
 
-Keep the API container private. Create a dedicated gateway service account and allow only that account to invoke the container:
-
-```bash
-yc iam service-account create --name <project>-api-gateway
-GATEWAY_SA_ID=$(yc iam service-account get \
-  --name <project>-api-gateway \
-  --format json | jq -r .id)
-API_CONTAINER_ID=$(yc serverless container get \
-  --name <project>-api \
-  --format json | jq -r .id)
-
-yc serverless container deny-unauthenticated-invoke <project>-api
-yc serverless container add-access-binding \
-  --name <project>-api \
-  --service-account-id "$GATEWAY_SA_ID" \
-  --role serverless-containers.containerInvoker
-```
-
-Create an OpenAPI 3 specification outside the repository, for example `.scratch/deploy/yandex-api-gateway.yaml`, using the actual container and service-account IDs:
-
-```yaml
-openapi: 3.0.0
-info:
-  title: project-api
-  version: 1.0.0
-paths:
-  /{proxy+}:
-    x-yc-apigateway-any-method:
-      x-yc-apigateway-integration:
-        type: serverless_containers
-        container_id: <api_container_ID>
-        service_account_id: <gateway_service_account_ID>
-      parameters:
-        - explode: false
-          in: path
-          name: proxy
-          required: false
-          schema:
-            default: '-'
-            type: string
-          style: simple
-```
-
-Create the gateway, attach the issued Certificate Manager certificate, and point DNS for the API host to the gateway's default domain:
-
-```bash
-yc serverless api-gateway create \
-  --name <project>-api \
-  --spec=.scratch/deploy/yandex-api-gateway.yaml
-
-yc serverless api-gateway add-domain <project>-api \
-  --domain api.example.com \
-  --certificate-id <certificate_ID>
-```
-
-Use `https://api.example.com` as `VITE_API_URL` and `https://app.example.com` in backend `CORS_ORIGINS`. Wait for certificate and DNS readiness before the browser auth smoke. The direct container URL remains private and is not a production API endpoint.
-
-Before exposing auth routes, connect a Smart Web Security security profile and Advanced Rate Limiter profile to the gateway. Scope limits to the auth write paths and choose client grouping/thresholds from the product's abuse model. Keep the backend limiter enabled as defense in depth, but do not count it as a global attempt limit when Serverless Containers scales out.
+Attach Smart Web Security and Advanced Rate Limiter to the API virtual host before DNS
+is switched. Enable access logs with redaction and alerts for elevated `4xx`, `5xx`, and
+backend latency. Use `https://api.<site-domain>` as `VITE_API_URL` and the exact
+`https://app.<site-domain>` origin in `CORS_ORIGINS`.
 
 ## Managed PostgreSQL
 
@@ -184,8 +175,7 @@ Use Yandex Managed Service for PostgreSQL **18** for production data. Do not acc
 Operational defaults:
 
 - Use the `PRODUCTION` environment for real production data.
-- Keep the database in the same cloud network as the backend container when private connectivity is required.
-- If the database host has no public access, the Serverless Container must be attached to the same cloud network.
+- Keep the database private in the same cloud network as the Compute instance group.
 - Configure security groups for PostgreSQL access, including port `6432` for the allowed source.
 - Use SSL for public internet connections.
 - Take a backup before destructive schema or data operations.
@@ -251,7 +241,7 @@ After deployment, invoke the private cleanup container once with an IAM token an
 
 ## Real-Time Pub/Sub
 
-Keep the Yandex deployment path monolithic by default: the backend container should own HTTP routes, auth, persistence, and any WebSocket endpoints. Do not split chat, notifications, or presence into microservices unless the product has a concrete operational reason.
+Keep the Yandex deployment path monolithic by default: the API container should own HTTP routes, auth, persistence, and WebSocket endpoints, while the worker is only a second process for authoritative deadlines. Do not split chat, notifications, or presence into microservices unless the product has a concrete operational reason.
 
 When the backend runs as one container instance, WebSocket connection state can stay inside that process. If the container is horizontally scaled and users connected to different instances must receive the same chat, presence, collaboration, or live-notification events, add Yandex Managed Service for Valkey as a Redis-compatible Pub/Sub broker.
 
@@ -270,7 +260,7 @@ VITE_API_URL=https://api.example.com bun run build:webapp
 PUBLIC_WEBSITE_URL=https://www.example.com bun run build:website
 ```
 
-Both values are embedded at build time. `VITE_API_URL` must point to the API Gateway custom host. `PUBLIC_WEBSITE_URL` must be the public canonical origin of the website; without it, the generated pages intentionally omit canonical and `og:url` metadata. Rebuild after either origin changes. Add `PUBLIC_WEBAPP_URL` only when the public website intentionally links to the authenticated webapp.
+Both values are embedded at build time. `VITE_API_URL` must point to the Application Load Balancer custom host. `PUBLIC_WEBSITE_URL` must be the public canonical origin of the website; without it, the generated pages intentionally omit canonical and `og:url` metadata. Rebuild after either origin changes. Add `PUBLIC_WEBAPP_URL` only when the public website intentionally links to the authenticated webapp.
 
 Before uploading, create a Yandex Object Storage static access key for a service account and configure the AWS CLI with it. Yandex's Object Storage docs recommend `aws configure` with the static key and `ru-central1` as the region.
 
@@ -311,7 +301,7 @@ Object Storage static website hosting requires public read access to the bucket 
 
 For production `webapp`, `website`, and public media, put Yandex Cloud CDN in front of Object Storage when the product needs lower latency, custom cache behavior, HTTPS/domain management, or protection controls.
 
-Authenticated browser traffic needs custom webapp and API Gateway hosts under the same registrable domain, for example `app.example.com` and `api.example.com`. Do not use the direct `containers.yandexcloud.net` URL: besides creating a cross-site cookie topology, direct container invocation strips the request headers required by this auth contract.
+Authenticated browser traffic needs custom webapp and API hosts under the same registrable domain, for example `app.example.com` and `api.example.com`. Point the API host only to the Application Load Balancer; do not expose the VM or backend ports directly.
 
 Cloud CDN can use an Object Storage bucket as an origin. Create a CDN resource, attach the public domain, configure caching rules, and point DNS to the CDN load balancer with a `CNAME` record. Do not use `ANAME` for CDN distribution domains.
 
@@ -354,11 +344,12 @@ bun run build
 
 After deployment:
 
-- verify `/health/live` and `/health/ready` through `https://api.<site-domain>` on API Gateway while the underlying API container remains private;
+- verify API `/health/live` and `/health/ready` through `https://api.<site-domain>` on the Application Load Balancer;
+- verify worker `/health/live` and `/health/ready` from the private instance-group health-check path and confirm the worker port is unreachable from the public internet;
 - verify browser auth only from allowed `CORS_ORIGINS`;
 - verify all cookie-backed auth writes reject missing or untrusted browser `Origin` headers;
 - verify the webapp and API use same-site custom domains and that a reload restores the cookie-backed session in a browser with third-party cookies blocked;
-- verify through API Gateway that register returns `Set-Cookie`, refresh receives that cookie, `/me` receives the bearer `Authorization` header, logout clears the cookie, and the next refresh returns 401;
+- verify through the Application Load Balancer that register returns `Set-Cookie`, refresh receives that cookie, `/me` receives the bearer `Authorization` header, logout clears the cookie, and the next refresh returns 401;
 - verify Managed PostgreSQL connectivity and that Prisma migrations applied exactly once;
 - verify the private auth cleanup timer is active and its most recent scheduled invocation completed with task exit code `0`;
 - verify `webapp` route refreshes load the SPA fallback instead of a broken 404 page;
@@ -370,16 +361,14 @@ After deployment:
 
 - Yandex Cloud CLI quickstart: https://yandex.cloud/en/docs/cli/quickstart
 - Yandex Cloud CLI reference: https://yandex.cloud/en/docs/cli/cli-ref/
-- Yandex Serverless Containers: https://yandex.cloud/en/docs/serverless-containers/
-- Getting started with Serverless Containers: https://yandex.cloud/en/docs/serverless-containers/quickstart/container
-- Serverless Containers environment variables: https://yandex.cloud/en/docs/serverless-containers/operations/environment-variables-add
+- Compute Cloud Docker Compose: https://yandex.cloud/en/docs/compute/tutorials/docker-compose
+- Compute instance groups: https://yandex.cloud/en/docs/compute/concepts/instance-groups/
+- Instance group autohealing: https://yandex.cloud/en/docs/compute/concepts/instance-groups/autohealing
+- Application Load Balancer: https://yandex.cloud/en/docs/application-load-balancer/
+- Application Load Balancer route management and WebSocket: https://yandex.cloud/ru/docs/application-load-balancer/operations/manage-routes
 - Serverless Containers task runtime: https://yandex.cloud/en/docs/serverless-containers/operations/update-runtime
 - Serverless Containers timer trigger: https://yandex.cloud/en/docs/serverless-containers/operations/timer-create
-- Serverless Containers request-header filtering: https://yandex.cloud/en/docs/serverless-containers/concepts/invoke
-- API Gateway Serverless Containers integration: https://yandex.cloud/en/docs/api-gateway/concepts/extensions/containers
-- API Gateway custom domains: https://yandex.cloud/en/docs/api-gateway/operations/api-gw-domains
 - Smart Web Security Advanced Rate Limiter: https://yandex.cloud/en/docs/smartwebsecurity/concepts/arl
-- Deprecated API Gateway rate-limit extension: https://yandex.cloud/en/docs/api-gateway/concepts/extensions/rate-limit
 - Yandex Container Registry quickstart: https://yandex.cloud/en/docs/container-registry/quickstart
 - Yandex Managed Service for PostgreSQL: https://yandex.cloud/en/docs/managed-postgresql/
 - Managed PostgreSQL connection pre-configuration: https://yandex.cloud/en/docs/managed-postgresql/operations/connect/
