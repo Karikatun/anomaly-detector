@@ -184,24 +184,17 @@ backend latency. Use `https://api.anomaly-detector.ru` as `VITE_API_URL` and the
 ## Support Mailbox
 
 Use one real mailbox, `support@anomaly-detector.ru`, rather than forwarding to a
-personal address. The minimal Yandex 360 for Business plan is sufficient for the initial
-single-user support workflow.
+personal address. The mailbox is hosted by REG.RU and its MX records are configured.
 
-1. Create a Yandex 360 organisation and choose the minimal plan for one employee.
-2. Add and verify `anomaly-detector.ru` without delegating its name servers away from
-   REG.RU.
-3. In REG.RU DNS, add the verification TXT record supplied by Yandex 360.
-4. Add `MX @ mx.yandex.net.` with priority `10`.
-5. Add `TXT @ "v=spf1 redirect=_spf.yandex.net"`.
-6. Copy the domain-specific DKIM value from Yandex 360 and add it at
-   `mail._domainkey`.
-7. Create the employee/mailbox with login `support`.
-8. Send test messages in both directions to unrelated providers and verify SPF and DKIM
-   pass before placing the address in the UI, privacy policy, or terms.
-
-Add a DMARC policy after SPF and DKIM pass. Start in monitoring mode, review reports,
-then tighten the policy; do not publish a copied DKIM key or a guessed DMARC reporting
-address.
+1. Verify inbound and outbound delivery with unrelated mail providers.
+2. Obtain the exact SPF and DKIM values from the active REG.RU mail service and add
+   them to the domain without copying or guessing values from another provider.
+3. Verify that both SPF and DKIM pass on delivered messages.
+4. Add a DMARC policy in monitoring mode, review reports, then tighten it.
+5. Confirm the responsible operator, access recovery, and retention procedure for
+   support and personal-data requests.
+6. Confirm the contractual personal-data processing terms and data location of the
+   active REG.RU mail service before public launch.
 
 ## Managed PostgreSQL
 
