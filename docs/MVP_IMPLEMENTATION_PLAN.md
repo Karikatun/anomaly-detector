@@ -11,10 +11,10 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 **Общий статус:**
 - **Milestone 0 (Contracts)** — ✅ 100% завершён
 - **Milestone 1 (Tender Foundation)** — ✅ 100% завершён
-- **Milestone 2 (Game Core)** — 🔶 прежняя версия реализована; согласованная переработка правил ожидает реализации
-- **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 комнаты, парольный вход, Yandex ID, locale, удаление аккаунта, HTTP/WebSocket и reconnect готовы; остаётся VK ID
-- **Milestone 4 (Game Interface)** — 🔶 реализован рабочий интерфейс прежнего набора правил: лобби, история матчей, экран партии и основные действия; для целевого набора правил нужны главная страница, справочник, UI-миграция, i18n и визуальная система
-- **Milestone 5 (Operations, Beta)** — ❌ 0%
+- **Milestone 2 (Game Core)** — ✅ целевой набор правил реализован на авторитетном сервере и защищён симуляциями для 2-4 игроков
+- **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 основной путь готов; остаются VK ID, единый активный матч, корректное досрочное завершение и production-защита auth
+- **Milestone 4 (Game Interface)** — 🔶 целевой игровой поток и визуальная переработка в активной разработке; не завершены справочник правил, полный аудит/replay, i18n и обучение
+- **Milestone 5 (Operations, Beta)** — 🔶 health/readiness, env-проверки и runbook Yandex Cloud существуют; production-развёртывание, мониторинг и recovery drill не выполнялись
 
 ## Delivery Rules
 
@@ -26,9 +26,95 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 - Every issue is independently deliverable, linked to its dependencies, and classified before implementation.
 - Do not add chat, public matchmaking, bots, random events, permanent upgrades, monetization, native apps, PWA support, or public sharing to the MVP.
 
+## Ближайший План Перед Production MVP
+
+Порядок ниже учитывает риск потери игрового состояния и злоупотребления публичными auth-маршрутами. Каждый этап должен оставлять систему рабочей и независимо проверяемой.
+
+### P0. Один Незавершённый Матч На Игрока
+
+**Продуктовый инвариант:** игрок может состоять только в одной текущей игровой сессии со статусом `waiting`, `starting` или `active`. Завершённые матчи остаются в истории и не блокируют новую игру.
+
+1. [ ] Добавить устойчивую серверную запись текущего матча с уникальностью по `userId`. Создавать её транзакционно при создании/входе в комнату и удалять только при выходе из ожидающей комнаты или терминальном завершении матча.
+2. [ ] Добавить авторитетный read endpoint текущего матча. Он возвращает комнату/`tenderId`, статус и маршрут возврата, но не дублирует игровые правила.
+3. [ ] Запретить на сервере создание комнаты и вход по коду, если у игрока уже есть текущий матч. Проверить конкурентные запросы: два одновременных create/join не должны создать две активные записи.
+4. [ ] На главной при наличии текущего матча заменить карточки «Создать комнату» и «Войти по коду» одной карточкой «Вернуться в матч». На desktop она занимает всю строку; на mobile сохраняет обычную ширину контейнера.
+5. [ ] Оставить возврат через «Мои матчи». Незавершённый Tender показывать со статусом «Активный», завершённый штатно — «Завершён», завершённый из-за ухода всех игроков — «Завершён досрочно».
+6. [ ] Добавить backend integration и Playwright-сценарий с двумя игроками: блокировка второй комнаты, возврат с главной, возврат из истории и освобождение возможности создать матч после завершения.
+
+**Gate:** уникальность активного матча доказана на уровне БД/транзакции, а не только скрытием кнопок в клиенте.
+
+### P0. Завершение Матча После Ухода Всех Игроков
+
+**Семантика:** уход — явное действие игрока, а не потеря WebSocket, закрытие вкладки или краткий обрыв сети. Disconnect по-прежнему допускает reconnect и не завершает Tender.
+
+1. [ ] Добавить идемпотентные Tender-команды `leave-tender` и `resume-tender` через существующий `execute`. Хранить серверный признак ухода для каждого участника.
+2. [ ] Когда ушёл последний остававшийся участник, установить отдельный `abandonmentDueAt = now + 5 seconds`, не перезаписывая дедлайн текущей игровой фазы.
+3. [ ] Если любой участник вернулся до дедлайна, снять отложенное завершение. После дедлайна worker атомарно завершает Tender с `completionReason = all_players_left`; повторный worker-вызов безопасен.
+4. [ ] Досрочно завершённый матч сохранять в истории и participant-only audit, но не учитывать в победах, среднем рейтинге и других показателях завершённой соревновательной партии.
+5. [ ] После терминального перехода освободить записи текущего матча всех участников. Главная и история используют короткий polling только пока матч активен/ожидает завершения и инвалидируют общие query keys после leave/resume.
+6. [ ] Покрыть перезагрузку страницы, одиночный disconnect, уход одного игрока, уход всех с возвратом в пределах пяти секунд и фактическое завершение после пяти секунд.
+
+**Gate:** ни reload, ни сетевой сбой не завершают матч; после ухода всех сервер завершает его независимо от открытых браузеров, а у каждого участника обновляются главная и история.
+
+### P0. Защита Входа И Регистрации
+
+Текущий bounded in-process limiter (`AUTH_RATE_LIMIT_*`) и body limit остаются первой линией защиты, но не считаются глобальным production-лимитом: Yandex Serverless Containers может обслуживать запросы несколькими экземплярами.
+
+1. [ ] Разделить auth budgets по маршрутам: дешёвые register/refresh/logout не должны съедать бюджет дорогой проверки пароля и наоборот.
+2. [ ] Для password login хранить два независимых общих счётчика:
+   - по нормализованному логину — пять неуспешных попыток в окне 15 минут, затем ограниченная экспоненциальная задержка;
+   - по доверенному адресу клиента — отдельный более широкий предел до вызова Argon2id против credential stuffing и CPU DoS.
+3. [ ] Не вводить бессрочную блокировку аккаунта. Верный пароль должен сбрасывать счётчик логина; ответ при неверном логине, неверном пароле и активном throttling остаётся обобщённым и не раскрывает существование аккаунта.
+4. [ ] Выполнять dummy Argon2id verify для неизвестного логина/аккаунта без пароля, чтобы ранний выход не создавал заметную разницу времени.
+5. [ ] Хранить счётчики в PostgreSQL или другом общем trusted store с атомарным обновлением и TTL. На API Gateway подключить Yandex Smart Web Security Advanced Rate Limiter как независимую edge-защиту.
+6. [ ] После пяти ошибок показывать понятное нейтральное сообщение и приблизительное время повторной попытки, не раскрывая внутренний bucket или точный алгоритм ограничения.
+
+**Gate:** интеграционные тесты покрывают пять ошибок, шестую ограниченную попытку, успешный сброс, независимые login/IP buckets, конкурентные запросы и одинаковый внешний ответ для существующего/несуществующего логина.
+
+### P0. Не Более Трёх Парольных Регистраций С Устройства
+
+Надёжно идентифицировать физическое устройство в браузере невозможно. MVP использует privacy-preserving anti-abuse token, а не canvas/font/hardware fingerprint; очистка cookie остаётся обходом, поэтому это только один слой защиты.
+
+1. [ ] При первом обращении к auth выдавать долгоживущий случайный device token в подписанной `HttpOnly`, `Secure`, `SameSite` cookie. В БД хранить только HMAC/хеш токена.
+2. [ ] Разрешать не более трёх успешных password-регистраций на device token за 180 дней. Удаление аккаунта не должно немедленно возвращать квоту, иначе ограничение обходится циклом register/delete.
+3. [ ] Применять правило только к созданию password-аккаунта. OAuth identity остаётся уникальной у провайдера и защищается отдельными OAuth/state и edge-лимитами.
+4. [ ] Дополнить device quota независимым пределом регистраций по адресу/подсети и edge rate limit. Не блокировать общий домашний/офисный адрес только из-за трёх регистраций с разных корректных device tokens.
+5. [ ] Описать anti-abuse cookie, цель, срок хранения и удаление в политике обработки данных. Не сохранять сырые IP дольше срока, необходимого для защиты и расследования злоупотреблений.
+6. [ ] Покрыть первую выдачу cookie, три успешных регистрации, четвёртый отказ, конкурентную гонку, поддельный token и отсутствие утечки quota через тексты ошибок.
+
+**Gate:** ограничение атомарно при параллельных запросах и честно обозначено как anti-abuse control, а не как доказательство физического устройства.
+
+### P0. Хранение Паролей
+
+**Текущее состояние:** password-аккаунты сохраняют только PHC-строку Argon2id в `users.password_hash`; соль генерируется `Bun.password.hash` автоматически, plaintext не пишется в БД, а `Bun.password.verify` определяет алгоритм и параметры из PHC-строки. Проверка на закреплённом в репозитории Bun 1.3.14 создаёт `m=65536`, `t=2`, `p=1`, то есть 64 MiB памяти, две итерации и parallelism 1 — выше текущего минимального OWASP baseline `19 MiB / 2 / 1`. Это надёжная базовая схема. Риск перед production — параметры зависят от runtime defaults, не закреплены явно в коде и не проверены на производственном размере контейнера.
+
+1. [ ] Зафиксировать явные `memoryCost` и `timeCost` не ниже актуального OWASP baseline и проверять `p=1` в итоговой PHC-строке. Начальная проверяемая точка: текущие `64 MiB / 2 / 1`, если benchmark целевого контейнера подтверждает допустимую нагрузку.
+2. [ ] Провести benchmark на целевом Yandex-контейнере и выбрать стоимость, которая остаётся в допустимом latency/памяти под контролируемой параллельной нагрузкой; зафиксировать ожидаемый диапазон в тесте/runbook.
+3. [ ] При успешном входе определять устаревшие параметры PHC и делать opportunistic rehash, чтобы усиление настроек не требовало сброса паролей.
+4. [ ] Проверить, что пароль и его производные не попадают в логи, traces, audit, ошибки, аналитику и тестовые fixtures. Сохранить общий ответ «неверный логин или пароль».
+5. [ ] Оставить длину 8-128 как текущий минимум MVP, разрешить password managers и вставку, не вводить периодическую смену или искусственные composition rules. Перед публичным запуском решить путь восстановления аккаунта через подтверждённую внешнюю identity или явно принять отсутствие recovery для закрытой beta.
+
+**Gate:** security-тест проверяет формат и параметры нового хеша, verify старого хеша и rehash; нагрузочный тест доказывает, что публичный login нельзя использовать для неконтролируемого исчерпания CPU/памяти.
+
+### P1. Переработка Справочника Правил
+
+1. [x] Сохранить единый `RulesReferenceDialog`, доступный с главной и из активного Tender без навигации.
+2. [ ] Заменить длинный линейный текст доступным accordion с независимо раскрывающимися блоками:
+   - основная концепция и цель игры;
+   - терминология с небольшими смысловыми иконками и текстовыми подписями;
+   - общие правила и структура раунда;
+   - детальные правила по фазам: слоты, мощность, разведка, лаборатория, анализ модели, контракты, финальная модель;
+   - отдельный раздел «Как трактовать лабораторные анализы» с направлением источник → приёмник, матрицей результатов и примером вывода.
+3. [ ] На первом открытии раскрывать «Основная концепция», остальные блоки держать закрытыми; запоминание состояния между открытиями не требуется.
+4. [ ] Использовать нативную/доступную accordion-семантику: клавиатура, `aria-expanded`, видимый focus, заголовки и текстовые подписи. Цвет и иконка не могут быть единственным носителем смысла.
+5. [ ] Вынести весь текст в rules i18n chunk и сверить его с `RULES_REFERENCE.md` и фактическими серверными правилами. Не показывать игрокам устаревший справочник.
+6. [ ] Проверить mobile scroll/focus trap, desktop-размер, открытие из Tender без остановки таймера и без потери draft-состояния. Playwright проверяет поведение блоков, а визуальный вид — browser QA, не CSS-assertions.
+
+**Gate:** новый игрок может по справочнику правильно объяснить хотя бы один направленный лабораторный результат; справочник не противоречит серверу и не уводит из матча.
+
 ## Approved Ruleset Migration
 
-`GAME_DESIGN_BRIEF.md` now describes the agreed target ruleset. The current Tender implementation is an older ruleset and must not be presented as matching it until this migration is complete.
+`GAME_DESIGN_BRIEF.md` describes the agreed target ruleset. The checklist below records the completed server-side migration from the original prototype rules; remaining client and explanation work belongs to Milestone 4.
 
 1. [x] Replace starting Samples and Analytical Reports with the new discovery model: no starting Samples; Samples only from Access Slots or Reconnaissance; unknown Signals are revealed when acquired or named by a Contract.
 2. [x] Make Power allocation simultaneous and private after Access Slot resolution. Limit Model Analysis and Contracts to one Power; retain two-Power choices only for Reconnaissance and Laboratory.
@@ -40,6 +126,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 8. [x] Build the post-auth home page and the full Rules Reference. The reference must be reachable from the home page and as an in-game modal without leaving a Tender.
 
 **Gate:** deterministic API simulations for 2, 3, and 4 players cover every new rule, including hidden Power planning, Corporate Review, one-use Contract Evidence, Contract deck reproducibility, and final scoring; browser tests cover the Rules Reference from the home page and from an active Tender.
+
+**Статус миграции:** серверная миграция целевого ruleset завершена. Старое описание Milestone 2 ниже актуализировано; клиентская миграция и player-facing объяснение правил остаются частью Milestone 4.
 
 ## Milestone 0: Contract And Work Breakdown
 
@@ -80,35 +168,33 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Add end-of-round transition from round 1 through round 5.
 2. [x] Resolve six secret Access Slots with rotating public tie priority and the confirmed direct-request rule: with `A=1`, `B=1`, `C=2`, `D=6`, results are `A=1`, `B=3`, `C=2`, `D=6`.
    - [x] Rotate direct-collision tie priority between rounds.
-3. [x] Add four Power per player, a maximum of two per category, and open planning in Access Slot order.
-4. [x] Add Reconnaissance: six persistent Signals, non-consumable Samples, and initiating-player Raw Telemetry.
+3. [x] Add four Power per player with simultaneous private planning: up to two for Reconnaissance/Laboratory and up to one for Model Analysis/Contracts.
+4. [x] Add Reconnaissance targets, persistent Signals, non-consumable Samples, public discovery and initiating-player private Raw Telemetry.
 5. [x] Add Laboratory: directed source-to-receiver tests with Impulse and Continuous Protocols, public results, and authorised Private Measurements.
    - [x] Validate Directed Test source/receiver Samples and reject self-tests through the shared command contract.
    - [x] Resolve Impulse and Continuous Protocols deterministically from the hidden Anomaly Configuration.
    - [x] Store authorised Continuous Private Measurements in participant-scoped Tender views.
    - [x] Project public Laboratory results into Tender views.
    - [x] Project Laboratory results into replay/audit views beyond the append-only audit event.
-6. [x] Add Model Analysis: Working Model updates, public Theses, correct-rating reward, and wrong-thesis temporary contract-power restriction.
+6. [x] Add Model Analysis: Working Model updates, public Theses, correct-rating reward, Research Certifications, and round-scoped Corporate Review.
    - [x] Validate and resolve public Thesis submissions in Access Slot order.
    - [x] Project checked public Theses to every participant without exposing the hidden Anomaly Configuration.
    - [x] Apply the correct-Thesis Rating reward.
-   - [x] Apply and expose the wrong-Thesis temporary Contract Power restriction.
-   - [x] Clear the temporary Contract Power restriction after the player's successful Laboratory test.
+   - [x] Activate Corporate Review after a wrong Thesis and charge Budget for later Theses in the same round.
+   - [x] Award and privately expose spendable Research Certifications for correct Theses.
    - [x] Implement player-owned Working Model updates.
-   - [x] Implement extended verification marker for two Model Analysis Power.
-7. [x] Add Contracts: player-count-plus-one exclusive choices, reservation, Bid assessment, Budget, and Corporate Trust.
-   - [x] Create `players + 1` public normal Contracts for the round.
+7. [x] Add the seeded Contract deck: player-count-plus-one exclusive choices, evidence assessment, Rating rewards, and Corporate Trust.
+   - [x] Create `players + 1` public Contracts for the round: one Scientific, one Complex, and remaining Light.
    - [x] Reserve Contracts publicly in Access Slot order.
    - [x] Reject reservation of already reserved Contracts.
-   - [x] Add private Bid submission for a reserved Contract.
-   - [x] Assess a reserved Bid by required Public Result fit and matching public Laboratory evidence.
-   - [x] Keep Contract reservation and Bid submission in Access Slot order; Challenge is out of MVP scope.
+   - [x] Add immediate evidence submission for a reserved Contract.
+   - [x] Assess Light/Complex evidence and Scientific Research Certifications without consuming public journal facts.
+   - [x] Make successful Contract Evidence single-use while keeping the journal entry permanently visible.
    - [x] Add starting Budget and Access Slot budget cost/Remote compensation.
    - [x] Add Access Slot Budget compensation for slot 4 and Sample compensation for slots 5 and 6.
    - [x] Start with 2 Budget and no Samples or Analytical Reports.
-   - [x] Add requested-funding Budget payout for awarded single-Bid assessment.
-   - [x] Add Budget and Corporate Trust effects.
-8. [x] Add Rating calculation, Final Contract, partial Scientific Model scoring, full-model bonus, and deterministic tie-breaks.
+   - [x] Add Rating rewards and Corporate Trust without restoring the obsolete requested-funding payout.
+8. [x] Add Rating calculation, Final Contract, per-property/per-Signal Scientific Model scoring, complete-model bonus, and deterministic tie-breaks.
 9. [x] Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.
 
 **Skills:** `tdd` for every rule and edge case; `prototype` for timing, planning order, and decision clarity before complex UI work; `domain-modeling` whenever new rules add vocabulary; `grill-me` only if a rule changes score balance or the victory condition; `code-review` after each phase family.
@@ -146,22 +232,34 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Add automatic advanceDueTenders loop to the server entry point
    - [x] Start and stop the loop on server lifecycle
    - [x] Reconnecting subscriber receives the current state after a timeout
+7. [ ] Enforce the single-current-match invariant and expose the current match to the home page, as specified in «Один Незавершённый Матч На Игрока».
+8. [ ] Add explicit leave/resume and five-second all-player abandonment through the Tender Module and worker.
+9. [-] Complete auth abuse protection.
+   - [x] Bound auth request bodies.
+   - [x] Add a bounded per-instance client-address limiter and trusted-proxy configuration.
+   - [ ] Add shared password-attempt counters, unknown-user dummy verification, Yandex edge limits, and registration device quota.
+10. [-] Verify password storage and account recovery posture.
+   - [x] Use salted PHC Argon2id hashes and verify without storing plaintext.
+   - [ ] Pin and benchmark Argon2id parameters, support rehash on login, and decide the recovery path before public launch.
 
 **Skills:** `tdd` for authorization, room capacity, reconnect, and deadline behavior; `design-an-interface` before OAuth-provider and realtime protocol boundaries; `context7-mcp` when consulting Hono, Prisma, OAuth, or WebSocket documentation; `triage` and `code-review` for security-sensitive work.
 
-**Gate:** integration and browser tests prove that a room cannot start with an empty seat, unauthorised users cannot view a Tender, and reconnecting users receive the current authorised state.
+**Gate:** integration and browser tests prove that a room cannot start with an empty seat, one player cannot have two current matches, unauthorised users cannot view a Tender, reconnecting users receive the current authorised state, and public auth routes remain bounded under abuse.
 
 ## Milestone 4: Mobile-First Game Interface
 
 **Outcome:** players can finish a Tender from a portrait mobile browser while desktop remains efficient.
 
-1. [x] Build login, profile, room creation, room waiting, and host-confirmation flows for the existing ruleset.
-2. [-] Build the live Tender screen: the existing ruleset has timer, phase status, Access Slot order, Power planning, public Rating, and legal actions; migrate it to the target ruleset.
-3. [-] Build Reconnaissance, Directed Test, Thesis, Contract, Bid, and Final Scientific Model interactions for the target ruleset.
-4. [-] Build the interactive Working Model without exposing hidden Anomaly Configuration data; the private model exists, but needs the target interaction and mobile treatment.
-5. [-] Build end-of-round score breakdown and the final participant-only audit view; a basic end screen exists, but replay and score explanation remain incomplete.
-6. [-] Store every visible string in i18n chunks. Ship Russian copy first while preserving locale-selection architecture.
-7. [-] Apply the realistic corporate sci-fi visual system: an orbital station operating around an unknown object.
+1. [x] Build login, profile, home, room creation, room waiting, readiness, host-confirmation, and match-history flows.
+2. [-] Complete the live Tender screen for the target ruleset: timer, phase status, Access Slot order, private simultaneous Power planning, public Rating, legal actions, reconnect, and final state exist; continue browser-level validation of the full five-round path.
+3. [-] Complete Reconnaissance, Directed Test, Thesis, Contract Evidence, and Final Scientific Model interactions for the target ruleset.
+4. [-] Complete the interactive Working Model without exposing hidden Anomaly Configuration data; the private workspace exists, but accessibility and mobile/desktop playtest treatment are still in progress.
+5. [-] Complete end-of-round score breakdown and the final participant-only audit/replay. A final screen and audit projection exist, but phase-by-phase replay and complete score explanation remain incomplete.
+6. [-] Store every visible string in domain i18n chunks. Russian is the default, but player-visible literals still require a final repository scan.
+7. [-] Apply and verify the realistic corporate sci-fi visual system across all phases, mobile portrait, and desktop workspace.
+8. [ ] Replace create/join cards with the full-width «Вернуться в матч» state when the current-match endpoint reports an unfinished session.
+9. [ ] Finish the accordion Rules Reference and laboratory-result interpretation section described in P1.
+10. [ ] Add the short guided solo tutorial already required by `GAME_DESIGN_BRIEF.md`, or explicitly remove it from MVP scope through a product-doc decision before release.
 
 **Skills:** `prototype` for the Working Model and dense mobile interactions; `browser:control-in-app-browser` for mobile and desktop verification; `imagegen` only when original raster assets are needed; `tdd` for client state that affects correctness; `code-review` for each completed journey.
 
@@ -171,11 +269,21 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** a secure Russian beta deployment runs on Yandex Cloud and provides actionable match evidence.
 
-1. Configure Yandex Cloud using `yc`: Serverless Containers, Managed PostgreSQL, Object Storage only if required, secrets, logs, backups, and monitoring.
-2. Keep production data and operational configuration within the Russian launch boundary.
-3. Add deployment checks, migrations, environment validation, health/readiness endpoints, and rollback procedure.
-4. Measure real matches with 2, 3, and 4 players; tune deadlines only when data shows the five-round target is materially missed.
-5. Run a closed beta. Capture audit-derived defects, balance observations, and operational incidents as GitHub issues.
+1. [-] Configure Yandex Cloud using `yc`: Serverless Containers, Managed PostgreSQL, Object Storage only if required, Lockbox/secrets, logs, backups, and monitoring.
+   - [x] Document the target topology, environment, private container/API Gateway path, custom-domain auth requirements, and Smart Web Security.
+   - [ ] Provision and verify the production-like environment; deployment has not started.
+2. [-] Keep production data and operational configuration within the Russian launch boundary.
+   - [x] Record the Russian data-location decision and Yandex Cloud target.
+   - [ ] Complete legal review, Roskomnadzor notification decision, consent text, retention schedule, and anti-abuse cookie disclosure before collecting production users.
+3. [-] Complete the release-safety path.
+   - [x] Validate environment at startup and expose liveness/readiness endpoints.
+   - [ ] Run migrations against a production-like copy, document rollback/forward-fix ownership, and perform a real PostgreSQL backup/restore drill.
+   - [ ] Verify that API and worker are both deployed, monitored, and restart-safe; alert on worker lag, overdue Tenders, auth throttling, elevated 5xx, DB saturation, and abnormal realtime reconnects.
+4. [ ] Add production abuse and performance validation: auth/login load with Argon2id, registration quota races, WebSocket connection/message limits, 2-4 player Tender load, request-size limits, and log redaction.
+5. [ ] Run the complete release acceptance matrix on current mobile Safari/Chrome and desktop Chrome/Firefox, including reconnect, refresh, multi-tab session, active-match return, all-player abandonment, audit privacy, and account deletion.
+6. [ ] Measure real matches with 2, 3, and 4 players; tune deadlines only when data shows the five-round target is materially missed.
+7. [ ] Run a closed beta. Capture audit-derived defects, balance observations, accessibility problems, rules misunderstandings, and operational incidents as GitHub issues.
+8. [ ] Decide and document support ownership before public MVP: account recovery, incident contact, privacy requests, match disputes, and the response when a worker/deployment interrupts an active match.
 
 **Skills:** `tdd` for deployment configuration and privacy-sensitive deletion paths; `diagnosing-bugs` for nondeterminism, concurrency, or performance regressions; `improve-codebase-architecture` after several working verticals and before beta; `triage` for beta reports; `code-review` before release.
 
@@ -186,9 +294,13 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 MVP is ready for closed beta only when all of the following hold:
 
 - Two to four authenticated players can create a full private room and complete five live rounds.
+- A player cannot create or join a second unfinished match and can reliably return to the current one from the home page or match history.
+- Explicit departure by all players completes the match after five seconds without treating reloads or network disconnects as departure.
 - The server alone determines hidden configuration, timer outcomes, Rating, and the winner or shared winners.
 - Every participant receives only public information plus their authorised private information until the final audit.
 - Completed Tenders have a deterministic, participant-only replay and score explanation.
+- Password login, password registration, and device quota are protected by shared server-side limits plus Yandex edge controls; password hashes use benchmarked, explicit Argon2id parameters.
+- The Rules Reference explains concepts, terms, phases, and interpretation of directed laboratory results in an accessible accordion.
 - Russian is the default UI language, and all visible text is loaded from i18n resources.
 - Automated contract, backend, and browser coverage protects the critical flows.
 - Yandex Cloud deployment, data handling, monitoring, and recovery procedures have been verified.
