@@ -50,7 +50,6 @@ maybeDescribe('profile statistics API integration', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ageConfirmation: true,
         login: 'profile-player',
         password: 'password123',
         privacyConsent: true,

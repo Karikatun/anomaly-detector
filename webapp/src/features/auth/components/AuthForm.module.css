@@ -139,6 +139,7 @@
 .passwordToggle:focus-visible { outline: 2px solid #4e9dff; outline-offset: 1px; }
 .passwordToggle svg { width: 1.2rem; height: 1.2rem; }
 .consents { display: grid; gap: .8rem; padding-block: .15rem; }
+.ageNotice { color: #98abc0; text-align: center; }
 .consent { display: flex; align-items: center; gap: .75rem; color: #c4d2e0; }
 .consent :global([data-slot='label']) { cursor: pointer; line-height: 1.35; }
 .submit { min-height: 3.35rem; border: 1px solid rgba(68, 151, 255, .75); border-radius: 7px; background: linear-gradient(135deg, rgba(39, 94, 163, .95), rgba(24, 61, 112, .96)); font-size: 1rem !important; font-weight: 500 !important; }
