@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useState } from 'react'
-import type { OAuthStartRequest } from '@anomaly-detector/contracts'
+import type { OAuthProviderId, OAuthStartRequest } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -8,7 +8,7 @@ import { useI18n } from '@/platform/i18n'
 import { useAuth } from '../use-auth'
 
 type OAuthButtonProps = {
-  provider: 'yandex' | 'vk'
+  provider: OAuthProviderId
   label: string
   className?: string
   icon?: ReactNode

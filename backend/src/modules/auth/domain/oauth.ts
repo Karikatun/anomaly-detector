@@ -1,4 +1,4 @@
-export const oauthProviderIds = ['yandex', 'vk'] as const
+export const oauthProviderIds = ['yandex'] as const
 
 export type OAuthProviderId = (typeof oauthProviderIds)[number]
 

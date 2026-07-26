@@ -88,7 +88,7 @@ export const meResponseSchema = z.object({
 
 // ── OAuth ────────────────────────────────────────────────────────────────────
 
-export const oauthProviderSchema = z.union([z.literal('yandex'), z.literal('vk')])
+export const oauthProviderSchema = z.literal('yandex')
 
 export const oauthStartRequestSchema = z.object({
   registration: registrationLegalAcceptanceSchema.optional(),

@@ -261,7 +261,7 @@ describe('auth contracts', () => {
 
   test('validates OAuth provider param', () => {
     expect(oauthProviderSchema.parse('yandex')).toBe('yandex')
-    expect(oauthProviderSchema.parse('vk')).toBe('vk')
+    expect(() => oauthProviderSchema.parse('vk')).toThrow()
     expect(() => oauthProviderSchema.parse('google')).toThrow()
     expect(() => oauthProviderSchema.parse('')).toThrow()
   })

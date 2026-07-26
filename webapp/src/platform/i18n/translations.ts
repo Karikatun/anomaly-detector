@@ -35,7 +35,6 @@ const ru = {
 
   // OAuth
   'oauth.yandex': 'Яндекс ID',
-  'oauth.vk': 'VK ID',
   'oauth.redirecting': 'Перенаправляем...',
   'oauth.error.server': 'Ошибка сервера. Попробуйте позже.',
 

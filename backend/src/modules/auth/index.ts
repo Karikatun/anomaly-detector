@@ -20,7 +20,6 @@ import { createRequireAuth, type AuthHttpEnv } from './transport/middleware'
 import { createAuthRoutes } from './transport/routes'
 import { OAuthProviderRegistry } from './infrastructure/oauth-registry'
 import { createYandexOAuthProvider } from './infrastructure/oauth-yandex'
-import { createVkOAuthProvider } from './infrastructure/oauth-vk'
 import { createPrismaAuthAbuseProtection } from './infrastructure/auth-abuse-protection'
 import { createDeviceTokens } from './infrastructure/device-token'
 
@@ -55,13 +54,6 @@ export function createAuthModule({
     oauthProviders.register('yandex', createYandexOAuthProvider({
       clientId: env.YANDEX_OAUTH_CLIENT_ID,
       clientSecret: env.YANDEX_OAUTH_CLIENT_SECRET,
-    }))
-  }
-
-  if (env.VK_OAUTH_CLIENT_ID && env.VK_OAUTH_CLIENT_SECRET) {
-    oauthProviders.register('vk', createVkOAuthProvider({
-      clientId: env.VK_OAUTH_CLIENT_ID,
-      clientSecret: env.VK_OAUTH_CLIENT_SECRET,
     }))
   }
 

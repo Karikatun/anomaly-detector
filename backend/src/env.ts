@@ -62,8 +62,6 @@ const envSchema = z.object({
   COOKIE_SECURE: booleanStringSchema,
   YANDEX_OAUTH_CLIENT_ID: optionalStringSchema,
   YANDEX_OAUTH_CLIENT_SECRET: optionalStringSchema,
-  VK_OAUTH_CLIENT_ID: optionalStringSchema,
-  VK_OAUTH_CLIENT_SECRET: optionalStringSchema,
   OAUTH_CALLBACK_BASE_URL: optionalUrlSchema,
   SPACES_REGION: optionalStringSchema,
   SPACES_BUCKET: optionalStringSchema,
@@ -244,10 +242,7 @@ function validateStorageEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx
 }
 
 function validateOAuth(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
-  const oauthConfigured = Boolean(
-    (env.YANDEX_OAUTH_CLIENT_ID && env.YANDEX_OAUTH_CLIENT_SECRET)
-      || (env.VK_OAUTH_CLIENT_ID && env.VK_OAUTH_CLIENT_SECRET),
-  )
+  const oauthConfigured = Boolean(env.YANDEX_OAUTH_CLIENT_ID && env.YANDEX_OAUTH_CLIENT_SECRET)
   if (!oauthConfigured) return
   if (!env.OAUTH_CALLBACK_BASE_URL) {
     ctx.addIssue({

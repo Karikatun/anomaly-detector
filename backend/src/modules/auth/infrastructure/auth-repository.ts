@@ -259,6 +259,7 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
         where: { stateHash },
       })
       if (!transaction) return null
+      if (transaction.provider !== 'yandex') return null
       if (transaction.expiresAt < new Date()) return null
       return {
         codeVerifier: transaction.codeVerifier,
@@ -270,7 +271,7 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
             termsVersion: transaction.termsVersion,
           },
         } : {}),
-        provider: transaction.provider as 'yandex' | 'vk',
+        provider: transaction.provider,
         redirectUri: transaction.redirectUri,
         state,
       }
