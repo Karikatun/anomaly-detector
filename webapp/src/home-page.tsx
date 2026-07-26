@@ -7,16 +7,22 @@ import {
   UserCircleIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
 import {
   AuthForm,
   AuthSessionGate,
+  useAuth,
   useLogoutAction,
 } from '@/features/auth'
-import { CreateRoomDialog, JoinRoomDialog } from '@/features/rooms'
+import {
+  CreateRoomDialog,
+  JoinRoomDialog,
+  RoomsApi,
+  useCurrentMatchQuery,
+} from '@/features/rooms'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 import styles from './pages.module.css'
@@ -43,10 +49,23 @@ function AuthenticatedHome({
   displayName: string
 }) {
   const navigate = useNavigate()
+  const auth = useAuth()
   const { t } = useI18n()
   const logoutAction = useLogoutAction()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false)
+  const roomsApi = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
+  const currentMatch = useCurrentMatchQuery(roomsApi)
+
+  const returnToCurrentMatch = () => {
+    const match = currentMatch.data
+    if (!match) return
+    if (match.status === 'started' && match.tenderId) {
+      void navigate({ to: '/tenders/$tenderId', params: { tenderId: match.tenderId } })
+      return
+    }
+    void navigate({ to: '/rooms/$roomId', params: { roomId: match.roomId } })
+  }
 
   return (
     <section className={styles.screen} aria-label="Главное меню">
@@ -80,18 +99,40 @@ function AuthenticatedHome({
 
         <div className={styles.divider} />
         <div className={styles.actions}>
-          <MenuCard
-            accent="violet"
-            title="СОЗДАТЬ КОМНАТУ"
-            icon={Add01Icon}
-            onClick={() => setIsCreateDialogOpen(true)}
-          />
-          <MenuCard
-            accent="aqua"
-            title="ВОЙТИ ПО КОДУ"
-            icon={Login03Icon}
-            onClick={() => setIsJoinDialogOpen(true)}
-          />
+          {currentMatch.isPending ? (
+            <MenuCard
+              accent="plain"
+              disabled
+              fullRow
+              title="ПРОВЕРЯЕМ АКТИВНЫЙ МАТЧ"
+              icon={Login03Icon}
+              onClick={() => undefined}
+            />
+          ) : currentMatch.data ? (
+            <MenuCard
+              accent="aqua"
+              fullRow
+              title="ВЕРНУТЬСЯ В МАТЧ"
+              description="У вас есть активный незавершённый матч"
+              icon={Login03Icon}
+              onClick={returnToCurrentMatch}
+            />
+          ) : (
+            <>
+              <MenuCard
+                accent="violet"
+                title="СОЗДАТЬ КОМНАТУ"
+                icon={Add01Icon}
+                onClick={() => setIsCreateDialogOpen(true)}
+              />
+              <MenuCard
+                accent="aqua"
+                title="ВОЙТИ ПО КОДУ"
+                icon={Login03Icon}
+                onClick={() => setIsJoinDialogOpen(true)}
+              />
+            </>
+          )}
           <MenuCard
             accent="plain"
             title="МОИ МАТЧИ"
@@ -125,18 +166,23 @@ function MenuCard({
   description,
   icon,
   onClick,
+  fullRow = false,
+  disabled = false,
 }: {
   accent: 'violet' | 'aqua' | 'plain'
   title: string
   description?: string
   icon: typeof Add01Icon
   onClick: () => void
+  fullRow?: boolean
+  disabled?: boolean
 }) {
   return (
     <Button
       type="button"
       variant="ghost"
-      className={`${styles.menuCard} ${styles[accent]}`}
+      className={`${styles.menuCard} ${styles[accent]} ${fullRow ? styles.fullRow : ''}`}
+      disabled={disabled}
       onClick={onClick}
     >
       <span className={styles.copy}>

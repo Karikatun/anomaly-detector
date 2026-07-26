@@ -13,6 +13,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
 import { profileQueryKeys } from '@/features/profile'
+import { roomQueryKeys } from '@/features/rooms'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 import type { TranslationKey } from '@/platform/i18n/translations'
@@ -262,8 +263,10 @@ function TenderContent() {
   const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
   const { execute } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [resuming, setResuming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
+  const resumingTenderIdRef = useRef<string | null>(null)
 
   useLayoutEffect(() => {
     const header = headerRef.current
@@ -293,6 +296,17 @@ function TenderContent() {
     })
   }, [queryClient, tenderView?.phase, tenderId])
 
+  useEffect(() => {
+    if (!connected || !tenderView?.hasLeft || resumingTenderIdRef.current === tenderId) return
+    resumingTenderIdRef.current = tenderId
+    setResuming(true)
+    void execute({ type: 'resume-tender' })
+      .catch(() => {
+        resumingTenderIdRef.current = null
+      })
+      .finally(() => setResuming(false))
+  }, [connected, execute, tenderId, tenderView?.hasLeft])
+
   const handleCommand = useCallback(
     async (command: TenderCommandInput) => {
       setCommandError(null)
@@ -320,6 +334,22 @@ function TenderContent() {
     },
     [connected, execute],
   )
+  const leaveMatch = useCallback(async () => {
+    if (tenderView?.phase === 'complete') {
+      await navigate({ to: '/' })
+      return
+    }
+    try {
+      await handleCommand({ type: 'leave-tender' })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: roomQueryKeys.current() }),
+        queryClient.invalidateQueries({ queryKey: roomQueryKeys.mine() }),
+      ])
+      await navigate({ to: '/' })
+    } catch {
+      // The shared command error remains visible; stay in the match so the player can retry.
+    }
+  }, [handleCommand, navigate, queryClient, tenderView?.phase])
 
   if (error && !tenderView) {
     return (
@@ -403,7 +433,8 @@ function TenderContent() {
             size="icon-sm"
             aria-label={t('nav.leaveMatch')}
             title={t('nav.leaveMatch')}
-            onClick={() => void navigate({ to: '/' })}
+            disabled={submitting || resuming || tenderView.hasLeft}
+            onClick={() => void leaveMatch()}
           >
             <HugeiconsIcon icon={Logout01Icon} strokeWidth={1.7} aria-hidden="true" />
           </Button>

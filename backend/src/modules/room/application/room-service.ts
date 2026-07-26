@@ -30,6 +30,11 @@ export class TenderRoomService {
     return rooms.map(toRoomView)
   }
 
+  async getCurrentMatch(actorId: string): Promise<RoomView | null> {
+    const room = await this.dependencies.repository.readCurrentForMember?.(actorId) ?? null
+    return room ? toRoomView(room) : null
+  }
+
   async leaveRoom(input: { actorId: string; roomId: string }) {
     await this.dependencies.repository.leave(input)
   }
@@ -60,6 +65,7 @@ function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomVi
       status: room.status,
       ...(room.startsAt === null || room.startsAt === undefined ? {} : { startsAt: room.startsAt }),
       ...(room.tenderId === null ? {} : { tenderId: room.tenderId }),
+      ...(room.tenderCompletionReason === undefined ? {} : { tenderCompletionReason: room.tenderCompletionReason }),
       ...(room.tenderPhase === undefined ? {} : { tenderPhase: room.tenderPhase }),
     }
 }

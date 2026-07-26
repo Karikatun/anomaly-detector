@@ -33,12 +33,15 @@ export type StoredTenderAuditEvent = TenderAuditEvent
 
 export type StoredTender = {
   accessSlots: Record<string, number>
+  abandonmentDueAt: Date | null
   anomalyConfiguration: AnomalyConfiguration
   budgetByPlayer: Record<string, number>
   corporateTrustByPlayer: Record<string, number>
   corporateReviewActive: boolean
   contractCompletedByPlayer: Record<string, boolean>
   contractPowerRestrictionsByPlayer: Record<string, number>
+  completionReason?: 'all_players_left'
+  departedPlayerIds: string[]
   dueAt: Date | null
   id: string
   knownSignals: SignalId[]

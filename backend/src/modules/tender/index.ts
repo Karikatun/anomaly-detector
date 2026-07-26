@@ -264,12 +264,14 @@ export function createTenderModule({
       }
       const tender = await store.create({
         accessSlots: {},
+        abandonmentDueAt: null,
         anomalyConfiguration,
         budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
         corporateTrustByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 0])),
         corporateReviewActive: false,
         contractCompletedByPlayer: {},
         contractPowerRestrictionsByPlayer: {},
+        departedPlayerIds: [],
         dueAt: deadlineForPhase('access-slot-selection', now()),
         finalScientificModelCompletedByPlayer: {},
         finalScientificModelsByPlayer: {},
@@ -317,6 +319,37 @@ export function createTenderModule({
         return previousCommand.receipt
       }
       const player = readPlayer(tender, command.actorId)
+      if (command.type === 'leave-tender' || command.type === 'resume-tender') {
+        if (tender.phase === 'complete') {
+          throw new TenderFailure('invalid_tender_state', 'Tender is already complete')
+        }
+        const departedPlayerIds = command.type === 'leave-tender'
+          ? [...new Set([...tender.departedPlayerIds, player.id])]
+          : tender.departedPlayerIds.filter((playerId) => playerId !== player.id)
+        const allPlayersLeft = departedPlayerIds.length === tender.players.length
+        const abandonmentDueAt = allPlayersLeft
+          ? tender.abandonmentDueAt ?? new Date(now().getTime() + 5_000)
+          : null
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: command.type === 'leave-tender' ? 'player_left_tender' : 'player_resumed_tender',
+            payload: {
+              abandonmentDueAt: abandonmentDueAt?.toISOString(),
+              playerId: player.id,
+            },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: {
+            ...tender,
+            abandonmentDueAt,
+            departedPlayerIds,
+          },
+          tender,
+        })
+      }
       if (command.type === 'request-access-slot') {
         if (tender.phase !== 'access-slot-selection') {
           throw new TenderFailure('invalid_tender_state', 'Access Slot selection is closed')
@@ -807,8 +840,11 @@ export function createTenderModule({
       )
       return {
         ...(activePlayerId ? { activePlayerId } : {}),
+        abandonmentDueAt: tender.abandonmentDueAt?.toISOString() ?? null,
+        ...(tender.completionReason ? { completionReason: tender.completionReason } : {}),
         knownSignals: tender.knownSignals,
         corporateReviewActive: tender.corporateReviewActive,
+        hasLeft: tender.departedPlayerIds.includes(playerId),
         publicContracts: tender.publicContracts,
         publicFinalContract: tender.publicFinalContract,
         publicLaboratoryResults: tender.publicLaboratoryResults,
@@ -865,7 +901,34 @@ export function createTenderModule({
       const advancedTenderIds: string[] = []
       for (const tenderId of await store.findDue({ limit, now: dueNow })) {
         const tender = await store.read(tenderId)
-        if (!tender || tender.dueAt === null || tender.dueAt > dueNow) continue
+        if (!tender) continue
+        const abandonmentIsDue = tender.abandonmentDueAt !== null
+          && tender.abandonmentDueAt <= dueNow
+          && tender.departedPlayerIds.length === tender.players.length
+          && tender.phase !== 'complete'
+        if (abandonmentIsDue) {
+          const completed = await commitTimeout({
+            auditEvents: [{
+              kind: 'tender_abandoned',
+              payload: {
+                completionReason: 'all_players_left',
+                playerIds: tender.players.map((player) => player.id),
+              },
+            }],
+            nextTender: {
+              ...tender,
+              abandonmentDueAt: null,
+              completionReason: 'all_players_left',
+              dueAt: null,
+              phase: 'complete',
+              winnerPlayerIds: [],
+            },
+            tender,
+          })
+          if (completed) advancedTenderIds.push(tenderId)
+          continue
+        }
+        if (tender.dueAt === null || tender.dueAt > dueNow) continue
 
         if (tender.phase === 'power-allocation') {
           const timedOutPlayerIds = tender.players

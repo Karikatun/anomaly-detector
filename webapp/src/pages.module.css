@@ -134,6 +134,7 @@
 .aqua { border-color: rgba(0, 184, 191, .64); background: linear-gradient(120deg, rgba(0, 41, 49, .8), rgba(4, 15, 27, .86)); }
 .aqua .iconWrap { color: #85f6ed; text-shadow: 0 0 16px #00bcae; }
 .plain { flex: 0 0 100%; }
+.fullRow { flex: 0 0 100%; }
 .plain .iconWrap { margin-left: auto; }
 
 .rulesTrigger {

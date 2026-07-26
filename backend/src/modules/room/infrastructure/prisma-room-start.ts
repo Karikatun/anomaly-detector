@@ -21,6 +21,17 @@ export function createRoomStartModule(db: DbClient) {
 
       return { started }
     },
+    async releaseCompletedCurrentMatches(): Promise<number> {
+      const completedRooms = await db.tenderRoom.findMany({
+        where: { tender: { is: { phase: 'complete' } } },
+        select: { id: true },
+      })
+      if (completedRooms.length === 0) return 0
+      const released = await db.currentMatch.deleteMany({
+        where: { roomId: { in: completedRooms.map((room) => room.id) } },
+      })
+      return released.count
+    },
   }
 }
 

@@ -1,5 +1,6 @@
 export type RoomFailureKind =
   | 'room_already_joined'
+  | 'room_current_match_exists'
   | 'room_full'
   | 'room_not_found'
   | 'room_not_host'

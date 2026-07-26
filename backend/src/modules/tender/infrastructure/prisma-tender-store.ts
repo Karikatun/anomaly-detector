@@ -19,6 +19,8 @@ type PersistedTenderState = Pick<
   | 'corporateReviewActive'
   | 'contractCompletedByPlayer'
   | 'contractPowerRestrictionsByPlayer'
+  | 'completionReason'
+  | 'departedPlayerIds'
   | 'finalScientificModelCompletedByPlayer'
   | 'finalScientificModelsByPlayer'
   | 'knownSignals'
@@ -52,6 +54,8 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   corporateReviewActive: tender.corporateReviewActive,
   contractCompletedByPlayer: tender.contractCompletedByPlayer,
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
+  ...(tender.completionReason ? { completionReason: tender.completionReason } : {}),
+  departedPlayerIds: tender.departedPlayerIds,
   finalScientificModelCompletedByPlayer: tender.finalScientificModelCompletedByPlayer,
   finalScientificModelsByPlayer: tender.finalScientificModelsByPlayer,
   knownSignals: tender.knownSignals,
@@ -83,6 +87,7 @@ const toStoredCommand = (record: { fingerprint: string; receipt: Prisma.JsonValu
 })
 
 const toStoredTender = (record: {
+  abandonmentDueAt: Date | null
   dueAt: Date | null
   id: string
   phase: string
@@ -95,12 +100,15 @@ const toStoredTender = (record: {
   const publicFinalContract = state.publicFinalContract ?? { contractId: 'final-contract', kind: 'final', ratingReward: 8, requiredPublicResult: 'reflection', requiredSecondaryPublicResult: 'attenuation', targetRole: 'source', targetSignal: 'ferro' }
   return {
     accessSlots: state.accessSlots,
+    abandonmentDueAt: record.abandonmentDueAt,
     anomalyConfiguration: state.anomalyConfiguration,
     budgetByPlayer: state.budgetByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 2])),
     corporateTrustByPlayer: state.corporateTrustByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 0])),
     corporateReviewActive: state.corporateReviewActive ?? false,
     contractCompletedByPlayer: state.contractCompletedByPlayer ?? {},
     contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},
+    ...(state.completionReason ? { completionReason: state.completionReason } : {}),
+    departedPlayerIds: state.departedPlayerIds ?? [],
     dueAt: record.dueAt,
     finalScientificModelCompletedByPlayer: state.finalScientificModelCompletedByPlayer ?? {},
     finalScientificModelsByPlayer: state.finalScientificModelsByPlayer ?? {},
@@ -188,6 +196,7 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
         data: {
           version: tender.version,
           phase: tender.phase,
+          abandonmentDueAt: tender.abandonmentDueAt,
           dueAt: tender.dueAt,
           state: toPersistedState({ ...tender, id: '' }) as Prisma.InputJsonValue,
         },
@@ -234,6 +243,7 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
             data: {
               version: change.nextTender.version,
               phase: change.nextTender.phase,
+              abandonmentDueAt: change.nextTender.abandonmentDueAt,
               dueAt: change.nextTender.dueAt,
               state: toPersistedState(change.nextTender) as Prisma.InputJsonValue,
             },
@@ -269,12 +279,19 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
 
     async findDue({ limit, now }) {
       const tenders = await db.tender.findMany({
-        where: { dueAt: { lte: now } },
-        orderBy: { dueAt: 'asc' },
-        take: limit,
-        select: { id: true },
+        where: {
+          OR: [
+            { dueAt: { lte: now } },
+            { abandonmentDueAt: { lte: now } },
+          ],
+        },
+        take: limit * 2,
+        select: { abandonmentDueAt: true, dueAt: true, id: true },
       })
-      return tenders.map((tender) => tender.id)
+      return tenders
+        .sort((left, right) => earliestDeadline(left).getTime() - earliestDeadline(right).getTime())
+        .slice(0, limit)
+        .map((tender) => tender.id)
     },
 
     async readAuditEvents(tenderId): Promise<StoredTenderAuditEvent[]> {
@@ -295,6 +312,11 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
 }
 
 class TenderVersionConflict extends Error {}
+
+function earliestDeadline(tender: { abandonmentDueAt: Date | null; dueAt: Date | null }) {
+  const deadlines = [tender.dueAt, tender.abandonmentDueAt].filter((value): value is Date => value !== null)
+  return new Date(Math.min(...deadlines.map((deadline) => deadline.getTime())))
+}
 
 function isUniqueConstraintError(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002'

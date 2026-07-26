@@ -383,6 +383,128 @@ maybeDescribe('auth API integration', () => {
     expect(await command.json()).toEqual({ tenderId, version: 1 })
   }, 10_000)
 
+  test('exposes one current room and blocks creating another until the player leaves', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'single-current-room',
+        password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
+      }),
+    })
+    const { accessToken } = await register.json()
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    }
+
+    const firstRoom = await app.request('/api/rooms', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ capacity: 2 }),
+    })
+    expect(firstRoom.status).toBe(201)
+    const created = await firstRoom.json()
+
+    const currentRoom = await app.request('/api/rooms/current', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(currentRoom.status).toBe(200)
+    expect(await currentRoom.json()).toMatchObject({
+      match: {
+        roomId: created.roomId,
+        status: 'waiting',
+      },
+    })
+
+    const blockedRoom = await app.request('/api/rooms', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ capacity: 2 }),
+    })
+    expect(blockedRoom.status).toBe(409)
+    expect(await blockedRoom.json()).toMatchObject({ error: { code: 'CONFLICT' } })
+
+    const otherRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'single-current-other-host',
+        password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
+      }),
+    })
+    const other = await otherRegister.json()
+    const otherRoomResponse = await app.request('/api/rooms', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${other.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ capacity: 2 }),
+    })
+    const otherRoom = await otherRoomResponse.json()
+    const blockedJoin = await app.request(`/api/rooms/${otherRoom.roomId}/join`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(blockedJoin.status).toBe(409)
+    expect(await blockedJoin.json()).toMatchObject({ error: { code: 'CONFLICT' } })
+
+    const leave = await app.request(`/api/rooms/${created.roomId}/leave`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(leave.status).toBe(204)
+
+    const noCurrentRoom = await app.request('/api/rooms/current', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(noCurrentRoom.status).toBe(200)
+    expect(await noCurrentRoom.json()).toEqual({ match: null })
+
+    const replacementRoom = await app.request('/api/rooms', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ capacity: 2 }),
+    })
+    expect(replacementRoom.status).toBe(201)
+  })
+
+  test('creates only one current room across concurrent requests from one player', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'concurrent-current-room',
+        password: 'password123',
+        privacyConsent: true,
+        ageConfirmation: true,
+      }),
+    })
+    const { accessToken } = await register.json()
+    const request = () => app.request('/api/rooms', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ capacity: 2 }),
+    })
+
+    const responses = await Promise.all([request(), request()])
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409])
+    const currentRoom = await app.request('/api/rooms/current', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(currentRoom.status).toBe(200)
+    expect((await currentRoom.json()).match.roomId).toBeString()
+  })
+
   test('returns one durable successor across three concurrent refresh requests', async () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',

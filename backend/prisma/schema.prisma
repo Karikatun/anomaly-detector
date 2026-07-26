@@ -21,6 +21,7 @@ model User {
   identities   AuthIdentity[]
   hostedRooms  TenderRoom[]       @relation("TenderRoomHost")
   roomMemberships TenderRoomMember[]
+  currentMatch CurrentMatch?
 
   @@map("users")
 }
@@ -88,18 +89,20 @@ model RealtimeTicket {
 }
 
 model Tender {
-  id          String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  version     Int
-  phase       String
-  dueAt       DateTime?          @map("due_at")
-  state       Json
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-  commands    TenderCommand[]
-  auditEvents TenderAuditEvent[]
-  room        TenderRoom?
+  id               String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  version          Int
+  phase            String
+  dueAt            DateTime?          @map("due_at")
+  abandonmentDueAt DateTime?          @map("abandonment_due_at")
+  state            Json
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  commands         TenderCommand[]
+  auditEvents      TenderAuditEvent[]
+  room             TenderRoom?
 
   @@index([dueAt], map: "tenders_due_at_idx")
+  @@index([abandonmentDueAt], map: "tenders_abandonment_due_at_idx")
   @@index([phase], map: "tenders_phase_idx")
   @@map("tenders")
 }
@@ -116,6 +119,7 @@ model TenderRoom {
   host      User               @relation("TenderRoomHost", fields: [hostId], references: [id], onDelete: Restrict, map: "tender_rooms_host_id_fkey")
   tender    Tender?            @relation(fields: [tenderId], references: [id], onDelete: Restrict, map: "tender_rooms_tender_id_fkey")
   members   TenderRoomMember[]
+  currentMatches CurrentMatch[]
 
   @@index([status], map: "tender_rooms_status_idx")
   @@map("tender_rooms")
@@ -134,6 +138,17 @@ model TenderRoomMember {
   @@unique([roomId, seat], map: "tender_room_members_room_id_seat_key")
   @@index([userId], map: "tender_room_members_user_id_idx")
   @@map("tender_room_members")
+}
+
+model CurrentMatch {
+  userId    String     @id @map("user_id") @db.Uuid
+  roomId    String     @map("room_id") @db.Uuid
+  createdAt DateTime   @default(now()) @map("created_at")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade, map: "current_matches_user_id_fkey")
+  room      TenderRoom @relation(fields: [roomId], references: [id], onDelete: Cascade, map: "current_matches_room_id_fkey")
+
+  @@index([roomId], map: "current_matches_room_id_idx")
+  @@map("current_matches")
 }
 
 model TenderCommand {

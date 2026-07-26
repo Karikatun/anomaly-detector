@@ -243,6 +243,58 @@ test('requires every lobby player to be ready before enabling the match start', 
   }
 })
 
+test('returns both players to one active match and completes it five seconds after both leave', async ({ browser, page }) => {
+  test.setTimeout(60_000)
+  await registerBrowserUser(page, 'Хост выхода E2E', 'leave-host')
+  const webOrigin = new URL(page.url()).origin
+  const guestContext = await browser.newContext({ baseURL: webOrigin })
+  const guestPage = await guestContext.newPage()
+
+  try {
+    await registerBrowserUser(guestPage, 'Гость выхода E2E', 'leave-guest', webOrigin)
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await page.getByLabel('Количество игроков').selectOption('2')
+    await page.getByRole('button', { name: 'Создать команду' }).click()
+    await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}$/)
+    const roomId = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
+    if (!roomId) throw new Error('Room identifier is missing from the lobby URL')
+
+    await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
+    await guestPage.getByLabel('ID комнаты').fill(roomId)
+    await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Начать игру' }).click()
+    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+
+    await page.getByRole('button', { name: 'Выйти из матча' }).click()
+    await expect(page).toHaveURL('/')
+    await expect(page.getByRole('button', { name: 'ВЕРНУТЬСЯ В МАТЧ' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeHidden()
+
+    await page.getByRole('button', { name: 'МОИ МАТЧИ' }).click()
+    await expect(page.getByText('Активен', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Детали' }).click()
+    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    await expect(page.getByRole('heading', { name: headings.access })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Выйти из матча' }).click()
+    await guestPage.getByRole('button', { name: 'Выйти из матча' }).click()
+    await expect(page).toHaveURL('/')
+    await expect(guestPage).toHaveURL('/')
+
+    await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible({ timeout: 12_000 })
+    await expect(guestPage.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible({ timeout: 12_000 })
+    await expect(page.getByRole('button', { name: 'ВЕРНУТЬСЯ В МАТЧ' })).toBeHidden()
+
+    await page.getByRole('button', { name: 'МОИ МАТЧИ' }).click()
+    await expect(page.getByText('Завершён досрочно', { exact: true })).toBeVisible()
+  } finally {
+    await guestContext.close()
+  }
+})
+
 test('opens the Rules Reference inside an active Tender without leaving it', async ({ browser, page }) => {
   await registerBrowserUser(page, 'Хост правил E2E', 'rules-tender-host')
   const webOrigin = new URL(page.url()).origin

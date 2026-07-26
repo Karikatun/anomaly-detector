@@ -1,5 +1,6 @@
 import {
   createRoomRequestSchema,
+  currentMatchResponseSchema,
   myMatchesResponseSchema,
   roomViewSchema,
   setRoomReadyRequestSchema,
@@ -29,6 +30,11 @@ export class RoomsApi {
   async listMatches(): Promise<RoomView[]> {
     const response = await this.transport.request('/api/rooms/mine', myMatchesResponseSchema)
     return response.matches
+  }
+
+  async getCurrentMatch(): Promise<RoomView | null> {
+    const response = await this.transport.request('/api/rooms/current', currentMatchResponseSchema)
+    return response.match
   }
 
   join(roomId: string): Promise<RoomView> {

@@ -5,6 +5,7 @@ export type RoomRecord = Omit<RoomView, 'roomId' | 'serverTime'> & { id: string 
 export type RoomRepository = {
   create(input: { capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
   cancelStart?: (input: { actorId: string; roomId: string }) => Promise<RoomRecord>
+  readCurrentForMember?: (userId: string) => Promise<RoomRecord | null>
   listStartedForMember?: (userId: string) => Promise<RoomRecord[]>
   readForMember?: (input: { actorId: string; roomId: string }) => Promise<RoomRecord>
   join(input: { actorId: string; roomId: string }): Promise<RoomRecord>

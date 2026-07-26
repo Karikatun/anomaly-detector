@@ -27,6 +27,7 @@ export const roomViewSchema = z.object({
   status: roomStatusSchema,
   startsAt: z.string().datetime().nullable().optional(),
   tenderId: z.string().uuid().nullable().optional(),
+  tenderCompletionReason: z.enum(['all_players_left']).optional(),
   tenderPhase: z.string().optional(),
 }).strict()
 
@@ -34,7 +35,12 @@ export const myMatchesResponseSchema = z.object({
   matches: z.array(roomViewSchema),
 }).strict()
 
+export const currentMatchResponseSchema = z.object({
+  match: roomViewSchema.nullable(),
+}).strict()
+
 export type CreateRoomRequest = z.infer<typeof createRoomRequestSchema>
+export type CurrentMatchResponse = z.infer<typeof currentMatchResponseSchema>
 export type RoomMember = z.infer<typeof roomMemberSchema>
 export type RoomView = z.infer<typeof roomViewSchema>
 export type SetRoomReadyRequest = z.infer<typeof setRoomReadyRequestSchema>
