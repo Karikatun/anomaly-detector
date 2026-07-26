@@ -25,10 +25,10 @@ FROM oven/bun:1.3.14 AS runtime
 
 WORKDIR /app
 
-COPY --from=build /app/package.json /app/bun.lock /app/bunfig.toml ./
-COPY --from=production-dependencies /app/node_modules ./node_modules
-COPY --from=build /app/packages/contracts ./packages/contracts
-COPY --from=build /app/backend ./backend
+COPY --from=build --chown=bun:bun /app/package.json /app/bun.lock /app/bunfig.toml ./
+COPY --from=production-dependencies --chown=bun:bun /app/node_modules ./node_modules
+COPY --from=build --chown=bun:bun /app/packages/contracts ./packages/contracts
+COPY --from=build --chown=bun:bun /app/backend ./backend
 
 WORKDIR /app/backend
 
