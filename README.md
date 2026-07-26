@@ -65,6 +65,8 @@ bun run architecture:check        # проверка границ модулей
 - Deployment status: production readiness is in progress; no Yandex Cloud resources have been provisioned yet.
 - Production target when deployment starts: Yandex Cloud through the `yc` CLI, following [docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md). DigitalOcean scripts and docs remain template artifacts, but they are not this project's chosen production path.
 - Launch model: the site is publicly reachable without an allowlist; initial testing is distributed directly to known testers without a marketing campaign.
+- Production domains: `https://anomaly-detector.ru` for the webapp, `https://api.anomaly-detector.ru` for API/WebSocket traffic, and `https://www.anomaly-detector.ru` as a redirect to the primary host.
+- Public support address: `support@anomaly-detector.ru`; the mailbox must be activated and tested before launch.
 - Git publishing: `origin` points to `git@github.com:Karikatun/anomaly-detector.git`.
 
 ## Agent Intake Checklist Before Installing

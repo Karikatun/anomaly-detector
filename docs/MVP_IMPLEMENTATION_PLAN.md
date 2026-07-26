@@ -279,6 +279,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 2. [-] Keep production data and operational configuration within the Russian launch boundary.
    - [x] Record the Russian data-location decision and Yandex Cloud target.
    - [ ] Complete legal review, Roskomnadzor notification decision, consent text, retention schedule, and anti-abuse cookie disclosure before collecting production users.
+   - [-] Configure and test `support@anomaly-detector.ru`; the address is chosen, but its Yandex 360 mailbox and DNS records are not active yet.
 3. [-] Complete the release-safety path.
    - [x] Validate environment at startup and expose liveness/readiness endpoints.
    - [-] Run migrations against a production-like copy, document rollback/forward-fix ownership, and perform a real PostgreSQL backup/restore drill.
@@ -291,7 +292,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 5. [ ] Run the complete release acceptance matrix on current mobile Safari/Chrome and desktop Chrome/Firefox, including reconnect, refresh, multi-tab session, active-match return, all-player abandonment, audit privacy, and account deletion.
 6. [ ] Measure real matches with 2, 3, and 4 players; tune deadlines only when data shows the five-round target is materially missed.
 7. [ ] Run a public test without marketing, distributing links directly to known testers. Capture audit-derived defects, balance observations, accessibility problems, rules misunderstandings, support requests, abuse, and operational incidents as GitHub issues.
-8. [ ] Decide and document support ownership before public MVP: account recovery, incident contact, privacy requests, match disputes, and the response when a worker/deployment interrupts an active match.
+8. [-] Decide and document support ownership before public MVP: `support@anomaly-detector.ru` is the chosen public contact, but mailbox activation, responsible operator, account recovery, privacy requests, match disputes, and the response when a worker/deployment interrupts an active match remain incomplete.
 
 **Skills:** `tdd` for deployment configuration and privacy-sensitive deletion paths; `diagnosing-bugs` for nondeterminism, concurrency, or performance regressions; `improve-codebase-architecture` after several working verticals and before the public test; `triage` for tester reports; `code-review` before release.
 
