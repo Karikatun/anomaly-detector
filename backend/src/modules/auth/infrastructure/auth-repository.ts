@@ -1,44 +1,91 @@
+import { createHmac } from 'node:crypto'
+
 import type { DbClient } from '../../../db'
 import { Prisma } from '../../../generated/prisma/client'
 import type { AuthRepository } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
 
-export function createPrismaAuthRepository(db: DbClient): AuthRepository {
+const registrationDeviceWindowMs = 180 * 24 * 60 * 60 * 1_000
+const registrationIpWindowMs = 24 * 60 * 60 * 1_000
+
+export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): AuthRepository {
   return {
     findUserByLogin(login) {
       return db.user.findUnique({ where: { login } })
     },
 
     async createPasswordUserWithSession(input) {
-      try {
-        return await db.$transaction(async (tx) => {
-          const user = await tx.user.create({
-            data: {
-              login: input.user.login,
-              passwordHash: input.user.passwordHash,
-              displayName: input.user.displayName,
-            },
-          })
-          const session = await tx.authSession.create({
-            data: {
-              userId: user.id,
-              refreshTokenHash: input.session.refreshTokenHash,
-              refreshTokenFamilyHash: input.session.refreshTokenFamilyHash,
-              expiresAt: input.session.expiresAt,
-              userAgent: input.session.metadata.userAgent,
-              ipAddress: input.session.metadata.ipAddress,
-            },
-            select: { id: true },
-          })
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await db.$transaction(async (tx) => {
+            if (input.registration) {
+              const quotaKeys = [
+                ...(input.registration.deviceId
+                  ? [{
+                      keyHash: hashRegistrationKey(abuseSecret, 'device', input.registration.deviceId),
+                      scope: 'registration_device',
+                    }]
+                  : []),
+                {
+                  keyHash: hashRegistrationKey(
+                    abuseSecret,
+                    'ip',
+                    input.registration.ipAddress ?? 'unknown',
+                  ),
+                  scope: 'registration_ip',
+                },
+              ].sort((left, right) =>
+                `${left.scope}:${left.keyHash}`.localeCompare(`${right.scope}:${right.keyHash}`))
+              for (const quota of quotaKeys) {
+                await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${quota.scope}:${quota.keyHash}`}, 0))::text AS "lock"`
+              }
+              if (input.registration.deviceId) {
+                await consumeRegistrationQuota(tx, {
+                  keyHash: quotaKeys.find((quota) => quota.scope === 'registration_device')!.keyHash,
+                  limit: 3,
+                  now: input.registration.now,
+                  scope: 'registration_device',
+                  windowMs: registrationDeviceWindowMs,
+                })
+              }
+              await consumeRegistrationQuota(tx, {
+                keyHash: quotaKeys.find((quota) => quota.scope === 'registration_ip')!.keyHash,
+                limit: 20,
+                now: input.registration.now,
+                scope: 'registration_ip',
+                windowMs: registrationIpWindowMs,
+              })
+            }
+            const user = await tx.user.create({
+              data: {
+                login: input.user.login,
+                passwordHash: input.user.passwordHash,
+                displayName: input.user.displayName,
+              },
+            })
+            const session = await tx.authSession.create({
+              data: {
+                userId: user.id,
+                refreshTokenHash: input.session.refreshTokenHash,
+                refreshTokenFamilyHash: input.session.refreshTokenFamilyHash,
+                expiresAt: input.session.expiresAt,
+                userAgent: input.session.metadata.userAgent,
+                ipAddress: input.session.metadata.ipAddress,
+              },
+              select: { id: true },
+            })
 
-          return { user, session }
-        })
-      } catch (error) {
-        if (isUniqueConstraintError(error)) {
-          throw new AuthFailure('login_already_exists', 'User with this login already exists')
+            return { user, session }
+          })
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) continue
+          if (isUniqueConstraintError(error)) {
+            throw new AuthFailure('login_already_exists', 'User with this login already exists')
+          }
+          throw error
         }
-        throw error
       }
+      throw new Error('Unreachable registration transaction retry state')
     },
 
     createSession(input) {
@@ -279,6 +326,62 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
       await db.user.update({ where: { id: userId }, data })
     },
   }
+}
+
+async function consumeRegistrationQuota(
+  tx: Prisma.TransactionClient,
+  input: {
+    keyHash: string
+    limit: number
+    now: Date
+    scope: string
+    windowMs: number
+  },
+) {
+  const existing = await tx.authAbuseBucket.findUnique({
+    where: { scope_keyHash: { scope: input.scope, keyHash: input.keyHash } },
+  })
+  const windowExpired = !existing || existing.expiresAt <= input.now
+  const count = windowExpired ? 1 : existing.count + 1
+  if (count > input.limit) {
+    throw new AuthFailure('registration_limited', 'Registration limit reached. Try again later.')
+  }
+  const windowStartedAt = windowExpired ? input.now : existing.windowStartedAt
+  await tx.authAbuseBucket.upsert({
+    where: { scope_keyHash: { scope: input.scope, keyHash: input.keyHash } },
+    create: {
+      count,
+      expiresAt: new Date(windowStartedAt.getTime() + input.windowMs),
+      keyHash: input.keyHash,
+      scope: input.scope,
+      windowStartedAt,
+    },
+    update: {
+      blockedUntil: null,
+      count,
+      expiresAt: new Date(windowStartedAt.getTime() + input.windowMs),
+      windowStartedAt,
+    },
+  })
+}
+
+function hashRegistrationKey(secret: string, scope: string, value: string) {
+  return createHmac('sha256', secret)
+    .update(`auth-registration:${scope}:${value}`)
+    .digest('hex')
+}
+
+function isRetryableTransactionError(error: unknown) {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error.code === 'P2034'
+      || (error.code === 'P2002'
+        && 'meta' in error
+        && typeof error.meta === 'object'
+        && error.meta !== null
+        && 'modelName' in error.meta
+        && error.meta.modelName === 'AuthAbuseBucket'))
 }
 
 async function sha256(value: string) {

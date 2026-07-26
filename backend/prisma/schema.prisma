@@ -73,6 +73,20 @@ model AuthSession {
   @@map("auth_sessions")
 }
 
+model AuthAbuseBucket {
+  scope           String   @db.VarChar(32)
+  keyHash         String   @map("key_hash") @db.Char(64)
+  count           Int
+  windowStartedAt DateTime @map("window_started_at")
+  blockedUntil    DateTime? @map("blocked_until")
+  expiresAt       DateTime @map("expires_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@id([scope, keyHash])
+  @@index([expiresAt], map: "auth_abuse_buckets_expires_at_idx")
+  @@map("auth_abuse_buckets")
+}
+
 model RealtimeTicket {
   id         String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
   ticketHash String      @unique @map("ticket_hash")

@@ -26,11 +26,14 @@ import type { AppEnv } from '../../../env'
 import { AppError, validationErrorHook } from '../../../http/errors'
 import { clientAddress } from '../../../http/security'
 import type { AuthService } from '../application/auth-service'
+import type { DeviceTokens } from '../application/ports'
 import { userDtoFromPrincipal } from '../domain/user'
 import { executeAuth } from './errors'
 import type { AuthHttpEnv } from './middleware'
 
 const refreshCookieName = 'anomaly_detector_refresh'
+const deviceCookieName = 'anomaly_detector_device'
+const deviceTokenTtlSeconds = 180 * 24 * 60 * 60
 
 const cookieAuthResponseContent = {
   'application/json': {
@@ -344,6 +347,7 @@ const oauthCallbackRoute = createRoute({
 // ── Factory ──────────────────────────────────────────────────────────────────
 
 type CreateAuthRoutesOptions = {
+  deviceTokens: DeviceTokens
   env: AppEnv
   oauthCallbackBaseUrl?: string
   requireAuth: MiddlewareHandler<AuthHttpEnv>
@@ -351,7 +355,14 @@ type CreateAuthRoutesOptions = {
   webappUrl: string
 }
 
-export function createAuthRoutes({ env, oauthCallbackBaseUrl, requireAuth, service, webappUrl }: CreateAuthRoutesOptions) {
+export function createAuthRoutes({
+  deviceTokens,
+  env,
+  oauthCallbackBaseUrl,
+  requireAuth,
+  service,
+  webappUrl,
+}: CreateAuthRoutesOptions) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   const protectedRoutes = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
@@ -359,13 +370,23 @@ export function createAuthRoutes({ env, oauthCallbackBaseUrl, requireAuth, servi
 
   routes.openapi(cookieRegisterRoute, async (c) => {
     assertTrustedCookieOrigin(c, env)
-    const result = await executeAuth(() => service.register(c.req.valid('json'), requestMetadata(c, env)))
+    const device = registrationDevice(c, deviceTokens)
+    const result = await executeAuth(() => service.register(
+      c.req.valid('json'),
+      requestMetadata(c, env),
+      { deviceId: device.deviceId },
+    ))
     setRefreshCookie(c, result.refreshToken, env)
+    setDeviceCookie(c, device.cookieValue, env)
     return c.json(withoutRefreshToken(result), 201)
   })
 
   routes.openapi(tokenRegisterRoute, async (c) => {
-    const result = await executeAuth(() => service.register(c.req.valid('json'), requestMetadata(c, env)))
+    const result = await executeAuth(() => service.register(
+      c.req.valid('json'),
+      requestMetadata(c, env),
+      {},
+    ))
     return c.json(result, 201)
   })
 
@@ -501,6 +522,21 @@ function requestMetadata(c: Context, env: AppEnv): { userAgent?: string; ipAddre
 
 function getRefreshCookie(c: Context) {
   return getCookie(c, refreshCookieName)
+}
+
+function registrationDevice(c: Context, deviceTokens: DeviceTokens) {
+  return deviceTokens.resolve(getCookie(c, deviceCookieName))
+}
+
+function setDeviceCookie(c: Context, value: string | null, env: AppEnv) {
+  if (!value) return
+  setCookie(c, deviceCookieName, value, {
+    httpOnly: true,
+    secure: env.COOKIE_SECURE,
+    sameSite: refreshCookieSameSite(env),
+    path: '/api/auth',
+    maxAge: deviceTokenTtlSeconds,
+  })
 }
 
 function assertTrustedCookieOrigin(c: Context, env: AppEnv) {

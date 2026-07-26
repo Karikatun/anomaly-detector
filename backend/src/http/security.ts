@@ -42,7 +42,8 @@ function createAuthRateLimit(options: AuthSecurityOptions): MiddlewareHandler {
     }
 
     const now = Date.now()
-    let key = clientAddress(c, options)
+    const category = authWriteCategory(c.req.path)
+    let key = `${clientAddress(c, options)}:${category}`
     let bucket = buckets.get(key)
 
     if (!bucket || bucket.resetAt <= now) {
@@ -72,6 +73,13 @@ function createAuthRateLimit(options: AuthSecurityOptions): MiddlewareHandler {
 
     await next()
   }
+}
+
+function authWriteCategory(path: string) {
+  if (path.endsWith('/login')) return 'password-login'
+  if (path.endsWith('/register')) return 'password-register'
+  if (path.endsWith('/refresh') || path.endsWith('/logout')) return 'session'
+  return 'other'
 }
 
 export function clientAddress(

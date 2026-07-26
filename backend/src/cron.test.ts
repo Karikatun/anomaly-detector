@@ -16,9 +16,16 @@ describe('runCronTask', () => {
 
   test('deletes expired and revoked auth sessions after the retention window', async () => {
     const calls: unknown[] = []
+    const abuseCalls: unknown[] = []
     const cleanupRuntime = {
       env: { SESSION_ABSOLUTE_TTL_DAYS: 90, SESSION_RETENTION_DAYS: 7 },
       prisma: {
+        authAbuseBucket: {
+          deleteMany: async (input: unknown) => {
+            abuseCalls.push(input)
+            return { count: 3 }
+          },
+        },
         authSession: {
           deleteMany: async (input: unknown) => {
             calls.push(input)
@@ -32,6 +39,9 @@ describe('runCronTask', () => {
     await runCronTask('auth:sessions:cleanup', cleanupRuntime, now)
 
     expect(calls).toHaveLength(1)
+    expect(abuseCalls).toEqual([{
+      where: { expiresAt: { lt: now } },
+    }])
     expect(calls[0]).toMatchObject({
       where: {
         OR: [

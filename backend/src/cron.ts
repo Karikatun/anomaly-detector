@@ -27,7 +27,12 @@ const cronTasks = {
         ],
       },
     })
-    console.log(`Cron auth:sessions:cleanup removed ${count} stale sessions.`)
+    const abuseBuckets = await prisma.authAbuseBucket.deleteMany({
+      where: { expiresAt: { lt: now } },
+    })
+    console.log(
+      `Cron auth:sessions:cleanup removed ${count} stale sessions and ${abuseBuckets.count} expired abuse buckets.`,
+    )
   },
 } satisfies Record<string, CronTask>
 

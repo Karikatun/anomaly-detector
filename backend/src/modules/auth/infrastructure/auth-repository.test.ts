@@ -32,7 +32,7 @@ test('creates a password user and initial session inside one database transactio
     $transaction: async (run: (tx: typeof transactionClient) => unknown) => run(transactionClient),
   } as unknown as DbClient
 
-  const result = await createPrismaAuthRepository(db).createPasswordUserWithSession({
+  const result = await createPrismaAuthRepository(db, 'test-abuse-secret').createPasswordUserWithSession({
     user: {
       login: 'user',
       password: 'password123',
