@@ -13,8 +13,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 - **Milestone 1 (Tender Foundation)** — ✅ 100% завершён
 - **Milestone 2 (Game Core)** — ✅ целевой набор правил реализован на авторитетном сервере и защищён симуляциями для 2-4 игроков
 - **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 основной путь готов; единый активный матч и корректное досрочное завершение реализованы, остаются VK ID и production-защита auth
-- **Milestone 4 (Game Interface)** — 🔶 целевой игровой поток и визуальная переработка в активной разработке; не завершены справочник правил, полный аудит/replay, i18n и обучение
-- **Milestone 5 (Operations, Public Test)** — 🔶 подтверждён Compute Cloud runtime, добавлены worker health/readiness и локальный recovery drill; production-развёртывание и облачный мониторинг ещё не выполнялись
+- **Milestone 4 (Game Interface)** — 🔶 возврат в активный матч, справочник правил и Chromium E2E полного пятираундового матча готовы; остаются полный аудит/replay, финальная проверка i18n, обучение и браузерная матрица
+- **Milestone 5 (Operations, Public Test)** — 🔶 юридические тексты и доказательство согласия реализованы, входящая почта и DNS-защита домена проверены, добавлены worker health/readiness и локальный recovery drill; production-развёртывание, исходящая почта и облачный мониторинг ещё не проверены
 
 ## Delivery Rules
 
@@ -66,8 +66,9 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - по доверенному адресу клиента — отдельный более широкий предел до вызова Argon2id против credential stuffing и CPU DoS.
 3. [x] Не вводить бессрочную блокировку аккаунта. Верный пароль должен сбрасывать счётчик логина; ответ при неверном логине, неверном пароле и активном throttling остаётся обобщённым и не раскрывает существование аккаунта.
 4. [x] Выполнять dummy Argon2id verify для неизвестного логина/аккаунта без пароля, чтобы ранний выход не создавал заметную разницу времени.
-5. [-] Хранить счётчики в PostgreSQL с атомарным обновлением, TTL и плановой очисткой. На Application Load Balancer при production-развёртывании ещё нужно подключить Yandex Smart Web Security Advanced Rate Limiter как независимую edge-защиту.
-6. [x] После пяти ошибок показывать понятное нейтральное сообщение и приблизительное время повторной попытки, не раскрывая внутренний bucket или точный алгоритм ограничения.
+5. [x] Хранить счётчики в PostgreSQL с атомарным обновлением, TTL и плановой очисткой.
+6. [ ] На Application Load Balancer подключить Yandex Smart Web Security Advanced Rate Limiter как независимую edge-защиту.
+7. [x] После пяти ошибок показывать понятное нейтральное сообщение и приблизительное время повторной попытки, не раскрывая внутренний bucket или точный алгоритм ограничения.
 
 **Gate:** интеграционные тесты покрывают пять ошибок, шестую ограниченную попытку, успешный сброс, независимые login/IP buckets, конкурентные запросы и одинаковый внешний ответ для существующего/несуществующего логина.
 
@@ -78,9 +79,10 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 1. [x] При первой browser password-регистрации выдавать долгоживущий случайный device token в подписанной `HttpOnly`, `Secure`, `SameSite` cookie. В БД хранить только HMAC токена.
 2. [x] Разрешать не более трёх успешных password-регистраций на device token за 180 дней. Удаление аккаунта не должно немедленно возвращать квоту, иначе ограничение обходится циклом register/delete.
 3. [x] Применять правило только к созданию password-аккаунта. OAuth identity остаётся уникальной у провайдера и защищается отдельными OAuth/state и edge-лимитами.
-4. [-] Дополнить device quota независимым более широким пределом регистраций по доверенному адресу. Edge rate limit остаётся частью production-настройки Yandex Cloud.
-5. [x] Описать anti-abuse cookie, цель, срок хранения и удаление в политике обработки данных. Сырые IP не записываются в anti-abuse buckets: в PostgreSQL хранится HMAC-ключ.
-6. [x] Покрыть первую выдачу cookie, три успешных регистрации, четвёртый отказ, конкурентную гонку, поддельный token и отсутствие утечки quota через тексты ошибок.
+4. [x] Дополнить device quota независимым более широким пределом регистраций по доверенному адресу.
+5. [ ] Подключить независимый edge rate limit при production-настройке Yandex Cloud.
+6. [x] Описать anti-abuse cookie, цель, срок хранения и удаление в политике обработки данных. Сырые IP не записываются в anti-abuse buckets: в PostgreSQL хранится HMAC-ключ.
+7. [x] Покрыть первую выдачу cookie, три успешных регистрации, четвёртый отказ, конкурентную гонку, поддельный token и отсутствие утечки quota через тексты ошибок.
 
 **Gate:** ограничение атомарно при параллельных запросах и честно обозначено как anti-abuse control, а не как доказательство физического устройства.
 
@@ -209,12 +211,12 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 1. [-] Implement Yandex ID and VK ID authentication. Keep Telegram outside MVP until a separate legal review permits it.
    - [x] Add provider-agnostic OAuth identities, PKCE transaction storage, application ports, and Yandex ID start/callback flow.
    - [ ] Complete and validate the VK ID start/callback flow.
-2. [x] Enforce Russian-launch data policy: non-blocking 16+ product marking, account deletion that anonymises old match entries, and password registration through a unique login.
-   - [x] Add `DELETE /api/auth/account` endpoint: revokes all sessions, anonymises user record
-   - [x] Add required `privacyConsent` to the register schema (Zod validation rejects missing/falsy values)
-   - [x] Display the consent checkbox and a non-blocking `16+` notice in the registration form; do not collect or claim to verify age
-   - [x] Create privacy policy template for legal review
-   - [x] Add `anonymizedAt` field to User model (Prisma migration applied)
+2. [x] Enforce Russian-launch data policy: non-blocking 16+ product marking, versioned legal acceptance, unlinking deleted identities from history, and password registration through a unique login.
+   - [x] Add `DELETE /api/auth/account`: remove OAuth identities and sessions, prevent repeat login, and replace the deleted internal ID in Tender state, audit, commands, and receipts
+   - [x] Require a separate versioned personal-data consent for password and OAuth registration and persist the accepted version and timestamp
+   - [x] Publish the personal-data policy, separate consent, and User Agreement on public routes and link them from registration
+   - [x] Display a non-blocking `16+` notice without collecting or claiming to verify age
+   - [x] Remove expired OAuth transactions and realtime tickets through the scheduled auth cleanup task
 3. [x] Implement profile locale preference, default and fallback `ru`.
    - [x] Add `locale` field to User model with Prisma migration (default `'ru'`)
    - [x] Include `locale` in `UserDto` and auth responses
@@ -260,8 +262,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 5. [-] Complete end-of-round score breakdown and the final participant-only audit/replay. A final screen and audit projection exist, but phase-by-phase replay and complete score explanation remain incomplete.
 6. [-] Store every visible string in domain i18n chunks. Russian is the default, but player-visible literals still require a final repository scan.
 7. [-] Apply and verify the realistic corporate sci-fi visual system across all phases, mobile portrait, and desktop workspace.
-8. [ ] Replace create/join cards with the full-width «Вернуться в матч» state when the current-match endpoint reports an unfinished session.
-9. [ ] Finish the accordion Rules Reference and laboratory-result interpretation section described in P1.
+8. [x] Replace create/join cards with the full-width «Вернуться в матч» state when the current-match endpoint reports an unfinished session.
+9. [x] Finish the accordion Rules Reference and laboratory-result interpretation section described in P1, keeping the close action visible while the dialog is open.
 10. [ ] Add the short guided solo tutorial already required by `GAME_DESIGN_BRIEF.md`, or explicitly remove it from MVP scope through a product-doc decision before release.
 
 **Skills:** `prototype` for the Working Model and dense mobile interactions; `browser:control-in-app-browser` for mobile and desktop verification; `imagegen` only when original raster assets are needed; `tdd` for client state that affects correctness; `code-review` for each completed journey.
@@ -279,12 +281,16 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 2. [-] Keep production data and operational configuration within the Russian launch boundary.
    - [x] Record the Russian data-location decision and Yandex Cloud target.
    - [-] Complete legal readiness before collecting production users.
-     - [x] Prepare a comprehensive legal-review draft personal-data processing policy tied to the current data model, authentication providers, Russian hosting target, retention periods, support mailbox, and anti-abuse cookies.
+     - [x] Prepare and fill the personal-data processing policy with the individual operator's details, current data model, authentication providers, Russian hosting target, retention periods, support mailbox, and anti-abuse cookies.
      - [x] Prepare separate versioned personal-data consent and User Agreement texts, expose public legal routes, persist acceptance evidence for password and OAuth registration, unlink deleted identities from Tender JSON/audit, and clean expired OAuth/realtime records.
-     - [ ] Fill in the individual operator's full name and legal contact address, complete legal review, file the Roskomnadzor notification, and verify the published legal texts against production processors and retention operations.
-   - [-] Configure and test `support@anomaly-detector.ru`; the REG.RU mailbox and MX records are created, while end-to-end delivery, SPF, DKIM, and DMARC verification remain.
+     - [ ] Complete legal review, file the Roskomnadzor notification before production registration opens, and verify the published texts against production processors and retention operations.
+   - [-] Configure and test `support@anomaly-detector.ru`.
+     - [x] Create and enable the REG.RU mailbox; publish MX, SPF, DKIM, and monitoring-mode DMARC records.
+     - [x] Verify TLS connectivity, SMTP recipient acceptance, and actual incoming delivery into the mailbox.
+     - [ ] Verify authenticated outbound delivery to unrelated providers and require SPF/DKIM `PASS`; then document mailbox recovery, retention, and the applicable REG.RU data-processing terms.
 3. [-] Complete the release-safety path.
    - [x] Validate environment at startup and expose liveness/readiness endpoints.
+   - [x] Push the intended release commits and require the clean deployment branch to be synchronized with `origin` before provisioning or deployment.
    - [-] Run migrations against a production-like copy, document rollback/forward-fix ownership, and perform a real PostgreSQL backup/restore drill.
      - [x] Add and pass an isolated PostgreSQL 18 migration plus `pg_dump`/`pg_restore` rehearsal that cannot touch development data.
      - [ ] Repeat the drill on a production-like Yandex Managed PostgreSQL cluster and record recovery evidence and ownership.
@@ -295,7 +301,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 5. [ ] Run the complete release acceptance matrix on current mobile Safari/Chrome and desktop Chrome/Firefox, including reconnect, refresh, multi-tab session, active-match return, all-player abandonment, audit privacy, and account deletion.
 6. [ ] Measure real matches with 2, 3, and 4 players; tune deadlines only when data shows the five-round target is materially missed.
 7. [ ] Run a public test without marketing, distributing links directly to known testers. Capture audit-derived defects, balance observations, accessibility problems, rules misunderstandings, support requests, abuse, and operational incidents as GitHub issues.
-8. [-] Decide and document support ownership before public MVP: `support@anomaly-detector.ru` is the chosen public contact, but mailbox activation, responsible operator, account recovery, privacy requests, match disputes, and the response when a worker/deployment interrupts an active match remain incomplete.
+8. [-] Decide and document support ownership before public MVP: the mailbox is active and the responsible operator/public contact are identified, while account recovery, privacy-request handling, match disputes, retention, and the response when a worker/deployment interrupts an active match remain incomplete.
 
 **Skills:** `tdd` for deployment configuration and privacy-sensitive deletion paths; `diagnosing-bugs` for nondeterminism, concurrency, or performance regressions; `improve-codebase-architecture` after several working verticals and before the public test; `triage` for tester reports; `code-review` before release.
 
