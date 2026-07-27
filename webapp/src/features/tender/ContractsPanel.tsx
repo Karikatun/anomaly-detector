@@ -35,6 +35,7 @@ type ContractsPanelProps = {
   maxPower: number
   playerId: string
   players: TenderView['players']
+  privateUsedContractEvidenceTestIds: string[]
   round: number
   disabled?: boolean
   error?: string | null
@@ -58,6 +59,7 @@ export function ContractsPanel({
   maxPower,
   playerId,
   players,
+  privateUsedContractEvidenceTestIds,
   round,
   disabled,
   error,
@@ -66,27 +68,21 @@ export function ContractsPanel({
   onBid,
 }: ContractsPanelProps) {
   const [bids, setBids] = useState<Record<string, ContractBid>>({})
-  const [selectedContractId, setSelectedContractId] = useState<string | null>(null)
   const { t } = useI18n()
-  const ownJournal = journal.filter((entry) => entry.playerId === playerId)
+  const ownJournal = journal.filter((entry) =>
+    entry.playerId === playerId && !privateUsedContractEvidenceTestIds.includes(entry.testId),
+  )
   const reservedContract = contracts.find((contract) => contract.reservedByPlayerId === playerId)
-  const selectedContract = reservedContract
-    ?? contracts.find((contract) => contract.contractId === selectedContractId)
-  const selectedBid = selectedContract ? bids[selectedContract.contractId] : undefined
   const eligibleContracts = contracts.filter((contract) => contract.eligibleForPlayer)
+  const hasSubmittedContract = contracts.some((contract) =>
+    contract.reservedByPlayerId === playerId && contract.bidOutcome !== undefined,
+  )
 
-  const handleReserve = async (contractId: string) => {
-    setSelectedContractId(contractId)
+  const handleConfirmContract = async (contractId: string, bid: ContractBid, alreadyReserved: boolean) => {
     try {
-      await onReserve(contractId)
-      setBids((previous) => ({ ...previous, [contractId]: { evidenceTestIds: [] } }))
-    } catch {
-      // The parent owns the visible command error; keep the action available.
-    }
-  }
-
-  const handleBid = async (contractId: string, bid: ContractBid) => {
-    try {
+      if (!alreadyReserved) {
+        await onReserve(contractId)
+      }
       await onBid(contractId, bid)
       setBids((previous) => {
         const next = { ...previous }
@@ -94,28 +90,12 @@ export function ContractsPanel({
         return next
       })
     } catch {
-      // The parent owns the visible command error; keep the bid for retry.
+      // The parent owns the visible command error; keep the complete bid for retry.
     }
   }
 
-  const toggleEvidence = (contractId: string, testId: string) => {
-    setBids((previous) => {
-      const bid = previous[contractId] ?? { evidenceTestIds: [] }
-      const evidenceTestIds = bid.evidenceTestIds.includes(testId)
-        ? bid.evidenceTestIds.filter((id) => id !== testId)
-        : bid.evidenceTestIds.length < 2 ? [...bid.evidenceTestIds, testId] : bid.evidenceTestIds
-      return { ...previous, [contractId]: { ...bid, evidenceTestIds } }
-    })
-  }
-
-  const evidenceFits = (entry: ScientificJournalEntry, contract?: PublicContract) => {
-    if (!contract || contract.kind === 'scientific') return false
-    const role = contract.targetRole ?? 'source'
-    const signalMatches = entry[role === 'source' ? 'sourceSignal' : 'receiverSignal'] === contract.targetSignal
-    const resultMatches = entry.publicResult === contract.requiredPublicResult
-      || entry.publicResult === contract.requiredSecondaryPublicResult
-    return signalMatches && resultMatches
-  }
+  const evidenceLabel = (entry: ScientificJournalEntry) =>
+    `${t(signalLabelKeys[entry.sourceSignal])} → ${t(signalLabelKeys[entry.receiverSignal])} · ${t(`tender.result.${entry.publicResult}`)} · ${entry.protocol === 'continuous' ? 'непрерывный' : 'импульсный'}`
 
   return (
     <section className={styles.contractsWorkspace} aria-labelledby="contracts-heading">
@@ -132,53 +112,60 @@ export function ContractsPanel({
             <Typography as="span" variant="caption" className={styles.sectionMeta}>{maxPower} мощности</Typography>
           </div>
           <Typography variant="bodySm" className={styles.description}>
-            Выберите контракт и заранее проверьте подходящие доказательства.
+            Выберите контракт и заранее проверьте подходящие исследования.
           </Typography>
         </div>
 
         <div className={styles.surface}>
           {contracts.length === 0 && <Typography tone="muted">{t('tender.contracts.empty')}</Typography>}
-          {!reservedContract && (
+          {!reservedContract && eligibleContracts.length === 0 && contracts.length > 0 && (
             <div className={styles.contractSelection}>
-              <NativeSelect
-                aria-label="Подходящий контракт"
-                value={selectedContractId ?? ''}
-                disabled={disabled || eligibleContracts.length === 0}
-                onChange={(event) => setSelectedContractId(event.target.value || null)}
-              >
-                <option value="">Выберите подходящий контракт</option>
-                {eligibleContracts.map((contract) => (
-                  <option key={contract.contractId} value={contract.contractId}>
-                    {contract.targetSignal
-                      ? `${t(signalLabelKeys[contract.targetSignal])} · ${t(`tender.contracts.kind.${contract.kind ?? 'light'}`)}`
-                      : contract.contractId}
-                  </option>
-                ))}
-              </NativeSelect>
-              {eligibleContracts.length > 0 ? (
-                <Button
-                  type="button"
-                  disabled={disabled || !selectedContractId}
-                  onClick={() => selectedContractId && void handleReserve(selectedContractId)}
-                >
-                  {t('tender.contracts.reserve')}
-                </Button>
-              ) : (
-                <Button type="button" variant="outline" disabled={disabled} onClick={() => void onSkip()}>
-                  Пропустить ход
-                </Button>
-              )}
+              <Button type="button" variant="outline" disabled={disabled} onClick={() => void onSkip()}>
+                Пропустить ход
+              </Button>
             </div>
           )}
           <div className={styles.contractGrid}>
             {contracts.map((contract) => {
               const kind = contract.kind ?? 'light'
-              const bid = bids[contract.contractId]
+              const bid = bids[contract.contractId] ?? { evidenceTestIds: [] }
               const isFinal = kind === 'final'
               const canResolve = !isFinal || round === 5
               const reservedByOther = Boolean(contract.reservedByPlayerId && contract.reservedByPlayerId !== playerId)
+              const reservedBySelf = contract.reservedByPlayerId === playerId
               const reservedByName = players.find((candidate) => candidate.playerId === contract.reservedByPlayerId)?.displayName
               const target = contract.targetSignal
+              const targetRole = contract.targetRole ?? 'source'
+              const targetKey = targetRole === 'source' ? 'sourceSignal' : 'receiverSignal'
+              const targetEvidence = ownJournal.filter((entry) => entry[targetKey] === target)
+              const primaryEvidence = targetEvidence.filter((entry) => entry.publicResult === contract.requiredPublicResult)
+              const secondaryResult = contract.requiredSecondaryPublicResult
+                ?? (contract.requiredPublicResult === 'reflection' ? 'attenuation' : 'reflection')
+              const secondaryEvidence = targetEvidence.filter((entry) => entry.publicResult === secondaryResult)
+              const selectablePrimaryEvidence = (kind === 'complex' || kind === 'final')
+                && secondaryEvidence.length === 0
+                ? primaryEvidence.filter((entry) => entry.protocol === 'continuous')
+                : primaryEvidence
+              const selectedPrimaryEvidence = primaryEvidence.find((entry) => entry.testId === bid.evidenceTestIds[0])
+              const requiresSecondaryEvidence = (kind === 'complex' || kind === 'final')
+                && Boolean(selectedPrimaryEvidence && selectedPrimaryEvidence.protocol !== 'continuous')
+              const fittingCertifications = certifications.filter((signal) => signal === target)
+              const hasSuitableResearch = kind === 'scientific'
+                ? fittingCertifications.length > 0
+                : kind === 'light'
+                  ? primaryEvidence.length > 0
+                  : primaryEvidence.some((entry) => entry.protocol === 'continuous')
+                    || (primaryEvidence.length > 0 && secondaryEvidence.length > 0)
+              const bidIsComplete = kind === 'scientific'
+                ? Boolean(bid.researchCertificationSignal)
+                : bid.evidenceTestIds.length > 0
+                  && (!requiresSecondaryEvidence || bid.evidenceTestIds.length === 2)
+              const canChooseResearch = Boolean(
+                (contract.eligibleForPlayer || reservedBySelf)
+                && !reservedByOther
+                && !hasSubmittedContract
+                && contract.bidOutcome === undefined,
+              )
               const contractStyle = {
                 '--contract-accent': kindAccents[kind],
                 ...(target ? { '--signal-accent': signalAccent(target) } : {}),
@@ -188,7 +175,8 @@ export function ContractsPanel({
                 <article
                   key={contract.contractId}
                   className={`${styles.contractCard} ${isFinal ? styles.finalContract : ''}`}
-                  data-active={selectedContract?.contractId === contract.contractId || undefined}
+                  data-active={(reservedBySelf || bids[contract.contractId] !== undefined) || undefined}
+                  data-contract-id={contract.contractId}
                   data-contract-kind={kind}
                   style={contractStyle}
                 >
@@ -229,19 +217,131 @@ export function ContractsPanel({
                           : contract.bidOutcome === 'failed'
                             ? 'Заявка отклонена'
                             : reservedByOther
-                              ? `Зарезервирован · ${reservedByName ?? 'игрок'}`
+                            ? `Зарезервирован · ${reservedByName ?? 'игрок'}`
+                            : reservedBySelf
+                              ? 'Зарезервирован · вами'
                               : isFinal && !canResolve ? 'Доступен в раунде 5' : 'Свободен'}
                       </Typography>
                     </span>
                   </div>
 
-                  {(bid || contract.bidOutcome !== undefined || reservedByOther) && (
+                  {canChooseResearch && hasSuitableResearch && (
+                    <div className={styles.contractResearch}>
+                      {kind === 'scientific' ? (
+                        <>
+                          <Typography variant="caption" tone="muted">
+                            Научная сертификация по целевому сигналу
+                          </Typography>
+                          <NativeSelect
+                            aria-label="Подходящая сертификация"
+                            value={bid.researchCertificationSignal ?? ''}
+                            onChange={(event) => setBids((previous) => ({
+                              ...previous,
+                              [contract.contractId]: {
+                                ...bid,
+                                researchCertificationSignal: event.target.value
+                                  ? event.target.value as SignalId
+                                  : undefined,
+                              },
+                            }))}
+                          >
+                            <option value="">Выберите сертификат</option>
+                            {fittingCertifications.map((signal) => (
+                              <option key={signal} value={signal}>{t(signalLabelKeys[signal])}</option>
+                            ))}
+                          </NativeSelect>
+                        </>
+                      ) : (
+                        <>
+                          <Typography variant="caption" tone="muted">
+                            Подходящее неиспользованное исследование
+                          </Typography>
+                          <NativeSelect
+                            aria-label="Подходящее исследование"
+                            value={bid.evidenceTestIds[0] ?? ''}
+                            onChange={(event) => {
+                              const testId = event.target.value
+                              const primary = primaryEvidence.find((entry) => entry.testId === testId)
+                              setBids((previous) => ({
+                                ...previous,
+                                [contract.contractId]: {
+                                  ...bid,
+                                  evidenceTestIds: testId
+                                    ? [
+                                      testId,
+                                      ...(primary?.protocol !== 'continuous' && bid.evidenceTestIds[1]
+                                        ? [bid.evidenceTestIds[1]]
+                                        : []),
+                                    ]
+                                    : [],
+                                },
+                              }))
+                            }}
+                          >
+                            <option value="">Выберите исследование</option>
+                            {selectablePrimaryEvidence.map((entry) => (
+                              <option key={entry.testId} value={entry.testId}>{evidenceLabel(entry)}</option>
+                            ))}
+                          </NativeSelect>
+
+                          {(kind === 'complex' || kind === 'final') && (
+                            <>
+                              <Typography variant="caption" tone="muted">
+                                Непрерывного опыта достаточно. Для импульсного выберите второй опыт.
+                              </Typography>
+                              <NativeSelect
+                                aria-label="Дополнительное исследование"
+                                value={bid.evidenceTestIds[1] ?? ''}
+                                disabled={!requiresSecondaryEvidence}
+                                onChange={(event) => {
+                                  const testId = event.target.value
+                                  const primaryId = bid.evidenceTestIds[0]
+                                  setBids((previous) => ({
+                                    ...previous,
+                                    [contract.contractId]: {
+                                      ...bid,
+                                      evidenceTestIds: primaryId
+                                        ? [primaryId, ...(testId ? [testId] : [])]
+                                        : [],
+                                    },
+                                  }))
+                                }}
+                              >
+                                <option value="">Выберите второй опыт</option>
+                                {secondaryEvidence.map((entry) => (
+                                  <option key={entry.testId} value={entry.testId}>{evidenceLabel(entry)}</option>
+                                ))}
+                              </NativeSelect>
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        aria-label={`Подтвердить контракт ${contract.contractId}`}
+                        disabled={disabled || !bidIsComplete}
+                        onClick={() => void handleConfirmContract(contract.contractId, bid, reservedBySelf)}
+                      >
+                        <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={1.7} aria-hidden="true" />
+                        Подтвердить контракт
+                      </Button>
+                    </div>
+                  )}
+
+                  {!hasSuitableResearch
+                    && !reservedByOther
+                    && contract.bidOutcome === undefined
+                    && (!isFinal || canResolve) && (
+                    <Typography variant="bodySm" className={styles.noSuitableEvidence}>
+                      Для этого контракта нет подходящих исследований.
+                    </Typography>
+                  )}
+
+                  {contract.bidOutcome !== undefined && (
                     <Typography variant="caption" className={styles.reservedHint}>
-                      {contract.bidOutcome === 'awarded'
-                        ? 'Контракт выполнен'
-                        : contract.bidOutcome === 'failed'
-                          ? 'Заявка завершена'
-                          : 'Зафиксирован · доказательства справа'}
+                      {contract.bidOutcome === 'awarded' ? 'Контракт выполнен' : 'Заявка завершена'}
                     </Typography>
                   )}
                 </article>
@@ -255,103 +355,12 @@ export function ContractsPanel({
           <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
           <Typography variant="bodySm">Резервирование нельзя отменить или переключить на другой контракт.</Typography>
         </div>
-      </div>
-
-      <aside className={`${styles.surface} ${styles.contractEvidence}`}>
-        <div className={styles.sectionHeader}>
-          <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Ваши доказательства</Typography>
-          <Typography as="span" variant="caption" className={styles.sectionMeta}>Видите только вы</Typography>
-        </div>
-
-        {!selectedContract ? (
-          <Typography variant="bodySm" tone="muted">Выберите контракт, чтобы проверить доказательства.</Typography>
-        ) : selectedContract.kind === 'scientific' ? (
-          <div className={styles.evidencePanel}>
-            <Typography variant="caption" tone="muted">Личные научные сертификации</Typography>
-            {certifications.length === 0 && <Typography variant="bodySm" tone="muted">Нет доступных сертификаций.</Typography>}
-            {certifications.map((signal) => {
-              const fits = signal === selectedContract.targetSignal
-              return (
-                <div key={signal} className={styles.evidenceRow} data-fits={fits || undefined}>
-                  <SignalGlyph signal={signal} className={styles.signalGlyph} />
-                  <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
-                  <Typography as="span" variant="caption">{fits ? 'Подходит' : 'Не подходит'}</Typography>
-                </div>
-              )
-            })}
-            {selectedBid && (
-              <NativeSelect
-                value={selectedBid.researchCertificationSignal ?? ''}
-                onChange={(event) => setBids((previous) => ({
-                  ...previous,
-                  [selectedContract.contractId]: {
-                    ...selectedBid,
-                    researchCertificationSignal: event.target.value ? event.target.value as SignalId : undefined,
-                  },
-                }))}
-              >
-                <option value="">Выберите сертификат</option>
-                {certifications.filter((signal) => signal === selectedContract.targetSignal).map((signal) => (
-                  <option key={signal} value={signal}>{t(signalLabelKeys[signal])}</option>
-                ))}
-              </NativeSelect>
-            )}
-          </div>
-        ) : (
-          <div className={styles.evidencePanel}>
-            <Typography variant="caption" tone="muted">Неиспользованные опыты</Typography>
-            {ownJournal.length === 0 && <Typography variant="bodySm" tone="muted">В журнале пока нет ваших опытов.</Typography>}
-            {ownJournal.map((entry) => {
-              const fits = evidenceFits(entry, selectedContract)
-              const selected = selectedBid?.evidenceTestIds.includes(entry.testId) ?? false
-              return (
-                <button
-                  key={entry.testId}
-                  type="button"
-                  className={styles.evidenceRow}
-                  data-evidence
-                  data-fits={fits || undefined}
-                  data-selected={selected || undefined}
-                  disabled={!selectedBid}
-                  onClick={() => toggleEvidence(selectedContract.contractId, entry.testId)}
-                >
-                  <SignalGlyph signal={entry.sourceSignal} className={styles.signalGlyph} />
-                  <span>
-                    <Typography as="strong" variant="bodySmMedium">
-                      {t(signalLabelKeys[entry.sourceSignal])} → {t(signalLabelKeys[entry.receiverSignal])}
-                    </Typography>
-                    <Typography as="span" variant="caption" tone="muted">
-                      {t(`tender.result.${entry.publicResult}`)}
-                    </Typography>
-                  </span>
-                  <Typography as="span" variant="caption">{fits ? 'Подходит' : 'Не подходит'}</Typography>
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        {selectedBid && selectedContract && (
-          <Button
-            type="button"
-            size="sm"
-            aria-label={t('tender.contracts.submitAria', { id: selectedContract.contractId })}
-            disabled={disabled || (selectedContract.kind === 'scientific'
-              ? !selectedBid.researchCertificationSignal
-              : selectedBid.evidenceTestIds.length === 0)}
-            onClick={() => void handleBid(selectedContract.contractId, selectedBid)}
-          >
-            <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={1.7} aria-hidden="true" />
-            {t('tender.contracts.submit')}
-          </Button>
-        )}
-
         <div className={styles.info}>
           <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-          <Typography variant="bodySm">Успех обычного контракта: +1 Corporate Trust, без Бюджета.</Typography>
+          <Typography variant="bodySm">Успех обычного контракта: +1 Корпоративное доверие, без Бюджета.</Typography>
           <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} aria-hidden="true" />
         </div>
-      </aside>
+      </div>
     </section>
   )
 }

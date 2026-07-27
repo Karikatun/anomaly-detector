@@ -202,6 +202,7 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           maxPower={effective}
           playerId={auth.user?.id ?? ''}
           players={view.players}
+          privateUsedContractEvidenceTestIds={view.privateUsedContractEvidenceTestIds ?? []}
           round={view.round}
           disabled={disabled || isWaitingForTurn}
           error={error}

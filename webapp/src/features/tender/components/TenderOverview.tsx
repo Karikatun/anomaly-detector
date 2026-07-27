@@ -21,11 +21,6 @@ const laboratoryResultLabels: Record<string, string> = {
   unstable_collapse: 'Нестабильный срыв',
 }
 
-const protocolLabels: Record<string, string> = {
-  impulse: 'Импульсный',
-  continuous: 'Непрерывный',
-}
-
 const verificationLabels: Record<string, string> = {
   standard: 'Стандартная проверка',
   extended: 'Расширенная проверка',
@@ -115,7 +110,7 @@ export function TenderLaboratoryJournal({
               {`${t(signalLabelKeys[latest.sourceSignal])} → ${t(signalLabelKeys[latest.receiverSignal])}: ${laboratoryResultLabels[latest.publicResult] ?? latest.publicResult}`}
             </Typography>
             <Typography as="span" variant="caption" tone="muted">
-              {`${protocolLabels[latest.protocol] ?? latest.protocol} · ${playerName ?? 'Игрок'}`}
+              {playerName ?? 'Игрок'}
             </Typography>
           </span>
         </div>
@@ -176,7 +171,6 @@ export function TenderEvidence({ data }: { data: EvidenceData }) {
                 <Typography variant="bodySmMedium">
                   {laboratoryResultLabels[result.publicResult] ?? result.publicResult}
                 </Typography>
-                <Typography variant="caption" tone="muted">{protocolLabels[result.protocol] ?? result.protocol}</Typography>
               </div>
             ))}
           </div>

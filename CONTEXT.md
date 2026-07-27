@@ -48,7 +48,7 @@ _Avoid_: reputation, budget, score multiplier
 A player's spendable research funding. It pays for early Access Slots and precise work, and is replenished by grants, contracts, and slot compensation.
 _Avoid_: rating, points, currency
 
-**Corporate Trust**:
+**Корпоративное доверие**:
 A player's standing with the corporation, which governs eligibility for high-value Contracts. It is not a victory score or a payment resource.
 _Avoid_: reputation, rating, budget
 

@@ -159,23 +159,25 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
 
   return (
     <div className={styles.panel}>
-      {saveStatus.state === 'saving' && (
-        <Typography role="status" variant="control" tone="muted">
-          Сохраняем рабочую модель…
-        </Typography>
-      )}
-      {saveStatus.state === 'error' && (
-        <div className="flex flex-wrap items-center gap-3">
-          <Typography role="alert" variant="bodySm" tone="destructive">
-            {saveStatus.message}
+      <div className={styles.saveStatus}>
+        {saveStatus.state === 'saving' && (
+          <Typography role="status" variant="control" tone="muted">
+            Сохраняем рабочую модель…
           </Typography>
-          <Button type="button" variant="outline" size="sm" onClick={() => void draftController.retry()}>
-            Повторить сохранение
-          </Button>
-        </div>
-      )}
+        )}
+        {saveStatus.state === 'error' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <Typography role="alert" variant="bodySm" tone="destructive">
+              {saveStatus.message}
+            </Typography>
+            <Button type="button" variant="outline" size="sm" onClick={() => void draftController.retry()}>
+              Повторить сохранение
+            </Button>
+          </div>
+        )}
+      </div>
 
-      <div className={styles.table}>
+      <div className={styles.table} data-testid="working-model-table">
         <div className={styles.tableHeader} aria-hidden="true">
           <Typography as="span" variant="caption">Сигнал</Typography>
           <Typography as="span" variant="caption">Тип поля — гипотеза</Typography>

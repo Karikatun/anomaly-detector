@@ -59,3 +59,29 @@ test('Working Model remains editable while the phase action is waiting for anoth
   const thesisSelect = html.match(/<select[^>]*aria-label="Сигнал для тезиса"[^>]*>/)?.[0]
   expect(thesisSelect).toContain('disabled')
 })
+
+test('Model Analysis renders every public Thesis in its history', () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <ModelAnalysisPanel
+        dueAt="2026-07-25T12:01:30.000Z"
+        knownSignals={['aster']}
+        maxTheses={1}
+        model={{ signals: {} }}
+        privateMeasurements={[]}
+        publicLaboratoryResults={[]}
+        publicTheses={[
+          { correct: true, fieldType: 'inertial', playerId: 'player-a', polarity: 'positive', signalId: 'aster', verification: 'standard' },
+          { correct: false, fieldType: 'phase', playerId: 'player-a', polarity: 'positive', signalId: 'aster', verification: 'standard' },
+          { correct: false, fieldType: 'electromagnetic', playerId: 'player-a', polarity: 'positive', signalId: 'aster', verification: 'standard' },
+          { correct: true, fieldType: 'inertial', playerId: 'player-a', polarity: 'negative', signalId: 'aster', verification: 'extended' },
+        ]}
+        serverTime="2026-07-25T12:00:00.000Z"
+        onConfirmThesis={async () => undefined}
+        onSaveWorkingModel={async () => undefined}
+      />
+    </I18nProvider>,
+  )
+
+  expect(html.match(/data-public-thesis="true"/g)).toHaveLength(4)
+})

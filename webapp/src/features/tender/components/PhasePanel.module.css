@@ -448,6 +448,7 @@
 .laboratoryActions {
   display: grid;
   min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: .55rem;
   margin-top: .6rem;
 }
@@ -670,6 +671,12 @@
   border-top: 1px solid rgba(72, 128, 164, .22);
 }
 
+.analysisHistory .journalList {
+  max-height: 18rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 .analysisHistory .sectionHeader {
   margin-bottom: 0;
 }
@@ -706,8 +713,7 @@
   display: none;
 }
 
-.contractsMain,
-.contractEvidence {
+.contractsMain {
   display: grid;
   min-width: 0;
   align-content: start;
@@ -727,9 +733,17 @@
   margin-bottom: .65rem;
 }
 
+.contractSelection > button {
+  grid-column: 2;
+}
+
 @media (max-width: 36rem) {
   .contractSelection {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .contractSelection > button {
+    grid-column: 1;
   }
 }
 
@@ -744,7 +758,7 @@
   background:
     radial-gradient(circle at 0 0, color-mix(in srgb, var(--contract-accent) 9%, transparent), transparent 42%),
     rgba(2, 16, 29, .9);
-  cursor: pointer;
+  cursor: default;
 }
 
 .contractCard[data-active] {
@@ -809,60 +823,33 @@
   color: rgba(194, 214, 227, .46);
 }
 
-.evidencePanel {
+.contractResearch {
   display: grid;
   gap: .4rem;
   padding-top: .5rem;
   border-top: 1px solid rgba(72, 128, 164, .22);
 }
 
+.contractResearch > [data-slot='native-select-wrapper'] {
+  width: 100%;
+}
+
+.contractResearch > button {
+  width: 100%;
+  margin-top: .1rem;
+}
+
+.noSuitableEvidence {
+  padding: .6rem;
+  border: 1px solid color-mix(in srgb, var(--contract-accent) 58%, transparent);
+  border-radius: .45rem;
+  color: var(--contract-accent);
+  background: color-mix(in srgb, var(--contract-accent) 8%, transparent);
+}
+
 .reservedHint {
   color: var(--contract-accent);
   text-align: center;
-}
-
-.evidenceRow {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: .45rem;
-  padding: .45rem;
-  border: 1px solid rgba(72, 128, 164, .28);
-  border-radius: .45rem;
-  color: rgba(218, 233, 242, .62);
-  background: rgba(3, 18, 31, .72);
-  text-align: left;
-}
-
-.evidenceRow .signalGlyph {
-  width: 2rem;
-  height: 2rem;
-}
-
-.evidenceRow > span {
-  display: grid;
-  min-width: 0;
-}
-
-.evidenceRow > :last-child {
-  font-size: .58rem;
-}
-
-.evidenceRow[data-fits] {
-  border-color: color-mix(in srgb, var(--success) 48%, transparent);
-  color: var(--success);
-}
-
-.evidenceRow[data-selected] {
-  border-color: var(--primary);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 40%, transparent);
-}
-
-.evidenceRow:disabled {
-  cursor: default;
-  opacity: .58;
 }
 
 .finalContract {
@@ -1181,10 +1168,6 @@
     grid-template-columns: minmax(16rem, .65fr) minmax(22rem, 1fr);
   }
 
-  .laboratoryActions {
-    grid-template-columns: minmax(0, .75fr) minmax(17rem, 1.25fr);
-  }
-
   .signalGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: .7rem;
@@ -1354,7 +1337,7 @@
 
 @media (min-width: 75rem) {
   .contractsWorkspace {
-    grid-template-columns: minmax(10rem, .26fr) minmax(32rem, 1fr) minmax(17rem, .38fr);
+    grid-template-columns: minmax(10rem, .26fr) minmax(32rem, 1fr);
     gap: .85rem;
   }
 
@@ -1362,12 +1345,6 @@
     display: block;
   }
 
-  .contractEvidence {
-    position: sticky;
-    top: 6rem;
-    max-height: calc(100svh - 7rem);
-    overflow-y: auto;
-  }
 }
 
 @media (min-width: 64rem) and (max-width: 74.99rem) {

@@ -186,7 +186,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Activate Corporate Review after a wrong Thesis and charge Budget for later Theses in the same round.
    - [x] Award and privately expose spendable Research Certifications for correct Theses.
    - [x] Implement player-owned Working Model updates.
-7. [x] Add the seeded Contract deck: player-count-plus-one exclusive choices, evidence assessment, Rating rewards, and Corporate Trust.
+7. [x] Add the seeded Contract deck: player-count-plus-one exclusive choices, evidence assessment, Rating rewards, and trust points.
    - [x] Create `players + 1` public Contracts for the round: one Scientific, one Complex, and remaining Light.
    - [x] Reserve Contracts publicly in Access Slot order.
    - [x] Reject reservation of already reserved Contracts.
@@ -196,7 +196,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Add starting Budget and Access Slot budget cost/Remote compensation.
    - [x] Add Access Slot Budget compensation for slot 4 and Sample compensation for slots 5 and 6.
    - [x] Start with 2 Budget and no Samples or Analytical Reports.
-   - [x] Add Rating rewards and Corporate Trust without restoring the obsolete requested-funding payout.
+   - [x] Add Rating rewards and trust points without restoring the obsolete requested-funding payout.
 8. [x] Add Rating calculation, Final Contract, per-property/per-Signal Scientific Model scoring, complete-model bonus, and deterministic tie-breaks.
 9. [x] Add conservative server defaults for missing players: no beneficial slot choice, reserve Power, and skipped unresolved target.
 

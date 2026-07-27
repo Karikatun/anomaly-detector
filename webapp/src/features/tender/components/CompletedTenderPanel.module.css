@@ -216,6 +216,34 @@
   line-height: 1.1;
 }
 
+@media (max-width: 30rem) {
+  .signalCard {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .signalCopy {
+    display: contents;
+  }
+
+  .signalCopy > strong {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .signalProperties {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .signalProperties > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
 .ranking {
   display: grid;
   min-width: 0;
