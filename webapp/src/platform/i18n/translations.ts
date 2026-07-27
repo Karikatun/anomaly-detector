@@ -166,9 +166,9 @@ const ru = {
 
   // Room lobby
   'lobby.title': 'Лобби',
-  'lobby.room.id': 'КОД:',
-  'lobby.copyId': 'Скопировать код комнаты',
-  'lobby.copied': 'Код скопирован',
+  'lobby.room.id': 'ID:',
+  'lobby.copyId': 'Скопировать ID комнаты',
+  'lobby.copied': 'ID скопирован',
   'lobby.players': 'Игроки',
   'lobby.player.label': 'Игрок {seat}',
   'lobby.player.host': 'Лидер экспедиции',
