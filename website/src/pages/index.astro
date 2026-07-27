@@ -1,6 +1,6 @@
 ---
-const title = 'website'
-const description = 'Публичная SEO-поверхность проекта: лендинги, контент и индексируемые каталоги.'
+const title = 'Anomaly Detector'
+const description = 'Соревновательная браузерная игра о научной дедукции и исследовании аномалии.'
 const publicWebsiteUrl = import.meta.env.PUBLIC_WEBSITE_URL
 const canonicalUrl = publicWebsiteUrl
 	? new URL(Astro.url.pathname, publicWebsiteUrl).toString()
@@ -11,7 +11,11 @@ const canonicalUrl = publicWebsiteUrl
 	<head>
 		<meta charset="utf-8" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
+		<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+		<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#8b5cf6" />
+		<link rel="manifest" href="/site.webmanifest" />
+		<meta name="theme-color" content="#02050d" />
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
 		<title>{title}</title>
@@ -26,12 +30,19 @@ const canonicalUrl = publicWebsiteUrl
 	<body>
 		<main>
 			<section class="hero" aria-labelledby="page-title">
-				<p class="eyebrow">Astro workspace</p>
-				<h1 id="page-title">website</h1>
+				<img
+					class="brand-icon"
+					src="/favicon.svg"
+					width="112"
+					height="112"
+					alt=""
+					aria-hidden="true"
+				/>
+				<p class="eyebrow">Научная дедукция · 2–4 игрока</p>
+				<h1 id="page-title">Anomaly Detector</h1>
 				<p class="summary">
-					Публичная SSG/SSR-поверхность проекта на Astro: лендинги, контентные
-					сайты и маркетплейс. Страницы статические по умолчанию, динамические
-					роуты переводятся в SSR через prerender = false.
+					Исследуйте неизвестную аномалию, проверяйте гипотезы и находите
+					единственно верное объяснение раньше соперников.
 				</p>
 			</section>
 		</main>
@@ -40,18 +51,21 @@ const canonicalUrl = publicWebsiteUrl
 
 <style>
 	:root {
-		color-scheme: light;
+		color-scheme: dark;
 		font-family:
 			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
 			sans-serif;
-		background: #f6f8fb;
-		color: #14221f;
+		background: #02050d;
+		color: #f8fafc;
 	}
 
 	body {
 		margin: 0;
 		min-height: 100vh;
-		background: #f6f8fb;
+		background:
+			radial-gradient(circle at 22% 38%, rgb(107 33 168 / 24%), transparent 32rem),
+			radial-gradient(circle at 78% 70%, rgb(14 116 144 / 16%), transparent 30rem),
+			#02050d;
 	}
 
 	main {
@@ -65,20 +79,28 @@ const canonicalUrl = publicWebsiteUrl
 		max-width: 720px;
 	}
 
+	.brand-icon {
+		display: block;
+		width: 7rem;
+		height: 7rem;
+		margin-bottom: 2rem;
+		filter: drop-shadow(0 0 2rem rgb(168 85 247 / 30%));
+	}
+
 	.eyebrow {
 		margin: 0 0 1rem;
 		font-size: 0.8rem;
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: #4c6f5b;
+		color: #c4b5fd;
 	}
 
 	h1 {
 		margin: 0;
-		font-size: 4rem;
-		line-height: 0.92;
-		letter-spacing: 0;
+		font-size: clamp(3.25rem, 10vw, 7rem);
+		line-height: 0.9;
+		letter-spacing: -0.055em;
 	}
 
 	.summary {
@@ -86,16 +108,12 @@ const canonicalUrl = publicWebsiteUrl
 		max-width: 580px;
 		font-size: 1.125rem;
 		line-height: 1.55;
-		color: #3e4a42;
+		color: #aab5c5;
 	}
 
 	@media (min-width: 720px) {
 		main {
 			padding: 5rem;
-		}
-
-		h1 {
-			font-size: 7rem;
 		}
 
 		.summary {
@@ -108,8 +126,5 @@ const canonicalUrl = publicWebsiteUrl
 			padding: 6rem;
 		}
 
-		h1 {
-			font-size: 9rem;
-		}
 	}
 </style>

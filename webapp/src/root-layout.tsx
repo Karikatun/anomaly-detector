@@ -20,9 +20,10 @@ export function RootLayout() {
       {auth.isAuthenticated && pathname !== '/' && !isInTender && !isInRoomLobby && !isInMatchHistory && !isInProfile && (
         <header className="border-b bg-background/95 backdrop-blur">
           <div className="mx-auto flex min-h-16 w-full min-w-0 max-w-6xl flex-wrap items-center gap-3 px-5 py-3">
-            <Typography asChild variant="h6">
-              <Link to="/">{t('app.logo')}</Link>
-            </Typography>
+            <Link to="/" className="flex items-center gap-2">
+              <img src="/favicon.svg" width="30" height="30" alt="" aria-hidden="true" />
+              <Typography as="span" variant="h6">{t('app.logo')}</Typography>
+            </Link>
             <nav className="ml-auto flex items-center gap-2" aria-label={t('nav.primary')}>
               <Button type="button" variant="ghost" size="sm" asChild>
                 <Link to="/">{t('nav.rooms')}</Link>
