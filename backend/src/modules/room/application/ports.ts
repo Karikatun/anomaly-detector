@@ -1,8 +1,13 @@
-import type { RoomView } from '@anomaly-detector/contracts'
+import type { RoomMember, RoomView } from '@anomaly-detector/contracts'
 
-export type RoomRecord = Omit<RoomView, 'joinCode' | 'roomId' | 'serverTime'> & {
+export type RoomRecord = Omit<RoomView, 'joinCode' | 'members' | 'roomId' | 'serverTime'> & {
   id: string
   joinCode?: string | null
+  members: Array<Omit<RoomMember, 'displayName'>>
+}
+
+export type RoomMemberIdentityReader = {
+  readDisplayNames(userIds: string[]): Promise<Map<string, string>>
 }
 
 export type RoomRepository = {

@@ -172,7 +172,7 @@ function RoomLobbyContent() {
                       </Typography>
                       <div className={styles.playerCopy}>
                         <Typography className={styles.playerName}>
-                          {member ? t('lobby.player.label', { seat }) : t('lobby.player.waiting')}
+                          {member?.displayName ?? t('lobby.player.waiting')}
                         </Typography>
                         {isPlayerHost ? (
                           <Typography as="span" variant="control" className={styles.hostLabel}>

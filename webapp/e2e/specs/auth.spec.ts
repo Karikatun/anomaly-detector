@@ -96,7 +96,9 @@ test('registers, restores the browser session, opens the profile, and logs out',
     )
     .toBe(true)
 
-  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await page
+    .getByRole('link', { name: 'Открыть профиль пользователя Пользователь E2E' })
+    .click()
   await expect(page.getByRole('heading', { name: 'ПРОФИЛЬ', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Пользователь E2E' })).toBeVisible()
   await expect(page.getByText(login)).toHaveCount(0)

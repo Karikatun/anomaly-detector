@@ -1,4 +1,4 @@
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import {
   Add01Icon,
   File01Icon,
@@ -74,10 +74,16 @@ function AuthenticatedHome({
         <header className={styles.header}>
           <Typography variant="h1" className={styles.title}>ГЛАВНОЕ МЕНЮ</Typography>
           <div className={styles.account}>
-            <div className={styles.avatar} aria-hidden="true"><span className={styles.avatarCore} /></div>
-            <div className={styles.identity}>
-              <Typography variant="bodySmMedium" className={styles.name}>{displayName}</Typography>
-            </div>
+            <Link
+              to="/profile"
+              className={styles.profileLink}
+              aria-label={`Открыть профиль пользователя ${displayName}`}
+            >
+              <div className={styles.avatar} aria-hidden="true"><span className={styles.avatarCore} /></div>
+              <div className={styles.identity}>
+                <Typography variant="bodySmMedium" className={styles.name}>{displayName}</Typography>
+              </div>
+            </Link>
             <Button
               type="button"
               variant="ghost"

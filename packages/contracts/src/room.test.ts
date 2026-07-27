@@ -14,12 +14,26 @@ test('Room contracts accept a waiting private room for two to four players', () 
   expect(roomViewSchema.parse({
     capacity: 3,
     hostId: '019f8099-7e26-7760-ad08-66d1d66b2717',
-    members: [{ ready: false, seat: 1, userId: '019f8099-7e26-7760-ad08-66d1d66b2718' }],
+    members: [{
+      displayName: 'Исследователь',
+      ready: false,
+      seat: 1,
+      userId: '019f8099-7e26-7760-ad08-66d1d66b2718',
+    }],
     joinCode: '7K9M2NP4RX',
     roomId: '019f8099-7e26-7760-ad08-66d1d66b2719',
     serverTime: '2026-07-26T12:00:00.000Z',
     status: 'waiting',
   })).toMatchObject({ capacity: 3, serverTime: '2026-07-26T12:00:00.000Z', status: 'waiting' })
+  expect(() => roomViewSchema.parse({
+    capacity: 2,
+    hostId: '019f8099-7e26-7760-ad08-66d1d66b2717',
+    joinCode: '7K9M2NP4RX',
+    members: [{ ready: false, seat: 1, userId: '019f8099-7e26-7760-ad08-66d1d66b2718' }],
+    roomId: '019f8099-7e26-7760-ad08-66d1d66b2719',
+    serverTime: '2026-07-26T12:00:00.000Z',
+    status: 'waiting',
+  })).toThrow()
   expect(setRoomReadyRequestSchema.parse({ ready: true })).toEqual({ ready: true })
 })
 

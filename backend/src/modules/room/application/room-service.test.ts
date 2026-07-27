@@ -5,6 +5,9 @@ import { RoomFailure } from '../domain/errors'
 
 test('creates a waiting private room with its host in the first seat', async () => {
   const service = new TenderRoomService({
+    memberIdentityReader: {
+      readDisplayNames: async () => new Map([['user-1', 'Хост']]),
+    },
     repository: {
       create: async (input) => ({
         capacity: input.capacity,
@@ -25,7 +28,7 @@ test('creates a waiting private room with its host in the first seat', async () 
     capacity: 3,
     hostId: 'user-1',
     joinCode: null,
-    members: [{ ready: false, seat: 1, userId: 'user-1' }],
+    members: [{ displayName: 'Хост', ready: false, seat: 1, userId: 'user-1' }],
     roomId: 'room-1',
     serverTime: expect.any(String),
     status: 'waiting',
@@ -56,7 +59,10 @@ test('lists started matches for the requesting player', async () => {
     capacity: 2,
     hostId: 'user-1',
     joinCode: null,
-    members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
+    members: [
+      { displayName: 'Исследователь', ready: true, seat: 1, userId: 'user-1' },
+      { displayName: 'Исследователь', ready: true, seat: 2, userId: 'user-2' },
+    ],
     roomId: 'room-1',
     serverTime: expect.any(String),
     status: 'started',
@@ -193,7 +199,10 @@ test('schedules a full room start and exposes its server start time', async () =
     capacity: 2,
     hostId: 'user-1',
     joinCode: null,
-    members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
+    members: [
+      { displayName: 'Исследователь', ready: true, seat: 1, userId: 'user-1' },
+      { displayName: 'Исследователь', ready: true, seat: 2, userId: 'user-2' },
+    ],
     roomId: 'room-1',
     serverTime: expect.any(String),
     status: 'starting',
@@ -225,7 +234,10 @@ test('lets the host cancel a scheduled room start', async () => {
     capacity: 2,
     hostId: 'user-1',
     joinCode: null,
-    members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
+    members: [
+      { displayName: 'Исследователь', ready: true, seat: 1, userId: 'user-1' },
+      { displayName: 'Исследователь', ready: true, seat: 2, userId: 'user-2' },
+    ],
     roomId: 'room-1',
     serverTime: expect.any(String),
     status: 'waiting',
