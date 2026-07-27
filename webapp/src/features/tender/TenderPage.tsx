@@ -1,6 +1,6 @@
 import { Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useNavigate, useParams } from '@tanstack/react-router'
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
@@ -206,6 +206,7 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           disabled={disabled || isWaitingForTurn}
           error={error}
           onReserve={(contractId) => onCommand({ type: 'reserve-contract', contractId })}
+          onSkip={() => onCommand({ type: 'skip-contract' })}
           onBid={(contractId, bid) =>
             onCommand({ type: 'submit-contract-bid', contractId, ...bid })
           }
@@ -218,6 +219,11 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
     case 'final-scientific-model': {
       return withWaitingState(
         <FinalScientificModelPanel
+          evidence={{
+            privateMeasurements: view.privateMeasurements,
+            publicLaboratoryResults: view.publicLaboratoryResults,
+            publicTheses: view.publicTheses,
+          }}
           disabled={disabled || isWaitingForTurn}
           error={error}
           onConfirm={(scientificModel) => onCommand({ type: 'submit-scientific-model', scientificModel })}
@@ -258,6 +264,7 @@ function TenderContent() {
   const auth = useAuth()
   const { t } = useI18n()
   const navigate = useNavigate()
+  const tenderSearch = useSearch({ from: '/tenders/$tenderId' })
   const queryClient = useQueryClient()
 
   const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
@@ -336,7 +343,7 @@ function TenderContent() {
   )
   const leaveMatch = useCallback(async () => {
     if (tenderView?.phase === 'complete') {
-      await navigate({ to: '/' })
+      await navigate({ to: tenderSearch.from === 'matches' ? '/app' : '/' })
       return
     }
     try {
@@ -349,7 +356,7 @@ function TenderContent() {
     } catch {
       // The shared command error remains visible; stay in the match so the player can retry.
     }
-  }, [handleCommand, navigate, queryClient, tenderView?.phase])
+  }, [handleCommand, navigate, queryClient, tenderSearch.from, tenderView?.phase])
 
   if (error && !tenderView) {
     return (

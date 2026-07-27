@@ -3,6 +3,8 @@ import { describe, expect, test } from 'bun:test'
 import { createApp } from '../../../app'
 import type { DbClient } from '../../../db'
 import type { AppEnv } from '../../../env'
+import { AuthFailure } from '../domain/errors'
+import { oauthCallbackErrorCode } from './routes'
 
 const env: AppEnv = {
   PORT: 3000,
@@ -28,6 +30,14 @@ const env: AppEnv = {
 }
 
 describe('auth routes', () => {
+  test('uses a stable callback code when OAuth registration needs legal consent', () => {
+    expect(oauthCallbackErrorCode(new AuthFailure(
+      'oauth_registration_consent_required',
+      'localized message must not become a client contract',
+    ))).toBe('oauth_registration_consent_required')
+    expect(oauthCallbackErrorCode(new Error('provider failed'))).toBe('oauth_failed')
+  })
+
   test('limits auth request bodies before validation or password work', async () => {
     const app = createApp({ env: { ...env, AUTH_BODY_LIMIT_BYTES: 32 }, prisma: {} as DbClient })
     const response = await app.request('/api/auth/register', {

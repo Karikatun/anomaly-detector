@@ -49,7 +49,7 @@ function RoomLobbyContent() {
 
   useEffect(() => {
     if (currentRoom?.status === 'started' && currentRoom.tenderId) {
-      void navigate({ to: '/tenders/$tenderId', params: { tenderId: currentRoom.tenderId } })
+      void navigate({ to: '/tenders/$tenderId', params: { tenderId: currentRoom.tenderId }, search: { from: undefined } })
     }
   }, [currentRoom, navigate])
 

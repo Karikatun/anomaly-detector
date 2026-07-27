@@ -130,6 +130,34 @@ export function createTenderModule({
     .filter((player) => !tender.finalScientificModelCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
+  const contractIsEligibleForPlayer = (
+    tender: StoredTender,
+    playerId: string,
+    contract: StoredTender['publicContracts'][number],
+  ) => {
+    if (contract.reservedByPlayerId || contract.bidOutcome !== undefined) return false
+    const isFinal = contract.contractId === finalContractId || contract.kind === 'final'
+    const kind = contract.kind ?? (isFinal ? 'final' : 'light')
+    if (isFinal && (tender.round !== 5 || (tender.corporateTrustByPlayer[playerId] ?? 0) < 2)) return false
+    if (kind === 'scientific') {
+      return (tender.researchCertificationsByPlayer[playerId] ?? []).includes(contract.targetSignal!)
+    }
+    const role = contract.targetRole ?? 'source'
+    const availableEvidence = tender.publicScientificJournal.filter((entry) =>
+      entry.playerId === playerId
+      && !tender.usedContractEvidenceTestIds.includes(entry.testId)
+      && entry[role === 'source' ? 'sourceSignal' : 'receiverSignal'] === contract.targetSignal,
+    )
+    const matchesPrimary = (entry: (typeof availableEvidence)[number]) =>
+      entry.publicResult === contract.requiredPublicResult
+    if (kind === 'light') return availableEvidence.some(matchesPrimary)
+    const secondary = contract.requiredSecondaryPublicResult
+      ?? (contract.requiredPublicResult === 'reflection' ? 'attenuation' : 'reflection')
+    return availableEvidence.some((entry) => entry.protocol === 'continuous' && matchesPrimary(entry))
+      || availableEvidence.some(matchesPrimary)
+        && availableEvidence.some((entry) => entry.publicResult === secondary)
+  }
+
   const activePlayerIdForView = (tender: StoredTender) => {
     switch (tender.phase) {
       case 'reconnaissance': return nextReconnaissancePlayer(tender)?.id
@@ -646,7 +674,13 @@ export function createTenderModule({
         const alreadyReservedContract = tender.publicContracts.some((candidate) => candidate.reservedByPlayerId === player.id)
           || tender.publicFinalContract.reservedByPlayerId === player.id
         const canReserveFinalContract = tender.round === 5 && (tender.corporateTrustByPlayer[player.id] ?? 0) >= 2
-        if (!contract || contract.reservedByPlayerId || alreadyReservedContract || expectedPlayer?.id !== player.id || (isFinalContract && !canReserveFinalContract)) {
+        if (
+          !contract
+          || contract.reservedByPlayerId
+          || alreadyReservedContract
+          || expectedPlayer?.id !== player.id
+          || (isFinalContract && !canReserveFinalContract)
+        ) {
           throw new TenderFailure('invalid_tender_state', 'Contract reservation is not available to this Player')
         }
         const publicContracts = tender.publicContracts.map((candidate) => candidate.contractId === command.contractId
@@ -664,6 +698,36 @@ export function createTenderModule({
           command,
           commandFingerprint,
           nextTender: { ...nextTender, dueAt: tender.dueAt, phase: 'contracts' },
+          tender,
+        })
+      }
+
+      if (command.type === 'skip-contract') {
+        if (tender.phase !== 'contracts' || nextContractsPlayer(tender)?.id !== player.id) {
+          throw new TenderFailure('invalid_tender_state', 'Contract skip is not available to this Player')
+        }
+        const candidates = [...tender.publicContracts, tender.publicFinalContract]
+        const alreadyReserved = candidates.some((contract) => contract.reservedByPlayerId === player.id)
+        if (alreadyReserved || candidates.some((contract) => contractIsEligibleForPlayer(tender, player.id, contract))) {
+          throw new TenderFailure('invalid_tender_state', 'An eligible Contract is available to this Player')
+        }
+        const nextTender = {
+          ...tender,
+          contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [player.id]: true },
+        }
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'contract_skipped_no_eligible_contract',
+            payload: { playerId: player.id },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: (() => {
+            const advancedTender = advanceAfterContracts(nextTender)
+            return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, now()) }
+          })(),
           tender,
         })
       }
@@ -845,8 +909,14 @@ export function createTenderModule({
         knownSignals: tender.knownSignals,
         corporateReviewActive: tender.corporateReviewActive,
         hasLeft: tender.departedPlayerIds.includes(playerId),
-        publicContracts: tender.publicContracts,
-        publicFinalContract: tender.publicFinalContract,
+        publicContracts: tender.publicContracts.map((contract) => ({
+          ...contract,
+          eligibleForPlayer: contractIsEligibleForPlayer(tender, playerId, contract),
+        })),
+        publicFinalContract: {
+          ...tender.publicFinalContract,
+          eligibleForPlayer: contractIsEligibleForPlayer(tender, playerId, tender.publicFinalContract),
+        },
         publicLaboratoryResults: tender.publicLaboratoryResults,
         publicScientificJournal: tender.publicScientificJournal,
         round: tender.round,

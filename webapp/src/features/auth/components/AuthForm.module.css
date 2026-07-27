@@ -150,7 +150,8 @@
 .submit { min-height: 3.35rem; border: 1px solid rgba(68, 151, 255, .75); border-radius: 7px; background: linear-gradient(135deg, rgba(39, 94, 163, .95), rgba(24, 61, 112, .96)); font-size: 1rem !important; font-weight: 500 !important; }
 .submit:hover { background: linear-gradient(135deg, rgba(52, 117, 200, .98), rgba(32, 80, 148, .98)); }
 
-.footer { display: flex; width: min(100%, 34rem); justify-content: space-between; margin-top: auto; padding-top: 2.2rem; color: #98abc0; font-size: .82rem; }
+.footer { display: flex; width: min(100%, 34rem); align-items: baseline; justify-content: space-between; gap: 1rem; margin-top: auto; padding-top: 2.2rem; color: #98abc0; font-size: .82rem; line-height: 1.25; }
+.footer > * { font-size: inherit !important; line-height: inherit !important; white-space: nowrap; }
 .footer :global([data-slot='button']) { min-height: 0; padding: 0; color: inherit; font: inherit; }
 .footer :global([data-slot='button']):hover { color: #d7e9fb; text-decoration: underline; text-underline-offset: .22rem; }
 
@@ -170,7 +171,14 @@
   .yandexButton { min-height: 4.6rem; font-size: 1.2rem !important; }
   .yandexLogo { width: 2.55rem; }
   .credentials { padding: 1.2rem; }
+  .consent { align-items: flex-start; }
+  .consent :global([data-slot='checkbox']) { width: 1.2rem; height: 1.2rem; margin-top: .05rem; border-radius: 4px; }
   .footer { padding-top: 1.5rem; font-size: .72rem; }
+}
+
+.oauthConsentDialog {
+  width: min(calc(100% - 2rem), 30rem);
+  border-radius: 1rem;
 }
 
 @media (max-width: 390px) {

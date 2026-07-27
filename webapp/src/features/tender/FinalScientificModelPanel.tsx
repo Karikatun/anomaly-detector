@@ -8,6 +8,7 @@ import type {
   Polarity,
   ScientificModel,
   SignalId,
+  TenderView,
 } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
@@ -23,11 +24,13 @@ import {
 } from './catalog'
 import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
+import { TenderEvidence } from './components/TenderOverview'
 import { signalAccent } from './components/signal-visuals'
 import { runTenderAction } from './run-tender-action'
 
 type Props = {
   disabled?: boolean
+  evidence: Pick<TenderView, 'privateMeasurements' | 'publicLaboratoryResults' | 'publicTheses'>
   error?: string | null
   onConfirm: (model: ScientificModel) => Promise<void>
 }
@@ -47,7 +50,7 @@ const compactPolarityLabels: Record<Polarity, string> = {
   negative: '− Отриц.',
 }
 
-export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props) {
+export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm }: Props) {
   const { t } = useI18n()
   const [model, setModel] = useState<ScientificModel['signals']>({})
 
@@ -172,6 +175,12 @@ export function FinalScientificModelPanel({ disabled, error, onConfirm }: Props)
         </div>
 
         <aside className={styles.finalSidebar}>
+          <section className={styles.surface}>
+            <div className={styles.sectionHeader}>
+              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Данные для анализа</Typography>
+            </div>
+            <TenderEvidence data={evidence} />
+          </section>
           <section className={styles.surface}>
             <div className={styles.sectionHeader}>
               <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Прогресс</Typography>
