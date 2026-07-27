@@ -5,6 +5,7 @@ import {
   composeEnv,
   composeProjectName,
   defaultDatabaseUrl,
+  e2eBackendEnv,
   repositoryRoot,
 } from './env'
 
@@ -71,9 +72,39 @@ async function waitForPostgresPort(databaseUrl: string) {
   throw new Error(`Timed out waiting for PostgreSQL at ${hostname}:${port || 5432}`)
 }
 
+async function waitForWorkerReady(worker: ReturnType<typeof spawn>, healthPort: number) {
+  let spawnError: Error | undefined
+  worker.once('error', (error) => {
+    spawnError = error
+  })
+
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    if (spawnError) {
+      throw new Error(`E2E worker failed to start: ${spawnError.message}`)
+    }
+    if (worker.exitCode !== null) {
+      throw new Error(`E2E worker exited before becoming ready with code ${worker.exitCode}`)
+    }
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${healthPort}/health/ready`)
+      if (response.ok) return
+    } catch {
+      // The health server may not be listening yet.
+    }
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 250))
+  }
+
+  if (worker.exitCode === null) worker.kill('SIGTERM')
+  throw new Error(`Timed out waiting for E2E worker readiness on port ${healthPort}`)
+}
+
 export default async function globalSetup() {
   const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? defaultDatabaseUrl
   const databaseName = new URL(databaseUrl).pathname.replace(/^\//, '')
+  const backendPort = Number(process.env.E2E_BACKEND_PORT)
+  const workerHealthPort = backendPort + 1
 
   if (!databaseName.endsWith('_test') && process.env.E2E_ALLOW_NON_TEST_DATABASE !== '1') {
     throw new Error(
@@ -84,10 +115,12 @@ export default async function globalSetup() {
   process.env.TEST_DATABASE_URL = databaseUrl
   process.env.DATABASE_URL = databaseUrl
 
-  const env = composeEnv({
+  const env = composeEnv(e2eBackendEnv({
     DATABASE_URL: databaseUrl,
+    PORT: String(backendPort),
     TEST_DATABASE_URL: databaseUrl,
-  })
+    WORKER_HEALTH_PORT: String(workerHealthPort),
+  }))
 
   if (process.env.E2E_SKIP_DOCKER !== '1') {
     run('docker', [...composeArgs, 'up', '-d', 'postgres_test'], env)
@@ -110,6 +143,7 @@ export default async function globalSetup() {
     env,
     stdio: 'inherit',
   })
+  await waitForWorkerReady(worker, workerHealthPort)
 
   return async () => {
     if (worker.exitCode !== null) return
