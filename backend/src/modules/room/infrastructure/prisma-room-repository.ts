@@ -113,44 +113,48 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
       }
     },
     async create(input) {
-      try {
-        return await db.$transaction(async (tx) => {
-          await releaseCompletedCurrentMatch(tx, input.hostId)
-          if (await tx.currentMatch.findUnique({ where: { userId: input.hostId } })) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await db.$transaction(async (tx) => {
+            await releaseCompletedCurrentMatch(tx, input.hostId)
+            if (await tx.currentMatch.findUnique({ where: { userId: input.hostId } })) {
+              throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
+            }
+            const room = await tx.tenderRoom.create({
+              data: {
+                capacity: input.capacity,
+                hostId: input.hostId,
+                status: 'waiting',
+                members: {
+                  create: { seat: 1, userId: input.hostId },
+                },
+              },
+              include: {
+                members: { orderBy: { seat: 'asc' } },
+              },
+            })
+            await tx.currentMatch.create({
+              data: { roomId: room.id, userId: input.hostId },
+            })
+            return {
+              capacity: room.capacity as 2 | 3 | 4,
+              hostId: room.hostId,
+              id: room.id,
+              members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
+              status: 'waiting' as const,
+              startsAt: null,
+              tenderId: room.tenderId,
+            }
+          }, { isolationLevel: 'Serializable' })
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) continue
+          if (isCurrentMatchUniqueConstraintError(error)) {
             throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
           }
-          const room = await tx.tenderRoom.create({
-            data: {
-              capacity: input.capacity,
-              hostId: input.hostId,
-              status: 'waiting',
-              members: {
-                create: { seat: 1, userId: input.hostId },
-              },
-            },
-            include: {
-              members: { orderBy: { seat: 'asc' } },
-            },
-          })
-          await tx.currentMatch.create({
-            data: { roomId: room.id, userId: input.hostId },
-          })
-          return {
-            capacity: room.capacity as 2 | 3 | 4,
-            hostId: room.hostId,
-            id: room.id,
-            members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
-            status: 'waiting' as const,
-            startsAt: null,
-            tenderId: room.tenderId,
-          }
-        }, { isolationLevel: 'Serializable' })
-      } catch (error) {
-        if (isCurrentMatchUniqueConstraintError(error)) {
-          throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
+          throw error
         }
-        throw error
       }
+      throw new Error('Unreachable room creation transaction retry state')
     },
 
     async join(input) {
@@ -350,6 +354,13 @@ function isCurrentMatchUniqueConstraintError(error: unknown) {
     && error.meta !== null
     && 'modelName' in error.meta
     && error.meta.modelName === 'CurrentMatch'
+}
+
+function isRetryableTransactionError(error: unknown) {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && error.code === 'P2034'
 }
 
 function readTenderCompletionReason(state: Prisma.JsonValue | undefined) {
