@@ -253,13 +253,19 @@
 .player {
   display: grid;
   min-width: 0;
+  border: 1px solid rgba(70, 128, 164, .28);
+  border-radius: .5rem;
+  background: rgba(3, 18, 31, .74);
+  overflow: hidden;
+}
+
+.playerSummary {
+  display: grid;
+  min-width: 0;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: .5rem;
   padding: .52rem .58rem;
-  border: 1px solid rgba(70, 128, 164, .28);
-  border-radius: .5rem;
-  background: rgba(3, 18, 31, .74);
 }
 
 .player[data-winner] {
@@ -339,6 +345,53 @@
   text-transform: uppercase;
 }
 
+.ratingBreakdown {
+  display: grid;
+  min-width: 0;
+  gap: .35rem;
+  padding: .48rem .58rem .56rem;
+  border-top: 1px solid rgba(70, 128, 164, .2);
+  background: rgba(1, 12, 23, .48);
+}
+
+.breakdownTitle {
+  color: rgba(190, 210, 223, .56);
+  font-size: .54rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.breakdownList {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .26rem .7rem;
+}
+
+.breakdownList li {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .4rem;
+}
+
+.breakdownList li > span:first-child {
+  color: rgba(202, 220, 231, .68);
+  font-size: .58rem;
+}
+
+.breakdownPoints {
+  color: #2fcda3;
+  font-size: .62rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.noRatingAwards {
+  font-size: .58rem;
+}
+
 @media (min-width: 48rem) {
   .panel {
     gap: 1rem;
@@ -372,9 +425,17 @@
     height: 3.15rem;
   }
 
-  .player {
+  .playerSummary {
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     padding: .62rem .75rem;
+  }
+
+  .ratingBreakdown {
+    padding: .55rem .75rem .62rem;
+  }
+
+  .breakdownList {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .winnerBadge {

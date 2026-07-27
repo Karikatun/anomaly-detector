@@ -559,6 +559,10 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(page.getByText('Итоговый рейтинг', { exact: true })).toBeVisible()
+    await expect(page.getByText('За что начислен рейтинг', { exact: true }).first()).toBeVisible()
+    await expect(page.getByLabel('За что начислен рейтинг игроку Хост E2E')).toContainText(
+      /Начислений рейтинга нет|Верные тезисы|Выполненные контракты|Верные свойства модели|Полностью раскрытые сигналы|Бонус полной модели/,
+    )
     await expect(page.getByText('Хост E2E', { exact: true }).first()).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Конфигурация аномалии' })).toBeVisible()
     await expect(page.getByText('Раскрытые свойства шести сигналов', { exact: true })).toBeVisible()

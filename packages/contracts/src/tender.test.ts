@@ -260,6 +260,17 @@ describe('Tender contracts', () => {
         payload: { playerId: 'player-a', protocol: 'continuous' },
         sequence: 1,
       }],
+      ratingBreakdownByPlayer: {
+        'player-a': {
+          completeModelBonus: 3,
+          contractPoints: 4,
+          correctPropertyPoints: 8,
+          correctSignalPoints: 4,
+          otherPoints: 0,
+          thesisPoints: 2,
+          total: 21,
+        },
+      },
       privateMeasurementsByPlayer: {
         'player-a': [{ polarityRelation: 'same', receiverSignal: 'cinder', sourceSignal: 'aster' }],
       },
@@ -272,6 +283,9 @@ describe('Tender contracts', () => {
       }],
     })).toMatchObject({
       events: [{ kind: 'laboratory_test_completed', sequence: 1 }],
+      ratingBreakdownByPlayer: {
+        'player-a': { contractPoints: 4, thesisPoints: 2, total: 21 },
+      },
     })
   })
 })

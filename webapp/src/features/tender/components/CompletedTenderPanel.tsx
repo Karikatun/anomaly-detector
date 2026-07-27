@@ -20,6 +20,15 @@ type Props = {
   view: TenderView & { audit: NonNullable<TenderView['audit']> }
 }
 
+const ratingLabels = {
+  completeModelBonus: 'Бонус полной модели',
+  contractPoints: 'Выполненные контракты',
+  correctPropertyPoints: 'Верные свойства модели',
+  correctSignalPoints: 'Полностью раскрытые сигналы',
+  otherPoints: 'Другие начисления',
+  thesisPoints: 'Верные тезисы',
+} as const
+
 export function CompletedTenderPanel({ view }: Props) {
   const { t } = useI18n()
   const winnerIds = new Set(view.winnerPlayerIds ?? [])
@@ -111,33 +120,68 @@ export function CompletedTenderPanel({ view }: Props) {
         <ol className={styles.ranking}>
           {rankedPlayers.map((player, index) => {
             const isWinner = winnerIds.has(player.playerId)
+            const breakdown = view.audit.ratingBreakdownByPlayer[player.playerId]
+            const earnedRating = breakdown
+              ? Object.entries(ratingLabels)
+                  .map(([key, label]) => ({
+                    label,
+                    points: breakdown[key as keyof typeof ratingLabels],
+                  }))
+                  .filter(({ points }) => points !== 0)
+              : []
             return (
               <li key={player.playerId} className={styles.player} data-winner={isWinner || undefined}>
-                <Typography as="span" variant="h5" className={styles.position}>
-                  {String(index + 1).padStart(2, '0')}
-                </Typography>
-                <span className={styles.playerIdentity}>
-                  <Typography as="strong" variant="bodySmMedium">
-                    {player.displayName ?? player.playerId.slice(0, 8)}
+                <div className={styles.playerSummary}>
+                  <Typography as="span" variant="h5" className={styles.position}>
+                    {String(index + 1).padStart(2, '0')}
                   </Typography>
-                  <Typography as="span" variant="caption" tone="muted">Слот {player.accessSlot ?? '—'}</Typography>
-                </span>
-                <span className={styles.playerStats}>
-                  <span>
-                    <Typography as="small" variant="caption">Рейтинг</Typography>
-                    <Typography as="strong" variant="bodySmMedium">{player.rating}</Typography>
+                  <span className={styles.playerIdentity}>
+                    <Typography as="strong" variant="bodySmMedium">
+                      {player.displayName ?? player.playerId.slice(0, 8)}
+                    </Typography>
+                    <Typography as="span" variant="caption" tone="muted">Слот {player.accessSlot ?? '—'}</Typography>
                   </span>
-                  <span>
-                    <Typography as="small" variant="caption">Бюджет</Typography>
-                    <Typography as="strong" variant="bodySmMedium">{player.budget} M</Typography>
+                  <span className={styles.playerStats}>
+                    <span>
+                      <Typography as="small" variant="caption">Рейтинг</Typography>
+                      <Typography as="strong" variant="bodySmMedium">{player.rating}</Typography>
+                    </span>
+                    <span>
+                      <Typography as="small" variant="caption">Бюджет</Typography>
+                      <Typography as="strong" variant="bodySmMedium">{player.budget} M</Typography>
+                    </span>
                   </span>
-                </span>
-                {isWinner && (
-                  <span className={styles.winnerBadge}>
-                    <HugeiconsIcon icon={Award02Icon} strokeWidth={1.8} aria-hidden="true" />
-                    <Typography as="span" variant="caption">Победитель</Typography>
-                  </span>
-                )}
+                  {isWinner && (
+                    <span className={styles.winnerBadge}>
+                      <HugeiconsIcon icon={Award02Icon} strokeWidth={1.8} aria-hidden="true" />
+                      <Typography as="span" variant="caption">Победитель</Typography>
+                    </span>
+                  )}
+                </div>
+                <div
+                  className={styles.ratingBreakdown}
+                  aria-label={`За что начислен рейтинг игроку ${player.displayName ?? player.playerId.slice(0, 8)}`}
+                >
+                  <Typography as="span" variant="caption" className={styles.breakdownTitle}>
+                    За что начислен рейтинг
+                  </Typography>
+                  {earnedRating.length > 0 ? (
+                    <ul className={styles.breakdownList}>
+                      {earnedRating.map(({ label, points }) => (
+                        <li key={label}>
+                          <Typography as="span" variant="caption">{label}</Typography>
+                          <Typography as="strong" variant="caption" className={styles.breakdownPoints}>
+                            {points > 0 ? '+' : ''}{points}
+                          </Typography>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <Typography variant="caption" tone="muted" className={styles.noRatingAwards}>
+                      Начислений рейтинга нет
+                    </Typography>
+                  )}
+                </div>
               </li>
             )
           })}

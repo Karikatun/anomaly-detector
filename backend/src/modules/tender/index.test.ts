@@ -448,6 +448,36 @@ test('awards property points, completed Signal points, and the complete-model bo
     phase: 'final-scientific-model',
   })
   expect(finalModelView.players.find((player) => player.playerId === 'player-a')).toMatchObject({ rating: 21 })
+
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'final-model-b',
+    tenderId,
+    type: 'submit-scientific-model',
+    scientificModel: { signals: { aster: { fieldType: 'phase', polarity: 'positive' } } },
+  })
+
+  const completedView = await tender.readTenderView({ tenderId, playerId: 'player-a' })
+  expect(completedView.audit?.ratingBreakdownByPlayer).toEqual({
+    'player-a': {
+      completeModelBonus: 3,
+      contractPoints: 0,
+      correctPropertyPoints: 12,
+      correctSignalPoints: 6,
+      otherPoints: 0,
+      thesisPoints: 0,
+      total: 21,
+    },
+    'player-b': {
+      completeModelBonus: 0,
+      contractPoints: 0,
+      correctPropertyPoints: 0,
+      correctSignalPoints: 0,
+      otherPoints: 0,
+      thesisPoints: 0,
+      total: 0,
+    },
+  })
 })
 
 test('skips an unresolved operational action when its deadline expires', async () => {

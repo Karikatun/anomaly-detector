@@ -4,7 +4,9 @@ import type {
   CommandReceipt,
   CreateTender,
   PowerAllocation,
+  RatingBreakdown,
   ScientificModel,
+  TenderAuditEvent,
   TenderCommand,
   TenderPlayer,
   TenderView,
@@ -32,6 +34,78 @@ const normalContractRating = 4
 const finalContractRating = 8
 const completeScientificModelBonus = 3
 const finalContractId = 'final-contract'
+
+const createRatingBreakdownByPlayer = (
+  tender: StoredTender,
+  events: TenderAuditEvent[],
+): Record<string, RatingBreakdown> => {
+  const breakdownByPlayer = Object.fromEntries(tender.players.map((player) => [
+    player.id,
+    {
+      completeModelBonus: 0,
+      contractPoints: 0,
+      correctPropertyPoints: 0,
+      correctSignalPoints: 0,
+      otherPoints: 0,
+      thesisPoints: 0,
+      total: 0,
+    },
+  ])) as Record<string, RatingBreakdown>
+
+  for (const event of events) {
+    const playerId = typeof event.payload.playerId === 'string' ? event.payload.playerId : undefined
+    if (!playerId) continue
+    const breakdown = breakdownByPlayer[playerId]
+    if (!breakdown) continue
+
+    if (event.kind === 'thesis_checked' && event.payload.correct === true) {
+      breakdown.thesisPoints += 1
+    }
+    if (event.kind === 'contract_bid_assessed' && event.payload.awarded === true) {
+      const recordedAward = event.payload.ratingAward
+      if (typeof recordedAward === 'number' && Number.isInteger(recordedAward)) {
+        breakdown.contractPoints += recordedAward
+      } else {
+        const ratingByPlayer = event.payload.ratingByPlayer
+        const recordedTotal = typeof ratingByPlayer === 'object' && ratingByPlayer !== null
+          ? (ratingByPlayer as Record<string, unknown>)[playerId]
+          : undefined
+        if (typeof recordedTotal === 'number' && Number.isInteger(recordedTotal)) {
+          breakdown.contractPoints += recordedTotal
+            - breakdown.thesisPoints
+            - breakdown.contractPoints
+        }
+      }
+    }
+    if (event.kind === 'scientific_model_scored') {
+      const completeModelBonus = event.payload.completeModelBonus
+      const correctProperties = event.payload.correctProperties
+      const correctSignals = event.payload.correctSignals
+      if (typeof completeModelBonus === 'number' && Number.isInteger(completeModelBonus)) {
+        breakdown.completeModelBonus += completeModelBonus
+      }
+      if (typeof correctProperties === 'number' && Number.isInteger(correctProperties)) {
+        breakdown.correctPropertyPoints += correctProperties
+      }
+      if (typeof correctSignals === 'number' && Number.isInteger(correctSignals)) {
+        breakdown.correctSignalPoints += correctSignals
+      }
+    }
+  }
+
+  for (const player of tender.players) {
+    const breakdown = breakdownByPlayer[player.id]
+    const knownPoints = breakdown.completeModelBonus
+      + breakdown.contractPoints
+      + breakdown.correctPropertyPoints
+      + breakdown.correctSignalPoints
+      + breakdown.thesisPoints
+    breakdown.otherPoints = (tender.ratingByPlayer[player.id] ?? 0) - knownPoints
+    breakdown.total = knownPoints + breakdown.otherPoints
+  }
+
+  return breakdownByPlayer
+}
 
 const deadlineForPhase = (phase: string, at: Date) => {
   if (phase === 'complete') return null
@@ -797,8 +871,9 @@ export function createTenderModule({
         const corporateTrustByPlayer = isAwarded
           ? { ...tender.corporateTrustByPlayer, [player.id]: (tender.corporateTrustByPlayer[player.id] ?? 0) + (isFinalContract ? 0 : 1) }
           : tender.corporateTrustByPlayer
+        const ratingAward = contract.ratingReward ?? (isFinalContract ? finalContractRating : normalContractRating)
         const ratingByPlayer = isAwarded
-          ? { ...tender.ratingByPlayer, [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + (contract.ratingReward ?? (isFinalContract ? finalContractRating : normalContractRating)) }
+          ? { ...tender.ratingByPlayer, [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + ratingAward }
           : tender.ratingByPlayer
         const researchCertificationsByPlayer = isAwarded && kind === 'scientific'
           ? {
@@ -822,6 +897,7 @@ export function createTenderModule({
               corporateTrustByPlayer,
               evidenceTestIds,
               playerId: player.id,
+              ratingAward: isAwarded ? ratingAward : 0,
               ratingByPlayer,
               researchCertificationSignal: command.researchCertificationSignal,
             },
@@ -899,6 +975,9 @@ export function createTenderModule({
       const tender = await readTender(tenderId)
       const player = readPlayer(tender, playerId)
       const activePlayerId = activePlayerIdForView(tender)
+      const auditEvents = tender.phase === 'complete'
+        ? await store.readAuditEvents(tenderId)
+        : undefined
       const tiePriorities = Object.fromEntries(
         rotateTiePriority(tender.players, tender.round).map((candidate) => [candidate.id, candidate.tiePriority]),
       )
@@ -960,11 +1039,12 @@ export function createTenderModule({
         ...(tender.phase === 'complete' ? {
           audit: {
             anomalyConfiguration: tender.anomalyConfiguration,
-            events: await store.readAuditEvents(tenderId),
+            events: auditEvents!,
             privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
             privateTelemetryByPlayer: tender.privateMeasurementsByPlayer,
             publicLaboratoryResults: tender.publicLaboratoryResults,
             publicScientificJournal: tender.publicScientificJournal,
+            ratingBreakdownByPlayer: createRatingBreakdownByPlayer(tender, auditEvents!),
           },
         } : {}),
       }
