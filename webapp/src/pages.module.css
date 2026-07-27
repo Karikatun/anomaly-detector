@@ -57,6 +57,25 @@
 
 .account { align-items: center; gap: .8rem; }
 
+.profileLink {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  padding: .2rem .35rem;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.profileLink:hover {
+  background: rgba(20, 52, 84, .42);
+}
+
+.profileLink:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #020710, 0 0 0 4px #40c8ff;
+}
+
 .avatar {
   display: grid;
   width: 3.65rem;
@@ -188,6 +207,7 @@
   .header { align-items: center; }
   .title { padding-top: .2rem; font-size: 1.05rem; letter-spacing: -.035em; }
   .account { gap: .5rem; }
+  .profileLink { gap: .5rem; padding: .15rem .25rem; }
   .avatar { width: 2.7rem; }
   .identity { min-width: 4.1rem; }
   .name { font-size: .75rem; }

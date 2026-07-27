@@ -191,6 +191,11 @@ test('requires every lobby player to be ready before enabling the match start', 
     await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
     await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    for (const lobbyPage of [page, guestPage]) {
+      await expect(lobbyPage.getByText('Хост готовности E2E', { exact: true })).toBeVisible()
+      await expect(lobbyPage.getByText('Гость готовности E2E', { exact: true })).toBeVisible()
+      await expect(lobbyPage.getByText(/^Игрок \d+$/)).toHaveCount(0)
+    }
     await expect.poll(() => hostRoomReads).toBeGreaterThan(0)
     expect(hostJoinRequests).toBe(0)
     await page.route('**/api/rooms/*', async (route) => {

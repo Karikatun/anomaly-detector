@@ -1,8 +1,9 @@
 import type { RoomView } from '@anomaly-detector/contracts'
 
-import type { RoomRepository } from './ports'
+import type { RoomMemberIdentityReader, RoomRecord, RoomRepository } from './ports'
 
 type TenderRoomServiceDependencies = {
+  memberIdentityReader?: RoomMemberIdentityReader
   repository: RoomRepository
 }
 
@@ -11,35 +12,35 @@ export class TenderRoomService {
 
   async createRoom(input: { capacity: 2 | 3 | 4; hostId: string }): Promise<RoomView> {
     const room = await this.dependencies.repository.create(input)
-    return toRoomView(room)
+    return this.toRoomView(room)
   }
 
   async joinRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
     const room = await this.dependencies.repository.join(input)
-    return toRoomView(room)
+    return this.toRoomView(room)
   }
 
   async joinRoomByCode(input: { actorId: string; code: string }): Promise<RoomView> {
     const joinByCode = this.dependencies.repository.joinByCode
     if (!joinByCode) throw new Error('Room code joining is unavailable')
     const room = await joinByCode(input)
-    return toRoomView(room)
+    return this.toRoomView(room)
   }
 
   async getRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
     const readForMember = this.dependencies.repository.readForMember
     if (!readForMember) throw new Error('Room reading is unavailable')
-    return toRoomView(await readForMember(input))
+    return this.toRoomView(await readForMember(input))
   }
 
   async listMatches(actorId: string): Promise<RoomView[]> {
     const rooms = await this.dependencies.repository.listStartedForMember?.(actorId) ?? []
-    return rooms.map(toRoomView)
+    return Promise.all(rooms.map((room) => this.toRoomView(room)))
   }
 
   async getCurrentMatch(actorId: string): Promise<RoomView | null> {
     const room = await this.dependencies.repository.readCurrentForMember?.(actorId) ?? null
-    return room ? toRoomView(room) : null
+    return room ? this.toRoomView(room) : null
   }
 
   async leaveRoom(input: { actorId: string; roomId: string }) {
@@ -47,27 +48,32 @@ export class TenderRoomService {
   }
 
   async setReady(input: { actorId: string; ready: boolean; roomId: string }): Promise<RoomView> {
-    return toRoomView(await this.dependencies.repository.setReady(input))
+    return this.toRoomView(await this.dependencies.repository.setReady(input))
   }
 
   async startRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
-    return toRoomView(await this.dependencies.repository.start(input))
+    return this.toRoomView(await this.dependencies.repository.start(input))
   }
 
   async cancelRoomStart(input: { actorId: string; roomId: string }): Promise<RoomView> {
     const cancelStart = this.dependencies.repository.cancelStart
     if (!cancelStart) throw new Error('Room start cancellation is unavailable')
-    return toRoomView(await cancelStart(input))
+    return this.toRoomView(await cancelStart(input))
   }
 
-}
-
-function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomView {
+  private async toRoomView(room: RoomRecord): Promise<RoomView> {
+    const userIds = room.members.map((member) => member.userId)
+    const displayNames = this.dependencies.memberIdentityReader
+      ? await this.dependencies.memberIdentityReader.readDisplayNames(userIds)
+      : new Map<string, string>()
     return {
       capacity: room.capacity,
       hostId: room.hostId,
       joinCode: room.joinCode ?? null,
-      members: room.members,
+      members: room.members.map((member) => ({
+        ...member,
+        displayName: displayNames.get(member.userId) ?? 'Исследователь',
+      })),
       roomId: room.id,
       serverTime: new Date().toISOString(),
       status: room.status,
@@ -76,4 +82,5 @@ function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomVi
       ...(room.tenderCompletionReason === undefined ? {} : { tenderCompletionReason: room.tenderCompletionReason }),
       ...(room.tenderPhase === undefined ? {} : { tenderPhase: room.tenderPhase }),
     }
+  }
 }

@@ -26,6 +26,7 @@ export const joinRoomByCodeRequestSchema = z.object({
 }).strict()
 
 export const roomMemberSchema = z.object({
+  displayName: z.string().min(1).max(80),
   ready: z.boolean(),
   seat: z.number().int().positive(),
   userId: z.string().uuid(),
