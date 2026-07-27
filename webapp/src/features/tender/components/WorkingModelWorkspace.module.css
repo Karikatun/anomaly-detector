@@ -20,15 +20,15 @@
 }
 
 .dialog {
-  top: max(.5rem, env(safe-area-inset-top)) !important;
+  top: calc(var(--tender-sticky-header-height, 5.75rem) + .75rem) !important;
   right: auto !important;
   bottom: auto !important;
   left: .5rem !important;
   width: calc(100vw - 1rem) !important;
   min-width: 0;
   max-width: calc(100vw - 1rem) !important;
-  height: calc(100dvh - max(.5rem, env(safe-area-inset-top)) - max(.5rem, env(safe-area-inset-bottom))) !important;
-  max-height: calc(100dvh - max(.5rem, env(safe-area-inset-top)) - max(.5rem, env(safe-area-inset-bottom))) !important;
+  height: calc(100dvh - var(--tender-sticky-header-height, 5.75rem) - 1.5rem - env(safe-area-inset-bottom, 0px)) !important;
+  max-height: calc(100dvh - var(--tender-sticky-header-height, 5.75rem) - 1.5rem - env(safe-area-inset-bottom, 0px)) !important;
   box-sizing: border-box;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: .7rem;
