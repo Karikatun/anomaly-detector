@@ -240,6 +240,47 @@
   font-size: .9rem;
 }
 
+.dangerZone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  padding: 1rem clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid rgba(224, 78, 78, .28);
+  border-radius: 12px;
+  background: rgba(40, 7, 12, .58);
+}
+
+.dangerCopy {
+  display: grid;
+  gap: .25rem;
+}
+
+.dangerTitle {
+  color: #ffc2c2;
+  font-size: 1rem;
+}
+
+.dangerDescription {
+  color: #aa8990;
+  font-size: .82rem;
+}
+
+.deleteAccountButton {
+  flex: none;
+  border-color: rgba(231, 87, 87, .42);
+}
+
+.deletionDialog {
+  border: 1px solid rgba(224, 78, 78, .38);
+  background: #10080c;
+}
+
+.deletionActions {
+  margin-top: .25rem;
+}
+
 .statisticsLoading {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -510,6 +551,18 @@
   .memberSince {
     padding: .7rem 1rem .8rem;
     font-size: .8rem;
+  }
+
+  .dangerZone {
+    align-items: stretch;
+    flex-direction: column;
+    gap: .85rem;
+    margin-inline: 0;
+    padding: 1rem;
+  }
+
+  .deleteAccountButton {
+    width: 100%;
   }
 
   .statisticsLoading {

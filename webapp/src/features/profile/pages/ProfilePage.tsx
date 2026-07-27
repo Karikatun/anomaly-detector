@@ -11,6 +11,16 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
@@ -76,8 +86,94 @@ function ProfileContent() {
             В игре с {formatRegistrationDate(user.createdAt)}
           </Typography>
         </div>
+
+        <DeleteAccountControl
+          onDelete={async () => {
+            await auth.deleteAccount()
+            await navigate({ to: '/', replace: true })
+          }}
+        />
       </section>
     </main>
+  )
+}
+
+function DeleteAccountControl({
+  onDelete,
+}: {
+  onDelete: () => Promise<void>
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deletionError, setDeletionError] = useState(false)
+
+  const handleOpenChange = (open: boolean) => {
+    if (isDeleting) return
+    setIsOpen(open)
+    if (!open) setDeletionError(false)
+  }
+
+  const deleteAccount = async () => {
+    setDeletionError(false)
+    setIsDeleting(true)
+    try {
+      await onDelete()
+    } catch {
+      setDeletionError(true)
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <section className={styles.dangerZone} aria-labelledby="delete-account-title">
+      <span className={styles.dangerCopy}>
+        <Typography as="h2" id="delete-account-title" className={styles.dangerTitle}>
+          Удаление аккаунта
+        </Typography>
+        <Typography className={styles.dangerDescription}>
+          Удаляет данные входа и обезличивает вашу историю матчей.
+        </Typography>
+      </span>
+
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        <DialogTrigger asChild>
+          <Button type="button" variant="destructive" className={styles.deleteAccountButton}>
+            Удалить аккаунт
+          </Button>
+        </DialogTrigger>
+        <DialogContent className={styles.deletionDialog} showCloseButton={!isDeleting}>
+          <DialogHeader>
+            <DialogTitle>Удалить аккаунт?</DialogTitle>
+            <DialogDescription>
+              Это действие необратимо. Данные входа будут удалены. История матчей останется только
+              в обезличенном виде.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deletionError && (
+            <Typography role="alert" variant="bodySm" tone="destructive">
+              Не удалось удалить аккаунт. Попробуйте ещё раз.
+            </Typography>
+          )}
+
+          <DialogFooter className={styles.deletionActions}>
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={isDeleting}>
+                Отмена
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={() => void deleteAccount()}
+            >
+              {isDeleting ? 'Удаляем…' : 'Удалить аккаунт'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   )
 }
 

@@ -22,6 +22,7 @@ export type AuthContextValue = {
     provider: OAuthProviderId,
     registration?: OAuthStartRequest['registration'],
   ) => Promise<void>
+  deleteAccount: () => Promise<void>
   logout: () => Promise<void>
   updateProfile: (input: UpdateProfileRequest) => Promise<void>
 }
