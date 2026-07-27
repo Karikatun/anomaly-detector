@@ -1,6 +1,9 @@
 import type { RoomView } from '@anomaly-detector/contracts'
 
-export type RoomRecord = Omit<RoomView, 'roomId' | 'serverTime'> & { id: string }
+export type RoomRecord = Omit<RoomView, 'joinCode' | 'roomId' | 'serverTime'> & {
+  id: string
+  joinCode?: string | null
+}
 
 export type RoomRepository = {
   create(input: { capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
@@ -9,6 +12,7 @@ export type RoomRepository = {
   listStartedForMember?: (userId: string) => Promise<RoomRecord[]>
   readForMember?: (input: { actorId: string; roomId: string }) => Promise<RoomRecord>
   join(input: { actorId: string; roomId: string }): Promise<RoomRecord>
+  joinByCode?: (input: { actorId: string; code: string }) => Promise<RoomRecord>
   leave(input: { actorId: string; roomId: string }): Promise<void>
   setReady(input: { actorId: string; ready: boolean; roomId: string }): Promise<RoomRecord>
   start(input: { actorId: string; roomId: string }): Promise<RoomRecord>

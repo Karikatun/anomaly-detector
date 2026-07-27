@@ -168,9 +168,14 @@
   .detector { font-size: clamp(.8rem, 4vw, 1rem); }
   .tagline { max-width: 20rem; margin-top: .6rem; font-size: .7rem; }
   .content { margin-top: clamp(5rem, 18vw, 7rem); gap: 1rem; }
+  .content:has(.consents) { margin-top: 2.25rem; }
   .yandexButton { min-height: 4.6rem; font-size: 1.2rem !important; }
   .yandexLogo { width: 2.55rem; }
   .credentials { padding: 1.2rem; }
+  .credentials:has(.consents) { gap: .85rem; }
+  .credentials:has(.consents) .yandexButton { min-height: 3.8rem; }
+  .credentials:has(.consents) .fields { gap: .55rem; }
+  .credentials:has(.consents) .fieldErrorSlot { min-height: .75rem; }
   .consent { align-items: flex-start; }
   .consent :global([data-slot='checkbox']) { width: 1.2rem; height: 1.2rem; margin-top: .05rem; border-radius: 4px; }
   .footer { padding-top: 1.5rem; font-size: .72rem; }

@@ -54,11 +54,12 @@ function RoomLobbyContent() {
   }, [currentRoom, navigate])
 
   const handleCopy = useCallback(async () => {
+    const joinCredential = currentRoom?.joinCode ?? roomId
     try {
-      await navigator.clipboard.writeText(roomId)
+      await navigator.clipboard.writeText(joinCredential)
     } catch {
       const textarea = document.createElement('textarea')
-      textarea.value = roomId
+      textarea.value = joinCredential
       textarea.style.position = 'fixed'
       textarea.style.opacity = '0'
       document.body.appendChild(textarea)
@@ -68,7 +69,7 @@ function RoomLobbyContent() {
     }
     setCopied(true)
     setTimeout(() => setCopied(false), 2_000)
-  }, [roomId])
+  }, [currentRoom?.joinCode, roomId])
 
   const runRoomAction = useCallback(async <T,>(
     action: () => Promise<T>,
@@ -139,9 +140,13 @@ function RoomLobbyContent() {
         <header className={styles.header}>
           <button type="button" className={styles.roomCode} onClick={() => void handleCopy()}>
             <Typography as="span" variant="control">{t('lobby.room.id')}</Typography>
-            <Typography as="strong" variant="code">{currentRoom.roomId.slice(0, 8).toUpperCase()}</Typography>
-            <span className={styles.copyIcon} aria-hidden="true" />
-            <Typography as="span" variant="srOnly">{copied ? t('lobby.copied') : t('lobby.copyId')}</Typography>
+            <Typography as="strong" variant="code" data-testid="room-join-code">
+              {currentRoom.joinCode ?? currentRoom.roomId}
+            </Typography>
+            {copied
+              ? <Typography as="span" variant="control" className={styles.copiedLabel} aria-live="polite">{t('lobby.copied')}</Typography>
+              : <span className={styles.copyIcon} aria-hidden="true" />}
+            {!copied ? <Typography as="span" variant="srOnly">{t('lobby.copyId')}</Typography> : null}
           </button>
           <Typography as="h1" className={styles.title}>{t('lobby.title')}</Typography>
           {canLeave ? (

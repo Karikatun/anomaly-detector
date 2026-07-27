@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 export const roomCapacitySchema = z.union([z.literal(2), z.literal(3), z.literal(4)])
 export const roomIdSchema = z.string().uuid()
+export const roomJoinCodeSchema = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{10}$/)
+const legacyRoomJoinCredentialSchema = roomIdSchema
 export const roomStatusSchema = z.enum(['waiting', 'starting', 'started'])
 
 export const createRoomRequestSchema = z.object({
@@ -10,6 +12,17 @@ export const createRoomRequestSchema = z.object({
 
 export const setRoomReadyRequestSchema = z.object({
   ready: z.boolean(),
+}).strict()
+
+export const joinRoomByCodeRequestSchema = z.object({
+  code: z.string()
+    .transform((value) => {
+      const trimmed = value.trim()
+      return /^[0-9a-f-]{36}$/i.test(trimmed)
+        ? trimmed.toLowerCase()
+        : trimmed.replaceAll(/[\s-]/g, '').toUpperCase()
+    })
+    .pipe(z.union([roomJoinCodeSchema, legacyRoomJoinCredentialSchema])),
 }).strict()
 
 export const roomMemberSchema = z.object({
@@ -21,6 +34,7 @@ export const roomMemberSchema = z.object({
 export const roomViewSchema = z.object({
   capacity: roomCapacitySchema,
   hostId: z.string().uuid(),
+  joinCode: roomJoinCodeSchema.nullable(),
   members: z.array(roomMemberSchema),
   roomId: roomIdSchema,
   serverTime: z.string().datetime(),
@@ -41,6 +55,8 @@ export const currentMatchResponseSchema = z.object({
 
 export type CreateRoomRequest = z.infer<typeof createRoomRequestSchema>
 export type CurrentMatchResponse = z.infer<typeof currentMatchResponseSchema>
+export type JoinRoomByCodeRequest = z.input<typeof joinRoomByCodeRequestSchema>
+export type JoinRoomByCodePayload = z.output<typeof joinRoomByCodeRequestSchema>
 export type RoomMember = z.infer<typeof roomMemberSchema>
 export type RoomView = z.infer<typeof roomViewSchema>
 export type SetRoomReadyRequest = z.infer<typeof setRoomReadyRequestSchema>

@@ -235,7 +235,7 @@ export function ContractsPanel({
                     </span>
                   </div>
 
-                  {(bid || contract.bidOutcome !== undefined || reservedByOther || !canResolve) && (
+                  {(bid || contract.bidOutcome !== undefined || reservedByOther) && (
                     <Typography variant="caption" className={styles.reservedHint}>
                       {contract.bidOutcome === 'awarded'
                         ? 'Контракт выполнен'

@@ -329,8 +329,11 @@
   bottom: 0;
   display: grid;
   gap: .45rem;
-  padding-top: .45rem;
-  background: linear-gradient(180deg, transparent, var(--background) 22%);
+  padding: .5rem;
+  border: 1px solid rgba(72, 139, 183, .27);
+  border-radius: .72rem;
+  background: rgba(2, 15, 29, .97);
+  box-shadow: 0 -.7rem 1.5rem rgba(1, 8, 17, .78);
 }
 
 .confirmButton {
@@ -458,6 +461,7 @@
     border: 1px solid rgba(72, 139, 183, .27);
     border-radius: .8rem;
     background: rgba(2, 15, 29, .86);
+    box-shadow: none;
   }
 
   .confirmButton {

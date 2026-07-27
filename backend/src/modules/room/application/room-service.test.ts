@@ -24,6 +24,7 @@ test('creates a waiting private room with its host in the first seat', async () 
   await expect(service.createRoom({ capacity: 3, hostId: 'user-1' })).resolves.toEqual({
     capacity: 3,
     hostId: 'user-1',
+    joinCode: null,
     members: [{ ready: false, seat: 1, userId: 'user-1' }],
     roomId: 'room-1',
     serverTime: expect.any(String),
@@ -54,6 +55,7 @@ test('lists started matches for the requesting player', async () => {
   await expect(service.listMatches('user-1')).resolves.toEqual([{
     capacity: 2,
     hostId: 'user-1',
+    joinCode: null,
     members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
     serverTime: expect.any(String),
@@ -85,6 +87,43 @@ test('adds a player to the next available seat in a waiting room', async () => {
     members: [{ ready: false, seat: 1, userId: 'user-1' }, { ready: false, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
   })
+})
+
+test('joins a waiting room through its public join code', async () => {
+  const joinedByCode: Array<{ actorId: string; code: string }> = []
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      join: async () => { throw new Error('UUID join must not be used') },
+      joinByCode: async (input) => {
+        joinedByCode.push(input)
+        return {
+          capacity: 2,
+          hostId: 'user-1',
+          id: 'room-1',
+          joinCode: '7K9M2NP4RX',
+          members: [
+            { ready: false, seat: 1, userId: 'user-1' },
+            { ready: false, seat: 2, userId: input.actorId },
+          ],
+          status: 'waiting',
+          tenderId: null,
+        }
+      },
+      leave: async () => { throw new Error('not used') },
+      setReady: async () => { throw new Error('not used') },
+      start: async () => { throw new Error('not used') },
+    },
+  })
+
+  await expect(service.joinRoomByCode({
+    actorId: 'user-2',
+    code: '7K9M2NP4RX',
+  })).resolves.toMatchObject({
+    joinCode: '7K9M2NP4RX',
+    roomId: 'room-1',
+  })
+  expect(joinedByCode).toEqual([{ actorId: 'user-2', code: '7K9M2NP4RX' }])
 })
 
 test('reads room state for an existing member without joining again', async () => {
@@ -153,6 +192,7 @@ test('schedules a full room start and exposes its server start time', async () =
   await expect(service.startRoom({ actorId: 'user-1', roomId: 'room-1' })).resolves.toEqual({
     capacity: 2,
     hostId: 'user-1',
+    joinCode: null,
     members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
     serverTime: expect.any(String),
@@ -184,6 +224,7 @@ test('lets the host cancel a scheduled room start', async () => {
   await expect(service.cancelRoomStart({ actorId: 'user-1', roomId: 'room-1' })).resolves.toEqual({
     capacity: 2,
     hostId: 'user-1',
+    joinCode: null,
     members: [{ ready: true, seat: 1, userId: 'user-1' }, { ready: true, seat: 2, userId: 'user-2' }],
     roomId: 'room-1',
     serverTime: expect.any(String),

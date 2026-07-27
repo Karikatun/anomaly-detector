@@ -62,7 +62,12 @@ export function WorkingModelWorkspace({
             <Typography as="span" variant="caption" className={styles.count}>{knownSignals.length} / 6</Typography>
           </Button>
         </DialogTrigger>
-        <DialogContent className={styles.dialog} showCloseButton>
+        <DialogContent
+          className={styles.dialog}
+          closeLabel="Закрыть рабочую модель"
+          placement="viewport"
+          showCloseButton
+        >
           <DialogHeader className={styles.header}>
             <span>
               <DialogTitle>Рабочая модель</DialogTitle>

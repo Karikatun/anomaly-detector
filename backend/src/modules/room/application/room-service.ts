@@ -19,6 +19,13 @@ export class TenderRoomService {
     return toRoomView(room)
   }
 
+  async joinRoomByCode(input: { actorId: string; code: string }): Promise<RoomView> {
+    const joinByCode = this.dependencies.repository.joinByCode
+    if (!joinByCode) throw new Error('Room code joining is unavailable')
+    const room = await joinByCode(input)
+    return toRoomView(room)
+  }
+
   async getRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
     const readForMember = this.dependencies.repository.readForMember
     if (!readForMember) throw new Error('Room reading is unavailable')
@@ -59,6 +66,7 @@ function toRoomView(room: Awaited<ReturnType<RoomRepository['create']>>): RoomVi
     return {
       capacity: room.capacity,
       hostId: room.hostId,
+      joinCode: room.joinCode ?? null,
       members: room.members,
       roomId: room.id,
       serverTime: new Date().toISOString(),

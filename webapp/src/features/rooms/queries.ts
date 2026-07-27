@@ -4,7 +4,12 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 
-import type { CreateRoomRequest, RoomView, SetRoomReadyRequest } from '@anomaly-detector/contracts'
+import type {
+  CreateRoomRequest,
+  JoinRoomByCodeRequest,
+  RoomView,
+  SetRoomReadyRequest,
+} from '@anomaly-detector/contracts'
 
 import { sessionQueryKeys } from '@/platform/query'
 
@@ -56,6 +61,18 @@ export function useCreateRoomMutation({ api }: RoomMutationsOptions) {
 
   return useMutation({
     mutationFn: (input: CreateRoomRequest) => api.create(input),
+    onSuccess: (room) => {
+      queryClient.setQueryData(roomQueryKeys.byId(room.roomId), room)
+      queryClient.setQueryData(roomQueryKeys.current(), room)
+    },
+  })
+}
+
+export function useJoinRoomByCodeMutation({ api }: RoomMutationsOptions) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: JoinRoomByCodeRequest) => api.joinByCode(input),
     onSuccess: (room) => {
       queryClient.setQueryData(roomQueryKeys.byId(room.roomId), room)
       queryClient.setQueryData(roomQueryKeys.current(), room)
