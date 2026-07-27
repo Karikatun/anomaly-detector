@@ -97,7 +97,7 @@ test('registers, restores the browser session, opens the profile, and logs out',
     .toBe(true)
 
   await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
-  await expect(page.getByRole('heading', { name: 'ПРОФИЛЬ' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'ПРОФИЛЬ', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Пользователь E2E' })).toBeVisible()
   await expect(page.getByText(login)).toHaveCount(0)
   await expect(page.getByText('Завершите первый матч, чтобы появилась статистика.')).toBeVisible()
@@ -111,6 +111,63 @@ test('registers, restores the browser session, opens the profile, and logs out',
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
   await page.getByRole('button', { name: 'Войти' }).click()
   await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
+})
+
+test('deletes an account from the profile only after confirmation and recovers from a server error', async ({
+  page,
+}) => {
+  await registerBrowserUser(page, 'Удаляемый профиль', 'delete-account')
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+
+  const openDeletionDialog = page.getByRole('button', { name: 'Удалить аккаунт' })
+  await expect(openDeletionDialog).toBeVisible()
+  await openDeletionDialog.click()
+  const dialog = page.getByRole('dialog', { name: 'Удалить аккаунт?' })
+  await expect(dialog).toContainText('История матчей останется только в обезличенном виде.')
+  await dialog.getByRole('button', { name: 'Отмена' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('heading', { name: 'ПРОФИЛЬ', exact: true })).toBeVisible()
+
+  let rejectNextDeletion = true
+  await page.route('**/api/auth/account', async (route) => {
+    if (route.request().method() === 'DELETE' && rejectNextDeletion) {
+      rejectNextDeletion = false
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: {
+            code: 'UNAVAILABLE',
+            message: 'Account deletion is temporarily unavailable',
+          },
+        }),
+      })
+      return
+    }
+    await route.continue()
+  })
+
+  await openDeletionDialog.click()
+  await dialog.getByRole('button', { name: 'Удалить аккаунт' }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('Не удалось удалить аккаунт. Попробуйте ещё раз.')
+  await dialog.getByRole('button', { name: 'Отмена' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('heading', { name: 'ПРОФИЛЬ', exact: true })).toBeVisible()
+
+  await openDeletionDialog.click()
+  await dialog.getByRole('button', { name: 'Удалить аккаунт' }).click()
+  await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
+  await expect
+    .poll(async () =>
+      (await page.context().cookies()).some(
+        (cookie) => cookie.name === 'anomaly_detector_refresh',
+      ),
+    )
+    .toBe(false)
+
+  await page.goto('/profile')
+  await expect(page).toHaveURL('/')
+  await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
 })
 
 test('shows a neutral retry window after five failed password attempts', async ({ page }) => {

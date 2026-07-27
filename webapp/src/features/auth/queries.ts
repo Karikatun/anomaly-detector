@@ -28,7 +28,7 @@ type CurrentUserQueryOptions = {
 }
 
 type AuthMutationOptions = {
-  api: Pick<AuthApi, 'isSessionEpochCurrent' | 'login' | 'logout' | 'register'>
+  api: Pick<AuthApi, 'deleteAccount' | 'isSessionEpochCurrent' | 'login' | 'logout' | 'register'>
   setAccessToken: (accessToken: string | null) => void
 }
 
@@ -69,6 +69,18 @@ export function useLogoutMutation({ api, setAccessToken }: AuthMutationOptions) 
 
   return useMutation({
     mutationFn: () => logoutAuthenticatedSession({ api, queryClient, setAccessToken }),
+  })
+}
+
+export function useDeleteAccountMutation({ api, setAccessToken }: AuthMutationOptions) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      const transition = await api.deleteAccount()
+      if (!transition || !api.isSessionEpochCurrent(transition.sessionEpoch)) return
+      await clearAuthenticatedSession(queryClient, setAccessToken)
+    },
   })
 }
 

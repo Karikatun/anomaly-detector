@@ -135,6 +135,19 @@ export class AuthApi {
     })
   }
 
+  deleteAccount(): Promise<BrowserSessionTransition<undefined> | null> {
+    return this.authCoordinator(async () => {
+      if (!this.isSessionEpochCurrent(this.sessionEpoch)) return null
+
+      await this.performAuthenticatedRequest('/api/auth/account', z.any(), {
+        method: 'DELETE',
+      })
+      const sessionEvent = publishBrowserSessionState('cleared')
+      this.options.setAccessToken(null)
+      return { data: undefined, sessionEpoch: sessionEvent.epoch }
+    })
+  }
+
   async clearSession() {
     return this.authCoordinator(() => this.expireSessionWithinMutation(this.sessionEpoch))
   }

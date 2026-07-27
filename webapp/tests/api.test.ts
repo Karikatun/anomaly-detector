@@ -413,6 +413,42 @@ test('AuthApi clearSession does not revoke a possibly newer shared browser cooki
   expect(calls).toEqual([])
 })
 
+test('AuthApi deletes the account before clearing the browser session', async () => {
+  let accessToken: string | null = 'active-access-token'
+  const calls: Array<{
+    path: string
+    method: string | undefined
+    authorization: string | null
+  }> = []
+
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname
+    calls.push({
+      path,
+      method: init?.method,
+      authorization: new Headers(init?.headers).get('Authorization'),
+    })
+    return new Response(null, { status: 204 })
+  }
+
+  const client = new AuthApi({
+    getAccessToken: () => accessToken,
+    setAccessToken: (nextAccessToken) => {
+      accessToken = nextAccessToken
+    },
+  })
+
+  const transition = await client.deleteAccount()
+
+  expect(calls).toEqual([{
+    path: '/api/auth/account',
+    method: 'DELETE',
+    authorization: 'Bearer active-access-token',
+  }])
+  expect(accessToken).toBeNull()
+  expect(transition && client.isSessionEpochCurrent(transition.sessionEpoch)).toBe(true)
+})
+
 test('bootstrapAuthSession clears local state only for an unauthorized refresh', async () => {
   const events: string[] = []
   let completed = false

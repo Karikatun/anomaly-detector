@@ -19,6 +19,7 @@ import { AuthApi } from './api'
 import {
   clearAuthenticatedSession,
   useCurrentUserQuery,
+  useDeleteAccountMutation,
   useLoginMutation,
   useLogoutMutation,
   useRegisterMutation,
@@ -115,6 +116,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const { mutateAsync: registerAsync } = useRegisterMutation({ api, setAccessToken })
   const { mutateAsync: loginAsync } = useLoginMutation({ api, setAccessToken })
   const { mutateAsync: logoutAsync } = useLogoutMutation({ api, setAccessToken })
+  const { mutateAsync: deleteAccountAsync } = useDeleteAccountMutation({ api, setAccessToken })
 
   const updateProfile = useCallback(
     async (input: UpdateProfileRequest) => {
@@ -152,6 +154,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await logoutAsync()
   }, [logoutAsync])
 
+  const deleteAccount = useCallback(async () => {
+    await deleteAccountAsync()
+  }, [deleteAccountAsync])
+
   const retrySession = useCallback(async () => {
     if (accessToken) {
       await meQuery.refetch()
@@ -183,10 +189,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       register,
       login,
       startOAuth,
+      deleteAccount,
       logout,
       updateProfile,
     }),
-    [isSessionLoading, login, logout, meQuery.data?.user, register, retrySession, sessionError, startOAuth, transport, updateProfile],
+    [deleteAccount, isSessionLoading, login, logout, meQuery.data?.user, register, retrySession, sessionError, startOAuth, transport, updateProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
