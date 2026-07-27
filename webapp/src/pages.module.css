@@ -120,7 +120,7 @@
   background: linear-gradient(110deg, rgba(5, 16, 31, .9), rgba(4, 12, 24, .73));
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
 }
-.menuCard:hover { transform: translateY(-2px); background: rgba(9, 28, 50, .94); }
+.menuCard:hover { transform: none; background: linear-gradient(110deg, rgba(9, 28, 50, .96), rgba(5, 16, 31, .9)); }
 .menuCard:nth-child(3) { min-height: 8.5rem; }
 .menuCard:nth-child(4) { min-height: 6.2rem; }
 
@@ -130,8 +130,10 @@
 .iconWrap { display: grid; width: 4.6rem; aspect-ratio: 1; flex: 0 0 auto; place-items: center; color: #c7dbed; }
 .iconWrap svg { width: 3rem; height: 3rem; }
 .violet { border-color: rgba(175, 74, 231, .72); background: linear-gradient(120deg, rgba(22, 11, 49, .92), rgba(5, 12, 28, .84)); }
+.violet:hover { background: linear-gradient(120deg, rgba(34, 16, 68, .96), rgba(8, 18, 39, .92)); }
 .violet .iconWrap { color: #f07cff; text-shadow: 0 0 16px #b34bec; }
 .aqua { border-color: rgba(0, 184, 191, .64); background: linear-gradient(120deg, rgba(0, 41, 49, .8), rgba(4, 15, 27, .86)); }
+.aqua:hover { background: linear-gradient(120deg, rgba(0, 54, 62, .92), rgba(5, 22, 37, .94)); }
 .aqua .iconWrap { color: #85f6ed; text-shadow: 0 0 16px #00bcae; }
 .plain { flex: 0 0 100%; }
 .fullRow { flex: 0 0 100%; }

@@ -716,6 +716,19 @@
   gap: .5rem;
 }
 
+.contractSelection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .55rem;
+  margin-bottom: .65rem;
+}
+
+@media (max-width: 36rem) {
+  .contractSelection {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .contractCard {
   --contract-accent: var(--primary);
   display: grid;

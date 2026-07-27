@@ -27,6 +27,7 @@ import { AppError, validationErrorHook } from '../../../http/errors'
 import { clientAddress } from '../../../http/security'
 import type { AuthService } from '../application/auth-service'
 import type { DeviceTokens } from '../application/ports'
+import { AuthFailure } from '../domain/errors'
 import { userDtoFromPrincipal } from '../domain/user'
 import { executeAuth } from './errors'
 import type { AuthHttpEnv } from './middleware'
@@ -34,6 +35,9 @@ import type { AuthHttpEnv } from './middleware'
 const refreshCookieName = 'anomaly_detector_refresh'
 const deviceCookieName = 'anomaly_detector_device'
 const deviceTokenTtlSeconds = 180 * 24 * 60 * 60
+
+export const oauthCallbackErrorCode = (error: unknown) =>
+  error instanceof AuthFailure ? error.kind : 'oauth_failed'
 
 const cookieAuthResponseContent = {
   'application/json': {
@@ -492,8 +496,7 @@ export function createAuthRoutes({
       console.error('OAuth callback failed:', error)
       const redirectUrl = new URL(webappUrl)
       redirectUrl.pathname = '/'
-      const message = error instanceof Error ? encodeURIComponent(error.message) : 'oauth_failed'
-      redirectUrl.searchParams.set('auth_error', message)
+      redirectUrl.searchParams.set('auth_error', oauthCallbackErrorCode(error))
       return c.redirect(redirectUrl.toString(), 302)
     }
   })

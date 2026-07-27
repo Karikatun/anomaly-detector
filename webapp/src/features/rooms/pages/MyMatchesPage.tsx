@@ -115,6 +115,7 @@ function MyMatchesContent() {
                           onClick={() => void navigate({
                             to: '/tenders/$tenderId',
                             params: { tenderId: match.tenderId! },
+                            search: { from: 'matches' },
                           })}
                         >
                           {t('matches.details')}

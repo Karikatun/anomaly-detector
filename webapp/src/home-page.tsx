@@ -61,7 +61,7 @@ function AuthenticatedHome({
     const match = currentMatch.data
     if (!match) return
     if (match.status === 'started' && match.tenderId) {
-      void navigate({ to: '/tenders/$tenderId', params: { tenderId: match.tenderId } })
+      void navigate({ to: '/tenders/$tenderId', params: { tenderId: match.tenderId }, search: { from: undefined } })
       return
     }
     void navigate({ to: '/rooms/$roomId', params: { roomId: match.roomId } })

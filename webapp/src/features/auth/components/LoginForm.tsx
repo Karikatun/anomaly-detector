@@ -33,6 +33,7 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
   const auth = useAuth()
   const [passwordVisible, setPasswordVisible] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [consentReminder, setConsentReminder] = useState(false)
   const form = useForm({
     defaultValues: {
       displayName: '',
@@ -92,6 +93,10 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
               termsVersion,
             } : undefined}
             requireRegistrationConsent={mode === 'register'}
+            onConsentRequired={() => {
+              setConsentReminder(true)
+              document.getElementById('auth-privacy-consent')?.focus()
+            }}
           />
         )}
       </form.Subscribe>
@@ -212,7 +217,10 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                     <Checkbox
                       id="auth-privacy-consent"
                       checked={field.state.value}
-                      onCheckedChange={(checked) => field.handleChange(checked === true)}
+                      onCheckedChange={(checked) => {
+                        field.handleChange(checked === true)
+                        setConsentReminder(false)
+                      }}
                     />
                     <Label htmlFor="auth-privacy-consent">
                       Я даю согласие на{' '}
@@ -227,6 +235,11 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                   </div>
                 )}
               </form.Field>
+              {consentReminder && (
+                <Typography role="alert" variant="bodyXs" tone="destructive">
+                  Отметьте согласие на обработку персональных данных, чтобы продолжить через Яндекс.
+                </Typography>
+              )}
               <Typography variant="bodyXs" className={styles.termsNotice}>
                 Нажимая «Регистрация», вы принимаете{' '}
                 <Link className={styles.inlineLegalLink} to="/terms" target="_blank">

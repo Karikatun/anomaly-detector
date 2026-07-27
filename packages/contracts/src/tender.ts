@@ -107,6 +107,13 @@ export const reserveContractCommandSchema = z.object({
   type: z.literal('reserve-contract'),
 }).strict()
 
+export const skipContractCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  type: z.literal('skip-contract'),
+}).strict()
+
 export const contractKindSchema = z.enum(['light', 'complex', 'scientific', 'final'])
 export const contractSignalRoleSchema = z.enum(['source', 'receiver'])
 
@@ -167,6 +174,7 @@ export const tenderCommandSchema = z.discriminatedUnion('type', [
   updateWorkingModelCommandSchema,
   submitThesisCommandSchema,
   reserveContractCommandSchema,
+  skipContractCommandSchema,
   submitContractBidCommandSchema,
   submitScientificModelCommandSchema,
   leaveTenderCommandSchema,
@@ -216,6 +224,7 @@ export const publicContractSchema = z.object({
   awardedToPlayerId: playerIdSchema.optional(),
   bidOutcome: z.enum(['awarded', 'failed']).optional(),
   contractId: contractIdSchema,
+  eligibleForPlayer: z.boolean().optional(),
   kind: contractKindSchema.optional(),
   ratingReward: z.number().int().min(0).optional(),
   requiredPublicResult: publicResultSchema,

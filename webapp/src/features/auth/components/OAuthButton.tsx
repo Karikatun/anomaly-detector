@@ -14,6 +14,7 @@ type OAuthButtonProps = {
   icon?: ReactNode
   registration?: OAuthStartRequest['registration']
   requireRegistrationConsent?: boolean
+  onConsentRequired?: () => void
 }
 
 export function OAuthButton({
@@ -23,6 +24,7 @@ export function OAuthButton({
   icon,
   registration,
   requireRegistrationConsent = false,
+  onConsentRequired,
 }: OAuthButtonProps) {
   const { t } = useI18n()
   const { startOAuth } = useAuth()
@@ -31,6 +33,10 @@ export function OAuthButton({
 
   const handleClick = useCallback(async () => {
     if (busy) return
+    if (requireRegistrationConsent && !registration) {
+      onConsentRequired?.()
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -39,7 +45,7 @@ export function OAuthButton({
       setBusy(false)
       setError(t('oauth.error.server'))
     }
-  }, [busy, provider, registration, startOAuth, t])
+  }, [busy, onConsentRequired, provider, registration, requireRegistrationConsent, startOAuth, t])
 
   return (
     <div className="grid gap-1">
@@ -48,7 +54,7 @@ export function OAuthButton({
         variant="outline"
         size="lg"
         className={cn('w-full', className)}
-        disabled={busy || (requireRegistrationConsent && !registration)}
+        disabled={busy}
         onClick={() => void handleClick()}
       >
         {icon}

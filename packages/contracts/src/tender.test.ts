@@ -149,6 +149,15 @@ describe('Tender contracts', () => {
     ).toMatchObject({ type: 'update-working-model' })
   })
 
+  test('validates an explicit Contract skip command', () => {
+    expect(tenderCommandSchema.parse({
+      actorId: 'player-a',
+      commandId: 'command-a-skip-contract',
+      tenderId: 'tender-1',
+      type: 'skip-contract',
+    })).toMatchObject({ type: 'skip-contract' })
+  })
+
   test('validates an open Power allocation', () => {
     expect(
       powerAllocationSchema.parse({

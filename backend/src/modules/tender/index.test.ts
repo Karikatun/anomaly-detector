@@ -1473,6 +1473,100 @@ test('reserves public Contracts in Access Slot order', async () => {
   })
 })
 
+test('allows the active player to skip Contracts when no eligible evidence exists', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-slot', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 3 })
+  await tender.execute({ commandId: 'b-slot', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 4 })
+  for (const actorId of ['player-a', 'player-b']) {
+    await tender.execute({
+      allocation: { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 3 },
+      actorId,
+      commandId: `${actorId}-power`,
+      tenderId,
+      type: 'allocate-power',
+    })
+  }
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    activePlayerId: 'player-a',
+    phase: 'contracts',
+    publicContracts: [
+      { eligibleForPlayer: false },
+      { eligibleForPlayer: false },
+      { eligibleForPlayer: false },
+    ],
+  })
+
+  await tender.execute({ actorId: 'player-a', commandId: 'a-skip', tenderId, type: 'skip-contract' })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    activePlayerId: 'player-b',
+    phase: 'contracts',
+  })
+
+  await tender.execute({ actorId: 'player-b', commandId: 'b-skip', tenderId, type: 'skip-contract' })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'access-slot-selection',
+    round: 2,
+  })
+})
+
+test('rejects a Contract skip when the player has eligible evidence', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+
+  await tender.execute({ commandId: 'a-slot', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 3 })
+  await tender.execute({ commandId: 'b-slot', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 4 })
+  await tender.execute({
+    allocation: { contracts: 1, laboratory: 0, modelAnalysis: 1, reconnaissance: 0, reserve: 2 },
+    actorId: 'player-a',
+    commandId: 'a-power',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 },
+    actorId: 'player-b',
+    commandId: 'b-power',
+    tenderId,
+    type: 'allocate-power',
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'a-thesis',
+    fieldType: 'inertial',
+    polarity: 'negative',
+    signalId: 'aster',
+    tenderId,
+    type: 'submit-thesis',
+  })
+
+  const view = await tender.readTenderView({ tenderId, playerId: 'player-a' })
+  expect(view.phase).toBe('contracts')
+  expect(view.publicContracts[0]).toMatchObject({
+    eligibleForPlayer: true,
+    kind: 'scientific',
+    targetSignal: 'aster',
+  })
+  await expect(tender.execute({
+    actorId: 'player-a',
+    commandId: 'a-skip',
+    tenderId,
+    type: 'skip-contract',
+  })).rejects.toMatchObject({ kind: 'invalid_tender_state' })
+})
+
 test('does not award a Contract from removed claim and funding fields', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({

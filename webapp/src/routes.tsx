@@ -47,6 +47,9 @@ const roomLobbyRoute = createRoute({
 const tenderRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tenders/$tenderId',
+  validateSearch: (search: Record<string, unknown>) => ({
+    from: search.from === 'matches' ? 'matches' as const : undefined,
+  }),
   component: lazyRouteComponent(() => import('./features/tender/public/tender'), 'TenderRoute'),
 })
 

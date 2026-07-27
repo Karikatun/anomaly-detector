@@ -136,6 +136,7 @@ The server generates a deterministic, state-independent Contract deck from the T
 - A Complex Contract gives four Rating for either one unused, own Continuous Directed Test with the required role and effect, or two unused, own Directed Tests with the target Signal in its required role and the two listed distinct public effects.
 - A Scientific Contract gives three Rating for one unused, own Research Certification for its target Signal.
 - A player can win at most one ordinary Contract per round. Reservation is public and final: the player must immediately submit that Contract and cannot switch after reserving it.
+- A player with no currently eligible Contract may explicitly skip the Contract action instead of waiting for the phase deadline.
 - A Directed Test stays permanently visible in the public journal and remains usable in later rounds, but one Test record can be attached to only one successful Contract.
 - One Final Contract is visible from round one and resolves in round five. It gives eight Rating, requires at least two Corporate Trust, and uses the Complex Contract evidence rule.
 

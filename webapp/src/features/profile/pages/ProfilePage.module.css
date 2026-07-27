@@ -121,6 +121,9 @@
   height: auto;
   flex: 0 0 auto;
   filter: drop-shadow(0 0 20px rgba(208, 83, 255, .22));
+  background: transparent;
+  color-scheme: only dark;
+  forced-color-adjust: none;
 }
 
 .nameForm {

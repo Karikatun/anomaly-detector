@@ -39,6 +39,7 @@ type ContractsPanelProps = {
   disabled?: boolean
   error?: string | null
   onReserve: (contractId: string) => Promise<void>
+  onSkip: () => Promise<void>
   onBid: (contractId: string, bid: ContractBid) => Promise<void>
 }
 
@@ -61,16 +62,18 @@ export function ContractsPanel({
   disabled,
   error,
   onReserve,
+  onSkip,
   onBid,
 }: ContractsPanelProps) {
   const [bids, setBids] = useState<Record<string, ContractBid>>({})
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null)
   const { t } = useI18n()
   const ownJournal = journal.filter((entry) => entry.playerId === playerId)
-  const selectedContract = contracts.find((contract) => contract.contractId === selectedContractId)
-    ?? contracts.find((contract) => contract.reservedByPlayerId === playerId)
-    ?? contracts[0]
+  const reservedContract = contracts.find((contract) => contract.reservedByPlayerId === playerId)
+  const selectedContract = reservedContract
+    ?? contracts.find((contract) => contract.contractId === selectedContractId)
   const selectedBid = selectedContract ? bids[selectedContract.contractId] : undefined
+  const eligibleContracts = contracts.filter((contract) => contract.eligibleForPlayer)
 
   const handleReserve = async (contractId: string) => {
     setSelectedContractId(contractId)
@@ -135,6 +138,38 @@ export function ContractsPanel({
 
         <div className={styles.surface}>
           {contracts.length === 0 && <Typography tone="muted">{t('tender.contracts.empty')}</Typography>}
+          {!reservedContract && (
+            <div className={styles.contractSelection}>
+              <NativeSelect
+                aria-label="Подходящий контракт"
+                value={selectedContractId ?? ''}
+                disabled={disabled || eligibleContracts.length === 0}
+                onChange={(event) => setSelectedContractId(event.target.value || null)}
+              >
+                <option value="">Выберите подходящий контракт</option>
+                {eligibleContracts.map((contract) => (
+                  <option key={contract.contractId} value={contract.contractId}>
+                    {contract.targetSignal
+                      ? `${t(signalLabelKeys[contract.targetSignal])} · ${t(`tender.contracts.kind.${contract.kind ?? 'light'}`)}`
+                      : contract.contractId}
+                  </option>
+                ))}
+              </NativeSelect>
+              {eligibleContracts.length > 0 ? (
+                <Button
+                  type="button"
+                  disabled={disabled || !selectedContractId}
+                  onClick={() => selectedContractId && void handleReserve(selectedContractId)}
+                >
+                  {t('tender.contracts.reserve')}
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" disabled={disabled} onClick={() => void onSkip()}>
+                  Пропустить ход
+                </Button>
+              )}
+            </div>
+          )}
           <div className={styles.contractGrid}>
             {contracts.map((contract) => {
               const kind = contract.kind ?? 'light'
@@ -156,7 +191,6 @@ export function ContractsPanel({
                   data-active={selectedContract?.contractId === contract.contractId || undefined}
                   data-contract-kind={kind}
                   style={contractStyle}
-                  onClick={() => setSelectedContractId(contract.contractId)}
                 >
                   <header className={styles.contractHeader}>
                     <SignalGlyph signal={target} className={styles.signalGlyph} />
@@ -201,19 +235,7 @@ export function ContractsPanel({
                     </span>
                   </div>
 
-                  {!bid && contract.bidOutcome === undefined ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      aria-label={t('tender.contracts.reserveAria', { id: contract.contractId })}
-                      disabled={disabled || maxPower === 0 || !canResolve || reservedByOther}
-                      onClick={() => void handleReserve(contract.contractId)}
-                    >
-                      {reservedByOther
-                        ? 'Уже зарезервирован'
-                        : isFinal && !canResolve ? 'Заблокировано' : t('tender.contracts.reserve')}
-                    </Button>
-                  ) : (
+                  {(bid || contract.bidOutcome !== undefined || reservedByOther || !canResolve) && (
                     <Typography variant="caption" className={styles.reservedHint}>
                       {contract.bidOutcome === 'awarded'
                         ? 'Контракт выполнен'

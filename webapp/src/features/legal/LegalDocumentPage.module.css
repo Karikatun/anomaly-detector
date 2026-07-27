@@ -12,9 +12,27 @@
   color: var(--foreground);
 }
 
-.back {
-  display: inline-flex;
+.header {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
   margin-bottom: 1.5rem;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 5vw, 2.4rem);
+  line-height: 1.1;
+}
+
+.back {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: .65rem;
   color: var(--muted-foreground);
   text-decoration: none;
 }
@@ -31,12 +49,6 @@
   background: color-mix(in srgb, var(--card) 94%, transparent);
   padding: clamp(1.25rem, 4vw, 3rem);
   box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 18%);
-}
-
-.surface h1 {
-  margin: 0 0 1rem;
-  font-size: clamp(1.75rem, 5vw, 2.75rem);
-  line-height: 1.1;
 }
 
 .surface h2 {

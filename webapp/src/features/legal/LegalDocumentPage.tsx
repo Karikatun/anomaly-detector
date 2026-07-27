@@ -1,4 +1,6 @@
 import { Link } from '@tanstack/react-router'
+import { ArrowLeft01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import type { ReactNode } from 'react'
 
 import personalDataConsent from '../../../../docs/personal-data-consent.md?raw'
@@ -34,9 +36,13 @@ export function LegalDocumentPage({ documentId }: { documentId: LegalDocumentId 
   return (
     <section className={styles.page}>
       <article className={styles.document}>
-        <Link className={styles.back} to="/">← Вернуться к регистрации</Link>
-        <div className={styles.surface}>
+        <header className={styles.header}>
+          <Link className={styles.back} to="/" aria-label="Вернуться к регистрации">
+            <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={1.7} aria-hidden="true" />
+          </Link>
           <Typography variant="h1">{title}</Typography>
+        </header>
+        <div className={styles.surface}>
           <MarkdownBlocks lines={publicationLines} />
         </div>
       </article>
