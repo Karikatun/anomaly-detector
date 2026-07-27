@@ -166,6 +166,14 @@ test('restores the authenticated lobby before joining again after a direct reloa
 
   await expect(page.getByRole('heading', { name: 'Лобби' })).toBeVisible()
   await expect(page.getByText('Комната не найдена')).toBeHidden()
+  const copyRoomId = page.getByRole('button', { name: /Скопировать ID комнаты/ })
+  await expect(page.getByText('ID:', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('room-copy-icon')).toBeVisible()
+  await copyRoomId.click()
+  await expect(page.getByTestId('room-copy-success')).toBeVisible()
+  await expect(page.getByTestId('room-copy-icon')).toHaveCount(0)
+  await expect(page.getByTestId('room-copy-success')).toHaveCount(0, { timeout: 2_500 })
+  await expect(page.getByTestId('room-copy-icon')).toBeVisible()
 })
 
 test('requires every lobby player to be ready before enabling the match start', async ({ browser, page }) => {

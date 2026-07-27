@@ -1,5 +1,7 @@
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -33,6 +35,7 @@ function RoomLobbyContent() {
   const navigate = useNavigate()
   const [actionError, setActionError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const api = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
   const { mutateAsync: leaveRoom, isPending: isLeaving } = useLeaveRoomMutation({ api })
@@ -46,6 +49,10 @@ function RoomLobbyContent() {
     currentRoom?.serverTime,
     { fallbackSeconds: 5, maximumSeconds: 5 },
   )
+
+  useEffect(() => () => {
+    if (copyResetTimer.current) clearTimeout(copyResetTimer.current)
+  }, [])
 
   useEffect(() => {
     if (currentRoom?.status === 'started' && currentRoom.tenderId) {
@@ -68,7 +75,11 @@ function RoomLobbyContent() {
       document.body.removeChild(textarea)
     }
     setCopied(true)
-    setTimeout(() => setCopied(false), 2_000)
+    if (copyResetTimer.current) clearTimeout(copyResetTimer.current)
+    copyResetTimer.current = setTimeout(() => {
+      setCopied(false)
+      copyResetTimer.current = null
+    }, 2_000)
   }, [currentRoom?.joinCode, roomId])
 
   const runRoomAction = useCallback(async <T,>(
@@ -144,9 +155,19 @@ function RoomLobbyContent() {
               {currentRoom.joinCode ?? currentRoom.roomId}
             </Typography>
             {copied
-              ? <Typography as="span" variant="control" className={styles.copiedLabel} aria-live="polite">{t('lobby.copied')}</Typography>
-              : <span className={styles.copyIcon} aria-hidden="true" />}
-            {!copied ? <Typography as="span" variant="srOnly">{t('lobby.copyId')}</Typography> : null}
+              ? (
+                <HugeiconsIcon
+                  icon={CheckmarkCircle02Icon}
+                  strokeWidth={2}
+                  className={styles.copySuccessIcon}
+                  data-testid="room-copy-success"
+                  aria-hidden="true"
+                />
+              )
+              : <span className={styles.copyIcon} data-testid="room-copy-icon" aria-hidden="true" />}
+            <Typography as="span" variant="srOnly" aria-live="polite">
+              {copied ? t('lobby.copied') : t('lobby.copyId')}
+            </Typography>
           </button>
           <Typography as="h1" className={styles.title}>{t('lobby.title')}</Typography>
           {canLeave ? (
