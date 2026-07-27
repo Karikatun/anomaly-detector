@@ -1,10 +1,13 @@
 import type { DbClient } from '../../../db'
 import type { Prisma } from '../../../generated/prisma/client'
+import { randomBytes } from 'node:crypto'
 import type { RoomRepository } from '../application/ports'
 import { RoomFailure } from '../domain/errors'
 
+const JOIN_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+
 export function createPrismaRoomRepository(db: DbClient): RoomRepository {
-  return {
+  const repository: RoomRepository = {
     async cancelStart(input) {
       return db.$transaction(async (tx) => {
         const room = await tx.tenderRoom.findUnique({
@@ -24,6 +27,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           capacity: waitingRoom.capacity as 2 | 3 | 4,
           hostId: waitingRoom.hostId,
           id: waitingRoom.id,
+          joinCode: waitingRoom.joinCode,
           members: waitingRoom.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
           status: 'waiting' as const,
           startsAt: null,
@@ -41,6 +45,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         capacity: room.capacity as 2 | 3 | 4,
         hostId: room.hostId,
         id: room.id,
+        joinCode: room.joinCode,
         members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
         status: 'started' as const,
         startsAt: null,
@@ -71,6 +76,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           capacity: current.room.capacity as 2 | 3 | 4,
           hostId: current.room.hostId,
           id: current.room.id,
+          joinCode: current.room.joinCode,
           members: current.room.members.map((member) => ({
             ready: member.ready,
             seat: member.seat,
@@ -100,6 +106,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         capacity: room.capacity as 2 | 3 | 4,
         hostId: room.hostId,
         id: room.id,
+        joinCode: room.joinCode,
         members: room.members.map((member) => ({
           ready: member.ready,
           seat: member.seat,
@@ -124,6 +131,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
               data: {
                 capacity: input.capacity,
                 hostId: input.hostId,
+                joinCode: generateRoomJoinCode(),
                 status: 'waiting',
                 members: {
                   create: { seat: 1, userId: input.hostId },
@@ -140,6 +148,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
               capacity: room.capacity as 2 | 3 | 4,
               hostId: room.hostId,
               id: room.id,
+              joinCode: room.joinCode,
               members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
               status: 'waiting' as const,
               startsAt: null,
@@ -147,7 +156,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
             }
           }, { isolationLevel: 'Serializable' })
         } catch (error) {
-          if (isRetryableTransactionError(error) && attempt < 2) continue
+          if ((isRetryableTransactionError(error) || isJoinCodeUniqueConstraintError(error)) && attempt < 2) continue
           if (isCurrentMatchUniqueConstraintError(error)) {
             throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
           }
@@ -184,6 +193,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
             capacity: room.capacity as 2 | 3 | 4,
             hostId: room.hostId,
             id: room.id,
+            joinCode: room.joinCode,
             members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
             status: room.status as 'waiting' | 'starting' | 'started',
             startsAt: room.startsAt?.toISOString() ?? null,
@@ -212,6 +222,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           capacity: room.capacity as 2 | 3 | 4,
           hostId: room.hostId,
           id: room.id,
+          joinCode: room.joinCode,
           members: [
             ...room.members.map((member) => ({ ...member, ready: false })),
             { ready: false, seat, userId: input.actorId },
@@ -229,6 +240,14 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         }
         throw error
       }
+    },
+
+    async joinByCode(input) {
+      const room = input.code.length === 36
+        ? await db.tenderRoom.findUnique({ where: { id: input.code.toLowerCase() }, select: { id: true } })
+        : await db.tenderRoom.findUnique({ where: { joinCode: input.code }, select: { id: true } })
+      if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+      return repository.join({ actorId: input.actorId, roomId: room.id })
     },
 
     async leave(input) {
@@ -288,6 +307,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           capacity: room.capacity as 2 | 3 | 4,
           hostId: room.hostId,
           id: room.id,
+          joinCode: room.joinCode,
           members: room.members.map((member) => ({
             ready: member.userId === updatedMember.userId ? updatedMember.ready : member.ready,
             seat: member.seat,
@@ -324,6 +344,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           capacity: startingRoom.capacity as 2 | 3 | 4,
           hostId: startingRoom.hostId,
           id: startingRoom.id,
+          joinCode: startingRoom.joinCode,
           members: startingRoom.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
           status: 'starting' as const,
           startsAt: startsAt.toISOString(),
@@ -332,6 +353,11 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
       }, { isolationLevel: 'Serializable' })
     },
   }
+  return repository
+}
+
+function generateRoomJoinCode() {
+  return Array.from(randomBytes(10), (byte) => JOIN_CODE_ALPHABET[byte & 31]).join('')
 }
 
 async function releaseCompletedCurrentMatch(tx: Prisma.TransactionClient, userId: string) {
@@ -354,6 +380,23 @@ function isCurrentMatchUniqueConstraintError(error: unknown) {
     && error.meta !== null
     && 'modelName' in error.meta
     && error.meta.modelName === 'CurrentMatch'
+}
+
+function isJoinCodeUniqueConstraintError(error: unknown) {
+  if (
+    typeof error !== 'object'
+    || error === null
+    || !('code' in error)
+    || error.code !== 'P2002'
+    || !('meta' in error)
+    || typeof error.meta !== 'object'
+    || error.meta === null
+  ) return false
+
+  const target = 'target' in error.meta ? error.meta.target : undefined
+  return Array.isArray(target)
+    ? target.includes('join_code')
+    : String(target).includes('join_code')
 }
 
 function isRetryableTransactionError(error: unknown) {

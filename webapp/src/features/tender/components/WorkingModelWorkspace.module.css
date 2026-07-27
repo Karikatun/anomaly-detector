@@ -38,8 +38,8 @@
   background:
     radial-gradient(circle at 80% 10%, rgba(31, 157, 218, .08), transparent 34%),
     var(--background);
-  translate: none !important;
-  transform: none !important;
+  translate: none;
+  transform: none;
 }
 
 .header {
@@ -81,8 +81,8 @@
     max-height: none !important;
     padding: 1.25rem;
     border-radius: 1rem;
-    translate: -50% 0 !important;
-    transform: none !important;
+    translate: -50% 0;
+    transform: none;
   }
 
   .desktopPanel {

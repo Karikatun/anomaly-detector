@@ -2,6 +2,12 @@ import type { Page } from '@playwright/test'
 
 import { expect, registerBrowserUser, test } from '../helpers/test'
 
+async function readRoomJoinCode(page: Page) {
+  const code = (await page.getByTestId('room-join-code').textContent())?.trim()
+  if (!code) throw new Error('Room join code is missing from the lobby')
+  return code
+}
+
 async function chooseAccessSlot(page: Page, slot: number) {
   await page.getByRole('button', { name: new RegExp(`^Слот доступа ${slot}:`) }).click()
   await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
@@ -61,11 +67,10 @@ test('keeps the Working Model dialog below the Tender header and inside the view
     await page.getByLabel('Количество игроков').selectOption('2')
     await page.getByRole('button', { name: 'Создать команду' }).click()
     await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}$/)
-    const roomId = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
-    if (!roomId) throw new Error('Room identifier is missing')
+    const roomJoinCode = await readRoomJoinCode(page)
 
     await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
-    await guestPage.getByLabel('ID комнаты').fill(roomId)
+    await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
     await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
     await page.getByRole('button', { name: 'Готов', exact: true }).click()
@@ -77,6 +82,10 @@ test('keeps the Working Model dialog below the Tender header and inside the view
     await allocateReconnaissance(guestPage)
 
     await expect(page.getByRole('heading', { name: '3. Разведка' })).toBeVisible()
+    await page.getByRole('button', { name: /Рабочая модель/ }).click()
+    await expectDialogInsideViewport(page)
+
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
     await page.getByRole('button', { name: /Рабочая модель/ }).click()
     await expectDialogInsideViewport(page)
 

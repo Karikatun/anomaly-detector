@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -13,7 +13,10 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
+import { RoomsApi } from '../api'
+import { useJoinRoomByCodeMutation } from '../queries'
 import styles from './RoomDialog.module.css'
 
 export function JoinRoomDialog({
@@ -24,19 +27,28 @@ export function JoinRoomDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useI18n()
+  const auth = useAuth()
   const navigate = useNavigate()
-  const [roomId, setRoomId] = useState('')
+  const [roomCode, setRoomCode] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const api = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
+  const { mutateAsync: joinRoom, isPending } = useJoinRoomByCodeMutation({ api })
 
-  const handleJoin = () => {
-    const normalizedRoomId = roomId.trim()
-    if (!normalizedRoomId) {
+  const handleJoin = async () => {
+    if (!roomCode.trim()) {
       setError(t('rooms.join.error.required'))
       return
     }
 
-    onOpenChange(false)
-    void navigate({ to: '/rooms/$roomId', params: { roomId: normalizedRoomId } })
+    setError(null)
+    try {
+      const room = await joinRoom({ code: roomCode })
+      onOpenChange(false)
+      setRoomCode('')
+      await navigate({ to: '/rooms/$roomId', params: { roomId: room.roomId } })
+    } catch {
+      setError(t('rooms.join.error.invalid'))
+    }
   }
 
   return (
@@ -53,10 +65,13 @@ export function JoinRoomDialog({
             <Input
               id="join-room-id"
               className={styles.input}
-              value={roomId}
+              value={roomCode}
               placeholder={t('rooms.join.placeholder')}
-              onChange={(event) => { setRoomId(event.target.value); setError(null) }}
-              onKeyDown={(event) => { if (event.key === 'Enter') handleJoin() }}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => { setRoomCode(event.target.value); setError(null) }}
+              onKeyDown={(event) => { if (event.key === 'Enter') void handleJoin() }}
             />
           </Field>
           {error && <FieldError className={styles.error} errors={[{ message: error }]} />}
@@ -66,7 +81,9 @@ export function JoinRoomDialog({
           <DialogClose asChild>
             <Button type="button" variant="ghost" className={styles.cancel}>{t('rooms.join.cancel')}</Button>
           </DialogClose>
-          <Button type="button" className={styles.submit} onClick={handleJoin}>{t('rooms.join.submit')}</Button>
+          <Button type="button" className={styles.submit} disabled={isPending} onClick={() => void handleJoin()}>
+            {isPending ? t('rooms.join.pending') : t('rooms.join.submit')}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

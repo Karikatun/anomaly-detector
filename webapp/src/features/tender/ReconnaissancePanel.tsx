@@ -95,8 +95,7 @@ export function ReconnaissancePanel({
       target.startsWith('unknown-sector-') ? 'unknown-sector' : target as SignalId
     ))
     if (targets.length !== maxSignals) return
-    const succeeded = await runTenderAction(() => onConfirm(targets))
-    if (succeeded) setSelected(new Set())
+    await runTenderAction(() => onConfirm(targets))
   }
 
   const renderTarget = (target: string, index: number) => {

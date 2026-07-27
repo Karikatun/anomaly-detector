@@ -225,9 +225,16 @@
 }
 
 .footer {
+  position: sticky;
+  z-index: 20;
+  bottom: env(safe-area-inset-bottom, 0px);
   display: grid;
   gap: .4rem;
-  padding-top: .15rem;
+  padding: .5rem;
+  border: 1px solid rgba(65, 127, 169, .3);
+  border-radius: .72rem;
+  background: rgba(1, 13, 27, .97);
+  box-shadow: 0 -.7rem 1.5rem rgba(1, 8, 17, .78);
 }
 
 .actionButton {
@@ -890,6 +897,39 @@
   align-content: start;
 }
 
+.finalEvidenceSummary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  margin-bottom: .6rem;
+  padding: .55rem .65rem;
+  border: 1px solid rgba(40, 197, 181, .4);
+  border-radius: .55rem;
+  color: #bff8ef;
+  background: rgba(4, 34, 40, .5);
+}
+
+.finalEvidenceSummary > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: .08rem;
+}
+
+.finalEvidenceSummary > :last-child,
+.finalBackLink {
+  flex: none;
+  color: var(--primary);
+  font-size: .66rem;
+  text-decoration: underline;
+  text-underline-offset: .15rem;
+}
+
+.finalBackLink {
+  display: inline;
+}
+
 .finalProgressList {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1168,12 +1208,14 @@
   }
 
   .footer {
+    position: static;
     grid-template-columns: minmax(0, 1fr) minmax(20rem, 42rem);
     align-items: center;
     padding: .75rem 1rem;
     border: 1px solid rgba(65, 127, 169, .3);
     border-radius: .72rem;
     background: rgba(1, 13, 27, .9);
+    box-shadow: none;
   }
 
   .selectionSummary {
@@ -1226,6 +1268,22 @@
   .finalWorkspace {
     grid-template-columns: minmax(0, 1fr) minmax(17rem, .38fr);
     gap: .85rem;
+    height: max(32rem, calc(100dvh - var(--tender-sticky-header-height, 4.5rem) - 11rem));
+    max-height: 52rem;
+    align-items: stretch;
+  }
+
+  .finalWorkspace > .surface,
+  .finalSidebar {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .finalEvidenceSummary,
+  .finalBackLink {
+    display: none;
   }
 
   .finalModelHead {

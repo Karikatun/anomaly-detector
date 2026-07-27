@@ -52,9 +52,13 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  closeLabel = "Close",
+  placement = "centered",
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  closeLabel?: string
+  placement?: "centered" | "viewport"
   showCloseButton?: boolean
 }) {
   return (
@@ -63,7 +67,10 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-4xl bg-popover p-6 text-popover-foreground ring-1 ring-foreground/5 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed z-50 grid w-full gap-6 rounded-4xl bg-popover p-6 text-popover-foreground ring-1 ring-foreground/5 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+          placement === "centered"
+            ? "top-1/2 left-1/2 max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 sm:max-w-md data-open:zoom-in-95 data-closed:zoom-out-95"
+            : "translate-none",
           className
         )}
         {...props}
@@ -73,11 +80,11 @@ function DialogContent({
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button
               variant="ghost"
-              className="absolute top-4 right-4"
-              size="icon-sm"
+              className="absolute top-2 right-2 size-11"
+              size="icon"
             >
               <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-              <Typography variant="srOnly">Close</Typography>
+              <Typography variant="srOnly">{closeLabel}</Typography>
             </Button>
           </DialogPrimitive.Close>
         )}

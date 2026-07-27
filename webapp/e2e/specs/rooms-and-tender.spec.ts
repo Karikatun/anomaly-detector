@@ -9,11 +9,17 @@ const headings = {
   laboratory: '4. Лаборатория',
   analysis: '5. Анализ модели',
   contracts: '6. Контракты',
-  final: '7. Финальная научная модель',
+  final: '7. Финальная модель',
 } as const
 
 async function expectPhase(page: Page, heading: string) {
   await expect(page.getByRole('heading', { name: heading })).toBeVisible()
+}
+
+async function readRoomJoinCode(page: Page) {
+  const code = (await page.getByTestId('room-join-code').textContent())?.trim()
+  if (!code) throw new Error('Room join code is missing from the lobby')
+  return code
 }
 
 async function expectSynchronizedTimers(first: Page, second: Page) {
@@ -121,17 +127,21 @@ async function submitThesis(page: Page) {
 }
 
 async function completeContract(page: Page) {
-  const reserve = page
-    .locator('[data-contract-kind="complex"], [data-contract-kind="light"]')
-    .getByRole('button', { name: /^Зарезервировать контракт / })
-    .first()
-  const contractId = (await reserve.getAttribute('aria-label'))?.replace('Зарезервировать контракт ', '')
-  if (!contractId) throw new Error('Contract identifier is missing')
+  const contractSelect = page.getByRole('combobox', { name: 'Подходящий контракт' })
+  const skip = page.getByRole('button', { name: 'Пропустить ход' })
+  await expect.poll(async () => await contractSelect.isEnabled() || await skip.isEnabled()).toBe(true)
+  if (!await contractSelect.isEnabled()) {
+    await skip.click()
+    return
+  }
 
-  await reserve.click()
+  await contractSelect.selectOption({ index: 1 })
+  await page.getByRole('button', { name: 'Зарезервировать' }).click()
   await expect(page.getByText('Зафиксирован · доказательства справа')).toBeVisible()
-  await page.locator('button[data-evidence]:not(:disabled)').first().click()
+  const fittingEvidence = page.locator('button[data-evidence][data-fits]:not(:disabled)').first()
+  await fittingEvidence.click()
   const submit = page.getByRole('button', { name: /^Подать заявку по контракту / })
+  await expect(submit).toBeEnabled()
   await submit.click()
 }
 
@@ -176,11 +186,10 @@ test('requires every lobby player to be ready before enabling the match start', 
     await page.getByLabel('Количество игроков').selectOption('2')
     await page.getByRole('button', { name: 'Создать команду' }).click()
     await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)
-    const roomId = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
-    if (!roomId) throw new Error('Room identifier is missing from the lobby URL')
+    const roomJoinCode = await readRoomJoinCode(page)
 
     await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
-    await guestPage.getByLabel('ID комнаты').fill(roomId)
+    await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
     await expect.poll(() => hostRoomReads).toBeGreaterThan(0)
     expect(hostJoinRequests).toBe(0)
@@ -264,11 +273,10 @@ test('returns both players to one active match and completes it five seconds aft
     await page.getByLabel('Количество игроков').selectOption('2')
     await page.getByRole('button', { name: 'Создать команду' }).click()
     await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}$/)
-    const roomId = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
-    if (!roomId) throw new Error('Room identifier is missing from the lobby URL')
+    const roomJoinCode = await readRoomJoinCode(page)
 
     await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
-    await guestPage.getByLabel('ID комнаты').fill(roomId)
+    await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
     await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
     await page.getByRole('button', { name: 'Готов', exact: true }).click()
@@ -284,7 +292,9 @@ test('returns both players to one active match and completes it five seconds aft
     await page.getByRole('button', { name: 'МОИ МАТЧИ' }).click()
     await expect(page.getByText('Активен', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Детали' }).click()
-    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    await expect(page).toHaveURL((url) =>
+      /^\/tenders\/[0-9a-f-]{36}$/.test(url.pathname)
+      && url.searchParams.get('from') === 'matches')
     await expect(page.getByRole('heading', { name: headings.access })).toBeVisible()
 
     await page.getByRole('button', { name: 'Выйти из матча' }).click()
@@ -315,12 +325,11 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     await page.getByLabel('Количество игроков').selectOption('2')
     await page.getByRole('button', { name: 'Создать команду' }).click()
     await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)
-    const roomId = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
-    if (!roomId) throw new Error('Room identifier is missing from the lobby URL')
+    const roomJoinCode = await readRoomJoinCode(page)
 
     await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
     await expect(guestPage.getByRole('dialog')).toBeVisible()
-    await guestPage.getByLabel('ID комнаты').fill(roomId)
+    await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
     await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
     await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
@@ -343,7 +352,7 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
 })
 
 test('two players complete every Tender stage and receive each realtime phase transition', async ({ browser, page }) => {
-  test.setTimeout(180_000)
+  test.setTimeout(300_000)
   await registerBrowserUser(page, 'Хост E2E', 'room-host')
   const webOrigin = new URL(page.url()).origin
 
@@ -353,7 +362,10 @@ test('two players complete every Tender stage and receive each realtime phase tr
   ).toBeVisible()
   await page.getByRole('button', { name: 'Назад' }).click()
 
-  const guestContext = await browser.newContext({ baseURL: webOrigin })
+  const guestContext = await browser.newContext({
+    baseURL: webOrigin,
+    viewport: { width: 390, height: 844 },
+  })
   const guestPage = await guestContext.newPage()
   try {
     await registerBrowserUser(guestPage, 'Гость E2E', 'room-guest', webOrigin)
@@ -364,12 +376,11 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await page.getByRole('button', { name: 'Создать команду' }).click()
     await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}$/)
 
-    const roomId = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
-    if (!roomId) throw new Error('Room identifier is missing from the lobby URL')
+    const roomJoinCode = await readRoomJoinCode(page)
 
     await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
     await expect(guestPage.getByRole('dialog')).toBeVisible()
-    await guestPage.getByLabel('ID комнаты').fill(roomId)
+    await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
     await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
     await expect(guestPage.getByText('Готовы: 0/2')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()

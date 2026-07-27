@@ -130,6 +130,7 @@ model Tender {
 
 model TenderRoom {
   id        String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  joinCode  String?            @unique(map: "tender_rooms_join_code_key") @map("join_code") @db.VarChar(10)
   hostId    String             @map("host_id") @db.Uuid
   capacity  Int
   status    String

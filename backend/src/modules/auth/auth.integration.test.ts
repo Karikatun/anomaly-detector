@@ -209,6 +209,7 @@ maybeDescribe('auth API integration', () => {
     expect(room).toEqual({
       capacity: 2,
       hostId: user.id,
+      joinCode: expect.stringMatching(/^[0-9A-HJKMNP-TV-Z]{10}$/),
       roomId: expect.any(String),
       members: [{ ready: false, seat: 1, userId: user.id }],
       serverTime: expect.any(String),
@@ -227,9 +228,13 @@ maybeDescribe('auth API integration', () => {
       }),
     })
     const joiner = await joinerRegister.json()
-    const join = await app.request(`/api/rooms/${room.roomId}/join`, {
+    const join = await app.request('/api/rooms/join', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${joiner.accessToken}` },
+      headers: {
+        Authorization: `Bearer ${joiner.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: ` ${room.joinCode.toLowerCase()} ` }),
     })
 
     expect(join.status).toBe(200)
@@ -265,9 +270,13 @@ maybeDescribe('auth API integration', () => {
       }),
     })
     const extra = await extraRegister.json()
-    const fullRoomJoin = await app.request(`/api/rooms/${room.roomId}/join`, {
+    const fullRoomJoin = await app.request('/api/rooms/join', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${extra.accessToken}` },
+      headers: {
+        Authorization: `Bearer ${extra.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: room.joinCode }),
     })
 
     expect(fullRoomJoin.status).toBe(409)

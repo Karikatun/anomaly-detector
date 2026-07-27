@@ -53,7 +53,7 @@ const phaseLabels: Record<string, string> = {
   'laboratory': '4. Лаборатория',
   'model-analysis': '5. Анализ модели',
   'contracts': '6. Контракты',
-  'final-scientific-model': '7. Финальная научная модель',
+  'final-scientific-model': '7. Финальная модель',
   'complete': 'Завершён',
 }
 
@@ -77,7 +77,7 @@ function WaitingForTurn({ playerName }: { playerName?: string }) {
     <PhaseNotice
       kind="waiting"
       description={playerName
-        ? `Сейчас действует ${playerName}. Форма откроется в ваш слот.`
+        ? `Сейчас действует ${playerName}. Ваш подтверждённый выбор сохранён в форме ниже.`
         : 'Ожидаем синхронизацию следующего хода.'}
     >
       Ожидание хода
@@ -273,6 +273,7 @@ function TenderContent() {
   const [resuming, setResuming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
+  const leavingTenderIdRef = useRef<string | null>(null)
   const resumingTenderIdRef = useRef<string | null>(null)
 
   useLayoutEffect(() => {
@@ -304,7 +305,12 @@ function TenderContent() {
   }, [queryClient, tenderView?.phase, tenderId])
 
   useEffect(() => {
-    if (!connected || !tenderView?.hasLeft || resumingTenderIdRef.current === tenderId) return
+    if (
+      !connected
+      || !tenderView?.hasLeft
+      || leavingTenderIdRef.current === tenderId
+      || resumingTenderIdRef.current === tenderId
+    ) return
     resumingTenderIdRef.current = tenderId
     setResuming(true)
     void execute({ type: 'resume-tender' })
@@ -346,6 +352,7 @@ function TenderContent() {
       await navigate({ to: tenderSearch.from === 'matches' ? '/app' : '/' })
       return
     }
+    leavingTenderIdRef.current = tenderId
     try {
       await handleCommand({ type: 'leave-tender' })
       await Promise.all([
@@ -354,9 +361,10 @@ function TenderContent() {
       ])
       await navigate({ to: '/' })
     } catch {
+      leavingTenderIdRef.current = null
       // The shared command error remains visible; stay in the match so the player can retry.
     }
-  }, [handleCommand, navigate, queryClient, tenderSearch.from, tenderView?.phase])
+  }, [handleCommand, navigate, queryClient, tenderId, tenderSearch.from, tenderView?.phase])
 
   if (error && !tenderView) {
     return (

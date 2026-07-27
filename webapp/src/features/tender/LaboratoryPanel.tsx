@@ -46,12 +46,9 @@ export function LaboratoryPanel({
 
   const handleTest = async () => {
     if (!isValid) return
-    const succeeded = await runTenderAction(
+    await runTenderAction(
       () => onConfirm({ sourceSignal: source, receiverSignal: receiver, protocol }),
     )
-    if (succeeded) {
-      setSelectedSamples([])
-    }
   }
 
   const handleSampleClick = (signal: SignalId) => {
@@ -190,23 +187,34 @@ export function LaboratoryPanel({
               )}
             </div>
 
-            <Button
-              type="button"
-              size="lg"
-              className={styles.laboratoryActionButton}
-              disabled={disabled || !isValid}
-              onClick={() => void handleTest()}
-            >
-              <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
-              {source && receiver
-                ? `Провести опыт: ${signalName(source)} → ${signalName(receiver)}`
-                : t('tender.lab.confirm')}
-            </Button>
           </div>
         </section>
       </div>
 
       {error && <div className={styles.error} role="alert"><Typography variant="bodySm">{error}</Typography></div>}
+
+      <footer className={styles.footer}>
+        <div className={styles.info}>
+          <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
+          <Typography variant="bodySm">
+            {source && receiver
+              ? `${signalName(source)} → ${signalName(receiver)}`
+              : 'Выберите сначала источник, затем приёмник'}
+          </Typography>
+        </div>
+        <Button
+          type="button"
+          size="lg"
+          className={styles.actionButton}
+          disabled={disabled || !isValid}
+          onClick={() => void handleTest()}
+        >
+          <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
+          {source && receiver
+            ? `Провести опыт: ${signalName(source)} → ${signalName(receiver)}`
+            : t('tender.lab.confirm')}
+        </Button>
+      </footer>
     </section>
   )
 }

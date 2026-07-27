@@ -112,6 +112,18 @@ export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm
             </span>
           </div>
 
+          <a className={styles.finalEvidenceSummary} href="#final-evidence">
+            <span>
+              <Typography as="strong" variant="bodySmMedium">Данные для решения</Typography>
+              <Typography as="span" variant="caption" tone="muted">
+                {evidence.publicLaboratoryResults.length} публичных опытов ·{' '}
+                {evidence.privateMeasurements.length} личных измерений ·{' '}
+                {evidence.publicTheses.length} тезисов
+              </Typography>
+            </span>
+            <Typography as="span" variant="control">К данным ↓</Typography>
+          </a>
+
           <div className={styles.finalModelTable}>
             <div className={styles.finalModelHead} aria-hidden="true">
               <Typography as="span" variant="caption">Сигнал</Typography>
@@ -175,9 +187,12 @@ export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm
         </div>
 
         <aside className={styles.finalSidebar}>
-          <section className={styles.surface}>
+          <section className={styles.surface} id="final-evidence">
             <div className={styles.sectionHeader}>
               <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Данные для анализа</Typography>
+              <Typography asChild variant="control">
+                <a className={styles.finalBackLink} href="#final-model-heading">К модели ↑</a>
+              </Typography>
             </div>
             <TenderEvidence data={evidence} />
           </section>

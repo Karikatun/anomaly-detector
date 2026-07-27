@@ -1,10 +1,12 @@
 import {
   createRoomRequestSchema,
   currentMatchResponseSchema,
+  joinRoomByCodeRequestSchema,
   myMatchesResponseSchema,
   roomViewSchema,
   setRoomReadyRequestSchema,
   type CreateRoomRequest,
+  type JoinRoomByCodeRequest,
   type RoomView,
   type SetRoomReadyRequest,
 } from '@anomaly-detector/contracts'
@@ -40,6 +42,14 @@ export class RoomsApi {
   join(roomId: string): Promise<RoomView> {
     return this.transport.request(`/api/rooms/${roomId}/join`, roomViewSchema, {
       method: 'POST',
+    })
+  }
+
+  joinByCode(input: JoinRoomByCodeRequest): Promise<RoomView> {
+    const payload = joinRoomByCodeRequestSchema.parse(input)
+    return this.transport.request('/api/rooms/join', roomViewSchema, {
+      method: 'POST',
+      body: payload,
     })
   }
 
