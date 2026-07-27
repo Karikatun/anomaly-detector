@@ -295,6 +295,7 @@ const ru = {
   'tender.lab.description': 'Направленный опыт: сигнал-источник → сигнал-приёмник. Протокол: {protocol}.',
   'tender.lab.source': 'Источник',
   'tender.lab.receiver': 'Приёмник',
+  'tender.lab.sampleAria': 'Образец: {signal}',
   'tender.lab.sourceAria': 'Источник: {signal}',
   'tender.lab.receiverAria': 'Приёмник: {signal}',
   'tender.lab.confirm': 'Провести опыт',

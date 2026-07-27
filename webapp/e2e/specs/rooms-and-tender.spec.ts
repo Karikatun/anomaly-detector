@@ -53,9 +53,17 @@ async function runReconnaissance(page: Page, signalCount = 2) {
 }
 
 async function runLaboratory(page: Page) {
-  await page.getByRole('button', { name: /^Источник:/ }).first().click()
-  await page.getByRole('button', { name: /^Приёмник:/ }).first().click()
-  await page.getByRole('button', { name: 'Провести опыт' }).click()
+  await page.getByRole('button', { name: /^Образец:/ }).first().click()
+  await expect(page.getByRole('button', { name: /^Источник:/ })).toHaveCount(1)
+
+  await page.getByRole('button', { name: /^Источник:/ }).click()
+  await expect(page.getByRole('button', { name: /^Источник:/ })).toHaveCount(0)
+
+  await page.getByRole('button', { name: /^Образец:/ }).first().click()
+  await page.getByRole('button', { name: /^Образец:/ }).first().click()
+  await expect(page.getByRole('button', { name: /^Приёмник:/ })).toHaveCount(1)
+
+  await page.getByRole('button', { name: /^Провести опыт:/ }).click()
 }
 
 async function verifyWorkingModelModal(page: Page) {

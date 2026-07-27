@@ -335,6 +335,7 @@
 .sampleChoice {
   --signal-accent: var(--primary);
   display: grid;
+  width: 100%;
   min-width: 0;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -342,9 +343,15 @@
   padding: .4rem .5rem;
   border: 1px solid rgba(69, 126, 163, .3);
   border-radius: .5rem;
+  outline: none;
+  color: inherit;
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--signal-accent) 7%, transparent), transparent 42%),
     rgba(3, 18, 31, .76);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
 }
 
 .sampleChoice .signalGlyph {
@@ -352,35 +359,25 @@
   height: 2.15rem;
 }
 
-.roleButtons {
-  display: grid;
-  width: 100%;
-  grid-column: 1 / -1;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: center;
-  gap: .25rem;
+.sampleChoice:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--signal-accent) 68%, rgba(69, 126, 163, .3));
 }
 
-.roleButton {
-  display: grid;
-  min-width: 2rem;
-  min-height: 1.9rem;
-  place-items: center;
-  border: 1px solid rgba(72, 133, 173, .36);
-  border-radius: .35rem;
-  outline: none;
-  color: rgba(218, 233, 242, .62);
-  background: rgba(2, 14, 27, .8);
+.sampleChoice:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--signal-accent) 72%, transparent);
 }
 
-.roleButton[data-selected] {
+.sampleChoice[data-selected] {
   border-color: var(--signal-accent);
-  color: var(--signal-accent);
-  background: color-mix(in srgb, var(--signal-accent) 12%, rgba(2, 14, 27, .88));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--signal-accent) 18%, transparent), transparent 68%),
+    rgba(3, 18, 31, .86);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal-accent) 48%, transparent);
 }
 
-.roleButton span {
-  font-size: .62rem;
+.sampleChoice:disabled {
+  cursor: not-allowed;
+  opacity: .55;
 }
 
 .experiment {
@@ -1197,10 +1194,6 @@
   .sampleChoice .signalGlyph {
     width: 3.6rem;
     height: 3.6rem;
-  }
-
-  .sampleChoice .roleButtons {
-    grid-column: auto;
   }
 
   .experimentNode {

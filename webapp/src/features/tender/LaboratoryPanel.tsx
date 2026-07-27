@@ -1,4 +1,4 @@
-import { InformationCircleIcon, LockIcon, TestTube01Icon } from '@hugeicons/core-free-icons'
+import { LockIcon, TestTube01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
 import { useState } from 'react'
@@ -35,8 +35,9 @@ export function LaboratoryPanel({
   error,
   onConfirm,
 }: LaboratoryPanelProps) {
-  const [source, setSource] = useState<SignalId | null>(null)
-  const [receiver, setReceiver] = useState<SignalId | null>(null)
+  const [selectedSamples, setSelectedSamples] = useState<SignalId[]>([])
+  const source = selectedSamples[0] ?? null
+  const receiver = selectedSamples[1] ?? null
   const protocol: LaboratoryProtocol = powerAllocation >= 2 ? 'continuous' : 'impulse'
   const isValid = source !== null && receiver !== null && source !== receiver
   const { t } = useI18n()
@@ -49,9 +50,20 @@ export function LaboratoryPanel({
       () => onConfirm({ sourceSignal: source, receiverSignal: receiver, protocol }),
     )
     if (succeeded) {
-      setSource(null)
-      setReceiver(null)
+      setSelectedSamples([])
     }
+  }
+
+  const handleSampleClick = (signal: SignalId) => {
+    setSelectedSamples((current) => {
+      if (current.includes(signal)) {
+        return current.filter((selected) => selected !== signal)
+      }
+      if (current.length < 2) {
+        return [...current, signal]
+      }
+      return [signal]
+    })
   }
 
   return (
@@ -66,48 +78,32 @@ export function LaboratoryPanel({
           </div>
 
           <div className={styles.choiceMatrix}>
-            {mySamples.map((signal) => (
-              <div key={signal} className={styles.sampleChoice} style={signalStyle(signal)}>
-                <SignalGlyph signal={signal} className={styles.signalGlyph} />
-                <Typography as="strong" variant="bodySmMedium">{signalName(signal)}</Typography>
-                <span className={styles.roleButtons}>
-                  <button
-                    type="button"
-                    className={styles.roleButton}
-                    data-selected={source === signal || undefined}
-                    aria-label={t('tender.lab.sourceAria', { signal: signalName(signal) })}
-                    disabled={disabled}
-                    onClick={() => {
-                      setSource(source === signal ? null : signal)
-                      if (receiver === signal) setReceiver(null)
-                    }}
-                  >
-                    <Typography as="span" variant="caption">И</Typography>
-                  </button>
-                  {source !== signal ? (
-                    <button
-                      type="button"
-                      className={styles.roleButton}
-                      data-selected={receiver === signal || undefined}
-                      aria-label={t('tender.lab.receiverAria', { signal: signalName(signal) })}
-                      disabled={disabled}
-                      onClick={() => setReceiver(receiver === signal ? null : signal)}
-                    >
-                      <Typography as="span" variant="caption">П</Typography>
-                    </button>
-                  ) : (
-                    <span className={styles.roleButton} aria-hidden="true">
-                      <Typography as="span" variant="caption">П</Typography>
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
+            {mySamples.map((signal) => {
+              const role = source === signal ? 'source' : receiver === signal ? 'receiver' : undefined
+              const ariaLabel = role === 'source'
+                ? t('tender.lab.sourceAria', { signal: signalName(signal) })
+                : role === 'receiver'
+                  ? t('tender.lab.receiverAria', { signal: signalName(signal) })
+                  : t('tender.lab.sampleAria', { signal: signalName(signal) })
 
-          <div className={`${styles.info} mt-3`}>
-            <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-            <Typography variant="bodySm">И — источник, П — приёмник. Один сигнал нельзя использовать дважды.</Typography>
+              return (
+                <button
+                  key={signal}
+                  type="button"
+                  className={styles.sampleChoice}
+                  style={signalStyle(signal)}
+                  data-selected={role || undefined}
+                  data-role={role}
+                  aria-label={ariaLabel}
+                  aria-pressed={role !== undefined}
+                  disabled={disabled}
+                  onClick={() => handleSampleClick(signal)}
+                >
+                  <SignalGlyph signal={signal} className={styles.signalGlyph} />
+                  <Typography as="strong" variant="bodySmMedium">{signalName(signal)}</Typography>
+                </button>
+              )
+            })}
           </div>
         </section>
 
