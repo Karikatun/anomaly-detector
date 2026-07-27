@@ -205,6 +205,8 @@ test('awards a Light Contract once and permanently consumes its journal evidence
   const afterAward = await store.read(tenderId)
   expect(afterAward?.usedContractEvidenceTestIds).toEqual(['r1-t1'])
   expect(afterAward?.ratingByPlayer['player-a']).toBe(2)
+  expect((await tender.readTenderView({ tenderId, playerId: 'player-a' })).privateUsedContractEvidenceTestIds).toEqual(['r1-t1'])
+  expect((await tender.readTenderView({ tenderId, playerId: 'player-b' })).privateUsedContractEvidenceTestIds).toEqual([])
 
   if (!afterAward) throw new Error('Tender disappeared')
   const second = { ...contract, contractId: 'evidence-contract-2' }
@@ -1905,7 +1907,7 @@ test('rejects a continuous protocol when only one Laboratory power is allocated'
   ).rejects.toMatchObject({ kind: 'invalid_tender_state' })
 })
 
-test('rejects a Final Contract reservation below two Corporate Trust', async () => {
+test('rejects a Final Contract reservation below two trust points', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
     players: [

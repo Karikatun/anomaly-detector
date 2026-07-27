@@ -11,10 +11,11 @@ import {
 
 describe('Tender contracts', () => {
   test('allows an Access Slot cost to put a player into a budget deficit', () => {
-    expect(tenderViewSchema.parse({
+    const view = tenderViewSchema.parse({
       knownSignals: ['aster', 'boreal'],
       publicContracts: [],
       publicLaboratoryResults: [],
+      privateUsedContractEvidenceTestIds: ['round-1-test-1'],
       round: 2,
       serverTime: '2026-07-26T12:00:00.000Z',
       tenderId: 'tender-1',
@@ -26,7 +27,10 @@ describe('Tender contracts', () => {
       privateSamples: ['aster'],
       privateWorkingModel: { signals: {} },
       publicTheses: [],
-    }).players[0]?.budget).toBe(-1)
+    })
+
+    expect(view.players[0]?.budget).toBe(-1)
+    expect(view.privateUsedContractEvidenceTestIds).toEqual(['round-1-test-1'])
   })
 
   test('validates the Access Slot command, receipt, and player-scoped view', () => {

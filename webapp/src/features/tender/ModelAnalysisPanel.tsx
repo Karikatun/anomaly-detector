@@ -196,8 +196,13 @@ export function ModelAnalysisPanel({
               <Typography variant="bodySm" tone="muted">В этом тендере тезисов ещё нет.</Typography>
             ) : (
               <div className={styles.journalList}>
-                {publicTheses.slice(-3).reverse().map((thesis, index) => (
-                  <div key={`${thesis.playerId}-${thesis.signalId}-${index}`} className={styles.journalEntry} style={previewStyle(thesis.signalId)}>
+                {publicTheses.slice().reverse().map((thesis, index) => (
+                  <div
+                    key={`${thesis.playerId}-${thesis.signalId}-${index}`}
+                    className={styles.journalEntry}
+                    data-public-thesis
+                    style={previewStyle(thesis.signalId)}
+                  >
                     <SignalGlyph signal={thesis.signalId} className={styles.signalGlyph} />
                     <span className={styles.signalCopy}>
                       <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[thesis.signalId])}</Typography>

@@ -138,9 +138,9 @@ The server generates a deterministic, state-independent Contract deck from the T
 - A player can win at most one ordinary Contract per round. Reservation is public and final: the player must immediately submit that Contract and cannot switch after reserving it.
 - A player with no currently eligible Contract may explicitly skip the Contract action instead of waiting for the phase deadline.
 - A Directed Test stays permanently visible in the public journal and remains usable in later rounds, but one Test record can be attached to only one successful Contract.
-- One Final Contract is visible from round one and resolves in round five. It gives eight Rating, requires at least two Corporate Trust, and uses the Complex Contract evidence rule.
+- One Final Contract is visible from round one and resolves in round five. It gives eight Rating, requires at least two trust points, and uses the Complex Contract evidence rule.
 
-Successful ordinary Contracts grant one Corporate Trust but never Budget. Each player receives one Budget at the end of every round, in addition to late-slot compensation. Corporate Trust gates the Final Contract; it is not a score multiplier.
+Successful ordinary Contracts grant one trust point but never Budget. Each player receives one Budget at the end of every round, in addition to late-slot compensation. Trust gates the Final Contract; it is not a score multiplier.
 
 ## Timing And Failure Handling
 

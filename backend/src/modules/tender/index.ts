@@ -951,6 +951,9 @@ export function createTenderModule({
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
         privateResearchCertifications: tender.researchCertificationsByPlayer[player.id] ?? [],
         privateTelemetry: tender.privateMeasurementsByPlayer[player.id] ?? [],
+        privateUsedContractEvidenceTestIds: tender.usedContractEvidenceTestIds.filter((testId) =>
+          tender.publicScientificJournal.some((entry) => entry.testId === testId && entry.playerId === playerId),
+        ),
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
         publicTheses: tender.publicTheses,
         ...(tender.phase === 'complete' ? { winnerPlayerIds: tender.winnerPlayerIds } : {}),

@@ -300,6 +300,7 @@ export const tenderViewSchema = z.object({
   privateMeasurements: z.array(privateMeasurementSchema),
   privateResearchCertifications: z.array(signalIdSchema).optional(),
   privateTelemetry: z.array(privateMeasurementSchema).optional(),
+  privateUsedContractEvidenceTestIds: z.array(z.string().min(1)).optional(),
   privateWorkingModel: workingModelSchema,
   publicTheses: z.array(publicThesisSchema),
   audit: tenderAuditViewSchema.optional(),

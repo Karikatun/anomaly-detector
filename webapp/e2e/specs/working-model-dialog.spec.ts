@@ -48,6 +48,34 @@ async function expectDialogInsideViewport(page: Page) {
   await expect(dialog).toBeHidden()
 }
 
+async function expectWorkingModelTableToStayStillWhileSaving(page: Page) {
+  await page.route('**/api/tenders/*/commands', async (route) => {
+    const command = route.request().postDataJSON() as { type?: string } | null
+    if (command?.type === 'update-working-model') {
+      await new Promise((resolve) => setTimeout(resolve, 600))
+    }
+    await route.continue()
+  })
+
+  const dialog = page.getByRole('dialog')
+  const table = dialog.getByTestId('working-model-table')
+  const fieldButton = dialog.getByRole('button', {
+    name: 'Aster: гипотеза, тип поля Инерционное',
+  })
+  const before = await table.boundingBox()
+  expect(before).not.toBeNull()
+
+  await fieldButton.click()
+  await expect(dialog.getByRole('status')).toHaveText('Сохраняем рабочую модель…')
+  const during = await table.boundingBox()
+  expect(during).not.toBeNull()
+  expect(during!.y).toBe(before!.y)
+  expect(during!.height).toBe(before!.height)
+
+  await expect(dialog.getByRole('status')).toBeHidden()
+  await page.unrouteAll({ behavior: 'wait' })
+}
+
 test('keeps the Working Model dialog below the Tender header and inside the viewport', async ({
   browser,
   page,
@@ -82,6 +110,11 @@ test('keeps the Working Model dialog below the Tender header and inside the view
     await allocateReconnaissance(guestPage)
 
     await expect(page.getByRole('heading', { name: '3. Разведка' })).toBeVisible()
+    await page.getByRole('button', { name: /Рабочая модель/ }).click()
+    await expectWorkingModelTableToStayStillWhileSaving(page)
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toBeHidden()
+
     await page.getByRole('button', { name: /Рабочая модель/ }).click()
     await expectDialogInsideViewport(page)
 

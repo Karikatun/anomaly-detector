@@ -4,6 +4,13 @@
   gap: .55rem;
 }
 
+.saveStatus {
+  display: flex;
+  min-width: 0;
+  min-height: 1.4rem;
+  align-items: center;
+}
+
 .table {
   overflow: hidden;
   border: 1px solid rgba(67, 132, 174, .32);

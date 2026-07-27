@@ -107,6 +107,29 @@ async function verifyWorkingModelModal(page: Page) {
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.route('**/api/tenders/*/commands', async (route) => {
+      const command = route.request().postDataJSON() as { type?: string } | null
+      if (command?.type === 'update-working-model') {
+        await new Promise((resolve) => setTimeout(resolve, 600))
+      }
+      await route.continue()
+    })
+    const inlineTable = page.getByTestId('working-model-table')
+    const inlinePanel = inlineTable.locator('..')
+    const inlineBefore = await inlineTable.boundingBox()
+    expect(inlineBefore).not.toBeNull()
+    await inlinePanel.getByRole('button', {
+      name: 'Aster: гипотеза, полярность Положительная',
+    }).click()
+    await expect(inlinePanel.getByRole('status')).toHaveText('Сохраняем рабочую модель…')
+    const inlineDuring = await inlineTable.boundingBox()
+    expect(inlineDuring).not.toBeNull()
+    expect(inlineDuring!.y).toBe(inlineBefore!.y)
+    expect(inlineDuring!.height).toBe(inlineBefore!.height)
+    await expect(inlinePanel.getByRole('status')).toBeHidden()
+    await page.unrouteAll({ behavior: 'wait' })
     expect(pageErrors).toEqual([])
   } finally {
     page.off('pageerror', collectPageError)
@@ -127,22 +150,30 @@ async function submitThesis(page: Page) {
 }
 
 async function completeContract(page: Page) {
-  const contractSelect = page.getByRole('combobox', { name: 'Подходящий контракт' })
   const skip = page.getByRole('button', { name: 'Пропустить ход' })
-  await expect.poll(async () => await contractSelect.isEnabled() || await skip.isEnabled()).toBe(true)
-  if (!await contractSelect.isEnabled()) {
+  const confirm = page.getByRole('button', { name: /^Подтвердить контракт / }).first()
+  await expect.poll(async () => await confirm.isVisible() || await skip.isEnabled()).toBe(true)
+  if (!await confirm.isVisible()) {
     await skip.click()
     return
   }
 
-  await contractSelect.selectOption({ index: 1 })
-  await page.getByRole('button', { name: 'Зарезервировать' }).click()
-  await expect(page.getByText('Зафиксирован · доказательства справа')).toBeVisible()
-  const fittingEvidence = page.locator('button[data-evidence][data-fits]:not(:disabled)').first()
-  await fittingEvidence.click()
-  const submit = page.getByRole('button', { name: /^Подать заявку по контракту / })
-  await expect(submit).toBeEnabled()
-  await submit.click()
+  const contractCard = confirm.locator('xpath=ancestor::article')
+  const contractId = await contractCard.getAttribute('data-contract-id')
+  if (!contractId) throw new Error('Eligible Contract card has no stable id')
+  const selectedContractCard = page.locator(`article[data-contract-id="${contractId}"]`)
+  const fittingEvidence = contractCard.getByRole('combobox', { name: /Подходящее исследование|Подходящая сертификация/ })
+  await expect(fittingEvidence).toBeEnabled()
+  await fittingEvidence.selectOption({ index: 1 })
+  const additionalEvidence = contractCard.getByRole('combobox', { name: 'Дополнительное исследование' })
+  if (await additionalEvidence.isVisible() && await additionalEvidence.isEnabled()) {
+    await additionalEvidence.selectOption({ index: 1 })
+  }
+  await expect(confirm).toBeEnabled()
+  await confirm.click()
+  await expect(selectedContractCard.getByText('Контракт выполнен', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Подтвердить контракт / })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: /Подходящее исследование|Подходящая сертификация|Дополнительное исследование/ })).toHaveCount(0)
 }
 
 async function submitFinalModel(page: Page) {
