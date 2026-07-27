@@ -211,7 +211,7 @@ maybeDescribe('auth API integration', () => {
       hostId: user.id,
       joinCode: expect.stringMatching(/^[0-9A-HJKMNP-TV-Z]{10}$/),
       roomId: expect.any(String),
-      members: [{ ready: false, seat: 1, userId: user.id }],
+      members: [{ displayName: user.displayName ?? 'Исследователь', ready: false, seat: 1, userId: user.id }],
       serverTime: expect.any(String),
       status: 'waiting',
     })
