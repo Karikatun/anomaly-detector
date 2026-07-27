@@ -268,6 +268,16 @@ export const tenderAuditEventSchema = z.object({
   sequence: z.number().int().min(1),
 }).strict()
 
+export const ratingBreakdownSchema = z.object({
+  completeModelBonus: z.number().int().min(0),
+  contractPoints: z.number().int().min(0),
+  correctPropertyPoints: z.number().int().min(0),
+  correctSignalPoints: z.number().int().min(0),
+  otherPoints: z.number().int(),
+  thesisPoints: z.number().int().min(0),
+  total: z.number().int().min(0),
+}).strict()
+
 export const tenderAuditViewSchema = z.object({
   anomalyConfiguration: anomalyConfigurationSchema,
   events: z.array(tenderAuditEventSchema),
@@ -275,6 +285,7 @@ export const tenderAuditViewSchema = z.object({
   privateTelemetryByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)).optional(),
   publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
   publicScientificJournal: z.array(scientificJournalEntrySchema).optional(),
+  ratingBreakdownByPlayer: z.record(playerIdSchema, ratingBreakdownSchema),
 }).strict()
 
 export const tenderViewSchema = z.object({
@@ -335,6 +346,7 @@ export type PublicLaboratoryResult = z.infer<typeof publicLaboratoryResultSchema
 export type ScientificJournalEntry = z.infer<typeof scientificJournalEntrySchema>
 export type PublicThesis = z.infer<typeof publicThesisSchema>
 export type TenderAuditEvent = z.infer<typeof tenderAuditEventSchema>
+export type RatingBreakdown = z.infer<typeof ratingBreakdownSchema>
 export type TenderAuditView = z.infer<typeof tenderAuditViewSchema>
 export type WorkingModel = z.infer<typeof workingModelSchema>
 export type ScientificModel = z.infer<typeof scientificModelSchema>
