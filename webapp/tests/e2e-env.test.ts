@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 
-import { composeEnv } from '../e2e/env'
+import { composeEnv, e2eBackendEnv } from '../e2e/env'
 import { applyE2ePortEnv, resolveE2ePorts, type PortPlan } from '../e2e/ports'
 import { portFromUrl } from '../e2e/url'
 
@@ -11,6 +11,7 @@ const envKeys = [
   'E2E_BACKEND_URL',
   'E2E_WEB_PORT',
   'E2E_WEB_URL',
+  'JWT_SECRET',
   'POSTGRES_TEST_PORT',
   'TEST_DATABASE_URL',
 ] as const
@@ -38,6 +39,22 @@ test('composeEnv derives the docker compose port from the resolved test database
   })
 
   expect(env.POSTGRES_TEST_PORT).toBe('54330')
+})
+
+test('e2eBackendEnv gives API and worker processes one valid JWT secret', () => {
+  delete process.env.JWT_SECRET
+
+  const env = e2eBackendEnv()
+
+  expect(env.JWT_SECRET).toBe('web-e2e-secret-at-least-thirty-two-characters')
+})
+
+test('e2eBackendEnv preserves an explicitly configured JWT secret', () => {
+  process.env.JWT_SECRET = 'explicit-web-e2e-secret-at-least-thirty-two-chars'
+
+  const env = e2eBackendEnv()
+
+  expect(env.JWT_SECRET).toBe(process.env.JWT_SECRET)
 })
 
 test('portFromUrl handles postgres aliases and defaults', () => {

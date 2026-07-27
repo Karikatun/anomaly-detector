@@ -20,6 +20,23 @@ export const defaultBackendPort =
 export const defaultWebPort =
   process.env.E2E_WEB_PORT ?? String(preferredWebPort)
 export const defaultDatabaseUrl = `postgresql://superuser:superpassword@localhost:${defaultPostgresTestPort}/anomaly_detector_test?schema=public`
+export const defaultE2eJwtSecret = 'web-e2e-secret-at-least-thirty-two-characters'
+
+export function e2eBackendEnv(extra: NodeJS.ProcessEnv = {}) {
+  const jwtSecret = extra.JWT_SECRET ?? process.env.JWT_SECRET ?? defaultE2eJwtSecret
+
+  return {
+    ...process.env,
+    ...extra,
+    NODE_ENV: 'test',
+    JWT_SECRET: jwtSecret,
+    COOKIE_SECURE: 'false',
+    YANDEX_OAUTH_CLIENT_ID: '',
+    YANDEX_OAUTH_CLIENT_SECRET: '',
+    VK_OAUTH_CLIENT_ID: '',
+    VK_OAUTH_CLIENT_SECRET: '',
+  }
+}
 
 export function composeEnv(extra: NodeJS.ProcessEnv = {}) {
   const explicitDatabaseUrl =

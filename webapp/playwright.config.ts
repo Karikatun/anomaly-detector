@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { e2eBackendEnv } from './e2e/env'
 import { applyE2ePortEnv, resolveE2ePorts } from './e2e/ports'
 
 const frontendRoot = fileURLToPath(new URL('.', import.meta.url))
@@ -22,20 +23,11 @@ function normalizeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   )
 }
 
-const backendEnv = normalizeEnv({
-  ...process.env,
-  NODE_ENV: 'test',
+const backendEnv = normalizeEnv(e2eBackendEnv({
   PORT: String(backendPort),
   DATABASE_URL: databaseUrl,
-  JWT_SECRET:
-    process.env.JWT_SECRET ?? 'web-e2e-secret-at-least-thirty-two-characters',
   CORS_ORIGINS: [frontendUrl, 'http://localhost:5173'].join(','),
-  COOKIE_SECURE: 'false',
-  YANDEX_OAUTH_CLIENT_ID: '',
-  YANDEX_OAUTH_CLIENT_SECRET: '',
-  VK_OAUTH_CLIENT_ID: '',
-  VK_OAUTH_CLIENT_SECRET: '',
-})
+}))
 
 export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
