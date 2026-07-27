@@ -1,7 +1,7 @@
 // Russian translations — primary and default locale
 const ru = {
   // Layout
-  'app.logo': 'anomaly_detector',
+  'app.logo': 'Anomaly Detector',
   'nav.rooms': 'Комнаты',
   'nav.matches': 'Мои матчи',
   'nav.profile': 'Профиль',
