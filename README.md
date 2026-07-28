@@ -11,7 +11,8 @@
 Подробности:
 
 - [правила и описание игры](docs/GAME_DESIGN_BRIEF.md);
-- [план и текущий статус реализации](docs/MVP_IMPLEMENTATION_PLAN.md).
+- [план и текущий статус реализации](docs/MVP_IMPLEMENTATION_PLAN.md);
+- [дорожная карта после MVP](docs/POST_MVP_ROADMAP.md).
 
 ## Запуск
 
