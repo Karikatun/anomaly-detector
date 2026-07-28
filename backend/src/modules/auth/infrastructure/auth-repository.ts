@@ -253,33 +253,38 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
       })
     },
 
-    async findOAuthTransactionByState({ state }) {
+    async consumeOAuthTransactionByState({ now, state }) {
       const stateHash = await sha256(state)
-      const transaction = await db.oAuthTransaction.findUnique({
-        where: { stateHash },
-      })
-      if (!transaction) return null
-      if (transaction.provider !== 'yandex') return null
-      if (transaction.expiresAt < new Date()) return null
-      return {
-        codeVerifier: transaction.codeVerifier,
-        expiresAt: transaction.expiresAt,
-        ...(transaction.legalAcceptedAt && transaction.privacyConsentVersion && transaction.termsVersion ? {
-          legalAcceptance: {
-            acceptedAt: transaction.legalAcceptedAt,
-            privacyConsentVersion: transaction.privacyConsentVersion,
-            termsVersion: transaction.termsVersion,
+      return db.$transaction(async (tx) => {
+        const transaction = await tx.oAuthTransaction.findUnique({
+          where: { stateHash },
+        })
+        if (!transaction || transaction.provider !== 'yandex' || transaction.expiresAt <= now) {
+          return null
+        }
+        const consumed = await tx.oAuthTransaction.deleteMany({
+          where: {
+            expiresAt: { gt: now },
+            provider: 'yandex',
+            stateHash,
           },
-        } : {}),
-        provider: transaction.provider,
-        redirectUri: transaction.redirectUri,
-        state,
-      }
-    },
-
-    async deleteOAuthTransaction({ state }) {
-      const stateHash = await sha256(state)
-      await db.oAuthTransaction.deleteMany({ where: { stateHash } })
+        })
+        if (consumed.count !== 1) return null
+        return {
+          codeVerifier: transaction.codeVerifier,
+          expiresAt: transaction.expiresAt,
+          ...(transaction.legalAcceptedAt && transaction.privacyConsentVersion && transaction.termsVersion ? {
+            legalAcceptance: {
+              acceptedAt: transaction.legalAcceptedAt,
+              privacyConsentVersion: transaction.privacyConsentVersion,
+              termsVersion: transaction.termsVersion,
+            },
+          } : {}),
+          provider: transaction.provider,
+          redirectUri: transaction.redirectUri,
+          state,
+        }
+      })
     },
 
     async findUserByIdentity({ provider, subject }) {

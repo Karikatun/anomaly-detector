@@ -66,7 +66,7 @@ export type AuthRepository = {
     userId: string
     now: Date
     createdAfter: Date
-  }): Promise<{ id: string; user: AuthUserRecord } | null>
+  }): Promise<{ createdAt: Date; id: string; user: AuthUserRecord } | null>
   revokeSession(input: {
     refreshTokenHash: string
     refreshTokenFamilyHash: string
@@ -79,8 +79,10 @@ export type AuthRepository = {
   }): Promise<void>
   eraseUserIdentity(input: { userId: string; now: Date }): Promise<void>
   createOAuthTransaction(transaction: OAuthTransaction): Promise<void>
-  findOAuthTransactionByState(input: { state: string }): Promise<OAuthTransaction | null>
-  deleteOAuthTransaction(input: { state: string }): Promise<void>
+  consumeOAuthTransactionByState(input: {
+    now: Date
+    state: string
+  }): Promise<OAuthTransaction | null>
   findUserByIdentity(input: { provider: string; subject: string }): Promise<AuthUserRecord | null>
   createOAuthUserWithSession(input: {
     user: {

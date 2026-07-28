@@ -427,8 +427,11 @@ export function createAuthRoutes({
   })
   protectedRoutes.use('/account', requireAuth)
   protectedRoutes.openapi(deleteAccountRoute, async (c) => {
-    const userId = c.var.user.id
-    await executeAuth(() => service.deleteAccount(userId))
+    const user = c.var.user
+    await executeAuth(() => service.deleteAccount({
+      authenticatedAt: user.authenticatedAt,
+      userId: user.id,
+    }))
     deleteRefreshCookie(c, env)
     return c.body(null, 204)
   })
@@ -493,7 +496,9 @@ export function createAuthRoutes({
         },
       })
     } catch (error) {
-      console.error('OAuth callback failed:', error)
+      console.error('OAuth callback failed', {
+        code: oauthCallbackErrorCode(error),
+      })
       const redirectUrl = new URL(webappUrl)
       redirectUrl.pathname = '/'
       redirectUrl.searchParams.set('auth_error', oauthCallbackErrorCode(error))

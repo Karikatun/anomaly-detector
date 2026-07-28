@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const tenderIdSchema = z.string().min(1).max(128)
+export const tenderResourceIdSchema = z.uuid()
 export const playerIdSchema = z.string().min(1).max(128)
 export const commandIdSchema = z.string().min(1).max(128)
 export const contractIdSchema = z.string().min(1).max(128)

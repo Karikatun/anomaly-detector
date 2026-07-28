@@ -34,6 +34,9 @@ type AuthServiceDependencies = {
   repository: AuthRepository
 }
 
+const ACCOUNT_DELETION_RECENT_AUTH_MS = 10 * 60 * 1_000
+const AUTHENTICATION_CLOCK_SKEW_MS = 60 * 1_000
+
 export class AuthService {
   constructor(private readonly dependencies: AuthServiceDependencies) {}
 
@@ -121,7 +124,8 @@ export class AuthService {
       throw new AuthFailure('oauth_not_configured', 'OAuth sign-in is not configured')
     }
 
-    const transaction = await this.dependencies.repository.findOAuthTransactionByState({
+    const transaction = await this.dependencies.repository.consumeOAuthTransactionByState({
+      now: this.dependencies.clock.now(),
       state: input.state,
     })
     if (!transaction) {
@@ -188,9 +192,7 @@ export class AuthService {
       session = created.session
     }
 
-    // Clean up the used transaction
     const webappOrigin = decodeWebappOrigin(input.state) ?? ''
-    await this.dependencies.repository.deleteOAuthTransaction({ state: input.state }).catch(() => undefined)
 
     const response = await this.sessionResponse(user, session.id, refreshToken)
     return { ...response, webappOrigin }
@@ -344,6 +346,7 @@ export class AuthService {
 
     return {
       ...(await this.dependencies.projectUser(session.user)),
+      authenticatedAt: session.createdAt,
       sessionId: session.id,
     }
   }
@@ -366,10 +369,20 @@ export class AuthService {
     return true
   }
 
-  async deleteAccount(userId: string) {
+  async deleteAccount(input: { authenticatedAt: Date; userId: string }) {
     const now = this.dependencies.clock.now()
-    await this.dependencies.accountDeletionCleanup?.({ userId })
-    await this.dependencies.repository.eraseUserIdentity({ userId, now })
+    const authenticationAge = now.getTime() - input.authenticatedAt.getTime()
+    if (
+      authenticationAge > ACCOUNT_DELETION_RECENT_AUTH_MS
+      || authenticationAge < -AUTHENTICATION_CLOCK_SKEW_MS
+    ) {
+      throw new AuthFailure(
+        'recent_authentication_required',
+        'Recent authentication is required to delete the account',
+      )
+    }
+    await this.dependencies.accountDeletionCleanup?.({ userId: input.userId })
+    await this.dependencies.repository.eraseUserIdentity({ userId: input.userId, now })
   }
 
   async updateProfile(userId: string, input: { displayName?: string | null; locale?: 'ru' | 'en' }) {

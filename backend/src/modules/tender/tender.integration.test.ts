@@ -194,6 +194,30 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     ])
   })
 
+  test('fails closed with a validation error for corrupted persisted Tender state', async () => {
+    const tender = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    await prisma.tender.update({
+      where: { id: tenderId },
+      data: {
+        state: {
+          players: 'corrupted',
+        },
+      },
+    })
+
+    const restarted = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    await expect(restarted.readTenderView({
+      playerId: 'player-a',
+      tenderId,
+    })).rejects.toMatchObject({ name: 'ZodError' })
+  })
+
   test('persists an anonymised participant name without changing other players', async () => {
     const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
     const { tenderId } = await module.createTender({

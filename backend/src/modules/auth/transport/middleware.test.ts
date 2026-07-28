@@ -41,10 +41,11 @@ function createProtectedTestApp() {
     }
 
     return {
+      authenticatedAt: new Date('2026-01-01T00:00:00.000Z'),
       id: 'user-1',
       login: 'user',
       displayName: null,
-  locale: 'ru',
+      locale: 'ru',
       createdAt: '2026-01-01T00:00:00.000Z',
       sessionId: 'session-1',
     }
