@@ -29,6 +29,7 @@ type CreateTenderModuleOptions = {
 }
 
 const phaseDurationMs = 90_000
+const finalScientificModelDurationMs = 180_000
 const operationalGrantBudget = 1
 const normalContractRating = 4
 const finalContractRating = 8
@@ -109,7 +110,10 @@ const createRatingBreakdownByPlayer = (
 
 const deadlineForPhase = (phase: string, at: Date) => {
   if (phase === 'complete') return null
-  return new Date(at.getTime() + phaseDurationMs)
+  const durationMs = phase === 'final-scientific-model'
+    ? finalScientificModelDurationMs
+    : phaseDurationMs
+  return new Date(at.getTime() + durationMs)
 }
 
 const reservePowerAllocation: PowerAllocation = {
@@ -1012,6 +1016,9 @@ export function createTenderModule({
           budget: tender.budgetByPlayer[player.id] ?? 0,
           corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,
           contractPowerRestriction: tender.contractPowerRestrictionsByPlayer[player.id] ?? 0,
+          ...(tender.phase === 'final-scientific-model'
+            ? { finalScientificModelSubmitted: tender.finalScientificModelsByPlayer[player.id] !== undefined }
+            : {}),
           ...(tender.phase === 'power-allocation'
             ? { powerAllocationConfirmed: tender.powerAllocations[player.id] !== undefined }
             : {}),

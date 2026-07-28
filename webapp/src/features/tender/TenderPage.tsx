@@ -44,6 +44,10 @@ import {
   useRealtimeTender,
   type RealtimeErrorCode,
 } from './realtime'
+import {
+  getTenderCommandErrorMessage,
+  getWaitingForTurnDescription,
+} from './tender-command-feedback'
 import styles from './TenderPage.module.css'
 
 const phaseLabels: Record<string, string> = {
@@ -72,13 +76,19 @@ const realtimeErrorKeys = {
   'server-error': 'tender.realtime.error.server-error',
 } as const satisfies Record<RealtimeErrorCode, TranslationKey>
 
-function WaitingForTurn({ playerName }: { playerName?: string }) {
+function WaitingForTurn({
+  finalScientificModelSubmitted,
+  phase,
+  playerName,
+}: {
+  finalScientificModelSubmitted?: boolean
+  phase: TenderView['phase']
+  playerName?: string
+}) {
   return (
     <PhaseNotice
       kind="waiting"
-      description={playerName
-        ? `Сейчас действует ${playerName}. Ваш подтверждённый выбор сохранён в форме ниже.`
-        : 'Ожидаем синхронизацию следующего хода.'}
+      description={getWaitingForTurnDescription(phase, playerName, finalScientificModelSubmitted)}
     >
       Ожидание хода
     </PhaseNotice>
@@ -101,7 +111,13 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
   const isWaitingForTurn = sequentialPhases.has(view.phase) && activePlayerId !== auth.user?.id
   const withWaitingState = (content: ReactNode) => (
     <>
-      {isWaitingForTurn && <WaitingForTurn playerName={activePlayer?.displayName} />}
+      {isWaitingForTurn && (
+        <WaitingForTurn
+          finalScientificModelSubmitted={myPlayer?.finalScientificModelSubmitted}
+          phase={view.phase}
+          playerName={activePlayer?.displayName}
+        />
+      )}
       {content}
     </>
   )
@@ -270,12 +286,18 @@ function TenderContent() {
 
   const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
   const { execute } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
-  const [commandError, setCommandError] = useState<string | null>(null)
+  const [commandError, setCommandError] = useState<{ message: string; version: number } | null>(null)
   const [resuming, setResuming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const commandInFlightRef = useRef<{ promise: Promise<void>; token: symbol } | null>(null)
   const headerRef = useRef<HTMLElement>(null)
+  const latestTenderViewRef = useRef(tenderView)
   const leavingTenderIdRef = useRef<string | null>(null)
   const resumingTenderIdRef = useRef<string | null>(null)
+
+  useLayoutEffect(() => {
+    latestTenderViewRef.current = tenderView
+  }, [tenderView])
 
   useLayoutEffect(() => {
     const header = headerRef.current
@@ -322,19 +344,40 @@ function TenderContent() {
   }, [connected, execute, tenderId, tenderView?.hasLeft])
 
   const handleCommand = useCallback(
-    async (command: TenderCommandInput) => {
-      setCommandError(null)
-      setSubmitting(true)
-      try {
-        await execute(command)
-      } catch (err) {
-        setCommandError(err instanceof Error ? err.message : 'Command failed')
-        throw err
-      } finally {
-        setSubmitting(false)
-      }
+    (command: TenderCommandInput) => {
+      if (commandInFlightRef.current) return commandInFlightRef.current.promise
+      const startingView = latestTenderViewRef.current
+      const token = Symbol('tender-command')
+      const promise = (async () => {
+        setCommandError(null)
+        setSubmitting(true)
+        try {
+          await execute(command)
+        } catch (err) {
+          const message = getTenderCommandErrorMessage({
+            actorId: auth.user?.id ?? '',
+            command,
+            error: err,
+            latestView: latestTenderViewRef.current,
+            startingView,
+          })
+          if (message === null) return
+          setCommandError({
+            message,
+            version: latestTenderViewRef.current?.version ?? startingView?.version ?? 0,
+          })
+          throw err
+        } finally {
+          if (commandInFlightRef.current?.token === token) {
+            commandInFlightRef.current = null
+            setSubmitting(false)
+          }
+        }
+      })()
+      commandInFlightRef.current = { promise, token }
+      return promise
     },
-    [execute],
+    [auth.user?.id, execute],
   )
   const saveWorkingModel = useCallback(
     async (workingModel: TenderView['privateWorkingModel']) => {
@@ -389,6 +432,9 @@ function TenderContent() {
   }
 
   const phase = phaseLabels[tenderView.phase] ?? tenderView.phase
+  const visibleCommandError = commandError?.version === tenderView.version
+    ? commandError.message
+    : null
   const myPlayer = tenderView.players.find((p) => p.playerId === auth.user?.id)
   const mySlot = myPlayer?.accessSlot
   const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
@@ -485,7 +531,7 @@ function TenderContent() {
             <PhasePanel
               view={tenderView}
               disabled={submitting || !connected}
-              error={commandError}
+              error={visibleCommandError}
               onCommand={handleCommand}
               onSaveWorkingModel={saveWorkingModel}
               activePlayerId={tenderView.activePlayerId}

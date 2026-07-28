@@ -205,6 +205,7 @@ export const tenderPlayerViewSchema = z.object({
   budget: z.number().int(),
   corporateTrust: z.number().int().min(0).optional(),
   contractPowerRestriction: z.number().int().min(0).max(1),
+  finalScientificModelSubmitted: z.boolean().optional(),
   powerAllocation: powerAllocationSchema.optional(),
   powerAllocationConfirmed: z.boolean().optional(),
   rating: z.number().int().min(0),
