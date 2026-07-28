@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test'
 import { createTenderModule } from './index'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
-test('gives every live phase a 90-second deadline', async () => {
+test('gives planning phases a 90-second deadline', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })
   const { tenderId } = await tender.createTender({
@@ -395,13 +395,14 @@ test('completes five rounds for every supported player count when all players re
     }
 
     expect(await tender.readTenderView({ tenderId, playerId: players[0].id })).toMatchObject({
+      dueAt: '2026-07-20T12:18:00.000Z',
       phase: 'final-scientific-model',
       round: 5,
       players: players.map((player) => ({ playerId: player.id, budget: 7 })),
     })
 
     for (const player of players) {
-      dueAt = new Date(dueAt.getTime() + 90_000)
+      dueAt = new Date(dueAt.getTime() + 180_000)
       await tender.advanceDueTenders({ limit: 10, now: dueAt })
     }
 
@@ -446,6 +447,10 @@ test('awards property points, completed Signal points, and the complete-model bo
   const finalModelView = await tender.readTenderView({ tenderId, playerId: 'player-a' })
   expect(finalModelView).toMatchObject({
     phase: 'final-scientific-model',
+    players: [
+      { finalScientificModelSubmitted: true, playerId: 'player-a' },
+      { finalScientificModelSubmitted: false, playerId: 'player-b' },
+    ],
   })
   expect(finalModelView.players.find((player) => player.playerId === 'player-a')).toMatchObject({ rating: 21 })
 

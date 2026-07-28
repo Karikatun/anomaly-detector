@@ -553,8 +553,19 @@ test('two players complete every Tender stage and receive each realtime phase tr
 
     await expectPhase(page, headings.final)
     await expectPhase(guestPage, headings.final)
+    const finalTimer = page.getByRole('timer', { name: 'До конца фазы' })
+    await expect.poll(async () => {
+      const [minutes = 0, seconds = 0] = (await finalTimer.textContent() ?? '').split(':').map(Number)
+      return minutes * 60 + seconds
+    }).toBeGreaterThan(170)
+    await expect(guestPage.getByText(
+      /Ваш черновик финальной модели сохранён только в этой форме и ещё не отправлен/,
+    )).toBeVisible()
     await submitFinalModel(page)
     await expectPhase(guestPage, headings.final)
+    await expect(page.getByText(
+      /Ваша финальная модель отправлена и принята сервером/,
+    )).toBeVisible()
     await submitFinalModel(guestPage)
     await expect(page.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
