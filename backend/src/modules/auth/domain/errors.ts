@@ -9,6 +9,7 @@ export type AuthFailureKind =
   | 'oauth_transaction_invalid'
   | 'registration_limited'
   | 'refresh_session_invalid'
+  | 'refresh_token_reused'
   | 'refresh_token_required'
   | 'session_invalid'
 

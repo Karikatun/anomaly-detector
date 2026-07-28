@@ -5,24 +5,36 @@ import { secureHeaders } from 'hono/secure-headers'
 import type { DbClient } from './db'
 import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
-import { createAuthSecurity } from './http/security'
+import { createApiBodyLimit, createAuthSecurity } from './http/security'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 import { createProfileModule } from './modules/profile'
 import { createRoomModule } from './modules/room'
 import {
   createPersistentTenderModule,
+  createPrismaRealtimeTicketIssuer,
   createRealtimeTicketRoutes,
   createTenderRoutes,
   type TenderModule,
 } from './modules/tender'
+import {
+  consoleSecurityEventLogger,
+  createSecurityRequestContext,
+  type SecurityEventLogger,
+} from './security/events'
 
 type CreateAppOptions = {
   env: AppEnv
   prisma: DbClient
+  securityEvents?: SecurityEventLogger
   tender?: TenderModule
 }
 
-export function createApp({ env, prisma, tender: providedTender }: CreateAppOptions) {
+export function createApp({
+  env,
+  prisma,
+  securityEvents = consoleSecurityEventLogger,
+  tender: providedTender,
+}: CreateAppOptions) {
   const tender = providedTender ?? createPersistentTenderModule(prisma)
   const auth = createAuthModule({
     accountDeletionCleanup: ({ userId }) => tender.anonymizeParticipant(userId),
@@ -42,6 +54,8 @@ export function createApp({ env, prisma, tender: providedTender }: CreateAppOpti
   })
 
   app.use(secureHeaders())
+  app.use('*', createSecurityRequestContext())
+  app.use('*', createApiBodyLimit(env.AUTH_BODY_LIMIT_BYTES, securityEvents))
   app.use(
     '*',
     cors({
@@ -56,9 +70,9 @@ export function createApp({ env, prisma, tender: providedTender }: CreateAppOpti
     }),
   )
   for (const middleware of createAuthSecurity({
-    bodyLimitBytes: env.AUTH_BODY_LIMIT_BYTES,
     rateLimitMax: env.AUTH_RATE_LIMIT_MAX,
     rateLimitWindowSeconds: env.AUTH_RATE_LIMIT_WINDOW_SECONDS,
+    securityEvents,
     trustProxy: env.TRUST_PROXY,
     trustedProxyClientIpHeader: env.TRUSTED_PROXY_CLIENT_IP_HEADER,
     trustedProxyClientIpPosition: env.TRUSTED_PROXY_CLIENT_IP_POSITION,
@@ -97,7 +111,11 @@ export function createApp({ env, prisma, tender: providedTender }: CreateAppOpti
   app.route('/api/profile', profile.routes)
   app.route('/api/rooms', rooms.routes)
   app.route('/api/tenders', createTenderRoutes({ requireAuth: auth.requireAuth, tender }))
-  app.route('/api/realtime', createRealtimeTicketRoutes({ db: prisma, requireAuth: auth.requireAuth }))
+  app.route('/api/realtime', createRealtimeTicketRoutes({
+    issuer: createPrismaRealtimeTicketIssuer(prisma),
+    requireAuth: auth.requireAuth,
+    securityEvents,
+  }))
 
   app.doc('/openapi.json', {
     openapi: '3.0.0',
@@ -108,7 +126,7 @@ export function createApp({ env, prisma, tender: providedTender }: CreateAppOpti
   })
 
   app.notFound((c) => c.json(errorResponse('NOT_FOUND', 'Route not found'), 404))
-  app.onError(handleError)
+  app.onError((error, c) => handleError(error, c, securityEvents))
 
   return app
 }

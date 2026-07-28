@@ -4,11 +4,16 @@ import { bodyLimit } from 'hono/body-limit'
 import { isIP } from 'node:net'
 
 import { errorResponse } from './errors'
+import {
+  emitSecurityEvent,
+  type SecurityEventLogger,
+  type SecurityHttpEnv,
+} from '../security/events'
 
 type AuthSecurityOptions = {
-  bodyLimitBytes: number
   rateLimitMax: number
   rateLimitWindowSeconds: number
+  securityEvents: SecurityEventLogger
   trustProxy: boolean
   trustedProxyClientIpHeader?: string
   trustedProxyClientIpPosition?: 'first' | 'last'
@@ -22,16 +27,27 @@ type RateLimitBucket = {
 const maxTrackedClients = 10_000
 
 export function createAuthSecurity(options: AuthSecurityOptions): MiddlewareHandler[] {
-  return [
-    bodyLimit({
-      maxSize: options.bodyLimitBytes,
-      onError: (c) => c.json(errorResponse('PAYLOAD_TOO_LARGE', 'Request body is too large'), 413),
-    }),
-    createAuthRateLimit(options),
-  ]
+  return [createAuthRateLimit(options)]
 }
 
-function createAuthRateLimit(options: AuthSecurityOptions): MiddlewareHandler {
+export function createApiBodyLimit(
+  maxSize: number,
+  securityEvents: SecurityEventLogger,
+): MiddlewareHandler<SecurityHttpEnv> {
+  return bodyLimit({
+    maxSize,
+    onError: (c) => {
+      emitSecurityEvent(c, securityEvents, {
+        code: 'PAYLOAD_TOO_LARGE',
+        outcome: 'limited',
+        type: 'request_rejected',
+      })
+      return c.json(errorResponse('PAYLOAD_TOO_LARGE', 'Request body is too large'), 413)
+    },
+  })
+}
+
+function createAuthRateLimit(options: AuthSecurityOptions): MiddlewareHandler<SecurityHttpEnv> {
   const buckets = new Map<string, RateLimitBucket>()
   const windowMs = options.rateLimitWindowSeconds * 1000
 
@@ -68,6 +84,11 @@ function createAuthRateLimit(options: AuthSecurityOptions): MiddlewareHandler {
 
     if (bucket.count > options.rateLimitMax) {
       c.header('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))))
+      emitSecurityEvent(c, options.securityEvents, {
+        code: 'RATE_LIMITED',
+        outcome: 'limited',
+        type: 'request_rejected',
+      })
       return c.json(errorResponse('RATE_LIMITED', 'Too many authentication requests'), 429)
     }
 

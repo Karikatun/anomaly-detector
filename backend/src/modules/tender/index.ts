@@ -1265,6 +1265,7 @@ export type TenderModule = ReturnType<typeof createTenderModule>
 export { createTenderRoutes } from './transport/routes'
 export { createRealtimeTicketRoutes } from './realtime/ticket-routes'
 export { createRealtimeHub, type RealtimeHub } from './realtime/hub'
+export { createPrismaRealtimeTicketIssuer } from './realtime/prisma-realtime-ticket-issuer'
 export { createPrismaRealtimeTicketStore } from './realtime/prisma-realtime-ticket-store'
 export { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
 export {

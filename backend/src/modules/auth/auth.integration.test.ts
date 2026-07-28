@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createApp } from '../../app'
 import { createPrisma } from '../../db'
 import type { AppEnv } from '../../env'
+import type { SecurityEvent } from '../../security/events'
 import { createRoomStartModule } from '../room'
 import { createPersistentTenderModule } from '../tender'
 
@@ -34,9 +35,19 @@ maybeDescribe('auth API integration', () => {
     SPACES_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
   }
   const prisma = createPrisma(databaseUrl!)
-  const app = createApp({ env, prisma })
+  const securityEvents: SecurityEvent[] = []
+  const app = createApp({
+    env,
+    prisma,
+    securityEvents: {
+      emit: (event) => {
+        securityEvents.push(event)
+      },
+    },
+  })
 
   beforeEach(async () => {
+    securityEvents.length = 0
     await prisma.authAbuseBucket.deleteMany()
     await prisma.tenderRoomMember.deleteMany()
     await prisma.tenderRoom.deleteMany()
@@ -179,6 +190,61 @@ maybeDescribe('auth API integration', () => {
       expiresAt: expect.any(String),
       ticket: expect.any(String),
     })
+  })
+
+  test('durably limits realtime ticket issuance for one authenticated user', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'ticket-budget',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const { accessToken } = await register.json()
+    const issueTicket = () => app.request('/api/realtime/tickets', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+
+    for (let attempt = 1; attempt <= 10; attempt += 1) {
+      expect((await issueTicket()).status).toBe(201)
+    }
+
+    const limited = await issueTicket()
+    expect(limited.status).toBe(429)
+    expect(limited.headers.get('retry-after')).toBeTruthy()
+    expect(await limited.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many realtime ticket requests',
+      },
+    })
+    expect(securityEvents).toContainEqual(expect.objectContaining({
+      code: 'RATE_LIMITED',
+      outcome: 'limited',
+      reason: 'realtime_ticket_issue_budget',
+      type: 'request_rejected',
+    }))
+
+    const secondSession = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'ticket-budget',
+        password: 'password123',
+      }),
+    })
+    const secondSessionBody = await secondSession.json()
+    const limitedAcrossSessions = await app.request('/api/realtime/tickets', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secondSessionBody.accessToken}` },
+    })
+    expect(secondSession.status).toBe(200)
+    expect(limitedAcrossSessions.status).toBe(429)
   })
 
   test('creates a private room and lets another authenticated player join it', async () => {
@@ -1351,6 +1417,12 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({ refreshToken: registered.refreshToken }),
     })
     expect(replay.status).toBe(401)
+    expect(securityEvents).toContainEqual(expect.objectContaining({
+      code: 'UNAUTHORIZED',
+      outcome: 'denied',
+      reason: 'refresh_token_reused',
+      type: 'authentication_rejected',
+    }))
 
     const attackerCredential = await app.request('/api/auth/token/refresh', {
       method: 'POST',
@@ -1662,6 +1734,12 @@ maybeDescribe('auth API integration', () => {
       }),
     })
     expect(invalidLogin.status).toBe(401)
+    expect(securityEvents).toContainEqual(expect.objectContaining({
+      code: 'UNAUTHORIZED',
+      outcome: 'denied',
+      reason: 'invalid_credentials',
+      type: 'authentication_rejected',
+    }))
   })
 
   test('rehashes a verified legacy password and never exposes password material', async () => {

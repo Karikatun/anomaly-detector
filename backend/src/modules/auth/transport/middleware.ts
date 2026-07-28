@@ -5,6 +5,7 @@ import { executeAuth } from './errors'
 
 export type AuthHttpEnv = {
   Variables: {
+    securityRequestId: string
     user: AuthenticatedPrincipal
   }
 }
