@@ -71,30 +71,6 @@ test('lists started matches for the requesting player', async () => {
   }])
 })
 
-test('adds a player to the next available seat in a waiting room', async () => {
-  const service = new TenderRoomService({
-    repository: {
-      create: async () => { throw new Error('not used') },
-      join: async () => ({
-        capacity: 3,
-        hostId: 'user-1',
-        id: 'room-1',
-        members: [{ ready: false, seat: 1, userId: 'user-1' }, { ready: false, seat: 2, userId: 'user-2' }],
-        status: 'waiting',
-        tenderId: null,
-      }),
-      leave: async () => { throw new Error('not used') },
-      setReady: async () => { throw new Error('not used') },
-      start: async () => { throw new Error('not used') },
-    },
-  })
-
-  await expect(service.joinRoom({ actorId: 'user-2', roomId: 'room-1' })).resolves.toMatchObject({
-    members: [{ ready: false, seat: 1, userId: 'user-1' }, { ready: false, seat: 2, userId: 'user-2' }],
-    roomId: 'room-1',
-  })
-})
-
 test('joins a waiting room through its public join code', async () => {
   const joinedByCode: Array<{ actorId: string; code: string }> = []
   const service = new TenderRoomService({
@@ -321,21 +297,5 @@ test('propagates a repository error when starting a room that is not full', asyn
 
   await expect(
     service.startRoom({ actorId: 'user-1', roomId: 'room-1' }),
-  ).rejects.toMatchObject({ kind: 'room_full' })
-})
-
-test('propagates a repository error when joining a full room', async () => {
-  const service = new TenderRoomService({
-    repository: {
-      create: async () => { throw new Error('not used') },
-      join: async () => { throw new RoomFailure('room_full', 'Room full') },
-      leave: async () => { throw new Error('not used') },
-      setReady: async () => { throw new Error('not used') },
-      start: async () => { throw new Error('not used') },
-    },
-  })
-
-  await expect(
-    service.joinRoom({ actorId: 'user-3', roomId: 'room-1' }),
   ).rejects.toMatchObject({ kind: 'room_full' })
 })

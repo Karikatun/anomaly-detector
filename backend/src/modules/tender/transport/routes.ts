@@ -12,7 +12,7 @@ import { z } from 'zod'
 import { AppError, validationErrorHook } from '../../../http/errors'
 import type { AuthHttpEnv } from '../../auth'
 import type { createTenderModule } from '../index'
-import { executeTender } from './errors'
+import { executeTender, executeTenderRead } from './errors'
 
 const tenderParamsSchema = z.object({ tenderId: tenderIdSchema })
 
@@ -23,7 +23,6 @@ const readTenderRoute = createRoute({
   responses: {
     200: { content: { 'application/json': { schema: tenderViewSchema } }, description: 'Participant Tender view' },
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
-    403: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Not a Tender participant' },
     404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Tender not found' },
   },
 })
@@ -54,7 +53,7 @@ export function createTenderRoutes(input: {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
   routes.openapi(readTenderRoute, async (c) => c.json(
-    await executeTender(() => input.tender.readTenderView({
+    await executeTenderRead(() => input.tender.readTenderView({
       playerId: c.var.user.id,
       tenderId: c.req.valid('param').tenderId,
     })),

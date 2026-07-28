@@ -39,12 +39,6 @@ export class RoomsApi {
     return response.match
   }
 
-  join(roomId: string): Promise<RoomView> {
-    return this.transport.request(`/api/rooms/${roomId}/join`, roomViewSchema, {
-      method: 'POST',
-    })
-  }
-
   joinByCode(input: JoinRoomByCodeRequest): Promise<RoomView> {
     const payload = joinRoomByCodeRequestSchema.parse(input)
     return this.transport.request('/api/rooms/join', roomViewSchema, {

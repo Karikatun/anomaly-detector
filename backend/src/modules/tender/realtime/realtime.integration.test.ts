@@ -39,7 +39,9 @@ maybeDescribe('realtime websocket integration', () => {
     SPACES_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
   }
   const prisma = createPrisma(databaseUrl!)
-  const ticketStore = createPrismaRealtimeTicketStore(prisma)
+  const ticketStore = createPrismaRealtimeTicketStore(prisma, {
+    sessionAbsoluteTtlDays: env.SESSION_ABSOLUTE_TTL_DAYS,
+  })
 
   let realtime: RealtimeHub
   const tender = createTenderModule({
@@ -79,7 +81,11 @@ maybeDescribe('realtime websocket integration', () => {
       }),
     })
     expect(response.status).toBe(201)
-    return response.json() as Promise<{ accessToken: string; user: { id: string } }>
+    return response.json() as Promise<{
+      accessToken: string
+      refreshToken: string
+      user: { id: string }
+    }>
   }
 
   const issueTicket = async (accessToken: string) => {
@@ -117,6 +123,24 @@ maybeDescribe('realtime websocket integration', () => {
       setTimeout(poll, 10)
     }
     poll()
+  })
+
+  const observeRejectedConnection = (url: string) => new Promise<{
+    code: number
+    messages: unknown[]
+    reason: string
+  }>((resolve, reject) => {
+    const messages: unknown[] = []
+    const socket = new WebSocket(url)
+    const timeout = setTimeout(() => {
+      socket.close()
+      reject(new Error('Rejected WebSocket did not close'))
+    }, 5_000)
+    socket.onmessage = (event) => { messages.push(JSON.parse(String(event.data))) }
+    socket.onclose = (event) => {
+      clearTimeout(timeout)
+      resolve({ code: event.code, messages, reason: event.reason })
+    }
   })
 
   beforeEach(async () => {
@@ -196,6 +220,130 @@ maybeDescribe('realtime websocket integration', () => {
 
   test('rejects unknown tickets at the upgrade boundary', async () => {
     const response = await fetch(`${baseUrl}${wsPath}?ticket=${'x'.repeat(64)}&tenderId=00000000-0000-0000-0000-000000000000`)
+    expect(response.status).toBe(401)
+  })
+
+  test('closes foreign and missing Tender subscriptions identically without sending a view', async () => {
+    const host = await register('ws-foreign-host')
+    const outsider = await register('ws-foreign-outsider')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+
+    const foreignTicket = await issueTicket(outsider.accessToken)
+    const foreign = await observeRejectedConnection(
+      `${wsUrl}?ticket=${foreignTicket.ticket}&tenderId=${tenderId}`,
+    )
+    const missingTicket = await issueTicket(outsider.accessToken)
+    const missing = await observeRejectedConnection(
+      `${wsUrl}?ticket=${missingTicket.ticket}&tenderId=${crypto.randomUUID()}`,
+    )
+
+    expect(foreign).toEqual({ code: 4403, messages: [], reason: 'Forbidden' })
+    expect(missing).toEqual(foreign)
+  })
+
+  test('rejects a ticket after its authenticated session is revoked', async () => {
+    const host = await register('ws-revoked-session')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+    const ticket = await issueTicket(host.accessToken)
+
+    const logout = await fetch(`${baseUrl}/api/auth/token/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: host.refreshToken }),
+    })
+    expect(logout.status).toBe(204)
+
+    const response = await fetch(`${baseUrl}${wsPath}?ticket=${ticket.ticket}&tenderId=${tenderId}`)
+    expect(response.status).toBe(401)
+  })
+
+  test('rejects a ticket after its authenticated session expires', async () => {
+    const host = await register('ws-expired-session')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+    const ticket = await issueTicket(host.accessToken)
+    await prisma.authSession.updateMany({
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+      where: { userId: host.user.id },
+    })
+
+    const response = await fetch(`${baseUrl}${wsPath}?ticket=${ticket.ticket}&tenderId=${tenderId}`)
+    expect(response.status).toBe(401)
+  })
+
+  test('rejects an expired one-time ticket at the upgrade boundary', async () => {
+    const host = await register('ws-expired-ticket')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+    const ticket = await issueTicket(host.accessToken)
+    await prisma.realtimeTicket.updateMany({
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+      where: { userId: host.user.id },
+    })
+
+    const response = await fetch(`${baseUrl}${wsPath}?ticket=${ticket.ticket}&tenderId=${tenderId}`)
+    expect(response.status).toBe(401)
+  })
+
+  test('rejects a ticket after its authenticated session reaches its absolute lifetime', async () => {
+    const host = await register('ws-absolute-session')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+    const ticket = await issueTicket(host.accessToken)
+    await prisma.authSession.updateMany({
+      data: {
+        createdAt: new Date(
+          Date.now() - (env.SESSION_ABSOLUTE_TTL_DAYS * 24 * 60 * 60 + 1) * 1_000,
+        ),
+      },
+      where: { userId: host.user.id },
+    })
+
+    const response = await fetch(`${baseUrl}${wsPath}?ticket=${ticket.ticket}&tenderId=${tenderId}`)
+    expect(response.status).toBe(401)
+  })
+
+  test('rejects a ticket whose stored user and session identities diverge', async () => {
+    const host = await register('ws-ticket-owner')
+    const other = await register('ws-other-session')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+    const ticket = await issueTicket(host.accessToken)
+    const otherSession = await prisma.authSession.findFirstOrThrow({
+      where: { userId: other.user.id },
+    })
+    await prisma.realtimeTicket.updateMany({
+      data: { sessionId: otherSession.id },
+      where: { userId: host.user.id },
+    })
+
+    const response = await fetch(`${baseUrl}${wsPath}?ticket=${ticket.ticket}&tenderId=${tenderId}`)
     expect(response.status).toBe(401)
   })
 })

@@ -10,12 +10,14 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
   const repository: RoomRepository = {
     async cancelStart(input) {
       return db.$transaction(async (tx) => {
-        const room = await tx.tenderRoom.findUnique({
-          where: { id: input.roomId },
+        const room = await tx.tenderRoom.findFirst({
+          where: {
+            hostId: input.actorId,
+            id: input.roomId,
+          },
           include: { members: { orderBy: { seat: 'asc' } } },
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
-        if (room.hostId !== input.actorId) throw new RoomFailure('room_not_host', 'Only the room host can cancel its start')
         if (room.status !== 'starting') throw new RoomFailure('room_not_joinable', 'Room is not starting')
 
         const waitingRoom = await tx.tenderRoom.update({
@@ -91,17 +93,17 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
       }, { isolationLevel: 'Serializable' })
     },
     async readForMember(input) {
-      const room = await db.tenderRoom.findUnique({
-        where: { id: input.roomId },
+      const room = await db.tenderRoom.findFirst({
+        where: {
+          id: input.roomId,
+          members: { some: { userId: input.actorId } },
+        },
         include: {
           members: { orderBy: { seat: 'asc' } },
           tender: { select: { phase: true, state: true } },
         },
       })
       if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
-      if (!room.members.some((member) => member.userId === input.actorId)) {
-        throw new RoomFailure('room_not_member', 'Player did not join this room')
-      }
       return {
         capacity: room.capacity as 2 | 3 | 4,
         hostId: room.hostId,
@@ -243,24 +245,25 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
     },
 
     async joinByCode(input) {
-      const room = input.code.length === 36
-        ? await db.tenderRoom.findUnique({ where: { id: input.code.toLowerCase() }, select: { id: true } })
-        : await db.tenderRoom.findUnique({ where: { joinCode: input.code }, select: { id: true } })
+      const room = await db.tenderRoom.findUnique({
+        where: { joinCode: input.code },
+        select: { id: true },
+      })
       if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
       return repository.join({ actorId: input.actorId, roomId: room.id })
     },
 
     async leave(input) {
       await db.$transaction(async (tx) => {
-        const room = await tx.tenderRoom.findUnique({
-          where: { id: input.roomId },
+        const room = await tx.tenderRoom.findFirst({
+          where: {
+            id: input.roomId,
+            members: { some: { userId: input.actorId } },
+          },
           include: { members: { orderBy: { seat: 'asc' } } },
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
-        if (!room.members.some((member) => member.userId === input.actorId)) {
-          throw new RoomFailure('room_not_member', 'Player did not join this room')
-        }
 
         const remainingMembers = room.members.filter((member) => member.userId !== input.actorId)
         if (remainingMembers.length === 0) {
@@ -289,15 +292,15 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
 
     async setReady(input) {
       return db.$transaction(async (tx) => {
-        const room = await tx.tenderRoom.findUnique({
-          where: { id: input.roomId },
+        const room = await tx.tenderRoom.findFirst({
+          where: {
+            id: input.roomId,
+            members: { some: { userId: input.actorId } },
+          },
           include: { members: { orderBy: { seat: 'asc' } } },
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
-        if (!room.members.some((member) => member.userId === input.actorId)) {
-          throw new RoomFailure('room_not_member', 'Player did not join this room')
-        }
 
         const updatedMember = await tx.tenderRoomMember.update({
           where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
@@ -322,12 +325,14 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
 
     async start(input) {
       return db.$transaction(async (tx) => {
-        const room = await tx.tenderRoom.findUnique({
-          where: { id: input.roomId },
+        const room = await tx.tenderRoom.findFirst({
+          where: {
+            hostId: input.actorId,
+            id: input.roomId,
+          },
           include: { members: { orderBy: { seat: 'asc' } } },
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
-        if (room.hostId !== input.actorId) throw new RoomFailure('room_not_host', 'Only the room host can start it')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room has already started')
         if (room.members.length !== room.capacity) throw new RoomFailure('room_full', 'Room needs every seat filled before starting')
         if (room.members.some((member) => !member.ready)) {

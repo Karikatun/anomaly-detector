@@ -42,11 +42,9 @@ test('Room join codes accept an unambiguous uppercase code and normalize pasted 
   expect(joinRoomByCodeRequestSchema.parse({ code: ' 7k9m-2np4-rx ' })).toEqual({
     code: '7K9M2NP4RX',
   })
-  expect(joinRoomByCodeRequestSchema.parse({
+  expect(() => joinRoomByCodeRequestSchema.parse({
     code: ' 019f8099-7e26-7760-ad08-66d1d66b2719 ',
-  })).toEqual({
-    code: '019f8099-7e26-7760-ad08-66d1d66b2719',
-  })
+  })).toThrow()
   expect(() => roomJoinCodeSchema.parse('7K9M2NP4RO')).toThrow()
   expect(() => joinRoomByCodeRequestSchema.parse({ code: '7K9M2NP4' })).toThrow()
 })

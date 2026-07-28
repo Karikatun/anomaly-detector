@@ -13,7 +13,9 @@ import { createBackendRuntime } from './runtime'
 import { stopServerGracefully } from './shutdown'
 
 const runtime = createBackendRuntime()
-const ticketStore = createPrismaRealtimeTicketStore(runtime.prisma)
+const ticketStore = createPrismaRealtimeTicketStore(runtime.prisma, {
+  sessionAbsoluteTtlDays: runtime.env.SESSION_ABSOLUTE_TTL_DAYS,
+})
 const tenderStore = createPrismaTenderStore(runtime.prisma)
 
 let realtime: RealtimeHub
