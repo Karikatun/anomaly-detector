@@ -147,6 +147,9 @@ Yandex Application Load Balancer places the source client address first in
 `X-Forwarded-For`. Validate this in the production-like smoke test before relying on IP
 budgets, and keep backend ports reachable only from the load balancer and health checks.
 
+Despite its historical name, `AUTH_BODY_LIMIT_BYTES` is a global API request
+body limit and runs before route validation or authentication work.
+
 `AUTH_RATE_LIMIT_*` remains only a per-process backstop. Attach Smart Web Security with
 an Advanced Rate Limiter profile to the load balancer before exposing auth routes. Scope
 rules independently to register, login, refresh, and logout.
@@ -276,6 +279,31 @@ When the backend runs as one container instance, WebSocket connection state can 
 Each backend instance should publish domain events to Valkey and subscribe to the channels it needs to deliver events to its own local WebSocket connections. Keep Valkey out of baseline local setup and ordinary request/response APIs; add it only for cross-instance real-time fanout.
 
 ## Static Webapp And Website
+
+The current single-VM production path may serve the built webapp and proxy the
+API through Caddy. Use
+[`deploy/yandex/Caddyfile.example`](../deploy/yandex/Caddyfile.example) as the
+source configuration: set `ANOMALY_WEBAPP_ROOT` to the absolute directory that
+contains the deployed `webapp/dist` contents, validate with `caddy validate`,
+then reload Caddy. The file owns the browser CSP, HSTS, clickjacking protection,
+content-type protection, referrer policy, permissions policy, SPA fallback, API
+proxy, and `www` redirect. Keep these headers in the serving layer; HTML
+`<meta>` tags are not an equivalent replacement.
+
+Backend security events are emitted as single-line JSON with
+`"channel":"security"`, a generated request ID, route, method, stable reason,
+outcome, and timestamp. They intentionally exclude credentials, tokens,
+realtime tickets, login names, and raw request bodies. Route these stdout
+records into Cloud Logging and configure alerts at minimum for:
+
+- any sustained `exceptional_condition` events;
+- repeated `refresh_token_reused` events;
+- repeated `realtime_ticket_issue_budget` events;
+- sharp increases in `authentication_rejected`,
+  `authorization_rejected`, or `PAYLOAD_TOO_LARGE`.
+
+Retain the request ID in API responses and log search results so an incident can
+be correlated without recording sensitive request data.
 
 Deploy `webapp` and fully prerendered `website` output as static websites in Yandex Object Storage. Once `website` uses SSR/on-demand rendering or Astro server islands, that surface needs an Astro adapter and must move to a Serverless Container runtime instead of static hosting. When server islands appear on cached pages or rolling deploys, generate a stable key with `astro create-key` and configure `ASTRO_KEY` as a secret in both build and runtime environments. Never commit it, expose it as `PUBLIC_*`, print it in logs, or bake it into static output.
 

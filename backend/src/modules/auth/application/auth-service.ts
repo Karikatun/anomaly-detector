@@ -258,7 +258,7 @@ export class AuthService {
         sessionId: currentSession.id,
         now,
       })
-      throw new AuthFailure('refresh_session_invalid', 'Refresh session is invalid or expired')
+      throw new AuthFailure('refresh_token_reused', 'Refresh session is invalid or expired')
     }
 
     const nextRefreshToken = this.dependencies.refreshTokens.rotate(refreshToken)
@@ -283,7 +283,7 @@ export class AuthService {
     if (!rotated) {
       const racedSession = await this.dependencies.repository.findActiveRefreshSession(refreshLookup)
       if (!racedSession || racedSession.id !== currentSession.id) {
-        throw new AuthFailure('refresh_session_invalid', 'Refresh session is invalid or expired')
+        throw new AuthFailure('refresh_token_reused', 'Refresh session is invalid or expired')
       }
       if (racedSession.credentialState === 'reused') {
         await this.dependencies.repository.revokeSessionById({

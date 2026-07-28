@@ -11,6 +11,19 @@ export type RealtimeTicketStore = {
   >
 }
 
+export type RealtimeTicketIssuer = {
+  issue(input: {
+    expiresAt: Date
+    now: Date
+    sessionId: string
+    ticketHash: string
+    userId: string
+  }): Promise<
+    | { kind: 'issued' }
+    | { kind: 'limited'; retryAfterSeconds: number }
+  >
+}
+
 export function hashRealtimeTicket(ticket: string) {
   return createHash('sha256').update(ticket).digest('hex')
 }

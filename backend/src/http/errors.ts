@@ -1,8 +1,12 @@
 import type { ApiErrorCode, ApiErrorResponse } from '@anomaly-detector/contracts'
-import type { Context } from 'hono'
+import type { Context, Env } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { ZodError } from 'zod'
+import {
+  emitSecurityEvent,
+  type SecurityEventLogger,
+} from '../security/events'
 
 export class AppError extends Error {
   constructor(
@@ -10,6 +14,7 @@ export class AppError extends Error {
     public readonly code: ApiErrorCode,
     message: string,
     public readonly details?: unknown,
+    public readonly securityReason?: string,
   ) {
     super(message)
   }
@@ -41,8 +46,26 @@ export function validationErrorHook(result: ValidationHookResult, c: Context) {
   }
 }
 
-export function handleError(error: Error, c: Context) {
+export function handleError<
+  E extends Env & { Variables: { securityRequestId: string } },
+>(
+  error: Error,
+  c: Context<E>,
+  securityEvents?: SecurityEventLogger,
+) {
   if (error instanceof AppError) {
+    if (securityEvents && (error.status === 401 || error.status === 403 || error.status === 429)) {
+      emitSecurityEvent(c, securityEvents, {
+        code: error.code,
+        outcome: error.status === 429 ? 'limited' : 'denied',
+        ...(error.securityReason ? { reason: error.securityReason } : {}),
+        type: error.status === 401
+          ? 'authentication_rejected'
+          : error.status === 403
+            ? 'authorization_rejected'
+            : 'request_rejected',
+      })
+    }
     return c.json(errorResponse(error.code, error.message, error.details), error.status)
   }
 
@@ -54,6 +77,13 @@ export function handleError(error: Error, c: Context) {
     return c.json(errorResponse('BAD_REQUEST', error.message), error.status)
   }
 
+  if (securityEvents) {
+    emitSecurityEvent(c, securityEvents, {
+      code: 'INTERNAL_ERROR',
+      outcome: 'failed',
+      type: 'exceptional_condition',
+    })
+  }
   console.error(error)
   return c.json(errorResponse('INTERNAL_ERROR', 'Unexpected server error'), 500)
 }

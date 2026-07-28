@@ -1,0 +1,31 @@
+anomaly-detector.ru {
+	root * {$ANOMALY_WEBAPP_ROOT}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https://api.anomaly-detector.ru wss://api.anomaly-detector.ru"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	route {
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+www.anomaly-detector.ru {
+	redir https://anomaly-detector.ru{uri} permanent
+}
+
+api.anomaly-detector.ru {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	reverse_proxy 127.0.0.1:3000
+}

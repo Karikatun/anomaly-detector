@@ -54,6 +54,10 @@ COOKIE_SECURE=true
 
 `JWT_SECRET` belongs in the production backend runtime env. Generate it with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
 
+`AUTH_BODY_LIMIT_BYTES` retains its historical name for deployment
+compatibility, but the backend enforces it globally before parsing request
+bodies on auth, Room, Tender, profile, and realtime routes.
+
 DigitalOcean App Platform puts the real client address in `do-connecting-ip`; its `X-Forwarded-For` identifies the ingress server. Keep `TRUSTED_PROXY_CLIENT_IP_HEADER=do-connecting-ip` on this deployment path so auth rate limits and session metadata are scoped to the actual client.
 
 If storage is active, also configure:
