@@ -13,6 +13,8 @@ webapp/e2e/.artifacts/
 mobile/.expo/
 mobile/.maestro/reports/
 docs/ui/*
+PLAYTEST_REPORT*
+.codescoring/
 
 # Runtime and logs
 *.log

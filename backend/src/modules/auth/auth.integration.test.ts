@@ -270,6 +270,19 @@ maybeDescribe('auth API integration', () => {
       }),
     })
     const extra = await extraRegister.json()
+    const expectRoomHiddenFromExtra = async () => {
+      const existingRoom = await app.request(`/api/rooms/${room.roomId}`, {
+        headers: { Authorization: `Bearer ${extra.accessToken}` },
+      })
+      const absentRoom = await app.request('/api/rooms/019f8099-7e26-7760-ad08-66d1d66b2719', {
+        headers: { Authorization: `Bearer ${extra.accessToken}` },
+      })
+
+      expect(existingRoom.status).toBe(404)
+      expect(await existingRoom.json()).toEqual(await absentRoom.json())
+    }
+    await expectRoomHiddenFromExtra()
+
     const fullRoomJoin = await app.request('/api/rooms/join', {
       method: 'POST',
       headers: {
@@ -288,9 +301,13 @@ maybeDescribe('auth API integration', () => {
     })
     expect(leave.status).toBe(204)
 
-    const rejoin = await app.request(`/api/rooms/${room.roomId}/join`, {
+    const rejoin = await app.request('/api/rooms/join', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${joiner.accessToken}` },
+      headers: {
+        Authorization: `Bearer ${joiner.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: room.joinCode }),
     })
     expect(rejoin.status).toBe(200)
     expect(await rejoin.json()).toMatchObject({
@@ -302,7 +319,7 @@ maybeDescribe('auth API integration', () => {
       method: 'POST',
       headers: { Authorization: `Bearer ${joiner.accessToken}` },
     })
-    expect(nonHostStart.status).toBe(409)
+    expect(nonHostStart.status).toBe(404)
 
     const unreadyStart = await app.request(`/api/rooms/${room.roomId}/start`, {
       method: 'POST',
@@ -355,6 +372,12 @@ maybeDescribe('auth API integration', () => {
       startsAt: expect.any(String),
     })
     expect(scheduledRoom.tenderId).toBeUndefined()
+    const startingRoomForMember = await app.request(`/api/rooms/${room.roomId}`, {
+      headers: { Authorization: `Bearer ${joiner.accessToken}` },
+    })
+    expect(startingRoomForMember.status).toBe(200)
+    expect(await startingRoomForMember.json()).toMatchObject({ status: 'starting' })
+    await expectRoomHiddenFromExtra()
 
     const cancelStart = await app.request(`/api/rooms/${room.roomId}/cancel-start`, {
       method: 'POST',
@@ -374,8 +397,7 @@ maybeDescribe('auth API integration', () => {
     const restartedRoom = await restart.json()
 
     await createRoomStartModule(prisma).advanceDueRoomStarts({ now: new Date(restartedRoom.startsAt) })
-    const startedRoomResponse = await app.request(`/api/rooms/${room.roomId}/join`, {
-      method: 'POST',
+    const startedRoomResponse = await app.request(`/api/rooms/${room.roomId}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     expect(startedRoomResponse.status).toBe(200)
@@ -383,6 +405,7 @@ maybeDescribe('auth API integration', () => {
     expect(startedRoom.roomId).toBe(room.roomId)
     expect(startedRoom.status).toBe('started')
     expect(startedRoom.tenderId).toBeString()
+    await expectRoomHiddenFromExtra()
     const tenderId = startedRoom.tenderId as string
     expect(await prisma.tender.findUnique({ where: { id: tenderId } })).not.toBeNull()
 
@@ -399,7 +422,12 @@ maybeDescribe('auth API integration', () => {
     const outsiderView = await app.request(`/api/tenders/${tenderId}`, {
       headers: { Authorization: `Bearer ${extra.accessToken}` },
     })
-    expect(outsiderView.status).toBe(403)
+    const absentView = await app.request('/api/tenders/00000000-0000-4000-8000-000000000000', {
+      headers: { Authorization: `Bearer ${extra.accessToken}` },
+    })
+    expect(outsiderView.status).toBe(404)
+    expect(absentView.status).toBe(404)
+    expect(await outsiderView.json()).toEqual(await absentView.json())
 
     const command = await app.request(`/api/tenders/${tenderId}/commands`, {
       method: 'POST',
@@ -417,7 +445,214 @@ maybeDescribe('auth API integration', () => {
     })
     expect(command.status).toBe(200)
     expect(await command.json()).toEqual({ tenderId, version: 1 })
+
+    const workingModelCommand = await app.request(`/api/tenders/${tenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: user.id,
+        commandId: 'working-model-host-1',
+        tenderId,
+        type: 'update-working-model',
+        workingModel: {
+          signals: {
+            aster: { note: 'Host-only hypothesis' },
+          },
+        },
+      }),
+    })
+    expect(workingModelCommand.status).toBe(200)
+
+    const hostPrivateView = await app.request(`/api/tenders/${tenderId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    const joinerPrivateView = await app.request(`/api/tenders/${tenderId}`, {
+      headers: { Authorization: `Bearer ${joiner.accessToken}` },
+    })
+    expect(hostPrivateView.status).toBe(200)
+    expect(joinerPrivateView.status).toBe(200)
+    expect(await hostPrivateView.json()).toMatchObject({
+      players: expect.arrayContaining([
+        expect.objectContaining({ playerId: user.id, requestedAccessSlot: 3 }),
+      ]),
+      privateMeasurements: [],
+      privateRawTelemetrySignals: [],
+      privateResearchCertifications: [],
+      privateSamples: [],
+      privateUsedContractEvidenceTestIds: [],
+      privateWorkingModel: {
+        signals: {
+          aster: { note: 'Host-only hypothesis' },
+        },
+      },
+    })
+    const joinerPrivateBody = await joinerPrivateView.json()
+    expect(joinerPrivateBody).toMatchObject({
+      privateMeasurements: [],
+      privateRawTelemetrySignals: [],
+      privateResearchCertifications: [],
+      privateSamples: [],
+      privateUsedContractEvidenceTestIds: [],
+      privateWorkingModel: { signals: {} },
+    })
+    expect(joinerPrivateBody.players.find((player: { playerId: string }) => player.playerId === user.id))
+      .not.toHaveProperty('requestedAccessSlot')
   }, 10_000)
+
+  test('does not expose or mutate a Tender when an outsider submits a command by id', async () => {
+    const register = async (login: string) => {
+      const response = await app.request('/api/auth/token/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login,
+          password: 'password123',
+          privacyConsent: true,
+          privacyConsentVersion: '1.0',
+          termsVersion: '1.0',
+        }),
+      })
+      expect(response.status).toBe(201)
+      return response.json()
+    }
+    const player = await register('tender-command-idor-player')
+    const secondPlayer = await register('tender-command-idor-second-player')
+    const outsider = await register('tender-command-idor-outsider')
+    const { tenderId } = await createPersistentTenderModule(prisma).createTender({
+      players: [
+        { id: player.user.id, tiePriority: 1 },
+        { id: secondPlayer.user.id, tiePriority: 2 },
+      ],
+    })
+    const acceptedParticipantCommand = await app.request(`/api/tenders/${tenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${player.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: player.user.id,
+        commandId: 'shared-access-slot-command',
+        slot: 2,
+        tenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(acceptedParticipantCommand.status).toBe(200)
+    const absentTenderId = '00000000-0000-4000-8000-000000000000'
+    const submitCommand = (targetTenderId: string) => app.request(
+      `/api/tenders/${targetTenderId}/commands`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${outsider.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          actorId: outsider.user.id,
+          commandId: 'shared-access-slot-command',
+          slot: 1,
+          tenderId: targetTenderId,
+          type: 'request-access-slot',
+        }),
+      },
+    )
+
+    const existingTenderCommand = await submitCommand(tenderId)
+    const absentTenderCommand = await submitCommand(absentTenderId)
+
+    expect(existingTenderCommand.status).toBe(404)
+    expect(absentTenderCommand.status).toBe(404)
+    expect(await existingTenderCommand.json()).toEqual(await absentTenderCommand.json())
+
+    const participantCommandIdCollision = await app.request(`/api/tenders/${tenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${secondPlayer.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: secondPlayer.user.id,
+        commandId: 'shared-access-slot-command',
+        slot: 3,
+        tenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(participantCommandIdCollision.status).toBe(409)
+
+    const pathBodyMismatch = await app.request(`/api/tenders/${tenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${player.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: player.user.id,
+        commandId: 'path-body-mismatch',
+        slot: 3,
+        tenderId: absentTenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(pathBodyMismatch.status).toBe(403)
+
+    const actorImpersonation = await app.request(`/api/tenders/${tenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${secondPlayer.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: player.user.id,
+        commandId: 'actor-impersonation',
+        slot: 3,
+        tenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(actorImpersonation.status).toBe(403)
+
+    const { tenderId: secondTenderId } = await createPersistentTenderModule(prisma).createTender({
+      players: [
+        { id: player.user.id, tiePriority: 1 },
+        { id: secondPlayer.user.id, tiePriority: 2 },
+      ],
+    })
+    const sameCommandIdInAnotherTender = await app.request(`/api/tenders/${secondTenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${player.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: player.user.id,
+        commandId: 'shared-access-slot-command',
+        slot: 4,
+        tenderId: secondTenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(sameCommandIdInAnotherTender.status).toBe(200)
+    expect(await sameCommandIdInAnotherTender.json()).toEqual({
+      tenderId: secondTenderId,
+      version: 1,
+    })
+
+    const participantView = await app.request(`/api/tenders/${tenderId}`, {
+      headers: { Authorization: `Bearer ${player.accessToken}` },
+    })
+    expect(participantView.status).toBe(200)
+    const participantBody = await participantView.json()
+    expect(participantBody.version).toBe(1)
+    expect(participantBody.players.find((candidate: { playerId: string }) =>
+      candidate.playerId === player.user.id)).toMatchObject({ requestedAccessSlot: 2 })
+    expect(participantBody.players.some((candidate: { playerId: string }) =>
+      candidate.playerId === outsider.user.id)).toBe(false)
+  })
 
   test('exposes one current room and blocks creating another until the player leaves', async () => {
     const register = await app.request('/api/auth/token/register', {
@@ -485,9 +720,13 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({ capacity: 2 }),
     })
     const otherRoom = await otherRoomResponse.json()
-    const blockedJoin = await app.request(`/api/rooms/${otherRoom.roomId}/join`, {
+    const blockedJoin = await app.request('/api/rooms/join', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: otherRoom.joinCode }),
     })
     expect(blockedJoin.status).toBe(409)
     expect(await blockedJoin.json()).toMatchObject({ error: { code: 'CONFLICT' } })
@@ -510,6 +749,457 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({ capacity: 2 }),
     })
     expect(replacementRoom.status).toBe(201)
+  })
+
+  test('does not expose direct room joining by guessed room id', async () => {
+    const hostRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'direct-join-host',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const host = await hostRegister.json()
+    const createRoom = await app.request('/api/rooms', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${host.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ capacity: 2 }),
+    })
+    const room = await createRoom.json()
+
+    const outsiderRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'direct-join-outsider',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const outsider = await outsiderRegister.json()
+    const guessedRoomJoin = await app.request(`/api/rooms/${room.roomId}/join`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${outsider.accessToken}` },
+    })
+
+    expect(guessedRoomJoin.status).toBe(404)
+  })
+
+  test('does not let an outsider leave or discover a room by guessed room id', async () => {
+    const hostRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'leave-idor-host',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const host = await hostRegister.json()
+    const createRoom = await app.request('/api/rooms', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${host.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ capacity: 2 }),
+    })
+    const room = await createRoom.json()
+
+    const outsiderRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'leave-idor-outsider',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const outsider = await outsiderRegister.json()
+    const authorization = { Authorization: `Bearer ${outsider.accessToken}` }
+    const existingRoomLeave = await app.request(`/api/rooms/${room.roomId}/leave`, {
+      method: 'POST',
+      headers: authorization,
+    })
+    const absentRoomLeave = await app.request('/api/rooms/019f8099-7e26-7760-ad08-66d1d66b2719/leave', {
+      method: 'POST',
+      headers: authorization,
+    })
+
+    expect(existingRoomLeave.status).toBe(404)
+    expect(absentRoomLeave.status).toBe(404)
+    expect(await existingRoomLeave.json()).toEqual(await absentRoomLeave.json())
+    expect(await prisma.tenderRoom.findUniqueOrThrow({
+      where: { id: room.roomId },
+      select: {
+        hostId: true,
+        members: { select: { userId: true } },
+        currentMatches: { select: { userId: true } },
+      },
+    })).toEqual({
+      hostId: host.user.id,
+      members: [{ userId: host.user.id }],
+      currentMatches: [{ userId: host.user.id }],
+    })
+  })
+
+  test('only lets room members change their own readiness without exposing room existence', async () => {
+    const register = async (login: string) => {
+      const response = await app.request('/api/auth/token/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login,
+          password: 'password123',
+          privacyConsent: true,
+          privacyConsentVersion: '1.0',
+          termsVersion: '1.0',
+        }),
+      })
+      return response.json()
+    }
+    const host = await register('ready-idor-host')
+    const member = await register('ready-idor-member')
+    const outsider = await register('ready-idor-outsider')
+    const createRoom = await app.request('/api/rooms', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${host.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ capacity: 2 }),
+    })
+    const room = await createRoom.json()
+    await app.request('/api/rooms/join', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${member.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: room.joinCode }),
+    })
+
+    const setReady = (accessToken: string, roomId: string, ready: boolean) => app.request(
+      `/api/rooms/${roomId}/ready`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ready }),
+      },
+    )
+
+    const memberReady = await setReady(member.accessToken, room.roomId, true)
+    expect(memberReady.status).toBe(200)
+    expect(await memberReady.json()).toMatchObject({
+      members: [
+        { ready: false, userId: host.user.id },
+        { ready: true, userId: member.user.id },
+      ],
+    })
+    const memberNotReady = await setReady(member.accessToken, room.roomId, false)
+    expect(memberNotReady.status).toBe(200)
+    expect(await memberNotReady.json()).toMatchObject({
+      members: [
+        { ready: false, userId: host.user.id },
+        { ready: false, userId: member.user.id },
+      ],
+    })
+
+    for (const ready of [true, false]) {
+      const existingRoom = await setReady(outsider.accessToken, room.roomId, ready)
+      const absentRoom = await setReady(
+        outsider.accessToken,
+        '019f8099-7e26-7760-ad08-66d1d66b2719',
+        ready,
+      )
+      expect(existingRoom.status).toBe(404)
+      expect(await existingRoom.json()).toEqual(await absentRoom.json())
+    }
+    expect(await prisma.tenderRoomMember.findMany({
+      where: { roomId: room.roomId },
+      orderBy: { seat: 'asc' },
+      select: { ready: true, userId: true },
+    })).toEqual([
+      { ready: false, userId: host.user.id },
+      { ready: false, userId: member.user.id },
+    ])
+
+    await setReady(host.accessToken, room.roomId, true)
+    await setReady(member.accessToken, room.roomId, true)
+    const startRoom = await app.request(`/api/rooms/${room.roomId}/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${host.accessToken}` },
+    })
+    expect(startRoom.status).toBe(200)
+
+    const memberAfterStart = await setReady(member.accessToken, room.roomId, false)
+    expect(memberAfterStart.status).toBe(409)
+    const outsiderAfterStart = await setReady(outsider.accessToken, room.roomId, false)
+    const absentAfterStart = await setReady(
+      outsider.accessToken,
+      '019f8099-7e26-7760-ad08-66d1d66b2719',
+      false,
+    )
+    expect(outsiderAfterStart.status).toBe(404)
+    expect(await outsiderAfterStart.json()).toEqual(await absentAfterStart.json())
+  })
+
+  test('only lets the path room host schedule its start without exposing other rooms', async () => {
+    const register = async (login: string) => {
+      const response = await app.request('/api/auth/token/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login,
+          password: 'password123',
+          privacyConsent: true,
+          privacyConsentVersion: '1.0',
+          termsVersion: '1.0',
+        }),
+      })
+      return response.json()
+    }
+    const firstHost = await register('start-idor-first-host')
+    const secondHost = await register('start-idor-second-host')
+    const secondMember = await register('start-idor-second-member')
+    const outsider = await register('start-idor-outsider')
+    const createRoom = async (accessToken: string) => {
+      const response = await app.request('/api/rooms', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ capacity: 2 }),
+      })
+      return response.json()
+    }
+    const firstRoom = await createRoom(firstHost.accessToken)
+    const secondRoom = await createRoom(secondHost.accessToken)
+    await app.request('/api/rooms/join', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${secondMember.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: secondRoom.joinCode }),
+    })
+    const startRoom = (accessToken: string, roomId: string) => app.request(
+      `/api/rooms/${roomId}/start`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    )
+    const absentRoomId = '019f8099-7e26-7760-ad08-66d1d66b2719'
+    const tenderCountBefore = await prisma.tender.count()
+
+    for (const [accessToken, foreignRoomId] of [
+      [firstHost.accessToken, secondRoom.roomId],
+      [secondMember.accessToken, firstRoom.roomId],
+      [outsider.accessToken, secondRoom.roomId],
+    ] as const) {
+      const existingForeignRoom = await startRoom(accessToken, foreignRoomId)
+      const absentRoom = await startRoom(accessToken, absentRoomId)
+
+      expect(existingForeignRoom.status).toBe(404)
+      expect(await existingForeignRoom.json()).toEqual(await absentRoom.json())
+    }
+    expect(await prisma.tenderRoom.findMany({
+      where: { id: { in: [firstRoom.roomId, secondRoom.roomId] } },
+      orderBy: { id: 'asc' },
+      select: { id: true, startsAt: true, status: true, tenderId: true },
+    })).toEqual([
+      { id: firstRoom.roomId, startsAt: null, status: 'waiting', tenderId: null },
+      { id: secondRoom.roomId, startsAt: null, status: 'waiting', tenderId: null },
+    ].sort((left, right) => left.id.localeCompare(right.id)))
+    expect(await prisma.tender.count()).toBe(tenderCountBefore)
+  })
+
+  test('only lets the target room host cancel its start without exposing other rooms', async () => {
+    const register = async (login: string) => {
+      const response = await app.request('/api/auth/token/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login,
+          password: 'password123',
+          privacyConsent: true,
+          privacyConsentVersion: '1.0',
+          termsVersion: '1.0',
+        }),
+      })
+      return response.json()
+    }
+    const host = await register('cancel-start-idor-host')
+    const member = await register('cancel-start-idor-member')
+    const otherHost = await register('cancel-start-idor-other-host')
+    const outsider = await register('cancel-start-idor-outsider')
+    const createRoom = async (accessToken: string) => {
+      const response = await app.request('/api/rooms', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ capacity: 2 }),
+      })
+      return response.json()
+    }
+    const room = await createRoom(host.accessToken)
+    await createRoom(otherHost.accessToken)
+    await app.request('/api/rooms/join', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${member.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: room.joinCode }),
+    })
+    const setReady = (accessToken: string) => app.request(`/api/rooms/${room.roomId}/ready`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ready: true }),
+    })
+    expect((await setReady(host.accessToken)).status).toBe(200)
+    expect((await setReady(member.accessToken)).status).toBe(200)
+    const start = await app.request(`/api/rooms/${room.roomId}/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${host.accessToken}` },
+    })
+    expect(start.status).toBe(200)
+    const scheduledRoom = await start.json()
+    const cancelStart = (accessToken: string, roomId: string) => app.request(
+      `/api/rooms/${roomId}/cancel-start`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    )
+    const absentRoomId = '019f8099-7e26-7760-ad08-66d1d66b2719'
+    const tenderCountBefore = await prisma.tender.count()
+
+    for (const accessToken of [
+      member.accessToken,
+      otherHost.accessToken,
+      outsider.accessToken,
+    ] as const) {
+      const existingForeignRoom = await cancelStart(accessToken, room.roomId)
+      const absentRoom = await cancelStart(accessToken, absentRoomId)
+
+      expect(existingForeignRoom.status).toBe(404)
+      expect(await existingForeignRoom.json()).toEqual(await absentRoom.json())
+    }
+    expect(await prisma.tenderRoom.findUniqueOrThrow({
+      where: { id: room.roomId },
+      select: { startsAt: true, status: true, tenderId: true },
+    })).toEqual({
+      startsAt: new Date(scheduledRoom.startsAt),
+      status: 'starting',
+      tenderId: null,
+    })
+    expect(await prisma.tender.count()).toBe(tenderCountBefore)
+
+    const legitimateCancel = await cancelStart(host.accessToken, room.roomId)
+    expect(legitimateCancel.status).toBe(200)
+    expect(await legitimateCancel.json()).toMatchObject({
+      roomId: room.roomId,
+      status: 'waiting',
+    })
+    expect(await prisma.tenderRoom.findUniqueOrThrow({
+      where: { id: room.roomId },
+      select: { startsAt: true, status: true, tenderId: true },
+    })).toEqual({
+      startsAt: null,
+      status: 'waiting',
+      tenderId: null,
+    })
+    expect(await prisma.tender.count()).toBe(tenderCountBefore)
+  })
+
+  test('transfers a waiting room to the remaining member when its host leaves', async () => {
+    const hostRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'leave-host-transfer-host',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const host = await hostRegister.json()
+    const memberRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'leave-host-transfer-member',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const member = await memberRegister.json()
+    const createRoom = await app.request('/api/rooms', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${host.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ capacity: 2 }),
+    })
+    const room = await createRoom.json()
+    const joinRoom = await app.request('/api/rooms/join', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${member.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: room.joinCode }),
+    })
+    expect(joinRoom.status).toBe(200)
+
+    const leave = await app.request(`/api/rooms/${room.roomId}/leave`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${host.accessToken}` },
+    })
+    expect(leave.status).toBe(204)
+
+    const roomForMember = await app.request(`/api/rooms/${room.roomId}`, {
+      headers: { Authorization: `Bearer ${member.accessToken}` },
+    })
+    expect(roomForMember.status).toBe(200)
+    expect(await roomForMember.json()).toMatchObject({
+      hostId: member.user.id,
+      members: [{ ready: false, userId: member.user.id }],
+      status: 'waiting',
+    })
+    const formerHostCurrentRoom = await app.request('/api/rooms/current', {
+      headers: { Authorization: `Bearer ${host.accessToken}` },
+    })
+    expect(formerHostCurrentRoom.status).toBe(200)
+    expect(await formerHostCurrentRoom.json()).toEqual({ match: null })
   })
 
   test('creates only one current room across concurrent requests from one player', async () => {

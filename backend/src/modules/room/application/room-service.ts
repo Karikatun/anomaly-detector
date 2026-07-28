@@ -15,11 +15,6 @@ export class TenderRoomService {
     return this.toRoomView(room)
   }
 
-  async joinRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
-    const room = await this.dependencies.repository.join(input)
-    return this.toRoomView(room)
-  }
-
   async joinRoomByCode(input: { actorId: string; code: string }): Promise<RoomView> {
     const joinByCode = this.dependencies.repository.joinByCode
     if (!joinByCode) throw new Error('Room code joining is unavailable')

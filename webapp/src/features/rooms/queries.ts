@@ -43,14 +43,11 @@ export function useRoomQuery({
   api: RoomsApi
   roomId: string
 }) {
-  const queryClient = useQueryClient()
   const queryKey = roomQueryKeys.byId(roomId)
 
   return useQuery({
     queryKey,
-    queryFn: () => queryClient.getQueryData(queryKey)
-      ? api.get(roomId)
-      : api.join(roomId),
+    queryFn: () => api.get(roomId),
     refetchInterval: (query) => getRoomPollingIntervalMs(query.state.data?.status),
     retry: 1,
   })

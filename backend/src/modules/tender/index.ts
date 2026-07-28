@@ -416,6 +416,7 @@ export function createTenderModule({
       }
       const command = parsedCommand.data
       const tender = await readTender(command.tenderId)
+      const player = readPlayer(tender, command.actorId)
       const commandFingerprint = fingerprint(command)
       const previousCommand = tender.processedCommands[command.commandId]
       if (previousCommand) {
@@ -424,7 +425,6 @@ export function createTenderModule({
         }
         return previousCommand.receipt
       }
-      const player = readPlayer(tender, command.actorId)
       if (command.type === 'leave-tender' || command.type === 'resume-tender') {
         if (tender.phase === 'complete') {
           throw new TenderFailure('invalid_tender_state', 'Tender is already complete')

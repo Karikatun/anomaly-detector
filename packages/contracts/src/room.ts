@@ -3,7 +3,6 @@ import { z } from 'zod'
 export const roomCapacitySchema = z.union([z.literal(2), z.literal(3), z.literal(4)])
 export const roomIdSchema = z.string().uuid()
 export const roomJoinCodeSchema = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{10}$/)
-const legacyRoomJoinCredentialSchema = roomIdSchema
 export const roomStatusSchema = z.enum(['waiting', 'starting', 'started'])
 
 export const createRoomRequestSchema = z.object({
@@ -16,13 +15,8 @@ export const setRoomReadyRequestSchema = z.object({
 
 export const joinRoomByCodeRequestSchema = z.object({
   code: z.string()
-    .transform((value) => {
-      const trimmed = value.trim()
-      return /^[0-9a-f-]{36}$/i.test(trimmed)
-        ? trimmed.toLowerCase()
-        : trimmed.replaceAll(/[\s-]/g, '').toUpperCase()
-    })
-    .pipe(z.union([roomJoinCodeSchema, legacyRoomJoinCredentialSchema])),
+    .transform((value) => value.trim().replaceAll(/[\s-]/g, '').toUpperCase())
+    .pipe(roomJoinCodeSchema),
 }).strict()
 
 export const roomMemberSchema = z.object({
