@@ -86,6 +86,23 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Gate:** ограничение атомарно при параллельных запросах и честно обозначено как anti-abuse control, а не как доказательство физического устройства.
 
+### P0. Ограничение Публичного API И Realtime
+
+Текущая защита неоднородна: auth writes имеют bounded in-process IP limiter и отдельные PostgreSQL budgets для входа и регистрации, выдача realtime-билетов ограничена в PostgreSQL, но room join хранит счётчик только в памяти процесса, а Tender-команды и невалидные WebSocket upgrades не имеют общего бюджета. In-process limiter не является production-защитой при нескольких API-инстансах. Для MVP не нужна новая runtime-зависимость: edge-защита дополняется существующими PostgreSQL anti-abuse buckets.
+
+1. [ ] До публичного запуска подключить Yandex Smart Web Security Advanced Rate Limiter или эквивалентный edge/WAF limiter перед API и WebSocket ingress.
+   - Разделить бюджеты register, login, refresh/logout и OAuth.
+   - Ограничить WebSocket handshakes по доверенному адресу клиента, включая запросы с невалидным или отсутствующим билетом.
+   - Добавить общий высокий IP budget для остальных API-запросов; health checks выделить в отдельное правило или доверенный источник.
+2. [ ] Перенести room-join budget `20 попыток / 60 секунд` из памяти процесса в атомарный PostgreSQL bucket по пользователю, сохранив `Retry-After`, стабильный `429 RATE_LIMITED` и security event.
+3. [ ] Добавить атомарный PostgreSQL budget Tender-команд по `userId + tenderId`. Начальная граница для нагрузочной проверки — `60 запросов / 60 секунд` с допустимым коротким burst; окончательное значение определить по нормальному пятираундовому матчу и тесту конкурентной нагрузки.
+4. [ ] Добавить страховочный budget authenticated mutations по пользователю. Начальная граница для проверки — `120 запросов / 60 секунд`; route-specific budgets должны срабатывать независимо и раньше общего.
+5. [x] Ограничивать выдачу одноразовых realtime-билетов общим PostgreSQL budget `10 запросов / 60 секунд` на пользователя.
+6. [ ] Провести abuse/load validation для edge и application limits: несколько API-инстансов, общий NAT, mobile reconnect, burst команд, невалидные WebSocket tickets и очистка истёкших buckets.
+7. [ ] Не добавлять отдельные application-level лимиты для обычных authenticated GET/polling в MVP без нагрузочных данных. Их закрывает общий edge budget; профильные лимиты вводятся только при доказанной дорогой выборке или злоупотреблении.
+
+**Gate:** распределённый трафик нельзя обойти переключением между API-инстансами; room code enumeration, command flood и invalid WebSocket flood получают контролируемый `429` до дорогой работы; обычный вход, polling, reconnect и полный матч не упираются в лимиты; production smoke подтверждает корректный trusted client IP.
+
 ### P0. Хранение Паролей
 
 **Текущее состояние:** password-аккаунты сохраняют только PHC-строку Argon2id в `users.password_hash`; уникальная соль генерируется `Bun.password.hash` автоматически, plaintext не пишется в БД, а `Bun.password.verify` определяет алгоритм и параметры из PHC-строки. Новые хеши явно закреплены на `m=65536`, `t=2`, `p=1`, то есть 64 MiB памяти, две итерации и parallelism 1 — выше текущего минимального OWASP baseline `19 MiB / 2 / 1`. При успешном входе более слабый или устаревший PHC атомарно заменяется новым. Непарольные и повреждённые значения проверяются через фиктивный Argon2id-хеш и получают общий ответ без 500 или раскрытия типа аккаунта.
@@ -240,7 +257,9 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Bound auth request bodies.
    - [x] Add a bounded per-instance client-address limiter and trusted-proxy configuration.
    - [x] Add shared password-attempt counters, unknown-user dummy verification, and registration device quota.
-   - [ ] Configure and validate Yandex edge limits on the production ingress.
+   - [x] Add a shared PostgreSQL issuance budget for realtime tickets.
+   - [ ] Configure and validate route-scoped Yandex edge limits for auth, the general API, and WebSocket handshakes.
+   - [ ] Move room-join limiting to PostgreSQL and add shared Tender-command plus authenticated-mutation budgets.
 10. [-] Verify password storage and account recovery posture.
    - [x] Use salted PHC Argon2id hashes with explicit parameters and verify without storing plaintext.
    - [x] Support opportunistic compare-and-set rehash on successful login.
@@ -296,7 +315,7 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [-] Verify that API and worker are both deployed, monitored, and restart-safe; alert on worker lag, overdue Tenders, auth throttling, elevated 5xx, DB saturation, and abnormal realtime reconnects.
      - [x] Add internal worker liveness/readiness with per-loop success, failure, and stale-heartbeat tracking.
      - [ ] Connect API and worker health checks to Compute instance-group autohealing and production alerts.
-4. [ ] Add production abuse and performance validation: auth/login load with Argon2id, registration quota races, WebSocket connection/message limits, 2-4 player Tender load, request-size limits, and log redaction.
+4. [ ] Add production abuse and performance validation: auth/login load with Argon2id, registration quota races, multi-instance edge-limit enforcement, room-code enumeration, authenticated mutation and Tender-command bursts, invalid/valid WebSocket connection limits, mobile reconnect, 2-4 player Tender load, request-size limits, and log redaction.
 5. [ ] Run the complete release acceptance matrix on current mobile Safari/Chrome and desktop Chrome/Firefox, including reconnect, refresh, multi-tab session, active-match return, all-player abandonment, audit privacy, and account deletion.
 6. [ ] Measure real matches with 2, 3, and 4 players; tune deadlines only when data shows the five-round target is materially missed.
 7. [ ] Run a public test without marketing, distributing links directly to known testers. Capture audit-derived defects, balance observations, accessibility problems, rules misunderstandings, support requests, abuse, and operational incidents as GitHub issues.
