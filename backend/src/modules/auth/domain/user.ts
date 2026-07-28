@@ -10,6 +10,7 @@ export type AuthUserRecord = {
 }
 
 export type AuthenticatedPrincipal = UserDto & {
+  authenticatedAt: Date
   sessionId: string
 }
 
@@ -24,6 +25,10 @@ export function toBaseUserDto(user: AuthUserRecord): UserDto {
 }
 
 export function userDtoFromPrincipal(principal: AuthenticatedPrincipal): UserDto {
-  const { sessionId: _sessionId, ...user } = principal
+  const {
+    authenticatedAt: _authenticatedAt,
+    sessionId: _sessionId,
+    ...user
+  } = principal
   return user
 }

@@ -136,6 +136,28 @@ describe('realtime hub', () => {
     expect(messages).toHaveLength(1)
   })
 
+  test('isolates a failed socket without blocking healthy subscribers', async () => {
+    const tender = createTenderModule()
+    const { tenderId } = await tender.createTender({ players })
+    const hub = createRealtimeHub({ tender })
+    const brokenSocket: RealtimeSocket = {
+      send: () => {
+        throw new Error('socket closed during send')
+      },
+    }
+    await expect(hub.subscribe({
+      playerId: 'player-a',
+      socket: brokenSocket,
+      tenderId,
+    })).rejects.toThrow('socket closed during send')
+
+    const healthy = collectSocket()
+    await hub.subscribe({ playerId: 'player-b', socket: healthy.socket, tenderId })
+
+    await expect(hub.handleTenderChanged(tenderId)).resolves.toBeUndefined()
+    expect(healthy.messages).toHaveLength(2)
+  })
+
   test('exposes tender changes to an external publisher', async () => {
     const changed: string[] = []
     const tender = createTenderModule()

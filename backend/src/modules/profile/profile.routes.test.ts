@@ -45,6 +45,7 @@ test('returns authenticated player statistics from compatible completed matches'
   } as unknown as DbClient
   const requireAuth = createMiddleware<AuthHttpEnv>(async (c, next) => {
     c.set('user', {
+      authenticatedAt: new Date('2026-01-01T00:00:00.000Z'),
       createdAt: '2026-01-01T00:00:00.000Z',
       displayName: 'Player',
       id: 'player-a',

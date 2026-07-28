@@ -223,6 +223,27 @@ maybeDescribe('realtime websocket integration', () => {
     expect(response.status).toBe(401)
   })
 
+  test('rejects malformed Tender ids without consuming the one-time ticket', async () => {
+    const host = await register('ws-malformed-tender')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+    const ticket = await issueTicket(host.accessToken)
+
+    const malformed = await fetch(`${baseUrl}${wsPath}?ticket=${ticket.ticket}&tenderId=not-a-uuid`)
+    expect(malformed.status).toBe(400)
+    expect(await malformed.json()).toEqual({
+      error: { code: 'BAD_REQUEST', message: 'Invalid Tender id' },
+    })
+
+    const connection = await connect(`${wsUrl}?ticket=${ticket.ticket}&tenderId=${tenderId}`)
+    expect(await nextMessage(connection.messages, 0)).toMatchObject({ type: 'tender-view' })
+    connection.socket.close()
+  })
+
   test('closes foreign and missing Tender subscriptions identically without sending a view', async () => {
     const host = await register('ws-foreign-host')
     const outsider = await register('ws-foreign-outsider')

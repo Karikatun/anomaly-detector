@@ -91,8 +91,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
     updateUser: async () => undefined,
     eraseUserIdentity: async () => undefined,
     createOAuthTransaction: async () => undefined,
-    findOAuthTransactionByState: async () => null,
-    deleteOAuthTransaction: async () => undefined,
+    consumeOAuthTransactionByState: async () => null,
     findUserByIdentity: async () => null,
     createOAuthUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
   } satisfies AuthRepository
@@ -297,6 +296,59 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
   })])
 })
 
+test('consumes an OAuth transaction before provider exchange and rejects replay', async () => {
+  let transactionAvailable = true
+  let exchangeCalls = 0
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    oauthProviders: {
+      require: () => ({
+        authorizationUrl: () => 'https://provider.example/authorize',
+        exchangeCode: async () => {
+          exchangeCalls += 1
+          return { accessToken: 'provider-token', providerSubject: 'provider-sub-1' }
+        },
+        getUserInfo: async () => ({ displayName: 'OAuth User', providerSubject: 'provider-sub-1' }),
+      }),
+    },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: {
+      consumeOAuthTransactionByState: async () => {
+        if (!transactionAvailable) return null
+        transactionAvailable = false
+        return {
+          codeVerifier: 'verifier',
+          expiresAt: new Date('2026-07-20T12:10:00.000Z'),
+          provider: 'yandex',
+          redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
+          state: 'state',
+        }
+      },
+      findUserByIdentity: async () => user,
+      createSession: async () => ({ id: 'session-1' }),
+    } as unknown as AuthRepository,
+  })
+
+  await expect(service.completeOAuthSignIn({
+    code: 'authorization-code',
+    metadata: {},
+    state: 'state',
+  })).resolves.toMatchObject({ accessToken: 'access-token' })
+  await expect(service.completeOAuthSignIn({
+    code: 'authorization-code',
+    metadata: {},
+    state: 'state',
+  })).rejects.toMatchObject({ kind: 'oauth_transaction_invalid' })
+  expect(exchangeCalls).toBe(1)
+})
+
 test('refuses to create an OAuth user without a separately confirmed legal acceptance', async () => {
   const service = new AuthService({
     accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
@@ -316,8 +368,7 @@ test('refuses to create an OAuth user without a separately confirmed legal accep
     sessionAbsoluteTtlDays: 90,
     refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
     repository: {
-      deleteOAuthTransaction: async () => undefined,
-      findOAuthTransactionByState: async () => ({
+      consumeOAuthTransactionByState: async () => ({
         codeVerifier: 'verifier',
         expiresAt: new Date('2026-07-20T12:10:00.000Z'),
         provider: 'yandex',
@@ -356,7 +407,10 @@ test('deleteAccount removes identity links only after Tender history is anonymis
     repository,
   })
 
-  await service.deleteAccount(user.id)
+  await service.deleteAccount({
+    authenticatedAt: new Date('2026-07-20T12:00:00.000Z'),
+    userId: user.id,
+  })
 
   expect(operations).toEqual([
     `history:${user.id}`,

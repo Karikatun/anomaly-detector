@@ -115,7 +115,7 @@ test('registers, restores the browser session, opens the profile, and logs out',
   await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
 })
 
-test('deletes an account from the profile only after confirmation and recovers from a server error', async ({
+test('deletes an account from the profile only after confirmation and explains recent sign-in recovery', async ({
   page,
 }) => {
   await registerBrowserUser(page, 'Удаляемый профиль', 'delete-account')
@@ -135,12 +135,12 @@ test('deletes an account from the profile only after confirmation and recovers f
     if (route.request().method() === 'DELETE' && rejectNextDeletion) {
       rejectNextDeletion = false
       await route.fulfill({
-        status: 503,
+        status: 403,
         contentType: 'application/json',
         body: JSON.stringify({
           error: {
-            code: 'UNAVAILABLE',
-            message: 'Account deletion is temporarily unavailable',
+            code: 'FORBIDDEN',
+            message: 'Recent authentication is required to delete the account',
           },
         }),
       })
@@ -151,7 +151,9 @@ test('deletes an account from the profile only after confirmation and recovers f
 
   await openDeletionDialog.click()
   await dialog.getByRole('button', { name: 'Удалить аккаунт' }).click()
-  await expect(dialog.getByRole('alert')).toHaveText('Не удалось удалить аккаунт. Попробуйте ещё раз.')
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'Для удаления аккаунта выйдите, войдите снова и повторите действие в течение 10 минут.',
+  )
   await dialog.getByRole('button', { name: 'Отмена' }).click()
   await expect(dialog).toBeHidden()
   await expect(page.getByRole('heading', { name: 'ПРОФИЛЬ', exact: true })).toBeVisible()

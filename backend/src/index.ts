@@ -22,6 +22,7 @@ let realtime: RealtimeHub
 const tender = createTenderModule({
   onTenderChanged: (tenderId) => {
     void realtime?.handleTenderChanged(tenderId)
+      .catch((error) => console.error('Realtime Tender publish failed:', error))
   },
   store: tenderStore,
 })

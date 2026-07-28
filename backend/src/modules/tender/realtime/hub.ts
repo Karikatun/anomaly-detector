@@ -34,25 +34,35 @@ export function createRealtimeHub({ onTenderChanged, tender }: RealtimeHubOption
   const publish = async (tenderId: string) => {
     const targets = [...subscriptions].filter((subscription) => subscription.tenderId === tenderId)
     await Promise.all(targets.map(async (subscription) => {
-      const view = await tender.readTenderView({
-        playerId: subscription.playerId,
-        tenderId: subscription.tenderId,
-      })
-      subscription.version = view.version
-      deliver(subscription.socket, { type: 'tender-view', view })
+      try {
+        const view = await tender.readTenderView({
+          playerId: subscription.playerId,
+          tenderId: subscription.tenderId,
+        })
+        subscription.version = view.version
+        deliver(subscription.socket, { type: 'tender-view', view })
+      } catch (error) {
+        subscriptions.delete(subscription)
+        console.error('Realtime subscriber delivery failed:', error)
+      }
     }))
   }
 
   const syncActiveTenders = async () => {
     await Promise.all([...subscriptions].map(async (subscription) => {
-      const view = await tender.readTenderView({
-        playerId: subscription.playerId,
-        tenderId: subscription.tenderId,
-      })
-      if (view.version === subscription.version) return
+      try {
+        const view = await tender.readTenderView({
+          playerId: subscription.playerId,
+          tenderId: subscription.tenderId,
+        })
+        if (view.version === subscription.version) return
 
-      subscription.version = view.version
-      deliver(subscription.socket, { type: 'tender-view', view })
+        subscription.version = view.version
+        deliver(subscription.socket, { type: 'tender-view', view })
+      } catch (error) {
+        subscriptions.delete(subscription)
+        console.error('Realtime subscriber synchronisation failed:', error)
+      }
     }))
   }
 

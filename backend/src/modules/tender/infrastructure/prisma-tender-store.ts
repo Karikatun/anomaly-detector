@@ -1,4 +1,20 @@
-import type { CommandReceipt, TenderPhase } from '@anomaly-detector/contracts'
+import {
+  anomalyConfigurationSchema,
+  commandReceiptSchema,
+  playerIdSchema,
+  powerAllocationSchema,
+  privateMeasurementSchema,
+  publicContractSchema,
+  publicLaboratoryResultSchema,
+  publicThesisSchema,
+  scientificJournalEntrySchema,
+  scientificModelSchema,
+  signalIdSchema,
+  tenderPhaseSchema,
+  tenderPlayerSchema,
+  workingModelSchema,
+} from '@anomaly-detector/contracts'
+import { z } from 'zod'
 import type { Prisma } from '../../../generated/prisma/client'
 import type { DbClient } from '../../../db'
 import type {
@@ -50,6 +66,43 @@ type PersistedTenderState = Pick<
   | 'players'
 >
 
+const playerIntegerRecordSchema = z.record(playerIdSchema, z.number().int())
+const playerBooleanRecordSchema = z.record(playerIdSchema, z.boolean())
+const persistedTenderStateSchema = z.object({
+  accessSlots: z.record(playerIdSchema, z.number().int().min(1).max(6)),
+  anomalyConfiguration: anomalyConfigurationSchema,
+  budgetByPlayer: playerIntegerRecordSchema.optional(),
+  corporateTrustByPlayer: z.record(playerIdSchema, z.number().int().min(0)).optional(),
+  corporateReviewActive: z.boolean().optional(),
+  contractCompletedByPlayer: playerBooleanRecordSchema.optional(),
+  contractPowerRestrictionsByPlayer: z.record(playerIdSchema, z.number().int().min(0).max(1)).optional(),
+  completionReason: z.literal('all_players_left').optional(),
+  departedPlayerIds: z.array(playerIdSchema).optional(),
+  finalScientificModelCompletedByPlayer: playerBooleanRecordSchema.optional(),
+  finalScientificModelsByPlayer: z.record(playerIdSchema, scientificModelSchema).optional(),
+  knownSignals: z.array(signalIdSchema).optional(),
+  powerAllocations: z.record(playerIdSchema, powerAllocationSchema).optional(),
+  privateMeasurementsByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)).optional(),
+  privateWorkingModelsByPlayer: z.record(playerIdSchema, workingModelSchema).optional(),
+  publicContracts: z.array(publicContractSchema).optional(),
+  publicFinalContract: publicContractSchema.optional(),
+  publicLaboratoryResults: z.array(publicLaboratoryResultSchema).optional(),
+  publicScientificJournal: z.array(scientificJournalEntrySchema).optional(),
+  publicTheses: z.array(publicThesisSchema).optional(),
+  ratingByPlayer: z.record(playerIdSchema, z.number().int().min(0)).optional(),
+  rawTelemetrySignalsByPlayer: z.record(playerIdSchema, z.array(signalIdSchema)).optional(),
+  laboratoryCompletedByPlayer: playerBooleanRecordSchema.optional(),
+  modelAnalysisCompletedByPlayer: playerBooleanRecordSchema.optional(),
+  players: z.array(tenderPlayerSchema).min(2).max(4),
+  reconnaissanceCompletedByPlayer: playerBooleanRecordSchema.optional(),
+  requestedSlots: z.record(playerIdSchema, z.number().int().min(1).max(6)),
+  researchCertificationsByPlayer: z.record(playerIdSchema, z.array(signalIdSchema)).optional(),
+  round: z.number().int().min(1).max(5).optional(),
+  samplesByPlayer: z.record(playerIdSchema, z.array(signalIdSchema)).optional(),
+  usedContractEvidenceTestIds: z.array(z.string().min(1).max(128)).optional(),
+  winnerPlayerIds: z.array(playerIdSchema).optional(),
+}).passthrough()
+
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   accessSlots: tender.accessSlots,
   anomalyConfiguration: tender.anomalyConfiguration,
@@ -87,7 +140,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
 
 const toStoredCommand = (record: { fingerprint: string; receipt: Prisma.JsonValue }): StoredTenderCommand => ({
   fingerprint: record.fingerprint,
-  receipt: record.receipt as CommandReceipt,
+  receipt: commandReceiptSchema.parse(record.receipt),
 })
 
 const toStoredTender = (record: {
@@ -99,7 +152,7 @@ const toStoredTender = (record: {
   version: number
   commands: Array<{ commandId: string; fingerprint: string; receipt: Prisma.JsonValue }>
 }): StoredTender => {
-  const state = record.state as PersistedTenderState
+  const state = persistedTenderStateSchema.parse(record.state)
   const publicContracts = state.publicContracts ?? createDefaultContracts(state.players.length)
   const publicFinalContract = state.publicFinalContract ?? { contractId: 'final-contract', kind: 'final', ratingReward: 8, requiredPublicResult: 'reflection', requiredSecondaryPublicResult: 'attenuation', targetRole: 'source', targetSignal: 'ferro' }
   return {
@@ -117,8 +170,13 @@ const toStoredTender = (record: {
     finalScientificModelCompletedByPlayer: state.finalScientificModelCompletedByPlayer ?? {},
     finalScientificModelsByPlayer: state.finalScientificModelsByPlayer ?? {},
     id: record.id,
-    knownSignals: state.knownSignals ?? [...new Set([...publicContracts.map((contract) => contract.targetSignal), publicFinalContract.targetSignal])],
-    phase: record.phase as TenderPhase,
+    knownSignals: state.knownSignals ?? [
+      ...new Set(
+        [...publicContracts.map((contract) => contract.targetSignal), publicFinalContract.targetSignal]
+          .filter((signal): signal is NonNullable<typeof signal> => signal !== undefined),
+      ),
+    ],
+    phase: tenderPhaseSchema.parse(record.phase),
     powerAllocations: state.powerAllocations ?? {},
     publicContracts,
     publicFinalContract,
@@ -174,7 +232,7 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
         })
         const changedTenderIds: string[] = []
         for (const tender of tenders) {
-          const state = tender.state as PersistedTenderState
+          const state = persistedTenderStateSchema.parse(tender.state)
           if (!state.players.some((player) => player.id === playerId && player.displayName !== 'Deleted participant')) continue
           const anonymousPlayerId = `deleted-participant-${crypto.randomUUID()}`
           const anonymizedState = anonymizeParticipantInValue(

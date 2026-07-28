@@ -720,6 +720,20 @@ maybeDescribe('auth API integration', () => {
       candidate.playerId === outsider.user.id)).toBe(false)
   })
 
+  test('rejects a malformed Tender id before querying PostgreSQL', async () => {
+    const player = await registerForMeGuard('malformed-tender-id')
+    const response = await app.request('/api/tenders/not-a-uuid', {
+      headers: { Authorization: `Bearer ${player.accessToken}` },
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: 'VALIDATION_ERROR',
+      },
+    })
+  })
+
   test('exposes one current room and blocks creating another until the player leaves', async () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',
@@ -1872,6 +1886,50 @@ maybeDescribe('auth API integration', () => {
       displayName: 'Deleted participant',
       playerId: expect.stringMatching(/^deleted-participant-/),
     }))
+  })
+
+  test('requires a recent sign-in before deleting an account, even after token refresh', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'delete-requires-recent-auth',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const account = await register.json()
+    await prisma.authSession.updateMany({
+      data: { createdAt: new Date(Date.now() - 11 * 60 * 1_000) },
+      where: { userId: account.user.id },
+    })
+
+    const refreshed = await app.request('/api/auth/token/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: account.refreshToken }),
+    })
+    expect(refreshed.status).toBe(200)
+    const refreshedSession = await refreshed.json()
+
+    const deleted = await app.request('/api/auth/account', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${refreshedSession.accessToken}` },
+    })
+
+    expect(deleted.status).toBe(403)
+    expect(await deleted.json()).toEqual({
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Recent authentication is required to delete the account',
+      },
+    })
+    expect(await prisma.user.findUnique({
+      where: { id: account.user.id },
+      select: { passwordHash: true },
+    })).toEqual({ passwordHash: expect.any(String) })
   })
 
   test('limits password login after five failures and resets the login budget on success', async () => {

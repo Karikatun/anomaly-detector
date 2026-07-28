@@ -7,6 +7,7 @@ export type AuthFailureKind =
   | 'oauth_not_configured'
   | 'oauth_registration_consent_required'
   | 'oauth_transaction_invalid'
+  | 'recent_authentication_required'
   | 'registration_limited'
   | 'refresh_session_invalid'
   | 'refresh_token_reused'

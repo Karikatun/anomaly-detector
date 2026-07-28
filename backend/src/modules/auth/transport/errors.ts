@@ -13,6 +13,9 @@ export function toAuthAppError(error: unknown) {
   if (error.kind === 'registration_limited') {
     return new AppError(429, 'RATE_LIMITED', error.message, undefined, error.kind)
   }
+  if (error.kind === 'recent_authentication_required') {
+    return new AppError(403, 'FORBIDDEN', error.message, undefined, error.kind)
+  }
 
   return new AppError(401, 'UNAUTHORIZED', error.message, undefined, error.kind)
 }

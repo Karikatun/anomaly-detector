@@ -2,7 +2,7 @@ import {
   apiErrorSchema,
   commandReceiptSchema,
   tenderCommandSchema,
-  tenderIdSchema,
+  tenderResourceIdSchema,
   tenderViewSchema,
 } from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
@@ -14,7 +14,7 @@ import type { AuthHttpEnv } from '../../auth'
 import type { createTenderModule } from '../index'
 import { executeTender, executeTenderRead } from './errors'
 
-const tenderParamsSchema = z.object({ tenderId: tenderIdSchema })
+const tenderParamsSchema = z.object({ tenderId: tenderResourceIdSchema })
 
 const readTenderRoute = createRoute({
   method: 'get',

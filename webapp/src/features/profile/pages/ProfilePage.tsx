@@ -24,6 +24,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
+import { ApiRequestError } from '@/platform/api/http-client'
 
 import { ProfileApi } from '../api'
 import { useProfileStatisticsQuery } from '../queries'
@@ -105,21 +106,25 @@ function DeleteAccountControl({
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [deletionError, setDeletionError] = useState(false)
+  const [deletionError, setDeletionError] = useState<string | null>(null)
 
   const handleOpenChange = (open: boolean) => {
     if (isDeleting) return
     setIsOpen(open)
-    if (!open) setDeletionError(false)
+    if (!open) setDeletionError(null)
   }
 
   const deleteAccount = async () => {
-    setDeletionError(false)
+    setDeletionError(null)
     setIsDeleting(true)
     try {
       await onDelete()
-    } catch {
-      setDeletionError(true)
+    } catch (error) {
+      setDeletionError(
+        error instanceof ApiRequestError && error.status === 403
+          ? 'Для удаления аккаунта выйдите, войдите снова и повторите действие в течение 10 минут.'
+          : 'Не удалось удалить аккаунт. Попробуйте ещё раз.',
+      )
       setIsDeleting(false)
     }
   }
@@ -131,7 +136,7 @@ function DeleteAccountControl({
           Удаление аккаунта
         </Typography>
         <Typography className={styles.dangerDescription}>
-          Удаляет данные входа и обезличивает вашу историю матчей.
+          Удаляет данные входа и обезличивает вашу историю матчей. Потребуется недавний вход.
         </Typography>
       </span>
 
@@ -152,7 +157,7 @@ function DeleteAccountControl({
 
           {deletionError && (
             <Typography role="alert" variant="bodySm" tone="destructive">
-              Не удалось удалить аккаунт. Попробуйте ещё раз.
+              {deletionError}
             </Typography>
           )}
 

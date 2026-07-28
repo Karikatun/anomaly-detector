@@ -1,4 +1,5 @@
 import type { Server, ServerWebSocket } from 'bun'
+import { tenderResourceIdSchema } from '@anomaly-detector/contracts'
 
 import type { RealtimeHub } from './hub'
 import { consumeRealtimeTicket, type RealtimeTicketStore } from './tickets'
@@ -45,6 +46,12 @@ export async function upgradeRealtimeWebSocket(input: {
   const url = new URL(input.request.url)
   const ticket = url.searchParams.get('ticket') ?? ''
   const tenderId = url.searchParams.get('tenderId') ?? ''
+  if (!tenderResourceIdSchema.safeParse(tenderId).success) {
+    return Response.json(
+      { error: { code: 'BAD_REQUEST', message: 'Invalid Tender id' } },
+      { status: 400 },
+    )
+  }
   try {
     const principal = await consumeRealtimeTicket({ store: input.ticketStore, ticket })
     const upgraded = input.server.upgrade(input.request, {
