@@ -30,7 +30,7 @@ export const requestAccessSlotCommandSchema = z.object({
 export const powerAllocationSchema = z.object({
   contracts: z.number().int().min(0).max(1),
   laboratory: z.number().int().min(0).max(2),
-  modelAnalysis: z.number().int().min(0).max(1),
+  modelAnalysis: z.number().int().min(0).max(2),
   reconnaissance: z.number().int().min(0).max(2),
   reserve: z.number().int().min(0).max(4).optional(),
 }).strict().refine(
@@ -69,6 +69,12 @@ export const fieldTypeSchema = z.enum(['inertial', 'electromagnetic', 'phase'])
 export const polaritySchema = z.enum(['positive', 'negative'])
 export const publicResultSchema = z.enum(['attenuation', 'reflection', 'transmission_gain', 'unstable_collapse'])
 export const submitThesisCommandSchema = z.object({ commandId: commandIdSchema, tenderId: tenderIdSchema, actorId: playerIdSchema, signalId: signalIdSchema, fieldType: fieldTypeSchema, polarity: polaritySchema, type: z.literal('submit-thesis') }).strict()
+export const finishModelAnalysisCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  type: z.literal('finish-model-analysis'),
+}).strict()
 const uniqueFieldTypes = (values: Array<z.infer<typeof fieldTypeSchema>>) => new Set(values).size === values.length
 const uniquePolarities = (values: Array<z.infer<typeof polaritySchema>>) => new Set(values).size === values.length
 export const workingModelSignalSchema = z.object({
@@ -213,6 +219,7 @@ export const tenderCommandSchema = z.union([
   runLaboratoryTestCommandSchema,
   updateWorkingModelCommandSchema,
   submitThesisCommandSchema,
+  finishModelAnalysisCommandSchema,
   reserveContractCommandSchema,
   skipContractCommandSchema,
   submitContractBidCommandSchema,
@@ -246,6 +253,7 @@ export const tenderPlayerViewSchema = z.object({
   corporateTrust: z.number().int().min(0).optional(),
   contractPowerRestriction: z.number().int().min(0).max(1),
   finalScientificModelSubmitted: z.boolean().optional(),
+  modelAnalysisCompleted: z.boolean().optional(),
   powerAllocation: powerAllocationSchema.optional(),
   powerAllocationConfirmed: z.boolean().optional(),
   rating: z.number().int().min(0),
@@ -259,6 +267,17 @@ export const publicThesisSchema = z.object({
   polarity: polaritySchema,
   signalId: signalIdSchema,
   verification: z.enum(['standard', 'extended']),
+}).strict()
+
+export const privateThesisSchema = z.object({
+  fieldType: fieldTypeSchema,
+  fieldTypeCorrect: z.boolean(),
+  fullyCorrect: z.boolean(),
+  id: z.string().min(1).max(128),
+  polarity: polaritySchema,
+  polarityCorrect: z.boolean(),
+  round: z.number().int().min(1).max(5),
+  signalId: signalIdSchema,
 }).strict()
 
 export const publicContractSchema = z.object({
@@ -351,11 +370,16 @@ export const tenderViewSchema = z.object({
   privateRawTelemetrySignals: z.array(signalIdSchema),
   privateSamples: z.array(signalIdSchema),
   privateMeasurements: z.array(privateMeasurementSchema),
+  privateTheses: z.array(privateThesisSchema).optional(),
   privateResearchCertifications: z.array(signalIdSchema).optional(),
   privateTelemetry: z.array(privateMeasurementSchema).optional(),
   privateUsedContractEvidenceTestIds: z.array(z.string().min(1)).optional(),
   privateWorkingModel: workingModelSchema,
   publicTheses: z.array(publicThesisSchema),
+  modelAnalysisProgress: z.object({
+    completed: z.number().int().min(0),
+    total: z.number().int().min(0),
+  }).strict().optional(),
   audit: tenderAuditViewSchema.optional(),
   winnerPlayerIds: z.array(playerIdSchema).optional(),
 }).strict()
@@ -388,6 +412,7 @@ export type PublicContract = z.infer<typeof publicContractSchema>
 export type PublicLaboratoryResult = z.infer<typeof publicLaboratoryResultSchema>
 export type ScientificJournalEntry = z.infer<typeof scientificJournalEntrySchema>
 export type PublicThesis = z.infer<typeof publicThesisSchema>
+export type PrivateThesis = z.infer<typeof privateThesisSchema>
 export type TenderAuditEvent = z.infer<typeof tenderAuditEventSchema>
 export type RatingBreakdown = z.infer<typeof ratingBreakdownSchema>
 export type TenderAuditView = z.infer<typeof tenderAuditViewSchema>

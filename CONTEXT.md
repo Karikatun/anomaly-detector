@@ -27,7 +27,7 @@ A player's private deduction workspace containing possible properties, exclusion
 _Avoid_: player model, notes, theory board
 
 **Scientific Model**:
-A player's submitted claims about the anomaly, consisting of public theses during play and its final audit submission.
+A player's submitted claims about the anomaly, consisting of private checked Theses during play and its final audit submission.
 _Avoid_: final model, theory, solution
 
 **Signal**:
@@ -105,15 +105,15 @@ The same-or-different-polarity measurement received only by the initiator of a C
 _Avoid_: public result, raw telemetry, evidence
 
 **Thesis**:
-A public, immediately checked claim submitted from a player's Scientific Model.
+A private, immediately checked claim submitted from a player's Scientific Model. Its field type and polarity are checked independently for the author, without revealing the correct values to anyone during play.
 _Avoid_: note, hypothesis, public result
 
 **Corporate Review**:
-The round-local state triggered by an incorrect Thesis. Every later Thesis in that round costs its author one Budget; a player who cannot pay loses their allocated Model Analysis Power.
+The personal, round-local state triggered by an incorrect Thesis. That player's next Thesis in the same round costs one Budget; another player's Thesis never activates or pays for this review.
 _Avoid_: contract-power penalty, research tax
 
 **Research Certification**:
-One personal, spendable proof created by a correct Thesis. It is consumed by one successful Scientific Contract.
+One personal, spendable proof created the first time a player submits a fully correct Thesis for a Signal. It is consumed by one successful Scientific Contract.
 _Avoid_: reusable thesis, shared certification
 
 **Contract Evidence**:

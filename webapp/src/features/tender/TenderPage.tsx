@@ -111,7 +111,10 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
   const mySamples = myPlayer ? view.privateSamples : []
   const myPower = myPlayer?.powerAllocation
   const activePlayer = view.players.find((player) => player.playerId === activePlayerId)
-  const isWaitingForTurn = sequentialPhases.has(view.phase) && activePlayerId !== auth.user?.id
+  const isSharedModelAnalysis = view.phase === 'model-analysis' && view.ruleset === 'tender-v2'
+  const isWaitingForTurn = sequentialPhases.has(view.phase)
+    && !isSharedModelAnalysis
+    && activePlayerId !== auth.user?.id
   const withWaitingState = (content: ReactNode) => (
     <>
       {isWaitingForTurn && (
@@ -210,10 +213,15 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           publicTheses={view.publicTheses}
           publicLaboratoryResults={view.publicLaboratoryResults}
           privateMeasurements={view.privateMeasurements}
-          disabled={disabled || isWaitingForTurn}
+          privateTheses={view.privateTheses}
+          progress={view.modelAnalysisProgress}
+          round={view.round}
+          ruleset={view.ruleset}
+          disabled={disabled || isWaitingForTurn || myPlayer?.modelAnalysisCompleted}
           workingModelDisabled={disabled}
           error={error}
           onConfirmThesis={(input) => onCommand({ type: 'submit-thesis', ...input })}
+          onFinish={() => onCommand({ type: 'finish-model-analysis' })}
           onSaveWorkingModel={onSaveWorkingModel}
         />,
       ) : (
@@ -481,13 +489,16 @@ function TenderContent() {
   const myPlayer = tenderView.players.find((p) => p.playerId === auth.user?.id)
   const mySlot = myPlayer?.accessSlot
   const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
-  const isSequentialPhase = sequentialPhases.has(tenderView.phase)
+  const isSharedModelAnalysis = tenderView.phase === 'model-analysis'
+    && tenderView.ruleset === 'tender-v2'
+  const isSequentialPhase = sequentialPhases.has(tenderView.phase) && !isSharedModelAnalysis
   const isMyTurn = !isSequentialPhase || tenderView.activePlayerId === auth.user?.id
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
   const isPowerAllocation = tenderView.phase === 'power-allocation'
   const isLaboratoryPhase = tenderView.phase === 'laboratory'
   const isComplete = tenderView.phase === 'complete'
   const isPlanningPhase = isAccessSlotSelection || isPowerAllocation
+  const isOperationalPhase = !isPlanningPhase && !isComplete
   const showRightSidebar = !isPlanningPhase && !isComplete
   const showGenericTools = !isPlanningPhase && tenderView.phase !== 'model-analysis' && !isComplete
   const showContractPlanning = isPowerAllocation || isLaboratoryPhase
@@ -496,7 +507,9 @@ function TenderContent() {
     ? myPlayer?.requestedAccessSlot === undefined
     : isPowerAllocation
       ? myPlayer?.powerAllocation === undefined
-      : isSequentialPhase && isMyTurn
+      : isSharedModelAnalysis
+        ? !myPlayer?.modelAnalysisCompleted
+        : isSequentialPhase && isMyTurn
   const referenceHelpUrgentlyLocked = hasPendingAction && remainingSeconds <= 10
 
   return (
@@ -523,6 +536,14 @@ function TenderContent() {
           {isSequentialPhase && (
             <Badge variant={isMyTurn ? 'default' : 'outline'}>
               {isMyTurn ? 'Ваш ход' : `Ход: ${activePlayer?.displayName ?? 'игрока'}`}
+            </Badge>
+          )}
+          {isSharedModelAnalysis && tenderView.modelAnalysisProgress && (
+            <Badge variant="outline">
+              {t('tender.analysis.progress', {
+                completed: tenderView.modelAnalysisProgress.completed,
+                total: tenderView.modelAnalysisProgress.total,
+              })}
             </Badge>
           )}
         </div>
@@ -577,10 +598,10 @@ function TenderContent() {
         )}
 
         <TenderPhaseLayout
-          progress={isSequentialPhase && tenderView.phase !== 'complete'
+          progress={isOperationalPhase
             ? <TenderPhaseProgress phase={tenderView.phase} />
             : undefined}
-          mobilePlayers={isSequentialPhase
+          mobilePlayers={isOperationalPhase
             ? (
                 <TenderPlayers
                   activePlayerId={tenderView.activePlayerId}

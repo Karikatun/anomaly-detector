@@ -78,9 +78,9 @@ Every Directed Test is written to a permanent public scientific journal with its
 
 Every player has a private interactive deduction model. It supports possible-property marks, exclusions, personal hypotheses, and optional notes. It warns only about contradictions with confirmed public facts; it never solves the puzzle or recommends the next test.
 
-Players may use one Model Analysis Power to submit one public, immediately checked Thesis. A correct Thesis gives one Rating and one personal Research Certification. A Research Certification is consumed by a successful Scientific Contract.
+Players may allocate one or two Model Analysis Power for up to one or two private, immediately checked Theses. The author sees field-type and polarity correctness separately without learning the correct values. Other players receive neither the Thesis values, result, nor personal Thesis count during play. A fully correct Thesis gives one Rating and one personal Research Certification the first time that player certifies the Signal. A Research Certification is consumed by a successful Scientific Contract.
 
-An incorrect Thesis triggers a Corporate Review for the rest of that round. Every later player who wants to submit a Thesis must pay one Budget; a player who cannot pay skips the Thesis and loses the allocated Model Analysis Power. This makes an early speculative Thesis a deliberate tactical choice rather than a hidden contract-power penalty.
+Model Analysis uses one shared 90-second window in which players act independently. An incorrect first Thesis triggers a personal Corporate Review for the rest of that round: only that player's second Thesis costs one Budget. A player without the Budget loses the unused Model Analysis Power. After the first Thesis a player who allocated two Power may voluntarily finish with confirmation; timeout preserves submitted work and burns unused Power.
 
 Private final-model drafts can change freely until the final audit.
 
@@ -122,10 +122,10 @@ Each player has four Power units per round, allocated secretly among four action
 | --- | --- | --- |
 | Reconnaissance | Acquire one Sample | Acquire two Samples |
 | Laboratory | One Impulse test | One Deep Continuous test or two Broad Impulse tests |
-| Model analysis | Submit one Thesis | Not available |
+| Model analysis | Submit up to one private Thesis | Submit up to two private Theses |
 | Contract | Reserve and submit one Contract | Not available |
 
-Reconnaissance and Laboratory accept at most two Power; Model Analysis and Contracts accept at most one. Power allocation fixes only the category and amount. A player picks its exact target when its turn arrives in that phase. It can revise any choice before confirmation; confirmed actions are final.
+Reconnaissance, Laboratory, and Model Analysis accept at most two Power; Contracts accept at most one. Power allocation fixes only the category and amount. A player picks its exact target when its phase opens. It can revise any choice before confirmation; confirmed actions are final.
 
 Every Tender stores an immutable ruleset identifier. New matches use `tender-v2`; persisted state without an identifier is interpreted as `tender-v1`, and all UI rules/help content is selected from the match version rather than a deployment-global flag.
 
@@ -147,7 +147,7 @@ Successful ordinary Contracts grant one trust point but never Budget. Each playe
 
 ## Timing And Failure Handling
 
-Every live phase has a 90-second server deadline. Access Slot selection and Power allocation use one shared deadline because players act simultaneously. In ordered operational phases and the final Scientific Model, each active player receives a fresh 90 seconds when their choice opens.
+Every live phase has a 90-second server deadline except the final Scientific Model, whose delivery contract is defined separately. Access Slot selection, Power allocation, and Model Analysis use one shared deadline because players act independently. In the remaining ordered operational phases, each active player receives a fresh 90 seconds when their choice opens.
 
 If a player times out or disconnects, the server takes conservative, non-beneficial defaults: a standard or later free slot without budget spend, unallocated power to reserve, and a skipped unresolved target. The player may reconnect and continue. A missing player never blocks a match.
 

@@ -57,7 +57,7 @@ const categories = [
     key: 'modelAnalysis',
     labelKey: 'tender.power.category.modelAnalysis',
     oneEffectKey: 'tender.power.modelAnalysis.one',
-    twoEffectKey: null,
+    twoEffectKey: 'tender.power.modelAnalysis.two',
   },
   {
     accent: '#52c9f8',

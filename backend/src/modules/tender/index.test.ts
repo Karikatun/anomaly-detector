@@ -229,7 +229,7 @@ test('builds a reproducible seeded Contract deck with one contract of every requ
 test('awards a Light Contract once and permanently consumes its journal evidence', async () => {
   const store = createInMemoryTenderStore()
   const tender = createTenderModule({ store, seedGenerator: () => 'evidence-seed' })
-  const { tenderId } = await tender.createTender({ players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }] })
+  const { tenderId } = await tender.createTender({ ruleset: 'tender-v1', players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }] })
   const initial = await store.read(tenderId)
   if (!initial) throw new Error('Tender was not created')
   const contract = {
@@ -336,7 +336,7 @@ test('writes Continuous tests to the public Scientific Journal while keeping pri
 
 test('creates Research Certifications for correct Theses and charges later Theses during Corporate Review', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
-  const { tenderId } = await tender.createTender({ players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }] })
+  const { tenderId } = await tender.createTender({ ruleset: 'tender-v1', players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }] })
   await tender.execute({ actorId: 'player-a', commandId: 'slot-a', slot: 1, tenderId, type: 'request-access-slot' })
   await tender.execute({ actorId: 'player-b', commandId: 'slot-b', slot: 2, tenderId, type: 'request-access-slot' })
   await tender.execute({ actorId: 'player-a', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 1, reconnaissance: 2, reserve: 1 }, commandId: 'power-a', tenderId, type: 'allocate-power' })
@@ -349,6 +349,126 @@ test('creates Research Certifications for correct Theses and charges later These
   await tender.execute({ actorId: 'player-b', commandId: 'thesis-b', fieldType: 'phase', polarity: 'positive', signalId: 'boreal', tenderId, type: 'submit-thesis' })
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({ players: [{ playerId: 'player-a' }, { playerId: 'player-b', budget: 1 }] })
+})
+
+test('runs Model Analysis in one private shared window with personal review', async () => {
+  const now = new Date('2026-07-29T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now, seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  await tender.execute({ actorId: 'player-a', commandId: 'slot-a', slot: 3, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-b', commandId: 'slot-b', slot: 4, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-a', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 2, reconnaissance: 0, reserve: 2 }, commandId: 'power-a', tenderId, type: 'allocate-power' })
+  await tender.execute({ actorId: 'player-b', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 2, reconnaissance: 0, reserve: 2 }, commandId: 'power-b', tenderId, type: 'allocate-power' })
+
+  const sharedDueAt = (await tender.readTenderView({ tenderId, playerId: 'player-a' })).dueAt
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'thesis-a-1',
+    fieldType: 'inertial',
+    polarity: 'positive',
+    signalId: 'aster',
+    tenderId,
+    type: 'submit-thesis',
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    corporateReviewActive: true,
+    dueAt: sharedDueAt,
+    modelAnalysisProgress: { completed: 0, total: 2 },
+    privateTheses: [{
+      fieldTypeCorrect: true,
+      fullyCorrect: false,
+      polarityCorrect: false,
+      signalId: 'aster',
+    }],
+    publicTheses: [],
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+    corporateReviewActive: false,
+    dueAt: sharedDueAt,
+    privateTheses: [],
+    publicTheses: [],
+  })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'thesis-a-2',
+    fieldType: 'inertial',
+    polarity: 'negative',
+    signalId: 'aster',
+    tenderId,
+    type: 'submit-thesis',
+  })
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'thesis-b-1',
+    fieldType: 'inertial',
+    polarity: 'negative',
+    signalId: 'aster',
+    tenderId,
+    type: 'submit-thesis',
+  })
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'finish-analysis-b',
+    tenderId,
+    type: 'finish-model-analysis',
+  })
+
+  const completedView = await tender.readTenderView({ tenderId, playerId: 'player-a' })
+  expect(completedView).toMatchObject({
+    phase: 'access-slot-selection',
+    round: 2,
+    privateResearchCertifications: ['aster'],
+  })
+  expect(completedView.players.find((candidate) => candidate.playerId === 'player-a')).toMatchObject({
+    budget: 2,
+    rating: 1,
+  })
+})
+
+test('keeps submitted private Theses and burns unused analysis Power at the shared deadline', async () => {
+  const now = new Date('2026-07-29T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now, seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  await tender.execute({ actorId: 'player-a', commandId: 'slot-a', slot: 3, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-b', commandId: 'slot-b', slot: 4, tenderId, type: 'request-access-slot' })
+  await tender.execute({ actorId: 'player-a', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 2, reconnaissance: 0, reserve: 2 }, commandId: 'power-a', tenderId, type: 'allocate-power' })
+  await tender.execute({ actorId: 'player-b', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 1, reconnaissance: 0, reserve: 3 }, commandId: 'power-b', tenderId, type: 'allocate-power' })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'thesis-a-1',
+    fieldType: 'inertial',
+    polarity: 'positive',
+    signalId: 'aster',
+    tenderId,
+    type: 'submit-thesis',
+  })
+
+  expect(await tender.advanceDueTenders({
+    limit: 10,
+    now: new Date('2026-07-29T12:01:30.000Z'),
+  })).toMatchObject({ advancedTenderIds: [tenderId] })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'access-slot-selection',
+    privateTheses: [{
+      fieldType: 'inertial',
+      polarity: 'positive',
+      round: 1,
+      signalId: 'aster',
+    }],
+    round: 2,
+  })
 })
 
 test('resolves an expired Access Slot selection with conservative free defaults', async () => {
@@ -1290,6 +1410,7 @@ test('atomically records two public impulse results for a broad Laboratory actio
 test('checks public Theses in Access Slot order and opens Contracts', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
+    ruleset: 'tender-v1',
     players: [
       { id: 'player-a', tiePriority: 1 },
       { id: 'player-b', tiePriority: 2 },
@@ -1395,6 +1516,7 @@ test('checks public Theses in Access Slot order and opens Contracts', async () =
 test('awards Research Certification and activates Corporate Review after a wrong Thesis', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
+    ruleset: 'tender-v1',
     players: [
       { id: 'player-a', tiePriority: 1 },
       { id: 'player-b', tiePriority: 2 },

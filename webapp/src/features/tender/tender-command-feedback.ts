@@ -4,7 +4,7 @@ import { ApiRequestError } from '@/platform/api'
 import type { TranslationKey } from '@/platform/i18n'
 import type { TenderCommandInput } from './commands'
 
-type CommandFeedbackView = Pick<TenderView, 'publicTheses' | 'version'>
+type CommandFeedbackView = Pick<TenderView, 'privateTheses' | 'publicTheses' | 'version'>
 
 type CommandErrorContext = {
   actorId: string
@@ -26,17 +26,28 @@ const acceptedThesisIsVisible = ({
   && latestView !== null
   && latestView !== undefined
   && latestView.version > startingView.version
-  && latestView.publicTheses.filter((thesis) => (
-    thesis.playerId === actorId
-    && thesis.signalId === command.signalId
-    && thesis.fieldType === command.fieldType
-    && thesis.polarity === command.polarity
-  )).length > startingView.publicTheses.filter((thesis) => (
-    thesis.playerId === actorId
-    && thesis.signalId === command.signalId
-    && thesis.fieldType === command.fieldType
-    && thesis.polarity === command.polarity
-  )).length
+  && (
+    latestView.publicTheses.filter((thesis) => (
+      thesis.playerId === actorId
+      && thesis.signalId === command.signalId
+      && thesis.fieldType === command.fieldType
+      && thesis.polarity === command.polarity
+    )).length > startingView.publicTheses.filter((thesis) => (
+      thesis.playerId === actorId
+      && thesis.signalId === command.signalId
+      && thesis.fieldType === command.fieldType
+      && thesis.polarity === command.polarity
+    )).length
+    || (latestView.privateTheses ?? []).filter((thesis) => (
+      thesis.signalId === command.signalId
+      && thesis.fieldType === command.fieldType
+      && thesis.polarity === command.polarity
+    )).length > (startingView.privateTheses ?? []).filter((thesis) => (
+      thesis.signalId === command.signalId
+      && thesis.fieldType === command.fieldType
+      && thesis.polarity === command.polarity
+    )).length
+  )
 )
 
 export function getTenderCommandErrorKey(context: CommandErrorContext): TranslationKey | null {

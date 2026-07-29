@@ -4,6 +4,7 @@ import {
   playerIdSchema,
   powerAllocationSchema,
   privateMeasurementSchema,
+  privateThesisSchema,
   publicContractSchema,
   publicLaboratoryResultSchema,
   publicThesisSchema,
@@ -38,6 +39,7 @@ type PersistedTenderState = Pick<
   | 'budgetByPlayer'
   | 'corporateTrustByPlayer'
   | 'corporateReviewActive'
+  | 'corporateReviewByPlayer'
   | 'contractCompletedByPlayer'
   | 'contractPowerRestrictionsByPlayer'
   | 'completionReason'
@@ -58,6 +60,8 @@ type PersistedTenderState = Pick<
   | 'laboratoryCompletedByPlayer'
   | 'modelAnalysisCompletedByPlayer'
   | 'privateMeasurementsByPlayer'
+  | 'privateThesesByPlayer'
+  | 'certifiedSignalsByPlayer'
   | 'researchCertificationsByPlayer'
   | 'usedContractEvidenceTestIds'
   | 'privateWorkingModelsByPlayer'
@@ -76,6 +80,8 @@ const persistedTenderStateSchema = z.object({
   budgetByPlayer: playerIntegerRecordSchema.optional(),
   corporateTrustByPlayer: z.record(playerIdSchema, z.number().int().min(0)).optional(),
   corporateReviewActive: z.boolean().optional(),
+  corporateReviewByPlayer: playerBooleanRecordSchema.optional(),
+  certifiedSignalsByPlayer: z.record(playerIdSchema, z.array(signalIdSchema)).optional(),
   contractCompletedByPlayer: playerBooleanRecordSchema.optional(),
   contractPowerRestrictionsByPlayer: z.record(playerIdSchema, z.number().int().min(0).max(1)).optional(),
   completionReason: z.literal('all_players_left').optional(),
@@ -85,6 +91,7 @@ const persistedTenderStateSchema = z.object({
   knownSignals: z.array(signalIdSchema).optional(),
   powerAllocations: z.record(playerIdSchema, powerAllocationSchema).optional(),
   privateMeasurementsByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)).optional(),
+  privateThesesByPlayer: z.record(playerIdSchema, z.array(privateThesisSchema)).optional(),
   privateWorkingModelsByPlayer: z.record(playerIdSchema, workingModelSchema).optional(),
   publicContracts: z.array(publicContractSchema).optional(),
   publicFinalContract: publicContractSchema.optional(),
@@ -112,6 +119,8 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   budgetByPlayer: tender.budgetByPlayer,
   corporateTrustByPlayer: tender.corporateTrustByPlayer,
   corporateReviewActive: tender.corporateReviewActive,
+  corporateReviewByPlayer: tender.corporateReviewByPlayer,
+  certifiedSignalsByPlayer: tender.certifiedSignalsByPlayer,
   contractCompletedByPlayer: tender.contractCompletedByPlayer,
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
   ...(tender.completionReason ? { completionReason: tender.completionReason } : {}),
@@ -132,6 +141,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   laboratoryCompletedByPlayer: tender.laboratoryCompletedByPlayer,
   modelAnalysisCompletedByPlayer: tender.modelAnalysisCompletedByPlayer,
   privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
+  privateThesesByPlayer: tender.privateThesesByPlayer,
   researchCertificationsByPlayer: tender.researchCertificationsByPlayer,
   usedContractEvidenceTestIds: tender.usedContractEvidenceTestIds,
   privateWorkingModelsByPlayer: tender.privateWorkingModelsByPlayer,
@@ -166,6 +176,8 @@ const toStoredTender = (record: {
     budgetByPlayer: state.budgetByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 2])),
     corporateTrustByPlayer: state.corporateTrustByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 0])),
     corporateReviewActive: state.corporateReviewActive ?? false,
+    corporateReviewByPlayer: state.corporateReviewByPlayer ?? {},
+    certifiedSignalsByPlayer: state.certifiedSignalsByPlayer ?? {},
     contractCompletedByPlayer: state.contractCompletedByPlayer ?? {},
     contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},
     ...(state.completionReason ? { completionReason: state.completionReason } : {}),
@@ -194,6 +206,7 @@ const toStoredTender = (record: {
     laboratoryCompletedByPlayer: state.laboratoryCompletedByPlayer ?? {},
     modelAnalysisCompletedByPlayer: state.modelAnalysisCompletedByPlayer ?? {},
     privateMeasurementsByPlayer: state.privateMeasurementsByPlayer ?? {},
+    privateThesesByPlayer: state.privateThesesByPlayer ?? {},
     researchCertificationsByPlayer: state.researchCertificationsByPlayer ?? {},
     usedContractEvidenceTestIds: state.usedContractEvidenceTestIds ?? [],
     privateWorkingModelsByPlayer: state.privateWorkingModelsByPlayer ?? {},
