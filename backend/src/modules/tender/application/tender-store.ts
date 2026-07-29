@@ -53,6 +53,7 @@ export type StoredTender = {
   finalScientificModelCompletedByPlayer: Record<string, boolean>
   finalScientificModelDraftsByPlayer: Record<string, ScientificModelDraft>
   finalScientificModelsByPlayer: Record<string, ScientificModel>
+  finalScientificModelSubmittedAtByPlayer: Record<string, string>
   forfeitedAtByPlayer: Record<string, string>
   powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>
@@ -70,6 +71,11 @@ export type StoredTender = {
   laboratoryCompletedByPlayer: Record<string, boolean>
   modelAnalysisCompletedByPlayer: Record<string, boolean>
   privateMeasurementsByPlayer: Record<string, PrivateMeasurement[]>
+  automaticOperationalSkipsByPlayer: Record<string, {
+    phase: 'laboratory' | 'reconnaissance'
+    reason: 'all_pairs_researched' | 'all_samples_collected' | 'insufficient_samples'
+    round: number
+  }>
   privateThesesByPlayer: Record<string, PrivateThesis[]>
   certifiedSignalsByPlayer: Record<string, SignalId[]>
   researchCertificationsByPlayer: Record<string, SignalId[]>

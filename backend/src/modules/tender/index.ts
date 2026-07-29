@@ -200,10 +200,33 @@ export function createTenderModule({
     .filter((player) => tender.powerAllocations[player.id]?.reconnaissance > 0 && !tender.reconnaissanceCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
+  const playerHasLegalLaboratoryPair = (tender: StoredTender, playerId: string) => {
+    const samples = tender.samplesByPlayer[playerId] ?? []
+    return samples.some((sourceSignal) => samples.some((receiverSignal) =>
+      sourceSignal !== receiverSignal
+      && !tender.publicScientificJournal.some((entry) =>
+        entry.playerId === playerId
+        && entry.sourceSignal === sourceSignal
+        && entry.receiverSignal === receiverSignal,
+      ),
+    ))
+  }
+
   const nextLaboratoryPlayer = (tender: StoredTender) => tender.players
     .filter((player) => isActivePlayer(tender, player.id))
     .filter((player) => tender.powerAllocations[player.id]?.laboratory > 0 && !tender.laboratoryCompletedByPlayer[player.id])
+    .filter((player) => playerHasLegalLaboratoryPair(tender, player.id))
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
+
+  const playerAlreadyResearchedPair = (
+    tender: StoredTender,
+    playerId: string,
+    pair: { receiverSignal: SignalId; sourceSignal: SignalId },
+  ) => tender.publicScientificJournal.some((entry) =>
+    entry.playerId === playerId
+    && entry.sourceSignal === pair.sourceSignal
+    && entry.receiverSignal === pair.receiverSignal,
+  )
   const nextModelAnalysisPlayer = (tender: StoredTender) => tender.players.filter((player) => isActivePlayer(tender, player.id) && tender.powerAllocations[player.id]?.modelAnalysis > 0 && !tender.modelAnalysisCompletedByPlayer[player.id]).sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
   const modelAnalysisPlayers = (tender: StoredTender) => tender.players
     .filter((player) => isActivePlayer(tender, player.id) && (tender.powerAllocations[player.id]?.modelAnalysis ?? 0) > 0)
@@ -248,10 +271,10 @@ export function createTenderModule({
     const isFinal = contract.contractId === finalContractId || contract.kind === 'final'
     const kind = contract.kind ?? (isFinal ? 'final' : 'light')
     const role = contract.targetRole ?? 'source'
-    const availableEvidence = tender.publicScientificJournal.filter((entry) =>
-      entry.playerId === playerId
-      && !tender.usedContractEvidenceTestIds.includes(entry.testId)
-      && entry[role === 'source' ? 'sourceSignal' : 'receiverSignal'] === contract.targetSignal,
+    const ownEvidence = tender.publicScientificJournal.filter((entry) => entry.playerId === playerId)
+    const unusedEvidence = ownEvidence.filter((entry) => !tender.usedContractEvidenceTestIds.includes(entry.testId))
+    const availableEvidence = unusedEvidence.filter((entry) =>
+      entry[role === 'source' ? 'sourceSignal' : 'receiverSignal'] === contract.targetSignal,
     )
     const suitableResearchCertificationSignals = kind === 'scientific'
       && contract.targetSignal
@@ -264,31 +287,64 @@ export function createTenderModule({
       ?? (contract.requiredPublicResult === 'reflection' ? 'attenuation' : 'reflection')
     const primaryEvidence = availableEvidence.filter(matchesPrimary)
     const secondaryEvidence = availableEvidence.filter((entry) => entry.publicResult === secondary)
-    const continuousEvidence = primaryEvidence.filter((entry) => entry.protocol === 'continuous')
-    const pairedImpulseEvidence = primaryEvidence.some((entry) => entry.protocol === 'impulse')
-      && secondaryEvidence.some((entry) => entry.protocol === 'impulse')
-      ? [...primaryEvidence, ...secondaryEvidence].filter((entry) => entry.protocol === 'impulse')
-      : []
-    const suitableEvidence = kind === 'scientific'
+    const continuousEvidence = [...primaryEvidence, ...secondaryEvidence]
+      .filter((entry, index, entries) =>
+        entry.protocol === 'continuous'
+        && entries.findIndex((candidate) => candidate.testId === entry.testId) === index,
+      )
+    const primaryImpulseEvidence = primaryEvidence.filter((entry) => entry.protocol === 'impulse')
+    const secondaryImpulseEvidence = secondaryEvidence.filter((entry) => entry.protocol === 'impulse')
+    const suitableEvidenceSelections = kind === 'scientific'
       ? []
       : kind === 'light'
-        ? primaryEvidence
-        : continuousEvidence.length > 0
-          ? continuousEvidence
-          : pairedImpulseEvidence
+        ? primaryEvidence.map((entry) => [entry.testId])
+        : [
+            ...continuousEvidence.map((entry) => [entry.testId]),
+            ...primaryImpulseEvidence.flatMap((primary) =>
+              secondaryImpulseEvidence.map((secondaryEntry) => [primary.testId, secondaryEntry.testId]),
+            ),
+          ]
+    const suitableEvidence = tender.publicScientificJournal.filter((entry) =>
+      suitableEvidenceSelections.some((selection) => selection.includes(entry.testId)),
+    )
     const hasEvidence = kind === 'scientific'
       ? suitableResearchCertificationSignals.length > 0
-      : suitableEvidence.length > 0
+      : suitableEvidenceSelections.length > 0
     const missingConditions: NonNullable<NonNullable<StoredTender['publicContracts'][number]['planning']>['missingConditions']> = []
     if (contract.bidOutcome !== undefined) missingConditions.push('already_resolved')
     if (contract.reservedByPlayerId && contract.reservedByPlayerId !== playerId) missingConditions.push('reserved')
     if (isFinal && tender.round !== 5) missingConditions.push('final_round')
     if (isFinal && (tender.corporateTrustByPlayer[playerId] ?? 0) < 2) missingConditions.push('corporate_trust')
-    if (!hasEvidence) missingConditions.push('evidence')
+    if (!hasEvidence) {
+      if (kind === 'scientific') {
+        missingConditions.push('evidence')
+      } else {
+        const acceptedResults = new Set([contract.requiredPublicResult, secondary])
+        const usedSuitableEvidence = ownEvidence.some((entry) =>
+          tender.usedContractEvidenceTestIds.includes(entry.testId)
+          && entry[role === 'source' ? 'sourceSignal' : 'receiverSignal'] === contract.targetSignal
+          && acceptedResults.has(entry.publicResult),
+        )
+        const hasWrongRoleEvidence = unusedEvidence.some((entry) =>
+          entry[role === 'source' ? 'receiverSignal' : 'sourceSignal'] === contract.targetSignal
+          && acceptedResults.has(entry.publicResult),
+        )
+        missingConditions.push(
+          usedSuitableEvidence
+            ? 'evidence_used'
+            : hasWrongRoleEvidence
+              ? 'evidence_role'
+              : availableEvidence.length > 0
+                ? 'evidence_result'
+                : 'evidence',
+        )
+      }
+    }
     return {
       eligible: missingConditions.length === 0,
       missingConditions,
       requiredPower: 1 as const,
+      suitableEvidenceSelections,
       suitableEvidenceTestIds: suitableEvidence.map((entry) => entry.testId),
       suitableResearchCertificationSignals,
     }
@@ -299,6 +355,27 @@ export function createTenderModule({
     playerId: string,
     contract: StoredTender['publicContracts'][number],
   ) => contractPlanningForPlayer(tender, playerId, contract).eligible
+
+  const contractEvidenceSelectionIsEligible = (
+    tender: StoredTender,
+    playerId: string,
+    contract: StoredTender['publicContracts'][number],
+    evidenceTestIds: string[],
+    researchCertificationSignal?: SignalId,
+  ) => {
+    const planning = contractPlanningForPlayer(tender, playerId, contract)
+    if (!planning.eligible || evidenceTestIds.length !== new Set(evidenceTestIds).size) return false
+    const kind = contract.kind ?? (contract.contractId === finalContractId ? 'final' : 'light')
+    if (kind === 'scientific') {
+      return evidenceTestIds.length === 0
+        && researchCertificationSignal !== undefined
+        && planning.suitableResearchCertificationSignals.includes(researchCertificationSignal)
+    }
+    return planning.suitableEvidenceSelections.some((selection) =>
+      selection.length === evidenceTestIds.length
+      && selection.every((testId) => evidenceTestIds.includes(testId)),
+    )
+  }
 
   const activePlayerIdForView = (tender: StoredTender) => {
     switch (tender.phase) {
@@ -410,9 +487,93 @@ export function createTenderModule({
     return advanceAfterContracts(tender)
   }
 
-  const beginOperationalActions = (tender: StoredTender): StoredTender => nextReconnaissancePlayer(tender)
-    ? { ...tender, phase: 'reconnaissance' }
-    : advanceAfterOperationalActions(tender, 'reconnaissance')
+  const markImpossibleOperationalActions = (tender: StoredTender): StoredTender => ({
+    ...tender,
+    automaticOperationalSkipsByPlayer: {
+      ...tender.automaticOperationalSkipsByPlayer,
+      ...Object.fromEntries(tender.players.map((player) => {
+        const hasAllSamples = (tender.samplesByPlayer[player.id] ?? []).length >= signalIds.length
+        if ((tender.powerAllocations[player.id]?.reconnaissance ?? 0) > 0 && hasAllSamples) {
+          return [player.id, {
+            phase: 'reconnaissance' as const,
+            reason: 'all_samples_collected' as const,
+            round: tender.round,
+          }]
+        }
+        const insufficientSamples = (tender.samplesByPlayer[player.id] ?? []).length < 2
+        if (
+          (tender.powerAllocations[player.id]?.laboratory ?? 0) > 0
+          && (
+            (tender.powerAllocations[player.id]?.reconnaissance ?? 0) === 0
+            || tender.reconnaissanceCompletedByPlayer[player.id]
+          )
+          && !playerHasLegalLaboratoryPair(tender, player.id)
+        ) {
+          return [player.id, {
+            phase: 'laboratory' as const,
+            reason: insufficientSamples ? 'insufficient_samples' as const : 'all_pairs_researched' as const,
+            round: tender.round,
+          }]
+        }
+        return [player.id, tender.automaticOperationalSkipsByPlayer[player.id]]
+      }).filter((entry): entry is [string, NonNullable<(typeof tender.automaticOperationalSkipsByPlayer)[string]>] =>
+        entry[1] !== undefined,
+      )),
+    },
+    laboratoryCompletedByPlayer: {
+      ...tender.laboratoryCompletedByPlayer,
+      ...Object.fromEntries(tender.players
+        .filter((player) =>
+          (tender.powerAllocations[player.id]?.laboratory ?? 0) > 0
+          && (
+            (tender.powerAllocations[player.id]?.reconnaissance ?? 0) === 0
+            || tender.reconnaissanceCompletedByPlayer[player.id]
+          )
+          && !playerHasLegalLaboratoryPair(tender, player.id),
+        )
+        .map((player) => [player.id, true])),
+    },
+    reconnaissanceCompletedByPlayer: {
+      ...tender.reconnaissanceCompletedByPlayer,
+      ...Object.fromEntries(tender.players
+        .filter((player) =>
+          (tender.powerAllocations[player.id]?.reconnaissance ?? 0) > 0
+          && (tender.samplesByPlayer[player.id] ?? []).length >= signalIds.length,
+        )
+        .map((player) => [player.id, true])),
+    },
+  })
+
+  const beginOperationalActions = (input: StoredTender): StoredTender => {
+    const tender = markImpossibleOperationalActions(input)
+    return nextReconnaissancePlayer(tender)
+      ? { ...tender, phase: 'reconnaissance' }
+      : advanceAfterOperationalActions(tender, 'reconnaissance')
+  }
+
+  const automaticOperationalSkipEvents = (before: StoredTender, after: StoredTender) =>
+    after.players.flatMap((player) => {
+      const events: Array<{ kind: string; payload: Record<string, unknown> }> = []
+      if (!before.reconnaissanceCompletedByPlayer[player.id] && after.reconnaissanceCompletedByPlayer[player.id]) {
+        events.push({
+          kind: 'operational_action_auto_skipped',
+          payload: { phase: 'reconnaissance', playerId: player.id, reason: 'all_samples_collected' },
+        })
+      }
+      if (!before.laboratoryCompletedByPlayer[player.id] && after.laboratoryCompletedByPlayer[player.id]) {
+        events.push({
+          kind: 'operational_action_auto_skipped',
+          payload: {
+            phase: 'laboratory',
+            playerId: player.id,
+            reason: (before.samplesByPlayer[player.id] ?? []).length < 2
+              ? 'insufficient_samples'
+              : 'all_pairs_researched',
+          },
+        })
+      }
+      return events
+    })
 
   const continueAfterForfeit = (tender: StoredTender, changedAt: Date): StoredTender => {
     const remainingPlayers = activePlayers(tender)
@@ -559,6 +720,7 @@ export function createTenderModule({
         accessSlots: {},
         abandonmentDueAt: null,
         anomalyConfiguration,
+        automaticOperationalSkipsByPlayer: {},
         budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
         corporateTrustByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 0])),
         corporateReviewActive: false,
@@ -571,6 +733,7 @@ export function createTenderModule({
         finalScientificModelCompletedByPlayer: {},
         finalScientificModelDraftsByPlayer: {},
         finalScientificModelsByPlayer: {},
+        finalScientificModelSubmittedAtByPlayer: {},
         forfeitedAtByPlayer: {},
         knownSignals: [...new Set([...publicContracts.map((contract) => contract.targetSignal), publicFinalContract.targetSignal])],
         powerAllocations: {},
@@ -792,12 +955,17 @@ export function createTenderModule({
           ? beginOperationalActions({ ...tender, powerAllocations })
           : { ...tender, powerAllocations }
         return commitCommand({
-          auditEvents: [{
-            actorId: command.actorId,
-            commandId: command.commandId,
-            kind: 'power_allocated',
-            payload: { allocation: command.allocation, playerId: player.id },
-          }],
+          auditEvents: [
+            {
+              actorId: command.actorId,
+              commandId: command.commandId,
+              kind: 'power_allocated',
+              payload: { allocation: command.allocation, playerId: player.id },
+            },
+            ...(isReadyToStartReconnaissance
+              ? automaticOperationalSkipEvents({ ...tender, powerAllocations }, nextTender)
+              : []),
+          ],
           command,
           commandFingerprint,
           nextTender: {
@@ -839,6 +1007,12 @@ export function createTenderModule({
           ))
         ) {
           throw new TenderFailure('invalid_tender_state', 'Laboratory command is not available to this Player')
+        }
+        if (pairs.some((pair) => playerAlreadyResearchedPair(tender, player.id, pair))) {
+          throw new TenderFailure(
+            'laboratory_pair_already_researched',
+            'Player already researched this directed Laboratory pair',
+          )
         }
         const protocol = mode === 'deep' ? 'continuous' as const : 'impulse' as const
         const resolvedResults = pairs.map((pair) => ({
@@ -1189,6 +1363,10 @@ export function createTenderModule({
               .filter(([playerId]) => playerId !== player.id),
           ),
           finalScientificModelsByPlayer: { ...tender.finalScientificModelsByPlayer, [player.id]: command.scientificModel },
+          finalScientificModelSubmittedAtByPlayer: {
+            ...tender.finalScientificModelSubmittedAtByPlayer,
+            [player.id]: now().toISOString(),
+          },
           ratingByPlayer,
         }
         const phase = nextScientificModelPlayer(nextTender) ? 'final-scientific-model' : 'complete'
@@ -1304,41 +1482,14 @@ export function createTenderModule({
           throw new TenderFailure('invalid_tender_state', 'Contract Bid is not available to this Player')
         }
         const kind = contract.kind ?? (isFinalContract ? 'final' : 'light')
-        const targetRole = contract.targetRole ?? 'source'
-        const requiredSecondaryPublicResult = contract.requiredSecondaryPublicResult
-          ?? (contract.requiredPublicResult === 'reflection' ? 'attenuation' : 'reflection')
         const evidenceTestIds = command.evidenceTestIds ?? []
-        const evidence = evidenceTestIds.map((testId) => tender.publicScientificJournal.find((entry) => entry.testId === testId))
-        const hasDistinctExistingEvidence = evidence.length === new Set(evidenceTestIds).size && evidence.every((entry) => entry !== undefined)
-        const matchesEvidence = (entry: (typeof tender.publicScientificJournal)[number] | undefined) => Boolean(
-          entry
-          && entry.playerId === player.id
-          && !tender.usedContractEvidenceTestIds.includes(entry.testId)
-          && entry.publicResult === contract.requiredPublicResult
-          && entry[targetRole === 'source' ? 'sourceSignal' : 'receiverSignal'] === contract.targetSignal,
+        const isAwarded = contractEvidenceSelectionIsEligible(
+          tender,
+          player.id,
+          contract,
+          evidenceTestIds,
+          command.researchCertificationSignal,
         )
-        const matchesTargetRole = (entry: (typeof tender.publicScientificJournal)[number] | undefined) => Boolean(
-          entry
-          && entry.playerId === player.id
-          && !tender.usedContractEvidenceTestIds.includes(entry.testId)
-          && entry[targetRole === 'source' ? 'sourceSignal' : 'receiverSignal'] === contract.targetSignal,
-        )
-        const hasLightEvidence = hasDistinctExistingEvidence && evidence.length === 1 && matchesEvidence(evidence[0])
-        const hasComplexEvidence = hasDistinctExistingEvidence && (
-          (evidence.length === 1 && evidence[0]?.protocol === 'continuous' && matchesEvidence(evidence[0]))
-          || (evidence.length === 2
-            && evidence.every(matchesTargetRole)
-            && new Set(evidence.map((entry) => entry?.publicResult)).size === 2
-            && evidence.some((entry) => entry?.publicResult === contract.requiredPublicResult)
-            && evidence.some((entry) => entry?.publicResult === requiredSecondaryPublicResult))
-        )
-        const hasScientificCertification = command.researchCertificationSignal === contract.targetSignal
-          && (tender.researchCertificationsByPlayer[player.id] ?? []).includes(contract.targetSignal!)
-        const isAwarded = kind === 'scientific'
-          ? evidence.length === 0 && hasScientificCertification
-          : kind === 'light'
-            ? hasLightEvidence
-            : hasComplexEvidence
         if (tender.ruleset === 'tender-v2' && !isAwarded) {
           throw new TenderFailure('contract_evidence_stale', 'Selected Contract evidence is no longer suitable')
         }
@@ -1435,21 +1586,22 @@ export function createTenderModule({
         samplesByPlayer,
       }
       const isReadyForLaboratory = nextReconnaissancePlayer(nextTender) === undefined
+      const advancedTender = isReadyForLaboratory
+        ? advanceAfterOperationalActions(markImpossibleOperationalActions(nextTender), 'reconnaissance')
+        : { ...nextTender, phase: tender.phase }
       return commitCommand({
-        auditEvents: [{
-          actorId: command.actorId,
-          commandId: command.commandId,
-          kind: 'reconnaissance_completed',
-          payload: { acquiredSignals, playerId: player.id, targets },
-        }],
+        auditEvents: [
+          {
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'reconnaissance_completed',
+            payload: { acquiredSignals, playerId: player.id, targets },
+          },
+          ...(isReadyForLaboratory ? automaticOperationalSkipEvents(nextTender, advancedTender) : []),
+        ],
         command,
         commandFingerprint,
-        nextTender: (() => {
-          const advancedTender = isReadyForLaboratory
-            ? advanceAfterOperationalActions(nextTender, 'reconnaissance')
-            : { ...nextTender, phase: tender.phase }
-          return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, now()) }
-        })(),
+        nextTender: { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, now()) },
         tender,
       })
     },
@@ -1489,6 +1641,34 @@ export function createTenderModule({
             total: finalScientificModelPlayers(tender).length,
           }
         : undefined
+      const sequentialPhaseProgress = (() => {
+        if (tender.phase === 'reconnaissance') {
+          const players = activePlayers(tender).filter((candidate) =>
+            (tender.powerAllocations[candidate.id]?.reconnaissance ?? 0) > 0,
+          )
+          return {
+            completed: players.filter((candidate) => tender.reconnaissanceCompletedByPlayer[candidate.id]).length,
+            total: players.length,
+          }
+        }
+        if (tender.phase === 'laboratory') {
+          const players = activePlayers(tender).filter((candidate) =>
+            (tender.powerAllocations[candidate.id]?.laboratory ?? 0) > 0,
+          )
+          return {
+            completed: players.filter((candidate) => tender.laboratoryCompletedByPlayer[candidate.id]).length,
+            total: players.length,
+          }
+        }
+        if (tender.phase === 'contracts') {
+          const players = activePlayers(tender).filter((candidate) => effectiveContractPower(tender, candidate.id) > 0)
+          return {
+            completed: players.filter((candidate) => tender.contractCompletedByPlayer[candidate.id]).length,
+            total: players.length,
+          }
+        }
+        return undefined
+      })()
       const currentRoundPrivateTheses = (candidateId: string) =>
         (tender.privateThesesByPlayer[candidateId] ?? []).filter((thesis) => thesis.round === tender.round)
       const hiddenCurrentRoundRating = (candidateId: string) => {
@@ -1531,6 +1711,7 @@ export function createTenderModule({
         ruleset: tender.ruleset,
         ...(modelAnalysisProgress ? { modelAnalysisProgress } : {}),
         ...(finalScientificModelProgress ? { finalScientificModelProgress } : {}),
+        ...(sequentialPhaseProgress ? { sequentialPhaseProgress } : {}),
         serverTime: now().toISOString(),
         tenderId,
         version: tender.version,
@@ -1576,11 +1757,24 @@ export function createTenderModule({
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
+        ...(tender.automaticOperationalSkipsByPlayer[player.id]?.round === tender.round
+          ? { privateAutomaticOperationalSkip: tender.automaticOperationalSkipsByPlayer[player.id] }
+          : {}),
         ...(tender.ruleset === 'tender-v2'
           && tender.phase === 'final-scientific-model'
           && !tender.finalScientificModelCompletedByPlayer[player.id]
           ? {
               privateFinalScientificModelDraft: tender.finalScientificModelDraftsByPlayer[player.id] ?? { signals: {} },
+            }
+          : {}),
+        ...(tender.phase === 'final-scientific-model'
+          && tender.finalScientificModelsByPlayer[player.id]
+          && tender.finalScientificModelSubmittedAtByPlayer[player.id]
+          ? {
+              privateFinalScientificModelSubmission: {
+                scientificModel: tender.finalScientificModelsByPlayer[player.id],
+                submittedAt: tender.finalScientificModelSubmittedAtByPlayer[player.id],
+              },
             }
           : {}),
         privateTheses: tender.ruleset === 'tender-v2'
@@ -1658,12 +1852,15 @@ export function createTenderModule({
           }
           const nextTender = beginOperationalActions({ ...tender, powerAllocations })
           const completed = await commitTimeout({
-            auditEvents: [{
-              kind: 'power_allocation_timeout_resolved',
-              payload: {
-                timedOutPlayerIds,
+            auditEvents: [
+              {
+                kind: 'power_allocation_timeout_resolved',
+                payload: {
+                  timedOutPlayerIds,
+                },
               },
-            }],
+              ...automaticOperationalSkipEvents({ ...tender, powerAllocations }, nextTender),
+            ],
             nextTender: { ...nextTender, dueAt: deadlineForPhase(nextTender.phase, dueNow) },
             tender,
           })
@@ -1679,12 +1876,15 @@ export function createTenderModule({
           }
           const advancedTender = nextReconnaissancePlayer(nextTender)
             ? { ...nextTender, phase: 'reconnaissance' as const }
-            : advanceAfterOperationalActions(nextTender, 'reconnaissance')
+            : advanceAfterOperationalActions(markImpossibleOperationalActions(nextTender), 'reconnaissance')
           const completed = await commitTimeout({
-            auditEvents: [{
-              kind: 'operational_action_timeout_resolved',
-              payload: { phase: tender.phase, playerId: expectedPlayer.id },
-            }],
+            auditEvents: [
+              {
+                kind: 'operational_action_timeout_resolved',
+                payload: { phase: tender.phase, playerId: expectedPlayer.id },
+              },
+              ...automaticOperationalSkipEvents(nextTender, advancedTender),
+            ],
             nextTender: { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, dueNow) },
             tender,
           })

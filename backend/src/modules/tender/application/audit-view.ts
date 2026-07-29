@@ -133,6 +133,18 @@ export function createParticipantAuditRounds(
       continue
     }
 
+    if (event.kind === 'operational_action_auto_skipped'
+      && event.payload.phase === 'reconnaissance'
+      && playerId) {
+      round.reconnaissance.push({
+        playerId,
+        resolution: 'skipped',
+        skipReason: 'all_samples_collected',
+        targets: [],
+      })
+      continue
+    }
+
     if (event.kind === 'laboratory_test_completed' && playerId) {
       const results = Array.isArray(event.payload.results) ? event.payload.results : []
       const tests = results.flatMap((rawResult) => {
@@ -175,6 +187,21 @@ export function createParticipantAuditRounds(
         mode: 'impulse',
         playerId,
         resolution: 'timeout',
+        tests: [],
+      })
+      continue
+    }
+
+    if (event.kind === 'operational_action_auto_skipped'
+      && event.payload.phase === 'laboratory'
+      && playerId) {
+      round.laboratory.push({
+        mode: 'impulse',
+        playerId,
+        resolution: 'skipped',
+        skipReason: event.payload.reason === 'insufficient_samples'
+          ? 'insufficient_samples'
+          : 'all_pairs_researched',
         tests: [],
       })
       continue

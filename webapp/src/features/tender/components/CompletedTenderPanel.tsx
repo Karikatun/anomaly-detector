@@ -408,10 +408,15 @@ export function CompletedTenderPanel({ view }: Props) {
                               Тайм-аут
                             </Typography>
                           )}
+                          {entry.resolution === 'skipped' && (
+                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
+                              Разведка пропущена: все Образцы уже получены
+                            </Typography>
+                          )}
                         </div>
                         <div className={styles.auditTagList}>
-                          {entry.targets.length > 0 ? entry.targets.map((target) => (
-                            <Typography key={target} as="span" variant="caption">
+                          {entry.targets.length > 0 ? entry.targets.map((target, targetIndex) => (
+                            <Typography key={`${target}-${targetIndex}`} as="span" variant="caption">
                               {target === 'unknown-sector'
                                 ? 'Неизвестный сектор'
                                 : t(signalLabelKeys[target])}
@@ -448,11 +453,17 @@ export function CompletedTenderPanel({ view }: Props) {
                             <Typography
                               as="span"
                               variant="caption"
-                              className={entry.resolution === 'timeout'
+                              className={entry.resolution === 'timeout' || entry.resolution === 'skipped'
                                 ? styles.auditTimeoutBadge
                                 : styles.auditModeBadge}
                             >
-                              {entry.resolution === 'timeout' ? 'Тайм-аут' : modeLabel}
+                              {entry.resolution === 'timeout'
+                                ? 'Тайм-аут'
+                                : entry.resolution === 'skipped'
+                                  ? entry.skipReason === 'insufficient_samples'
+                                    ? 'Пропущено: нужны два Образца'
+                                    : 'Пропущено: все пары исследованы'
+                                  : modeLabel}
                             </Typography>
                           </div>
                           <div className={styles.laboratoryTests}>

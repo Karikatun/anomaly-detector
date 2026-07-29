@@ -44,6 +44,29 @@ test('keeps consecutive all-timeout rounds separate in the participant audit', (
   ])
 })
 
+test('projects automatic operational skips with player-facing reasons into the audit', () => {
+  const rounds = createParticipantAuditRounds({
+    privateMeasurementsByPlayer: {},
+    privateThesesByPlayer: {},
+    publicScientificJournal: [],
+    round: 1,
+  } as never, [
+    {
+      kind: 'operational_action_auto_skipped',
+      payload: { phase: 'laboratory', playerId: 'player-a', reason: 'all_pairs_researched' },
+      sequence: 1,
+    },
+  ])
+
+  expect(rounds[0]?.laboratory).toEqual([{
+    mode: 'impulse',
+    playerId: 'player-a',
+    resolution: 'skipped',
+    skipReason: 'all_pairs_researched',
+    tests: [],
+  }])
+})
+
 test('gives planning phases a 90-second deadline', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })
@@ -438,6 +461,71 @@ test('keeps a v2 Contract reservation recoverable when submitted evidence is sta
   })
   expect((await tender.readTenderView({ tenderId, playerId: 'player-a' })).publicContracts[0])
     .not.toHaveProperty('bidOutcome')
+})
+
+test('uses the same eligibility result to preview and award the Final Contract', async () => {
+  const store = createInMemoryTenderStore()
+  const tender = createTenderModule({ store })
+  const { tenderId } = await tender.createTender({
+    players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }],
+  })
+  const initial = await store.read(tenderId)
+  if (!initial) throw new Error('Tender was not created')
+  await store.commit({
+    auditEvents: [],
+    expectedVersion: initial.version,
+    nextTender: {
+      ...initial,
+      accessSlots: { 'player-a': 1, 'player-b': 2 },
+      corporateTrustByPlayer: { 'player-a': 2, 'player-b': 0 },
+      phase: 'contracts',
+      powerAllocations: {
+        'player-a': { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 3 },
+        'player-b': { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 },
+      },
+      publicScientificJournal: [{
+        playerId: 'player-a',
+        protocol: 'continuous',
+        publicResult: 'attenuation',
+        receiverSignal: 'aster',
+        sourceSignal: 'ferro',
+        testId: 'ferro-aster-continuous',
+      }],
+      round: 5,
+    },
+    tenderId,
+  })
+
+  expect((await tender.readTenderView({ tenderId, playerId: 'player-a' })).publicFinalContract)
+    .toMatchObject({
+      eligibleForPlayer: true,
+      planning: {
+        eligible: true,
+        suitableEvidenceTestIds: ['ferro-aster-continuous'],
+      },
+    })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'reserve-final',
+    contractId: 'final-contract',
+    tenderId,
+    type: 'reserve-contract',
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'submit-final',
+    contractId: 'final-contract',
+    evidenceTestIds: ['ferro-aster-continuous'],
+    tenderId,
+    type: 'submit-contract-bid',
+  })
+
+  expect((await store.read(tenderId))?.publicFinalContract).toMatchObject({
+    awardedToPlayerId: 'player-a',
+    bidOutcome: 'awarded',
+  })
+  expect((await store.read(tenderId))?.usedContractEvidenceTestIds).toContain('ferro-aster-continuous')
 })
 
 test('releases a reserved Contract without consuming the action when its deadline expires', async () => {
@@ -869,6 +957,19 @@ test('awards property points, completed Signal points, and the complete-model bo
     dueAt: sharedFinalDueAt,
     finalScientificModelProgress: { completed: 1, total: 2 },
     phase: 'final-scientific-model',
+    privateFinalScientificModelSubmission: {
+      scientificModel: {
+        signals: {
+          aster: { fieldType: 'inertial', polarity: 'negative' },
+          boreal: { fieldType: 'inertial', polarity: 'positive' },
+          cinder: { fieldType: 'electromagnetic', polarity: 'negative' },
+          delta: { fieldType: 'phase', polarity: 'negative' },
+          eclipse: { fieldType: 'electromagnetic', polarity: 'positive' },
+          ferro: { fieldType: 'phase', polarity: 'positive' },
+        },
+      },
+      submittedAt: now.toISOString(),
+    },
     players: [
       { finalScientificModelSubmitted: true, playerId: 'player-a' },
       { playerId: 'player-b' },
@@ -1680,6 +1781,191 @@ test('atomically records two public impulse results for a broad Laboratory actio
   ])
 })
 
+test('rejects only the same Player repeating the same directed Laboratory pair', async () => {
+  const store = createInMemoryTenderStore()
+  const tender = createTenderModule({ store })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  const initial = await store.read(tenderId)
+  if (!initial) throw new Error('Tender was not created')
+  await store.commit({
+    auditEvents: [],
+    expectedVersion: initial.version,
+    nextTender: {
+      ...initial,
+      accessSlots: { 'player-a': 1, 'player-b': 2 },
+      laboratoryCompletedByPlayer: {},
+      phase: 'laboratory',
+      powerAllocations: {
+        'player-a': { contracts: 0, laboratory: 1, modelAnalysis: 0, reconnaissance: 0, reserve: 3 },
+        'player-b': { contracts: 0, laboratory: 1, modelAnalysis: 0, reconnaissance: 0, reserve: 3 },
+      },
+      publicScientificJournal: [{
+        playerId: 'player-a',
+        protocol: 'continuous',
+        publicResult: 'reflection',
+        receiverSignal: 'delta',
+        sourceSignal: 'cinder',
+        testId: 'prior-a',
+      }],
+      samplesByPlayer: {
+        'player-a': ['cinder', 'delta'],
+        'player-b': ['cinder', 'delta'],
+      },
+    },
+    tenderId,
+  })
+
+  await expect(tender.execute({
+    actorId: 'player-a',
+    commandId: 'repeat-a',
+    laboratory: { mode: 'impulse', pair: { receiverSignal: 'delta', sourceSignal: 'cinder' } },
+    tenderId,
+    type: 'run-laboratory-test',
+  })).rejects.toMatchObject({ kind: 'laboratory_pair_already_researched' })
+
+  expect((await tender.readTenderView({ tenderId, playerId: 'player-a' })).publicScientificJournal).toHaveLength(1)
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'reverse-a',
+    laboratory: { mode: 'impulse', pair: { receiverSignal: 'cinder', sourceSignal: 'delta' } },
+    tenderId,
+    type: 'run-laboratory-test',
+  })
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'same-pair-b',
+    laboratory: { mode: 'impulse', pair: { receiverSignal: 'delta', sourceSignal: 'cinder' } },
+    tenderId,
+    type: 'run-laboratory-test',
+  })
+
+  expect((await tender.readTenderView({ tenderId, playerId: 'player-a' })).publicScientificJournal).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ playerId: 'player-a', receiverSignal: 'cinder', sourceSignal: 'delta' }),
+      expect.objectContaining({ playerId: 'player-b', receiverSignal: 'delta', sourceSignal: 'cinder' }),
+    ]),
+  )
+})
+
+test('auto-skips Laboratory immediately when every directed Sample pair was already researched', async () => {
+  const store = createInMemoryTenderStore()
+  const tender = createTenderModule({ store })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  const initial = await store.read(tenderId)
+  if (!initial) throw new Error('Tender was not created')
+  await store.commit({
+    auditEvents: [],
+    expectedVersion: initial.version,
+    nextTender: {
+      ...initial,
+      accessSlots: { 'player-a': 1, 'player-b': 2 },
+      phase: 'power-allocation',
+      powerAllocations: {
+        'player-a': { contracts: 1, laboratory: 1, modelAnalysis: 0, reconnaissance: 0, reserve: 2 },
+      },
+      publicScientificJournal: [
+        { playerId: 'player-a', protocol: 'impulse', publicResult: 'reflection', receiverSignal: 'delta', sourceSignal: 'cinder', testId: 'a-forward' },
+        { playerId: 'player-a', protocol: 'impulse', publicResult: 'attenuation', receiverSignal: 'cinder', sourceSignal: 'delta', testId: 'a-reverse' },
+      ],
+      samplesByPlayer: {
+        'player-a': ['cinder', 'delta'],
+        'player-b': [],
+      },
+    },
+    tenderId,
+  })
+
+  await tender.execute({
+    actorId: 'player-b',
+    allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 },
+    commandId: 'power-b',
+    tenderId,
+    type: 'allocate-power',
+  })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    activePlayerId: 'player-a',
+    phase: 'contracts',
+  })
+  expect(await store.readAuditEvents(tenderId)).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      kind: 'operational_action_auto_skipped',
+      payload: {
+        phase: 'laboratory',
+        playerId: 'player-a',
+        reason: 'all_pairs_researched',
+      },
+    }),
+  ]))
+})
+
+test('rejects a broad Laboratory action atomically when either pair was already researched', async () => {
+  const store = createInMemoryTenderStore()
+  const tender = createTenderModule({ store })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  const initial = await store.read(tenderId)
+  if (!initial) throw new Error('Tender was not created')
+  await store.commit({
+    auditEvents: [],
+    expectedVersion: initial.version,
+    nextTender: {
+      ...initial,
+      accessSlots: { 'player-a': 1, 'player-b': 2 },
+      phase: 'laboratory',
+      powerAllocations: {
+        'player-a': { contracts: 0, laboratory: 2, modelAnalysis: 0, reconnaissance: 0, reserve: 2 },
+        'player-b': { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 },
+      },
+      publicScientificJournal: [{
+        playerId: 'player-a',
+        protocol: 'continuous',
+        publicResult: 'reflection',
+        receiverSignal: 'delta',
+        sourceSignal: 'cinder',
+        testId: 'prior-a',
+      }],
+      samplesByPlayer: {
+        'player-a': ['cinder', 'delta', 'eclipse'],
+        'player-b': [],
+      },
+    },
+    tenderId,
+  })
+
+  await expect(tender.execute({
+    actorId: 'player-a',
+    commandId: 'broad-with-repeat',
+    laboratory: {
+      mode: 'broad',
+      pairs: [
+        { receiverSignal: 'delta', sourceSignal: 'cinder' },
+        { receiverSignal: 'eclipse', sourceSignal: 'cinder' },
+      ],
+    },
+    tenderId,
+    type: 'run-laboratory-test',
+  })).rejects.toMatchObject({ kind: 'laboratory_pair_already_researched' })
+
+  expect((await store.read(tenderId))?.publicScientificJournal).toHaveLength(1)
+  expect((await store.read(tenderId))?.laboratoryCompletedByPlayer['player-a']).toBeUndefined()
+})
+
 test('checks public Theses in Access Slot order and opens Contracts', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
@@ -2209,15 +2495,16 @@ test('completes the Tender after Contracts in round five', async () => {
     if (round === 1) {
       await tender.execute({ commandId: `a-${round}-recon`, tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
       await tender.execute({ commandId: `b-${round}-recon`, tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
-    } else {
+    } else if (round <= 3) {
+      const reverse = round === 3
       await tender.execute({
         commandId: `a-${round}-lab`,
         tenderId,
         actorId: 'player-a',
         type: 'run-laboratory-test',
         protocol: 'continuous',
-        sourceSignal: 'cinder',
-        receiverSignal: 'delta',
+        sourceSignal: reverse ? 'delta' : 'cinder',
+        receiverSignal: reverse ? 'cinder' : 'delta',
       })
       await tender.execute({
         commandId: `b-${round}-lab`,
@@ -2225,8 +2512,8 @@ test('completes the Tender after Contracts in round five', async () => {
         actorId: 'player-b',
         type: 'run-laboratory-test',
         protocol: 'continuous',
-        sourceSignal: 'cinder',
-        receiverSignal: 'eclipse',
+        sourceSignal: reverse ? 'eclipse' : 'cinder',
+        receiverSignal: reverse ? 'cinder' : 'eclipse',
       })
     }
     await tender.execute({
@@ -2356,9 +2643,10 @@ test('projects public Laboratory results into the participant audit view', async
     if (round === 1) {
       await tender.execute({ commandId: `a-${round}-recon`, tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
       await tender.execute({ commandId: `b-${round}-recon`, tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
-    } else {
-      await tender.execute({ commandId: `a-${round}-lab`, tenderId, actorId: 'player-a', type: 'run-laboratory-test', protocol: 'continuous', sourceSignal: 'cinder', receiverSignal: 'delta' })
-      await tender.execute({ commandId: `b-${round}-lab`, tenderId, actorId: 'player-b', type: 'run-laboratory-test', protocol: 'continuous', sourceSignal: 'cinder', receiverSignal: 'eclipse' })
+    } else if (round <= 3) {
+      const reverse = round === 3
+      await tender.execute({ commandId: `a-${round}-lab`, tenderId, actorId: 'player-a', type: 'run-laboratory-test', protocol: 'continuous', sourceSignal: reverse ? 'delta' : 'cinder', receiverSignal: reverse ? 'cinder' : 'delta' })
+      await tender.execute({ commandId: `b-${round}-lab`, tenderId, actorId: 'player-b', type: 'run-laboratory-test', protocol: 'continuous', sourceSignal: reverse ? 'eclipse' : 'cinder', receiverSignal: reverse ? 'cinder' : 'eclipse' })
     }
     await tender.execute({ commandId: `a-${round}-reserve`, tenderId, actorId: 'player-a', type: 'reserve-contract', contractId: `round-${round}-contract-1` })
     await tender.execute({ commandId: `a-${round}-bid`, tenderId, actorId: 'player-a', type: 'submit-contract-bid', contractId: `round-${round}-contract-1`, claimedPublicResult: 'unstable_collapse', requestedFunding: 1 })

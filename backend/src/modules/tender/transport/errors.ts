@@ -15,6 +15,9 @@ export async function executeTender<T>(operation: () => Promise<T>): Promise<T> 
     if (error.kind === 'contract_evidence_stale') {
       throw new AppError(409, 'TENDER_EVIDENCE_UNAVAILABLE', 'Selected Contract evidence is no longer available')
     }
+    if (error.kind === 'laboratory_pair_already_researched') {
+      throw new AppError(409, 'TENDER_LABORATORY_PAIR_ALREADY_RESEARCHED', 'Laboratory pair was already researched')
+    }
     if (error.kind === 'player_forfeited') {
       throw new AppError(403, 'TENDER_PLAYER_FORFEITED', 'Tender access is unavailable')
     }

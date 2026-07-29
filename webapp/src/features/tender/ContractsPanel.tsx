@@ -124,24 +124,24 @@ export function ContractsPanel({
               const reservedByName = players.find((candidate) => candidate.playerId === contract.reservedByPlayerId)?.displayName
               const target = contract.targetSignal
               const planning = contract.planning
-              const targetRole = contract.targetRole ?? 'source'
-              const targetKey = targetRole === 'source' ? 'sourceSignal' : 'receiverSignal'
-              const suitableEvidenceIds = new Set(planning?.suitableEvidenceTestIds ?? [])
-              const targetEvidence = ownJournal.filter((entry) =>
-                entry[targetKey] === target
-                && (planning === undefined || suitableEvidenceIds.has(entry.testId)),
+              const suitableEvidenceSelections = planning?.suitableEvidenceSelections
+                ?? ownJournal
+                  .filter((entry) =>
+                    entry[contract.targetRole === 'receiver' ? 'receiverSignal' : 'sourceSignal'] === target
+                    && entry.publicResult === contract.requiredPublicResult,
+                  )
+                  .map((entry) => [entry.testId])
+              const evidenceById = new Map(ownJournal.map((entry) => [entry.testId, entry]))
+              const selectablePrimaryEvidence = [...new Set(
+                suitableEvidenceSelections.map((selection) => selection[0]),
+              )].flatMap((testId) => evidenceById.get(testId) ?? [])
+              const selectedEvidenceSelections = suitableEvidenceSelections.filter((selection) =>
+                selection[0] === bid.evidenceTestIds[0],
               )
-              const primaryEvidence = targetEvidence.filter((entry) => entry.publicResult === contract.requiredPublicResult)
-              const secondaryResult = contract.requiredSecondaryPublicResult
-                ?? (contract.requiredPublicResult === 'reflection' ? 'attenuation' : 'reflection')
-              const secondaryEvidence = targetEvidence.filter((entry) => entry.publicResult === secondaryResult)
-              const selectablePrimaryEvidence = (kind === 'complex' || kind === 'final')
-                && secondaryEvidence.length === 0
-                ? primaryEvidence.filter((entry) => entry.protocol === 'continuous')
-                : primaryEvidence
-              const selectedPrimaryEvidence = primaryEvidence.find((entry) => entry.testId === bid.evidenceTestIds[0])
-              const requiresSecondaryEvidence = (kind === 'complex' || kind === 'final')
-                && Boolean(selectedPrimaryEvidence && selectedPrimaryEvidence.protocol !== 'continuous')
+              const requiresSecondaryEvidence = selectedEvidenceSelections.some((selection) => selection.length === 2)
+              const selectableSecondaryEvidence = [...new Set(
+                selectedEvidenceSelections.flatMap((selection) => selection.slice(1)),
+              )].flatMap((testId) => evidenceById.get(testId) ?? [])
               const suitableCertificationSignals = new Set(
                 planning?.suitableResearchCertificationSignals ?? [],
               )
@@ -154,13 +154,14 @@ export function ContractsPanel({
                 : kind === 'scientific'
                   ? fittingCertifications.length > 0
                   : kind === 'light'
-                    ? primaryEvidence.length > 0
-                    : primaryEvidence.some((entry) => entry.protocol === 'continuous')
-                      || (primaryEvidence.length > 0 && secondaryEvidence.length > 0)
+                    ? selectablePrimaryEvidence.length > 0
+                    : suitableEvidenceSelections.length > 0
               const bidIsComplete = kind === 'scientific'
                 ? Boolean(bid.researchCertificationSignal)
-                : bid.evidenceTestIds.length > 0
-                  && (!requiresSecondaryEvidence || bid.evidenceTestIds.length === 2)
+                : suitableEvidenceSelections.some((selection) =>
+                    selection.length === bid.evidenceTestIds.length
+                    && selection.every((testId) => bid.evidenceTestIds.includes(testId)),
+                  )
               const canChooseResearch = Boolean(
                 ((planning?.eligible ?? contract.eligibleForPlayer) || reservedBySelf)
                 && !reservedByOther
@@ -262,7 +263,6 @@ export function ContractsPanel({
                             value={bid.evidenceTestIds[0] ?? ''}
                             onChange={(event) => {
                               const testId = event.target.value
-                              const primary = primaryEvidence.find((entry) => entry.testId === testId)
                               setBids((previous) => ({
                                 ...previous,
                                 [contract.contractId]: {
@@ -270,7 +270,9 @@ export function ContractsPanel({
                                   evidenceTestIds: testId
                                     ? [
                                       testId,
-                                      ...(primary?.protocol !== 'continuous' && bid.evidenceTestIds[1]
+                                      ...(suitableEvidenceSelections.some((selection) =>
+                                        selection[0] === testId && selection.length === 2,
+                                      ) && bid.evidenceTestIds[1]
                                         ? [bid.evidenceTestIds[1]]
                                         : []),
                                     ]
@@ -309,7 +311,7 @@ export function ContractsPanel({
                                 }}
                               >
                                 <option value="">Выберите второй опыт</option>
-                                {secondaryEvidence.map((entry) => (
+                                {selectableSecondaryEvidence.map((entry) => (
                                   <option key={entry.testId} value={entry.testId}>{evidenceLabel(entry)}</option>
                                 ))}
                               </NativeSelect>

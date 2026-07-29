@@ -322,6 +322,12 @@ describe('Tender contracts', () => {
       privateFinalScientificModelDraft: {
         signals: { aster: { fieldType: 'inertial' } },
       },
+      privateFinalScientificModelSubmission: {
+        scientificModel: {
+          signals: { aster: { fieldType: 'inertial', polarity: 'negative' } },
+        },
+        submittedAt: '2026-07-29T12:00:00.000Z',
+      },
       privateMeasurements: [],
       privateRawTelemetrySignals: [],
       privateSamples: ['aster'],
@@ -347,6 +353,12 @@ describe('Tender contracts', () => {
       finalScientificModelProgress: { completed: 1, total: 2 },
       privateFinalScientificModelDraft: {
         signals: { aster: { fieldType: 'inertial' } },
+      },
+      privateFinalScientificModelSubmission: {
+        scientificModel: {
+          signals: { aster: { fieldType: 'inertial', polarity: 'negative' } },
+        },
+        submittedAt: '2026-07-29T12:00:00.000Z',
       },
     })
   })
