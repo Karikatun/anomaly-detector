@@ -725,6 +725,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     }).toBeGreaterThan(170)
     await expect(page.getByRole('heading', { name: 'Игроки' })).toHaveCount(0)
     await expect(page.getByText('Рабочая модель', { exact: true })).toHaveCount(0)
+    await expect(page.locator('#final-evidence [data-private-thesis]')).toHaveCount(4)
+    await expect(guestPage.locator('#final-evidence [data-private-thesis]')).toHaveCount(4)
     await expect(guestPage.getByText('Подтвердили 0 из 2 исследователей').first()).toBeVisible()
     await expect(guestPage.getByRole('button', { name: 'Отправить финальную модель' })).toBeEnabled()
     await page.getByRole('button', { name: 'Ferro: тип поля Инерционное', exact: true }).click()

@@ -38,7 +38,10 @@ type Props = {
   disabled?: boolean
   draft: ScientificModelDraft
   dueAt: string | null
-  evidence: Pick<TenderView, 'privateMeasurements' | 'publicLaboratoryResults' | 'publicTheses'>
+  evidence: Pick<
+    TenderView,
+    'privateMeasurements' | 'privateTheses' | 'publicLaboratoryResults' | 'publicTheses'
+  >
   error?: string | null
   onConfirm: (model: ScientificModel) => Promise<void>
   onSaveDraft: (draft: ScientificModelDraft) => Promise<void>
@@ -194,7 +197,7 @@ export function FinalScientificModelPanel({
               <Typography as="span" variant="caption" tone="muted">
                 {evidence.publicLaboratoryResults.length} публичных опытов ·{' '}
                 {evidence.privateMeasurements.length} личных измерений ·{' '}
-                {evidence.publicTheses.length} тезисов
+                {(evidence.privateTheses?.length ?? 0) + evidence.publicTheses.length} тезисов
               </Typography>
             </span>
             <Typography as="span" variant="control">К данным ↓</Typography>
