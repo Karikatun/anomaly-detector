@@ -1,10 +1,15 @@
 import {
+  Analytics01Icon,
   ArrowDown01Icon,
   Award02Icon,
   CheckmarkCircle02Icon,
+  ContractsIcon,
+  FlashIcon,
+  FlaskConicalIcon,
+  Radar02Icon,
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
+import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useState } from 'react'
 
@@ -44,21 +49,35 @@ const roundRatingLabels = {
 } as const
 
 function AuditGroup({
+  accent,
   children,
   count,
+  icon,
   title,
 }: {
+  accent: string
   children: ReactNode
   count: number
+  icon: IconSvgElement
   title: string
 }) {
   if (count === 0) return null
 
   return (
-    <section className={styles.roundAuditSection}>
+    <section
+      className={styles.roundAuditSection}
+      style={{ '--audit-accent': accent } as CSSProperties}
+    >
       <header>
-        <Typography as="h4" variant="bodySmMedium">{title}</Typography>
-        <Typography as="span" variant="caption">{count}</Typography>
+        <span className={styles.roundAuditSectionTitle}>
+          <span className={styles.roundAuditSectionIcon}>
+            <HugeiconsIcon icon={icon} strokeWidth={1.8} aria-hidden="true" />
+          </span>
+          <Typography as="h4" variant="bodySmMedium">{title}</Typography>
+        </span>
+        <Typography as="span" variant="caption" className={styles.roundAuditSectionCount}>
+          {count}
+        </Typography>
       </header>
       <ul className={styles.auditEntries}>{[children].map((child) => child)}</ul>
     </section>
@@ -79,6 +98,8 @@ export function CompletedTenderPanel({ view }: Props) {
   const selectedPlayers = selectedPlayerId === 'all'
     ? rankedPlayers
     : rankedPlayers.filter((player) => player.playerId === selectedPlayerId)
+  const playerName = (playerId: string) =>
+    view.players.find((player) => player.playerId === playerId)?.displayName ?? playerId
   const completionReasonLabel = {
     standard: 'Завершён после полного финального аудита',
     all_players_left: 'Завершён: все игроки покинули матч',
@@ -301,110 +322,270 @@ export function CompletedTenderPanel({ view }: Props) {
                 </summary>
 
                 <div className={styles.roundAuditContent}>
-                  <AuditGroup title="Слоты доступа" count={accessSlots.length}>
+                  <AuditGroup
+                    accent="#f4a51c"
+                    icon={UserGroupIcon}
+                    title="Слоты доступа"
+                    count={accessSlots.length}
+                  >
                     {accessSlots.map((entry) => (
                       <li key={`slot-${entry.playerId}`}>
-                        <Typography variant="caption">
-                          {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
-                          {': '}
-                          {entry.resolution === 'timeout' ? 'Тайм-аут' : `запрошен ${entry.requestedSlot ?? '—'}`}
-                          {' → назначен '}
-                          {entry.assignedSlot ?? '—'}
-                        </Typography>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          {entry.resolution === 'timeout' && (
+                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
+                              Тайм-аут
+                            </Typography>
+                          )}
+                        </div>
+                        <div className={styles.auditFacts}>
+                          <span>
+                            <Typography as="small" variant="caption">Запрошен</Typography>
+                            <Typography as="strong" variant="caption">{entry.requestedSlot ?? '—'}</Typography>
+                          </span>
+                          <Typography as="span" variant="caption" className={styles.auditArrow}>→</Typography>
+                          <span>
+                            <Typography as="small" variant="caption">Назначен</Typography>
+                            <Typography as="strong" variant="caption">{entry.assignedSlot ?? '—'}</Typography>
+                          </span>
+                        </div>
                       </li>
                     ))}
                   </AuditGroup>
 
-                  <AuditGroup title="Распределение Мощности" count={powerAllocations.length}>
+                  <AuditGroup
+                    accent="#38bdf8"
+                    icon={FlashIcon}
+                    title="Распределение Мощности"
+                    count={powerAllocations.length}
+                  >
                     {powerAllocations.map((entry) => (
                       <li key={`power-${entry.playerId}`}>
-                        <Typography variant="caption">
-                          {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
-                          {entry.resolution === 'timeout' ? ': Тайм-аут · ' : ': '}
-                          Разведка {entry.allocation.reconnaissance} · Лаборатория {entry.allocation.laboratory}
-                          {' · '}Анализ {entry.allocation.modelAnalysis} · Контракты {entry.allocation.contracts}
-                          {' · '}Не распределено {entry.allocation.reserve ?? 0}
-                        </Typography>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          {entry.resolution === 'timeout' && (
+                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
+                              Тайм-аут
+                            </Typography>
+                          )}
+                        </div>
+                        <div className={styles.powerFacts}>
+                          {[
+                            ['Разведка', entry.allocation.reconnaissance],
+                            ['Лаборатория', entry.allocation.laboratory],
+                            ['Анализ', entry.allocation.modelAnalysis],
+                            ['Контракты', entry.allocation.contracts],
+                            ['Резерв', entry.allocation.reserve ?? 0],
+                          ].map(([label, value]) => (
+                            <span key={label}>
+                              <Typography as="small" variant="caption">{label}</Typography>
+                              <Typography as="strong" variant="caption">{value}</Typography>
+                            </span>
+                          ))}
+                        </div>
                       </li>
                     ))}
                   </AuditGroup>
 
-                  <AuditGroup title="Разведка" count={reconnaissance.length}>
+                  <AuditGroup
+                    accent="#38bdf8"
+                    icon={Radar02Icon}
+                    title="Разведка"
+                    count={reconnaissance.length}
+                  >
                     {reconnaissance.map((entry) => (
                       <li key={`recon-${entry.playerId}`}>
-                        <Typography variant="caption">
-                          {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
-                          {entry.resolution === 'timeout'
-                            ? ': Тайм-аут'
-                            : `: ${entry.targets.join(', ') || 'без новых Сигналов'}`}
-                        </Typography>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          {entry.resolution === 'timeout' && (
+                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
+                              Тайм-аут
+                            </Typography>
+                          )}
+                        </div>
+                        <div className={styles.auditTagList}>
+                          {entry.targets.length > 0 ? entry.targets.map((target) => (
+                            <Typography key={target} as="span" variant="caption">
+                              {target === 'unknown-sector'
+                                ? 'Неизвестный сектор'
+                                : t(signalLabelKeys[target])}
+                            </Typography>
+                          )) : (
+                            <Typography as="span" variant="caption" tone="muted">
+                              Без новых сигналов
+                            </Typography>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </AuditGroup>
 
-                  <AuditGroup title="Лаборатория" count={laboratory.length}>
-                    {laboratory.map((entry, index) => (
-                      <li key={`lab-${entry.playerId}-${index}`}>
-                        <Typography as="strong" variant="caption">
-                          {entry.resolution === 'timeout'
-                            ? 'Тайм-аут'
-                            : entry.mode === 'broad'
-                              ? 'Широкое исследование'
-                              : entry.mode === 'deep' ? 'Глубокое исследование' : 'Импульсный опыт'}
-                        </Typography>
-                        {entry.tests.map((test) => (
-                          <Typography key={test.testId} variant="caption">
-                            {test.testId}: {t(signalLabelKeys[test.sourceSignal])} → {t(signalLabelKeys[test.receiverSignal])}
-                            {' · '}{t(`tender.result.${test.publicResult}`)}
-                            {test.usedByContractId ? ` · использован в ${test.usedByContractId}` : ''}
-                          </Typography>
-                        ))}
-                        {entry.privateMeasurements?.map((measurement) => (
-                          <Typography
-                            key={`${measurement.sourceSignal}-${measurement.receiverSignal}`}
-                            variant="caption"
-                            tone="muted"
-                          >
-                            Приватное измерение: {measurement.polarityRelation === 'same'
-                              ? 'одинаковые полярности'
-                              : 'разные полярности'}
-                          </Typography>
-                        ))}
-                      </li>
-                    ))}
+                  <AuditGroup
+                    accent="#a968e8"
+                    icon={FlaskConicalIcon}
+                    title="Лаборатория"
+                    count={laboratory.length}
+                  >
+                    {laboratory.map((entry, index) => {
+                      const modeLabel = entry.mode === 'broad'
+                        ? 'Широкое исследование'
+                        : entry.mode === 'deep' ? 'Глубокое исследование' : 'Импульсный опыт'
+                      return (
+                        <li
+                          key={`lab-${entry.playerId}-${index}`}
+                          aria-label={`Исследование игрока ${playerName(entry.playerId)}`}
+                        >
+                          <div className={styles.auditEntryHeader}>
+                            <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                              {playerName(entry.playerId)}
+                            </Typography>
+                            <Typography
+                              as="span"
+                              variant="caption"
+                              className={entry.resolution === 'timeout'
+                                ? styles.auditTimeoutBadge
+                                : styles.auditModeBadge}
+                            >
+                              {entry.resolution === 'timeout' ? 'Тайм-аут' : modeLabel}
+                            </Typography>
+                          </div>
+                          <div className={styles.laboratoryTests}>
+                            {entry.tests.map((test) => (
+                              <div key={test.testId} className={styles.laboratoryTest}>
+                                <Typography as="span" variant="caption" className={styles.testIdBadge}>
+                                  {test.testId}
+                                </Typography>
+                                <Typography as="strong" variant="caption" className={styles.testRoute}>
+                                  {t(signalLabelKeys[test.sourceSignal])}
+                                  {' → '}
+                                  {t(signalLabelKeys[test.receiverSignal])}
+                                </Typography>
+                                <Typography as="span" variant="caption" className={styles.testResultBadge}>
+                                  {t(`tender.result.${test.publicResult}`)}
+                                </Typography>
+                                {test.usedByContractId && (
+                                  <Typography as="span" variant="caption" className={styles.contractUseBadge}>
+                                    Контракт {test.usedByContractId}
+                                  </Typography>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          {entry.privateMeasurements?.map((measurement) => (
+                            <div
+                              key={`${measurement.sourceSignal}-${measurement.receiverSignal}`}
+                              className={styles.privateMeasurement}
+                            >
+                              <Typography as="small" variant="caption">Приватное измерение</Typography>
+                              <Typography as="strong" variant="caption">
+                                {measurement.polarityRelation === 'same'
+                                  ? 'Одинаковые полярности'
+                                  : 'Разные полярности'}
+                              </Typography>
+                            </div>
+                          ))}
+                        </li>
+                      )
+                    })}
                   </AuditGroup>
 
-                  <AuditGroup title="Тезисы" count={theses.length}>
+                  <AuditGroup
+                    accent="#22d3ee"
+                    icon={Analytics01Icon}
+                    title="Тезисы"
+                    count={theses.length}
+                  >
                     {theses.map((entry) => (
                       <li key={entry.id}>
-                        <Typography variant="caption">
-                          {t(signalLabelKeys[entry.signalId])}: тип {entry.fieldTypeCorrect ? 'верно' : 'неверно'},
-                          {' '}полярность {entry.polarityCorrect ? 'верно' : 'неверно'}
-                        </Typography>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          <Typography as="span" variant="caption" className={styles.signalNameBadge}>
+                            {t(signalLabelKeys[entry.signalId])}
+                          </Typography>
+                        </div>
+                        <div className={styles.correctness}>
+                          <Typography as="span" variant="caption" data-correct={entry.fieldTypeCorrect || undefined}>
+                            Тип поля: {entry.fieldTypeCorrect ? 'верно' : 'неверно'}
+                          </Typography>
+                          <Typography as="span" variant="caption" data-correct={entry.polarityCorrect || undefined}>
+                            Полярность: {entry.polarityCorrect ? 'верно' : 'неверно'}
+                          </Typography>
+                        </div>
                       </li>
                     ))}
                   </AuditGroup>
 
-                  <AuditGroup title="Контракты" count={contracts.length}>
+                  <AuditGroup
+                    accent="#f4a51c"
+                    icon={ContractsIcon}
+                    title="Контракты"
+                    count={contracts.length}
+                  >
                     {contracts.map((entry, index) => (
                       <li key={`${entry.playerId}-${entry.contractId ?? entry.outcome}-${index}`}>
-                        <Typography variant="caption">
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          {entry.contractId && (
+                            <Typography as="span" variant="caption" className={styles.contractIdBadge}>
+                              {entry.contractId}
+                            </Typography>
+                          )}
+                        </div>
+                        <Typography as="strong" variant="caption" className={styles.contractOutcome}>
                           {entry.outcome === 'timeout_released'
-                            ? `Резерв ${entry.contractId ?? ''} освобождён по тайм-ауту`
+                            ? 'Резерв освобождён по тайм-ауту'
                             : entry.outcome === 'skipped'
-                              ? 'Контракт пропущен: подходящих доказательств нет'
-                              : `${entry.contractId}: выполнен · доказательства ${entry.evidenceTestIds.join(', ') || entry.researchCertificationSignal || '—'}`}
+                              ? 'Контракт пропущен'
+                              : 'Контракт выполнен'}
                         </Typography>
+                        {entry.outcome === 'skipped' ? (
+                          <Typography variant="caption" tone="muted">
+                            Подходящих доказательств нет
+                          </Typography>
+                        ) : entry.outcome === 'awarded' && (
+                          <div className={styles.auditTagList}>
+                            {(entry.evidenceTestIds.length > 0
+                              ? entry.evidenceTestIds
+                              : [entry.researchCertificationSignal ?? '—']
+                            ).map((evidence) => (
+                              <Typography key={evidence} as="span" variant="caption">
+                                {evidence}
+                              </Typography>
+                            ))}
+                          </div>
+                        )}
                       </li>
                     ))}
                   </AuditGroup>
 
-                  <AuditGroup title="Изменения рейтинга" count={ratingChanges.length}>
+                  <AuditGroup
+                    accent="#2fcda3"
+                    icon={Award02Icon}
+                    title="Изменения рейтинга"
+                    count={ratingChanges.length}
+                  >
                     {ratingChanges.map((entry, index) => (
                       <li key={`${entry.playerId}-${entry.source}-${index}`}>
-                        <Typography variant="caption">
-                          {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
-                          {`: ${entry.points >= 0 ? '+' : ''}${entry.points} · ${roundRatingLabels[entry.source]}`}
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          <Typography as="strong" variant="caption" className={styles.ratingChangeBadge}>
+                            {entry.points >= 0 ? '+' : ''}{entry.points}
+                          </Typography>
+                        </div>
+                        <Typography variant="caption" tone="muted">
+                          Источник: {roundRatingLabels[entry.source]}
                         </Typography>
                       </li>
                     ))}
