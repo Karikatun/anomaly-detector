@@ -312,6 +312,21 @@
   text-overflow: ellipsis;
 }
 
+.thesisChecks {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: .25rem .55rem;
+}
+
+.thesisChecks [data-correct='true'] {
+  color: var(--success);
+}
+
+.thesisChecks [data-correct='false'] {
+  color: var(--destructive);
+}
+
 .planningContext {
   display: grid;
   min-width: 0;

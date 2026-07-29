@@ -139,12 +139,17 @@ export function TenderLaboratoryJournal({
   )
 }
 
-type EvidenceData = Pick<TenderView, 'privateMeasurements' | 'publicLaboratoryResults' | 'publicTheses'>
+type EvidenceData = Pick<
+  TenderView,
+  'privateMeasurements' | 'privateTheses' | 'publicLaboratoryResults' | 'publicTheses'
+>
 
 export function TenderEvidence({ data }: { data: EvidenceData }) {
   const { t } = useI18n()
+  const privateTheses = data.privateTheses ?? []
   const isEmpty = data.publicLaboratoryResults.length === 0
     && data.privateMeasurements.length === 0
+    && privateTheses.length === 0
     && data.publicTheses.length === 0
 
   return (
@@ -202,6 +207,36 @@ export function TenderEvidence({ data }: { data: EvidenceData }) {
         </section>
       )}
 
+      {privateTheses.length > 0 && (
+        <section className={styles.evidenceSection}>
+          <div className={styles.evidenceHeading}>
+            <Typography as="h3" variant="control">Личные тезисы</Typography>
+            <Typography as="span" variant="caption">Только вы · {privateTheses.length}</Typography>
+          </div>
+          <div className={styles.evidenceGrid}>
+            {privateTheses.slice().reverse().map((thesis) => (
+              <div key={thesis.id} className={styles.evidenceCard} data-private data-private-thesis>
+                <span className={styles.evidenceSignal}>
+                  <SignalGlyph signal={thesis.signalId} />
+                  <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[thesis.signalId])}</Typography>
+                </span>
+                <Typography variant="caption" tone="muted">
+                  {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
+                </Typography>
+                <span className={styles.thesisChecks}>
+                  <Typography as="span" variant="caption" data-correct={thesis.fieldTypeCorrect}>
+                    {thesis.fieldTypeCorrect ? 'Тип верен' : 'Тип неверен'}
+                  </Typography>
+                  <Typography as="span" variant="caption" data-correct={thesis.polarityCorrect}>
+                    {thesis.polarityCorrect ? 'Полярность верна' : 'Полярность неверна'}
+                  </Typography>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {data.publicTheses.length > 0 && (
         <section className={styles.evidenceSection}>
           <div className={styles.evidenceHeading}>
@@ -233,6 +268,7 @@ export function TenderEvidence({ data }: { data: EvidenceData }) {
 export function TenderResearchData({ view }: { view: TenderView }) {
   const count = view.publicLaboratoryResults.length
     + view.privateMeasurements.length
+    + (view.privateTheses?.length ?? 0)
     + view.publicTheses.length
 
   return (
