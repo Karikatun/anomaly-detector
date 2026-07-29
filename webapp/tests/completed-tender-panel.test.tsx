@@ -20,7 +20,44 @@ const view = {
       },
     },
     completionReason: 'standard',
-    events: [],
+    rounds: [{
+      accessSlots: [{ assignedSlot: 1, playerId: 'player-a', requestedSlot: 1, resolution: 'confirmed' }],
+      contracts: [{
+        contractId: 'contract-1',
+        evidenceTestIds: ['r1-t1'],
+        outcome: 'awarded',
+        playerId: 'player-a',
+        ratingAward: 4,
+      }],
+      laboratory: [{
+        mode: 'broad',
+        playerId: 'player-a',
+        resolution: 'completed',
+        tests: [{
+          playerId: 'player-a',
+          protocol: 'impulse',
+          publicResult: 'reflection',
+          receiverSignal: 'boreal',
+          sourceSignal: 'aster',
+          testId: 'r1-t1',
+          usedByContractId: 'contract-1',
+        }],
+      }],
+      powerAllocations: [{
+        allocation: {
+          contracts: 1,
+          laboratory: 2,
+          modelAnalysis: 1,
+          reconnaissance: 0,
+        },
+        playerId: 'player-a',
+        resolution: 'confirmed',
+      }],
+      ratingChanges: [{ playerId: 'player-a', points: 4, source: 'contract' }],
+      reconnaissance: [{ playerId: 'player-b', resolution: 'timeout', targets: [] }],
+      round: 1,
+      theses: [],
+    }],
     finalScientificModelsByPlayer: {
       'player-a': {
         signals: {
@@ -114,4 +151,10 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('Официальные финальные модели')
   expect(html).toContain('Финальная модель не отправлена')
   expect(html).toContain('Фильтр итогового аудита по игроку')
+  expect(html).toContain('Раунд 1')
+  expect(html).toContain('Распределение Мощности')
+  expect(html).toContain('Широкое исследование')
+  expect(html).toContain('r1-t1')
+  expect(html).toContain('contract-1')
+  expect(html).toContain('Тайм-аут')
 })

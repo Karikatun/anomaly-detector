@@ -221,6 +221,7 @@ export function FinalScientificModelPanel({
                     {fieldTypes.map((fieldType) => (
                       <button
                         aria-label={`${signalName}: тип поля ${t(fieldTypeLabelKeys[fieldType])}`}
+                        aria-pressed={claim?.fieldType === fieldType}
                         key={fieldType}
                         type="button"
                         disabled={formDisabled}
@@ -241,6 +242,7 @@ export function FinalScientificModelPanel({
                     {polarities.map((polarity) => (
                       <button
                         aria-label={`${signalName}: полярность ${t(polarityLabelKeys[polarity])}`}
+                        aria-pressed={claim?.polarity === polarity}
                         key={polarity}
                         type="button"
                         disabled={formDisabled}

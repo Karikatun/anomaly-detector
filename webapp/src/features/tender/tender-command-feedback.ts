@@ -55,7 +55,15 @@ export function getTenderCommandErrorKey(context: CommandErrorContext): Translat
   if (context.error instanceof ApiRequestError && context.error.code === 'TENDER_DEADLINE_EXPIRED') {
     return 'tender.command.deadlineExpired'
   }
-  if (context.error instanceof ApiRequestError && context.error.code === 'CONFLICT') {
+  if (context.error instanceof ApiRequestError && context.error.code === 'TENDER_EVIDENCE_UNAVAILABLE') {
+    return 'tender.command.evidenceUnavailable'
+  }
+  if (context.error instanceof ApiRequestError && (
+    context.error.code === 'CONFLICT'
+    || context.error.code === 'TENDER_ACTION_UNAVAILABLE'
+    || context.error.code === 'TENDER_COMMAND_CONFLICT'
+    || context.error.code === 'TENDER_VERSION_CONFLICT'
+  )) {
     return 'tender.command.conflict'
   }
   return 'tender.command.fallback'

@@ -70,7 +70,9 @@ export function ContractsPanel({
     entry.playerId === playerId && !privateUsedContractEvidenceTestIds.includes(entry.testId),
   )
   const reservedContract = contracts.find((contract) => contract.reservedByPlayerId === playerId)
-  const eligibleContracts = contracts.filter((contract) => contract.eligibleForPlayer)
+  const eligibleContracts = contracts.filter((contract) =>
+    contract.planning?.eligible ?? contract.eligibleForPlayer,
+  )
   const hasSubmittedContract = contracts.some((contract) =>
     contract.reservedByPlayerId === playerId && contract.bidOutcome !== undefined,
   )
@@ -128,9 +130,14 @@ export function ContractsPanel({
               const reservedBySelf = contract.reservedByPlayerId === playerId
               const reservedByName = players.find((candidate) => candidate.playerId === contract.reservedByPlayerId)?.displayName
               const target = contract.targetSignal
+              const planning = contract.planning
               const targetRole = contract.targetRole ?? 'source'
               const targetKey = targetRole === 'source' ? 'sourceSignal' : 'receiverSignal'
-              const targetEvidence = ownJournal.filter((entry) => entry[targetKey] === target)
+              const suitableEvidenceIds = new Set(planning?.suitableEvidenceTestIds ?? [])
+              const targetEvidence = ownJournal.filter((entry) =>
+                entry[targetKey] === target
+                && (planning === undefined || suitableEvidenceIds.has(entry.testId)),
+              )
               const primaryEvidence = targetEvidence.filter((entry) => entry.publicResult === contract.requiredPublicResult)
               const secondaryResult = contract.requiredSecondaryPublicResult
                 ?? (contract.requiredPublicResult === 'reflection' ? 'attenuation' : 'reflection')
@@ -142,19 +149,27 @@ export function ContractsPanel({
               const selectedPrimaryEvidence = primaryEvidence.find((entry) => entry.testId === bid.evidenceTestIds[0])
               const requiresSecondaryEvidence = (kind === 'complex' || kind === 'final')
                 && Boolean(selectedPrimaryEvidence && selectedPrimaryEvidence.protocol !== 'continuous')
-              const fittingCertifications = certifications.filter((signal) => signal === target)
-              const hasSuitableResearch = kind === 'scientific'
-                ? fittingCertifications.length > 0
-                : kind === 'light'
-                  ? primaryEvidence.length > 0
-                  : primaryEvidence.some((entry) => entry.protocol === 'continuous')
-                    || (primaryEvidence.length > 0 && secondaryEvidence.length > 0)
+              const suitableCertificationSignals = new Set(
+                planning?.suitableResearchCertificationSignals ?? [],
+              )
+              const fittingCertifications = certifications.filter((signal) =>
+                signal === target
+                && (planning === undefined || suitableCertificationSignals.has(signal)),
+              )
+              const hasSuitableResearch = planning
+                ? planning.eligible
+                : kind === 'scientific'
+                  ? fittingCertifications.length > 0
+                  : kind === 'light'
+                    ? primaryEvidence.length > 0
+                    : primaryEvidence.some((entry) => entry.protocol === 'continuous')
+                      || (primaryEvidence.length > 0 && secondaryEvidence.length > 0)
               const bidIsComplete = kind === 'scientific'
                 ? Boolean(bid.researchCertificationSignal)
                 : bid.evidenceTestIds.length > 0
                   && (!requiresSecondaryEvidence || bid.evidenceTestIds.length === 2)
               const canChooseResearch = Boolean(
-                (contract.eligibleForPlayer || reservedBySelf)
+                ((planning?.eligible ?? contract.eligibleForPlayer) || reservedBySelf)
                 && !reservedByOther
                 && !hasSubmittedContract
                 && contract.bidOutcome === undefined,

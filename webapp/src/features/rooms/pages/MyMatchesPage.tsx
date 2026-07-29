@@ -108,6 +108,11 @@ function MyMatchesContent() {
                         <span className={styles.statusDot} aria-hidden="true" />
                         {status}
                       </Typography>
+                      {match.tenderRuleset && (
+                        <Typography variant="caption" tone="muted">
+                          {t('rules.ruleset', { version: match.tenderRuleset === 'tender-v2' ? '2' : '1' })}
+                        </Typography>
+                      )}
                     </div>
                     <div className={styles.actionCell}>
                       {match.tenderId && (!match.tenderForfeited || isComplete) ? (

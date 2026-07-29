@@ -55,6 +55,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         tenderCompletionReason: readTenderCompletionReason(room.tender?.state),
         tenderForfeited: readTenderForfeited(room.tender?.state, userId),
         tenderPhase: room.tender?.phase,
+        tenderRuleset: readTenderRuleset(room.tender?.state),
       }))
     },
     async readCurrentForMember(userId) {
@@ -94,6 +95,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           tenderCompletionReason: readTenderCompletionReason(current.room.tender?.state),
           tenderForfeited: readTenderForfeited(current.room.tender?.state, userId),
           tenderPhase: current.room.tender?.phase,
+          tenderRuleset: readTenderRuleset(current.room.tender?.state),
         }
       }, { isolationLevel: 'Serializable' })
     },
@@ -125,6 +127,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         tenderCompletionReason: readTenderCompletionReason(room.tender?.state),
         tenderForfeited: readTenderForfeited(room.tender?.state, input.actorId),
         tenderPhase: room.tender?.phase,
+        tenderRuleset: readTenderRuleset(room.tender?.state),
       }
     },
     async create(input) {
@@ -431,6 +434,18 @@ function readTenderCompletionReason(state: Prisma.JsonValue | undefined) {
     return state.completionReason
   }
   return undefined
+}
+
+function readTenderRuleset(state: Prisma.JsonValue | undefined) {
+  if (
+    typeof state === 'object'
+    && state !== null
+    && !Array.isArray(state)
+    && (state.ruleset === 'tender-v1' || state.ruleset === 'tender-v2')
+  ) {
+    return state.ruleset
+  }
+  return state === undefined ? undefined : 'tender-v1'
 }
 
 function readTenderForfeited(state: Prisma.JsonValue | undefined, userId: string) {

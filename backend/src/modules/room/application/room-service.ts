@@ -77,6 +77,7 @@ export class TenderRoomService {
       ...(room.tenderCompletionReason === undefined ? {} : { tenderCompletionReason: room.tenderCompletionReason }),
       ...(room.tenderForfeited ? { tenderForfeited: true } : {}),
       ...(room.tenderPhase === undefined ? {} : { tenderPhase: room.tenderPhase }),
+      ...(room.tenderRuleset === undefined ? {} : { tenderRuleset: room.tenderRuleset }),
     }
   }
 }

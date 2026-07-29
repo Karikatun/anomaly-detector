@@ -218,6 +218,153 @@ export function CompletedTenderPanel({ view }: Props) {
         </NativeSelect>
       </label>
 
+      <section className={styles.section} aria-labelledby="completed-rounds-heading">
+        <div className={styles.sectionHeader}>
+          <span>
+            <Typography id="completed-rounds-heading" as="h3" variant="bodySmMedium">
+              Аудит по раундам
+            </Typography>
+            <Typography variant="caption" tone="muted">
+              Фактический порядок действий, тайм-аутов, доказательств и начислений
+            </Typography>
+          </span>
+        </div>
+        <div className={styles.auditPlayerList}>
+          {view.audit.rounds.map((round) => {
+            const includesPlayer = (playerId: string) =>
+              selectedPlayerId === 'all' || selectedPlayerId === playerId
+            return (
+              <details
+                key={round.round}
+                className={styles.auditPlayer}
+                data-audit-round={round.round}
+                open={round.round === view.audit.rounds.length}
+              >
+                <summary>
+                  <Typography as="strong" variant="bodySmMedium">Раунд {round.round}</Typography>
+                </summary>
+
+                <Typography as="h4" variant="bodySmMedium">Слоты доступа</Typography>
+                <ul className={styles.auditEntries}>
+                  {round.accessSlots.filter((entry) => includesPlayer(entry.playerId)).map((entry) => (
+                    <li key={`slot-${entry.playerId}`}>
+                      <Typography variant="caption">
+                        {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
+                        {': '}
+                        {entry.resolution === 'timeout' ? 'Тайм-аут' : `запрошен ${entry.requestedSlot ?? '—'}`}
+                        {' → назначен '}
+                        {entry.assignedSlot ?? '—'}
+                      </Typography>
+                    </li>
+                  ))}
+                </ul>
+
+                <Typography as="h4" variant="bodySmMedium">Распределение Мощности</Typography>
+                <ul className={styles.auditEntries}>
+                  {round.powerAllocations.filter((entry) => includesPlayer(entry.playerId)).map((entry) => (
+                    <li key={`power-${entry.playerId}`}>
+                      <Typography variant="caption">
+                        {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
+                        {entry.resolution === 'timeout' ? ': Тайм-аут · ' : ': '}
+                        Разведка {entry.allocation.reconnaissance} · Лаборатория {entry.allocation.laboratory}
+                        {' · '}Анализ {entry.allocation.modelAnalysis} · Контракты {entry.allocation.contracts}
+                        {' · '}Не распределено {entry.allocation.reserve ?? 0}
+                      </Typography>
+                    </li>
+                  ))}
+                </ul>
+
+                <Typography as="h4" variant="bodySmMedium">Разведка</Typography>
+                <ul className={styles.auditEntries}>
+                  {round.reconnaissance.filter((entry) => includesPlayer(entry.playerId)).map((entry) => (
+                    <li key={`recon-${entry.playerId}`}>
+                      <Typography variant="caption">
+                        {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
+                        {entry.resolution === 'timeout'
+                          ? ': Тайм-аут'
+                          : `: ${entry.targets.join(', ') || 'без новых Сигналов'}`}
+                      </Typography>
+                    </li>
+                  ))}
+                </ul>
+
+                <Typography as="h4" variant="bodySmMedium">Лаборатория</Typography>
+                <ul className={styles.auditEntries}>
+                  {round.laboratory.filter((entry) => includesPlayer(entry.playerId)).map((entry, index) => (
+                    <li key={`lab-${entry.playerId}-${index}`}>
+                      <Typography as="strong" variant="caption">
+                        {entry.resolution === 'timeout'
+                          ? 'Тайм-аут'
+                          : entry.mode === 'broad'
+                            ? 'Широкое исследование'
+                            : entry.mode === 'deep' ? 'Глубокое исследование' : 'Импульсный опыт'}
+                      </Typography>
+                      {entry.tests.map((test) => (
+                        <Typography key={test.testId} variant="caption">
+                          {test.testId}: {t(signalLabelKeys[test.sourceSignal])} → {t(signalLabelKeys[test.receiverSignal])}
+                          {' · '}{t(`tender.result.${test.publicResult}`)}
+                          {test.usedByContractId ? ` · использован в ${test.usedByContractId}` : ''}
+                        </Typography>
+                      ))}
+                      {entry.privateMeasurements?.map((measurement) => (
+                        <Typography
+                          key={`${measurement.sourceSignal}-${measurement.receiverSignal}`}
+                          variant="caption"
+                          tone="muted"
+                        >
+                          Приватное измерение: {measurement.polarityRelation === 'same'
+                            ? 'одинаковые полярности'
+                            : 'разные полярности'}
+                        </Typography>
+                      ))}
+                    </li>
+                  ))}
+                </ul>
+
+                <Typography as="h4" variant="bodySmMedium">Тезисы</Typography>
+                <ul className={styles.auditEntries}>
+                  {round.theses.filter((entry) => includesPlayer(entry.playerId)).map((entry) => (
+                    <li key={entry.id}>
+                      <Typography variant="caption">
+                        {t(signalLabelKeys[entry.signalId])}: тип {entry.fieldTypeCorrect ? 'верно' : 'неверно'},
+                        {' '}полярность {entry.polarityCorrect ? 'верно' : 'неверно'}
+                      </Typography>
+                    </li>
+                  ))}
+                </ul>
+
+                <Typography as="h4" variant="bodySmMedium">Контракты</Typography>
+                <ul className={styles.auditEntries}>
+                  {round.contracts.filter((entry) => includesPlayer(entry.playerId)).map((entry, index) => (
+                    <li key={`${entry.playerId}-${entry.contractId ?? entry.outcome}-${index}`}>
+                      <Typography variant="caption">
+                        {entry.outcome === 'timeout_released'
+                          ? `Резерв ${entry.contractId ?? ''} освобождён по тайм-ауту`
+                          : entry.outcome === 'skipped'
+                            ? 'Контракт пропущен: подходящих доказательств нет'
+                            : `${entry.contractId}: выполнен · доказательства ${entry.evidenceTestIds.join(', ') || entry.researchCertificationSignal || '—'}`}
+                      </Typography>
+                    </li>
+                  ))}
+                </ul>
+
+                <Typography as="h4" variant="bodySmMedium">Рейтинг</Typography>
+                <ul className={styles.auditEntries}>
+                  {round.ratingChanges.filter((entry) => includesPlayer(entry.playerId)).map((entry, index) => (
+                    <li key={`${entry.playerId}-${entry.source}-${index}`}>
+                      <Typography variant="caption">
+                        {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
+                        {`: ${entry.points >= 0 ? '+' : ''}${entry.points} · ${entry.source}`}
+                      </Typography>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )
+          })}
+        </div>
+      </section>
+
       <section className={styles.section} aria-labelledby="completed-theses-heading">
         <div className={styles.sectionHeader}>
           <span>

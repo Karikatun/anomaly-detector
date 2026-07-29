@@ -24,6 +24,7 @@ import { ProtectedPage, useAuth } from '@/features/auth'
 import { profileQueryKeys } from '@/features/profile'
 import { roomQueryKeys } from '@/features/rooms'
 import { LaboratoryInterpretationDialog, RulesReferenceDialog } from '@/features/rules'
+import { ApiRequestError } from '@/platform/api'
 import { useI18n } from '@/platform/i18n'
 import type { TranslationKey } from '@/platform/i18n/translations'
 import { useSynchronizedCountdown } from '@/platform/time/synchronized-countdown'
@@ -61,6 +62,8 @@ import {
   getWaitingForTurnDescription,
 } from './tender-command-feedback'
 import styles from './TenderPage.module.css'
+import type { WorkingModelSaveStatus } from './working-model-draft'
+import { tenderRulesetPolicy } from './ruleset-policy'
 
 const phaseLabels: Record<string, string> = {
   'access-slot-selection': '1. Выбор слота доступа',
@@ -107,22 +110,38 @@ function WaitingForTurn({
   )
 }
 
-function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, activePlayerId }: {
+function PhasePanel({
+  view,
+  disabled,
+  error,
+  onCommand,
+  onSaveWorkingModel,
+  activePlayerId,
+  workingModelDialog,
+}: {
   view: TenderView
   disabled: boolean
   error: string | null
   onCommand: (cmd: TenderCommandInput) => Promise<void>
   onSaveWorkingModel: (workingModel: TenderView['privateWorkingModel']) => Promise<void>
   activePlayerId?: string
+  workingModelDialog: {
+    onOpenChange: (open: boolean) => void
+    onSaveStatusChange: (status: WorkingModelSaveStatus) => void
+    open: boolean
+    openDisabled: boolean
+    showTimerWarning: boolean
+  }
 }) {
   const auth = useAuth()
   const myPlayer = view.players.find((p) => p.playerId === auth.user?.id)
   const mySamples = myPlayer ? view.privateSamples : []
   const myPower = myPlayer?.powerAllocation
   const activePlayer = view.players.find((player) => player.playerId === activePlayerId)
-  const isSharedModelAnalysis = view.phase === 'model-analysis' && view.ruleset === 'tender-v2'
+  const policy = tenderRulesetPolicy(view.ruleset)
+  const isSharedModelAnalysis = view.phase === 'model-analysis' && policy.sharedModelAnalysis
   const isSharedFinalScientificModel = view.phase === 'final-scientific-model'
-    && view.ruleset === 'tender-v2'
+    && policy.sharedFinalScientificModel
   const isWaitingForTurn = sequentialPhases.has(view.phase)
     && !isSharedModelAnalysis
     && !isSharedFinalScientificModel
@@ -197,7 +216,7 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           disabled={disabled || isWaitingForTurn}
           error={error}
           onConfirm={(laboratory) => {
-            if (view.ruleset === 'tender-v1') {
+            if (!policy.versionedLaboratory) {
               const pair = laboratory.mode === 'broad'
                 ? laboratory.pairs[0]
                 : laboratory.pair
@@ -229,6 +248,8 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           ruleset={view.ruleset}
           disabled={disabled || isWaitingForTurn || myPlayer?.modelAnalysisCompleted}
           workingModelDisabled={disabled}
+          workingModelDialog={workingModelDialog}
+          workingModelSignals={mySamples}
           error={error}
           onConfirmThesis={(input) => onCommand({ type: 'submit-thesis', ...input })}
           onFinish={() => onCommand({ type: 'finish-model-analysis' })}
@@ -333,11 +354,13 @@ function TenderContent() {
   const [rulesOpen, setRulesOpen] = useState(false)
   const [laboratoryHelpOpen, setLaboratoryHelpOpen] = useState(false)
   const [exitOpen, setExitOpen] = useState(false)
+  const [workingModelOpen, setWorkingModelOpen] = useState(false)
+  const [workingModelSaveError, setWorkingModelSaveError] = useState<string | null>(null)
   const commandInFlightRef = useRef<{ promise: Promise<void>; token: symbol } | null>(null)
   const headerRef = useRef<HTMLElement>(null)
   const primaryContentRef = useRef<HTMLDivElement>(null)
   const latestTenderViewRef = useRef(tenderView)
-  const previousActivePlayerIdRef = useRef<string | undefined>(undefined)
+  const previousSequentialTurnRef = useRef<string | undefined>(undefined)
   const leavingTenderIdRef = useRef<string | null>(null)
   const resumingTenderIdRef = useRef<string | null>(null)
 
@@ -396,18 +419,22 @@ function TenderContent() {
 
   useEffect(() => {
     const activePlayerId = tenderView?.activePlayerId
-    const previousActivePlayerId = previousActivePlayerIdRef.current
-    previousActivePlayerIdRef.current = activePlayerId
+    const turnKey = tenderView && sequentialPhases.has(tenderView.phase)
+      ? `${tenderView.phase}:${activePlayerId ?? ''}`
+      : undefined
+    const previousTurnKey = previousSequentialTurnRef.current
+    previousSequentialTurnRef.current = turnKey
     if (
       !tenderView
-      || previousActivePlayerId === undefined
-      || previousActivePlayerId === activePlayerId
+      || previousTurnKey === undefined
+      || previousTurnKey === turnKey
       || activePlayerId !== auth.user?.id
       || !sequentialPhases.has(tenderView.phase)
     ) return
     requestAnimationFrame(() => {
       setRulesOpen(false)
       setLaboratoryHelpOpen(false)
+      setWorkingModelOpen(false)
       primaryContentRef.current?.focus()
     })
   }, [auth.user?.id, tenderView])
@@ -423,6 +450,9 @@ function TenderContent() {
         try {
           await execute(command)
         } catch (err) {
+          if (err instanceof ApiRequestError && err.code === 'TENDER_EVIDENCE_UNAVAILABLE') {
+            retry()
+          }
           const messageKey = getTenderCommandErrorKey({
             actorId: auth.user?.id ?? '',
             command,
@@ -446,7 +476,7 @@ function TenderContent() {
       commandInFlightRef.current = { promise, token }
       return promise
     },
-    [auth.user?.id, execute, t],
+    [auth.user?.id, execute, retry, t],
   )
   const saveWorkingModel = useCallback(
     async (workingModel: TenderView['privateWorkingModel']) => {
@@ -510,10 +540,11 @@ function TenderContent() {
   const myPlayer = tenderView.players.find((p) => p.playerId === auth.user?.id)
   const mySlot = myPlayer?.accessSlot
   const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
+  const policy = tenderRulesetPolicy(tenderView.ruleset)
   const isSharedModelAnalysis = tenderView.phase === 'model-analysis'
-    && tenderView.ruleset === 'tender-v2'
+    && policy.sharedModelAnalysis
   const isSharedFinalScientificModel = tenderView.phase === 'final-scientific-model'
-    && tenderView.ruleset === 'tender-v2'
+    && policy.sharedFinalScientificModel
   const isSharedOperationalPhase = isSharedModelAnalysis || isSharedFinalScientificModel
   const isSequentialPhase = sequentialPhases.has(tenderView.phase) && !isSharedOperationalPhase
   const isMyTurn = !isSequentialPhase || tenderView.activePlayerId === auth.user?.id
@@ -542,6 +573,11 @@ function TenderContent() {
           : !myPlayer?.finalScientificModelSubmitted
         : isSequentialPhase && isMyTurn
   const referenceHelpUrgentlyLocked = hasPendingAction && remainingSeconds <= 10
+  const referenceHelpLockedForTurn = isSequentialPhase && isMyTurn && Boolean(hasPendingAction)
+  const referenceHelpLocked = referenceHelpUrgentlyLocked || referenceHelpLockedForTurn
+  const handleWorkingModelSaveStatus = (status: WorkingModelSaveStatus) => {
+    setWorkingModelSaveError(status.state === 'error' ? status.message : null)
+  }
 
   return (
     <section className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}>
@@ -594,9 +630,9 @@ function TenderContent() {
           )}
           <RulesReferenceDialog
             belowTenderHeader
-            disabled={referenceHelpUrgentlyLocked}
+            disabled={referenceHelpLocked}
             onOpenChange={setRulesOpen}
-            open={rulesOpen && !referenceHelpUrgentlyLocked}
+            open={rulesOpen && !referenceHelpLocked}
             showTimerWarning={!isComplete}
             ruleset={tenderView.ruleset}
             triggerClassName={styles.rulesAction}
@@ -605,9 +641,10 @@ function TenderContent() {
           />
           <LaboratoryInterpretationDialog
             belowTenderHeader
-            disabled={referenceHelpUrgentlyLocked}
+            disabled={referenceHelpLocked}
             onOpenChange={setLaboratoryHelpOpen}
-            open={laboratoryHelpOpen && !referenceHelpUrgentlyLocked}
+            open={laboratoryHelpOpen && !referenceHelpLocked}
+            ruleset={tenderView.ruleset}
             showTimerWarning={!isComplete}
             triggerClassName={styles.laboratoryAction}
             triggerTextClassName={styles.headerActionLabel}
@@ -664,6 +701,11 @@ function TenderContent() {
             onRetry={retry}
           />
         )}
+        {workingModelSaveError && (
+          <Typography role="alert" variant="bodySm" tone="destructive">
+            {workingModelSaveError}
+          </Typography>
+        )}
 
         <TenderPhaseLayout
           progress={isOperationalPhase
@@ -692,6 +734,13 @@ function TenderContent() {
               onCommand={handleCommand}
               onSaveWorkingModel={saveWorkingModel}
               activePlayerId={tenderView.activePlayerId}
+              workingModelDialog={{
+                onOpenChange: setWorkingModelOpen,
+                onSaveStatusChange: handleWorkingModelSaveStatus,
+                open: workingModelOpen && !referenceHelpLocked,
+                openDisabled: referenceHelpLocked,
+                showTimerWarning: !isComplete,
+              }}
             />
 
             {isLaboratoryPhase && (
@@ -707,15 +756,25 @@ function TenderContent() {
           supporting={showGenericTools || showContractPlanning || showMobileAnalysisResearchData
             ? (
                 <>
-                  {showContractPlanning && <ContractPlanningPanel view={tenderView} />}
+                  {showContractPlanning && (
+                    <ContractPlanningPanel
+                      closeSheet={referenceHelpUrgentlyLocked}
+                      view={tenderView}
+                    />
+                  )}
                   {showGenericTools && (
                     <>
                   <WorkingModelWorkspace
                     disabled={!connected}
                     inlineOnDesktop
-                    knownSignals={tenderView.knownSignals}
+                    knownSignals={tenderView.privateSamples}
                     model={tenderView.privateWorkingModel}
                     onSave={saveWorkingModel}
+                    onOpenChange={setWorkingModelOpen}
+                    onSaveStatusChange={handleWorkingModelSaveStatus}
+                    open={workingModelOpen && !referenceHelpLocked}
+                    openDisabled={referenceHelpLocked}
+                    showTimerWarning={!isComplete}
                   />
                   <TenderResearchData view={tenderView} />
                     </>

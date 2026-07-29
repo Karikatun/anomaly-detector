@@ -61,19 +61,20 @@ async function expectWorkingModelTableToStayStillWhileSaving(page: Page) {
   const dialog = page.getByRole('dialog')
   const table = dialog.getByTestId('working-model-table')
   const fieldButton = dialog.getByRole('button', {
-    name: 'Aster: гипотеза, тип поля Инерционное',
-  })
+    name: /: гипотеза, тип поля Инерционное$/,
+  }).first()
   const before = await table.boundingBox()
   expect(before).not.toBeNull()
 
   await fieldButton.click()
-  await expect(dialog.getByRole('status')).toHaveText('Сохраняем рабочую модель…')
+  const savingStatus = dialog.getByText('Сохраняем рабочую модель…', { exact: true })
+  await expect(savingStatus).toBeVisible()
   const during = await table.boundingBox()
   expect(during).not.toBeNull()
   expect(during!.y).toBe(before!.y)
   expect(during!.height).toBe(before!.height)
 
-  await expect(dialog.getByRole('status')).toBeHidden()
+  await expect(savingStatus).toBeHidden()
   await page.unrouteAll({ behavior: 'wait' })
 }
 
@@ -111,16 +112,22 @@ test('keeps the Working Model dialog below the Tender header and inside the view
     await allocateReconnaissance(guestPage)
 
     await expect(page.getByRole('heading', { name: '3. Разведка' })).toBeVisible()
-    await page.getByRole('button', { name: /Рабочая модель/ }).click()
+    const workingModelButton = page.getByRole('button', { name: /Рабочая модель/ })
+    await expect(workingModelButton).toBeDisabled()
+    await page.getByRole('button', { name: /^Сигнал для разведки:/ }).first().click()
+    await page.getByRole('button', { name: 'Исследовать' }).click()
+    await expect(guestPage.getByRole('heading', { name: '3. Разведка' })).toBeVisible()
+    await expect(workingModelButton).toBeEnabled()
+    await workingModelButton.click()
     await expectWorkingModelTableToStayStillWhileSaving(page)
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog')).toBeHidden()
 
-    await page.getByRole('button', { name: /Рабочая модель/ }).click()
+    await workingModelButton.click()
     await expectDialogInsideViewport(page)
 
     await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }))
-    await page.getByRole('button', { name: /Рабочая модель/ }).click()
+    await workingModelButton.click()
     await expectDialogInsideViewport(page)
 
     await page.setViewportSize({ width: 1280, height: 720 })

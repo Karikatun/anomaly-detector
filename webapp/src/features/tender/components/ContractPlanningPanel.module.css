@@ -6,14 +6,13 @@
   background: rgba(20, 10, 36, .48);
 }
 
-.panel > summary {
+.summary {
   display: flex;
   min-height: 2.75rem;
   align-items: center;
   justify-content: space-between;
   gap: .75rem;
   padding: .65rem .75rem;
-  cursor: pointer;
 }
 
 .list {
@@ -57,12 +56,40 @@
   grid-column: 1 / -1;
 }
 
-@media (min-width: 64rem) {
-  .panel > summary {
-    cursor: default;
-  }
+.missingConditions {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: .125rem;
+  margin: 0;
+  padding-inline-start: 1rem;
+}
 
-  .panel:not([open]) .list {
-    display: grid;
+@media (min-width: 64rem) {
+  .mobileTrigger,
+  .nearest {
+    display: none;
   }
+}
+
+@media (max-width: 63.999rem) {
+  .desktopPanel {
+    display: none;
+  }
+}
+
+.mobileTrigger {
+  width: 100%;
+}
+
+.nearest {
+  display: block;
+  padding: .35rem .25rem 0;
+}
+
+.sheet {
+  bottom: 0;
+  left: 0;
+  max-height: min(78dvh, 42rem);
+  overflow-y: auto;
+  border-radius: 1.25rem 1.25rem 0 0;
 }

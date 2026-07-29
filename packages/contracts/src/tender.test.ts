@@ -399,12 +399,26 @@ describe('Tender contracts', () => {
         },
       },
       completionReason: 'standard',
-      events: [{
-        actorId: 'player-a',
-        commandId: 'command-a-4',
-        kind: 'laboratory_test_completed',
-        payload: { playerId: 'player-a', protocol: 'continuous' },
-        sequence: 1,
+      rounds: [{
+        accessSlots: [],
+        contracts: [],
+        laboratory: [{
+          mode: 'deep',
+          playerId: 'player-a',
+          tests: [{
+            playerId: 'player-a',
+            protocol: 'continuous',
+            publicResult: 'transmission_gain',
+            receiverSignal: 'cinder',
+            sourceSignal: 'aster',
+            testId: 'r1-t1',
+          }],
+        }],
+        powerAllocations: [],
+        ratingChanges: [],
+        reconnaissance: [],
+        round: 1,
+        theses: [],
       }],
       finalScientificModelsByPlayer: {
         'player-a': {
@@ -445,10 +459,38 @@ describe('Tender contracts', () => {
       }],
       ruleset: 'tender-v2',
     })).toMatchObject({
-      events: [{ kind: 'laboratory_test_completed', sequence: 1 }],
+      rounds: [{ laboratory: [{ mode: 'deep', tests: [{ testId: 'r1-t1' }] }], round: 1 }],
       ratingBreakdownByPlayer: {
         'player-a': { contractPoints: 4, thesisPoints: 2, total: 21 },
       },
     })
+
+    expect(tenderAuditViewSchema.safeParse({
+      anomalyConfiguration: {
+        seed: 'seed-1',
+        signals: {
+          aster: { fieldType: 'inertial', polarity: 'positive' },
+          boreal: { fieldType: 'inertial', polarity: 'negative' },
+          cinder: { fieldType: 'electromagnetic', polarity: 'positive' },
+          delta: { fieldType: 'electromagnetic', polarity: 'negative' },
+          eclipse: { fieldType: 'phase', polarity: 'positive' },
+          ferro: { fieldType: 'phase', polarity: 'negative' },
+        },
+      },
+      completionReason: 'standard',
+      events: [{
+        kind: 'working_model_updated',
+        payload: { workingModel: { signals: { aster: { note: 'secret' } } } },
+        sequence: 1,
+      }],
+      finalScientificModelsByPlayer: {},
+      forfeitedAtByPlayer: {},
+      placementByPlayer: {},
+      privateMeasurementsByPlayer: {},
+      privateThesesByPlayer: {},
+      publicLaboratoryResults: [],
+      ratingBreakdownByPlayer: {},
+      ruleset: 'tender-v2',
+    }).success).toBe(false)
   })
 })

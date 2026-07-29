@@ -13,6 +13,7 @@ import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
 import { runTenderAction } from './run-tender-action'
+import { tenderRulesetPolicy } from './ruleset-policy'
 
 type LaboratoryPanelProps = {
   mySamples: SignalId[]
@@ -38,8 +39,9 @@ export function LaboratoryPanel({
   onConfirm,
 }: LaboratoryPanelProps) {
   const [selectedSamples, setSelectedSamples] = useState<SignalId[]>([])
+  const policy = tenderRulesetPolicy(ruleset)
   const [mode, setMode] = useState<'broad' | 'deep' | 'impulse' | null>(
-    powerAllocation === 1 ? 'impulse' : ruleset === 'tender-v1' ? 'deep' : null,
+    powerAllocation === 1 ? 'impulse' : policy.versionedLaboratory ? null : 'deep',
   )
   const [firstBroadPair, setFirstBroadPair] = useState<{
     receiverSignal: SignalId
@@ -104,7 +106,7 @@ export function LaboratoryPanel({
             <Typography as="span" variant="caption" className={styles.sectionMeta}>{mySamples.length} доступно</Typography>
           </div>
 
-          {powerAllocation === 2 && ruleset !== 'tender-v1' && (
+          {powerAllocation === 2 && policy.versionedLaboratory && (
             <div className={styles.laboratoryModeSwitch} role="group" aria-label={t('tender.lab.mode.aria')}>
               <button
                 type="button"
