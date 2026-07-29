@@ -9,6 +9,13 @@ const accents: Record<SignalId, string> = {
   ferro: '#21d4dc',
 }
 
+export const contractKindAccents = {
+  light: '#38bdf8',
+  complex: '#f29a38',
+  scientific: '#bd72f4',
+  final: '#f3bd42',
+} as const
+
 export function signalAccent(signal: SignalId) {
   return accents[signal]
 }

@@ -1,4 +1,5 @@
 import type { TenderView } from '@anomaly-detector/contracts'
+import type { CSSProperties } from 'react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,10 @@ import {
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { signalLabelKeys } from '../catalog'
+import { SignalGlyph } from './SignalGlyph'
+import { contractKindAccents, signalAccent } from './signal-visuals'
 import styles from './ContractPlanningPanel.module.css'
+import phaseStyles from './PhasePanel.module.css'
 
 const missingConditionKeys = {
   already_resolved: 'tender.contractPlanning.missing.alreadyResolved',
@@ -41,68 +45,106 @@ export function ContractPlanningPanel({
       {contracts.map((contract) => {
         const kind = contract.kind ?? 'light'
         const planning = contract.planning
+        const target = contract.targetSignal
+        const contractStyle = {
+          '--contract-accent': contractKindAccents[kind],
+          ...(target ? { '--signal-accent': signalAccent(target) } : {}),
+        } as CSSProperties
+        const planningDetail = planning?.suitableEvidenceTestIds.length
+          ? t('tender.contractPlanning.evidence', {
+              count: planning.suitableEvidenceTestIds.length,
+            })
+          : planning?.suitableResearchCertificationSignals.length
+            ? t('tender.contractPlanning.certification')
+            : t('tender.contractPlanning.missing')
         return (
-          <article key={contract.contractId} className={styles.contract}>
-            <span>
-              <Typography as="strong" variant="bodySmMedium">
-                {t(`tender.contracts.kind.${kind}`)}
-              </Typography>
-              <Typography as="span" variant="caption" tone="muted">
-                {contract.targetSignal
-                  ? t(signalLabelKeys[contract.targetSignal])
-                  : t('tender.contractPlanning.noTarget')}
-              </Typography>
-            </span>
-            <span className={styles.requirements}>
-              <Typography as="span" variant="caption">
-                {t('tender.contractPlanning.reward', { count: contract.ratingReward ?? 0 })}
-              </Typography>
-              <Typography as="span" variant="caption">
-                {t('tender.contractPlanning.power', { count: planning?.requiredPower ?? 1 })}
-              </Typography>
-              <Typography as="span" variant="caption">
-                {t(`tender.result.${contract.requiredPublicResult}`)}
-              </Typography>
-              {contract.requiredSecondaryPublicResult && (
+          <article
+            key={contract.contractId}
+            className={`${phaseStyles.contractCard} ${kind === 'final' ? phaseStyles.finalContract : ''}`}
+            style={contractStyle}
+          >
+            <header className={`${phaseStyles.contractHeader} ${styles.contractHeader}`}>
+              <SignalGlyph signal={target} className={phaseStyles.signalGlyph} />
+              <span className={phaseStyles.signalCopy}>
+                <Typography as="span" variant="caption" className={phaseStyles.contractKind}>
+                  {t(`tender.contracts.kind.${kind}`)}
+                </Typography>
+                <Typography as="strong" variant="bodySmMedium" className={phaseStyles.signalName}>
+                  {target
+                    ? `${t(signalLabelKeys[target])} · ${t(`tender.contracts.role.${contract.targetRole ?? 'source'}`)}`
+                    : t('tender.contractPlanning.noTarget')}
+                </Typography>
+              </span>
+              <span className={`${phaseStyles.contractReward} ${styles.contractReward}`}>
+                <Typography as="strong" variant="bodySmMedium">
+                  +{contract.ratingReward ?? 0}
+                </Typography>
                 <Typography as="span" variant="caption">
-                  {t(`tender.result.${contract.requiredSecondaryPublicResult}`)}
+                  {t('tender.contractPlanning.rating')}
                 </Typography>
+              </span>
+            </header>
+
+            <div className={phaseStyles.contractFacts}>
+              <span className={phaseStyles.contractFact}>
+                <Typography as="span" variant="caption">
+                  {t('tender.contractPlanning.result')}
+                </Typography>
+                <Typography as="span" variant="caption">
+                  {t(`tender.result.${contract.requiredPublicResult}`)}
+                </Typography>
+              </span>
+              {contract.requiredSecondaryPublicResult && (
+                <span className={phaseStyles.contractFact}>
+                  <Typography as="span" variant="caption">
+                    {t('tender.contractPlanning.additionalResult')}
+                  </Typography>
+                  <Typography as="span" variant="caption">
+                    {t(`tender.result.${contract.requiredSecondaryPublicResult}`)}
+                  </Typography>
+                </span>
               )}
-            </span>
-            <Typography
-              as="span"
-              variant="caption"
-              tone={planning?.eligible ? 'default' : 'muted'}
-              className={styles.eligibility}
-            >
-              {planning?.eligible
-                ? t('tender.contractPlanning.eligible')
-                : t('tender.contractPlanning.notEligible')}
-            </Typography>
-            {planning && (
-              <>
-                <Typography as="span" variant="caption" tone="muted" className={styles.eligibility}>
-                  {planning.suitableEvidenceTestIds.length > 0
-                    ? t('tender.contractPlanning.evidence', {
-                        count: planning.suitableEvidenceTestIds.length,
-                      })
-                    : planning.suitableResearchCertificationSignals.length > 0
-                      ? t('tender.contractPlanning.certification')
-                      : t('tender.contractPlanning.missing')}
+              <span className={phaseStyles.contractFact}>
+                <Typography as="span" variant="caption">
+                  {t('tender.contractPlanning.powerLabel')}
                 </Typography>
-                {planning.missingConditions.length > 0 && (
-                  <ul className={styles.missingConditions}>
-                    {planning.missingConditions.map((condition) => (
-                      <li key={condition}>
-                        <Typography variant="caption" tone="muted">
-                          {t(missingConditionKeys[condition])}
-                        </Typography>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
+                <Typography as="span" variant="caption">
+                  {planning?.requiredPower ?? 1}
+                </Typography>
+              </span>
+              <span className={phaseStyles.contractFact}>
+                <Typography as="span" variant="caption">
+                  {t('tender.contractPlanning.status')}
+                </Typography>
+                <Typography as="span" variant="caption">
+                  {planning?.eligible
+                    ? t('tender.contractPlanning.ready')
+                    : t('tender.contractPlanning.needsPreparation')}
+                </Typography>
+              </span>
+            </div>
+
+            <div className={styles.planningState} data-eligible={planning?.eligible || undefined}>
+              <Typography as="strong" variant="bodySmMedium">
+                {planning?.eligible
+                  ? t('tender.contractPlanning.eligible')
+                  : t('tender.contractPlanning.notEligible')}
+              </Typography>
+              <Typography variant="caption" tone="muted">
+                {planningDetail}
+              </Typography>
+              {planning && planning.missingConditions.length > 0 && (
+                <ul className={styles.missingConditions}>
+                  {planning.missingConditions.map((condition) => (
+                    <li key={condition}>
+                      <Typography variant="caption" tone="muted">
+                        {t(missingConditionKeys[condition])}
+                      </Typography>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </article>
         )
       })}
