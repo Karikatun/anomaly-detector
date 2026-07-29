@@ -456,6 +456,9 @@ export function createTenderModule({
           tender,
         })
       }
+      if (tender.dueAt !== null && now() >= tender.dueAt) {
+        throw new TenderFailure('tender_deadline_expired', 'Tender action deadline expired')
+      }
       if (command.type === 'request-access-slot') {
         if (tender.phase !== 'access-slot-selection') {
           throw new TenderFailure('invalid_tender_state', 'Access Slot selection is closed')

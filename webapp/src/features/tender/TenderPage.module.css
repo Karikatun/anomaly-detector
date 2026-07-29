@@ -19,3 +19,56 @@
   justify-content: flex-start;
   gap: 1rem;
 }
+
+.rulesAction {
+  min-height: 2.75rem;
+  border-color: rgba(43, 154, 255, .62);
+  color: #70bbff;
+  background: rgba(7, 39, 78, .56);
+}
+
+.laboratoryAction {
+  min-height: 2.75rem;
+  border-color: rgba(176, 98, 237, .62);
+  color: #d19aff;
+  background: rgba(64, 25, 96, .5);
+}
+
+.leaveAction {
+  min-height: 2.75rem;
+}
+
+@media (max-width: 47.999rem) {
+  .headerActions {
+    flex-wrap: nowrap;
+  }
+
+  .connectionBadge {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .headerActionLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .rulesAction,
+  .laboratoryAction {
+    width: 2.75rem;
+    min-width: 2.75rem;
+    padding-inline: 0;
+  }
+}

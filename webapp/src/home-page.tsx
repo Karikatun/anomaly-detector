@@ -141,8 +141,7 @@ function AuthenticatedHome({
           )}
           <MenuCard
             accent="plain"
-            title="МОИ МАТЧИ"
-            description="История ваших матчей и аудит"
+            title={t('matches.title').toUpperCase()}
             icon={File01Icon}
             onClick={() => void navigate({ to: '/app' })}
           />

@@ -9,6 +9,9 @@ export async function executeTender<T>(operation: () => Promise<T>): Promise<T> 
     if (error.kind === 'tender_not_found' || error.kind === 'player_not_in_tender') {
       throw new AppError(404, 'NOT_FOUND', 'Tender not found')
     }
+    if (error.kind === 'tender_deadline_expired') {
+      throw new AppError(409, 'TENDER_DEADLINE_EXPIRED', 'Tender action deadline expired')
+    }
     if (error.kind === 'duplicate_command_conflict' || error.kind === 'tender_version_conflict' || error.kind === 'invalid_tender_state') {
       throw new AppError(409, 'CONFLICT', error.message)
     }

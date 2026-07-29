@@ -217,6 +217,20 @@
 }
 
 @media (max-width: 30rem) {
+  .signalGlyph {
+    width: 2.15rem;
+    height: 2.15rem;
+  }
+
+  .signalCopy > strong {
+    font-size: .78rem;
+  }
+
+  .signalProperties > span {
+    font-size: .68rem;
+    line-height: 1.25;
+  }
+
   .signalCard {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -411,6 +425,15 @@
     padding: .8rem;
   }
 
+  .sectionHeader h3 {
+    font-size: .9rem;
+  }
+
+  .sectionHeader p,
+  .count {
+    font-size: .75rem;
+  }
+
   .signalGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -423,6 +446,26 @@
   .signalGlyph {
     width: 3.15rem;
     height: 3.15rem;
+  }
+
+  .signalCopy > strong,
+  .playerIdentity strong {
+    font-size: .875rem;
+  }
+
+  .signalProperties > span,
+  .playerIdentity > span,
+  .playerStats strong,
+  .winnerBadge span,
+  .breakdownTitle,
+  .breakdownList li > span:first-child,
+  .breakdownPoints,
+  .noRatingAwards {
+    font-size: .75rem;
+  }
+
+  .playerStats small {
+    font-size: .7rem;
   }
 
   .playerSummary {

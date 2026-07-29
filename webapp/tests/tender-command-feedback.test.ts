@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 
 import type { TenderCommandInput } from '../src/features/tender/commands'
 import {
-  getTenderCommandErrorMessage,
+  getTenderCommandErrorKey,
   getWaitingForTurnDescription,
 } from '../src/features/tender/tender-command-feedback'
 import { ApiRequestError } from '../src/platform/api'
@@ -15,7 +15,7 @@ const acceptedThesis: TenderCommandInput = {
 }
 
 test('accepted Thesis wins over a stale invalid-state response', () => {
-  expect(getTenderCommandErrorMessage({
+  expect(getTenderCommandErrorKey({
     actorId: 'player-a',
     command: acceptedThesis,
     error: new ApiRequestError(409, 'CONFLICT', 'Model analysis is not available to this Player'),
@@ -38,7 +38,7 @@ test('accepted Thesis wins over a stale invalid-state response', () => {
 })
 
 test('a real invalid-state response is localized when the Thesis was not accepted', () => {
-  expect(getTenderCommandErrorMessage({
+  expect(getTenderCommandErrorKey({
     actorId: 'player-a',
     command: acceptedThesis,
     error: new ApiRequestError(409, 'CONFLICT', 'Model analysis is not available to this Player'),
@@ -50,7 +50,39 @@ test('a real invalid-state response is localized when the Thesis was not accepte
       version: 10,
       publicTheses: [],
     },
-  })).toBe('Время действия истекло или ход уже завершён. Проверьте текущее состояние игры.')
+  })).toBe('tender.command.conflict')
+})
+
+test('an expired Tender command uses a specific localized message', () => {
+  expect(getTenderCommandErrorKey({
+    actorId: 'player-a',
+    command: acceptedThesis,
+    error: new ApiRequestError(409, 'TENDER_DEADLINE_EXPIRED', 'Tender deadline expired'),
+    latestView: {
+      version: 10,
+      publicTheses: [],
+    },
+    startingView: {
+      version: 10,
+      publicTheses: [],
+    },
+  })).toBe('tender.command.deadlineExpired')
+})
+
+test('an unknown backend message never reaches the player', () => {
+  expect(getTenderCommandErrorKey({
+    actorId: 'player-a',
+    command: acceptedThesis,
+    error: new ApiRequestError(500, 'INTERNAL_ERROR', 'Prisma transaction failed'),
+    latestView: {
+      version: 10,
+      publicTheses: [],
+    },
+    startingView: {
+      version: 10,
+      publicTheses: [],
+    },
+  })).toBe('tender.command.fallback')
 })
 
 test('an older identical Thesis does not hide a real invalid-state response', () => {
@@ -62,7 +94,7 @@ test('an older identical Thesis does not hide a real invalid-state response', ()
     signalId: 'aster' as const,
     verification: 'standard' as const,
   }
-  expect(getTenderCommandErrorMessage({
+  expect(getTenderCommandErrorKey({
     actorId: 'player-a',
     command: acceptedThesis,
     error: new ApiRequestError(409, 'CONFLICT', 'Model analysis is not available to this Player'),
@@ -74,7 +106,7 @@ test('an older identical Thesis does not hide a real invalid-state response', ()
       version: 10,
       publicTheses: [existingThesis],
     },
-  })).toBe('Время действия истекло или ход уже завершён. Проверьте текущее состояние игры.')
+  })).toBe('tender.command.conflict')
 })
 
 test('an unsubmitted final Scientific Model is described as a local draft', () => {

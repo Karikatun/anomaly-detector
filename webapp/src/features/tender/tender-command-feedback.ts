@@ -1,6 +1,7 @@
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { ApiRequestError } from '@/platform/api'
+import type { TranslationKey } from '@/platform/i18n'
 import type { TenderCommandInput } from './commands'
 
 type CommandFeedbackView = Pick<TenderView, 'publicTheses' | 'version'>
@@ -38,12 +39,15 @@ const acceptedThesisIsVisible = ({
   )).length
 )
 
-export function getTenderCommandErrorMessage(context: CommandErrorContext) {
+export function getTenderCommandErrorKey(context: CommandErrorContext): TranslationKey | null {
   if (acceptedThesisIsVisible(context)) return null
-  if (context.error instanceof ApiRequestError && context.error.code === 'CONFLICT') {
-    return 'Время действия истекло или ход уже завершён. Проверьте текущее состояние игры.'
+  if (context.error instanceof ApiRequestError && context.error.code === 'TENDER_DEADLINE_EXPIRED') {
+    return 'tender.command.deadlineExpired'
   }
-  return context.error instanceof Error ? context.error.message : 'Не удалось выполнить действие.'
+  if (context.error instanceof ApiRequestError && context.error.code === 'CONFLICT') {
+    return 'tender.command.conflict'
+  }
+  return 'tender.command.fallback'
 }
 
 export function getWaitingForTurnDescription(

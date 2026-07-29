@@ -223,6 +223,15 @@ describe('auth contracts', () => {
         },
       }),
     ).toThrow()
+
+    expect(apiErrorSchema.parse({
+      error: {
+        code: 'TENDER_DEADLINE_EXPIRED',
+        message: 'Tender action deadline expired',
+      },
+    })).toMatchObject({
+      error: { code: 'TENDER_DEADLINE_EXPIRED' },
+    })
   })
 
   test('validates OAuth start request and response', () => {

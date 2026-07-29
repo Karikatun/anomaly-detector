@@ -185,6 +185,18 @@
   border-color: var(--primary);
 }
 
+@media (max-width: 47.999rem) {
+  .segmented button,
+  .advancedToggle,
+  .markerButtons button {
+    min-height: 2.75rem;
+  }
+
+  .note {
+    min-height: 2.75rem;
+  }
+}
+
 @media (min-width: 48rem) {
   .tableHeader {
     display: grid;

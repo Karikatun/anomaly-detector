@@ -14,9 +14,10 @@ import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
 import { profileQueryKeys } from '@/features/profile'
 import { roomQueryKeys } from '@/features/rooms'
-import { RulesReferenceDialog } from '@/features/rules'
+import { LaboratoryInterpretationDialog, RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
 import type { TranslationKey } from '@/platform/i18n/translations'
+import { useSynchronizedCountdown } from '@/platform/time/synchronized-countdown'
 import { AccessSlotPanel } from './AccessSlotPanel'
 import { ContractsPanel } from './ContractsPanel'
 import { FinalScientificModelPanel } from './FinalScientificModelPanel'
@@ -45,7 +46,7 @@ import {
   type RealtimeErrorCode,
 } from './realtime'
 import {
-  getTenderCommandErrorMessage,
+  getTenderCommandErrorKey,
   getWaitingForTurnDescription,
 } from './tender-command-feedback'
 import styles from './TenderPage.module.css'
@@ -289,9 +290,13 @@ function TenderContent() {
   const [commandError, setCommandError] = useState<{ message: string; version: number } | null>(null)
   const [resuming, setResuming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const [laboratoryHelpOpen, setLaboratoryHelpOpen] = useState(false)
   const commandInFlightRef = useRef<{ promise: Promise<void>; token: symbol } | null>(null)
   const headerRef = useRef<HTMLElement>(null)
+  const primaryContentRef = useRef<HTMLDivElement>(null)
   const latestTenderViewRef = useRef(tenderView)
+  const previousActivePlayerIdRef = useRef<string | undefined>(undefined)
   const leavingTenderIdRef = useRef<string | null>(null)
   const resumingTenderIdRef = useRef<string | null>(null)
 
@@ -343,6 +348,29 @@ function TenderContent() {
       .finally(() => setResuming(false))
   }, [connected, execute, tenderId, tenderView?.hasLeft])
 
+  const remainingSeconds = useSynchronizedCountdown(
+    tenderView?.dueAt,
+    tenderView?.serverTime ?? '1970-01-01T00:00:00.000Z',
+  )
+
+  useEffect(() => {
+    const activePlayerId = tenderView?.activePlayerId
+    const previousActivePlayerId = previousActivePlayerIdRef.current
+    previousActivePlayerIdRef.current = activePlayerId
+    if (
+      !tenderView
+      || previousActivePlayerId === undefined
+      || previousActivePlayerId === activePlayerId
+      || activePlayerId !== auth.user?.id
+      || !sequentialPhases.has(tenderView.phase)
+    ) return
+    requestAnimationFrame(() => {
+      setRulesOpen(false)
+      setLaboratoryHelpOpen(false)
+      primaryContentRef.current?.focus()
+    })
+  }, [auth.user?.id, tenderView])
+
   const handleCommand = useCallback(
     (command: TenderCommandInput) => {
       if (commandInFlightRef.current) return commandInFlightRef.current.promise
@@ -354,16 +382,16 @@ function TenderContent() {
         try {
           await execute(command)
         } catch (err) {
-          const message = getTenderCommandErrorMessage({
+          const messageKey = getTenderCommandErrorKey({
             actorId: auth.user?.id ?? '',
             command,
             error: err,
             latestView: latestTenderViewRef.current,
             startingView,
           })
-          if (message === null) return
+          if (messageKey === null) return
           setCommandError({
-            message,
+            message: t(messageKey),
             version: latestTenderViewRef.current?.version ?? startingView?.version ?? 0,
           })
           throw err
@@ -377,7 +405,7 @@ function TenderContent() {
       commandInFlightRef.current = { promise, token }
       return promise
     },
-    [auth.user?.id, execute],
+    [auth.user?.id, execute, t],
   )
   const saveWorkingModel = useCallback(
     async (workingModel: TenderView['privateWorkingModel']) => {
@@ -450,6 +478,13 @@ function TenderContent() {
     || tenderView.phase === 'final-scientific-model'
   const showRightSidebar = !isPlanningPhase && !isEmbeddedWorkspacePhase && !isComplete
   const showGenericTools = !isPlanningPhase && !isLaboratoryPhase && !isEmbeddedWorkspacePhase && !isComplete
+  const referenceHelpDisabled = isSequentialPhase && isMyTurn
+  const hasPendingAction = isAccessSlotSelection
+    ? myPlayer?.requestedAccessSlot === undefined
+    : isPowerAllocation
+      ? myPlayer?.powerAllocation === undefined
+      : isSequentialPhase && isMyTurn
+  const referenceHelpUrgentlyLocked = hasPendingAction && remainingSeconds <= 10
 
   return (
     <section className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}>
@@ -478,27 +513,43 @@ function TenderContent() {
             </Badge>
           )}
         </div>
-        <div className="flex items-center justify-self-end gap-1">
+        <div className={`${styles.headerActions} flex items-center justify-self-end gap-1`}>
           {connected ? (
-            <Badge variant="outline" className="text-emerald-400">{t('tender.realtime.live')}</Badge>
+            <Badge variant="outline" className={`${styles.connectionBadge} text-emerald-400`}>{t('tender.realtime.live')}</Badge>
           ) : (
-            <Badge variant="outline" className="text-amber-400">{t('tender.realtime.reconnecting')}</Badge>
+            <Badge variant="outline" className={`${styles.connectionBadge} text-amber-400`}>{t('tender.realtime.reconnecting')}</Badge>
           )}
           <RulesReferenceDialog
             belowTenderHeader
-            triggerIconOnly
-            triggerClassName="border-border/70 bg-input/20"
+            disabled={referenceHelpDisabled || referenceHelpUrgentlyLocked}
+            onOpenChange={setRulesOpen}
+            open={rulesOpen && !referenceHelpUrgentlyLocked}
+            showTimerWarning
+            triggerClassName={styles.rulesAction}
+            triggerIcon="book"
+            triggerTextClassName={styles.headerActionLabel}
+          />
+          <LaboratoryInterpretationDialog
+            belowTenderHeader
+            disabled={referenceHelpDisabled || referenceHelpUrgentlyLocked}
+            onOpenChange={setLaboratoryHelpOpen}
+            open={laboratoryHelpOpen && !referenceHelpUrgentlyLocked}
+            showTimerWarning
+            triggerClassName={styles.laboratoryAction}
+            triggerTextClassName={styles.headerActionLabel}
           />
           <Button
             type="button"
             variant="outline"
-            size="icon-sm"
+            size="sm"
+            className={styles.leaveAction}
             aria-label={t('nav.leaveMatch')}
             title={t('nav.leaveMatch')}
             disabled={submitting || resuming || tenderView.hasLeft}
             onClick={() => void leaveMatch()}
           >
             <HugeiconsIcon icon={Logout01Icon} strokeWidth={1.7} aria-hidden="true" />
+            <Typography as="span" variant="control">{t('button.logout')}</Typography>
           </Button>
         </div>
       </header>
@@ -527,7 +578,11 @@ function TenderContent() {
         )}
 
         <div className={showRightSidebar ? 'grid min-w-0 items-start gap-6 lg:grid-cols-[1fr_320px]' : 'grid min-w-0 items-start gap-4'}>
-          <div className={isPlanningPhase ? 'grid min-w-0 self-start gap-4' : 'grid min-w-0 self-start gap-6'}>
+          <div
+            ref={primaryContentRef}
+            tabIndex={-1}
+            className={isPlanningPhase ? 'grid min-w-0 self-start gap-4 outline-none' : 'grid min-w-0 self-start gap-6 outline-none'}
+          >
             <PhasePanel
               view={tenderView}
               disabled={submitting || !connected}
