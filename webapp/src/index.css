@@ -112,3 +112,18 @@
 }
 
 /* Anomaly visual on tender page */
+
+@media (max-width: 760px) {
+  button[data-slot='button'],
+  a[data-slot='button'],
+  button[data-slot='dialog-close'],
+  button[data-slot='dialog-trigger'],
+  select[data-slot='native-select'] {
+    min-height: 2.75rem !important;
+  }
+
+  button[data-slot='button'][data-size^='icon'],
+  a[data-slot='button'][data-size^='icon'] {
+    min-width: 2.75rem !important;
+  }
+}

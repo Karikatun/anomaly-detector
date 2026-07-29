@@ -178,7 +178,10 @@
   .credentials:has(.consents) .fieldErrorSlot { min-height: .75rem; }
   .consent { align-items: flex-start; }
   .consent :global([data-slot='checkbox']) { width: 1.2rem; height: 1.2rem; margin-top: .05rem; border-radius: 4px; }
-  .footer { padding-top: 1.5rem; font-size: .72rem; }
+  .passwordToggle { width: 2.75rem; height: 2.75rem; }
+  .footer { align-items: center; padding-top: 1.5rem; font-size: .875rem; }
+  .footer > * { display: inline-flex; min-height: 2.75rem; align-items: center; }
+  .footer :global([data-slot='button']) { min-height: 2.75rem; }
 }
 
 .oauthConsentDialog {
