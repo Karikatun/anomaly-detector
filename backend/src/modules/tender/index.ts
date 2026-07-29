@@ -209,6 +209,24 @@ export function createTenderModule({
   const nextScientificModelPlayer = (tender: StoredTender) => tender.players
     .filter((player) => !tender.finalScientificModelCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
+  const finalScientificModelPlayers = (tender: StoredTender) => tender.players
+
+  const createFinalScientificModelDrafts = (tender: StoredTender) => Object.fromEntries(
+    finalScientificModelPlayers(tender).map((player) => {
+      const workingSignals = tender.privateWorkingModelsByPlayer[player.id]?.signals ?? {}
+      const signals = Object.fromEntries(
+        Object.entries(workingSignals).flatMap(([signalId, state]) => {
+          const hypothesis = state.hypothesis
+          if (!hypothesis || (hypothesis.fieldType === undefined && hypothesis.polarity === undefined)) return []
+          return [[signalId, {
+            ...(hypothesis.fieldType ? { fieldType: hypothesis.fieldType } : {}),
+            ...(hypothesis.polarity ? { polarity: hypothesis.polarity } : {}),
+          }]]
+        }),
+      )
+      return [player.id, { signals }]
+    }),
+  )
 
   const contractIsEligibleForPlayer = (
     tender: StoredTender,
@@ -246,7 +264,9 @@ export function createTenderModule({
         ? nextModelAnalysisPlayer(tender)?.id
         : undefined
       case 'contracts': return nextContractsPlayer(tender)?.id
-      case 'final-scientific-model': return nextScientificModelPlayer(tender)?.id
+      case 'final-scientific-model': return tender.ruleset === 'tender-v1'
+        ? nextScientificModelPlayer(tender)?.id
+        : undefined
       default: return undefined
     }
   }
@@ -270,7 +290,13 @@ export function createTenderModule({
       (tender.budgetByPlayer[player.id] ?? 0) + operationalGrantBudget,
     ]))
     const tenderAfterGrant = { ...tender, budgetByPlayer }
-    if (tender.round >= 5) return { ...tenderAfterGrant, phase: 'final-scientific-model' }
+    if (tender.round >= 5) return {
+      ...tenderAfterGrant,
+      finalScientificModelDraftsByPlayer: tender.ruleset === 'tender-v2'
+        ? createFinalScientificModelDrafts(tenderAfterGrant)
+        : tender.finalScientificModelDraftsByPlayer,
+      phase: 'final-scientific-model',
+    }
     const round = tender.round + 1
     const publicContracts = createRoundContracts(round, tender.players.length, tender.anomalyConfiguration.seed)
     return {
@@ -389,6 +415,7 @@ export function createTenderModule({
         departedPlayerIds: [],
         dueAt: deadlineForPhase('access-slot-selection', now()),
         finalScientificModelCompletedByPlayer: {},
+        finalScientificModelDraftsByPlayer: {},
         finalScientificModelsByPlayer: {},
         knownSignals: [...new Set([...publicContracts.map((contract) => contract.targetSignal), publicFinalContract.targetSignal])],
         powerAllocations: {},
@@ -876,8 +903,41 @@ export function createTenderModule({
         })
       }
 
+      if (command.type === 'update-scientific-model-draft') {
+        if (
+          tender.ruleset !== 'tender-v2'
+          || tender.phase !== 'final-scientific-model'
+          || tender.finalScientificModelCompletedByPlayer[player.id]
+        ) {
+          throw new TenderFailure('invalid_tender_state', 'Final Scientific Model draft is not available to this Player')
+        }
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'scientific_model_draft_updated',
+            payload: { playerId: player.id },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: {
+            ...tender,
+            finalScientificModelDraftsByPlayer: {
+              ...tender.finalScientificModelDraftsByPlayer,
+              [player.id]: command.scientificModelDraft,
+            },
+          },
+          tender,
+        })
+      }
+
       if (command.type === 'submit-scientific-model') {
-        if (tender.phase !== 'final-scientific-model' || nextScientificModelPlayer(tender)?.id !== player.id) {
+        const canSubmit = tender.ruleset === 'tender-v2'
+          ? tender.phase === 'final-scientific-model'
+            && !tender.finalScientificModelCompletedByPlayer[player.id]
+          : tender.phase === 'final-scientific-model'
+            && nextScientificModelPlayer(tender)?.id === player.id
+        if (!canSubmit) {
           throw new TenderFailure('invalid_tender_state', 'Final Scientific Model is not available to this Player')
         }
         const correctProperties = Object.entries(command.scientificModel.signals).reduce((score, [signalId, claim]) => {
@@ -905,12 +965,20 @@ export function createTenderModule({
         const nextTender = {
           ...tender,
           finalScientificModelCompletedByPlayer: { ...tender.finalScientificModelCompletedByPlayer, [player.id]: true },
+          finalScientificModelDraftsByPlayer: Object.fromEntries(
+            Object.entries(tender.finalScientificModelDraftsByPlayer)
+              .filter(([playerId]) => playerId !== player.id),
+          ),
           finalScientificModelsByPlayer: { ...tender.finalScientificModelsByPlayer, [player.id]: command.scientificModel },
           ratingByPlayer,
         }
         const phase = nextScientificModelPlayer(nextTender) ? 'final-scientific-model' : 'complete'
         const completedTender = phase === 'complete'
-          ? { ...nextTender, winnerPlayerIds: resolveWinners(nextTender) }
+          ? {
+              ...nextTender,
+              finalScientificModelDraftsByPlayer: {},
+              winnerPlayerIds: resolveWinners(nextTender),
+            }
           : nextTender
         return commitCommand({
           auditEvents: [{
@@ -921,7 +989,13 @@ export function createTenderModule({
           }],
           command,
           commandFingerprint,
-          nextTender: { ...completedTender, dueAt: deadlineForPhase(phase, now()), phase },
+          nextTender: {
+            ...completedTender,
+            dueAt: tender.ruleset === 'tender-v2' && phase === 'final-scientific-model'
+              ? tender.dueAt
+              : deadlineForPhase(phase, now()),
+            phase,
+          },
           tender,
         })
       }
@@ -1179,6 +1253,15 @@ export function createTenderModule({
             total: modelAnalysisPlayers(tender).length,
           }
         : undefined
+      const finalScientificModelProgress = tender.ruleset === 'tender-v2'
+        && tender.phase === 'final-scientific-model'
+        ? {
+            completed: finalScientificModelPlayers(tender).filter((candidate) =>
+              tender.finalScientificModelCompletedByPlayer[candidate.id],
+            ).length,
+            total: finalScientificModelPlayers(tender).length,
+          }
+        : undefined
       const currentRoundPrivateTheses = (candidateId: string) =>
         (tender.privateThesesByPlayer[candidateId] ?? []).filter((thesis) => thesis.round === tender.round)
       const hiddenCurrentRoundRating = (candidateId: string) => {
@@ -1217,6 +1300,7 @@ export function createTenderModule({
         round: tender.round,
         ruleset: tender.ruleset,
         ...(modelAnalysisProgress ? { modelAnalysisProgress } : {}),
+        ...(finalScientificModelProgress ? { finalScientificModelProgress } : {}),
         serverTime: now().toISOString(),
         tenderId,
         version: tender.version,
@@ -1235,6 +1319,7 @@ export function createTenderModule({
           corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,
           contractPowerRestriction: tender.contractPowerRestrictionsByPlayer[player.id] ?? 0,
           ...(tender.phase === 'final-scientific-model'
+            && (tender.ruleset === 'tender-v1' || player.id === playerId)
             ? { finalScientificModelSubmitted: tender.finalScientificModelsByPlayer[player.id] !== undefined }
             : {}),
           ...(tender.ruleset === 'tender-v2' && tender.phase === 'model-analysis' && player.id === playerId
@@ -1260,6 +1345,13 @@ export function createTenderModule({
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
+        ...(tender.ruleset === 'tender-v2'
+          && tender.phase === 'final-scientific-model'
+          && !tender.finalScientificModelCompletedByPlayer[player.id]
+          ? {
+              privateFinalScientificModelDraft: tender.finalScientificModelDraftsByPlayer[player.id] ?? { signals: {} },
+            }
+          : {}),
         privateTheses: tender.ruleset === 'tender-v2'
           ? tender.privateThesesByPlayer[player.id] ?? []
           : undefined,
@@ -1438,6 +1530,35 @@ export function createTenderModule({
           continue
         }
         if (tender.phase === 'final-scientific-model') {
+          if (tender.ruleset === 'tender-v2') {
+            const timedOutPlayerIds = finalScientificModelPlayers(tender)
+              .filter((player) => !tender.finalScientificModelCompletedByPlayer[player.id])
+              .map((player) => player.id)
+            const finalScientificModelCompletedByPlayer = {
+              ...tender.finalScientificModelCompletedByPlayer,
+              ...Object.fromEntries(timedOutPlayerIds.map((playerId) => [playerId, true])),
+            }
+            const completedTender = {
+              ...tender,
+              finalScientificModelCompletedByPlayer,
+              finalScientificModelDraftsByPlayer: {},
+            }
+            const completed = await commitTimeout({
+              auditEvents: [{
+                kind: 'final_scientific_model_timeout_resolved',
+                payload: { timedOutPlayerIds },
+              }],
+              nextTender: {
+                ...completedTender,
+                dueAt: null,
+                phase: 'complete',
+                winnerPlayerIds: resolveWinners(completedTender),
+              },
+              tender,
+            })
+            if (completed) advancedTenderIds.push(tenderId)
+            continue
+          }
           const expectedPlayer = nextScientificModelPlayer(tender)
           if (!expectedPlayer) continue
           const nextTender = {

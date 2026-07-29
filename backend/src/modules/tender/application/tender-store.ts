@@ -8,6 +8,7 @@ import type {
   PublicThesis,
   PrivateThesis,
   ScientificModel,
+  ScientificModelDraft,
   TenderCommand,
   TenderAuditEvent,
   TenderPhase,
@@ -50,6 +51,7 @@ export type StoredTender = {
   knownSignals: SignalId[]
   phase: TenderPhase
   finalScientificModelCompletedByPlayer: Record<string, boolean>
+  finalScientificModelDraftsByPlayer: Record<string, ScientificModelDraft>
   finalScientificModelsByPlayer: Record<string, ScientificModel>
   powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>

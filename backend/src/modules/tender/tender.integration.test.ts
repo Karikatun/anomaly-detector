@@ -374,6 +374,67 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     })
   })
 
+  test('restores a private Final Scientific Model draft after a PostgreSQL restart', async () => {
+    const now = new Date('2026-07-29T12:00:00.000Z')
+    const firstModule = createTenderModule({
+      now: () => now,
+      store: createPrismaTenderStore(prisma),
+    })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'working-model-a',
+      tenderId,
+      type: 'update-working-model',
+      workingModel: {
+        signals: {
+          aster: {
+            hypothesis: { fieldType: 'inertial', polarity: 'negative' },
+            possibleFieldTypes: ['phase'],
+          },
+        },
+      },
+    })
+    let dueAt = now
+    for (let round = 1; round <= 5; round += 1) {
+      dueAt = new Date(dueAt.getTime() + 90_000)
+      await firstModule.advanceDueTenders({ limit: 10, now: dueAt })
+      dueAt = new Date(dueAt.getTime() + 90_000)
+      await firstModule.advanceDueTenders({ limit: 10, now: dueAt })
+    }
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'final-draft-a',
+      scientificModelDraft: {
+        signals: {
+          aster: { fieldType: 'inertial', polarity: 'negative' },
+          boreal: { fieldType: 'phase' },
+        },
+      },
+      tenderId,
+      type: 'update-scientific-model-draft',
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+      finalScientificModelProgress: { completed: 0, total: 2 },
+      privateFinalScientificModelDraft: {
+        signals: {
+          aster: { fieldType: 'inertial', polarity: 'negative' },
+          boreal: { fieldType: 'phase' },
+        },
+      },
+    })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+      privateFinalScientificModelDraft: { signals: {} },
+    })
+  })
+
   test('persists resolved Access Slots and the phase transition', async () => {
     const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
     const { tenderId } = await module.createTender({

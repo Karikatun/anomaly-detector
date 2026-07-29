@@ -1,19 +1,22 @@
 import { Alert01Icon, InformationCircleIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type {
   FieldType,
   Polarity,
   ScientificModel,
+  ScientificModelDraft,
   SignalId,
   TenderView,
+  WorkingModel,
 } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
+import { useSynchronizedCountdown } from '@/platform/time/synchronized-countdown'
 import {
   fieldTypeLabelKeys,
   fieldTypes,
@@ -27,12 +30,24 @@ import { SignalGlyph } from './components/SignalGlyph'
 import { TenderEvidence } from './components/TenderOverview'
 import { signalAccent } from './components/signal-visuals'
 import { runTenderAction } from './run-tender-action'
+import {
+  WorkingModelDraftController,
+  type WorkingModelSaveStatus,
+} from './working-model-draft'
+import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 
 type Props = {
   disabled?: boolean
+  draft: ScientificModelDraft
+  dueAt: string | null
   evidence: Pick<TenderView, 'privateMeasurements' | 'publicLaboratoryResults' | 'publicTheses'>
   error?: string | null
   onConfirm: (model: ScientificModel) => Promise<void>
+  onSaveDraft: (draft: ScientificModelDraft) => Promise<void>
+  progress?: TenderView['finalScientificModelProgress']
+  serverTime: string
+  submitted?: boolean
+  workingModel: WorkingModel
 }
 
 const rowStyle = (signal: SignalId) => ({
@@ -50,38 +65,79 @@ const compactPolarityLabels: Record<Polarity, string> = {
   negative: '− Отриц.',
 }
 
-export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm }: Props) {
+export function FinalScientificModelPanel({
+  disabled,
+  draft: initialDraft,
+  dueAt,
+  evidence,
+  error,
+  onConfirm,
+  onSaveDraft,
+  progress,
+  serverTime,
+  submitted,
+  workingModel,
+}: Props) {
   const { t } = useI18n()
-  const [model, setModel] = useState<ScientificModel['signals']>({})
+  const [draft, setDraft] = useState<ScientificModelDraft>(initialDraft)
+  const [saveStatus, setSaveStatus] = useState<WorkingModelSaveStatus>({ state: 'idle' })
+  const [draftController] = useState(() => new WorkingModelDraftController<ScientificModelDraft>({
+    cancel: (timer) => clearTimeout(timer),
+    errorMessage: t('tender.finalDraft.saveError'),
+    initialModel: initialDraft,
+    onDraft: setDraft,
+    onStatus: setSaveStatus,
+    save: onSaveDraft,
+    schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+  }))
+  const remainingSeconds = useSynchronizedCountdown(dueAt, serverTime, { maximumSeconds: 180 })
+  const formDisabled = disabled || submitted || remainingSeconds === 0
+  const model = draft.signals
+
+  useEffect(() => {
+    draftController.setSave(onSaveDraft)
+  }, [draftController, onSaveDraft])
+
+  useEffect(() => {
+    draftController.receiveServerModel(initialDraft)
+  }, [draftController, initialDraft])
+
+  useEffect(() => {
+    draftController.resume()
+    return () => {
+      void draftController.dispose()
+    }
+  }, [draftController])
 
   const toggleFieldType = (signal: SignalId, value: FieldType) => {
-    setModel((previous) => {
-      const current = previous[signal] ?? {}
+    const previous = draft.signals
+    const current = previous[signal] ?? {}
       const fieldType = current.fieldType === value ? undefined : value
       if (!fieldType && !current.polarity) {
         const next = { ...previous }
         delete next[signal]
-        return next
+        draftController.update({ signals: next })
+        return
       }
-      return { ...previous, [signal]: { ...current, fieldType } }
-    })
+    draftController.update({ signals: { ...previous, [signal]: { ...current, fieldType } } })
   }
 
   const togglePolarity = (signal: SignalId, value: Polarity) => {
-    setModel((previous) => {
-      const current = previous[signal] ?? {}
+    const previous = draft.signals
+    const current = previous[signal] ?? {}
       const polarity = current.polarity === value ? undefined : value
       if (!current.fieldType && !polarity) {
         const next = { ...previous }
         delete next[signal]
-        return next
+        draftController.update({ signals: next })
+        return
       }
-      return { ...previous, [signal]: { ...current, polarity } }
-    })
+    draftController.update({ signals: { ...previous, [signal]: { ...current, polarity } } })
   }
 
   const handleSubmit = async () => {
     if (Object.keys(model).length > 0) {
+      await draftController.flush()
       await runTenderAction(() => onConfirm({ signals: model }))
     }
   }
@@ -111,6 +167,30 @@ export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm
               <Typography as="span" variant="caption">/ 12</Typography>
             </span>
           </div>
+          {progress && (
+            <Typography variant="bodySm" tone="muted">
+              {t('tender.finalDraft.progress', {
+                completed: progress.completed,
+                total: progress.total,
+              })}
+            </Typography>
+          )}
+          {submitted && (
+            <div className={styles.info} role="status">
+              <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
+              <Typography variant="bodySm">{t('tender.finalDraft.submitted')}</Typography>
+            </div>
+          )}
+          {!submitted && remainingSeconds <= 30 && (
+            <div className={styles.warning} role="alert">
+              <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
+              <Typography variant="bodySm">
+                {remainingSeconds <= 10
+                  ? t('tender.finalDraft.warningCritical')
+                  : t('tender.finalDraft.warning')}
+              </Typography>
+            </div>
+          )}
 
           <a className={styles.finalEvidenceSummary} href="#final-evidence">
             <span>
@@ -147,7 +227,7 @@ export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm
                         aria-label={`${signalName}: тип поля ${t(fieldTypeLabelKeys[fieldType])}`}
                         key={fieldType}
                         type="button"
-                        disabled={disabled}
+                        disabled={formDisabled}
                         data-selected={claim?.fieldType === fieldType ? '' : undefined}
                         onClick={() => toggleFieldType(signal, fieldType)}
                       >
@@ -167,7 +247,7 @@ export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm
                         aria-label={`${signalName}: полярность ${t(polarityLabelKeys[polarity])}`}
                         key={polarity}
                         type="button"
-                        disabled={disabled}
+                        disabled={formDisabled}
                         data-selected={claim?.polarity === polarity ? '' : undefined}
                         onClick={() => togglePolarity(signal, polarity)}
                       >
@@ -187,6 +267,19 @@ export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm
         </div>
 
         <aside className={styles.finalSidebar}>
+          <section className={styles.surface}>
+            <div className={styles.sectionHeader}>
+              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>
+                {t('tender.finalDraft.workingModelHint')}
+              </Typography>
+            </div>
+            <WorkingModelWorkspace
+              disabled
+              knownSignals={[...signalIds]}
+              model={workingModel}
+              onSave={async () => undefined}
+            />
+          </section>
           <section className={styles.surface} id="final-evidence">
             <div className={styles.sectionHeader}>
               <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Данные для анализа</Typography>
@@ -254,6 +347,12 @@ export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm
       </div>
 
       {error && <div className={styles.error} role="alert"><Typography variant="bodySm">{error}</Typography></div>}
+      {saveStatus.state === 'saving' && (
+        <Typography variant="caption" tone="muted" role="status">{t('tender.finalDraft.saving')}</Typography>
+      )}
+      {saveStatus.state === 'error' && (
+        <div className={styles.error} role="alert"><Typography variant="bodySm">{saveStatus.message}</Typography></div>
+      )}
 
       <footer className={styles.footer}>
         <div className={styles.info}>
@@ -266,10 +365,14 @@ export function FinalScientificModelPanel({ disabled, evidence, error, onConfirm
           type="button"
           size="lg"
           className={styles.actionButton}
-          disabled={disabled || claimedCount === 0}
+          disabled={formDisabled || claimedCount === 0}
           onClick={() => void handleSubmit()}
         >
-          {claimedCount === 0 ? 'Укажите хотя бы одно свойство' : 'Отправить финальную модель'}
+          {submitted
+            ? t('tender.finalDraft.submitted')
+            : claimedCount === 0
+              ? 'Укажите хотя бы одно свойство'
+              : 'Отправить финальную модель'}
         </Button>
       </footer>
     </section>
