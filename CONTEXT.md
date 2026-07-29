@@ -74,6 +74,14 @@ _Avoid_: action point, energy, move
 Power deliberately left unallocated by a player or assigned by the server after a timeout. It grants no action or benefit in the current round.
 _Avoid_: unused action, skipped action
 
+**Collapse**:
+Leaving the live Tender screen without changing participation. Timers and ordinary timeout behavior continue, and the player may return from Match History.
+_Avoid_: leave Tender, surrender, pause
+
+**Forfeit**:
+A permanent player decision to leave an active Tender. A forfeited player is removed from every pending action, cannot resume or win, but remains in the completed history and participant audit.
+_Avoid_: collapse, disconnect, timeout
+
 **Tender Ruleset**:
 The immutable rules version stored with a Tender. New Tenders use `tender-v2`; persisted records without a version are interpreted as `tender-v1` so a deployment never changes an active match.
 _Avoid_: frontend version, latest rules

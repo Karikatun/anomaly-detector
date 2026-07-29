@@ -75,6 +75,7 @@ export class TenderRoomService {
       ...(room.startsAt === null || room.startsAt === undefined ? {} : { startsAt: room.startsAt }),
       ...(room.tenderId === null ? {} : { tenderId: room.tenderId }),
       ...(room.tenderCompletionReason === undefined ? {} : { tenderCompletionReason: room.tenderCompletionReason }),
+      ...(room.tenderForfeited ? { tenderForfeited: true } : {}),
       ...(room.tenderPhase === undefined ? {} : { tenderPhase: room.tenderPhase }),
     }
   }

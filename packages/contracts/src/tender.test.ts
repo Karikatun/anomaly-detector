@@ -351,6 +351,15 @@ describe('Tender contracts', () => {
     })
   })
 
+  test('validates permanent Tender forfeit state and early completion reason', () => {
+    expect(tenderCommandSchema.parse({
+      actorId: 'player-a',
+      commandId: 'command-a-forfeit',
+      tenderId: 'tender-1',
+      type: 'forfeit-tender',
+    })).toMatchObject({ type: 'forfeit-tender' })
+  })
+
   test('validates a Contract reservation command', () => {
     expect(
       tenderCommandSchema.parse({

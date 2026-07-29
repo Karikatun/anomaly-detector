@@ -186,30 +186,38 @@ export function createTenderModule({
   }
 
   const fingerprint = (command: TenderCommand) => JSON.stringify(command)
+  const isActivePlayer = (tender: StoredTender, playerId: string) =>
+    tender.forfeitedAtByPlayer[playerId] === undefined
+  const activePlayers = (tender: StoredTender) => tender.players
+    .filter((player) => isActivePlayer(tender, player.id))
 
   const nextReconnaissancePlayer = (tender: StoredTender) => tender.players
+    .filter((player) => isActivePlayer(tender, player.id))
     .filter((player) => tender.powerAllocations[player.id]?.reconnaissance > 0 && !tender.reconnaissanceCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
   const nextLaboratoryPlayer = (tender: StoredTender) => tender.players
+    .filter((player) => isActivePlayer(tender, player.id))
     .filter((player) => tender.powerAllocations[player.id]?.laboratory > 0 && !tender.laboratoryCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
-  const nextModelAnalysisPlayer = (tender: StoredTender) => tender.players.filter((player) => tender.powerAllocations[player.id]?.modelAnalysis > 0 && !tender.modelAnalysisCompletedByPlayer[player.id]).sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
+  const nextModelAnalysisPlayer = (tender: StoredTender) => tender.players.filter((player) => isActivePlayer(tender, player.id) && tender.powerAllocations[player.id]?.modelAnalysis > 0 && !tender.modelAnalysisCompletedByPlayer[player.id]).sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
   const modelAnalysisPlayers = (tender: StoredTender) => tender.players
-    .filter((player) => (tender.powerAllocations[player.id]?.modelAnalysis ?? 0) > 0)
+    .filter((player) => isActivePlayer(tender, player.id) && (tender.powerAllocations[player.id]?.modelAnalysis ?? 0) > 0)
 
   const effectiveContractPower = (tender: StoredTender, playerId: string) => tender.powerAllocations[playerId]?.contracts ?? 0
 
   const nextContractsPlayer = (tender: StoredTender) => tender.players
+    .filter((player) => isActivePlayer(tender, player.id))
     .filter((player) => effectiveContractPower(tender, player.id) > 0)
     .filter((player) => !tender.contractCompletedByPlayer[player.id])
     .filter((player) => tender.publicContracts.every((contract) => contract.reservedByPlayerId !== player.id || contract.bidOutcome === undefined))
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
 
   const nextScientificModelPlayer = (tender: StoredTender) => tender.players
+    .filter((player) => isActivePlayer(tender, player.id))
     .filter((player) => !tender.finalScientificModelCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
-  const finalScientificModelPlayers = (tender: StoredTender) => tender.players
+  const finalScientificModelPlayers = (tender: StoredTender) => activePlayers(tender)
 
   const createFinalScientificModelDrafts = (tender: StoredTender) => Object.fromEntries(
     finalScientificModelPlayers(tender).map((player) => {
@@ -327,6 +335,73 @@ export function createTenderModule({
     ? { ...tender, phase: 'reconnaissance' }
     : advanceAfterOperationalActions(tender, 'reconnaissance')
 
+  const continueAfterForfeit = (tender: StoredTender, changedAt: Date): StoredTender => {
+    const remainingPlayers = activePlayers(tender)
+    if (tender.phase === 'access-slot-selection') {
+      if (!remainingPlayers.every((player) => tender.requestedSlots[player.id] !== undefined)) return tender
+      const accessSlots = resolveAccessSlots(rotateTiePriority(remainingPlayers, tender.round), tender.requestedSlots)
+      const budgetByPlayer = {
+        ...tender.budgetByPlayer,
+        ...Object.fromEntries(remainingPlayers.map((player) => [
+          player.id,
+          (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
+        ])),
+      }
+      const samplesByPlayer = { ...tender.samplesByPlayer }
+      const rawTelemetrySignalsByPlayer = { ...tender.rawTelemetrySignalsByPlayer }
+      const knownSignals = [...tender.knownSignals]
+      for (const player of remainingPlayers) {
+        if (!receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
+        const nextSample = nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
+        if (!nextSample) continue
+        samplesByPlayer[player.id] = [...(samplesByPlayer[player.id] ?? []), nextSample]
+        rawTelemetrySignalsByPlayer[player.id] = [...(rawTelemetrySignalsByPlayer[player.id] ?? []), nextSample]
+        if (!knownSignals.includes(nextSample)) knownSignals.push(nextSample)
+      }
+      return {
+        ...tender,
+        accessSlots: { ...tender.accessSlots, ...accessSlots },
+        budgetByPlayer,
+        dueAt: deadlineForPhase('power-allocation', changedAt),
+        knownSignals,
+        phase: 'power-allocation',
+        rawTelemetrySignalsByPlayer,
+        samplesByPlayer,
+      }
+    }
+    if (tender.phase === 'power-allocation') {
+      if (!remainingPlayers.every((player) => tender.powerAllocations[player.id] !== undefined)) return tender
+      const advancedTender = beginOperationalActions(tender)
+      return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, changedAt) }
+    }
+    if (tender.phase === 'reconnaissance' && !nextReconnaissancePlayer(tender)) {
+      const advancedTender = advanceAfterOperationalActions(tender, 'reconnaissance')
+      return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, changedAt) }
+    }
+    if (tender.phase === 'laboratory' && !nextLaboratoryPlayer(tender)) {
+      const advancedTender = advanceAfterOperationalActions(tender, 'laboratory')
+      return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, changedAt) }
+    }
+    if (tender.phase === 'model-analysis' && !nextModelAnalysisPlayer(tender)) {
+      const advancedTender = advanceAfterOperationalActions(tender, 'model-analysis')
+      return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, changedAt) }
+    }
+    if (tender.phase === 'contracts' && !nextContractsPlayer(tender)) {
+      const advancedTender = advanceAfterContracts(tender)
+      return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, changedAt) }
+    }
+    if (tender.phase === 'final-scientific-model' && !nextScientificModelPlayer(tender)) {
+      return {
+        ...tender,
+        dueAt: null,
+        finalScientificModelDraftsByPlayer: {},
+        phase: 'complete',
+        winnerPlayerIds: resolveWinners(tender),
+      }
+    }
+    return tender
+  }
+
   const commitCommand = async ({
     auditEvents,
     command,
@@ -417,6 +492,7 @@ export function createTenderModule({
         finalScientificModelCompletedByPlayer: {},
         finalScientificModelDraftsByPlayer: {},
         finalScientificModelsByPlayer: {},
+        forfeitedAtByPlayer: {},
         knownSignals: [...new Set([...publicContracts.map((contract) => contract.targetSignal), publicFinalContract.targetSignal])],
         powerAllocations: {},
         publicContracts,
@@ -463,6 +539,67 @@ export function createTenderModule({
         }
         return previousCommand.receipt
       }
+      if (!isActivePlayer(tender, player.id) && command.type !== 'forfeit-tender') {
+        throw new TenderFailure('player_forfeited', 'Player permanently forfeited this Tender')
+      }
+      if (command.type === 'forfeit-tender') {
+        if (tender.phase === 'complete') {
+          throw new TenderFailure('invalid_tender_state', 'Tender is already complete')
+        }
+        const forfeitedAt = now()
+        const forfeitedAtByPlayer = {
+          ...tender.forfeitedAtByPlayer,
+          [player.id]: tender.forfeitedAtByPlayer[player.id] ?? forfeitedAt.toISOString(),
+        }
+        const forfeitedTender = {
+          ...tender,
+          contractCompletedByPlayer: { ...tender.contractCompletedByPlayer, [player.id]: true },
+          finalScientificModelCompletedByPlayer: {
+            ...tender.finalScientificModelCompletedByPlayer,
+            [player.id]: true,
+          },
+          forfeitedAtByPlayer,
+          laboratoryCompletedByPlayer: { ...tender.laboratoryCompletedByPlayer, [player.id]: true },
+          modelAnalysisCompletedByPlayer: { ...tender.modelAnalysisCompletedByPlayer, [player.id]: true },
+          reconnaissanceCompletedByPlayer: { ...tender.reconnaissanceCompletedByPlayer, [player.id]: true },
+        }
+        const remainingPlayers = activePlayers(forfeitedTender)
+        const nextTender = remainingPlayers.length <= 1
+          ? {
+              ...forfeitedTender,
+              completionReason: remainingPlayers.length === 1
+                ? 'last_active_player' as const
+                : 'all_players_forfeited' as const,
+              dueAt: null,
+              finalScientificModelDraftsByPlayer: {},
+              phase: 'complete' as const,
+              winnerPlayerIds: remainingPlayers.map((candidate) => candidate.id),
+            }
+          : continueAfterForfeit(forfeitedTender, forfeitedAt)
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'player_forfeited_tender',
+            payload: {
+              forfeitedAt: forfeitedAtByPlayer[player.id],
+              playerId: player.id,
+            },
+          }, ...(nextTender.phase === 'complete'
+            ? [{
+                kind: 'tender_completed_early',
+                payload: {
+                  completionReason: nextTender.completionReason,
+                  winnerPlayerIds: nextTender.winnerPlayerIds,
+                },
+              }]
+            : [])],
+          command,
+          commandFingerprint,
+          nextTender,
+          tender,
+        })
+      }
       if (command.type === 'leave-tender' || command.type === 'resume-tender') {
         if (tender.phase === 'complete') {
           throw new TenderFailure('invalid_tender_state', 'Tender is already complete')
@@ -502,8 +639,9 @@ export function createTenderModule({
           throw new TenderFailure('invalid_tender_state', 'Access Slot selection is closed')
         }
         const requestedSlots = { ...tender.requestedSlots, [player.id]: command.slot }
-        const isReadyToResolve = Object.keys(requestedSlots).length === tender.players.length
-        const accessSlots = isReadyToResolve ? resolveAccessSlots(rotateTiePriority(tender.players, tender.round), requestedSlots) : tender.accessSlots
+        const currentActivePlayers = activePlayers(tender)
+        const isReadyToResolve = currentActivePlayers.every((candidate) => requestedSlots[candidate.id] !== undefined)
+        const accessSlots = isReadyToResolve ? resolveAccessSlots(rotateTiePriority(currentActivePlayers, tender.round), requestedSlots) : tender.accessSlots
         const budgetByPlayer = isReadyToResolve
           ? Object.fromEntries(tender.players.map((player) => [
             player.id,
@@ -514,7 +652,7 @@ export function createTenderModule({
         const samplesByPlayer = isReadyToResolve ? { ...tender.samplesByPlayer } : tender.samplesByPlayer
         const knownSignals = isReadyToResolve ? [...tender.knownSignals] : tender.knownSignals
         if (isReadyToResolve) {
-          for (const player of tender.players) {
+          for (const player of currentActivePlayers) {
             if (!receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
             const nextSample = nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
             if (!nextSample) continue
@@ -569,7 +707,8 @@ export function createTenderModule({
           throw new TenderFailure('invalid_tender_state', 'Laboratory Power requires access to two distinct Samples')
         }
         const powerAllocations: Record<string, PowerAllocation> = { ...tender.powerAllocations, [player.id]: command.allocation }
-        const isReadyToStartReconnaissance = Object.keys(powerAllocations).length === tender.players.length
+        const isReadyToStartReconnaissance = activePlayers(tender)
+          .every((candidate) => powerAllocations[candidate.id] !== undefined)
         const nextTender = isReadyToStartReconnaissance
           ? beginOperationalActions({ ...tender, powerAllocations })
           : { ...tender, powerAllocations }
@@ -1238,6 +1377,9 @@ export function createTenderModule({
       const { tenderId, playerId } = parsedQuery.data
       const tender = await readTender(tenderId)
       const player = readPlayer(tender, playerId)
+      if (tender.phase !== 'complete' && !isActivePlayer(tender, player.id)) {
+        throw new TenderFailure('player_forfeited', 'Player permanently forfeited this Tender')
+      }
       const activePlayerId = activePlayerIdForView(tender)
       const auditEvents = tender.phase === 'complete'
         ? await store.readAuditEvents(tenderId)
@@ -1287,6 +1429,7 @@ export function createTenderModule({
           ? tender.corporateReviewByPlayer[playerId] ?? false
           : tender.corporateReviewActive,
         hasLeft: tender.departedPlayerIds.includes(playerId),
+        hasForfeited: !isActivePlayer(tender, playerId),
         publicContracts: tender.publicContracts.map((contract) => ({
           ...contract,
           eligibleForPlayer: contractIsEligibleForPlayer(tender, playerId, contract),
@@ -1311,6 +1454,7 @@ export function createTenderModule({
           displayName: player.displayName ?? player.id.slice(0, 8),
           tiePriority: tiePriorities[player.id],
           ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
+          ...(!isActivePlayer(tender, player.id) ? { forfeited: true } : {}),
           budget: tender.ruleset === 'tender-v2'
             && tender.phase === 'model-analysis'
             && player.id !== playerId
@@ -1411,7 +1555,7 @@ export function createTenderModule({
         if (tender.dueAt === null || tender.dueAt > dueNow) continue
 
         if (tender.phase === 'power-allocation') {
-          const timedOutPlayerIds = tender.players
+          const timedOutPlayerIds = activePlayers(tender)
             .filter((player) => tender.powerAllocations[player.id] === undefined)
             .map((player) => player.id)
           if (timedOutPlayerIds.length === 0) continue
@@ -1579,24 +1723,28 @@ export function createTenderModule({
         }
         if (tender.phase !== 'access-slot-selection') continue
 
-        const timedOutPlayers = tender.players.filter((player) => tender.requestedSlots[player.id] === undefined)
+        const currentActivePlayers = activePlayers(tender)
+        const timedOutPlayers = currentActivePlayers.filter((player) => tender.requestedSlots[player.id] === undefined)
         const requestedSlots = {
           ...tender.requestedSlots,
           ...Object.fromEntries(timedOutPlayers.map((player) => [player.id, 3])),
         }
-        const accessSlots = resolveAccessSlots(rotateTiePriority(tender.players, tender.round), requestedSlots)
+        const accessSlots = resolveAccessSlots(rotateTiePriority(currentActivePlayers, tender.round), requestedSlots)
         const timedOutPlayerIds = new Set(timedOutPlayers.map((player) => player.id))
-        const budgetByPlayer = Object.fromEntries(tender.players.map((player) => [
-          player.id,
-          timedOutPlayerIds.has(player.id)
-            ? tender.budgetByPlayer[player.id] ?? 0
-            : (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
-        ]))
+        const budgetByPlayer = {
+          ...tender.budgetByPlayer,
+          ...Object.fromEntries(currentActivePlayers.map((player) => [
+            player.id,
+            timedOutPlayerIds.has(player.id)
+              ? tender.budgetByPlayer[player.id] ?? 0
+              : (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
+          ])),
+        }
         const samplesByPlayer = { ...tender.samplesByPlayer }
         const rawTelemetrySignalsByPlayer = { ...tender.rawTelemetrySignalsByPlayer }
         const knownSignals = [...tender.knownSignals]
         const sampleCompensationByPlayer: Record<string, SignalId> = {}
-        for (const player of tender.players) {
+        for (const player of currentActivePlayers) {
           if (timedOutPlayerIds.has(player.id) || !receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
           const nextSample = nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
           if (!nextSample) continue

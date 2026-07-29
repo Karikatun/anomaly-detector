@@ -88,8 +88,10 @@ function MyMatchesContent() {
             <div className={styles.rows}>
               {matches.data.map((match) => {
                 const isComplete = match.tenderPhase === 'complete'
-                const status = match.tenderCompletionReason === 'all_players_left'
-                  ? 'Завершён досрочно'
+                const status = match.tenderForfeited && !isComplete
+                  ? t('matches.status.forfeited')
+                  : match.tenderCompletionReason !== undefined
+                    ? t('matches.status.earlyComplete')
                   : isComplete
                     ? t('matches.status.complete')
                     : t('matches.status.active')
@@ -108,7 +110,7 @@ function MyMatchesContent() {
                       </Typography>
                     </div>
                     <div className={styles.actionCell}>
-                      {match.tenderId ? (
+                      {match.tenderId && (!match.tenderForfeited || isComplete) ? (
                         <Button
                           type="button"
                           className={styles.detailsButton}
