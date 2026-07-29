@@ -13,6 +13,16 @@ import type {
 } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
@@ -37,10 +47,15 @@ type ModelAnalysisPanelProps = {
   publicTheses: PublicThesis[]
   publicLaboratoryResults: TenderView['publicLaboratoryResults']
   privateMeasurements: TenderView['privateMeasurements']
+  privateTheses?: TenderView['privateTheses']
+  progress?: TenderView['modelAnalysisProgress']
+  round: number
+  ruleset?: TenderView['ruleset']
   disabled?: boolean
   workingModelDisabled?: boolean
   error?: string | null
   onConfirmThesis: (input: { signalId: SignalId; fieldType: FieldType; polarity: Polarity }) => Promise<void>
+  onFinish: () => Promise<void>
   onSaveWorkingModel: (model: WorkingModel) => Promise<void>
 }
 
@@ -55,10 +70,15 @@ export function ModelAnalysisPanel({
   publicTheses,
   publicLaboratoryResults,
   privateMeasurements,
+  privateTheses,
+  progress,
+  round,
+  ruleset,
   disabled,
   workingModelDisabled,
   error,
   onConfirmThesis,
+  onFinish,
   onSaveWorkingModel,
 }: ModelAnalysisPanelProps) {
   const [signalId, setSignalId] = useState<SignalId | ''>('')
@@ -66,6 +86,10 @@ export function ModelAnalysisPanel({
   const [polarity, setPolarity] = useState<Polarity | ''>('')
   const { t } = useI18n()
   const isValid = signalId !== '' && fieldType !== '' && polarity !== ''
+  const isPrivateAnalysis = ruleset === 'tender-v2'
+  const visibleTheses = isPrivateAnalysis
+    ? (privateTheses ?? []).filter((thesis) => thesis.round === round)
+    : publicTheses
 
   const handleSubmit = async () => {
     if (!isValid) return
@@ -100,9 +124,11 @@ export function ModelAnalysisPanel({
         <section className={`${styles.surface} ${styles.analysisThesis}`}>
           <div className={styles.sectionHeader}>
             <Typography as="h2" variant="bodySmMedium" className={styles.sectionTitle}>
-              Публичный тезис
+              {isPrivateAnalysis ? t('tender.analysis.privateTitle') : t('tender.analysis.publicTitle')}
             </Typography>
-            <Typography as="span" variant="caption" className={styles.sectionMeta}>Видят все</Typography>
+            <Typography as="span" variant="caption" className={styles.sectionMeta}>
+              {isPrivateAnalysis ? t('tender.analysis.privateMeta') : t('tender.analysis.publicMeta')}
+            </Typography>
           </div>
 
           <div className={styles.analysisFormGrid}>
@@ -169,7 +195,9 @@ export function ModelAnalysisPanel({
           <div className={styles.warning}>
             <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
             <Typography variant="bodySm">
-              Верный тезис: +1 рейтинг и сертификация. Неверный запускает корпоративную проверку.
+              {isPrivateAnalysis
+                ? t('tender.analysis.privateWarning')
+                : t('tender.analysis.publicWarning')}
             </Typography>
           </div>
           <details className={styles.analysisEvidence}>
@@ -189,18 +217,26 @@ export function ModelAnalysisPanel({
           </details>
           <div className={styles.analysisHistory}>
             <div className={styles.sectionHeader}>
-              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>История тезисов</Typography>
-              <Typography as="span" variant="caption" className={styles.sectionMeta}>{publicTheses.length}</Typography>
+              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>
+                {t('tender.analysis.history')}
+              </Typography>
+              <Typography as="span" variant="caption" className={styles.sectionMeta}>
+                {visibleTheses.length} / {maxTheses}
+              </Typography>
             </div>
-            {publicTheses.length === 0 ? (
-              <Typography variant="bodySm" tone="muted">В этом тендере тезисов ещё нет.</Typography>
+            {visibleTheses.length === 0 ? (
+              <Typography variant="bodySm" tone="muted">{t('tender.analysis.historyEmpty')}</Typography>
             ) : (
               <div className={styles.journalList}>
-                {publicTheses.slice().reverse().map((thesis, index) => (
+                {visibleTheses.slice().reverse().map((thesis, index) => {
+                  const fieldTypeCorrect = 'fieldTypeCorrect' in thesis ? thesis.fieldTypeCorrect : thesis.correct
+                  const polarityCorrect = 'polarityCorrect' in thesis ? thesis.polarityCorrect : thesis.correct
+                  return (
                   <div
-                    key={`${thesis.playerId}-${thesis.signalId}-${index}`}
+                    key={'id' in thesis ? thesis.id : `${thesis.playerId}-${thesis.signalId}-${index}`}
                     className={styles.journalEntry}
-                    data-public-thesis
+                    data-private-thesis={isPrivateAnalysis || undefined}
+                    data-public-thesis={!isPrivateAnalysis || undefined}
                     style={previewStyle(thesis.signalId)}
                   >
                     <SignalGlyph signal={thesis.signalId} className={styles.signalGlyph} />
@@ -211,13 +247,27 @@ export function ModelAnalysisPanel({
                       </Typography>
                     </span>
                     <span className={styles.journalMeta}>
-                      <Typography as="span" variant="caption">{thesis.correct ? 'Верно' : 'Неверно'}</Typography>
+                      <Typography as="span" variant="caption" data-correct={fieldTypeCorrect || undefined}>
+                        {fieldTypeCorrect ? t('tender.analysis.typeCorrect') : t('tender.analysis.typeIncorrect')}
+                      </Typography>
+                      <Typography as="span" variant="caption" data-correct={polarityCorrect || undefined}>
+                        {polarityCorrect ? t('tender.analysis.polarityCorrect') : t('tender.analysis.polarityIncorrect')}
+                      </Typography>
                     </span>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
+          {isPrivateAnalysis && progress && (
+            <Typography variant="bodySm" tone="muted">
+              {t('tender.analysis.progress', {
+                completed: progress.completed,
+                total: progress.total,
+              })}
+            </Typography>
+          )}
         </section>
       </div>
 
@@ -227,9 +277,34 @@ export function ModelAnalysisPanel({
         <div className={styles.info}>
           <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
           <Typography variant="bodySm">
-            Тезис публичен и необратим.{maxTheses > 1 ? ' Доступна расширенная проверка.' : ''}
+            {isPrivateAnalysis
+              ? t('tender.analysis.privateInfo')
+              : t('tender.analysis.publicInfo')}
           </Typography>
         </div>
+        {isPrivateAnalysis && maxTheses === 2 && visibleTheses.length === 1 && !disabled && (
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button type="button" size="lg" variant="outline">
+                {t('tender.analysis.finishEarly')}
+              </Button>
+            </DialogTrigger>
+            <DialogContent closeLabel={t('tender.analysis.finishCancel')}>
+              <DialogHeader>
+                <DialogTitle>{t('tender.analysis.finishTitle')}</DialogTitle>
+                <DialogDescription>{t('tender.analysis.finishDescription')}</DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">{t('tender.analysis.finishCancel')}</Button>
+                </DialogClose>
+                <Button type="button" onClick={() => void runTenderAction(onFinish)}>
+                  {t('tender.analysis.finishConfirm')}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
         <Button
           type="button"
           size="lg"

@@ -6,6 +6,7 @@ import type {
   PublicLaboratoryResult,
   ScientificJournalEntry,
   PublicThesis,
+  PrivateThesis,
   ScientificModel,
   TenderCommand,
   TenderAuditEvent,
@@ -39,6 +40,7 @@ export type StoredTender = {
   budgetByPlayer: Record<string, number>
   corporateTrustByPlayer: Record<string, number>
   corporateReviewActive: boolean
+  corporateReviewByPlayer: Record<string, boolean>
   contractCompletedByPlayer: Record<string, boolean>
   contractPowerRestrictionsByPlayer: Record<string, number>
   completionReason?: 'all_players_left'
@@ -65,6 +67,8 @@ export type StoredTender = {
   laboratoryCompletedByPlayer: Record<string, boolean>
   modelAnalysisCompletedByPlayer: Record<string, boolean>
   privateMeasurementsByPlayer: Record<string, PrivateMeasurement[]>
+  privateThesesByPlayer: Record<string, PrivateThesis[]>
+  certifiedSignalsByPlayer: Record<string, SignalId[]>
   researchCertificationsByPlayer: Record<string, SignalId[]>
   usedContractEvidenceTestIds: string[]
   privateWorkingModelsByPlayer: Record<string, WorkingModel>

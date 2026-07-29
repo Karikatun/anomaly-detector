@@ -648,6 +648,14 @@
   font-size: .58rem;
 }
 
+[data-private-thesis] .journalMeta span[data-correct] {
+  color: #69d78c;
+}
+
+[data-private-thesis] .journalMeta span:not([data-correct]) {
+  color: #ff7676;
+}
+
 .analysisSplit,
 .analysisThesis,
 .analysisHistory {

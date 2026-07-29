@@ -38,15 +38,15 @@ test('Working Model remains editable while the phase action is waiting for anoth
       <ModelAnalysisPanel
         disabled
         workingModelDisabled={false}
-        dueAt="2026-07-25T12:01:30.000Z"
         knownSignals={['aster']}
         maxTheses={1}
         model={{ signals: {} }}
         privateMeasurements={[]}
         publicLaboratoryResults={[]}
         publicTheses={[]}
-        serverTime="2026-07-25T12:00:00.000Z"
+        round={1}
         onConfirmThesis={async () => undefined}
+        onFinish={async () => undefined}
         onSaveWorkingModel={async () => undefined}
       />
     </I18nProvider>,
@@ -64,7 +64,6 @@ test('Model Analysis renders every public Thesis in its history', () => {
   const html = renderToStaticMarkup(
     <I18nProvider>
       <ModelAnalysisPanel
-        dueAt="2026-07-25T12:01:30.000Z"
         knownSignals={['aster']}
         maxTheses={1}
         model={{ signals: {} }}
@@ -76,12 +75,50 @@ test('Model Analysis renders every public Thesis in its history', () => {
           { correct: false, fieldType: 'electromagnetic', playerId: 'player-a', polarity: 'positive', signalId: 'aster', verification: 'standard' },
           { correct: true, fieldType: 'inertial', playerId: 'player-a', polarity: 'negative', signalId: 'aster', verification: 'extended' },
         ]}
-        serverTime="2026-07-25T12:00:00.000Z"
+        round={1}
         onConfirmThesis={async () => undefined}
+        onFinish={async () => undefined}
         onSaveWorkingModel={async () => undefined}
       />
     </I18nProvider>,
   )
 
   expect(html.match(/data-public-thesis="true"/g)).toHaveLength(4)
+})
+
+test('private Model Analysis shows separate property results only to its owner', () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <ModelAnalysisPanel
+        knownSignals={['aster']}
+        maxTheses={2}
+        model={{ signals: {} }}
+        privateMeasurements={[]}
+        privateTheses={[{
+          fieldType: 'inertial',
+          fieldTypeCorrect: true,
+          fullyCorrect: false,
+          id: 'r1-player-a-thesis-1',
+          polarity: 'positive',
+          polarityCorrect: false,
+          round: 1,
+          signalId: 'aster',
+        }]}
+        progress={{ completed: 1, total: 2 }}
+        publicLaboratoryResults={[]}
+        publicTheses={[]}
+        round={1}
+        ruleset="tender-v2"
+        onConfirmThesis={async () => undefined}
+        onFinish={async () => undefined}
+        onSaveWorkingModel={async () => undefined}
+      />
+    </I18nProvider>,
+  )
+
+  expect(html).toContain('data-private-thesis="true"')
+  expect(html).toContain('Тип верен')
+  expect(html).toContain('Полярность неверна')
+  expect(html).toContain('Завершили 1 из 2 исследователей')
+  expect(html).not.toContain('data-public-thesis="true"')
 })

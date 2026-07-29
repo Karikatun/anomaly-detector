@@ -332,6 +332,48 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     })
   })
 
+  test('restores private Model Analysis state without exposing it to another player', async () => {
+    const firstModule = createTenderModule({
+      seedGenerator: () => 'seed-1',
+      store: createPrismaTenderStore(prisma),
+    })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    await firstModule.execute({ actorId: 'player-a', commandId: 'slot-a', slot: 3, tenderId, type: 'request-access-slot' })
+    await firstModule.execute({ actorId: 'player-b', commandId: 'slot-b', slot: 4, tenderId, type: 'request-access-slot' })
+    await firstModule.execute({ actorId: 'player-a', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 2, reconnaissance: 0, reserve: 2 }, commandId: 'power-a', tenderId, type: 'allocate-power' })
+    await firstModule.execute({ actorId: 'player-b', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 1, reconnaissance: 0, reserve: 3 }, commandId: 'power-b', tenderId, type: 'allocate-power' })
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'thesis-a-1',
+      fieldType: 'inertial',
+      polarity: 'positive',
+      signalId: 'aster',
+      tenderId,
+      type: 'submit-thesis',
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+      corporateReviewActive: true,
+      privateTheses: [{
+        fieldTypeCorrect: true,
+        polarityCorrect: false,
+        signalId: 'aster',
+      }],
+      publicTheses: [],
+    })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })).toMatchObject({
+      corporateReviewActive: false,
+      privateTheses: [],
+      publicTheses: [],
+    })
+  })
+
   test('persists resolved Access Slots and the phase transition', async () => {
     const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
     const { tenderId } = await module.createTender({

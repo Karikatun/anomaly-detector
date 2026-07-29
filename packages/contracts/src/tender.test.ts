@@ -194,12 +194,17 @@ describe('Tender contracts', () => {
       reconnaissance: 0,
     })).toThrow()
 
-    expect(() => powerAllocationSchema.parse({
+    expect(powerAllocationSchema.parse({
       contracts: 1,
       laboratory: 0,
       modelAnalysis: 2,
       reconnaissance: 1,
-    })).toThrow()
+    })).toEqual({
+      contracts: 1,
+      laboratory: 0,
+      modelAnalysis: 2,
+      reconnaissance: 1,
+    })
   })
 
   test('validates a Reconnaissance command with one or two distinct Signals', () => {
@@ -254,6 +259,47 @@ describe('Tender contracts', () => {
       tenderId: 'tender-1',
       type: 'run-laboratory-test',
     })).toThrow()
+  })
+
+  test('validates private Thesis results and voluntary Model Analysis completion', () => {
+    expect(tenderCommandSchema.parse({
+      actorId: 'player-a',
+      commandId: 'command-a-finish-analysis',
+      tenderId: 'tender-1',
+      type: 'finish-model-analysis',
+    })).toMatchObject({ type: 'finish-model-analysis' })
+
+    expect(tenderViewSchema.parse({
+      knownSignals: ['aster'],
+      modelAnalysisProgress: { completed: 1, total: 2 },
+      phase: 'model-analysis',
+      players: [{ budget: 1, contractPowerRestriction: 0, playerId: 'player-a', rating: 1 }],
+      privateMeasurements: [],
+      privateRawTelemetrySignals: [],
+      privateSamples: ['aster'],
+      privateTheses: [{
+        fieldType: 'inertial',
+        fieldTypeCorrect: true,
+        fullyCorrect: false,
+        id: 'r1-player-a-thesis-1',
+        polarity: 'negative',
+        polarityCorrect: false,
+        round: 1,
+        signalId: 'aster',
+      }],
+      privateWorkingModel: { signals: {} },
+      publicContracts: [],
+      publicLaboratoryResults: [],
+      publicTheses: [],
+      round: 1,
+      ruleset: 'tender-v2',
+      serverTime: '2026-07-26T12:00:00.000Z',
+      tenderId: 'tender-1',
+      version: 4,
+    })).toMatchObject({
+      modelAnalysisProgress: { completed: 1, total: 2 },
+      privateTheses: [{ fieldTypeCorrect: true, polarityCorrect: false }],
+    })
   })
 
   test('validates a Contract reservation command', () => {

@@ -195,6 +195,8 @@ export function createTenderModule({
     .filter((player) => tender.powerAllocations[player.id]?.laboratory > 0 && !tender.laboratoryCompletedByPlayer[player.id])
     .sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
   const nextModelAnalysisPlayer = (tender: StoredTender) => tender.players.filter((player) => tender.powerAllocations[player.id]?.modelAnalysis > 0 && !tender.modelAnalysisCompletedByPlayer[player.id]).sort((left, right) => tender.accessSlots[left.id] - tender.accessSlots[right.id])[0]
+  const modelAnalysisPlayers = (tender: StoredTender) => tender.players
+    .filter((player) => (tender.powerAllocations[player.id]?.modelAnalysis ?? 0) > 0)
 
   const effectiveContractPower = (tender: StoredTender, playerId: string) => tender.powerAllocations[playerId]?.contracts ?? 0
 
@@ -240,7 +242,9 @@ export function createTenderModule({
     switch (tender.phase) {
       case 'reconnaissance': return nextReconnaissancePlayer(tender)?.id
       case 'laboratory': return nextLaboratoryPlayer(tender)?.id
-      case 'model-analysis': return nextModelAnalysisPlayer(tender)?.id
+      case 'model-analysis': return tender.ruleset === 'tender-v1'
+        ? nextModelAnalysisPlayer(tender)?.id
+        : undefined
       case 'contracts': return nextContractsPlayer(tender)?.id
       case 'final-scientific-model': return nextScientificModelPlayer(tender)?.id
       default: return undefined
@@ -250,7 +254,9 @@ export function createTenderModule({
   const resolveWinners = (tender: StoredTender) => {
     const highestRating = Math.max(...tender.players.map((player) => tender.ratingByPlayer[player.id] ?? 0))
     const ratingLeaders = tender.players.filter((player) => (tender.ratingByPlayer[player.id] ?? 0) === highestRating)
-    const correctThesisCount = (playerId: string) => tender.publicTheses.filter((thesis) => thesis.playerId === playerId && thesis.correct).length
+    const correctThesisCount = (playerId: string) => tender.ruleset === 'tender-v2'
+      ? (tender.certifiedSignalsByPlayer[playerId] ?? []).length
+      : tender.publicTheses.filter((thesis) => thesis.playerId === playerId && thesis.correct).length
     const highestThesisCount = Math.max(...ratingLeaders.map((player) => correctThesisCount(player.id)))
     const thesisLeaders = ratingLeaders.filter((player) => correctThesisCount(player.id) === highestThesisCount)
     const highestBudget = Math.max(...thesisLeaders.map((player) => tender.budgetByPlayer[player.id] ?? 0))
@@ -272,6 +278,7 @@ export function createTenderModule({
       accessSlots: {},
       contractCompletedByPlayer: {},
       corporateReviewActive: false,
+      corporateReviewByPlayer: {},
       laboratoryCompletedByPlayer: {},
       modelAnalysisCompletedByPlayer: {},
       phase: 'access-slot-selection',
@@ -375,6 +382,8 @@ export function createTenderModule({
         budgetByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 2])),
         corporateTrustByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 0])),
         corporateReviewActive: false,
+        corporateReviewByPlayer: {},
+        certifiedSignalsByPlayer: {},
         contractCompletedByPlayer: {},
         contractPowerRestrictionsByPlayer: {},
         departedPlayerIds: [],
@@ -396,6 +405,7 @@ export function createTenderModule({
         laboratoryCompletedByPlayer: {},
         modelAnalysisCompletedByPlayer: {},
         privateMeasurementsByPlayer: {},
+        privateThesesByPlayer: {},
         researchCertificationsByPlayer: {},
         usedContractEvidenceTestIds: [],
         privateWorkingModelsByPlayer: {},
@@ -657,6 +667,106 @@ export function createTenderModule({
       }
 
       if (command.type === 'submit-thesis') {
+        if (tender.ruleset === 'tender-v2') {
+          if (
+            tender.phase !== 'model-analysis'
+            || (tender.powerAllocations[player.id]?.modelAnalysis ?? 0) === 0
+            || tender.modelAnalysisCompletedByPlayer[player.id]
+          ) {
+            throw new TenderFailure('invalid_tender_state', 'Model analysis is not available to this Player')
+          }
+          const existingTheses = tender.privateThesesByPlayer[player.id] ?? []
+          const roundTheses = existingTheses.filter((thesis) => thesis.round === tender.round)
+          const maxTheses = tender.powerAllocations[player.id]?.modelAnalysis ?? 0
+          if (roundTheses.length >= maxTheses) {
+            throw new TenderFailure('invalid_tender_state', 'Model analysis attempts are exhausted')
+          }
+          const reviewActive = tender.corporateReviewByPlayer[player.id] ?? false
+          if (reviewActive && (tender.budgetByPlayer[player.id] ?? 0) < 1) {
+            throw new TenderFailure('invalid_tender_state', 'Model analysis requires one Budget')
+          }
+
+          const actual = tender.anomalyConfiguration.signals[command.signalId]
+          const fieldTypeCorrect = actual.fieldType === command.fieldType
+          const polarityCorrect = actual.polarity === command.polarity
+          const fullyCorrect = fieldTypeCorrect && polarityCorrect
+          const alreadyCertified = (tender.certifiedSignalsByPlayer[player.id] ?? []).includes(command.signalId)
+          const earnsReward = fullyCorrect && !alreadyCertified
+          const privateThesis = {
+            fieldType: command.fieldType,
+            fieldTypeCorrect,
+            fullyCorrect,
+            id: `r${tender.round}-${player.id}-thesis-${roundTheses.length + 1}`,
+            polarity: command.polarity,
+            polarityCorrect,
+            round: tender.round,
+            signalId: command.signalId,
+          }
+          const privateThesesByPlayer = {
+            ...tender.privateThesesByPlayer,
+            [player.id]: [...existingTheses, privateThesis],
+          }
+          const nextRoundThesisCount = roundTheses.length + 1
+          const budgetByPlayer = reviewActive
+            ? { ...tender.budgetByPlayer, [player.id]: (tender.budgetByPlayer[player.id] ?? 0) - 1 }
+            : tender.budgetByPlayer
+          const corporateReviewByPlayer = {
+            ...tender.corporateReviewByPlayer,
+            [player.id]: reviewActive || !fullyCorrect,
+          }
+          const canSubmitAnother = nextRoundThesisCount < maxTheses
+            && (!corporateReviewByPlayer[player.id] || (budgetByPlayer[player.id] ?? 0) >= 1)
+          const modelAnalysisCompletedByPlayer = canSubmitAnother
+            ? tender.modelAnalysisCompletedByPlayer
+            : { ...tender.modelAnalysisCompletedByPlayer, [player.id]: true }
+          const nextTender = {
+            ...tender,
+            budgetByPlayer,
+            certifiedSignalsByPlayer: earnsReward
+              ? {
+                  ...tender.certifiedSignalsByPlayer,
+                  [player.id]: [...(tender.certifiedSignalsByPlayer[player.id] ?? []), command.signalId],
+                }
+              : tender.certifiedSignalsByPlayer,
+            corporateReviewByPlayer,
+            modelAnalysisCompletedByPlayer,
+            privateThesesByPlayer,
+            ratingByPlayer: earnsReward
+              ? { ...tender.ratingByPlayer, [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + 1 }
+              : tender.ratingByPlayer,
+            researchCertificationsByPlayer: earnsReward
+              ? {
+                  ...tender.researchCertificationsByPlayer,
+                  [player.id]: [...(tender.researchCertificationsByPlayer[player.id] ?? []), command.signalId],
+                }
+              : tender.researchCertificationsByPlayer,
+          }
+          const analysisStillOpen = nextModelAnalysisPlayer(nextTender) !== undefined
+          const advancedTender = analysisStillOpen
+            ? { ...nextTender, phase: 'model-analysis' as const, dueAt: tender.dueAt }
+            : advanceAfterOperationalActions(nextTender, 'model-analysis')
+          return commitCommand({
+            auditEvents: [{
+              actorId: command.actorId,
+              commandId: command.commandId,
+              kind: 'private_thesis_checked',
+              payload: {
+                fieldTypeCorrect,
+                fullyCorrect,
+                playerId: player.id,
+                polarityCorrect,
+                signalId: command.signalId,
+                thesisId: privateThesis.id,
+              },
+            }],
+            command,
+            commandFingerprint,
+            nextTender: analysisStillOpen
+              ? advancedTender
+              : { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, now()) },
+            tender,
+          })
+        }
         if (tender.phase !== 'model-analysis' || nextModelAnalysisPlayer(tender)?.id !== player.id) throw new TenderFailure('invalid_tender_state', 'Model analysis is not available to this Player')
         if (tender.corporateReviewActive && (tender.budgetByPlayer[player.id] ?? 0) < 1) {
           const nextTender = { ...tender, modelAnalysisCompletedByPlayer: { ...tender.modelAnalysisCompletedByPlayer, [player.id]: true } }
@@ -703,6 +813,43 @@ export function createTenderModule({
             : advanceAfterOperationalActions(nextTender, 'model-analysis')
           return { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, now()) }
         })(), tender })
+      }
+
+      if (command.type === 'finish-model-analysis') {
+        if (
+          tender.ruleset !== 'tender-v2'
+          || tender.phase !== 'model-analysis'
+          || (tender.powerAllocations[player.id]?.modelAnalysis ?? 0) < 2
+          || tender.modelAnalysisCompletedByPlayer[player.id]
+          || (tender.privateThesesByPlayer[player.id] ?? []).filter((thesis) => thesis.round === tender.round).length !== 1
+        ) {
+          throw new TenderFailure('invalid_tender_state', 'Model analysis cannot be finished now')
+        }
+        const nextTender = {
+          ...tender,
+          modelAnalysisCompletedByPlayer: {
+            ...tender.modelAnalysisCompletedByPlayer,
+            [player.id]: true,
+          },
+        }
+        const analysisStillOpen = nextModelAnalysisPlayer(nextTender) !== undefined
+        const advancedTender = analysisStillOpen
+          ? { ...nextTender, phase: 'model-analysis' as const, dueAt: tender.dueAt }
+          : advanceAfterOperationalActions(nextTender, 'model-analysis')
+        return commitCommand({
+          auditEvents: [{
+            actorId: command.actorId,
+            commandId: command.commandId,
+            kind: 'model_analysis_finished_early',
+            payload: { playerId: player.id },
+          }],
+          command,
+          commandFingerprint,
+          nextTender: analysisStillOpen
+            ? advancedTender
+            : { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, now()) },
+          tender,
+        })
       }
 
       if (command.type === 'update-working-model') {
@@ -1024,12 +1171,38 @@ export function createTenderModule({
       const tiePriorities = Object.fromEntries(
         rotateTiePriority(tender.players, tender.round).map((candidate) => [candidate.id, candidate.tiePriority]),
       )
+      const modelAnalysisProgress = tender.ruleset === 'tender-v2' && tender.phase === 'model-analysis'
+        ? {
+            completed: modelAnalysisPlayers(tender).filter((candidate) =>
+              tender.modelAnalysisCompletedByPlayer[candidate.id],
+            ).length,
+            total: modelAnalysisPlayers(tender).length,
+          }
+        : undefined
+      const currentRoundPrivateTheses = (candidateId: string) =>
+        (tender.privateThesesByPlayer[candidateId] ?? []).filter((thesis) => thesis.round === tender.round)
+      const hiddenCurrentRoundRating = (candidateId: string) => {
+        const allTheses = tender.privateThesesByPlayer[candidateId] ?? []
+        return currentRoundPrivateTheses(candidateId).filter((thesis) => {
+          if (!thesis.fullyCorrect) return false
+          const thesisIndex = allTheses.findIndex((candidate) => candidate.id === thesis.id)
+          return !allTheses.slice(0, thesisIndex).some((candidate) =>
+            candidate.fullyCorrect && candidate.signalId === thesis.signalId,
+          )
+        }).length
+      }
+      const hiddenCurrentRoundBudget = (candidateId: string) => {
+        const theses = currentRoundPrivateTheses(candidateId)
+        return theses.length >= 2 && !theses[0]?.fullyCorrect ? 1 : 0
+      }
       return {
         ...(activePlayerId ? { activePlayerId } : {}),
         abandonmentDueAt: tender.abandonmentDueAt?.toISOString() ?? null,
         ...(tender.completionReason ? { completionReason: tender.completionReason } : {}),
         knownSignals: tender.knownSignals,
-        corporateReviewActive: tender.corporateReviewActive,
+        corporateReviewActive: tender.ruleset === 'tender-v2'
+          ? tender.corporateReviewByPlayer[playerId] ?? false
+          : tender.corporateReviewActive,
         hasLeft: tender.departedPlayerIds.includes(playerId),
         publicContracts: tender.publicContracts.map((contract) => ({
           ...contract,
@@ -1043,6 +1216,7 @@ export function createTenderModule({
         publicScientificJournal: tender.publicScientificJournal,
         round: tender.round,
         ruleset: tender.ruleset,
+        ...(modelAnalysisProgress ? { modelAnalysisProgress } : {}),
         serverTime: now().toISOString(),
         tenderId,
         version: tender.version,
@@ -1053,11 +1227,18 @@ export function createTenderModule({
           displayName: player.displayName ?? player.id.slice(0, 8),
           tiePriority: tiePriorities[player.id],
           ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
-          budget: tender.budgetByPlayer[player.id] ?? 0,
+          budget: tender.ruleset === 'tender-v2'
+            && tender.phase === 'model-analysis'
+            && player.id !== playerId
+            ? (tender.budgetByPlayer[player.id] ?? 0) + hiddenCurrentRoundBudget(player.id)
+            : tender.budgetByPlayer[player.id] ?? 0,
           corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,
           contractPowerRestriction: tender.contractPowerRestrictionsByPlayer[player.id] ?? 0,
           ...(tender.phase === 'final-scientific-model'
             ? { finalScientificModelSubmitted: tender.finalScientificModelsByPlayer[player.id] !== undefined }
+            : {}),
+          ...(tender.ruleset === 'tender-v2' && tender.phase === 'model-analysis' && player.id === playerId
+            ? { modelAnalysisCompleted: tender.modelAnalysisCompletedByPlayer[player.id] ?? false }
             : {}),
           ...(tender.phase === 'power-allocation'
             ? { powerAllocationConfirmed: tender.powerAllocations[player.id] !== undefined }
@@ -1067,7 +1248,11 @@ export function createTenderModule({
             && (tender.phase !== 'power-allocation' || player.id === playerId)
             ? { powerAllocation: tender.powerAllocations[player.id] }
             : {}),
-          rating: tender.ratingByPlayer[player.id] ?? 0,
+          rating: tender.ruleset === 'tender-v2'
+            && tender.phase === 'model-analysis'
+            && player.id !== playerId
+            ? Math.max(0, (tender.ratingByPlayer[player.id] ?? 0) - hiddenCurrentRoundRating(player.id))
+            : tender.ratingByPlayer[player.id] ?? 0,
           ...(player.id === playerId && tender.requestedSlots[player.id] !== undefined
             ? { requestedAccessSlot: tender.requestedSlots[player.id] }
             : {}),
@@ -1075,13 +1260,16 @@ export function createTenderModule({
         privateRawTelemetrySignals: tender.rawTelemetrySignalsByPlayer[player.id] ?? [],
         privateSamples: tender.samplesByPlayer[player.id] ?? [],
         privateMeasurements: tender.privateMeasurementsByPlayer[player.id] ?? [],
+        privateTheses: tender.ruleset === 'tender-v2'
+          ? tender.privateThesesByPlayer[player.id] ?? []
+          : undefined,
         privateResearchCertifications: tender.researchCertificationsByPlayer[player.id] ?? [],
         privateTelemetry: tender.privateMeasurementsByPlayer[player.id] ?? [],
         privateUsedContractEvidenceTestIds: tender.usedContractEvidenceTestIds.filter((testId) =>
           tender.publicScientificJournal.some((entry) => entry.testId === testId && entry.playerId === playerId),
         ),
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
-        publicTheses: tender.publicTheses,
+        publicTheses: tender.ruleset === 'tender-v2' ? [] : tender.publicTheses,
         ...(tender.phase === 'complete' ? { winnerPlayerIds: tender.winnerPlayerIds } : {}),
         ...(tender.phase === 'complete' ? {
           audit: {
@@ -1193,6 +1381,29 @@ export function createTenderModule({
           continue
         }
         if (tender.phase === 'model-analysis') {
+          if (tender.ruleset === 'tender-v2') {
+            const timedOutPlayerIds = modelAnalysisPlayers(tender)
+              .filter((player) => !tender.modelAnalysisCompletedByPlayer[player.id])
+              .map((player) => player.id)
+            const modelAnalysisCompletedByPlayer = {
+              ...tender.modelAnalysisCompletedByPlayer,
+              ...Object.fromEntries(timedOutPlayerIds.map((playerId) => [playerId, true])),
+            }
+            const advancedTender = advanceAfterOperationalActions({
+              ...tender,
+              modelAnalysisCompletedByPlayer,
+            }, 'model-analysis')
+            const completed = await commitTimeout({
+              auditEvents: [{
+                kind: 'model_analysis_timeout_resolved',
+                payload: { timedOutPlayerIds },
+              }],
+              nextTender: { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, dueNow) },
+              tender,
+            })
+            if (completed) advancedTenderIds.push(tenderId)
+            continue
+          }
           const expectedPlayer = nextModelAnalysisPlayer(tender)
           if (!expectedPlayer) continue
           const nextTender = {

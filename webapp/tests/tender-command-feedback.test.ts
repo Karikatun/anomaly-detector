@@ -53,6 +53,33 @@ test('a real invalid-state response is localized when the Thesis was not accepte
   })).toBe('tender.command.conflict')
 })
 
+test('an accepted private Thesis wins over a stale invalid-state response', () => {
+  expect(getTenderCommandErrorKey({
+    actorId: 'player-a',
+    command: acceptedThesis,
+    error: new ApiRequestError(409, 'CONFLICT', 'Model analysis is already completed'),
+    latestView: {
+      version: 11,
+      publicTheses: [],
+      privateTheses: [{
+        fieldType: 'inertial',
+        fieldTypeCorrect: true,
+        fullyCorrect: false,
+        id: 'r1-player-a-thesis-1',
+        polarity: 'positive',
+        polarityCorrect: false,
+        round: 1,
+        signalId: 'aster',
+      }],
+    },
+    startingView: {
+      version: 10,
+      publicTheses: [],
+      privateTheses: [],
+    },
+  })).toBeNull()
+})
+
 test('an expired Tender command uses a specific localized message', () => {
   expect(getTenderCommandErrorKey({
     actorId: 'player-a',

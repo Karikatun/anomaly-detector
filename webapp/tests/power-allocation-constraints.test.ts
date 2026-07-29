@@ -5,6 +5,7 @@ import { powerAllocationLimits, powerAllocationProblem } from '../src/features/t
 test('limits Reconnaissance power to the number of missing Samples', () => {
   expect(powerAllocationLimits(5)).toMatchObject({ reconnaissance: 1 })
   expect(powerAllocationLimits(6)).toMatchObject({ reconnaissance: 0 })
+  expect(powerAllocationLimits(0)).toMatchObject({ modelAnalysis: 2 })
 })
 
 test('requires enough existing and planned Samples for a Laboratory test', () => {

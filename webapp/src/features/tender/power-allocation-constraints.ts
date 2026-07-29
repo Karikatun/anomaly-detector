@@ -11,7 +11,7 @@ export function powerAllocationLimits(sampleCount: number) {
   return {
     reconnaissance: Math.min(2, Math.max(0, signalCount - sampleCount)),
     laboratory: 2,
-    modelAnalysis: 1,
+    modelAnalysis: 2,
     contracts: 1,
   } as const
 }
