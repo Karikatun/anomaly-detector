@@ -143,6 +143,26 @@
   box-shadow: 0 0 10px currentColor;
 }
 
+.statusCell {
+  display: grid;
+  justify-items: start;
+  gap: .38rem;
+}
+
+.rulesetBadge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: .2rem .46rem;
+  border: 1px solid rgba(73, 137, 180, .38);
+  border-radius: 999px;
+  color: #86aac2;
+  background: rgba(7, 35, 55, .72);
+  font-size: .68rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
 .actionCell {
   display: flex;
   justify-content: flex-end;

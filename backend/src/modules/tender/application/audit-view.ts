@@ -54,7 +54,9 @@ export function createParticipantAuditRounds(
   const requestedSlotsByRound = new Map<number, Map<string, number>>()
 
   for (const event of events) {
-    if (event.kind === 'access_slot_requested' && accessResolved) {
+    const startsNextRound = event.kind === 'access_slot_requested'
+      || event.kind === 'access_slot_timeout_resolved'
+    if (startsNextRound && accessResolved) {
       currentRound = Math.min(currentRound + 1, tender.round)
       accessResolved = false
     }
