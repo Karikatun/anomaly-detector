@@ -1,59 +1,86 @@
 /**
- * Seeds two test users into the database.
- * Run: bun run scripts/seed-test-users.ts
+ * Creates or verifies the two stable local browser-audit users.
+ * Run: bun run seed:test-users
  */
 
 const API = process.env.API_URL ?? 'http://localhost:3000'
 
-interface CookieAuthResponse {
+interface TokenAuthResponse {
   user: { id: string; displayName: string; login: string }
 }
 
-async function registerUser(login: string, password: string, displayName: string): Promise<CookieAuthResponse> {
-  const res = await fetch(`${API}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Origin': 'http://localhost:5173' },
-    body: JSON.stringify({
-      displayName,
-      login,
-      password,
-      privacyConsent: true,
-      privacyConsentVersion: '1.0',
-      termsVersion: '1.0',
-    }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }))
-    throw new Error(`Failed to register ${login}: ${err.error?.message ?? res.statusText}`)
+type ApiError = {
+  error?: {
+    code?: string
+    message?: string
   }
-  return res.json()
+}
+
+async function request(path: string, body: object) {
+  return fetch(`${API}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+async function registerOrVerify(
+  login: string,
+  password: string,
+  displayName: string,
+): Promise<{ result: TokenAuthResponse; status: 'created' | 'verified' }> {
+  const registration = await request('/api/auth/token/register', {
+    displayName,
+    login,
+    password,
+    privacyConsent: true,
+    privacyConsentVersion: '1.0',
+    termsVersion: '1.0',
+  })
+  if (registration.ok) {
+    return { result: await registration.json() as TokenAuthResponse, status: 'created' }
+  }
+
+  const registrationError = await registration.json().catch(() => ({})) as ApiError
+  if (registration.status !== 409 || registrationError.error?.code !== 'CONFLICT') {
+    throw new Error(
+      `Не удалось создать ${login}: ${registrationError.error?.message ?? registration.statusText}`,
+    )
+  }
+
+  const loginResponse = await request('/api/auth/token/login', { login, password })
+  if (!loginResponse.ok) {
+    const loginError = await loginResponse.json().catch(() => ({})) as ApiError
+    throw new Error(
+      `Пользователь ${login} уже существует, но пароль не совпадает: `
+      + `${loginError.error?.message ?? loginResponse.statusText}`,
+    )
+  }
+
+  return {
+    result: await loginResponse.json() as TokenAuthResponse,
+    status: 'verified',
+  }
 }
 
 async function main() {
-  console.log(`Seeding test users via ${API}...\n`)
+  console.log(`Подготовка локальных тестовых пользователей через ${API}...`)
 
   const users = [
-    { login: 'player1', password: 'test1234', displayName: 'Игрок 1' },
-    { login: 'player2', password: 'test1234', displayName: 'Игрок 2' },
+    { login: 'testPlayer1', password: 'test1234', displayName: 'Тестовый игрок 1' },
+    { login: 'testPlayer2', password: 'test1234', displayName: 'Тестовый игрок 2' },
   ]
 
   for (const user of users) {
-    try {
-      const result = await registerUser(user.login, user.password, user.displayName)
-      console.log(`✓ ${user.displayName}: ${result.user.id} (${result.user.login})`)
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('already exists')) {
-        console.log(`⚠ ${user.displayName}: already exists, skipping`)
-      } else {
-        console.error(`✗ ${user.displayName}:`, err instanceof Error ? err.message : err)
-      }
-    }
+    const { result, status } = await registerOrVerify(user.login, user.password, user.displayName)
+    const statusLabel = status === 'created' ? 'создан' : 'проверен'
+    console.log(`✓ ${result.user.login}: ${statusLabel}`)
   }
 
-  console.log('\nDone.')
+  console.log('Готово.')
 }
 
 main().catch((err) => {
-  console.error('Seed failed:', err)
+  console.error('Подготовка пользователей завершилась ошибкой:', err)
   process.exit(1)
 })

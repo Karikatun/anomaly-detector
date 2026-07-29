@@ -57,6 +57,7 @@
     "test:backend:unit": "bun run --cwd backend test:unit",
     "test:backend:integration": "bun run --cwd backend test:integration",
     "test:webapp": "bun run --cwd webapp test",
+    "seed:test-users": "bun scripts/seed-test-users.ts",
     "smoke:backend:docker": "bun run --cwd backend smoke:docker",
     "drill:postgres:backup-restore": "bun scripts/postgres-backup-restore-drill.mjs",
     "e2e:webapp": "bun run --cwd webapp e2e"
