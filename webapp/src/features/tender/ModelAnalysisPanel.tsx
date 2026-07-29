@@ -37,7 +37,6 @@ import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
-import { TenderEvidence } from './components/TenderOverview'
 import { runTenderAction } from './run-tender-action'
 
 type ModelAnalysisPanelProps = {
@@ -45,8 +44,6 @@ type ModelAnalysisPanelProps = {
   maxTheses: number
   model: WorkingModel
   publicTheses: PublicThesis[]
-  publicLaboratoryResults: TenderView['publicLaboratoryResults']
-  privateMeasurements: TenderView['privateMeasurements']
   privateTheses?: TenderView['privateTheses']
   progress?: TenderView['modelAnalysisProgress']
   round: number
@@ -68,8 +65,6 @@ export function ModelAnalysisPanel({
   maxTheses,
   model,
   publicTheses,
-  publicLaboratoryResults,
-  privateMeasurements,
   privateTheses,
   progress,
   round,
@@ -87,8 +82,10 @@ export function ModelAnalysisPanel({
   const { t } = useI18n()
   const isValid = signalId !== '' && fieldType !== '' && polarity !== ''
   const isPrivateAnalysis = ruleset === 'tender-v2'
+  const privateThesisHistory = privateTheses ?? []
+  const currentRoundPrivateTheses = privateThesisHistory.filter((thesis) => thesis.round === round)
   const visibleTheses = isPrivateAnalysis
-    ? (privateTheses ?? []).filter((thesis) => thesis.round === round)
+    ? privateThesisHistory
     : publicTheses
 
   const handleSubmit = async () => {
@@ -200,28 +197,19 @@ export function ModelAnalysisPanel({
                 : t('tender.analysis.publicWarning')}
             </Typography>
           </div>
-          <details className={styles.analysisEvidence}>
-            <summary>
-              <Typography as="span" variant="bodySmMedium">История лаборатории</Typography>
-              <Typography as="span" variant="caption">
-                {publicLaboratoryResults.length + privateMeasurements.length}
-              </Typography>
-            </summary>
-            <TenderEvidence
-              data={{
-                privateMeasurements,
-                publicLaboratoryResults,
-                publicTheses: [],
-              }}
-            />
-          </details>
           <div className={styles.analysisHistory}>
             <div className={styles.sectionHeader}>
               <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>
                 {t('tender.analysis.history')}
               </Typography>
               <Typography as="span" variant="caption" className={styles.sectionMeta}>
-                {visibleTheses.length} / {maxTheses}
+                {isPrivateAnalysis
+                  ? t('tender.analysis.historyCount', {
+                      current: currentRoundPrivateTheses.length,
+                      max: maxTheses,
+                      total: visibleTheses.length,
+                    })
+                  : `${visibleTheses.length} / ${maxTheses}`}
               </Typography>
             </div>
             {visibleTheses.length === 0 ? (
@@ -282,7 +270,7 @@ export function ModelAnalysisPanel({
               : t('tender.analysis.publicInfo')}
           </Typography>
         </div>
-        {isPrivateAnalysis && maxTheses === 2 && visibleTheses.length === 1 && !disabled && (
+        {isPrivateAnalysis && maxTheses === 2 && currentRoundPrivateTheses.length === 1 && !disabled && (
           <Dialog>
             <DialogTrigger asChild>
               <Button type="button" size="lg" variant="outline">

@@ -23,11 +23,6 @@ test('Final Scientific Model restores its private server draft and aggregate pro
         onSaveDraft={async () => undefined}
         progress={{ completed: 1, total: 2 }}
         serverTime="2026-07-29T12:00:00.000Z"
-        workingModel={{
-          signals: {
-            aster: { note: 'Проверить полярность' },
-          },
-        }}
       />
     </I18nProvider>,
   )
@@ -36,7 +31,7 @@ test('Final Scientific Model restores its private server draft and aggregate pro
   expect(html).toContain('aria-label="Aster: тип поля Инерционное"')
   expect(html).toContain('aria-label="Aster: полярность Отрицательная"')
   expect(html.match(/data-selected=""/g)).toHaveLength(2)
-  expect(html).toContain('Рабочая модель и заметки')
+  expect(html).not.toContain('Рабочая модель')
 })
 
 test('submitted Final Scientific Model is locked and server-confirmed', () => {
@@ -55,7 +50,6 @@ test('submitted Final Scientific Model is locked and server-confirmed', () => {
         progress={{ completed: 1, total: 2 }}
         serverTime="2026-07-29T12:00:00.000Z"
         submitted
-        workingModel={{ signals: {} }}
       />
     </I18nProvider>,
   )

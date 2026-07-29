@@ -68,13 +68,15 @@ export function LaboratoryInterpretationDialog({
           <DialogTitle>{t('rules.laboratory.dialogTitle')}</DialogTitle>
           <DialogDescription>{t('rules.laboratory.dialogDescription')}</DialogDescription>
         </DialogHeader>
-        {showTimerWarning && (
-          <Typography role="status" variant="bodySm" className={styles.timerWarning}>
-            {t('rules.timerContinues')}
-          </Typography>
-        )}
-        <div className={styles.scrollArea}>
-          <LaboratoryInterpretation />
+        <div className={styles.body}>
+          {showTimerWarning && (
+            <Typography role="status" variant="bodySm" className={styles.timerWarning}>
+              {t('rules.timerContinues')}
+            </Typography>
+          )}
+          <div className={styles.scrollArea}>
+            <LaboratoryInterpretation />
+          </div>
         </div>
         <DialogFooter className={styles.footer}>
           <DialogClose asChild>

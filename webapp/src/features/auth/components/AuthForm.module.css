@@ -85,7 +85,8 @@
 .backButton:hover { color: #e9f2fb; background: transparent; }
 
 .yandexButton {
-  min-height: 5.6rem;
+  height: 70px;
+  min-height: 70px;
   border-color: rgba(165, 203, 233, .64);
   border-radius: 8px;
   color: #f6fbff;
@@ -126,10 +127,10 @@
   box-shadow: inset 0 1px 0 rgba(147, 205, 245, .05);
 }
 
-.credentialsTitle { color: #b8cce0; font-size: .95rem; font-weight: 500; letter-spacing: .035em; text-align: center; }
-.fields { display: grid; gap: .85rem; }
+.credentialsTitle { margin-block: -.5rem; color: #b8cce0; font-size: .95rem; font-weight: 500; letter-spacing: .035em; text-align: center; }
+.fields { display: grid; gap: .25rem; }
 .field { gap: .35rem; }
-.fieldErrorSlot { min-height: 1.25rem; }
+.fieldErrorSlot { min-height: .75rem; }
 .fieldLabel { color: #aabdd0; font-size: .8rem; }
 .input { height: 3.35rem; border-color: rgba(94, 139, 174, .6); border-radius: 7px; color: #e9f2fb; background: rgba(2, 14, 27, .68); font-size: .98rem; }
 .passwordControl { position: relative; }
@@ -141,7 +142,7 @@
 .consents { display: grid; gap: .8rem; padding-block: .15rem; }
 .ageNotice { color: #98abc0; text-align: center; }
 .consent { display: flex; align-items: center; gap: .75rem; color: #c4d2e0; }
-.consent :global([data-slot='label']) { cursor: pointer; line-height: 1.35; }
+.consent :global([data-slot='label']) { display: block; min-width: 0; flex: 1; cursor: pointer; line-height: 1.35; }
 .inlineLegalLink,
 .legalLink { color: inherit; text-underline-offset: .2rem; }
 .inlineLegalLink:hover,
@@ -169,12 +170,12 @@
   .tagline { max-width: 20rem; margin-top: .6rem; font-size: .7rem; }
   .content { margin-top: clamp(5rem, 18vw, 7rem); gap: 1rem; }
   .content:has(.consents) { margin-top: 2.25rem; }
-  .yandexButton { min-height: 4.6rem; font-size: 1.2rem !important; }
+  .yandexButton { height: 70px; min-height: 70px; font-size: 1.2rem !important; }
   .yandexLogo { width: 2.55rem; }
   .credentials { padding: 1.2rem; }
   .credentials:has(.consents) { gap: .85rem; }
-  .credentials:has(.consents) .yandexButton { min-height: 3.8rem; }
-  .credentials:has(.consents) .fields { gap: .55rem; }
+  .credentials:has(.consents) .yandexButton { height: 70px; min-height: 70px; }
+  .credentials:has(.consents) .fields { gap: .25rem; }
   .credentials:has(.consents) .fieldErrorSlot { min-height: .75rem; }
   .consent { align-items: flex-start; }
   .consent :global([data-slot='checkbox']) { width: 1.2rem; height: 1.2rem; margin-top: .05rem; border-radius: 4px; }

@@ -10,7 +10,6 @@ import type {
   ScientificModelDraft,
   SignalId,
   TenderView,
-  WorkingModel,
 } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
@@ -34,7 +33,6 @@ import {
   WorkingModelDraftController,
   type WorkingModelSaveStatus,
 } from './working-model-draft'
-import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 
 type Props = {
   disabled?: boolean
@@ -47,7 +45,6 @@ type Props = {
   progress?: TenderView['finalScientificModelProgress']
   serverTime: string
   submitted?: boolean
-  workingModel: WorkingModel
 }
 
 const rowStyle = (signal: SignalId) => ({
@@ -76,7 +73,6 @@ export function FinalScientificModelPanel({
   progress,
   serverTime,
   submitted,
-  workingModel,
 }: Props) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<ScientificModelDraft>(initialDraft)
@@ -267,19 +263,6 @@ export function FinalScientificModelPanel({
         </div>
 
         <aside className={styles.finalSidebar}>
-          <section className={styles.surface}>
-            <div className={styles.sectionHeader}>
-              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>
-                {t('tender.finalDraft.workingModelHint')}
-              </Typography>
-            </div>
-            <WorkingModelWorkspace
-              disabled
-              knownSignals={[...signalIds]}
-              model={workingModel}
-              onSave={async () => undefined}
-            />
-          </section>
           <section className={styles.surface} id="final-evidence">
             <div className={styles.sectionHeader}>
               <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Данные для анализа</Typography>

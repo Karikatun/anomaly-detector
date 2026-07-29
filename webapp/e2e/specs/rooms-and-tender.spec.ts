@@ -86,6 +86,27 @@ async function verifyWorkingModelModal(page: Page) {
     await expect(sharedTimer).toBeVisible()
     const initialTime = await sharedTimer.textContent()
 
+    await page.getByRole('button', { name: 'Трактовка анализов' }).click()
+    const laboratoryDialog = page.getByRole('dialog')
+    const laboratoryWarning = laboratoryDialog.getByRole('status')
+    const laboratoryCopy = laboratoryDialog.getByText('Источник и приёмник нельзя менять местами при трактовке результата.')
+    const laboratoryClose = laboratoryDialog.getByRole('button', { name: 'Закрыть трактовку анализов' })
+    const [warningBox, copyBox, closeBox] = await Promise.all([
+      laboratoryWarning.boundingBox(),
+      laboratoryCopy.boundingBox(),
+      laboratoryClose.boundingBox(),
+    ])
+    expect(warningBox).not.toBeNull()
+    expect(copyBox).not.toBeNull()
+    expect(closeBox).not.toBeNull()
+    expect(warningBox!.y + warningBox!.height).toBeLessThanOrEqual(copyBox!.y)
+    expect(await laboratoryClose.evaluate((button, box) => {
+      const target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+      return target === button || button.contains(target)
+    }, closeBox!)).toBe(true)
+    await laboratoryClose.click()
+    await expect(laboratoryDialog).toBeHidden()
+
     await page.getByRole('button', { name: /Рабочая модель/ }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -106,6 +127,8 @@ async function verifyWorkingModelModal(page: Page) {
     await expect(fieldButton).toBeEnabled()
     await fieldButton.click()
     await expect(fieldButton).toHaveAttribute('aria-pressed', 'true')
+    await fieldButton.click()
+    await expect(fieldButton).toHaveAttribute('aria-pressed', 'false')
 
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
@@ -331,7 +354,23 @@ test('lets a player collapse and return, then permanently forfeit the match', as
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
 
+    const headerTimer = page
+      .locator('header[aria-label="Текущая фаза игры"]')
+      .locator('[role="timer"]')
+    const toSeconds = (value: string | null) => {
+      const [minutes = 0, seconds = 0] = (value ?? '').split(':').map(Number)
+      return minutes * 60 + seconds
+    }
+    const initialHeaderSeconds = toSeconds(await headerTimer.textContent())
+    await expect.poll(async () =>
+      initialHeaderSeconds - toSeconds(await headerTimer.textContent()),
+    ).toBeGreaterThanOrEqual(2)
     await page.getByRole('button', { name: 'Выйти из матча' }).click()
+    const exitDialog = page.getByRole('dialog', { name: 'Что сделать с матчем?' })
+    const exitTimer = exitDialog.getByRole('timer', { name: 'До конца фазы' })
+    await expect.poll(async () => {
+      return Math.abs(toSeconds(await headerTimer.textContent()) - toSeconds(await exitTimer.textContent()))
+    }, { timeout: 3_000 }).toBeLessThanOrEqual(1)
     await page.getByRole('button', { name: 'Свернуть', exact: true }).click()
     await expect(page).toHaveURL('/')
     await expect(page.getByRole('button', { name: 'ВЕРНУТЬСЯ В МАТЧ' })).toBeVisible()
@@ -384,9 +423,36 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     await page.getByRole('button', { name: 'Начать игру' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
 
+    await page.setViewportSize({ width: 390, height: 844 })
+    const tenderHeader = page.locator('header[aria-label="Текущая фаза игры"]')
+    const leaveButton = page.getByRole('button', { name: 'Выйти из матча' })
+    const rulesButton = page.getByRole('button', { name: 'Правила' })
+    const laboratoryButton = page.getByRole('button', { name: 'Трактовка анализов' })
+    const [leaveBox, rulesBox, laboratoryBox] = await Promise.all([
+      leaveButton.boundingBox(),
+      rulesButton.boundingBox(),
+      laboratoryButton.boundingBox(),
+    ])
+    expect(leaveBox).not.toBeNull()
+    expect(rulesBox).not.toBeNull()
+    expect(laboratoryBox).not.toBeNull()
+    expect(leaveBox!.y).toBeLessThan(rulesBox!.y)
+    expect(leaveBox!.y).toBeLessThan(laboratoryBox!.y)
+    expect(await tenderHeader.evaluate((header) => header.scrollWidth <= header.clientWidth)).toBe(true)
+
     await page.getByRole('button', { name: 'Правила' }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Детальные правила по фазам' })).toBeVisible()
+    const rulesDialog = page.getByRole('dialog')
+    await expect(rulesDialog).toBeVisible()
+    const timerWarning = rulesDialog.getByRole('status')
+    const firstRule = rulesDialog.getByRole('button', { name: 'Детальные правила по фазам' })
+    await expect(firstRule).toBeVisible()
+    const [timerWarningBox, firstRuleBox] = await Promise.all([
+      timerWarning.boundingBox(),
+      firstRule.boundingBox(),
+    ])
+    expect(timerWarningBox).not.toBeNull()
+    expect(firstRuleBox).not.toBeNull()
+    expect(timerWarningBox!.y + timerWarningBox!.height).toBeLessThanOrEqual(firstRuleBox!.y)
     await expect(page.getByRole('button', { name: 'Закрыть правила' })).toBeInViewport()
     await page.getByRole('button', { name: 'Закрыть правила' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
@@ -507,8 +573,12 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await allocatePower(guestPage, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
 
     await expectPhase(page, headings.reconnaissance)
+    await expect(page.getByText(/^Контракты этого раунда · \d+$/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Правила' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'Трактовка анализов' })).toBeEnabled()
     await runReconnaissance(page)
     await expectPhase(guestPage, headings.reconnaissance)
+    await expect(guestPage.getByText(/^Контракты этого раунда · \d+$/)).toBeVisible()
     await runReconnaissance(guestPage)
 
     await expectPhase(page, headings.laboratory)
@@ -517,6 +587,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await runLaboratory(guestPage)
 
     await expectPhase(page, headings.contracts)
+    await expect(page.getByRole('heading', { name: 'Игроки' })).toHaveCount(1)
     await completeContract(page)
     await expectPhase(guestPage, headings.contracts)
     await completeContract(guestPage)
@@ -549,7 +620,15 @@ test('two players complete every Tender stage and receive each realtime phase tr
 
       await expectPhase(page, headings.analysis)
       await expectPhase(guestPage, headings.analysis)
-      await expect(guestPage.getByText('История лаборатории')).toBeVisible()
+      await expect(guestPage.getByText('История лаборатории')).toHaveCount(0)
+      await expect(
+        guestPage.getByText('Данные исследования', { exact: true }).filter({ visible: true }),
+      ).toHaveCount(1)
+      if (round > 2) {
+        const previousThesisCount = round - 2
+        await expect(page.locator('[data-private-thesis]')).toHaveCount(previousThesisCount)
+        await expect(page.getByText(`Всего: ${previousThesisCount} · раунд: 0/1`)).toBeVisible()
+      }
       if (round === 2) await verifyWorkingModelModal(guestPage)
       await submitThesis(page)
       await submitThesis(guestPage)
@@ -562,6 +641,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
       const [minutes = 0, seconds = 0] = (await finalTimer.textContent() ?? '').split(':').map(Number)
       return minutes * 60 + seconds
     }).toBeGreaterThan(170)
+    await expect(page.getByRole('heading', { name: 'Игроки' })).toHaveCount(0)
+    await expect(page.getByText('Рабочая модель', { exact: true })).toHaveCount(0)
     await expect(guestPage.getByText('Подтвердили 0 из 2 исследователей').first()).toBeVisible()
     await expect(guestPage.getByRole('button', { name: 'Отправить финальную модель' })).toBeEnabled()
     await submitFinalModel(page)
@@ -578,6 +659,15 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByRole('heading', { name: 'Конфигурация аномалии' })).toBeVisible()
     await expect(page.getByText('Раскрытые свойства шести сигналов', { exact: true })).toBeVisible()
     await expect(page.getByText('Финальная модель не отправлена')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Правила' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByText('Таймер матча продолжает идти')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Закрыть правила' }).click()
+    await page.getByRole('button', { name: 'Трактовка анализов' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByText('Таймер матча продолжает идти')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Закрыть трактовку анализов' }).click()
 
     await page.getByRole('button', { name: 'Выйти из матча' }).click()
     await expect(page).toHaveURL('/')

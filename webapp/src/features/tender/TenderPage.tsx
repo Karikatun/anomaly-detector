@@ -223,8 +223,6 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           maxTheses={maPower}
           model={view.privateWorkingModel}
           publicTheses={view.publicTheses}
-          publicLaboratoryResults={view.publicLaboratoryResults}
-          privateMeasurements={view.privateMeasurements}
           privateTheses={view.privateTheses}
           progress={view.modelAnalysisProgress}
           round={view.round}
@@ -247,7 +245,6 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
       const effective = Math.max(0, contractPower - restriction)
       return effective > 0 ? withWaitingState(
         <ContractsPanel
-          activePlayerId={view.activePlayerId}
           certifications={view.privateResearchCertifications ?? []}
           contracts={[...view.publicContracts, ...(view.publicFinalContract ? [view.publicFinalContract] : [])]}
           journal={view.publicScientificJournal ?? []}
@@ -288,7 +285,6 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           progress={view.finalScientificModelProgress}
           serverTime={view.serverTime}
           submitted={myPlayer?.finalScientificModelSubmitted}
-          workingModel={view.privateWorkingModel}
         />,
       )
     }
@@ -523,14 +519,19 @@ function TenderContent() {
   const isMyTurn = !isSequentialPhase || tenderView.activePlayerId === auth.user?.id
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
   const isPowerAllocation = tenderView.phase === 'power-allocation'
+  const isReconnaissancePhase = tenderView.phase === 'reconnaissance'
   const isLaboratoryPhase = tenderView.phase === 'laboratory'
   const isComplete = tenderView.phase === 'complete'
   const isPlanningPhase = isAccessSlotSelection || isPowerAllocation
   const isOperationalPhase = !isPlanningPhase && !isComplete
-  const showRightSidebar = !isPlanningPhase && !isComplete
-  const showGenericTools = !isPlanningPhase && tenderView.phase !== 'model-analysis' && !isComplete
-  const showContractPlanning = isPowerAllocation || isLaboratoryPhase
-  const referenceHelpDisabled = isSequentialPhase && isMyTurn
+  const showPhasePlayers = isOperationalPhase && tenderView.phase !== 'final-scientific-model'
+  const showRightSidebar = showPhasePlayers
+  const showGenericTools = !isPlanningPhase
+    && tenderView.phase !== 'model-analysis'
+    && tenderView.phase !== 'final-scientific-model'
+    && !isComplete
+  const showContractPlanning = isPowerAllocation || isReconnaissancePhase || isLaboratoryPhase
+  const showMobileAnalysisResearchData = tenderView.phase === 'model-analysis'
   const hasPendingAction = isAccessSlotSelection
     ? myPlayer?.requestedAccessSlot === undefined
     : isPowerAllocation
@@ -549,16 +550,16 @@ function TenderContent() {
         aria-label={t('tender.phase.status')}
         className={`${styles.header} sticky top-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-xl border bg-background/95 px-3 py-2 shadow-sm backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:px-5 sm:py-3`}
       >
-        <div className="grid min-w-0 gap-0.5">
+        <div className={`${styles.headerInfo} grid min-w-0 gap-0.5`}>
           <Typography variant="shortcut" tone="muted" className="uppercase">
             Раунд {tenderView.round} / 5
           </Typography>
           <Typography as="h3" variant="bodySmMedium" className="truncate">{phase}</Typography>
         </div>
-        <div className="justify-self-end">
-          <TenderTimer dueAt={tenderView.dueAt} serverTime={tenderView.serverTime} />
+        <div className={`${styles.headerTimer} justify-self-end`}>
+          <TenderTimer remainingSeconds={tenderView.dueAt ? remainingSeconds : null} />
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className={`${styles.headerMeta} flex min-w-0 flex-wrap items-center gap-2`}>
           {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}
           {isAccessSlotSelection && (
             <Badge variant="outline">Бюджет: {myPlayer?.budget ?? 0} M</Badge>
@@ -593,10 +594,10 @@ function TenderContent() {
           )}
           <RulesReferenceDialog
             belowTenderHeader
-            disabled={referenceHelpDisabled || referenceHelpUrgentlyLocked}
+            disabled={referenceHelpUrgentlyLocked}
             onOpenChange={setRulesOpen}
             open={rulesOpen && !referenceHelpUrgentlyLocked}
-            showTimerWarning
+            showTimerWarning={!isComplete}
             ruleset={tenderView.ruleset}
             triggerClassName={styles.rulesAction}
             triggerIcon="book"
@@ -604,10 +605,10 @@ function TenderContent() {
           />
           <LaboratoryInterpretationDialog
             belowTenderHeader
-            disabled={referenceHelpDisabled || referenceHelpUrgentlyLocked}
+            disabled={referenceHelpUrgentlyLocked}
             onOpenChange={setLaboratoryHelpOpen}
             open={laboratoryHelpOpen && !referenceHelpUrgentlyLocked}
-            showTimerWarning
+            showTimerWarning={!isComplete}
             triggerClassName={styles.laboratoryAction}
             triggerTextClassName={styles.headerActionLabel}
           />
@@ -638,7 +639,7 @@ function TenderContent() {
               </DialogHeader>
               <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
                 <Typography variant="bodySm" tone="muted">{t('tender.exit.timerContinues')}</Typography>
-                <TenderTimer dueAt={tenderView.dueAt} serverTime={tenderView.serverTime} />
+                <TenderTimer remainingSeconds={tenderView.dueAt ? remainingSeconds : null} />
               </div>
               <DialogFooter>
                 <DialogClose asChild>
@@ -668,7 +669,7 @@ function TenderContent() {
           progress={isOperationalPhase
             ? <TenderPhaseProgress phase={tenderView.phase} />
             : undefined}
-          mobilePlayers={isOperationalPhase
+          mobilePlayers={showPhasePlayers
             ? (
                 <TenderPlayers
                   activePlayerId={tenderView.activePlayerId}
@@ -703,7 +704,7 @@ function TenderContent() {
             )}
             </div>
           )}
-          supporting={showGenericTools || showContractPlanning
+          supporting={showGenericTools || showContractPlanning || showMobileAnalysisResearchData
             ? (
                 <>
                   {showContractPlanning && <ContractPlanningPanel view={tenderView} />}
@@ -718,6 +719,11 @@ function TenderContent() {
                   />
                   <TenderResearchData view={tenderView} />
                     </>
+                  )}
+                  {showMobileAnalysisResearchData && (
+                    <div className="min-[64rem]:hidden">
+                      <TenderResearchData view={tenderView} />
+                    </div>
                   )}
                 </>
               )

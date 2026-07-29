@@ -17,7 +17,7 @@ function NativeSelect({
   return (
     <div
       className={cn(
-        "group/native-select relative w-fit has-[select:disabled]:opacity-50",
+        "group/native-select relative w-full min-w-0 has-[select:disabled]:opacity-50",
         className
       )}
       data-slot="native-select-wrapper"
@@ -27,11 +27,11 @@ function NativeSelect({
         <select
           data-slot="native-select"
           data-size={size}
-          className="h-9 w-full min-w-0 appearance-none rounded-4xl border border-input bg-input/30 py-1 pr-8 pl-3 transition-colors outline-none select-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 data-[size=sm]:h-8 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
+          className="h-12 w-full min-w-0 appearance-none rounded-lg border border-[rgba(74,139,181,.52)] bg-[rgba(3,18,31,.88)] py-2 pr-11 pl-4 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,.025)] transition-[border-color,background-color,box-shadow] outline-none select-none selection:bg-primary selection:text-primary-foreground hover:border-[rgba(71,170,229,.72)] hover:bg-[rgba(5,26,44,.94)] focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/25 disabled:pointer-events-none disabled:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 data-[size=sm]:h-11 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
           {...props}
         />
       </Typography>
-      <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted-foreground select-none" aria-hidden="true" data-slot="native-select-icon" />
+      <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={1.8} className="pointer-events-none absolute top-1/2 right-4 size-5 -translate-y-1/2 text-primary/80 select-none" aria-hidden="true" data-slot="native-select-icon" />
     </div>
   )
 }
