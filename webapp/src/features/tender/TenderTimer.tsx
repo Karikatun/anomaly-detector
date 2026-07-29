@@ -1,19 +1,15 @@
 import { Typography } from '@/components/ui/typography'
-import { useSynchronizedCountdown } from '@/platform/time/synchronized-countdown'
 
 type TenderTimerProps = {
-  dueAt: string | null | undefined
-  serverTime: string
+  remainingSeconds: number | null
 }
 
-export function TenderTimer({ dueAt, serverTime }: TenderTimerProps) {
-  const remaining = useSynchronizedCountdown(dueAt, serverTime)
+export function TenderTimer({ remainingSeconds }: TenderTimerProps) {
+  if (remainingSeconds === null) return null
 
-  if (!dueAt) return null
-
-  const minutes = Math.floor(remaining / 60)
-  const seconds = remaining % 60
-  const urgent = remaining <= 10
+  const minutes = Math.floor(remainingSeconds / 60)
+  const seconds = remainingSeconds % 60
+  const urgent = remainingSeconds <= 10
 
   return (
     <Typography

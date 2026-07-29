@@ -71,7 +71,7 @@ export function WorkingModelWorkspace({
           <DialogHeader className={styles.header}>
             <span>
               <DialogTitle>Рабочая модель</DialogTitle>
-              <DialogDescription>Ваши приватные гипотезы и метки</DialogDescription>
+              <DialogDescription>Ваши приватные гипотезы</DialogDescription>
             </span>
           </DialogHeader>
           <div className={styles.content}>

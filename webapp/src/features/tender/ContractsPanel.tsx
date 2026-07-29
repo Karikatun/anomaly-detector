@@ -23,12 +23,10 @@ import { signalLabelKeys } from './catalog'
 import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
-import { TenderPlayers } from './components/TenderOverview'
 
 type ContractBid = { evidenceTestIds: string[]; researchCertificationSignal?: SignalId }
 
 type ContractsPanelProps = {
-  activePlayerId?: string
   certifications: SignalId[]
   contracts: PublicContract[]
   journal: ScientificJournalEntry[]
@@ -52,7 +50,6 @@ const kindAccents = {
 } as const
 
 export function ContractsPanel({
-  activePlayerId,
   certifications,
   contracts,
   journal,
@@ -99,10 +96,6 @@ export function ContractsPanel({
 
   return (
     <section className={styles.contractsWorkspace} aria-labelledby="contracts-heading">
-      <aside className={styles.contractPlayers}>
-        <TenderPlayers activePlayerId={activePlayerId} currentUserId={playerId} players={players} />
-      </aside>
-
       <div className={styles.contractsMain}>
         <div className={`${styles.surface} ${styles.intro}`}>
           <div className={styles.sectionHeader}>

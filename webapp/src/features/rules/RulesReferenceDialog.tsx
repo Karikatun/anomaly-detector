@@ -178,53 +178,55 @@ export function RulesReferenceDialog({
           <DialogTitle>{t('rules.title')}</DialogTitle>
           <DialogDescription>{t('rules.description')}</DialogDescription>
         </DialogHeader>
-        {showTimerWarning && (
-          <Typography role="status" variant="bodySm" className={styles.timerWarning}>
-            {t('rules.timerContinues')}
-          </Typography>
-        )}
+        <div className={styles.body}>
+          {showTimerWarning && (
+            <Typography role="status" variant="bodySm" className={styles.timerWarning}>
+              {t('rules.timerContinues')}
+            </Typography>
+          )}
 
-        <div className={styles.scrollArea}>
-          <div className={styles.accordion}>
-            {sections.map((section) => {
-              const isOpen = openSections.has(section.id)
-              const triggerId = `rules-${section.id}-trigger`
-              const panelId = `rules-${section.id}-panel`
-              return (
-                <section key={section.id} className={styles.section}>
-                  <button
-                    id={triggerId}
-                    type="button"
-                    className={styles.sectionTrigger}
-                    aria-expanded={isOpen}
-                    aria-controls={panelId}
-                    onClick={() => toggleSection(section.id)}
-                  >
-                    <span className={styles.sectionHeading}>
-                      <Typography as="span" variant="h6">{t(section.titleKey)}</Typography>
-                      <Typography as="span" variant="bodyXs" tone="muted">
-                        {t(section.summaryKey)}
-                      </Typography>
-                    </span>
-                    <HugeiconsIcon
-                      icon={ArrowDown01Icon}
-                      strokeWidth={1.8}
-                      className={cn(styles.chevron, isOpen && styles.chevronOpen)}
-                      aria-hidden="true"
-                    />
-                  </button>
-                  <div
-                    id={panelId}
-                    role="region"
-                    aria-labelledby={triggerId}
-                    className={styles.sectionPanel}
-                    hidden={!isOpen}
-                  >
-                    <RuleSectionContent section={section.id} />
-                  </div>
-                </section>
-              )
-            })}
+          <div className={styles.scrollArea}>
+            <div className={styles.accordion}>
+              {sections.map((section) => {
+                const isOpen = openSections.has(section.id)
+                const triggerId = `rules-${section.id}-trigger`
+                const panelId = `rules-${section.id}-panel`
+                return (
+                  <section key={section.id} className={styles.section}>
+                    <button
+                      id={triggerId}
+                      type="button"
+                      className={styles.sectionTrigger}
+                      aria-expanded={isOpen}
+                      aria-controls={panelId}
+                      onClick={() => toggleSection(section.id)}
+                    >
+                      <span className={styles.sectionHeading}>
+                        <Typography as="span" variant="h6">{t(section.titleKey)}</Typography>
+                        <Typography as="span" variant="bodyXs" tone="muted">
+                          {t(section.summaryKey)}
+                        </Typography>
+                      </span>
+                      <HugeiconsIcon
+                        icon={ArrowDown01Icon}
+                        strokeWidth={1.8}
+                        className={cn(styles.chevron, isOpen && styles.chevronOpen)}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    <div
+                      id={panelId}
+                      role="region"
+                      aria-labelledby={triggerId}
+                      className={styles.sectionPanel}
+                      hidden={!isOpen}
+                    >
+                      <RuleSectionContent section={section.id} />
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
           </div>
         </div>
 

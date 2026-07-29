@@ -39,8 +39,29 @@
 }
 
 @media (max-width: 47.999rem) {
+  .header {
+    grid-template-areas:
+      "info timer leave"
+      "meta rules laboratory";
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: .45rem;
+  }
+
+  .headerInfo {
+    grid-area: info;
+  }
+
+  .headerTimer {
+    grid-area: timer;
+  }
+
+  .headerMeta {
+    grid-area: meta;
+    overflow: hidden;
+  }
+
   .headerActions {
-    flex-wrap: nowrap;
+    display: contents;
   }
 
   .connectionBadge {
@@ -67,8 +88,33 @@
 
   .rulesAction,
   .laboratoryAction {
-    width: 2.75rem;
+    width: 100%;
     min-width: 2.75rem;
     padding-inline: 0;
+  }
+
+  .rulesAction {
+    grid-area: rules;
+  }
+
+  .laboratoryAction {
+    grid-area: laboratory;
+  }
+
+  .leaveAction {
+    grid-area: leave;
+    gap: .25rem;
+    padding-inline: .55rem;
+  }
+
+  .rulesAction svg,
+  .laboratoryAction svg,
+  .leaveAction svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .leaveAction span {
+    font-size: .75rem;
   }
 }

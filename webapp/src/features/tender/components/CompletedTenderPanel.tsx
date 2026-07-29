@@ -82,22 +82,6 @@ export function CompletedTenderPanel({ view }: Props) {
         </span>
       </header>
 
-      <label className={styles.playerFilter}>
-        <Typography as="span" variant="caption">Показать детали игрока</Typography>
-        <NativeSelect
-          aria-label="Фильтр итогового аудита по игроку"
-          value={selectedPlayerId}
-          onChange={(event) => setSelectedPlayerId(event.target.value)}
-        >
-          <option value="all">Все игроки</option>
-          {rankedPlayers.map((player) => (
-            <option key={player.playerId} value={player.playerId}>
-              {player.displayName ?? player.playerId.slice(0, 8)}
-            </option>
-          ))}
-        </NativeSelect>
-      </label>
-
       <section className={styles.section} aria-labelledby="completed-signals-heading">
         <div className={styles.sectionHeader}>
           <span>
@@ -218,6 +202,22 @@ export function CompletedTenderPanel({ view }: Props) {
         </ol>
       </section>
 
+      <label className={styles.playerFilter}>
+        <Typography as="span" variant="caption">Показать детали игрока</Typography>
+        <NativeSelect
+          aria-label="Фильтр итогового аудита по игроку"
+          value={selectedPlayerId}
+          onChange={(event) => setSelectedPlayerId(event.target.value)}
+        >
+          <option value="all">Все игроки</option>
+          {rankedPlayers.map((player) => (
+            <option key={player.playerId} value={player.playerId}>
+              {player.displayName ?? player.playerId.slice(0, 8)}
+            </option>
+          ))}
+        </NativeSelect>
+      </label>
+
       <section className={styles.section} aria-labelledby="completed-theses-heading">
         <div className={styles.sectionHeader}>
           <span>
@@ -242,20 +242,27 @@ export function CompletedTenderPanel({ view }: Props) {
                 ) : (
                   <ul className={styles.auditEntries}>
                     {theses.map((thesis) => (
-                      <li key={thesis.id}>
-                        <Typography as="strong" variant="bodySmMedium">
-                          Раунд {thesis.round} · {t(signalLabelKeys[thesis.signalId])}
-                        </Typography>
-                        <Typography as="span" variant="caption">
-                          {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
-                        </Typography>
-                        <span className={styles.correctness}>
-                          <Typography as="span" variant="caption" data-correct={thesis.fieldTypeCorrect || undefined}>
-                            Тип: {thesis.fieldTypeCorrect ? 'верно' : 'неверно'}
+                      <li
+                        key={thesis.id}
+                        className={styles.signalAuditEntry}
+                        style={{ '--signal-accent': signalAccent(thesis.signalId) } as CSSProperties}
+                      >
+                        <SignalGlyph signal={thesis.signalId} className={styles.auditSignalGlyph} />
+                        <span className={styles.auditEntryCopy}>
+                          <Typography as="strong" variant="bodySmMedium">
+                            Раунд {thesis.round} · {t(signalLabelKeys[thesis.signalId])}
                           </Typography>
-                          <Typography as="span" variant="caption" data-correct={thesis.polarityCorrect || undefined}>
-                            Полярность: {thesis.polarityCorrect ? 'верно' : 'неверно'}
+                          <Typography as="span" variant="caption">
+                            {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
                           </Typography>
+                          <span className={styles.correctness}>
+                            <Typography as="span" variant="caption" data-correct={thesis.fieldTypeCorrect || undefined}>
+                              Тип: {thesis.fieldTypeCorrect ? 'верно' : 'неверно'}
+                            </Typography>
+                            <Typography as="span" variant="caption" data-correct={thesis.polarityCorrect || undefined}>
+                              Полярность: {thesis.polarityCorrect ? 'верно' : 'неверно'}
+                            </Typography>
+                          </span>
                         </span>
                       </li>
                     ))}
@@ -294,19 +301,26 @@ export function CompletedTenderPanel({ view }: Props) {
                       const claim = result.signals[signal]
                       if (!claim) return null
                       return (
-                        <li key={signal}>
-                          <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
-                          <span className={styles.correctness}>
-                            {claim.fieldType && (
-                              <Typography as="span" variant="caption" data-correct={claim.fieldTypeCorrect || undefined}>
-                                {t(fieldTypeLabelKeys[claim.fieldType])}: {claim.fieldTypeCorrect ? 'верно' : 'неверно'}
-                              </Typography>
-                            )}
-                            {claim.polarity && (
-                              <Typography as="span" variant="caption" data-correct={claim.polarityCorrect || undefined}>
-                                {t(polarityLabelKeys[claim.polarity])}: {claim.polarityCorrect ? 'верно' : 'неверно'}
-                              </Typography>
-                            )}
+                        <li
+                          key={signal}
+                          className={styles.signalAuditEntry}
+                          style={{ '--signal-accent': signalAccent(signal) } as CSSProperties}
+                        >
+                          <SignalGlyph signal={signal} className={styles.auditSignalGlyph} />
+                          <span className={styles.auditEntryCopy}>
+                            <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
+                            <span className={styles.correctness}>
+                              {claim.fieldType && (
+                                <Typography as="span" variant="caption" data-correct={claim.fieldTypeCorrect || undefined}>
+                                  {t(fieldTypeLabelKeys[claim.fieldType])}: {claim.fieldTypeCorrect ? 'верно' : 'неверно'}
+                                </Typography>
+                              )}
+                              {claim.polarity && (
+                                <Typography as="span" variant="caption" data-correct={claim.polarityCorrect || undefined}>
+                                  {t(polarityLabelKeys[claim.polarity])}: {claim.polarityCorrect ? 'верно' : 'неверно'}
+                                </Typography>
+                              )}
+                            </span>
                           </span>
                         </li>
                       )

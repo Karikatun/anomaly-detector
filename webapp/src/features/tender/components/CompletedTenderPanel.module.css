@@ -22,6 +22,10 @@
   background: rgba(2, 15, 28, .7);
 }
 
+.playerFilter > [data-slot='native-select-wrapper'] {
+  justify-self: stretch;
+}
+
 .auditPlayerList {
   display: grid;
   gap: .5rem;
@@ -45,8 +49,32 @@
   display: grid;
   gap: .18rem;
   padding: .45rem;
+  border: 1px solid transparent;
   border-radius: .4rem;
   background: rgba(11, 37, 55, .55);
+}
+
+.auditEntries > .signalAuditEntry {
+  --signal-accent: var(--primary);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: .55rem;
+  border-color: color-mix(in srgb, var(--signal-accent) 48%, rgba(65, 127, 169, .28));
+  background:
+    radial-gradient(circle at 0 50%, color-mix(in srgb, var(--signal-accent) 13%, transparent), transparent 42%),
+    rgba(11, 37, 55, .55);
+}
+
+.auditSignalGlyph {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+}
+
+.auditEntryCopy {
+  display: grid;
+  min-width: 0;
+  gap: .2rem;
 }
 
 .correctness {
@@ -481,6 +509,23 @@
     padding: .9rem 1rem;
   }
 
+  .heroCopy h2 {
+    font-size: 1.4rem;
+  }
+
+  .heroCopy p {
+    font-size: .82rem;
+  }
+
+  .eyebrow,
+  .winner small {
+    font-size: .68rem;
+  }
+
+  .winner strong {
+    font-size: .86rem;
+  }
+
   .winner {
     grid-column: auto;
   }
@@ -489,13 +534,37 @@
     padding: .8rem;
   }
 
+  .playerFilter {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+    padding: .8rem;
+  }
+
+  .playerFilter > span {
+    font-size: .86rem;
+  }
+
+  .auditEntries {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .5rem;
+  }
+
+  .auditEntries > li {
+    min-height: 5rem;
+    padding: .6rem;
+  }
+
+  .auditSignalGlyph {
+    width: 3rem;
+    height: 3rem;
+  }
+
   .sectionHeader h3 {
-    font-size: .9rem;
+    font-size: 1rem;
   }
 
   .sectionHeader p,
   .count {
-    font-size: .75rem;
+    font-size: .8rem;
   }
 
   .signalGrid {
@@ -514,7 +583,7 @@
 
   .signalCopy > strong,
   .playerIdentity strong {
-    font-size: .875rem;
+    font-size: .94rem;
   }
 
   .signalProperties > span,
@@ -525,11 +594,22 @@
   .breakdownList li > span:first-child,
   .breakdownPoints,
   .noRatingAwards {
-    font-size: .75rem;
+    font-size: .8rem;
   }
 
   .playerStats small {
-    font-size: .7rem;
+    font-size: .75rem;
+  }
+
+  .auditPlayer > h4,
+  .auditEntryCopy > strong {
+    font-size: .94rem;
+  }
+
+  .auditPlayer > p,
+  .auditEntryCopy > span,
+  .correctness > span {
+    font-size: .8rem;
   }
 
   .playerSummary {

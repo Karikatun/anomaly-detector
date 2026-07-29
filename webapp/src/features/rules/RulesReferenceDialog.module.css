@@ -10,6 +10,13 @@
   border-radius: 1.25rem;
 }
 
+.body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .header {
   padding: 1.25rem 1.25rem 1rem;
   border-bottom: 1px solid rgba(126, 166, 198, .18);
@@ -35,6 +42,7 @@
 }
 
 .scrollArea {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -236,9 +244,13 @@
 }
 
 .footer {
+  position: relative;
+  z-index: 1;
+  flex: none;
   padding: .85rem 1.25rem;
   border-top: 1px solid rgba(126, 166, 198, .18);
   background: var(--popover);
+  box-shadow: 0 -.6rem 1rem rgba(3, 10, 19, .22);
 }
 
 .ruleset {
@@ -248,6 +260,7 @@
 
 .closeButton {
   min-width: 10rem;
+  background: var(--popover);
 }
 
 .belowTenderHeader {

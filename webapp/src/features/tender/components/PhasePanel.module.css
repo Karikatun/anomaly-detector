@@ -681,6 +681,7 @@
 .laboratoryModeSwitch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: .65rem;
   overflow: hidden;
   border: 1px solid rgba(69, 126, 163, .38);
   border-radius: .55rem;
@@ -739,36 +740,10 @@
   margin-bottom: 0;
 }
 
-.analysisEvidence {
-  overflow: hidden;
-  border: 1px solid rgba(65, 127, 169, .3);
-  border-radius: .55rem;
-  background: rgba(2, 15, 28, .68);
-}
-
-.analysisEvidence > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: .55rem;
-  padding: .55rem .65rem;
-  color: rgba(222, 236, 245, .78);
-  cursor: pointer;
-  list-style: none;
-}
-
-.analysisEvidence > summary > :last-child {
-  color: var(--primary);
-}
-
 .contractsWorkspace {
   display: grid;
   min-width: 0;
   gap: .65rem;
-}
-
-.contractPlayers {
-  display: none;
 }
 
 .contractsMain {
@@ -805,7 +780,7 @@
     right: .75rem;
     bottom: env(safe-area-inset-bottom, 0px);
     left: .75rem;
-    z-index: 70;
+    z-index: 40;
   }
 
   .contractSelection {
@@ -1403,18 +1378,6 @@
     width: fit-content;
     min-width: 13rem;
   }
-}
-
-@media (min-width: 75rem) {
-  .contractsWorkspace {
-    grid-template-columns: minmax(10rem, .26fr) minmax(32rem, 1fr);
-    gap: .85rem;
-  }
-
-  .contractPlayers {
-    display: block;
-  }
-
 }
 
 @media (min-width: 64rem) and (max-width: 74.99rem) {

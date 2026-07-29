@@ -45,7 +45,7 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
         </header>
 
         {mode === 'choice' ? (
-          <div className={`${styles.content} ${styles.choiceContent}`}>
+          <div key="choice" className={`${styles.content} ${styles.choiceContent}`}>
             <Button
               type="button"
               size="lg"
@@ -65,7 +65,7 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
             </Button>
           </div>
         ) : (
-          <div className={styles.content}>
+          <div key="credentials" className={styles.content}>
             <Button
               type="button"
               variant="ghost"

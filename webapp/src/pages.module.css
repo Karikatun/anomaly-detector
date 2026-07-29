@@ -126,7 +126,7 @@
 .menuCard {
   position: relative;
   flex: 1 1 calc((100% - 1.5rem) / 2);
-  min-height: 10rem;
+  min-height: 6.2rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -140,8 +140,6 @@
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 .menuCard:hover { transform: none; background: linear-gradient(110deg, rgba(9, 28, 50, .96), rgba(5, 16, 31, .9)); }
-.menuCard:nth-child(3) { min-height: 8.5rem; }
-.menuCard:nth-child(4) { min-height: 6.2rem; }
 
 .copy { min-width: 0; flex: 1; flex-direction: column; gap: .9rem; align-items: flex-start; }
 .cardTitle { font-size: clamp(1.15rem, 1.75vw, 1.7rem); line-height: 1.1; letter-spacing: -.035em; }
@@ -198,6 +196,11 @@
   content: '';
   background: currentColor;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+@media (min-width: 761px) {
+  .panel { display: flex; flex-direction: column; }
+  .actions { margin-block: auto; }
 }
 
 @media (max-width: 760px) {

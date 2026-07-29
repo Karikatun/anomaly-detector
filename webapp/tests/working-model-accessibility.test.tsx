@@ -5,7 +5,7 @@ import { WorkingModelPanel } from '../src/features/tender/WorkingModelPanel'
 import { ModelAnalysisPanel } from '../src/features/tender/ModelAnalysisPanel'
 import { I18nProvider } from '../src/platform/i18n'
 
-test('Working Model exposes each Signal, category, marker state, and note to assistive technology', () => {
+test('Working Model exposes only reversible field-type and polarity hypotheses', () => {
   const html = renderToStaticMarkup(
     <I18nProvider>
       <WorkingModelPanel
@@ -24,12 +24,13 @@ test('Working Model exposes each Signal, category, marker state, and note to ass
     </I18nProvider>,
   )
 
-  expect(html).toContain('aria-label="Aster: возможные типы поля"')
-  expect(html).toContain('aria-label="Aster: тип поля Инерционное, возможно"')
-  expect(html).toContain('data-marker-state="excluded"')
+  expect(html).toContain('aria-label="Aster: гипотеза, тип поля Инерционное"')
   expect(html).toContain('aria-label="Aster: гипотеза, полярность Положительная"')
   expect(html).toContain('aria-pressed="true"')
-  expect(html).toContain('aria-label="Aster: заметка"')
+  expect(html).not.toContain('гипотеза, тип поля не выбрано')
+  expect(html).not.toContain('гипотеза, полярность не выбрано')
+  expect(html).not.toContain('Метки')
+  expect(html).not.toContain('aria-label="Aster: заметка"')
 })
 
 test('Working Model remains editable while the phase action is waiting for another player', () => {
@@ -41,8 +42,6 @@ test('Working Model remains editable while the phase action is waiting for anoth
         knownSignals={['aster']}
         maxTheses={1}
         model={{ signals: {} }}
-        privateMeasurements={[]}
-        publicLaboratoryResults={[]}
         publicTheses={[]}
         round={1}
         onConfirmThesis={async () => undefined}
@@ -67,8 +66,6 @@ test('Model Analysis renders every public Thesis in its history', () => {
         knownSignals={['aster']}
         maxTheses={1}
         model={{ signals: {} }}
-        privateMeasurements={[]}
-        publicLaboratoryResults={[]}
         publicTheses={[
           { correct: true, fieldType: 'inertial', playerId: 'player-a', polarity: 'positive', signalId: 'aster', verification: 'standard' },
           { correct: false, fieldType: 'phase', playerId: 'player-a', polarity: 'positive', signalId: 'aster', verification: 'standard' },
@@ -93,21 +90,31 @@ test('private Model Analysis shows separate property results only to its owner',
         knownSignals={['aster']}
         maxTheses={2}
         model={{ signals: {} }}
-        privateMeasurements={[]}
-        privateTheses={[{
-          fieldType: 'inertial',
-          fieldTypeCorrect: true,
-          fullyCorrect: false,
-          id: 'r1-player-a-thesis-1',
-          polarity: 'positive',
-          polarityCorrect: false,
-          round: 1,
-          signalId: 'aster',
-        }]}
+        privateTheses={[
+          {
+            fieldType: 'phase',
+            fieldTypeCorrect: false,
+            fullyCorrect: false,
+            id: 'r1-player-a-thesis-1',
+            polarity: 'negative',
+            polarityCorrect: true,
+            round: 1,
+            signalId: 'aster',
+          },
+          {
+            fieldType: 'inertial',
+            fieldTypeCorrect: true,
+            fullyCorrect: false,
+            id: 'r2-player-a-thesis-1',
+            polarity: 'positive',
+            polarityCorrect: false,
+            round: 2,
+            signalId: 'aster',
+          },
+        ]}
         progress={{ completed: 1, total: 2 }}
-        publicLaboratoryResults={[]}
         publicTheses={[]}
-        round={1}
+        round={2}
         ruleset="tender-v2"
         onConfirmThesis={async () => undefined}
         onFinish={async () => undefined}
@@ -116,9 +123,11 @@ test('private Model Analysis shows separate property results only to its owner',
     </I18nProvider>,
   )
 
-  expect(html).toContain('data-private-thesis="true"')
+  expect(html.match(/data-private-thesis="true"/g)).toHaveLength(2)
   expect(html).toContain('Тип верен')
   expect(html).toContain('Полярность неверна')
+  expect(html).toContain('Завершить анализ')
   expect(html).toContain('Завершили 1 из 2 исследователей')
   expect(html).not.toContain('data-public-thesis="true"')
+  expect(html).not.toContain('История лаборатории')
 })
