@@ -24,6 +24,7 @@ import {
 import { Typography } from '@/components/ui/typography'
 import { cn } from '@/lib/utils'
 import { type TranslationKey, useI18n } from '@/platform/i18n'
+import type { TenderRuleset } from '@anomaly-detector/contracts'
 import styles from './RulesReferenceDialog.module.css'
 
 const sections = [
@@ -114,6 +115,7 @@ export function RulesReferenceDialog({
   onOpenChange,
   showTimerWarning = false,
   triggerIcon = 'information',
+  ruleset,
 }: {
   belowTenderHeader?: boolean
   disabled?: boolean
@@ -121,6 +123,7 @@ export function RulesReferenceDialog({
   open?: boolean
   showTimerWarning?: boolean
   triggerIcon?: 'book' | 'information'
+  ruleset?: TenderRuleset
   triggerVariant?: 'default' | 'outline' | 'ghost'
   triggerClassName?: string
   triggerIconOnly?: boolean
@@ -226,6 +229,11 @@ export function RulesReferenceDialog({
         </div>
 
         <DialogFooter className={styles.footer}>
+          {ruleset && (
+            <Typography variant="caption" tone="muted" className={styles.ruleset}>
+              {t('rules.ruleset', { version: ruleset === 'tender-v2' ? '2' : '1' })}
+            </Typography>
+          )}
           <DialogClose asChild>
             <Button type="button" variant="outline" className={styles.closeButton}>
               {t('rules.close')}
@@ -300,6 +308,10 @@ export function LaboratoryInterpretation() {
         <article className={styles.protocol}>
           <Typography variant="bodySmMedium">{t('rules.laboratory.continuous.title')}</Typography>
           <Typography variant="bodyXs" tone="muted">{t('rules.laboratory.continuous.body')}</Typography>
+        </article>
+        <article className={styles.protocol}>
+          <Typography variant="bodySmMedium">{t('rules.laboratory.broad.title')}</Typography>
+          <Typography variant="bodyXs" tone="muted">{t('rules.laboratory.broad.body')}</Typography>
         </article>
       </div>
       <Typography variant="bodySmMedium">{t('rules.laboratory.cycle')}</Typography>

@@ -187,6 +187,11 @@ export function CompletedTenderPanel({ view }: Props) {
           })}
         </ol>
       </section>
+      {view.ruleset && (
+        <Typography variant="caption" tone="muted">
+          {t('rules.ruleset', { version: view.ruleset === 'tender-v2' ? '2' : '1' })}
+        </Typography>
+      )}
     </section>
   )
 }

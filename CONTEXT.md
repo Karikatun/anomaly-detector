@@ -66,9 +66,13 @@ _Avoid_: turn order, initiative bid, action space
 One of four units that a player allocates across research, analysis, and contract categories each round.
 _Avoid_: action point, energy, move
 
-**Reserve Power**:
+**Unallocated Power**:
 Power deliberately left unallocated by a player or assigned by the server after a timeout. It grants no action or benefit in the current round.
 _Avoid_: unused action, skipped action
+
+**Tender Ruleset**:
+The immutable rules version stored with a Tender. New Tenders use `tender-v2`; persisted records without a version are interpreted as `tender-v1` so a deployment never changes an active match.
+_Avoid_: frontend version, latest rules
 
 **Phase**:
 A shared resolution stage of a round: Reconnaissance, Laboratory, Model Analysis, or Contracts.
@@ -87,6 +91,10 @@ _Avoid_: mixture, combination, experiment pair
 **Protocol**:
 The operating mode of a Directed Test. The MVP protocols are Impulse and Continuous.
 _Avoid_: test, power, action
+
+**Laboratory Mode**:
+The action selected for two Laboratory Power: Deep runs one Continuous Directed Test, while Broad atomically runs two distinct directed Impulse tests.
+_Avoid_: protocol, second turn
 
 **Public Result**:
 The test outcome visible to every player: transmission gain, attenuation, reflection, or unstable collapse.

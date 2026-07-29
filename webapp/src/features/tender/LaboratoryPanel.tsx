@@ -3,7 +3,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
 import { useState } from 'react'
 
-import type { LaboratoryProtocol, SignalId, TenderView } from '@anomaly-detector/contracts'
+import type { LaboratoryAction, SignalId, TenderView } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
@@ -18,9 +18,10 @@ type LaboratoryPanelProps = {
   mySamples: SignalId[]
   privateMeasurements: TenderView['privateMeasurements']
   powerAllocation: number
+  ruleset?: TenderView['ruleset']
   disabled?: boolean
   error?: string | null
-  onConfirm: (input: { sourceSignal: SignalId; receiverSignal: SignalId; protocol: LaboratoryProtocol }) => Promise<void>
+  onConfirm: (input: LaboratoryAction) => Promise<void>
 }
 
 const signalStyle = (signal?: SignalId) => ({
@@ -31,24 +32,53 @@ export function LaboratoryPanel({
   mySamples,
   privateMeasurements,
   powerAllocation,
+  ruleset,
   disabled,
   error,
   onConfirm,
 }: LaboratoryPanelProps) {
   const [selectedSamples, setSelectedSamples] = useState<SignalId[]>([])
+  const [mode, setMode] = useState<'broad' | 'deep' | 'impulse' | null>(
+    powerAllocation === 1 ? 'impulse' : ruleset === 'tender-v1' ? 'deep' : null,
+  )
+  const [firstBroadPair, setFirstBroadPair] = useState<{
+    receiverSignal: SignalId
+    sourceSignal: SignalId
+  } | null>(null)
   const source = selectedSamples[0] ?? null
   const receiver = selectedSamples[1] ?? null
-  const protocol: LaboratoryProtocol = powerAllocation >= 2 ? 'continuous' : 'impulse'
   const isValid = source !== null && receiver !== null && source !== receiver
   const { t } = useI18n()
   const signalName = (signal: SignalId) => t(signalLabelKeys[signal])
   const latestMeasurement = privateMeasurements.at(-1)
 
   const handleTest = async () => {
-    if (!isValid) return
+    if (!isValid || mode === null) return
+    const pair = { sourceSignal: source, receiverSignal: receiver }
+    if (mode === 'broad' && firstBroadPair === null) {
+      setFirstBroadPair(pair)
+      setSelectedSamples([])
+      return
+    }
     await runTenderAction(
-      () => onConfirm({ sourceSignal: source, receiverSignal: receiver, protocol }),
+      () => onConfirm(mode === 'broad'
+        ? { mode, pairs: [firstBroadPair!, pair] }
+        : { mode, pair }),
     )
+  }
+
+  const selectMode = (nextMode: 'broad' | 'deep') => {
+    if (mode === nextMode) return
+    if (nextMode === 'broad') {
+      if (isValid) {
+        setFirstBroadPair({ sourceSignal: source, receiverSignal: receiver })
+        setSelectedSamples([])
+      }
+    } else if (firstBroadPair) {
+      setSelectedSamples([firstBroadPair.sourceSignal, firstBroadPair.receiverSignal])
+      setFirstBroadPair(null)
+    }
+    setMode(nextMode)
   }
 
   const handleSampleClick = (signal: SignalId) => {
@@ -73,6 +103,49 @@ export function LaboratoryPanel({
             </Typography>
             <Typography as="span" variant="caption" className={styles.sectionMeta}>{mySamples.length} доступно</Typography>
           </div>
+
+          {powerAllocation === 2 && ruleset !== 'tender-v1' && (
+            <div className={styles.laboratoryModeSwitch} role="group" aria-label={t('tender.lab.mode.aria')}>
+              <button
+                type="button"
+                aria-pressed={mode === 'deep'}
+                data-selected={mode === 'deep' || undefined}
+                disabled={disabled}
+                onClick={() => selectMode('deep')}
+              >
+                <Typography as="span" variant="bodySmMedium">{t('tender.lab.mode.deep')}</Typography>
+              </button>
+              <button
+                type="button"
+                aria-pressed={mode === 'broad'}
+                data-selected={mode === 'broad' || undefined}
+                disabled={disabled}
+                onClick={() => selectMode('broad')}
+              >
+                <Typography as="span" variant="bodySmMedium">{t('tender.lab.mode.broad')}</Typography>
+              </button>
+            </div>
+          )}
+
+          {firstBroadPair && mode === 'broad' && (
+            <div className={styles.broadPairSummary}>
+              <Typography as="strong" variant="caption">{t('tender.lab.mode.firstPair')}</Typography>
+              <Typography as="span" variant="bodySm">
+                {signalName(firstBroadPair.sourceSignal)} → {signalName(firstBroadPair.receiverSignal)}
+              </Typography>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedSamples([firstBroadPair.sourceSignal, firstBroadPair.receiverSignal])
+                  setFirstBroadPair(null)
+                }}
+              >
+                {t('tender.lab.mode.editFirstPair')}
+              </Button>
+            </div>
+          )}
 
           <div className={styles.choiceMatrix}>
             {mySamples.map((signal) => {
@@ -126,9 +199,13 @@ export function LaboratoryPanel({
           <div className={styles.protocol}>
             <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
             <span className={styles.protocolCopy}>
-              <Typography as="span" variant="caption" tone="muted">Протокол · {powerAllocation} мощности</Typography>
+              <Typography as="span" variant="caption" tone="muted">
+                {t('tender.lab.protocolLabel', { count: powerAllocation })}
+              </Typography>
               <Typography as="strong" variant="bodySmMedium">
-                {t(`tender.lab.protocol.${protocol}`)}
+                {mode === null
+                  ? t('tender.lab.mode.choose')
+                  : t(`tender.lab.protocol.${mode === 'deep' ? 'continuous' : 'impulse'}`)}
               </Typography>
             </span>
           </div>
@@ -206,12 +283,16 @@ export function LaboratoryPanel({
           type="button"
           size="lg"
           className={styles.actionButton}
-          disabled={disabled || !isValid}
+          disabled={disabled || !isValid || mode === null}
           onClick={() => void handleTest()}
         >
           <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
-          {source && receiver
-            ? `Провести опыт: ${signalName(source)} → ${signalName(receiver)}`
+          {mode === 'broad' && firstBroadPair === null && source && receiver
+            ? t('tender.lab.mode.continueBroad')
+            : source && receiver
+              ? mode === 'broad'
+                ? t('tender.lab.mode.confirmBroad')
+                : `Провести опыт: ${signalName(source)} → ${signalName(receiver)}`
             : t('tender.lab.confirm')}
         </Button>
       </footer>

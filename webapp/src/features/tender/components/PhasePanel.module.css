@@ -670,6 +670,52 @@
   min-height: 2.75rem;
 }
 
+.laboratoryModeSwitch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(69, 126, 163, .38);
+  border-radius: .55rem;
+}
+
+.laboratoryModeSwitch button {
+  min-height: 2.75rem;
+  padding: .55rem .75rem;
+  border: 0;
+  color: rgba(215, 231, 241, .68);
+  background: rgba(4, 18, 31, .82);
+}
+
+.laboratoryModeSwitch button + button {
+  border-left: 1px solid rgba(69, 126, 163, .38);
+}
+
+.laboratoryModeSwitch button[data-selected] {
+  color: #dff4ff;
+  background: rgba(17, 117, 178, .28);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.broadPairSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .2rem .65rem;
+  padding: .6rem .7rem;
+  border: 1px solid rgba(69, 126, 163, .3);
+  border-radius: .55rem;
+  background: rgba(3, 18, 31, .72);
+}
+
+.broadPairSummary > :first-child {
+  grid-column: 1 / -1;
+  color: var(--primary);
+}
+
+.broadPairSummary button {
+  min-height: 2.75rem;
+}
+
 .analysisHistory {
   padding-top: .65rem;
   border-top: 1px solid rgba(72, 128, 164, .22);

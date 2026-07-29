@@ -29,6 +29,7 @@ import { TenderTimer } from './TenderTimer'
 import { ReconnectOverlay } from './components/ReconnectOverlay'
 import { PhaseNotice, UnavailablePhaseCard } from './components/TenderActionPanel'
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
+import { TenderPhaseLayout } from './components/TenderPhaseLayout'
 import {
   TenderLaboratoryJournal,
   TenderPlanningContext,
@@ -37,6 +38,7 @@ import {
 } from './components/TenderOverview'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import { CompletedTenderPanel } from './components/CompletedTenderPanel'
+import { ContractPlanningPanel } from './components/ContractPlanningPanel'
 import {
   useTenderCommands,
   type TenderCommandInput,
@@ -176,9 +178,22 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           mySamples={mySamples}
           privateMeasurements={view.privateMeasurements}
           powerAllocation={labPower}
+          ruleset={view.ruleset}
           disabled={disabled || isWaitingForTurn}
           error={error}
-          onConfirm={(input) => onCommand({ type: 'run-laboratory-test', ...input })}
+          onConfirm={(laboratory) => {
+            if (view.ruleset === 'tender-v1') {
+              const pair = laboratory.mode === 'broad'
+                ? laboratory.pairs[0]
+                : laboratory.pair
+              return onCommand({
+                type: 'run-laboratory-test',
+                protocol: laboratory.mode === 'deep' ? 'continuous' : 'impulse',
+                ...pair,
+              })
+            }
+            return onCommand({ type: 'run-laboratory-test', laboratory })
+          }}
         />,
       ) : (
         <UnavailablePhaseCard>Вы не выделили мощность на лабораторию.</UnavailablePhaseCard>
@@ -473,11 +488,9 @@ function TenderContent() {
   const isLaboratoryPhase = tenderView.phase === 'laboratory'
   const isComplete = tenderView.phase === 'complete'
   const isPlanningPhase = isAccessSlotSelection || isPowerAllocation
-  const isEmbeddedWorkspacePhase = tenderView.phase === 'model-analysis'
-    || tenderView.phase === 'contracts'
-    || tenderView.phase === 'final-scientific-model'
-  const showRightSidebar = !isPlanningPhase && !isEmbeddedWorkspacePhase && !isComplete
-  const showGenericTools = !isPlanningPhase && !isLaboratoryPhase && !isEmbeddedWorkspacePhase && !isComplete
+  const showRightSidebar = !isPlanningPhase && !isComplete
+  const showGenericTools = !isPlanningPhase && tenderView.phase !== 'model-analysis' && !isComplete
+  const showContractPlanning = isPowerAllocation || isLaboratoryPhase
   const referenceHelpDisabled = isSequentialPhase && isMyTurn
   const hasPendingAction = isAccessSlotSelection
     ? myPlayer?.requestedAccessSlot === undefined
@@ -525,6 +538,7 @@ function TenderContent() {
             onOpenChange={setRulesOpen}
             open={rulesOpen && !referenceHelpUrgentlyLocked}
             showTimerWarning
+            ruleset={tenderView.ruleset}
             triggerClassName={styles.rulesAction}
             triggerIcon="book"
             triggerTextClassName={styles.headerActionLabel}
@@ -562,27 +576,26 @@ function TenderContent() {
           />
         )}
 
-        {isSequentialPhase && tenderView.phase !== 'complete' && (
-          <TenderPhaseProgress phase={tenderView.phase} />
-        )}
-
-        {isSequentialPhase && (
-          <div className="lg:hidden">
-            <TenderPlayers
-              activePlayerId={tenderView.activePlayerId}
-              compact
-              currentUserId={auth.user?.id}
-              players={tenderView.players}
-            />
-          </div>
-        )}
-
-        <div className={showRightSidebar ? 'grid min-w-0 items-start gap-6 lg:grid-cols-[1fr_320px]' : 'grid min-w-0 items-start gap-4'}>
-          <div
-            ref={primaryContentRef}
-            tabIndex={-1}
-            className={isPlanningPhase ? 'grid min-w-0 self-start gap-4 outline-none' : 'grid min-w-0 self-start gap-6 outline-none'}
-          >
+        <TenderPhaseLayout
+          progress={isSequentialPhase && tenderView.phase !== 'complete'
+            ? <TenderPhaseProgress phase={tenderView.phase} />
+            : undefined}
+          mobilePlayers={isSequentialPhase
+            ? (
+                <TenderPlayers
+                  activePlayerId={tenderView.activePlayerId}
+                  compact
+                  currentUserId={auth.user?.id}
+                  players={tenderView.players}
+                />
+              )
+            : undefined}
+          primary={(
+            <div
+              ref={primaryContentRef}
+              tabIndex={-1}
+              className="grid min-w-0 self-start gap-4 outline-none"
+            >
             <PhasePanel
               view={tenderView}
               disabled={submitting || !connected}
@@ -593,41 +606,37 @@ function TenderContent() {
             />
 
             {isLaboratoryPhase && (
-              <div className="lg:hidden">
+              <div className="min-[64rem]:hidden">
                 <TenderLaboratoryJournal
                   players={tenderView.players}
                   results={tenderView.publicLaboratoryResults}
                 />
               </div>
             )}
-
-            {showGenericTools && (
-              <div className="grid gap-2">
-                <TenderResearchData view={tenderView} />
-
-                <WorkingModelWorkspace
-                  disabled={!connected}
-                  knownSignals={tenderView.knownSignals}
-                  model={tenderView.privateWorkingModel}
-                  onSave={saveWorkingModel}
-                />
-              </div>
-            )}
-
-            {(tenderView.phase === 'model-analysis' || tenderView.phase === 'final-scientific-model') && (
-              <div className="hidden lg:block">
-                <TenderPlayers
-                  activePlayerId={tenderView.activePlayerId}
-                  compact
-                  currentUserId={auth.user?.id}
-                  players={tenderView.players}
-                />
-              </div>
-            )}
-          </div>
-
-          {showRightSidebar && (
-            <aside className="hidden self-start gap-4 lg:grid">
+            </div>
+          )}
+          supporting={showGenericTools || showContractPlanning
+            ? (
+                <>
+                  {showContractPlanning && <ContractPlanningPanel view={tenderView} />}
+                  {showGenericTools && (
+                    <>
+                  <WorkingModelWorkspace
+                    disabled={!connected}
+                    inlineOnDesktop
+                    knownSignals={tenderView.knownSignals}
+                    model={tenderView.privateWorkingModel}
+                    onSave={saveWorkingModel}
+                  />
+                  <TenderResearchData view={tenderView} />
+                    </>
+                  )}
+                </>
+              )
+            : undefined}
+          sidebar={showRightSidebar
+            ? (
+              <>
               <TenderPlayers
                 activePlayerId={tenderView.activePlayerId}
                 currentUserId={auth.user?.id}
@@ -639,9 +648,11 @@ function TenderContent() {
                   results={tenderView.publicLaboratoryResults}
                 />
               )}
-            </aside>
-          )}
-        </div>
+              {tenderView.phase === 'model-analysis' && <TenderResearchData view={tenderView} />}
+              </>
+            )
+            : undefined}
+        />
       </div>
     </section>
   )

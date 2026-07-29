@@ -16,6 +16,7 @@ test('gives planning phases a 90-second deadline', async () => {
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     dueAt: '2026-07-20T12:01:30.000Z',
     phase: 'access-slot-selection',
+    ruleset: 'tender-v2',
   })
 
   await tender.execute({ actorId: 'player-a', commandId: 'slot-a', slot: 1, tenderId, type: 'request-access-slot' })
@@ -310,7 +311,7 @@ test('acquires deterministic Samples from Unknown Sectors for use in the same ro
     phase: 'laboratory',
     privateSamples: ['delta', 'eclipse'],
   })
-  await expect(tender.execute({ actorId: 'player-a', commandId: 'lab-a-1', protocol: 'continuous', receiverSignal: 'eclipse', sourceSignal: 'delta', tenderId, type: 'run-laboratory-test' })).resolves.toMatchObject({ tenderId })
+  await expect(tender.execute({ actorId: 'player-a', commandId: 'lab-a-1', laboratory: { mode: 'deep', pair: { receiverSignal: 'eclipse', sourceSignal: 'delta' } }, tenderId, type: 'run-laboratory-test' })).resolves.toMatchObject({ tenderId })
 })
 
 test('writes Continuous tests to the public Scientific Journal while keeping private telemetry player-scoped', async () => {
@@ -321,7 +322,7 @@ test('writes Continuous tests to the public Scientific Journal while keeping pri
   await tender.execute({ actorId: 'player-a', allocation: { contracts: 0, laboratory: 2, modelAnalysis: 0, reconnaissance: 2 }, commandId: 'power-a', tenderId, type: 'allocate-power' })
   await tender.execute({ actorId: 'player-b', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 }, commandId: 'power-b', tenderId, type: 'allocate-power' })
   await tender.execute({ actorId: 'player-a', commandId: 'recon-a', targets: ['unknown-sector', 'unknown-sector'], tenderId, type: 'conduct-reconnaissance' } as never)
-  await tender.execute({ actorId: 'player-a', commandId: 'lab-a', protocol: 'continuous', receiverSignal: 'eclipse', sourceSignal: 'delta', tenderId, type: 'run-laboratory-test' })
+  await tender.execute({ actorId: 'player-a', commandId: 'lab-a', laboratory: { mode: 'deep', pair: { receiverSignal: 'eclipse', sourceSignal: 'delta' } }, tenderId, type: 'run-laboratory-test' })
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     publicScientificJournal: [{ playerId: 'player-a', protocol: 'continuous', receiverSignal: 'eclipse', sourceSignal: 'delta', testId: 'r1-t1' }],
@@ -1224,7 +1225,7 @@ test('resolves a continuous Laboratory test between a Player\'s Samples', async 
   await tender.execute({ commandId: 'b-2', tenderId, actorId: 'player-b', type: 'allocate-power', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } })
   await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
 
-  await tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', sourceSignal: 'cinder', receiverSignal: 'delta', protocol: 'continuous' } as never)
+  await tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'delta' } } })
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     phase: 'access-slot-selection',
@@ -1248,6 +1249,42 @@ test('resolves a continuous Laboratory test between a Player\'s Samples', async 
       sourceSignal: 'cinder',
     }],
   })
+})
+
+test('atomically records two public impulse results for a broad Laboratory action', async () => {
+  const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  await tender.execute({ commandId: 'a-1', tenderId, actorId: 'player-a', type: 'request-access-slot', slot: 1 })
+  await tender.execute({ commandId: 'b-1', tenderId, actorId: 'player-b', type: 'request-access-slot', slot: 2 })
+  await tender.execute({ commandId: 'a-2', tenderId, actorId: 'player-a', type: 'allocate-power', allocation: { contracts: 0, laboratory: 2, modelAnalysis: 0, reconnaissance: 2 } })
+  await tender.execute({ commandId: 'b-2', tenderId, actorId: 'player-b', type: 'allocate-power', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 } })
+  await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'a-4',
+    laboratory: {
+      mode: 'broad',
+      pairs: [
+        { sourceSignal: 'cinder', receiverSignal: 'delta' },
+        { sourceSignal: 'delta', receiverSignal: 'cinder' },
+      ],
+    },
+    tenderId,
+    type: 'run-laboratory-test',
+  })
+
+  const view = await tender.readTenderView({ tenderId, playerId: 'player-a' })
+  expect(view.privateMeasurements).toEqual([])
+  expect(view.publicScientificJournal).toMatchObject([
+    { protocol: 'impulse', sourceSignal: 'cinder', receiverSignal: 'delta', testId: 'r1-t1' },
+    { protocol: 'impulse', sourceSignal: 'delta', receiverSignal: 'cinder', testId: 'r1-t2' },
+  ])
 })
 
 test('checks public Theses in Access Slot order and opens Contracts', async () => {
@@ -1684,9 +1721,7 @@ test('does not award a Contract from removed claim and funding fields', async ()
     tenderId,
     actorId: 'player-a',
     type: 'run-laboratory-test',
-    sourceSignal: 'cinder',
-    receiverSignal: 'delta',
-    protocol: 'impulse',
+    laboratory: { mode: 'impulse', pair: { sourceSignal: 'cinder', receiverSignal: 'delta' } },
   })
   await tender.execute({
     commandId: 'b-4',
@@ -1773,18 +1808,14 @@ test('completes the Tender after Contracts in round five', async () => {
         tenderId,
         actorId: 'player-a',
         type: 'run-laboratory-test',
-        sourceSignal: 'cinder',
-        receiverSignal: 'delta',
-        protocol: 'continuous',
+        laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'delta' } },
       })
       await tender.execute({
         commandId: `b-${round}-lab`,
         tenderId,
         actorId: 'player-b',
         type: 'run-laboratory-test',
-        sourceSignal: 'cinder',
-        receiverSignal: 'eclipse',
-        protocol: 'continuous',
+        laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'eclipse' } },
       })
     }
     await tender.execute({
@@ -1911,8 +1942,8 @@ test('projects public Laboratory results into the participant audit view', async
       await tender.execute({ commandId: `a-${round}-recon`, tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
       await tender.execute({ commandId: `b-${round}-recon`, tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
     } else {
-      await tender.execute({ commandId: `a-${round}-lab`, tenderId, actorId: 'player-a', type: 'run-laboratory-test', sourceSignal: 'cinder', receiverSignal: 'delta', protocol: 'continuous' })
-      await tender.execute({ commandId: `b-${round}-lab`, tenderId, actorId: 'player-b', type: 'run-laboratory-test', sourceSignal: 'cinder', receiverSignal: 'eclipse', protocol: 'continuous' })
+      await tender.execute({ commandId: `a-${round}-lab`, tenderId, actorId: 'player-a', type: 'run-laboratory-test', laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'delta' } } })
+      await tender.execute({ commandId: `b-${round}-lab`, tenderId, actorId: 'player-b', type: 'run-laboratory-test', laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'eclipse' } } })
     }
     await tender.execute({ commandId: `a-${round}-reserve`, tenderId, actorId: 'player-a', type: 'reserve-contract', contractId: `round-${round}-contract-1` })
     await tender.execute({ commandId: `a-${round}-bid`, tenderId, actorId: 'player-a', type: 'submit-contract-bid', contractId: `round-${round}-contract-1`, claimedPublicResult: 'unstable_collapse', requestedFunding: 1 })
@@ -1955,7 +1986,7 @@ test('produces no private measurement for an impulse Laboratory test', async () 
   await tender.execute({ commandId: 'b-2', tenderId, actorId: 'player-b', type: 'allocate-power', allocation: { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 2, reserve: 2 } as never })
   await tender.execute({ commandId: 'a-3', tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
   await tender.execute({ commandId: 'b-3', tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
-  await tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', sourceSignal: 'cinder', receiverSignal: 'delta', protocol: 'impulse' })
+  await tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', laboratory: { mode: 'impulse', pair: { sourceSignal: 'cinder', receiverSignal: 'delta' } } })
 
   expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
     privateMeasurements: [],
@@ -1986,7 +2017,7 @@ test('rejects a continuous protocol when only one Laboratory power is allocated'
   await tender.execute({ commandId: 'b-3', tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', targets: ['aster', 'boreal'] })
 
   await expect(
-    tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', sourceSignal: 'cinder', receiverSignal: 'delta', protocol: 'continuous' }),
+    tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'delta' } } }),
   ).rejects.toMatchObject({ kind: 'invalid_tender_state' })
 })
 
@@ -2028,7 +2059,7 @@ test('rejects a self-directed Laboratory test', async () => {
   await tender.execute({ commandId: 'b-3', tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', targets: ['aster', 'boreal'] })
 
   await expect(
-    tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', sourceSignal: 'cinder', receiverSignal: 'cinder', protocol: 'impulse' }),
+    tender.execute({ commandId: 'a-4', tenderId, actorId: 'player-a', type: 'run-laboratory-test', laboratory: { mode: 'impulse', pair: { sourceSignal: 'cinder', receiverSignal: 'cinder' } } }),
   ).rejects.toMatchObject({ kind: 'invalid_tender_command' })
 })
 

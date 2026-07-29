@@ -6,6 +6,7 @@ export const playerIdSchema = z.string().min(1).max(128)
 export const commandIdSchema = z.string().min(1).max(128)
 export const contractIdSchema = z.string().min(1).max(128)
 export const signalIdSchema = z.enum(['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'])
+export const tenderRulesetSchema = z.enum(['tender-v1', 'tender-v2'])
 
 export const tenderPlayerSchema = z.object({
   id: playerIdSchema,
@@ -15,6 +16,7 @@ export const tenderPlayerSchema = z.object({
 
 export const createTenderSchema = z.object({
   players: z.array(tenderPlayerSchema).min(2).max(4),
+  ruleset: tenderRulesetSchema.optional(),
 }).strict()
 
 export const requestAccessSlotCommandSchema = z.object({
@@ -90,7 +92,7 @@ export const updateWorkingModelCommandSchema = z.object({
   type: z.literal('update-working-model'),
   workingModel: workingModelSchema,
 }).strict()
-export const runLaboratoryTestCommandSchema = z.object({
+export const legacyRunLaboratoryTestCommandSchema = z.object({
   commandId: commandIdSchema,
   tenderId: tenderIdSchema,
   actorId: playerIdSchema,
@@ -99,6 +101,43 @@ export const runLaboratoryTestCommandSchema = z.object({
   protocol: laboratoryProtocolSchema,
   type: z.literal('run-laboratory-test'),
 }).strict().refine((command) => command.sourceSignal !== command.receiverSignal, 'Laboratory Signals must differ')
+
+export const laboratoryPairSchema = z.object({
+  receiverSignal: signalIdSchema,
+  sourceSignal: signalIdSchema,
+}).strict().refine((pair) => pair.sourceSignal !== pair.receiverSignal, 'Laboratory Signals must differ')
+
+export const laboratoryActionSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('impulse'),
+    pair: laboratoryPairSchema,
+  }).strict(),
+  z.object({
+    mode: z.literal('deep'),
+    pair: laboratoryPairSchema,
+  }).strict(),
+  z.object({
+    mode: z.literal('broad'),
+    pairs: z.tuple([laboratoryPairSchema, laboratoryPairSchema]).refine(
+      ([first, second]) => (
+        first.sourceSignal !== second.sourceSignal
+        || first.receiverSignal !== second.receiverSignal
+      ),
+      'Broad Laboratory pairs must be distinct',
+    ),
+  }).strict(),
+])
+
+export const runLaboratoryTestCommandSchema = z.union([
+  legacyRunLaboratoryTestCommandSchema,
+  z.object({
+    commandId: commandIdSchema,
+    tenderId: tenderIdSchema,
+    actorId: playerIdSchema,
+    laboratory: laboratoryActionSchema,
+    type: z.literal('run-laboratory-test'),
+  }).strict(),
+])
 
 export const reserveContractCommandSchema = z.object({
   commandId: commandIdSchema,
@@ -167,7 +206,7 @@ export const resumeTenderCommandSchema = z.object({
   type: z.literal('resume-tender'),
 }).strict()
 
-export const tenderCommandSchema = z.discriminatedUnion('type', [
+export const tenderCommandSchema = z.union([
   requestAccessSlotCommandSchema,
   allocatePowerCommandSchema,
   conductReconnaissanceCommandSchema,
@@ -302,6 +341,7 @@ export const tenderViewSchema = z.object({
   publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
   publicScientificJournal: z.array(scientificJournalEntrySchema).optional(),
   round: z.number().int().min(1).max(5),
+  ruleset: tenderRulesetSchema.optional(),
   serverTime: z.string().datetime(),
   tenderId: tenderIdSchema,
   version: z.number().int().min(0),
@@ -341,6 +381,7 @@ export type SignalId = z.infer<typeof signalIdSchema>
 export type FieldType = z.infer<typeof fieldTypeSchema>
 export type Polarity = z.infer<typeof polaritySchema>
 export type LaboratoryProtocol = z.infer<typeof laboratoryProtocolSchema>
+export type LaboratoryAction = z.infer<typeof laboratoryActionSchema>
 export type PowerAllocation = z.infer<typeof powerAllocationSchema>
 export type CommandReceipt = z.infer<typeof commandReceiptSchema>
 export type PublicContract = z.infer<typeof publicContractSchema>
@@ -353,6 +394,7 @@ export type TenderAuditView = z.infer<typeof tenderAuditViewSchema>
 export type WorkingModel = z.infer<typeof workingModelSchema>
 export type ScientificModel = z.infer<typeof scientificModelSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
+export type TenderRuleset = z.infer<typeof tenderRulesetSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>
 export type TenderViewQuery = z.infer<typeof tenderViewQuerySchema>
 export type AdvanceDueTendersInput = z.infer<typeof advanceDueTendersInputSchema>

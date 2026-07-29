@@ -390,6 +390,7 @@ export function createTenderModule({
         publicTheses: [],
         ratingByPlayer: {},
         round: 1,
+        ruleset: parsedInput.data.ruleset ?? 'tender-v2',
         rawTelemetrySignalsByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, []])),
         reconnaissanceCompletedByPlayer: {},
         laboratoryCompletedByPlayer: {},
@@ -558,34 +559,60 @@ export function createTenderModule({
         }
         const expectedPlayer = nextLaboratoryPlayer(tender)
         const samples = tender.samplesByPlayer[player.id] ?? []
-        const expectedProtocol = tender.powerAllocations[player.id]?.laboratory === 2 ? 'continuous' : 'impulse'
-        if (expectedPlayer?.id !== player.id || command.protocol !== expectedProtocol || !samples.includes(command.sourceSignal) || !samples.includes(command.receiverSignal)) {
+        const allocatedPower = tender.powerAllocations[player.id]?.laboratory ?? 0
+        const isVersionedCommand = 'laboratory' in command
+        if (
+          expectedPlayer?.id !== player.id
+          || (tender.ruleset === 'tender-v2') !== isVersionedCommand
+        ) {
           throw new TenderFailure('invalid_tender_state', 'Laboratory command is not available to this Player')
         }
-        const publicResult = resolvePublicResult(
-          tender.anomalyConfiguration.signals[command.sourceSignal],
-          tender.anomalyConfiguration.signals[command.receiverSignal],
-        )
+        const mode = isVersionedCommand
+          ? command.laboratory.mode
+          : command.protocol === 'continuous' ? 'deep' : 'impulse'
+        const pairs = isVersionedCommand
+          ? command.laboratory.mode === 'broad'
+            ? command.laboratory.pairs
+            : [command.laboratory.pair]
+          : [{ receiverSignal: command.receiverSignal, sourceSignal: command.sourceSignal }]
+        const requiredPower = mode === 'impulse' ? 1 : 2
+        if (
+          allocatedPower !== requiredPower
+          || pairs.some((pair) => (
+            !samples.includes(pair.sourceSignal)
+            || !samples.includes(pair.receiverSignal)
+          ))
+        ) {
+          throw new TenderFailure('invalid_tender_state', 'Laboratory command is not available to this Player')
+        }
+        const protocol = mode === 'deep' ? 'continuous' as const : 'impulse' as const
+        const resolvedResults = pairs.map((pair) => ({
+          playerId: player.id,
+          protocol,
+          publicResult: resolvePublicResult(
+            tender.anomalyConfiguration.signals[pair.sourceSignal],
+            tender.anomalyConfiguration.signals[pair.receiverSignal],
+          ),
+          receiverSignal: pair.receiverSignal,
+          sourceSignal: pair.sourceSignal,
+        }))
         const publicLaboratoryResults = [
           ...tender.publicLaboratoryResults,
-          {
-            playerId: player.id,
-            protocol: command.protocol,
-            publicResult,
-            receiverSignal: command.receiverSignal,
-            sourceSignal: command.sourceSignal,
-          },
+          ...resolvedResults,
         ]
         const publicScientificJournal = [
           ...tender.publicScientificJournal,
-          { ...publicLaboratoryResults.at(-1)!, testId: `r${tender.round}-t${tender.publicScientificJournal.length + 1}` },
+          ...resolvedResults.map((result, index) => ({
+            ...result,
+            testId: `r${tender.round}-t${tender.publicScientificJournal.length + index + 1}`,
+          })),
         ]
         const laboratoryCompletedByPlayer = { ...tender.laboratoryCompletedByPlayer, [player.id]: true }
-        const measurement = command.protocol === 'continuous'
+        const measurement = mode === 'deep'
           ? [{
-            receiverSignal: command.receiverSignal,
-            sourceSignal: command.sourceSignal,
-            polarityRelation: tender.anomalyConfiguration.signals[command.sourceSignal].polarity === tender.anomalyConfiguration.signals[command.receiverSignal].polarity
+            receiverSignal: pairs[0]!.receiverSignal,
+            sourceSignal: pairs[0]!.sourceSignal,
+            polarityRelation: tender.anomalyConfiguration.signals[pairs[0]!.sourceSignal].polarity === tender.anomalyConfiguration.signals[pairs[0]!.receiverSignal].polarity
               ? 'same' as const
               : 'different' as const,
           }]
@@ -606,7 +633,16 @@ export function createTenderModule({
             actorId: command.actorId,
             commandId: command.commandId,
             kind: 'laboratory_test_completed',
-            payload: { playerId: player.id, protocol: command.protocol, publicResult, receiverSignal: command.receiverSignal, sourceSignal: command.sourceSignal },
+            payload: {
+              mode,
+              playerId: player.id,
+              protocol,
+              results: resolvedResults.map((result) => ({
+                publicResult: result.publicResult,
+                receiverSignal: result.receiverSignal,
+                sourceSignal: result.sourceSignal,
+              })),
+            },
           }],
           command,
           commandFingerprint,
@@ -1006,6 +1042,7 @@ export function createTenderModule({
         publicLaboratoryResults: tender.publicLaboratoryResults,
         publicScientificJournal: tender.publicScientificJournal,
         round: tender.round,
+        ruleset: tender.ruleset,
         serverTime: now().toISOString(),
         tenderId,
         version: tender.version,

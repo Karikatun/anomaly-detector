@@ -162,6 +162,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       publicFinalContract: { contractId: 'final-contract', requiredPublicResult: 'reflection' },
       publicLaboratoryResults: [],
       round: 1,
+      ruleset: 'tender-v2',
       tenderId,
       version: 1,
       phase: 'access-slot-selection',

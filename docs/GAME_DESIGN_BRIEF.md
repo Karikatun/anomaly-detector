@@ -70,6 +70,7 @@ The starting protocols are:
 
 - Impulse costs one Laboratory Power and gives one public result class.
 - Continuous costs two Laboratory Power and gives the same public result plus a private measurement: whether the source and receiver have the same or different polarities.
+- With two Laboratory Power the player explicitly chooses Deep (one Continuous test) or Broad (two distinct directed Impulse tests committed atomically). Broad gives two public results and no private polarity measurement.
 
 Signals cannot be tested against themselves in the MVP. Self-tests may become a future technology.
 
@@ -120,11 +121,13 @@ Each player has four Power units per round, allocated secretly among four action
 | Category | One power | Two power |
 | --- | --- | --- |
 | Reconnaissance | Acquire one Sample | Acquire two Samples |
-| Laboratory | One Impulse test | One Continuous test |
+| Laboratory | One Impulse test | One Deep Continuous test or two Broad Impulse tests |
 | Model analysis | Submit one Thesis | Not available |
 | Contract | Reserve and submit one Contract | Not available |
 
 Reconnaissance and Laboratory accept at most two Power; Model Analysis and Contracts accept at most one. Power allocation fixes only the category and amount. A player picks its exact target when its turn arrives in that phase. It can revise any choice before confirmation; confirmed actions are final.
+
+Every Tender stores an immutable ruleset identifier. New matches use `tender-v2`; persisted state without an identifier is interpreted as `tender-v1`, and all UI rules/help content is selected from the match version rather than a deployment-global flag.
 
 Reconnaissance can target an Unknown Sector or an already revealed Signal. An Unknown Sector deterministically reveals one undiscovered Signal and gives its Sample to the researching player. An already revealed Signal gives its Sample only if the player does not already have it. A Sample acquired in Reconnaissance can be used in that same round's Laboratory phase.
 
