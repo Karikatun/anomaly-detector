@@ -82,7 +82,7 @@ Players may allocate one or two Model Analysis Power for up to one or two privat
 
 Model Analysis uses one shared 90-second window in which players act independently. An incorrect first Thesis triggers a personal Corporate Review for the rest of that round: only that player's second Thesis costs one Budget. A player without the Budget loses the unused Model Analysis Power. After the first Thesis a player who allocated two Power may voluntarily finish with confirmation; timeout preserves submitted work and burns unused Power.
 
-Private final-model drafts can change freely until the final audit.
+The final Scientific Model uses one shared three-minute window. At phase entry the server snapshots only explicit Working Model hypotheses into each player's private draft; possible and excluded marks remain hints and are never selected automatically. Draft edits autosave independently, survive reconnects, and stop synchronising from the Working Model. Only an explicit atomic submission is scored or revealed; an unsubmitted draft is discarded at timeout.
 
 ## Round Structure
 
@@ -147,7 +147,7 @@ Successful ordinary Contracts grant one trust point but never Budget. Each playe
 
 ## Timing And Failure Handling
 
-Every live phase has a 90-second server deadline except the final Scientific Model, whose delivery contract is defined separately. Access Slot selection, Power allocation, and Model Analysis use one shared deadline because players act independently. In the remaining ordered operational phases, each active player receives a fresh 90 seconds when their choice opens.
+Every live phase has a 90-second server deadline except the final Scientific Model, which uses one shared three-minute deadline. Access Slot selection, Power allocation, Model Analysis, and the final Scientific Model use shared deadlines because players act independently. In the remaining ordered operational phases, each active player receives a fresh 90 seconds when their choice opens.
 
 If a player times out or disconnects, the server takes conservative, non-beneficial defaults: a standard or later free slot without budget spend, unallocated power to reserve, and a skipped unresolved target. The player may reconnect and continue. A missing player never blocks a match.
 

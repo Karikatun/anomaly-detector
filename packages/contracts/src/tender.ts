@@ -190,6 +190,16 @@ export const scientificModelSchema = z.object({
   (model) => Object.keys(model.signals).length > 0,
   'Scientific Model must claim at least one Signal property',
 )
+export const scientificModelDraftSchema = z.object({
+  signals: z.partialRecord(signalIdSchema, scientificModelSignalSchema),
+}).strict()
+export const updateScientificModelDraftCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  scientificModelDraft: scientificModelDraftSchema,
+  type: z.literal('update-scientific-model-draft'),
+}).strict()
 export const submitScientificModelCommandSchema = z.object({
   commandId: commandIdSchema,
   tenderId: tenderIdSchema,
@@ -223,6 +233,7 @@ export const tenderCommandSchema = z.union([
   reserveContractCommandSchema,
   skipContractCommandSchema,
   submitContractBidCommandSchema,
+  updateScientificModelDraftCommandSchema,
   submitScientificModelCommandSchema,
   leaveTenderCommandSchema,
   resumeTenderCommandSchema,
@@ -371,12 +382,17 @@ export const tenderViewSchema = z.object({
   privateSamples: z.array(signalIdSchema),
   privateMeasurements: z.array(privateMeasurementSchema),
   privateTheses: z.array(privateThesisSchema).optional(),
+  privateFinalScientificModelDraft: scientificModelDraftSchema.optional(),
   privateResearchCertifications: z.array(signalIdSchema).optional(),
   privateTelemetry: z.array(privateMeasurementSchema).optional(),
   privateUsedContractEvidenceTestIds: z.array(z.string().min(1)).optional(),
   privateWorkingModel: workingModelSchema,
   publicTheses: z.array(publicThesisSchema),
   modelAnalysisProgress: z.object({
+    completed: z.number().int().min(0),
+    total: z.number().int().min(0),
+  }).strict().optional(),
+  finalScientificModelProgress: z.object({
     completed: z.number().int().min(0),
     total: z.number().int().min(0),
   }).strict().optional(),
@@ -418,6 +434,7 @@ export type RatingBreakdown = z.infer<typeof ratingBreakdownSchema>
 export type TenderAuditView = z.infer<typeof tenderAuditViewSchema>
 export type WorkingModel = z.infer<typeof workingModelSchema>
 export type ScientificModel = z.infer<typeof scientificModelSchema>
+export type ScientificModelDraft = z.infer<typeof scientificModelDraftSchema>
 export type TenderPhase = z.infer<typeof tenderPhaseSchema>
 export type TenderRuleset = z.infer<typeof tenderRulesetSchema>
 export type TenderView = z.infer<typeof tenderViewSchema>

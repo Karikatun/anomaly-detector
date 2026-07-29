@@ -570,10 +570,8 @@ test('completes five rounds for every supported player count when all players re
       players: players.map((player) => ({ playerId: player.id, budget: 7 })),
     })
 
-    for (const player of players) {
-      dueAt = new Date(dueAt.getTime() + 180_000)
-      await tender.advanceDueTenders({ limit: 10, now: dueAt })
-    }
+    dueAt = new Date(dueAt.getTime() + 180_000)
+    await tender.advanceDueTenders({ limit: 10, now: dueAt })
 
     expect(await tender.readTenderView({ tenderId, playerId: players[0].id })).toMatchObject({
       phase: 'complete',
@@ -588,6 +586,21 @@ test('awards property points, completed Signal points, and the complete-model bo
   const { tenderId } = await tender.createTender({
     players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }],
   })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'working-model-a',
+    tenderId,
+    type: 'update-working-model',
+    workingModel: {
+      signals: {
+        aster: {
+          hypothesis: { fieldType: 'inertial', polarity: 'negative' },
+          note: 'Проверить перед отправкой',
+          possibleFieldTypes: ['phase'],
+        },
+      },
+    },
+  })
   let dueAt = now
   for (let round = 1; round <= 5; round += 1) {
     dueAt = new Date(dueAt.getTime() + 90_000)
@@ -595,6 +608,28 @@ test('awards property points, completed Signal points, and the complete-model bo
     dueAt = new Date(dueAt.getTime() + 90_000)
     await tender.advanceDueTenders({ limit: 10, now: dueAt })
   }
+
+  const sharedFinalDueAt = (await tender.readTenderView({ tenderId, playerId: 'player-a' })).dueAt
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    finalScientificModelProgress: { completed: 0, total: 2 },
+    privateFinalScientificModelDraft: {
+      signals: {
+        aster: { fieldType: 'inertial', polarity: 'negative' },
+      },
+    },
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'final-draft-a',
+    scientificModelDraft: {
+      signals: {
+        aster: { fieldType: 'inertial', polarity: 'negative' },
+        boreal: { fieldType: 'inertial' },
+      },
+    },
+    tenderId,
+    type: 'update-scientific-model-draft',
+  })
 
   await tender.execute({
     actorId: 'player-a',
@@ -615,13 +650,22 @@ test('awards property points, completed Signal points, and the complete-model bo
 
   const finalModelView = await tender.readTenderView({ tenderId, playerId: 'player-a' })
   expect(finalModelView).toMatchObject({
+    dueAt: sharedFinalDueAt,
+    finalScientificModelProgress: { completed: 1, total: 2 },
     phase: 'final-scientific-model',
     players: [
       { finalScientificModelSubmitted: true, playerId: 'player-a' },
-      { finalScientificModelSubmitted: false, playerId: 'player-b' },
+      { playerId: 'player-b' },
     ],
   })
+  expect(finalModelView.players[1]).not.toHaveProperty('finalScientificModelSubmitted')
+  expect(finalModelView).not.toHaveProperty('privateFinalScientificModelDraft')
   expect(finalModelView.players.find((player) => player.playerId === 'player-a')).toMatchObject({ rating: 21 })
+  const playerBView = await tender.readTenderView({ tenderId, playerId: 'player-b' })
+  expect(playerBView.players[0]).not.toHaveProperty('finalScientificModelSubmitted')
+  expect(playerBView).toMatchObject({
+    privateFinalScientificModelDraft: { signals: {} },
+  })
 
   await tender.execute({
     actorId: 'player-b',

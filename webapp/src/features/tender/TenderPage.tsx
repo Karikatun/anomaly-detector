@@ -112,8 +112,11 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
   const myPower = myPlayer?.powerAllocation
   const activePlayer = view.players.find((player) => player.playerId === activePlayerId)
   const isSharedModelAnalysis = view.phase === 'model-analysis' && view.ruleset === 'tender-v2'
+  const isSharedFinalScientificModel = view.phase === 'final-scientific-model'
+    && view.ruleset === 'tender-v2'
   const isWaitingForTurn = sequentialPhases.has(view.phase)
     && !isSharedModelAnalysis
+    && !isSharedFinalScientificModel
     && activePlayerId !== auth.user?.id
   const withWaitingState = (content: ReactNode) => (
     <>
@@ -260,6 +263,8 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
     case 'final-scientific-model': {
       return withWaitingState(
         <FinalScientificModelPanel
+          draft={view.privateFinalScientificModelDraft ?? { signals: {} }}
+          dueAt={view.dueAt ?? null}
           evidence={{
             privateMeasurements: view.privateMeasurements,
             publicLaboratoryResults: view.publicLaboratoryResults,
@@ -268,6 +273,13 @@ function PhasePanel({ view, disabled, error, onCommand, onSaveWorkingModel, acti
           disabled={disabled || isWaitingForTurn}
           error={error}
           onConfirm={(scientificModel) => onCommand({ type: 'submit-scientific-model', scientificModel })}
+          onSaveDraft={(scientificModelDraft) =>
+            onCommand({ type: 'update-scientific-model-draft', scientificModelDraft })
+          }
+          progress={view.finalScientificModelProgress}
+          serverTime={view.serverTime}
+          submitted={myPlayer?.finalScientificModelSubmitted}
+          workingModel={view.privateWorkingModel}
         />,
       )
     }
@@ -491,7 +503,10 @@ function TenderContent() {
   const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
   const isSharedModelAnalysis = tenderView.phase === 'model-analysis'
     && tenderView.ruleset === 'tender-v2'
-  const isSequentialPhase = sequentialPhases.has(tenderView.phase) && !isSharedModelAnalysis
+  const isSharedFinalScientificModel = tenderView.phase === 'final-scientific-model'
+    && tenderView.ruleset === 'tender-v2'
+  const isSharedOperationalPhase = isSharedModelAnalysis || isSharedFinalScientificModel
+  const isSequentialPhase = sequentialPhases.has(tenderView.phase) && !isSharedOperationalPhase
   const isMyTurn = !isSequentialPhase || tenderView.activePlayerId === auth.user?.id
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
   const isPowerAllocation = tenderView.phase === 'power-allocation'
@@ -507,8 +522,10 @@ function TenderContent() {
     ? myPlayer?.requestedAccessSlot === undefined
     : isPowerAllocation
       ? myPlayer?.powerAllocation === undefined
-      : isSharedModelAnalysis
-        ? !myPlayer?.modelAnalysisCompleted
+      : isSharedOperationalPhase
+        ? isSharedModelAnalysis
+          ? !myPlayer?.modelAnalysisCompleted
+          : !myPlayer?.finalScientificModelSubmitted
         : isSequentialPhase && isMyTurn
   const referenceHelpUrgentlyLocked = hasPendingAction && remainingSeconds <= 10
 
@@ -543,6 +560,14 @@ function TenderContent() {
               {t('tender.analysis.progress', {
                 completed: tenderView.modelAnalysisProgress.completed,
                 total: tenderView.modelAnalysisProgress.total,
+              })}
+            </Badge>
+          )}
+          {isSharedFinalScientificModel && tenderView.finalScientificModelProgress && (
+            <Badge variant="outline">
+              {t('tender.finalDraft.progress', {
+                completed: tenderView.finalScientificModelProgress.completed,
+                total: tenderView.finalScientificModelProgress.total,
               })}
             </Badge>
           )}

@@ -5,22 +5,24 @@ export type WorkingModelSaveStatus =
   | { state: 'saving' }
   | { state: 'error'; message: string }
 
-type WorkingModelDraftControllerOptions = {
+type WorkingModelDraftControllerOptions<TDraft> = {
   cancel: (timer: ReturnType<typeof setTimeout>) => void
-  initialModel: WorkingModel
-  onDraft: (draft: WorkingModel) => void
+  errorMessage?: string
+  initialModel: TDraft
+  onDraft: (draft: TDraft) => void
   onStatus: (status: WorkingModelSaveStatus) => void
-  save: (draft: WorkingModel) => Promise<void>
+  save: (draft: TDraft) => Promise<void>
   schedule: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>
 }
 
-export class WorkingModelDraftController {
-  private readonly cancel: WorkingModelDraftControllerOptions['cancel']
-  private readonly onDraft: WorkingModelDraftControllerOptions['onDraft']
-  private readonly onStatus: WorkingModelDraftControllerOptions['onStatus']
-  private readonly schedule: WorkingModelDraftControllerOptions['schedule']
-  private save: WorkingModelDraftControllerOptions['save']
-  private draft: WorkingModel
+export class WorkingModelDraftController<TDraft = WorkingModel> {
+  private readonly cancel: WorkingModelDraftControllerOptions<TDraft>['cancel']
+  private readonly errorMessage: string
+  private readonly onDraft: WorkingModelDraftControllerOptions<TDraft>['onDraft']
+  private readonly onStatus: WorkingModelDraftControllerOptions<TDraft>['onStatus']
+  private readonly schedule: WorkingModelDraftControllerOptions<TDraft>['schedule']
+  private save: WorkingModelDraftControllerOptions<TDraft>['save']
+  private draft: TDraft
   private revision = 0
   private savedRevision = 0
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -28,16 +30,17 @@ export class WorkingModelDraftController {
   private saveFailed = false
   private disposed = false
 
-  constructor(options: WorkingModelDraftControllerOptions) {
+  constructor(options: WorkingModelDraftControllerOptions<TDraft>) {
     this.cancel = options.cancel
     this.draft = options.initialModel
+    this.errorMessage = options.errorMessage ?? 'Не удалось сохранить рабочую модель'
     this.onDraft = options.onDraft
     this.onStatus = options.onStatus
     this.save = options.save
     this.schedule = options.schedule
   }
 
-  setSave(save: WorkingModelDraftControllerOptions['save']) {
+  setSave(save: WorkingModelDraftControllerOptions<TDraft>['save']) {
     this.save = save
   }
 
@@ -45,7 +48,7 @@ export class WorkingModelDraftController {
     this.disposed = false
   }
 
-  update(draft: WorkingModel) {
+  update(draft: TDraft) {
     if (this.disposed) return
     this.draft = draft
     this.revision += 1
@@ -54,7 +57,7 @@ export class WorkingModelDraftController {
     this.scheduleSave()
   }
 
-  receiveServerModel(model: WorkingModel) {
+  receiveServerModel(model: TDraft) {
     if (this.disposed) return
     if (this.hasPendingChanges()) return
     this.draft = model
@@ -113,11 +116,11 @@ export class WorkingModelDraftController {
       await this.inFlight
       this.savedRevision = revision
       this.emitStatus({ state: 'idle' })
-    } catch (error) {
+    } catch {
       this.saveFailed = true
       this.emitStatus({
         state: 'error',
-        message: error instanceof Error ? error.message : 'Не удалось сохранить рабочую модель',
+        message: this.errorMessage,
       })
     } finally {
       this.inFlight = null

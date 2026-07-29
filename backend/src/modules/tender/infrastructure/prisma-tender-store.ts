@@ -10,6 +10,7 @@ import {
   publicThesisSchema,
   scientificJournalEntrySchema,
   scientificModelSchema,
+  scientificModelDraftSchema,
   signalIdSchema,
   tenderPhaseSchema,
   tenderPlayerSchema,
@@ -45,6 +46,7 @@ type PersistedTenderState = Pick<
   | 'completionReason'
   | 'departedPlayerIds'
   | 'finalScientificModelCompletedByPlayer'
+  | 'finalScientificModelDraftsByPlayer'
   | 'finalScientificModelsByPlayer'
   | 'knownSignals'
   | 'powerAllocations'
@@ -87,6 +89,7 @@ const persistedTenderStateSchema = z.object({
   completionReason: z.literal('all_players_left').optional(),
   departedPlayerIds: z.array(playerIdSchema).optional(),
   finalScientificModelCompletedByPlayer: playerBooleanRecordSchema.optional(),
+  finalScientificModelDraftsByPlayer: z.record(playerIdSchema, scientificModelDraftSchema).optional(),
   finalScientificModelsByPlayer: z.record(playerIdSchema, scientificModelSchema).optional(),
   knownSignals: z.array(signalIdSchema).optional(),
   powerAllocations: z.record(playerIdSchema, powerAllocationSchema).optional(),
@@ -126,6 +129,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   ...(tender.completionReason ? { completionReason: tender.completionReason } : {}),
   departedPlayerIds: tender.departedPlayerIds,
   finalScientificModelCompletedByPlayer: tender.finalScientificModelCompletedByPlayer,
+  finalScientificModelDraftsByPlayer: tender.finalScientificModelDraftsByPlayer,
   finalScientificModelsByPlayer: tender.finalScientificModelsByPlayer,
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
@@ -184,6 +188,7 @@ const toStoredTender = (record: {
     departedPlayerIds: state.departedPlayerIds ?? [],
     dueAt: record.dueAt,
     finalScientificModelCompletedByPlayer: state.finalScientificModelCompletedByPlayer ?? {},
+    finalScientificModelDraftsByPlayer: state.finalScientificModelDraftsByPlayer ?? {},
     finalScientificModelsByPlayer: state.finalScientificModelsByPlayer ?? {},
     id: record.id,
     knownSignals: state.knownSignals ?? [

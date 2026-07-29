@@ -302,6 +302,55 @@ describe('Tender contracts', () => {
     })
   })
 
+  test('validates a private Final Scientific Model draft and aggregate progress', () => {
+    expect(tenderCommandSchema.parse({
+      actorId: 'player-a',
+      commandId: 'command-a-final-draft',
+      scientificModelDraft: { signals: {} },
+      tenderId: 'tender-1',
+      type: 'update-scientific-model-draft',
+    })).toMatchObject({ scientificModelDraft: { signals: {} } })
+
+    expect(tenderViewSchema.parse({
+      finalScientificModelProgress: { completed: 1, total: 2 },
+      knownSignals: ['aster'],
+      phase: 'final-scientific-model',
+      players: [
+        { budget: 1, contractPowerRestriction: 0, playerId: 'player-a', rating: 1 },
+        { budget: 2, contractPowerRestriction: 0, playerId: 'player-b', rating: 0 },
+      ],
+      privateFinalScientificModelDraft: {
+        signals: { aster: { fieldType: 'inertial' } },
+      },
+      privateMeasurements: [],
+      privateRawTelemetrySignals: [],
+      privateSamples: ['aster'],
+      privateWorkingModel: { signals: {} },
+      publicContracts: [],
+      publicFinalContract: {
+        contractId: 'final-contract',
+        kind: 'final',
+        ratingReward: 8,
+        requiredPublicResult: 'reflection',
+        requiredSecondaryPublicResult: 'attenuation',
+        targetRole: 'source',
+        targetSignal: 'ferro',
+      },
+      publicLaboratoryResults: [],
+      publicTheses: [],
+      round: 5,
+      ruleset: 'tender-v2',
+      serverTime: '2026-07-29T12:00:00.000Z',
+      tenderId: 'tender-1',
+      version: 20,
+    })).toMatchObject({
+      finalScientificModelProgress: { completed: 1, total: 2 },
+      privateFinalScientificModelDraft: {
+        signals: { aster: { fieldType: 'inertial' } },
+      },
+    })
+  })
+
   test('validates a Contract reservation command', () => {
     expect(
       tenderCommandSchema.parse({

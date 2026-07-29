@@ -30,6 +30,10 @@ _Avoid_: player model, notes, theory board
 A player's submitted claims about the anomaly, consisting of private checked Theses during play and its final audit submission.
 _Avoid_: final model, theory, solution
 
+**Final Scientific Model Draft**:
+A private server-side draft created once from explicit Working Model hypotheses when the shared final phase begins. Later edits autosave independently; the draft is never scored or revealed unless the player explicitly submits it.
+_Avoid_: submitted model, autosubmission, Working Model copy
+
 **Signal**:
 One of the six persistent named phenomena in the anomaly. Its name enters the public registry when a player first receives its Sample or when a Contract names it; its properties remain hidden.
 _Avoid_: sample, ingredient, resource card
