@@ -1,0 +1,68 @@
+.panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(150, 104, 210, .35);
+  border-radius: .7rem;
+  background: rgba(20, 10, 36, .48);
+}
+
+.panel > summary {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .65rem .75rem;
+  cursor: pointer;
+}
+
+.list {
+  display: grid;
+  gap: .45rem;
+  padding: 0 .75rem .75rem;
+}
+
+.contract {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .35rem .75rem;
+  padding: .55rem .65rem;
+  border: 1px solid rgba(126, 166, 198, .18);
+  border-radius: .55rem;
+  background: rgba(3, 18, 31, .72);
+}
+
+.contract > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: .1rem;
+}
+
+.requirements {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .25rem;
+}
+
+.requirements > span {
+  padding: .12rem .3rem;
+  border: 1px solid rgba(126, 166, 198, .22);
+  border-radius: .3rem;
+}
+
+.eligibility {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 64rem) {
+  .panel > summary {
+    cursor: default;
+  }
+
+  .panel:not([open]) .list {
+    display: grid;
+  }
+}

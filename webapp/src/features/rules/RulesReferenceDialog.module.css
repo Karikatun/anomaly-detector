@@ -241,6 +241,11 @@
   background: var(--popover);
 }
 
+.ruleset {
+  margin-right: auto;
+  align-self: center;
+}
+
 .closeButton {
   min-width: 10rem;
 }

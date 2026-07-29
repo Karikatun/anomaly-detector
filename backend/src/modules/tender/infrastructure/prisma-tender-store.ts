@@ -12,6 +12,7 @@ import {
   signalIdSchema,
   tenderPhaseSchema,
   tenderPlayerSchema,
+  tenderRulesetSchema,
   workingModelSchema,
 } from '@anomaly-detector/contracts'
 import { z } from 'zod'
@@ -52,6 +53,7 @@ type PersistedTenderState = Pick<
   | 'publicTheses'
   | 'ratingByPlayer'
   | 'round'
+  | 'ruleset'
   | 'rawTelemetrySignalsByPlayer'
   | 'laboratoryCompletedByPlayer'
   | 'modelAnalysisCompletedByPlayer'
@@ -98,6 +100,7 @@ const persistedTenderStateSchema = z.object({
   requestedSlots: z.record(playerIdSchema, z.number().int().min(1).max(6)),
   researchCertificationsByPlayer: z.record(playerIdSchema, z.array(signalIdSchema)).optional(),
   round: z.number().int().min(1).max(5).optional(),
+  ruleset: tenderRulesetSchema.optional(),
   samplesByPlayer: z.record(playerIdSchema, z.array(signalIdSchema)).optional(),
   usedContractEvidenceTestIds: z.array(z.string().min(1).max(128)).optional(),
   winnerPlayerIds: z.array(playerIdSchema).optional(),
@@ -124,6 +127,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   publicTheses: tender.publicTheses,
   ratingByPlayer: tender.ratingByPlayer,
   round: tender.round,
+  ruleset: tender.ruleset,
   rawTelemetrySignalsByPlayer: tender.rawTelemetrySignalsByPlayer,
   laboratoryCompletedByPlayer: tender.laboratoryCompletedByPlayer,
   modelAnalysisCompletedByPlayer: tender.modelAnalysisCompletedByPlayer,
@@ -185,6 +189,7 @@ const toStoredTender = (record: {
     publicTheses: state.publicTheses ?? [],
     ratingByPlayer: state.ratingByPlayer ?? {},
     round: state.round ?? 1,
+    ruleset: state.ruleset ?? 'tender-v1',
     rawTelemetrySignalsByPlayer: state.rawTelemetrySignalsByPlayer ?? {},
     laboratoryCompletedByPlayer: state.laboratoryCompletedByPlayer ?? {},
     modelAnalysisCompletedByPlayer: state.modelAnalysisCompletedByPlayer ?? {},

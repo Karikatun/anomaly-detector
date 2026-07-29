@@ -215,6 +215,47 @@ describe('Tender contracts', () => {
     ).toMatchObject({ type: 'conduct-reconnaissance' })
   })
 
+  test('validates strict Laboratory modes and rejects duplicate broad pairs', () => {
+    expect(tenderCommandSchema.parse({
+      actorId: 'player-a',
+      commandId: 'command-a-deep',
+      laboratory: {
+        mode: 'deep',
+        pair: { receiverSignal: 'boreal', sourceSignal: 'aster' },
+      },
+      tenderId: 'tender-1',
+      type: 'run-laboratory-test',
+    })).toMatchObject({ laboratory: { mode: 'deep' } })
+
+    expect(tenderCommandSchema.parse({
+      actorId: 'player-a',
+      commandId: 'command-a-broad',
+      laboratory: {
+        mode: 'broad',
+        pairs: [
+          { receiverSignal: 'boreal', sourceSignal: 'aster' },
+          { receiverSignal: 'delta', sourceSignal: 'cinder' },
+        ],
+      },
+      tenderId: 'tender-1',
+      type: 'run-laboratory-test',
+    })).toMatchObject({ laboratory: { mode: 'broad' } })
+
+    expect(() => tenderCommandSchema.parse({
+      actorId: 'player-a',
+      commandId: 'command-a-duplicate-broad',
+      laboratory: {
+        mode: 'broad',
+        pairs: [
+          { receiverSignal: 'boreal', sourceSignal: 'aster' },
+          { receiverSignal: 'boreal', sourceSignal: 'aster' },
+        ],
+      },
+      tenderId: 'tender-1',
+      type: 'run-laboratory-test',
+    })).toThrow()
+  })
+
   test('validates a Contract reservation command', () => {
     expect(
       tenderCommandSchema.parse({

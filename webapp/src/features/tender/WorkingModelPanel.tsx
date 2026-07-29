@@ -178,14 +178,7 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
       </div>
 
       <div className={styles.table} data-testid="working-model-table">
-        <div className={styles.tableHeader} aria-hidden="true">
-          <Typography as="span" variant="caption">Сигнал</Typography>
-          <Typography as="span" variant="caption">Тип поля — гипотеза</Typography>
-          <Typography as="span" variant="caption">Полярность — гипотеза</Typography>
-          <Typography as="span" variant="caption">Метки</Typography>
-        </div>
-
-        {signalIds.map((signal) => {
+        {signalIds.filter((signal) => knownSignals.includes(signal)).map((signal) => {
           const isKnown = knownSignals.includes(signal)
           const cell = draft.signals?.[signal]
           const hypothesis = cell?.hypothesis

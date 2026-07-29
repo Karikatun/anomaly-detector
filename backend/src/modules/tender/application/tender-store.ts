@@ -11,6 +11,7 @@ import type {
   TenderAuditEvent,
   TenderPhase,
   TenderPlayer,
+  TenderRuleset,
   WorkingModel,
 } from '@anomaly-detector/contracts'
 import type { AnomalyConfiguration, SignalId } from '../domain/anomaly-configuration'
@@ -56,6 +57,7 @@ export type StoredTender = {
   publicScientificJournal: ScientificJournalEntry[]
   publicTheses: PublicThesis[]
   ratingByPlayer: Record<string, number>
+  ruleset: TenderRuleset
   round: number
   requestedSlots: Record<string, number>
   rawTelemetrySignalsByPlayer: Record<string, SignalId[]>

@@ -1,0 +1,44 @@
+.shell,
+.main,
+.supporting {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+}
+
+.progress {
+  min-width: 0;
+}
+
+.columns {
+  display: grid;
+  min-width: 0;
+  align-items: start;
+  gap: 1rem;
+}
+
+.mobilePlayers {
+  min-width: 0;
+}
+
+.sidebar {
+  display: none;
+  min-width: 0;
+}
+
+@media (min-width: 64rem) {
+  .columns[data-has-sidebar] {
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    gap: 1.5rem;
+  }
+
+  .mobilePlayers {
+    display: none;
+  }
+
+  .sidebar {
+    display: grid;
+    align-self: start;
+    gap: 1rem;
+  }
+}
