@@ -151,6 +151,8 @@ Every live phase has a 90-second server deadline except the final Scientific Mod
 
 If a player times out or disconnects, the server takes conservative, non-beneficial defaults: a standard or later free slot without budget spend, unallocated power to reserve, and a skipped unresolved target. The player may reconnect and continue. A missing player never blocks a match.
 
+Closing, reloading, losing the network, or choosing Collapse only leaves the game screen; it never changes participation. Explicit Forfeit is permanent: the player loses live access, is skipped by every phase, remains in history and the final audit, and cannot win. If one active player remains, the Tender completes early with that player as winner.
+
 ## Modes And Match Setup
 
 - Standard rooms are private, invite-code rooms for exactly 2, 3, or 4 real players.

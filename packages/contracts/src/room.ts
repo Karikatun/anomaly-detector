@@ -36,7 +36,12 @@ export const roomViewSchema = z.object({
   status: roomStatusSchema,
   startsAt: z.string().datetime().nullable().optional(),
   tenderId: z.string().uuid().nullable().optional(),
-  tenderCompletionReason: z.enum(['all_players_left']).optional(),
+  tenderCompletionReason: z.enum([
+    'all_players_left',
+    'last_active_player',
+    'all_players_forfeited',
+  ]).optional(),
+  tenderForfeited: z.boolean().optional(),
   tenderPhase: z.string().optional(),
 }).strict()
 

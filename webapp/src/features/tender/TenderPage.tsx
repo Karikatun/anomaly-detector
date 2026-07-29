@@ -9,6 +9,15 @@ import type { TenderView } from '@anomaly-detector/contracts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
@@ -327,6 +336,7 @@ function TenderContent() {
   const [submitting, setSubmitting] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [laboratoryHelpOpen, setLaboratoryHelpOpen] = useState(false)
+  const [exitOpen, setExitOpen] = useState(false)
   const commandInFlightRef = useRef<{ promise: Promise<void>; token: symbol } | null>(null)
   const headerRef = useRef<HTMLElement>(null)
   const primaryContentRef = useRef<HTMLDivElement>(null)
@@ -454,24 +464,27 @@ function TenderContent() {
     },
     [connected, execute],
   )
-  const leaveMatch = useCallback(async () => {
-    if (tenderView?.phase === 'complete') {
-      await navigate({ to: tenderSearch.from === 'matches' ? '/app' : '/' })
-      return
-    }
-    leavingTenderIdRef.current = tenderId
+  const collapseMatch = useCallback(async () => {
+    setExitOpen(false)
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: roomQueryKeys.current() }),
+      queryClient.invalidateQueries({ queryKey: roomQueryKeys.mine() }),
+    ])
+    await navigate({ to: tenderSearch.from === 'matches' ? '/app' : '/' })
+  }, [navigate, queryClient, tenderSearch.from])
+  const forfeitMatch = useCallback(async () => {
     try {
-      await handleCommand({ type: 'leave-tender' })
+      await handleCommand({ type: 'forfeit-tender' })
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: roomQueryKeys.current() }),
         queryClient.invalidateQueries({ queryKey: roomQueryKeys.mine() }),
       ])
+      setExitOpen(false)
       await navigate({ to: '/' })
     } catch {
-      leavingTenderIdRef.current = null
       // The shared command error remains visible; stay in the match so the player can retry.
     }
-  }, [handleCommand, navigate, queryClient, tenderId, tenderSearch.from, tenderView?.phase])
+  }, [handleCommand, navigate, queryClient])
 
   if (error && !tenderView) {
     return (
@@ -606,11 +619,40 @@ function TenderContent() {
             aria-label={t('nav.leaveMatch')}
             title={t('nav.leaveMatch')}
             disabled={submitting || resuming || tenderView.hasLeft}
-            onClick={() => void leaveMatch()}
+            onClick={() => {
+              if (tenderView.phase === 'complete') {
+                void collapseMatch()
+              } else {
+                setExitOpen(true)
+              }
+            }}
           >
             <HugeiconsIcon icon={Logout01Icon} strokeWidth={1.7} aria-hidden="true" />
             <Typography as="span" variant="control">{t('button.logout')}</Typography>
           </Button>
+          <Dialog open={exitOpen} onOpenChange={setExitOpen}>
+            <DialogContent closeLabel={t('tender.exit.cancel')}>
+              <DialogHeader>
+                <DialogTitle>{t('tender.exit.title')}</DialogTitle>
+                <DialogDescription>{t('tender.exit.description')}</DialogDescription>
+              </DialogHeader>
+              <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                <Typography variant="bodySm" tone="muted">{t('tender.exit.timerContinues')}</Typography>
+                <TenderTimer dueAt={tenderView.dueAt} serverTime={tenderView.serverTime} />
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">{t('tender.exit.cancel')}</Button>
+                </DialogClose>
+                <Button type="button" variant="outline" onClick={() => void collapseMatch()}>
+                  {t('tender.exit.collapse')}
+                </Button>
+                <Button type="button" variant="destructive" onClick={() => void forfeitMatch()}>
+                  {t('tender.exit.forfeit')}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </header>
 

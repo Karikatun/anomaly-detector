@@ -145,6 +145,55 @@ test('abandons a Tender five seconds after every player explicitly leaves and ca
   })
 })
 
+test('permanently forfeits players, skips their actions, and ends with the last active winner', async () => {
+  let now = new Date('2026-07-29T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+      { id: 'player-c', tiePriority: 3 },
+    ],
+  })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'forfeit-a',
+    tenderId,
+    type: 'forfeit-tender',
+  })
+  await expect(tender.readTenderView({ tenderId, playerId: 'player-a' })).rejects.toMatchObject({
+    kind: 'player_forfeited',
+  })
+  await expect(tender.execute({
+    actorId: 'player-a',
+    commandId: 'resume-a',
+    tenderId,
+    type: 'resume-tender',
+  })).rejects.toMatchObject({ kind: 'player_forfeited' })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-c' })).toMatchObject({
+    phase: 'access-slot-selection',
+    players: [
+      { forfeited: true, playerId: 'player-a' },
+      { playerId: 'player-b' },
+      { playerId: 'player-c' },
+    ],
+  })
+
+  now = new Date('2026-07-29T12:00:01.000Z')
+  await tender.execute({
+    actorId: 'player-b',
+    commandId: 'forfeit-b',
+    tenderId,
+    type: 'forfeit-tender',
+  })
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    completionReason: 'last_active_player',
+    phase: 'complete',
+    winnerPlayerIds: ['player-c'],
+  })
+})
+
 test('rejects Power allocations with more Reconnaissance than missing Samples', async () => {
   const store = createInMemoryTenderStore()
   const tender = createTenderModule({ store })

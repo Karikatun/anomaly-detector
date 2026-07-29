@@ -48,6 +48,7 @@ type PersistedTenderState = Pick<
   | 'finalScientificModelCompletedByPlayer'
   | 'finalScientificModelDraftsByPlayer'
   | 'finalScientificModelsByPlayer'
+  | 'forfeitedAtByPlayer'
   | 'knownSignals'
   | 'powerAllocations'
   | 'publicContracts'
@@ -86,11 +87,12 @@ const persistedTenderStateSchema = z.object({
   certifiedSignalsByPlayer: z.record(playerIdSchema, z.array(signalIdSchema)).optional(),
   contractCompletedByPlayer: playerBooleanRecordSchema.optional(),
   contractPowerRestrictionsByPlayer: z.record(playerIdSchema, z.number().int().min(0).max(1)).optional(),
-  completionReason: z.literal('all_players_left').optional(),
+  completionReason: z.enum(['all_players_left', 'last_active_player', 'all_players_forfeited']).optional(),
   departedPlayerIds: z.array(playerIdSchema).optional(),
   finalScientificModelCompletedByPlayer: playerBooleanRecordSchema.optional(),
   finalScientificModelDraftsByPlayer: z.record(playerIdSchema, scientificModelDraftSchema).optional(),
   finalScientificModelsByPlayer: z.record(playerIdSchema, scientificModelSchema).optional(),
+  forfeitedAtByPlayer: z.record(playerIdSchema, z.string().datetime()).optional(),
   knownSignals: z.array(signalIdSchema).optional(),
   powerAllocations: z.record(playerIdSchema, powerAllocationSchema).optional(),
   privateMeasurementsByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)).optional(),
@@ -131,6 +133,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   finalScientificModelCompletedByPlayer: tender.finalScientificModelCompletedByPlayer,
   finalScientificModelDraftsByPlayer: tender.finalScientificModelDraftsByPlayer,
   finalScientificModelsByPlayer: tender.finalScientificModelsByPlayer,
+  forfeitedAtByPlayer: tender.forfeitedAtByPlayer,
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
   publicContracts: tender.publicContracts,
@@ -190,6 +193,7 @@ const toStoredTender = (record: {
     finalScientificModelCompletedByPlayer: state.finalScientificModelCompletedByPlayer ?? {},
     finalScientificModelDraftsByPlayer: state.finalScientificModelDraftsByPlayer ?? {},
     finalScientificModelsByPlayer: state.finalScientificModelsByPlayer ?? {},
+    forfeitedAtByPlayer: state.forfeitedAtByPlayer ?? {},
     id: record.id,
     knownSignals: state.knownSignals ?? [
       ...new Set(

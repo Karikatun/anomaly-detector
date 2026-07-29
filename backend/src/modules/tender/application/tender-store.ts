@@ -44,7 +44,7 @@ export type StoredTender = {
   corporateReviewByPlayer: Record<string, boolean>
   contractCompletedByPlayer: Record<string, boolean>
   contractPowerRestrictionsByPlayer: Record<string, number>
-  completionReason?: 'all_players_left'
+  completionReason?: 'all_players_left' | 'last_active_player' | 'all_players_forfeited'
   departedPlayerIds: string[]
   dueAt: Date | null
   id: string
@@ -53,6 +53,7 @@ export type StoredTender = {
   finalScientificModelCompletedByPlayer: Record<string, boolean>
   finalScientificModelDraftsByPlayer: Record<string, ScientificModelDraft>
   finalScientificModelsByPlayer: Record<string, ScientificModel>
+  forfeitedAtByPlayer: Record<string, string>
   powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>
   publicContracts: PublicContract[]

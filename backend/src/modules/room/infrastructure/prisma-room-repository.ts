@@ -53,6 +53,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         startsAt: null,
         tenderId: room.tenderId,
         tenderCompletionReason: readTenderCompletionReason(room.tender?.state),
+        tenderForfeited: readTenderForfeited(room.tender?.state, userId),
         tenderPhase: room.tender?.phase,
       }))
     },
@@ -70,7 +71,10 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           },
         })
         if (!current) return null
-        if (current.room.tender?.phase === 'complete') {
+        if (
+          current.room.tender?.phase === 'complete'
+          || readTenderForfeited(current.room.tender?.state, userId)
+        ) {
           await tx.currentMatch.delete({ where: { userId } })
           return null
         }
@@ -88,6 +92,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           startsAt: current.room.startsAt?.toISOString() ?? null,
           tenderId: current.room.tenderId,
           tenderCompletionReason: readTenderCompletionReason(current.room.tender?.state),
+          tenderForfeited: readTenderForfeited(current.room.tender?.state, userId),
           tenderPhase: current.room.tender?.phase,
         }
       }, { isolationLevel: 'Serializable' })
@@ -118,6 +123,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         startsAt: room.startsAt?.toISOString() ?? null,
         tenderId: room.tenderId,
         tenderCompletionReason: readTenderCompletionReason(room.tender?.state),
+        tenderForfeited: readTenderForfeited(room.tender?.state, input.actorId),
         tenderPhase: room.tender?.phase,
       }
     },
@@ -416,9 +422,25 @@ function readTenderCompletionReason(state: Prisma.JsonValue | undefined) {
     typeof state === 'object'
     && state !== null
     && !Array.isArray(state)
-    && state.completionReason === 'all_players_left'
+    && (
+      state.completionReason === 'all_players_left'
+      || state.completionReason === 'last_active_player'
+      || state.completionReason === 'all_players_forfeited'
+    )
   ) {
     return state.completionReason
   }
   return undefined
+}
+
+function readTenderForfeited(state: Prisma.JsonValue | undefined, userId: string) {
+  if (
+    typeof state !== 'object'
+    || state === null
+    || Array.isArray(state)
+    || typeof state.forfeitedAtByPlayer !== 'object'
+    || state.forfeitedAtByPlayer === null
+    || Array.isArray(state.forfeitedAtByPlayer)
+  ) return false
+  return typeof state.forfeitedAtByPlayer[userId] === 'string'
 }

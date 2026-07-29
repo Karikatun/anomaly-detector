@@ -221,6 +221,12 @@ export const resumeTenderCommandSchema = z.object({
   actorId: playerIdSchema,
   type: z.literal('resume-tender'),
 }).strict()
+export const forfeitTenderCommandSchema = z.object({
+  commandId: commandIdSchema,
+  tenderId: tenderIdSchema,
+  actorId: playerIdSchema,
+  type: z.literal('forfeit-tender'),
+}).strict()
 
 export const tenderCommandSchema = z.union([
   requestAccessSlotCommandSchema,
@@ -237,6 +243,7 @@ export const tenderCommandSchema = z.union([
   submitScientificModelCommandSchema,
   leaveTenderCommandSchema,
   resumeTenderCommandSchema,
+  forfeitTenderCommandSchema,
 ])
 
 export const commandReceiptSchema = z.object({
@@ -264,6 +271,7 @@ export const tenderPlayerViewSchema = z.object({
   corporateTrust: z.number().int().min(0).optional(),
   contractPowerRestriction: z.number().int().min(0).max(1),
   finalScientificModelSubmitted: z.boolean().optional(),
+  forfeited: z.boolean().optional(),
   modelAnalysisCompleted: z.boolean().optional(),
   powerAllocation: powerAllocationSchema.optional(),
   powerAllocationConfirmed: z.boolean().optional(),
@@ -362,9 +370,14 @@ export const tenderAuditViewSchema = z.object({
 export const tenderViewSchema = z.object({
   activePlayerId: playerIdSchema.optional(),
   abandonmentDueAt: z.string().datetime().nullable().optional(),
-  completionReason: z.enum(['all_players_left']).optional(),
+  completionReason: z.enum([
+    'all_players_left',
+    'last_active_player',
+    'all_players_forfeited',
+  ]).optional(),
   corporateReviewActive: z.boolean().optional(),
   hasLeft: z.boolean().optional(),
+  hasForfeited: z.boolean().optional(),
   knownSignals: z.array(signalIdSchema),
   publicContracts: z.array(publicContractSchema),
   publicFinalContract: publicContractSchema.optional(),

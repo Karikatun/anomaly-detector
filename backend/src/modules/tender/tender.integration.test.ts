@@ -65,6 +65,39 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     })
   })
 
+  test('persists a permanent forfeit and restores participant audit access after early completion', async () => {
+    const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+        { id: 'player-c', tiePriority: 3 },
+      ],
+    })
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'forfeit-a',
+      tenderId,
+      type: 'forfeit-tender',
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    await expect(restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).rejects.toMatchObject({
+      kind: 'player_forfeited',
+    })
+    await restartedModule.execute({
+      actorId: 'player-b',
+      commandId: 'forfeit-b',
+      tenderId,
+      type: 'forfeit-tender',
+    })
+    expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+      completionReason: 'last_active_player',
+      phase: 'complete',
+      winnerPlayerIds: ['player-c'],
+    })
+  })
+
   test('persists a due Access Slot deadline and resolves it after a restart', async () => {
     const createdAt = new Date('2026-07-20T12:00:00.000Z')
     const firstModule = createTenderModule({
