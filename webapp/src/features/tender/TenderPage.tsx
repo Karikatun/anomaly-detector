@@ -294,6 +294,7 @@ function PhasePanel({
           dueAt={view.dueAt ?? null}
           evidence={{
             privateMeasurements: view.privateMeasurements,
+            privateTheses: view.privateTheses,
             publicLaboratoryResults: view.publicLaboratoryResults,
             publicTheses: view.publicTheses,
           }}
