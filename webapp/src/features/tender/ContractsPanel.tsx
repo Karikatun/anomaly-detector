@@ -22,7 +22,7 @@ import { useI18n } from '@/platform/i18n'
 import { signalLabelKeys } from './catalog'
 import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
-import { signalAccent } from './components/signal-visuals'
+import { contractKindAccents, signalAccent } from './components/signal-visuals'
 
 type ContractBid = { evidenceTestIds: string[]; researchCertificationSignal?: SignalId }
 
@@ -41,13 +41,6 @@ type ContractsPanelProps = {
   onSkip: () => Promise<void>
   onBid: (contractId: string, bid: ContractBid) => Promise<void>
 }
-
-const kindAccents = {
-  light: '#38bdf8',
-  complex: '#f29a38',
-  scientific: '#bd72f4',
-  final: '#f3bd42',
-} as const
 
 export function ContractsPanel({
   certifications,
@@ -175,7 +168,7 @@ export function ContractsPanel({
                 && contract.bidOutcome === undefined,
               )
               const contractStyle = {
-                '--contract-accent': kindAccents[kind],
+                '--contract-accent': contractKindAccents[kind],
                 ...(target ? { '--signal-accent': signalAccent(target) } : {}),
               } as CSSProperties
 
