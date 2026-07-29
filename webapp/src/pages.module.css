@@ -219,7 +219,7 @@
     display: flex !important;
     flex: 0 0 auto;
     width: 100%;
-    min-height: 6.1rem;
+    min-height: 5rem;
     align-items: center;
     justify-content: space-between;
     gap: .5rem;
@@ -227,14 +227,14 @@
     border-width: 1px;
     border-radius: 7px;
   }
-  .menuCard:nth-child(3), .menuCard:nth-child(4) { min-height: 6.1rem; }
+  .menuCard:nth-child(3), .menuCard:nth-child(4) { min-height: 5rem; }
   .copy { display: flex; min-width: 0; flex: 1; gap: .65rem; }
   .cardTitle { font-size: 1.15rem; letter-spacing: -.035em; }
   .cardDescription { max-width: 100%; font-size: .83rem; line-height: 1.4; }
   .iconWrap { width: 3.6rem; flex: 0 0 3.6rem; }
   .iconWrap svg { width: 2.5rem; height: 2.5rem; }
   .plain .iconWrap { margin-left: 0; }
-  .rulesTrigger { display: flex !important; flex: 0 0 auto; width: 100%; min-height: 6.1rem; align-items: center; justify-content: space-between; gap: 0rem; padding: .7rem .7rem .7rem 1.4rem; border-radius: 7px; color: #2b9aff; background: rgba(2, 17, 38, .72); }
+  .rulesTrigger { display: flex !important; flex: 0 0 auto; width: 100%; min-height: 5rem; align-items: center; justify-content: space-between; gap: 0rem; padding: .7rem .7rem .7rem 1.4rem; border-radius: 7px; color: #2b9aff; background: rgba(2, 17, 38, .72); }
   .rulesLabel { align-self: center; font-size: 1.15rem !important; font-weight: 500 !important; transform: translateY(2px); }
   .rulesTrigger::before { width: 2.5rem; height: 2.5rem; flex: 0 0 3.6rem; align-self: center; order: 2; margin-left: auto; content: ''; background: currentColor; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat; }
 }
