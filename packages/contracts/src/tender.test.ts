@@ -398,6 +398,7 @@ describe('Tender contracts', () => {
           ferro: { fieldType: 'phase', polarity: 'negative' },
         },
       },
+      completionReason: 'standard',
       events: [{
         actorId: 'player-a',
         commandId: 'command-a-4',
@@ -405,6 +406,22 @@ describe('Tender contracts', () => {
         payload: { playerId: 'player-a', protocol: 'continuous' },
         sequence: 1,
       }],
+      finalScientificModelsByPlayer: {
+        'player-a': {
+          signals: {
+            aster: {
+              fieldType: 'inertial',
+              fieldTypeCorrect: true,
+              polarity: 'positive',
+              polarityCorrect: true,
+            },
+          },
+          submitted: true,
+        },
+      },
+      forfeitedAtByPlayer: {},
+      placementByPlayer: { 'player-a': 1 },
+      privateThesesByPlayer: { 'player-a': [] },
       ratingBreakdownByPlayer: {
         'player-a': {
           completeModelBonus: 3,
@@ -426,6 +443,7 @@ describe('Tender contracts', () => {
         receiverSignal: 'cinder',
         sourceSignal: 'aster',
       }],
+      ruleset: 'tender-v2',
     })).toMatchObject({
       events: [{ kind: 'laboratory_test_completed', sequence: 1 }],
       ratingBreakdownByPlayer: {

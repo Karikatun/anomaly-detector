@@ -357,14 +357,37 @@ export const ratingBreakdownSchema = z.object({
   total: z.number().int().min(0),
 }).strict()
 
+export const finalScientificModelSignalAuditSchema = z.object({
+  fieldType: fieldTypeSchema.optional(),
+  fieldTypeCorrect: z.boolean().optional(),
+  polarity: polaritySchema.optional(),
+  polarityCorrect: z.boolean().optional(),
+}).strict()
+
+export const finalScientificModelAuditSchema = z.object({
+  signals: z.partialRecord(signalIdSchema, finalScientificModelSignalAuditSchema),
+  submitted: z.boolean(),
+}).strict()
+
 export const tenderAuditViewSchema = z.object({
   anomalyConfiguration: anomalyConfigurationSchema,
+  completionReason: z.enum([
+    'standard',
+    'all_players_left',
+    'last_active_player',
+    'all_players_forfeited',
+  ]),
   events: z.array(tenderAuditEventSchema),
+  finalScientificModelsByPlayer: z.record(playerIdSchema, finalScientificModelAuditSchema),
+  forfeitedAtByPlayer: z.record(playerIdSchema, z.string().datetime()),
+  placementByPlayer: z.record(playerIdSchema, z.number().int().min(1)),
+  privateThesesByPlayer: z.record(playerIdSchema, z.array(privateThesisSchema)),
   privateMeasurementsByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)),
   privateTelemetryByPlayer: z.record(playerIdSchema, z.array(privateMeasurementSchema)).optional(),
   publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
   publicScientificJournal: z.array(scientificJournalEntrySchema).optional(),
   ratingBreakdownByPlayer: z.record(playerIdSchema, ratingBreakdownSchema),
+  ruleset: tenderRulesetSchema,
 }).strict()
 
 export const tenderViewSchema = z.object({

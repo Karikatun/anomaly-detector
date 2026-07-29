@@ -32,7 +32,8 @@ export class ProfileStatisticsService {
     }
 
     const placements = matches.map((match) => placementFor(match, userId))
-    const ratings = matches.map((match) => playerFor(match, userId).rating)
+    const performanceMatches = matches.filter((match) => !match.excludeFromPerformanceAverages)
+    const ratings = performanceMatches.map((match) => playerFor(match, userId).rating)
     const wins = matches.filter((match) => match.winnerPlayerIds.includes(userId)).length
     const submittedContracts = sum(matches.map((match) => match.playerResult.submittedContracts))
     const successfulContracts = sum(matches.map((match) => match.playerResult.successfulContracts))
@@ -40,10 +41,12 @@ export class ProfileStatisticsService {
 
     return {
       averagePlacement: average(placements),
-      averageRating: average(ratings),
+      averageRating: ratings.length === 0 ? null : average(ratings),
       contractSuccessRate: submittedContracts === 0 ? null : successfulContracts / submittedContracts,
       matchesPlayed: matches.length,
-      modelAccuracy: correctModelProperties / (matches.length * modelPropertiesPerMatch),
+      modelAccuracy: performanceMatches.length === 0
+        ? null
+        : correctModelProperties / (performanceMatches.length * modelPropertiesPerMatch),
       wins,
       winRate: wins / matches.length,
     }
@@ -62,6 +65,10 @@ function playerFor(match: CompletedProfileMatch, userId: string) {
 }
 
 function comparePlayers(left: CompletedMatchPlayer, right: CompletedMatchPlayer) {
+  if (Boolean(left.forfeitedAt) !== Boolean(right.forfeitedAt)) return left.forfeitedAt ? 1 : -1
+  if (left.forfeitedAt && right.forfeitedAt) {
+    return Date.parse(right.forfeitedAt) - Date.parse(left.forfeitedAt)
+  }
   return right.rating - left.rating
     || right.correctTheses - left.correctTheses
     || right.budget - left.budget

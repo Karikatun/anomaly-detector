@@ -19,7 +19,37 @@ const view = {
         ferro: { fieldType: 'phase', polarity: 'negative' },
       },
     },
+    completionReason: 'standard',
     events: [],
+    finalScientificModelsByPlayer: {
+      'player-a': {
+        signals: {
+          aster: {
+            fieldType: 'inertial',
+            fieldTypeCorrect: true,
+            polarity: 'negative',
+            polarityCorrect: false,
+          },
+        },
+        submitted: true,
+      },
+      'player-b': { signals: {}, submitted: false },
+    },
+    forfeitedAtByPlayer: {},
+    placementByPlayer: { 'player-a': 1, 'player-b': 2 },
+    privateThesesByPlayer: {
+      'player-a': [{
+        fieldType: 'inertial',
+        fieldTypeCorrect: true,
+        fullyCorrect: false,
+        id: 'r1-player-a-thesis-1',
+        polarity: 'negative',
+        polarityCorrect: false,
+        round: 1,
+        signalId: 'aster',
+      }],
+      'player-b': [],
+    },
     privateMeasurementsByPlayer: {},
     publicLaboratoryResults: [],
     ratingBreakdownByPlayer: {
@@ -42,6 +72,7 @@ const view = {
         total: 0,
       },
     },
+    ruleset: 'tender-v2',
   },
   knownSignals: [],
   phase: 'complete',
@@ -77,4 +108,10 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('Полностью раскрытые сигналы')
   expect(html).toContain('Бонус полной модели')
   expect(html).toContain('Начислений рейтинга нет')
+  expect(html).toContain('Приватные тезисы')
+  expect(html).toContain('Тип: верно')
+  expect(html).toContain('Полярность: неверно')
+  expect(html).toContain('Официальные финальные модели')
+  expect(html).toContain('Финальная модель не отправлена')
+  expect(html).toContain('Фильтр итогового аудита по игроку')
 })
