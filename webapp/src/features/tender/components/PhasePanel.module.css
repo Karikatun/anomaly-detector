@@ -771,18 +771,6 @@
 }
 
 @media (max-width: 36rem) {
-  .analysisPanel {
-    padding-bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
-  }
-
-  .analysisPanel > .footer {
-    position: fixed;
-    right: .75rem;
-    bottom: env(safe-area-inset-bottom, 0px);
-    left: .75rem;
-    z-index: 40;
-  }
-
   .contractSelection {
     grid-template-columns: minmax(0, 1fr);
   }

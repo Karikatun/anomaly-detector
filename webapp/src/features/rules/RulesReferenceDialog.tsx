@@ -191,7 +191,7 @@ export function RulesReferenceDialog({
             </Typography>
           )}
           {ruleset && (
-            <Typography variant="bodySm" tone="muted">
+            <Typography variant="bodySm" tone="muted" className={styles.rulesetNotice}>
               {t(ruleset === 'tender-v1' ? 'rules.rulesetV1Notice' : 'rules.rulesetV2Notice')}
             </Typography>
           )}

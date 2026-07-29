@@ -3,7 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import type { TenderView } from '@anomaly-detector/contracts'
 
-import { TenderEvidence, TenderLaboratoryJournal } from '../src/features/tender/components/TenderOverview'
+import {
+  TenderEvidence,
+  TenderLaboratoryJournal,
+  TenderResearchData,
+} from '../src/features/tender/components/TenderOverview'
 import { I18nProvider } from '../src/platform/i18n'
 
 const view = {
@@ -48,4 +52,30 @@ test('keeps Laboratory protocol details out of the public journal presentation',
   expect(html).toContain('TestPlayer1')
   expect(html).not.toContain('Непрерывный')
   expect(html).not.toContain('Импульсный')
+})
+
+test('includes the current player private Thesis history in Research Data', () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <TenderResearchData
+        view={{
+          ...view,
+          privateTheses: [{
+            fieldType: 'inertial',
+            fieldTypeCorrect: true,
+            fullyCorrect: false,
+            id: 'round-2-player-a-thesis-1',
+            polarity: 'negative',
+            polarityCorrect: false,
+            round: 2,
+            signalId: 'aster',
+          }],
+        }}
+      />
+    </I18nProvider>,
+  )
+
+  expect(html).toContain('Личные тезисы')
+  expect(html).toContain('Тип верен')
+  expect(html).toContain('Полярность неверна')
 })

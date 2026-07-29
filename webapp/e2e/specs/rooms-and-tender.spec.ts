@@ -451,19 +451,30 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     expect(leaveBox!.y).toBeLessThan(laboratoryBox!.y)
     expect(await tenderHeader.evaluate((header) => header.scrollWidth <= header.clientWidth)).toBe(true)
 
+    await page.setViewportSize({ width: 1440, height: 900 })
     await page.getByRole('button', { name: 'Правила' }).click()
     const rulesDialog = page.getByRole('dialog')
     await expect(rulesDialog).toBeVisible()
+    expect(await rulesDialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true)
     const timerWarning = rulesDialog.getByRole('status')
+    const rulesetNotice = rulesDialog.getByText(/^Этот Tender использует/)
     const firstRule = rulesDialog.getByRole('button', { name: 'Детальные правила по фазам' })
     await expect(firstRule).toBeVisible()
-    const [timerWarningBox, firstRuleBox] = await Promise.all([
+    const [dialogBox, timerWarningBox, rulesetNoticeBox, firstRuleBox] = await Promise.all([
+      rulesDialog.boundingBox(),
       timerWarning.boundingBox(),
+      rulesetNotice.boundingBox(),
       firstRule.boundingBox(),
     ])
+    expect(dialogBox).not.toBeNull()
     expect(timerWarningBox).not.toBeNull()
+    expect(rulesetNoticeBox).not.toBeNull()
     expect(firstRuleBox).not.toBeNull()
     expect(timerWarningBox!.y + timerWarningBox!.height).toBeLessThanOrEqual(firstRuleBox!.y)
+    expect(rulesetNoticeBox!.x).toBeGreaterThanOrEqual(timerWarningBox!.x)
+    expect(rulesetNoticeBox!.x + rulesetNoticeBox!.width).toBeLessThanOrEqual(
+      timerWarningBox!.x + timerWarningBox!.width,
+    )
     await expect(page.getByRole('button', { name: 'Закрыть правила' })).toBeInViewport()
     await page.getByRole('button', { name: 'Закрыть правила' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
@@ -629,6 +640,13 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await expect(page.getByRole('heading', { name: 'Ваши образцы' })).toBeVisible()
       await expect(page.getByText('Данные исследования', { exact: true })).toBeVisible()
       await expect(page.getByText('Лаборатория, личные измерения и тезисы', { exact: true })).toBeVisible()
+      if (round > 2) {
+        const researchData = page
+          .getByText('Данные исследования', { exact: true })
+          .locator('xpath=ancestor::details')
+        await researchData.locator('summary').click()
+        await expect(researchData.locator('[data-private-thesis]')).toHaveCount(round - 2)
+      }
       await chooseAccessSlot(page, 1)
       await chooseAccessSlot(guestPage, 2)
 
@@ -663,9 +681,19 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await expect(
         guestPage.getByText('Данные исследования', { exact: true }).filter({ visible: true }),
       ).toHaveCount(1)
+      if (round === 2) {
+        const mobileActionFooter = guestPage
+          .getByRole('button', { name: 'Выдвинуть тезис' })
+          .locator('xpath=ancestor::footer')
+        await expect(mobileActionFooter).not.toHaveCSS('position', 'fixed')
+      }
       if (round > 2) {
         const previousThesisCount = round - 2
-        await expect(page.locator('[data-private-thesis]')).toHaveCount(previousThesisCount)
+        const thesisHistory = page
+          .getByText('История тезисов', { exact: true })
+          .locator('..')
+          .locator('..')
+        await expect(thesisHistory.locator('[data-private-thesis]')).toHaveCount(previousThesisCount)
         await expect(page.getByText(`Всего: ${previousThesisCount} · раунд: 0/1`)).toBeVisible()
       }
       if (round === 2) await verifyWorkingModelModal(guestPage)
