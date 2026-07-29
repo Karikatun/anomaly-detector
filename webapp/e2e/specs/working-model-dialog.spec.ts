@@ -16,6 +16,7 @@ async function chooseAccessSlot(page: Page, slot: number) {
 async function allocateReconnaissance(page: Page) {
   await page.getByRole('button', { name: 'Увеличить мощность: Разведка' }).click()
   await page.getByRole('button', { name: 'Подтвердить распределение' }).click()
+  await page.getByRole('button', { name: 'Подтвердить и продолжить' }).click()
 }
 
 async function expectDialogInsideViewport(page: Page) {
@@ -123,8 +124,8 @@ test('keeps the Working Model dialog below the Tender header and inside the view
     await expectDialogInsideViewport(page)
 
     await page.setViewportSize({ width: 1280, height: 720 })
-    await page.getByRole('button', { name: /Рабочая модель/ }).click()
-    await expectDialogInsideViewport(page)
+    await expect(page.getByRole('button', { name: /Рабочая модель/ })).toHaveCount(0)
+    await expect(page.getByTestId('working-model-table')).toBeVisible()
   } finally {
     await guestContext.close()
   }

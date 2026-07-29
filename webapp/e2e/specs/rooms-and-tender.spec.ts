@@ -59,6 +59,9 @@ async function runReconnaissance(page: Page, signalCount = 2) {
 }
 
 async function runLaboratory(page: Page) {
+  const deepMode = page.getByRole('button', { name: 'Глубокое', exact: true })
+  if (await deepMode.isVisible()) await deepMode.click()
+
   await page.getByRole('button', { name: /^Образец:/ }).first().click()
   await expect(page.getByRole('button', { name: /^Источник:/ })).toHaveCount(1)
 
@@ -177,8 +180,8 @@ async function completeContract(page: Page) {
 }
 
 async function submitFinalModel(page: Page) {
-  await page.getByRole('button', { name: 'Aster: тип поля Инерционное', exact: true }).click()
-  await page.getByRole('button', { name: 'Aster: полярность Положительная', exact: true }).click()
+  await page.getByRole('button', { name: 'Ferro: тип поля Инерционное', exact: true }).click()
+  await page.getByRole('button', { name: 'Ferro: полярность Положительная', exact: true }).click()
   await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
 }
 
@@ -304,7 +307,7 @@ test('requires every lobby player to be ready before enabling the match start', 
   }
 })
 
-test('returns both players to one active match and completes it five seconds after both leave', async ({ browser, page }) => {
+test('lets a player collapse and return, then permanently forfeit the match', async ({ browser, page }) => {
   test.setTimeout(60_000)
   await registerBrowserUser(page, 'Хост выхода E2E', 'leave-host')
   const webOrigin = new URL(page.url()).origin
@@ -329,11 +332,12 @@ test('returns both players to one active match and completes it five seconds aft
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
 
     await page.getByRole('button', { name: 'Выйти из матча' }).click()
+    await page.getByRole('button', { name: 'Свернуть', exact: true }).click()
     await expect(page).toHaveURL('/')
     await expect(page.getByRole('button', { name: 'ВЕРНУТЬСЯ В МАТЧ' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeHidden()
 
-    await page.getByRole('button', { name: 'МОИ МАТЧИ' }).click()
+    await page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()
     await expect(page.getByText('Активен', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Детали' }).click()
     await expect(page).toHaveURL((url) =>
@@ -342,16 +346,13 @@ test('returns both players to one active match and completes it five seconds aft
     await expect(page.getByRole('heading', { name: headings.access })).toBeVisible()
 
     await page.getByRole('button', { name: 'Выйти из матча' }).click()
-    await guestPage.getByRole('button', { name: 'Выйти из матча' }).click()
+    await page.getByRole('button', { name: 'Выйти', exact: true }).click()
     await expect(page).toHaveURL('/')
-    await expect(guestPage).toHaveURL('/')
-
-    await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible({ timeout: 12_000 })
-    await expect(guestPage.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible({ timeout: 12_000 })
+    await expect(guestPage.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'ВЕРНУТЬСЯ В МАТЧ' })).toBeHidden()
 
-    await page.getByRole('button', { name: 'МОИ МАТЧИ' }).click()
-    await expect(page.getByText('Завершён досрочно', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()
+    await expect(page.getByText('Вы выбыли', { exact: true })).toBeVisible()
   } finally {
     await guestContext.close()
   }
@@ -456,7 +457,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(page.getByRole('button', { name: 'Выйти', exact: true })).toBeHidden()
     await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeHidden()
-    await expect(page.getByRole('button', { name: 'МОИ МАТЧИ' })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' })).toBeHidden()
     await expectPhase(page, headings.access)
     await expectPhase(guestPage, headings.access)
     await expectSynchronizedTimers(page, guestPage)
@@ -484,7 +485,10 @@ test('two players complete every Tender stage and receive each realtime phase tr
     })
     await page.getByRole('button', { name: /^Слот доступа 1:/ }).click()
     await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
-    await expect(page.getByRole('alert')).toContainText('Команда временно недоступна')
+    await expect(page.getByRole('alert')).toContainText(
+      'Не удалось выполнить действие. Обновите состояние матча и попробуйте ещё раз.',
+    )
+    await expect(page.getByRole('alert')).not.toContainText('Команда временно недоступна')
     await expect(page.getByRole('button', { name: 'Подтвердить выбор' })).toBeEnabled()
     rejectFirstCommand = false
     await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
@@ -558,14 +562,11 @@ test('two players complete every Tender stage and receive each realtime phase tr
       const [minutes = 0, seconds = 0] = (await finalTimer.textContent() ?? '').split(':').map(Number)
       return minutes * 60 + seconds
     }).toBeGreaterThan(170)
-    await expect(guestPage.getByText(
-      /Ваш черновик финальной модели сохранён только в этой форме и ещё не отправлен/,
-    )).toBeVisible()
+    await expect(guestPage.getByText('Подтвердили 0 из 2 исследователей').first()).toBeVisible()
+    await expect(guestPage.getByRole('button', { name: 'Отправить финальную модель' })).toBeEnabled()
     await submitFinalModel(page)
     await expectPhase(guestPage, headings.final)
-    await expect(page.getByText(
-      /Ваша финальная модель отправлена и принята сервером/,
-    )).toBeVisible()
+    await expect(page.getByRole('status')).toContainText('Финальная модель отправлена')
     await submitFinalModel(guestPage)
     await expect(page.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
@@ -574,11 +575,12 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByLabel('За что начислен рейтинг игроку Хост E2E')).toContainText(
       /Начислений рейтинга нет|Верные тезисы|Выполненные контракты|Верные свойства модели|Полностью раскрытые сигналы|Бонус полной модели/,
     )
-    await expect(page.getByText('Хост E2E', { exact: true }).first()).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Конфигурация аномалии' })).toBeVisible()
     await expect(page.getByText('Раскрытые свойства шести сигналов', { exact: true })).toBeVisible()
+    await expect(page.getByText('Финальная модель не отправлена')).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Выйти из матча' }).click()
+    await expect(page).toHaveURL('/')
     await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
     await expect(
       page.getByText('Сыграно матчей').locator('..').getByText('1', { exact: true }),

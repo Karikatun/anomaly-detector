@@ -88,7 +88,7 @@ function MyMatchesContent() {
             <div className={styles.rows}>
               {matches.data.map((match) => {
                 const isComplete = match.tenderPhase === 'complete'
-                const status = match.tenderForfeited && !isComplete
+                const status = match.tenderForfeited
                   ? t('matches.status.forfeited')
                   : match.tenderCompletionReason !== undefined
                     ? t('matches.status.earlyComplete')
