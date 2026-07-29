@@ -709,8 +709,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: .2rem .65rem;
-  padding: .6rem .7rem;
+  gap: .1rem .65rem;
+  margin-bottom: .4rem;
+  padding: .4rem .7rem;
   border: 1px solid rgba(69, 126, 163, .3);
   border-radius: .55rem;
   background: rgba(3, 18, 31, .72);
@@ -722,7 +723,7 @@
 }
 
 .broadPairSummary button {
-  min-height: 2.75rem;
+  min-height: 2.25rem;
 }
 
 .analysisHistory {
