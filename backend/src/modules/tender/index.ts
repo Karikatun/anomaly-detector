@@ -62,6 +62,9 @@ const createRatingBreakdownByPlayer = (
     if (event.kind === 'thesis_checked' && event.payload.correct === true) {
       breakdown.thesisPoints += 1
     }
+    if (event.kind === 'private_thesis_checked' && event.payload.ratingAward === 1) {
+      breakdown.thesisPoints += 1
+    }
     if (event.kind === 'contract_bid_assessed' && event.payload.awarded === true) {
       const recordedAward = event.payload.ratingAward
       if (typeof recordedAward === 'number' && Number.isInteger(recordedAward)) {
@@ -279,14 +282,57 @@ export function createTenderModule({
     }
   }
 
+  const correctThesisCount = (tender: StoredTender, playerId: string) => tender.ruleset === 'tender-v2'
+    ? (tender.certifiedSignalsByPlayer[playerId] ?? []).length
+    : tender.publicTheses.filter((thesis) => thesis.playerId === playerId && thesis.correct).length
+
+  const compareFinalPlayers = (tender: StoredTender, left: TenderPlayer, right: TenderPlayer) => {
+    const leftForfeitedAt = tender.forfeitedAtByPlayer[left.id]
+    const rightForfeitedAt = tender.forfeitedAtByPlayer[right.id]
+    if (Boolean(leftForfeitedAt) !== Boolean(rightForfeitedAt)) return leftForfeitedAt ? 1 : -1
+    if (leftForfeitedAt && rightForfeitedAt) {
+      return Date.parse(rightForfeitedAt) - Date.parse(leftForfeitedAt)
+    }
+    return (tender.ratingByPlayer[right.id] ?? 0) - (tender.ratingByPlayer[left.id] ?? 0)
+      || correctThesisCount(tender, right.id) - correctThesisCount(tender, left.id)
+      || (tender.budgetByPlayer[right.id] ?? 0) - (tender.budgetByPlayer[left.id] ?? 0)
+  }
+
+  const placementByPlayer = (tender: StoredTender) => Object.fromEntries(
+    tender.players.map((player) => [
+      player.id,
+      1 + tender.players.filter((candidate) => compareFinalPlayers(tender, candidate, player) < 0).length,
+    ]),
+  )
+
+  const finalScientificModelAuditByPlayer = (tender: StoredTender) => Object.fromEntries(
+    tender.players.map((player) => {
+      const model = tender.finalScientificModelsByPlayer[player.id]
+      if (!model) return [player.id, { signals: {}, submitted: false }]
+      return [player.id, {
+        signals: Object.fromEntries(Object.entries(model.signals).map(([signalId, claim]) => {
+          const actual = tender.anomalyConfiguration.signals[signalId as SignalId]
+          return [signalId, {
+            ...(claim.fieldType
+              ? { fieldType: claim.fieldType, fieldTypeCorrect: claim.fieldType === actual.fieldType }
+              : {}),
+            ...(claim.polarity
+              ? { polarity: claim.polarity, polarityCorrect: claim.polarity === actual.polarity }
+              : {}),
+          }]
+        })),
+        submitted: true,
+      }]
+    }),
+  )
+
   const resolveWinners = (tender: StoredTender) => {
-    const highestRating = Math.max(...tender.players.map((player) => tender.ratingByPlayer[player.id] ?? 0))
-    const ratingLeaders = tender.players.filter((player) => (tender.ratingByPlayer[player.id] ?? 0) === highestRating)
-    const correctThesisCount = (playerId: string) => tender.ruleset === 'tender-v2'
-      ? (tender.certifiedSignalsByPlayer[playerId] ?? []).length
-      : tender.publicTheses.filter((thesis) => thesis.playerId === playerId && thesis.correct).length
-    const highestThesisCount = Math.max(...ratingLeaders.map((player) => correctThesisCount(player.id)))
-    const thesisLeaders = ratingLeaders.filter((player) => correctThesisCount(player.id) === highestThesisCount)
+    const eligiblePlayers = activePlayers(tender)
+    if (eligiblePlayers.length === 0) return []
+    const highestRating = Math.max(...eligiblePlayers.map((player) => tender.ratingByPlayer[player.id] ?? 0))
+    const ratingLeaders = eligiblePlayers.filter((player) => (tender.ratingByPlayer[player.id] ?? 0) === highestRating)
+    const highestThesisCount = Math.max(...ratingLeaders.map((player) => correctThesisCount(tender, player.id)))
+    const thesisLeaders = ratingLeaders.filter((player) => correctThesisCount(tender, player.id) === highestThesisCount)
     const highestBudget = Math.max(...thesisLeaders.map((player) => tender.budgetByPlayer[player.id] ?? 0))
     return thesisLeaders.filter((player) => (tender.budgetByPlayer[player.id] ?? 0) === highestBudget).map((player) => player.id)
   }
@@ -921,6 +967,7 @@ export function createTenderModule({
                 fullyCorrect,
                 playerId: player.id,
                 polarityCorrect,
+                ratingAward: earnsReward ? 1 : 0,
                 signalId: command.signalId,
                 thesisId: privateThesis.id,
               },
@@ -1510,12 +1557,18 @@ export function createTenderModule({
         ...(tender.phase === 'complete' ? {
           audit: {
             anomalyConfiguration: tender.anomalyConfiguration,
+            completionReason: tender.completionReason ?? 'standard',
             events: auditEvents!,
+            finalScientificModelsByPlayer: finalScientificModelAuditByPlayer(tender),
+            forfeitedAtByPlayer: tender.forfeitedAtByPlayer,
+            placementByPlayer: placementByPlayer(tender),
+            privateThesesByPlayer: tender.privateThesesByPlayer,
             privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
             privateTelemetryByPlayer: tender.privateMeasurementsByPlayer,
             publicLaboratoryResults: tender.publicLaboratoryResults,
             publicScientificJournal: tender.publicScientificJournal,
             ratingBreakdownByPlayer: createRatingBreakdownByPlayer(tender, auditEvents!),
+            ruleset: tender.ruleset,
           },
         } : {}),
       }

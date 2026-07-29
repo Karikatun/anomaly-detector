@@ -1,10 +1,12 @@
 import { Award02Icon, CheckmarkCircle02Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
+import { useState } from 'react'
 
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { Typography } from '@/components/ui/typography'
+import { NativeSelect } from '@/components/ui/native-select'
 import { useI18n } from '@/platform/i18n'
 import {
   fieldTypeLabelKeys,
@@ -31,16 +33,24 @@ const ratingLabels = {
 
 export function CompletedTenderPanel({ view }: Props) {
   const { t } = useI18n()
+  const [selectedPlayerId, setSelectedPlayerId] = useState('all')
   const winnerIds = new Set(view.winnerPlayerIds ?? [])
   const winnerNames = view.players
     .filter((player) => winnerIds.has(player.playerId))
     .map((player) => player.displayName ?? player.playerId.slice(0, 8))
-  const rankedPlayers = view.players.slice().sort((left, right) => {
-    const winnerDifference = Number(winnerIds.has(right.playerId)) - Number(winnerIds.has(left.playerId))
-    if (winnerDifference !== 0) return winnerDifference
-    if (right.rating !== left.rating) return right.rating - left.rating
-    return (left.accessSlot ?? 99) - (right.accessSlot ?? 99)
-  })
+  const rankedPlayers = view.players.slice().sort((left, right) =>
+    (view.audit.placementByPlayer[left.playerId] ?? 99)
+    - (view.audit.placementByPlayer[right.playerId] ?? 99),
+  )
+  const selectedPlayers = selectedPlayerId === 'all'
+    ? rankedPlayers
+    : rankedPlayers.filter((player) => player.playerId === selectedPlayerId)
+  const completionReasonLabel = {
+    standard: 'Завершён после полного финального аудита',
+    all_players_left: 'Завершён: все игроки покинули матч',
+    last_active_player: 'Завершён досрочно: остался один активный игрок',
+    all_players_forfeited: 'Завершён досрочно без победителя: все игроки выбыли',
+  }[view.audit.completionReason]
 
   return (
     <section className={styles.panel} aria-labelledby="completed-tender-heading">
@@ -56,7 +66,7 @@ export function CompletedTenderPanel({ view }: Props) {
             Тендер завершён
           </Typography>
           <Typography variant="bodySm" tone="muted">
-            Аномалия раскрыта. Конфигурация сигналов и итоговые показатели доступны всем игрокам.
+            {completionReasonLabel}
           </Typography>
         </span>
         <span className={styles.winner}>
@@ -71,6 +81,22 @@ export function CompletedTenderPanel({ view }: Props) {
           </span>
         </span>
       </header>
+
+      <label className={styles.playerFilter}>
+        <Typography as="span" variant="caption">Показать детали игрока</Typography>
+        <NativeSelect
+          aria-label="Фильтр итогового аудита по игроку"
+          value={selectedPlayerId}
+          onChange={(event) => setSelectedPlayerId(event.target.value)}
+        >
+          <option value="all">Все игроки</option>
+          {rankedPlayers.map((player) => (
+            <option key={player.playerId} value={player.playerId}>
+              {player.displayName ?? player.playerId.slice(0, 8)}
+            </option>
+          ))}
+        </NativeSelect>
+      </label>
 
       <section className={styles.section} aria-labelledby="completed-signals-heading">
         <div className={styles.sectionHeader}>
@@ -118,8 +144,9 @@ export function CompletedTenderPanel({ view }: Props) {
         </div>
 
         <ol className={styles.ranking}>
-          {rankedPlayers.map((player, index) => {
+          {rankedPlayers.map((player) => {
             const isWinner = winnerIds.has(player.playerId)
+            const placement = view.audit.placementByPlayer[player.playerId] ?? 1
             const breakdown = view.audit.ratingBreakdownByPlayer[player.playerId]
             const earnedRating = breakdown
               ? Object.entries(ratingLabels)
@@ -133,13 +160,16 @@ export function CompletedTenderPanel({ view }: Props) {
               <li key={player.playerId} className={styles.player} data-winner={isWinner || undefined}>
                 <div className={styles.playerSummary}>
                   <Typography as="span" variant="h5" className={styles.position}>
-                    {String(index + 1).padStart(2, '0')}
+                    {String(placement).padStart(2, '0')}
                   </Typography>
                   <span className={styles.playerIdentity}>
                     <Typography as="strong" variant="bodySmMedium">
                       {player.displayName ?? player.playerId.slice(0, 8)}
                     </Typography>
                     <Typography as="span" variant="caption" tone="muted">Слот {player.accessSlot ?? '—'}</Typography>
+                    {player.forfeited && (
+                      <Typography as="span" variant="caption" tone="destructive">Окончательно выбыл</Typography>
+                    )}
                   </span>
                   <span className={styles.playerStats}>
                     <span>
@@ -186,6 +216,107 @@ export function CompletedTenderPanel({ view }: Props) {
             )
           })}
         </ol>
+      </section>
+
+      <section className={styles.section} aria-labelledby="completed-theses-heading">
+        <div className={styles.sectionHeader}>
+          <span>
+            <Typography id="completed-theses-heading" as="h3" variant="bodySmMedium">
+              Приватные тезисы
+            </Typography>
+            <Typography variant="caption" tone="muted">
+              Раскрыты участникам только после завершения матча
+            </Typography>
+          </span>
+        </div>
+        <div className={styles.auditPlayerList}>
+          {selectedPlayers.map((player) => {
+            const theses = view.audit.privateThesesByPlayer[player.playerId] ?? []
+            return (
+              <article key={player.playerId} className={styles.auditPlayer}>
+                <Typography as="h4" variant="bodySmMedium">
+                  {player.displayName ?? player.playerId.slice(0, 8)}
+                </Typography>
+                {theses.length === 0 ? (
+                  <Typography variant="caption" tone="muted">Тезисов нет</Typography>
+                ) : (
+                  <ul className={styles.auditEntries}>
+                    {theses.map((thesis) => (
+                      <li key={thesis.id}>
+                        <Typography as="strong" variant="bodySmMedium">
+                          Раунд {thesis.round} · {t(signalLabelKeys[thesis.signalId])}
+                        </Typography>
+                        <Typography as="span" variant="caption">
+                          {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
+                        </Typography>
+                        <span className={styles.correctness}>
+                          <Typography as="span" variant="caption" data-correct={thesis.fieldTypeCorrect || undefined}>
+                            Тип: {thesis.fieldTypeCorrect ? 'верно' : 'неверно'}
+                          </Typography>
+                          <Typography as="span" variant="caption" data-correct={thesis.polarityCorrect || undefined}>
+                            Полярность: {thesis.polarityCorrect ? 'верно' : 'неверно'}
+                          </Typography>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className={styles.section} aria-labelledby="completed-final-models-heading">
+        <div className={styles.sectionHeader}>
+          <span>
+            <Typography id="completed-final-models-heading" as="h3" variant="bodySmMedium">
+              Официальные финальные модели
+            </Typography>
+            <Typography variant="caption" tone="muted">
+              Неотправленные серверные черновики не раскрываются
+            </Typography>
+          </span>
+        </div>
+        <div className={styles.auditPlayerList}>
+          {selectedPlayers.map((player) => {
+            const result = view.audit.finalScientificModelsByPlayer[player.playerId]
+            return (
+              <article key={player.playerId} className={styles.auditPlayer}>
+                <Typography as="h4" variant="bodySmMedium">
+                  {player.displayName ?? player.playerId.slice(0, 8)}
+                </Typography>
+                {!result?.submitted ? (
+                  <Typography variant="caption" tone="muted">Финальная модель не отправлена</Typography>
+                ) : (
+                  <ul className={styles.auditEntries}>
+                    {signalIds.map((signal) => {
+                      const claim = result.signals[signal]
+                      if (!claim) return null
+                      return (
+                        <li key={signal}>
+                          <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
+                          <span className={styles.correctness}>
+                            {claim.fieldType && (
+                              <Typography as="span" variant="caption" data-correct={claim.fieldTypeCorrect || undefined}>
+                                {t(fieldTypeLabelKeys[claim.fieldType])}: {claim.fieldTypeCorrect ? 'верно' : 'неверно'}
+                              </Typography>
+                            )}
+                            {claim.polarity && (
+                              <Typography as="span" variant="caption" data-correct={claim.polarityCorrect || undefined}>
+                                {t(polarityLabelKeys[claim.polarity])}: {claim.polarityCorrect ? 'верно' : 'неверно'}
+                              </Typography>
+                            )}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </article>
+            )
+          })}
+        </div>
       </section>
       {view.ruleset && (
         <Typography variant="caption" tone="muted">

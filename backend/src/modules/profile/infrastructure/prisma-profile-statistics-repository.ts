@@ -9,12 +9,21 @@ import type {
 const playerSchema = z.object({ id: z.string() }).passthrough()
 const compatibleStateSchema = z.object({
   budgetByPlayer: z.record(z.string(), z.number()),
+  certifiedSignalsByPlayer: z.record(z.string(), z.array(z.string())).optional(),
+  completionReason: z.enum([
+    'standard',
+    'all_players_left',
+    'last_active_player',
+    'all_players_forfeited',
+  ]).optional(),
+  forfeitedAtByPlayer: z.record(z.string(), z.string().datetime()).optional(),
   players: z.array(playerSchema).min(2),
   publicTheses: z.array(z.object({
     correct: z.boolean(),
     playerId: z.string(),
   }).passthrough()),
   ratingByPlayer: z.record(z.string(), z.number()),
+  ruleset: z.enum(['tender-v1', 'tender-v2']).optional(),
   winnerPlayerIds: z.array(z.string()),
 }).passthrough()
 
@@ -76,7 +85,8 @@ export function createPrismaProfileStatisticsRepository(db: DbClient): ProfileSt
           || !playerIds.has(userId)
           || !state.players.every((player) =>
             state.budgetByPlayer[player.id] !== undefined)
-          || state.winnerPlayerIds.length === 0
+          || (state.winnerPlayerIds.length === 0
+            && state.completionReason !== 'all_players_forfeited')
           || !state.winnerPlayerIds.every((playerId) => playerIds.has(playerId))
           || !state.publicTheses.every((thesis) => playerIds.has(thesis.playerId))
           || !eventsResult.data.every((event) => playerIds.has(event.payload.playerId))
@@ -96,10 +106,17 @@ export function createPrismaProfileStatisticsRepository(db: DbClient): ProfileSt
         }
 
         const match: CompletedProfileMatch = {
+          excludeFromPerformanceAverages: state.completionReason === 'last_active_player'
+            || state.completionReason === 'all_players_forfeited',
           players: state.players.map((player) => ({
             budget: state.budgetByPlayer[player.id] ?? 0,
-            correctTheses: state.publicTheses.filter((thesis) =>
-              thesis.playerId === player.id && thesis.correct).length,
+            correctTheses: state.ruleset === 'tender-v2'
+              ? (state.certifiedSignalsByPlayer?.[player.id] ?? []).length
+              : state.publicTheses.filter((thesis) =>
+                thesis.playerId === player.id && thesis.correct).length,
+            ...(state.forfeitedAtByPlayer?.[player.id]
+              ? { forfeitedAt: state.forfeitedAtByPlayer[player.id] }
+              : {}),
             playerId: player.id,
             rating: state.ratingByPlayer[player.id] ?? 0,
           })),

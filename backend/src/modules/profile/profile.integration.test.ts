@@ -82,9 +82,11 @@ maybeDescribe('profile statistics API integration', () => {
         phase: 'complete',
         state: {
           budgetByPlayer: { [guest.id]: 4, [user.id]: 3 },
+          certifiedSignalsByPlayer: { [user.id]: ['Aster'] },
           players: [{ id: user.id }, { id: guest.id }],
-          publicTheses: [{ correct: true, playerId: user.id }],
+          publicTheses: [],
           ratingByPlayer: { [user.id]: 11 },
+          ruleset: 'tender-v2',
           winnerPlayerIds: [user.id],
         },
         version: 1,
@@ -104,6 +106,45 @@ maybeDescribe('profile statistics API integration', () => {
         tenderId: tender.id,
       },
     })
+    const earlyTender = await prisma.tender.create({
+      data: {
+        auditEvents: {
+          create: [{
+            actorId: user.id,
+            kind: 'contract_bid_assessed',
+            payload: { awarded: false, playerId: user.id },
+            sequence: 1,
+          }],
+        },
+        phase: 'complete',
+        state: {
+          budgetByPlayer: { [guest.id]: 100, [user.id]: 0 },
+          certifiedSignalsByPlayer: { [guest.id]: ['Aster', 'Boreal'] },
+          completionReason: 'last_active_player',
+          forfeitedAtByPlayer: { [guest.id]: '2026-07-29T10:00:00.000Z' },
+          players: [{ id: user.id }, { id: guest.id }],
+          publicTheses: [],
+          ratingByPlayer: { [guest.id]: 100, [user.id]: 0 },
+          ruleset: 'tender-v2',
+          winnerPlayerIds: [user.id],
+        },
+        version: 1,
+      },
+    })
+    await prisma.tenderRoom.create({
+      data: {
+        capacity: 2,
+        hostId: user.id,
+        members: {
+          create: [
+            { seat: 1, userId: user.id },
+            { seat: 2, userId: guest.id },
+          ],
+        },
+        status: 'started',
+        tenderId: earlyTender.id,
+      },
+    })
 
     const response = await app.request('/api/profile/statistics', {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -113,10 +154,10 @@ maybeDescribe('profile statistics API integration', () => {
     expect(await response.json()).toEqual({
       averagePlacement: 1,
       averageRating: 11,
-      contractSuccessRate: 1,
-      matchesPlayed: 1,
+      contractSuccessRate: 0.5,
+      matchesPlayed: 2,
       modelAccuracy: 0.75,
-      wins: 1,
+      wins: 2,
       winRate: 1,
     })
   })

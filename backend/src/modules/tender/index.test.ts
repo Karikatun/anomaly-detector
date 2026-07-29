@@ -187,11 +187,28 @@ test('permanently forfeits players, skips their actions, and ends with the last 
     tenderId,
     type: 'forfeit-tender',
   })
-  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+  const completedView = await tender.readTenderView({ tenderId, playerId: 'player-a' })
+  expect(completedView).toMatchObject({
+    audit: {
+      completionReason: 'last_active_player',
+      finalScientificModelsByPlayer: {
+        'player-a': { signals: {}, submitted: false },
+        'player-b': { signals: {}, submitted: false },
+        'player-c': { signals: {}, submitted: false },
+      },
+      placementByPlayer: {
+        'player-a': 3,
+        'player-b': 2,
+        'player-c': 1,
+      },
+      ruleset: 'tender-v2',
+    },
     completionReason: 'last_active_player',
     phase: 'complete',
     winnerPlayerIds: ['player-c'],
   })
+  expect(JSON.stringify(completedView.audit)).not.toContain('finalScientificModelDraft')
+  expect(JSON.stringify(completedView.audit)).not.toContain('privateWorkingModel')
 })
 
 test('rejects Power allocations with more Reconnaissance than missing Samples', async () => {

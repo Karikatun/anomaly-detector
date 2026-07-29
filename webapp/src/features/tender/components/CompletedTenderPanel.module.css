@@ -11,6 +11,70 @@
     rgba(1, 13, 27, .92);
 }
 
+.playerFilter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, 18rem);
+  align-items: center;
+  gap: .6rem;
+  padding: .65rem;
+  border: 1px solid rgba(65, 127, 169, .27);
+  border-radius: .65rem;
+  background: rgba(2, 15, 28, .7);
+}
+
+.auditPlayerList {
+  display: grid;
+  gap: .5rem;
+}
+
+.auditPlayer {
+  display: grid;
+  gap: .4rem;
+  padding: .6rem;
+  border: 1px solid rgba(70, 128, 164, .28);
+  border-radius: .5rem;
+  background: rgba(3, 18, 31, .74);
+}
+
+.auditEntries {
+  display: grid;
+  gap: .35rem;
+}
+
+.auditEntries > li {
+  display: grid;
+  gap: .18rem;
+  padding: .45rem;
+  border-radius: .4rem;
+  background: rgba(11, 37, 55, .55);
+}
+
+.correctness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+}
+
+.correctness > span {
+  padding: .16rem .35rem;
+  border: 1px solid rgba(234, 84, 95, .42);
+  border-radius: .3rem;
+  color: #ff9ca5;
+  background: rgba(111, 24, 35, .22);
+}
+
+.correctness > span[data-correct] {
+  border-color: rgba(47, 205, 163, .42);
+  color: #7fe5c8;
+  background: rgba(12, 92, 74, .22);
+}
+
+@media (max-width: 40rem) {
+  .playerFilter {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .hero {
   display: grid;
   min-width: 0;
