@@ -49,6 +49,23 @@ The Docker smoke test builds the backend image, starts it against `postgres_test
 
 `.github/workflows/ci.yml` runs typecheck, deployment/script tests, contract tests, webapp client tests, backend tests, and the webapp Playwright smoke flow on pushes to `main` and `master` plus pull requests.
 
+## Локальные игроки для ручной проверки
+
+После запуска локального backend подготовьте две стабильные синтетические учётные записи:
+
+```bash
+bun run seed:test-users
+```
+
+Скрипт безопасно повторяется: он создаёт отсутствующих игроков и проверяет пароль уже существующих.
+
+| Вид | Логин | Пароль |
+| --- | --- | --- |
+| Десктоп | `testPlayer1` | `test1234` |
+| Мобильный web | `testPlayer2` | `test1234` |
+
+Эти данные предназначены только для локальной разработки и ручного browser-аудита. Не используйте их в production.
+
 ## Webapp E2E
 
 Playwright is configured in `webapp/playwright.config.ts`.
