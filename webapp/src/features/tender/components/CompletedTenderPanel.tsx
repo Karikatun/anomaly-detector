@@ -1,6 +1,11 @@
-import { Award02Icon, CheckmarkCircle02Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  Award02Icon,
+  CheckmarkCircle02Icon,
+  UserGroupIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { useState } from 'react'
 
 import type { TenderView } from '@anomaly-detector/contracts'
@@ -30,6 +35,35 @@ const ratingLabels = {
   otherPoints: 'Другие начисления',
   thesisPoints: 'Верные тезисы',
 } as const
+
+const roundRatingLabels = {
+  contract: 'Контракт',
+  final_model: 'Финальная модель',
+  other: 'Другое начисление',
+  thesis: 'Тезис',
+} as const
+
+function AuditGroup({
+  children,
+  count,
+  title,
+}: {
+  children: ReactNode
+  count: number
+  title: string
+}) {
+  if (count === 0) return null
+
+  return (
+    <section className={styles.roundAuditSection}>
+      <header>
+        <Typography as="h4" variant="bodySmMedium">{title}</Typography>
+        <Typography as="span" variant="caption">{count}</Typography>
+      </header>
+      <ul className={styles.auditEntries}>{[children].map((child) => child)}</ul>
+    </section>
+  )
+}
 
 export function CompletedTenderPanel({ view }: Props) {
   const { t } = useI18n()
@@ -233,189 +267,156 @@ export function CompletedTenderPanel({ view }: Props) {
           {view.audit.rounds.map((round) => {
             const includesPlayer = (playerId: string) =>
               selectedPlayerId === 'all' || selectedPlayerId === playerId
+            const accessSlots = round.accessSlots.filter((entry) => includesPlayer(entry.playerId))
+            const powerAllocations = round.powerAllocations.filter((entry) => includesPlayer(entry.playerId))
+            const reconnaissance = round.reconnaissance.filter((entry) => includesPlayer(entry.playerId))
+            const laboratory = round.laboratory.filter((entry) => includesPlayer(entry.playerId))
+            const theses = round.theses.filter((entry) => includesPlayer(entry.playerId))
+            const contracts = round.contracts.filter((entry) => includesPlayer(entry.playerId))
+            const ratingChanges = round.ratingChanges.filter((entry) => includesPlayer(entry.playerId))
+            const entryCount = accessSlots.length
+              + powerAllocations.length
+              + reconnaissance.length
+              + laboratory.length
+              + theses.length
+              + contracts.length
+              + ratingChanges.length
             return (
               <details
                 key={round.round}
-                className={styles.auditPlayer}
+                className={styles.roundAudit}
                 data-audit-round={round.round}
-                open={round.round === view.audit.rounds.length}
               >
                 <summary>
-                  <Typography as="strong" variant="bodySmMedium">Раунд {round.round}</Typography>
+                  <Typography as="span" variant="bodySmMedium" className={styles.roundIndex}>
+                    {String(round.round).padStart(2, '0')}
+                  </Typography>
+                  <span className={styles.roundSummaryCopy}>
+                    <Typography as="strong" variant="bodySmMedium">Раунд {round.round}</Typography>
+                    <Typography as="span" variant="caption" tone="muted">{entryCount} записей</Typography>
+                  </span>
+                  <span className={styles.roundToggle} aria-hidden="true">
+                    <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={1.8} />
+                  </span>
                 </summary>
 
-                <Typography as="h4" variant="bodySmMedium">Слоты доступа</Typography>
-                <ul className={styles.auditEntries}>
-                  {round.accessSlots.filter((entry) => includesPlayer(entry.playerId)).map((entry) => (
-                    <li key={`slot-${entry.playerId}`}>
-                      <Typography variant="caption">
-                        {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
-                        {': '}
-                        {entry.resolution === 'timeout' ? 'Тайм-аут' : `запрошен ${entry.requestedSlot ?? '—'}`}
-                        {' → назначен '}
-                        {entry.assignedSlot ?? '—'}
-                      </Typography>
-                    </li>
-                  ))}
-                </ul>
-
-                <Typography as="h4" variant="bodySmMedium">Распределение Мощности</Typography>
-                <ul className={styles.auditEntries}>
-                  {round.powerAllocations.filter((entry) => includesPlayer(entry.playerId)).map((entry) => (
-                    <li key={`power-${entry.playerId}`}>
-                      <Typography variant="caption">
-                        {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
-                        {entry.resolution === 'timeout' ? ': Тайм-аут · ' : ': '}
-                        Разведка {entry.allocation.reconnaissance} · Лаборатория {entry.allocation.laboratory}
-                        {' · '}Анализ {entry.allocation.modelAnalysis} · Контракты {entry.allocation.contracts}
-                        {' · '}Не распределено {entry.allocation.reserve ?? 0}
-                      </Typography>
-                    </li>
-                  ))}
-                </ul>
-
-                <Typography as="h4" variant="bodySmMedium">Разведка</Typography>
-                <ul className={styles.auditEntries}>
-                  {round.reconnaissance.filter((entry) => includesPlayer(entry.playerId)).map((entry) => (
-                    <li key={`recon-${entry.playerId}`}>
-                      <Typography variant="caption">
-                        {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
-                        {entry.resolution === 'timeout'
-                          ? ': Тайм-аут'
-                          : `: ${entry.targets.join(', ') || 'без новых Сигналов'}`}
-                      </Typography>
-                    </li>
-                  ))}
-                </ul>
-
-                <Typography as="h4" variant="bodySmMedium">Лаборатория</Typography>
-                <ul className={styles.auditEntries}>
-                  {round.laboratory.filter((entry) => includesPlayer(entry.playerId)).map((entry, index) => (
-                    <li key={`lab-${entry.playerId}-${index}`}>
-                      <Typography as="strong" variant="caption">
-                        {entry.resolution === 'timeout'
-                          ? 'Тайм-аут'
-                          : entry.mode === 'broad'
-                            ? 'Широкое исследование'
-                            : entry.mode === 'deep' ? 'Глубокое исследование' : 'Импульсный опыт'}
-                      </Typography>
-                      {entry.tests.map((test) => (
-                        <Typography key={test.testId} variant="caption">
-                          {test.testId}: {t(signalLabelKeys[test.sourceSignal])} → {t(signalLabelKeys[test.receiverSignal])}
-                          {' · '}{t(`tender.result.${test.publicResult}`)}
-                          {test.usedByContractId ? ` · использован в ${test.usedByContractId}` : ''}
+                <div className={styles.roundAuditContent}>
+                  <AuditGroup title="Слоты доступа" count={accessSlots.length}>
+                    {accessSlots.map((entry) => (
+                      <li key={`slot-${entry.playerId}`}>
+                        <Typography variant="caption">
+                          {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
+                          {': '}
+                          {entry.resolution === 'timeout' ? 'Тайм-аут' : `запрошен ${entry.requestedSlot ?? '—'}`}
+                          {' → назначен '}
+                          {entry.assignedSlot ?? '—'}
                         </Typography>
-                      ))}
-                      {entry.privateMeasurements?.map((measurement) => (
-                        <Typography
-                          key={`${measurement.sourceSignal}-${measurement.receiverSignal}`}
-                          variant="caption"
-                          tone="muted"
-                        >
-                          Приватное измерение: {measurement.polarityRelation === 'same'
-                            ? 'одинаковые полярности'
-                            : 'разные полярности'}
-                        </Typography>
-                      ))}
-                    </li>
-                  ))}
-                </ul>
-
-                <Typography as="h4" variant="bodySmMedium">Тезисы</Typography>
-                <ul className={styles.auditEntries}>
-                  {round.theses.filter((entry) => includesPlayer(entry.playerId)).map((entry) => (
-                    <li key={entry.id}>
-                      <Typography variant="caption">
-                        {t(signalLabelKeys[entry.signalId])}: тип {entry.fieldTypeCorrect ? 'верно' : 'неверно'},
-                        {' '}полярность {entry.polarityCorrect ? 'верно' : 'неверно'}
-                      </Typography>
-                    </li>
-                  ))}
-                </ul>
-
-                <Typography as="h4" variant="bodySmMedium">Контракты</Typography>
-                <ul className={styles.auditEntries}>
-                  {round.contracts.filter((entry) => includesPlayer(entry.playerId)).map((entry, index) => (
-                    <li key={`${entry.playerId}-${entry.contractId ?? entry.outcome}-${index}`}>
-                      <Typography variant="caption">
-                        {entry.outcome === 'timeout_released'
-                          ? `Резерв ${entry.contractId ?? ''} освобождён по тайм-ауту`
-                          : entry.outcome === 'skipped'
-                            ? 'Контракт пропущен: подходящих доказательств нет'
-                            : `${entry.contractId}: выполнен · доказательства ${entry.evidenceTestIds.join(', ') || entry.researchCertificationSignal || '—'}`}
-                      </Typography>
-                    </li>
-                  ))}
-                </ul>
-
-                <Typography as="h4" variant="bodySmMedium">Рейтинг</Typography>
-                <ul className={styles.auditEntries}>
-                  {round.ratingChanges.filter((entry) => includesPlayer(entry.playerId)).map((entry, index) => (
-                    <li key={`${entry.playerId}-${entry.source}-${index}`}>
-                      <Typography variant="caption">
-                        {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
-                        {`: ${entry.points >= 0 ? '+' : ''}${entry.points} · ${entry.source}`}
-                      </Typography>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className={styles.section} aria-labelledby="completed-theses-heading">
-        <div className={styles.sectionHeader}>
-          <span>
-            <Typography id="completed-theses-heading" as="h3" variant="bodySmMedium">
-              Приватные тезисы
-            </Typography>
-            <Typography variant="caption" tone="muted">
-              Раскрыты участникам только после завершения матча
-            </Typography>
-          </span>
-        </div>
-        <div className={styles.auditPlayerList}>
-          {selectedPlayers.map((player) => {
-            const theses = view.audit.privateThesesByPlayer[player.playerId] ?? []
-            return (
-              <article key={player.playerId} className={styles.auditPlayer}>
-                <Typography as="h4" variant="bodySmMedium">
-                  {player.displayName ?? player.playerId.slice(0, 8)}
-                </Typography>
-                {theses.length === 0 ? (
-                  <Typography variant="caption" tone="muted">Тезисов нет</Typography>
-                ) : (
-                  <ul className={styles.auditEntries}>
-                    {theses.map((thesis) => (
-                      <li
-                        key={thesis.id}
-                        className={styles.signalAuditEntry}
-                        style={{ '--signal-accent': signalAccent(thesis.signalId) } as CSSProperties}
-                      >
-                        <SignalGlyph signal={thesis.signalId} className={styles.auditSignalGlyph} />
-                        <span className={styles.auditEntryCopy}>
-                          <Typography as="strong" variant="bodySmMedium">
-                            Раунд {thesis.round} · {t(signalLabelKeys[thesis.signalId])}
-                          </Typography>
-                          <Typography as="span" variant="caption">
-                            {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
-                          </Typography>
-                          <span className={styles.correctness}>
-                            <Typography as="span" variant="caption" data-correct={thesis.fieldTypeCorrect || undefined}>
-                              Тип: {thesis.fieldTypeCorrect ? 'верно' : 'неверно'}
-                            </Typography>
-                            <Typography as="span" variant="caption" data-correct={thesis.polarityCorrect || undefined}>
-                              Полярность: {thesis.polarityCorrect ? 'верно' : 'неверно'}
-                            </Typography>
-                          </span>
-                        </span>
                       </li>
                     ))}
-                  </ul>
-                )}
-              </article>
+                  </AuditGroup>
+
+                  <AuditGroup title="Распределение Мощности" count={powerAllocations.length}>
+                    {powerAllocations.map((entry) => (
+                      <li key={`power-${entry.playerId}`}>
+                        <Typography variant="caption">
+                          {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
+                          {entry.resolution === 'timeout' ? ': Тайм-аут · ' : ': '}
+                          Разведка {entry.allocation.reconnaissance} · Лаборатория {entry.allocation.laboratory}
+                          {' · '}Анализ {entry.allocation.modelAnalysis} · Контракты {entry.allocation.contracts}
+                          {' · '}Не распределено {entry.allocation.reserve ?? 0}
+                        </Typography>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup title="Разведка" count={reconnaissance.length}>
+                    {reconnaissance.map((entry) => (
+                      <li key={`recon-${entry.playerId}`}>
+                        <Typography variant="caption">
+                          {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
+                          {entry.resolution === 'timeout'
+                            ? ': Тайм-аут'
+                            : `: ${entry.targets.join(', ') || 'без новых Сигналов'}`}
+                        </Typography>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup title="Лаборатория" count={laboratory.length}>
+                    {laboratory.map((entry, index) => (
+                      <li key={`lab-${entry.playerId}-${index}`}>
+                        <Typography as="strong" variant="caption">
+                          {entry.resolution === 'timeout'
+                            ? 'Тайм-аут'
+                            : entry.mode === 'broad'
+                              ? 'Широкое исследование'
+                              : entry.mode === 'deep' ? 'Глубокое исследование' : 'Импульсный опыт'}
+                        </Typography>
+                        {entry.tests.map((test) => (
+                          <Typography key={test.testId} variant="caption">
+                            {test.testId}: {t(signalLabelKeys[test.sourceSignal])} → {t(signalLabelKeys[test.receiverSignal])}
+                            {' · '}{t(`tender.result.${test.publicResult}`)}
+                            {test.usedByContractId ? ` · использован в ${test.usedByContractId}` : ''}
+                          </Typography>
+                        ))}
+                        {entry.privateMeasurements?.map((measurement) => (
+                          <Typography
+                            key={`${measurement.sourceSignal}-${measurement.receiverSignal}`}
+                            variant="caption"
+                            tone="muted"
+                          >
+                            Приватное измерение: {measurement.polarityRelation === 'same'
+                              ? 'одинаковые полярности'
+                              : 'разные полярности'}
+                          </Typography>
+                        ))}
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup title="Тезисы" count={theses.length}>
+                    {theses.map((entry) => (
+                      <li key={entry.id}>
+                        <Typography variant="caption">
+                          {t(signalLabelKeys[entry.signalId])}: тип {entry.fieldTypeCorrect ? 'верно' : 'неверно'},
+                          {' '}полярность {entry.polarityCorrect ? 'верно' : 'неверно'}
+                        </Typography>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup title="Контракты" count={contracts.length}>
+                    {contracts.map((entry, index) => (
+                      <li key={`${entry.playerId}-${entry.contractId ?? entry.outcome}-${index}`}>
+                        <Typography variant="caption">
+                          {entry.outcome === 'timeout_released'
+                            ? `Резерв ${entry.contractId ?? ''} освобождён по тайм-ауту`
+                            : entry.outcome === 'skipped'
+                              ? 'Контракт пропущен: подходящих доказательств нет'
+                              : `${entry.contractId}: выполнен · доказательства ${entry.evidenceTestIds.join(', ') || entry.researchCertificationSignal || '—'}`}
+                        </Typography>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup title="Изменения рейтинга" count={ratingChanges.length}>
+                    {ratingChanges.map((entry, index) => (
+                      <li key={`${entry.playerId}-${entry.source}-${index}`}>
+                        <Typography variant="caption">
+                          {view.players.find((player) => player.playerId === entry.playerId)?.displayName ?? entry.playerId}
+                          {`: ${entry.points >= 0 ? '+' : ''}${entry.points} · ${roundRatingLabels[entry.source]}`}
+                        </Typography>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  {entryCount === 0 && (
+                    <Typography variant="caption" tone="muted" className={styles.emptyRound}>
+                      Для выбранного игрока записей в этом раунде нет.
+                    </Typography>
+                  )}
+                </div>
+              </details>
             )
           })}
         </div>

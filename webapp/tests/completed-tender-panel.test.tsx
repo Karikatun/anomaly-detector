@@ -56,7 +56,17 @@ const view = {
       ratingChanges: [{ playerId: 'player-a', points: 4, source: 'contract' }],
       reconnaissance: [{ playerId: 'player-b', resolution: 'timeout', targets: [] }],
       round: 1,
-      theses: [],
+      theses: [{
+        fieldType: 'inertial',
+        fieldTypeCorrect: true,
+        fullyCorrect: false,
+        id: 'r1-player-a-thesis-1',
+        playerId: 'player-a',
+        polarity: 'negative',
+        polarityCorrect: false,
+        round: 1,
+        signalId: 'aster',
+      }],
     }],
     finalScientificModelsByPlayer: {
       'player-a': {
@@ -145,9 +155,9 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('Полностью раскрытые сигналы')
   expect(html).toContain('Бонус полной модели')
   expect(html).toContain('Начислений рейтинга нет')
-  expect(html).toContain('Приватные тезисы')
-  expect(html).toContain('Тип: верно')
-  expect(html).toContain('Полярность: неверно')
+  expect(html).toContain('Тезисы')
+  expect(html).toContain('Aster: тип верно, полярность неверно')
+  expect(html).not.toContain('Приватные тезисы')
   expect(html).toContain('Официальные финальные модели')
   expect(html).toContain('Финальная модель не отправлена')
   expect(html).toContain('Фильтр итогового аудита по игроку')
@@ -157,4 +167,5 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('r1-t1')
   expect(html).toContain('contract-1')
   expect(html).toContain('Тайм-аут')
+  expect(html).not.toMatch(/<details[^>]*data-audit-round[^>]*open/)
 })

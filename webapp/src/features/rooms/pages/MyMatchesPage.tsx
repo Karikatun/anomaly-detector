@@ -103,13 +103,13 @@ function MyMatchesContent() {
                     <div className={styles.cell} data-label={t('matches.column.players')}>
                       <Typography className={styles.players}>{match.members.length}</Typography>
                     </div>
-                    <div className={styles.cell} data-label={t('matches.column.status')}>
+                    <div className={`${styles.cell} ${styles.statusCell}`} data-label={t('matches.column.status')}>
                       <Typography className={styles.status} data-complete={isComplete || undefined}>
                         <span className={styles.statusDot} aria-hidden="true" />
                         {status}
                       </Typography>
                       {match.tenderRuleset && (
-                        <Typography variant="caption" tone="muted">
+                        <Typography as="span" variant="caption" className={styles.rulesetBadge}>
                           {t('rules.ruleset', { version: match.tenderRuleset === 'tender-v2' ? '2' : '1' })}
                         </Typography>
                       )}

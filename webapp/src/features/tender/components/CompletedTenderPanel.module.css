@@ -40,6 +40,149 @@
   background: rgba(3, 18, 31, .74);
 }
 
+.roundAudit {
+  overflow: hidden;
+  border: 1px solid rgba(70, 128, 164, .3);
+  border-radius: .58rem;
+  background: rgba(3, 18, 31, .74);
+}
+
+.roundAudit[open] {
+  border-color: rgba(54, 184, 255, .5);
+  box-shadow: inset 0 0 1.6rem rgba(30, 149, 211, .04);
+}
+
+.roundAudit > summary {
+  display: grid;
+  min-height: 3.45rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .65rem;
+  padding: .55rem .65rem;
+  cursor: pointer;
+  list-style: none;
+  background:
+    linear-gradient(90deg, rgba(20, 102, 150, .08), transparent 56%),
+    rgba(2, 15, 28, .68);
+}
+
+.roundAudit > summary::-webkit-details-marker {
+  display: none;
+}
+
+.roundAudit > summary:hover {
+  background:
+    linear-gradient(90deg, rgba(20, 126, 184, .14), transparent 62%),
+    rgba(4, 24, 41, .8);
+}
+
+.roundIndex {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border: 1px solid rgba(54, 184, 255, .42);
+  border-radius: 50%;
+  color: var(--primary);
+  background: rgba(7, 52, 78, .5);
+  font-variant-numeric: tabular-nums;
+}
+
+.roundSummaryCopy {
+  display: grid;
+  min-width: 0;
+  gap: .04rem;
+}
+
+.roundSummaryCopy > strong {
+  color: #eaf6fc;
+}
+
+.roundSummaryCopy > span {
+  font-size: .62rem;
+}
+
+.roundToggle {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgba(70, 128, 164, .36);
+  border-radius: 50%;
+  color: rgba(173, 208, 229, .72);
+  background: rgba(5, 29, 48, .72);
+  transition: color .16s ease, transform .16s ease;
+}
+
+.roundToggle svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.roundAudit[open] .roundToggle {
+  color: var(--primary);
+  transform: rotate(180deg);
+}
+
+.roundAuditContent {
+  display: grid;
+  gap: .55rem;
+  padding: .65rem;
+  border-top: 1px solid rgba(70, 128, 164, .22);
+}
+
+.roundAuditSection {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: .42rem;
+  padding: .55rem;
+  border: 1px solid rgba(70, 128, 164, .22);
+  border-radius: .48rem;
+  background: rgba(2, 14, 25, .58);
+}
+
+.roundAuditSection > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.roundAuditSection > header h4 {
+  color: rgba(222, 237, 246, .82);
+  font-size: .72rem;
+}
+
+.roundAuditSection > header > span {
+  display: grid;
+  min-width: 1.5rem;
+  min-height: 1.25rem;
+  place-items: center;
+  padding-inline: .28rem;
+  border: 1px solid rgba(70, 145, 187, .34);
+  border-radius: 999px;
+  color: var(--primary);
+  background: rgba(7, 40, 61, .52);
+  font-size: .58rem;
+}
+
+.roundAudit .auditEntries {
+  grid-template-columns: minmax(0, 1fr);
+  gap: .32rem;
+}
+
+.roundAudit .auditEntries > li {
+  min-height: 0;
+  padding: .45rem;
+  overflow-wrap: anywhere;
+}
+
+.emptyRound {
+  padding: .55rem;
+  text-align: center;
+}
+
 .auditEntries {
   display: grid;
   gap: .35rem;
@@ -546,6 +689,24 @@
   .auditEntries {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: .5rem;
+  }
+
+  .roundAuditContent {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: .8rem;
+  }
+
+  .roundAuditSection {
+    padding: .7rem;
+  }
+
+  .roundSummaryCopy > strong {
+    font-size: .94rem;
+  }
+
+  .roundSummaryCopy > span,
+  .roundAuditSection > header h4 {
+    font-size: .8rem;
   }
 
   .auditEntries > li {

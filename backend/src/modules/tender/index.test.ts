@@ -1,7 +1,48 @@
 import { expect, test } from 'bun:test'
+import type { TenderAuditEvent } from '@anomaly-detector/contracts'
 
 import { createTenderModule } from './index'
+import { createParticipantAuditRounds } from './application/audit-view'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
+
+test('keeps consecutive all-timeout rounds separate in the participant audit', () => {
+  const events = [
+    {
+      actorId: 'player-a',
+      kind: 'access_slot_requested',
+      payload: { playerId: 'player-a', slot: 1 },
+      sequence: 1,
+    },
+    {
+      kind: 'access_slots_resolved',
+      payload: { accessSlots: { 'player-a': 1 } },
+      sequence: 2,
+    },
+    {
+      kind: 'access_slot_timeout_resolved',
+      payload: { accessSlots: { 'player-a': 2 }, timedOutPlayerIds: ['player-a'] },
+      sequence: 3,
+    },
+    {
+      kind: 'access_slot_timeout_resolved',
+      payload: { accessSlots: { 'player-a': 3 }, timedOutPlayerIds: ['player-a'] },
+      sequence: 4,
+    },
+  ] satisfies TenderAuditEvent[]
+
+  const rounds = createParticipantAuditRounds({
+    privateMeasurementsByPlayer: {},
+    privateThesesByPlayer: {},
+    publicScientificJournal: [],
+    round: 3,
+  } as never, events)
+
+  expect(rounds.map((round) => round.accessSlots.map((entry) => entry.assignedSlot))).toEqual([
+    [1],
+    [2],
+    [3],
+  ])
+})
 
 test('gives planning phases a 90-second deadline', async () => {
   const now = new Date('2026-07-20T12:00:00.000Z')
