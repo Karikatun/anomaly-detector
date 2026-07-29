@@ -32,9 +32,16 @@ type WorkingModelPanelProps = {
   knownSignals: SignalId[]
   disabled?: boolean
   onSave: (model: WorkingModel) => Promise<void>
+  onSaveStatusChange?: (status: WorkingModelSaveStatus) => void
 }
 
-export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: WorkingModelPanelProps) {
+export function WorkingModelPanel({
+  model,
+  knownSignals,
+  disabled,
+  onSave,
+  onSaveStatusChange,
+}: WorkingModelPanelProps) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<WorkingModel>(model)
   const [saveStatus, setSaveStatus] = useState<WorkingModelSaveStatus>({ state: 'idle' })
@@ -54,6 +61,10 @@ export function WorkingModelPanel({ model, knownSignals, disabled, onSave }: Wor
   useEffect(() => {
     draftController.receiveServerModel(model)
   }, [draftController, model])
+
+  useEffect(() => {
+    onSaveStatusChange?.(saveStatus)
+  }, [onSaveStatusChange, saveStatus])
 
   useEffect(() => {
     draftController.resume()

@@ -1,5 +1,6 @@
 import { FlaskConicalIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import type { TenderRuleset } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +24,7 @@ export function LaboratoryInterpretationDialog({
   disabled = false,
   onOpenChange,
   open,
+  ruleset,
   showTimerWarning = false,
   triggerClassName,
   triggerIconOnly = false,
@@ -32,6 +34,7 @@ export function LaboratoryInterpretationDialog({
   disabled?: boolean
   onOpenChange?: (open: boolean) => void
   open?: boolean
+  ruleset?: TenderRuleset
   showTimerWarning?: boolean
   triggerClassName?: string
   triggerIconOnly?: boolean
@@ -75,7 +78,7 @@ export function LaboratoryInterpretationDialog({
             </Typography>
           )}
           <div className={styles.scrollArea}>
-            <LaboratoryInterpretation />
+            <LaboratoryInterpretation ruleset={ruleset} />
           </div>
         </div>
         <DialogFooter className={styles.footer}>

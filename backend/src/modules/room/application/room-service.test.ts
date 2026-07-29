@@ -47,6 +47,7 @@ test('lists started matches for the requesting player', async () => {
         status: 'started',
         tenderId: 'tender-1',
         tenderPhase: 'complete',
+        tenderRuleset: 'tender-v2',
       }],
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
@@ -68,6 +69,7 @@ test('lists started matches for the requesting player', async () => {
     status: 'started',
     tenderId: 'tender-1',
     tenderPhase: 'complete',
+    tenderRuleset: 'tender-v2',
   }])
 })
 

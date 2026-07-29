@@ -94,6 +94,12 @@ const phases = [
   ['rules.phases.roundEnd.title', 'rules.phases.roundEnd.body'],
 ] as const
 
+const legacyPhaseBodies: Partial<Record<(typeof phases)[number][0], TranslationKey>> = {
+  'rules.phases.lab.title': 'rules.phases.lab.v1Body',
+  'rules.phases.analysis.title': 'rules.phases.analysis.v1Body',
+  'rules.phases.roundEnd.title': 'rules.phases.roundEnd.v1Body',
+}
+
 const laboratoryRows = [
   ['rules.laboratory.relation.same', 'rules.laboratory.polarity.same', 'rules.laboratory.result.gain'],
   ['rules.laboratory.relation.same', 'rules.laboratory.polarity.different', 'rules.laboratory.result.attenuation'],
@@ -184,6 +190,11 @@ export function RulesReferenceDialog({
               {t('rules.timerContinues')}
             </Typography>
           )}
+          {ruleset && (
+            <Typography variant="bodySm" tone="muted">
+              {t(ruleset === 'tender-v1' ? 'rules.rulesetV1Notice' : 'rules.rulesetV2Notice')}
+            </Typography>
+          )}
 
           <div className={styles.scrollArea}>
             <div className={styles.accordion}>
@@ -221,7 +232,7 @@ export function RulesReferenceDialog({
                       className={styles.sectionPanel}
                       hidden={!isOpen}
                     >
-                      <RuleSectionContent section={section.id} />
+                      <RuleSectionContent ruleset={ruleset} section={section.id} />
                     </div>
                   </section>
                 )
@@ -247,7 +258,13 @@ export function RulesReferenceDialog({
   )
 }
 
-function RuleSectionContent({ section }: { section: RuleSectionId }) {
+function RuleSectionContent({
+  ruleset,
+  section,
+}: {
+  ruleset?: TenderRuleset
+  section: RuleSectionId
+}) {
   const { t } = useI18n()
 
   if (section === 'concept') {
@@ -286,7 +303,9 @@ function RuleSectionContent({ section }: { section: RuleSectionId }) {
             </Typography>
             <span className={styles.phaseCopy}>
               <Typography as="span" variant="bodySmMedium">{t(titleKey)}</Typography>
-              <Typography as="span" variant="bodyXs" tone="muted">{t(bodyKey)}</Typography>
+              <Typography as="span" variant="bodyXs" tone="muted">
+                {t(ruleset === 'tender-v1' ? legacyPhaseBodies[titleKey] ?? bodyKey : bodyKey)}
+              </Typography>
             </span>
           </li>
         ))}
@@ -294,10 +313,10 @@ function RuleSectionContent({ section }: { section: RuleSectionId }) {
     )
   }
 
-  return <LaboratoryInterpretation />
+  return <LaboratoryInterpretation ruleset={ruleset} />
 }
 
-export function LaboratoryInterpretation() {
+export function LaboratoryInterpretation({ ruleset = 'tender-v2' }: { ruleset?: TenderRuleset }) {
   const { t } = useI18n()
   return (
     <div className={styles.laboratory}>
@@ -311,10 +330,12 @@ export function LaboratoryInterpretation() {
           <Typography variant="bodySmMedium">{t('rules.laboratory.continuous.title')}</Typography>
           <Typography variant="bodyXs" tone="muted">{t('rules.laboratory.continuous.body')}</Typography>
         </article>
-        <article className={styles.protocol}>
-          <Typography variant="bodySmMedium">{t('rules.laboratory.broad.title')}</Typography>
-          <Typography variant="bodyXs" tone="muted">{t('rules.laboratory.broad.body')}</Typography>
-        </article>
+        {ruleset === 'tender-v2' && (
+          <article className={styles.protocol}>
+            <Typography variant="bodySmMedium">{t('rules.laboratory.broad.title')}</Typography>
+            <Typography variant="bodyXs" tone="muted">{t('rules.laboratory.broad.body')}</Typography>
+          </article>
+        )}
       </div>
       <Typography variant="bodySmMedium">{t('rules.laboratory.cycle')}</Typography>
       <div className={styles.tableScroll}>

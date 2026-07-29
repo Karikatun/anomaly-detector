@@ -58,20 +58,26 @@ async function runReconnaissance(page: Page, signalCount = 2) {
   await page.getByRole('button', { name: 'Исследовать' }).click()
 }
 
-async function runLaboratory(page: Page) {
-  const deepMode = page.getByRole('button', { name: 'Глубокое', exact: true })
-  if (await deepMode.isVisible()) await deepMode.click()
-
+async function selectLaboratoryPair(page: Page, alternateReceiver = false) {
   await page.getByRole('button', { name: /^Образец:/ }).first().click()
   await expect(page.getByRole('button', { name: /^Источник:/ })).toHaveCount(1)
-
-  await page.getByRole('button', { name: /^Источник:/ }).click()
-  await expect(page.getByRole('button', { name: /^Источник:/ })).toHaveCount(0)
-
-  await page.getByRole('button', { name: /^Образец:/ }).first().click()
-  await page.getByRole('button', { name: /^Образец:/ }).first().click()
+  await page.getByRole('button', { name: /^Образец:/ }).nth(alternateReceiver ? 1 : 0).click()
   await expect(page.getByRole('button', { name: /^Приёмник:/ })).toHaveCount(1)
+}
 
+async function runLaboratory(page: Page, mode: 'broad' | 'deep' = 'deep') {
+  const modeButton = page.getByRole('button', {
+    name: mode === 'broad' ? 'Широкое' : 'Глубокое',
+    exact: true,
+  })
+  if (await modeButton.isVisible()) await modeButton.click()
+  await selectLaboratoryPair(page)
+  if (mode === 'broad' && await modeButton.isVisible()) {
+    await page.getByRole('button', { name: 'Сохранить первую пару' }).click()
+    await selectLaboratoryPair(page, true)
+    await page.getByRole('button', { name: 'Провести два опыта' }).click()
+    return
+  }
   await page.getByRole('button', { name: /^Провести опыт:/ }).click()
 }
 
@@ -122,8 +128,8 @@ async function verifyWorkingModelModal(page: Page) {
     expect(dialogBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height)
 
     const fieldButton = dialog.getByRole('button', {
-      name: 'Aster: гипотеза, тип поля Инерционное',
-    })
+      name: /: гипотеза, тип поля Инерционное$/,
+    }).first()
     await expect(fieldButton).toBeEnabled()
     await fieldButton.click()
     await expect(fieldButton).toHaveAttribute('aria-pressed', 'true')
@@ -147,8 +153,8 @@ async function verifyWorkingModelModal(page: Page) {
     const inlineBefore = await inlineTable.boundingBox()
     expect(inlineBefore).not.toBeNull()
     await inlinePanel.getByRole('button', {
-      name: 'Aster: гипотеза, полярность Положительная',
-    }).click()
+      name: /: гипотеза, полярность Положительная$/,
+    }).first().click()
     await expect(inlinePanel.getByRole('status')).toHaveText('Сохраняем рабочую модель…')
     const inlineDuring = await inlineTable.boundingBox()
     expect(inlineDuring).not.toBeNull()
@@ -159,7 +165,7 @@ async function verifyWorkingModelModal(page: Page) {
     expect(pageErrors).toEqual([])
   } finally {
     page.off('pageerror', collectPageError)
-    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.setViewportSize({ width: 390, height: 844 })
   }
 }
 
@@ -197,14 +203,19 @@ async function completeContract(page: Page) {
   }
   await expect(confirm).toBeEnabled()
   await confirm.click()
-  await expect(selectedContractCard.getByText('Контракт выполнен', { exact: true })).toBeVisible()
+  await expect.poll(async () =>
+    await selectedContractCard.getByText('Контракт выполнен', { exact: true }).isVisible()
+    || !await page.getByRole('heading', { name: headings.contracts }).isVisible(),
+  ).toBe(true)
   await expect(page.getByRole('button', { name: /^Подтвердить контракт / })).toHaveCount(0)
   await expect(page.getByRole('combobox', { name: /Подходящее исследование|Подходящая сертификация|Дополнительное исследование/ })).toHaveCount(0)
 }
 
-async function submitFinalModel(page: Page) {
-  await page.getByRole('button', { name: 'Ferro: тип поля Инерционное', exact: true }).click()
-  await page.getByRole('button', { name: 'Ferro: полярность Положительная', exact: true }).click()
+async function submitFinalModel(page: Page, edit = true) {
+  if (edit) {
+    await page.getByRole('button', { name: 'Ferro: тип поля Инерционное', exact: true }).click()
+    await page.getByRole('button', { name: 'Ferro: полярность Положительная', exact: true }).click()
+  }
   await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
 }
 
@@ -464,6 +475,7 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
 
 test('two players complete every Tender stage and receive each realtime phase transition', async ({ browser, page }) => {
   test.setTimeout(300_000)
+  await page.setViewportSize({ width: 1440, height: 900 })
   await registerBrowserUser(page, 'Хост E2E', 'room-host')
   const webOrigin = new URL(page.url()).origin
 
@@ -478,6 +490,22 @@ test('two players complete every Tender stage and receive each realtime phase tr
     viewport: { width: 390, height: 844 },
   })
   const guestPage = await guestContext.newPage()
+  const guestRealtimeViews: Array<Record<string, unknown>> = []
+  guestPage.on('websocket', (socket) => {
+    socket.on('framereceived', ({ payload }) => {
+      try {
+        const message = JSON.parse(String(payload)) as {
+          type?: string
+          view?: Record<string, unknown>
+        }
+        if (message.type === 'tender-view' && message.view) {
+          guestRealtimeViews.push(message.view)
+        }
+      } catch {
+        // Only Tender JSON frames participate in the privacy assertion.
+      }
+    })
+  })
   try {
     await registerBrowserUser(guestPage, 'Гость E2E', 'room-guest', webOrigin)
 
@@ -573,12 +601,14 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await allocatePower(guestPage, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
 
     await expectPhase(page, headings.reconnaissance)
-    await expect(page.getByText(/^Контракты этого раунда · \d+$/)).toBeVisible()
+    await expect(page.getByText(/^Контракты этого раунда · \d+$/).filter({ visible: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Правила' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Трактовка анализов' })).toBeDisabled()
+    await runReconnaissance(page)
     await expect(page.getByRole('button', { name: 'Правила' })).toBeEnabled()
     await expect(page.getByRole('button', { name: 'Трактовка анализов' })).toBeEnabled()
-    await runReconnaissance(page)
     await expectPhase(guestPage, headings.reconnaissance)
-    await expect(guestPage.getByText(/^Контракты этого раунда · \d+$/)).toBeVisible()
+    await expect(guestPage.getByText(/^Контракты этого раунда · \d+$/).filter({ visible: true })).toBeVisible()
     await runReconnaissance(guestPage)
 
     await expectPhase(page, headings.laboratory)
@@ -604,22 +634,31 @@ test('two players complete every Tender stage and receive each realtime phase tr
 
       await expectPhase(page, headings.power)
       await expectPhase(guestPage, headings.power)
-      await allocatePower(page, { 'Разведка': 1, 'Лаборатория': 2, 'Анализ модели': 1 })
-      await allocatePower(guestPage, { 'Разведка': 1, 'Лаборатория': 2, 'Анализ модели': 1 })
+      const roundAllocation = round === 2
+        ? { 'Разведка': 1, 'Лаборатория': 2, 'Анализ модели': 1 }
+        : { 'Лаборатория': 2, 'Анализ модели': 1, 'Контракты': 1 }
+      await allocatePower(page, roundAllocation)
+      await allocatePower(guestPage, roundAllocation)
 
-      await expectPhase(page, headings.reconnaissance)
-      await runReconnaissance(page, 1)
-      await expectPhase(guestPage, headings.reconnaissance)
-      await runReconnaissance(guestPage, 1)
+      if (round === 2) {
+        await expectPhase(page, headings.reconnaissance)
+        await runReconnaissance(page, 1)
+        await expectPhase(guestPage, headings.reconnaissance)
+        await runReconnaissance(guestPage, 1)
+      }
 
       await expectPhase(page, headings.laboratory)
       await expectPhase(guestPage, headings.laboratory)
       await runLaboratory(page)
       await expect(page.getByText('История', { exact: true })).toBeVisible()
-      await runLaboratory(guestPage)
+      await runLaboratory(guestPage, round === 2 ? 'broad' : 'deep')
 
       await expectPhase(page, headings.analysis)
       await expectPhase(guestPage, headings.analysis)
+      if (round === 2) {
+        await page.reload()
+        await expectPhase(page, headings.analysis)
+      }
       await expect(guestPage.getByText('История лаборатории')).toHaveCount(0)
       await expect(
         guestPage.getByText('Данные исследования', { exact: true }).filter({ visible: true }),
@@ -631,7 +670,22 @@ test('two players complete every Tender stage and receive each realtime phase tr
       }
       if (round === 2) await verifyWorkingModelModal(guestPage)
       await submitThesis(page)
+      if (round === 2) {
+        await expect(guestPage.getByText('Завершили 1 из 2 исследователей').first()).toBeVisible()
+        const guestViewAfterHostThesis = guestRealtimeViews
+          .filter((view) => view.phase === 'model-analysis')
+          .at(-1)
+        expect(guestViewAfterHostThesis?.publicTheses).toEqual([])
+        expect(guestViewAfterHostThesis?.privateTheses).toEqual([])
+      }
       await submitThesis(guestPage)
+      if (round >= 3) {
+        await expectPhase(page, headings.contracts)
+        await completeContract(page)
+        if (await guestPage.getByRole('heading', { name: headings.contracts }).isVisible()) {
+          await completeContract(guestPage)
+        }
+      }
     }
 
     await expectPhase(page, headings.final)
@@ -645,7 +699,22 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('Рабочая модель', { exact: true })).toHaveCount(0)
     await expect(guestPage.getByText('Подтвердили 0 из 2 исследователей').first()).toBeVisible()
     await expect(guestPage.getByRole('button', { name: 'Отправить финальную модель' })).toBeEnabled()
-    await submitFinalModel(page)
+    await page.getByRole('button', { name: 'Ferro: тип поля Инерционное', exact: true }).click()
+    await page.getByRole('button', { name: 'Ferro: полярность Положительная', exact: true }).click()
+    const finalDraftSaving = page.getByText('Сохраняем черновик…', { exact: true })
+    await expect(finalDraftSaving).toBeVisible()
+    await expect(finalDraftSaving).toBeHidden()
+    await page.reload()
+    await expectPhase(page, headings.final)
+    await expect(page.getByRole('button', {
+      name: 'Ferro: тип поля Инерционное',
+      exact: true,
+    })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('button', {
+      name: 'Ferro: полярность Положительная',
+      exact: true,
+    })).toHaveAttribute('aria-pressed', 'true')
+    await submitFinalModel(page, false)
     await expectPhase(guestPage, headings.final)
     await expect(page.getByRole('status')).toContainText('Финальная модель отправлена')
     await submitFinalModel(guestPage)
@@ -659,6 +728,10 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByRole('heading', { name: 'Конфигурация аномалии' })).toBeVisible()
     await expect(page.getByText('Раскрытые свойства шести сигналов', { exact: true })).toBeVisible()
     await expect(page.getByText('Финальная модель не отправлена')).toHaveCount(0)
+    await expect(page.getByText('Аудит по раундам', { exact: true })).toBeVisible()
+    const secondRoundAudit = page.locator('details[data-audit-round="2"]')
+    await secondRoundAudit.locator('summary').click()
+    await expect(secondRoundAudit.getByText('Широкое исследование', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Правила' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()

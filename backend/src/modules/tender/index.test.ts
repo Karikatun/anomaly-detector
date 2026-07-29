@@ -332,6 +332,115 @@ test('awards a Light Contract once and permanently consumes its journal evidence
   expect((await store.read(tenderId))?.publicContracts[0]).toMatchObject({ bidOutcome: 'failed' })
 })
 
+test('keeps a v2 Contract reservation recoverable when submitted evidence is stale', async () => {
+  const store = createInMemoryTenderStore()
+  const tender = createTenderModule({ store })
+  const { tenderId } = await tender.createTender({
+    players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }],
+  })
+  const initial = await store.read(tenderId)
+  if (!initial) throw new Error('Tender was not created')
+  const contract = {
+    contractId: 'recoverable-contract',
+    kind: 'light' as const,
+    ratingReward: 2,
+    requiredPublicResult: 'reflection' as const,
+    targetRole: 'source' as const,
+    targetSignal: 'aster' as const,
+  }
+  await store.commit({
+    auditEvents: [],
+    expectedVersion: initial.version,
+    nextTender: {
+      ...initial,
+      accessSlots: { 'player-a': 1, 'player-b': 2 },
+      phase: 'contracts',
+      powerAllocations: {
+        'player-a': { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 3 },
+        'player-b': { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 3 },
+      },
+      publicContracts: [contract],
+      publicScientificJournal: [{
+        playerId: 'player-a',
+        protocol: 'impulse',
+        publicResult: 'reflection',
+        receiverSignal: 'boreal',
+        sourceSignal: 'aster',
+        testId: 'r1-t1',
+      }],
+    },
+    tenderId,
+  })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'reserve-recoverable',
+    contractId: contract.contractId,
+    tenderId,
+    type: 'reserve-contract',
+  })
+  await expect(tender.execute({
+    actorId: 'player-a',
+    commandId: 'submit-stale',
+    contractId: contract.contractId,
+    evidenceTestIds: ['missing-test'],
+    tenderId,
+    type: 'submit-contract-bid',
+  })).rejects.toMatchObject({ kind: 'contract_evidence_stale' })
+
+  expect(await tender.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+    phase: 'contracts',
+    publicContracts: [{
+      contractId: contract.contractId,
+      reservedByPlayerId: 'player-a',
+    }],
+  })
+  expect((await tender.readTenderView({ tenderId, playerId: 'player-a' })).publicContracts[0])
+    .not.toHaveProperty('bidOutcome')
+})
+
+test('releases a reserved Contract without consuming the action when its deadline expires', async () => {
+  const store = createInMemoryTenderStore()
+  const dueAt = new Date('2026-07-29T12:01:30.000Z')
+  const tender = createTenderModule({ store, now: () => new Date('2026-07-29T12:00:00.000Z') })
+  const { tenderId } = await tender.createTender({
+    players: [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }],
+  })
+  const initial = await store.read(tenderId)
+  if (!initial) throw new Error('Tender was not created')
+  const contract = {
+    contractId: 'timeout-contract',
+    kind: 'light' as const,
+    ratingReward: 2,
+    requiredPublicResult: 'reflection' as const,
+    targetRole: 'source' as const,
+    targetSignal: 'aster' as const,
+  }
+  await store.commit({
+    auditEvents: [],
+    expectedVersion: initial.version,
+    nextTender: {
+      ...initial,
+      accessSlots: { 'player-a': 1, 'player-b': 2 },
+      dueAt,
+      phase: 'contracts',
+      powerAllocations: {
+        'player-a': { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 3 },
+        'player-b': { contracts: 1, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 3 },
+      },
+      publicContracts: [{ ...contract, reservedByPlayerId: 'player-a' }],
+    },
+    tenderId,
+  })
+
+  await tender.advanceDueTenders({ limit: 10, now: dueAt })
+
+  const view = await tender.readTenderView({ tenderId, playerId: 'player-a' })
+  expect(view.publicContracts[0]).toEqual(expect.objectContaining({ contractId: contract.contractId }))
+  expect(view.publicContracts[0]).not.toHaveProperty('reservedByPlayerId')
+  expect(view.publicContracts[0]).not.toHaveProperty('bidOutcome')
+})
+
 test('starts without Samples, reveals only Contract-named Signals, and publishes a Night Slot Sample name', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
@@ -901,6 +1010,18 @@ test('does not expose the post-match audit before the Tender is complete', async
 
   await expect(tender.readTenderView({ tenderId, playerId: 'player-a' })).resolves.not.toHaveProperty('audit')
   await expect(tender.readTenderView({ tenderId, playerId: 'player-b' })).resolves.not.toHaveProperty('audit')
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'forfeit-a-1',
+    tenderId,
+    type: 'forfeit-tender',
+  })
+  const completedView = await tender.readTenderView({ tenderId, playerId: 'player-b' })
+  expect(completedView.audit).toBeDefined()
+  expect(completedView.audit).not.toHaveProperty('events')
+  expect(completedView.audit?.rounds).toEqual(expect.any(Array))
+  expect(JSON.stringify(completedView.audit)).not.toContain('Private draft.')
 })
 
 test('stores a player-owned Working Model without exposing it to other players', async () => {
@@ -1176,6 +1297,7 @@ test('grants the documented budget compensation for Access Slot 4', async () => 
 test('rotates Access Slot tie priority between rounds', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
+    ruleset: 'tender-v1',
     players: [
       { id: 'player-a', tiePriority: 1 },
       { id: 'player-b', tiePriority: 2 },
@@ -1693,6 +1815,7 @@ test('awards Research Certification and activates Corporate Review after a wrong
 test('reserves public Contracts in Access Slot order', async () => {
   const tender = createTenderModule()
   const { tenderId } = await tender.createTender({
+    ruleset: 'tender-v1',
     players: [
       { id: 'player-a', tiePriority: 1 },
       { id: 'player-b', tiePriority: 2 },
@@ -1852,9 +1975,9 @@ test('allows the active player to skip Contracts when no eligible evidence exist
     activePlayerId: 'player-a',
     phase: 'contracts',
     publicContracts: [
-      { eligibleForPlayer: false },
-      { eligibleForPlayer: false },
-      { eligibleForPlayer: false },
+      { eligibleForPlayer: false, planning: { eligible: false, requiredPower: 1 } },
+      { eligibleForPlayer: false, planning: { eligible: false, requiredPower: 1 } },
+      { eligibleForPlayer: false, planning: { eligible: false, requiredPower: 1 } },
     ],
   })
 
@@ -1911,6 +2034,13 @@ test('rejects a Contract skip when the player has eligible evidence', async () =
   expect(view.publicContracts[0]).toMatchObject({
     eligibleForPlayer: true,
     kind: 'scientific',
+    planning: {
+      eligible: true,
+      missingConditions: [],
+      requiredPower: 1,
+      suitableEvidenceTestIds: [],
+      suitableResearchCertificationSignals: ['aster'],
+    },
     targetSignal: 'aster',
   })
   await expect(tender.execute({
@@ -1924,6 +2054,7 @@ test('rejects a Contract skip when the player has eligible evidence', async () =
 test('does not award a Contract from removed claim and funding fields', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
+    ruleset: 'tender-v1',
     players: [
       { id: 'player-a', tiePriority: 1 },
       { id: 'player-b', tiePriority: 2 },
@@ -1953,7 +2084,9 @@ test('does not award a Contract from removed claim and funding fields', async ()
     tenderId,
     actorId: 'player-a',
     type: 'run-laboratory-test',
-    laboratory: { mode: 'impulse', pair: { sourceSignal: 'cinder', receiverSignal: 'delta' } },
+    protocol: 'impulse',
+    sourceSignal: 'cinder',
+    receiverSignal: 'delta',
   })
   await tender.execute({
     commandId: 'b-4',
@@ -2004,6 +2137,7 @@ test('does not award a Contract from removed claim and funding fields', async ()
 test('completes the Tender after Contracts in round five', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
+    ruleset: 'tender-v1',
     players: [
       { id: 'player-a', tiePriority: 1 },
       { id: 'player-b', tiePriority: 2 },
@@ -2040,14 +2174,18 @@ test('completes the Tender after Contracts in round five', async () => {
         tenderId,
         actorId: 'player-a',
         type: 'run-laboratory-test',
-        laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'delta' } },
+        protocol: 'continuous',
+        sourceSignal: 'cinder',
+        receiverSignal: 'delta',
       })
       await tender.execute({
         commandId: `b-${round}-lab`,
         tenderId,
         actorId: 'player-b',
         type: 'run-laboratory-test',
-        laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'eclipse' } },
+        protocol: 'continuous',
+        sourceSignal: 'cinder',
+        receiverSignal: 'eclipse',
       })
     }
     await tender.execute({
@@ -2121,10 +2259,13 @@ test('completes the Tender after Contracts in round five', async () => {
         aster: { fieldType: expect.any(String), polarity: expect.any(String) },
       }),
     },
-    events: expect.arrayContaining([
-      expect.objectContaining({ actorId: 'player-a', commandId: 'a-1-slot', kind: 'access_slot_requested', sequence: 1 }),
-      expect.objectContaining({ actorId: 'player-a', commandId: 'a-2-lab', kind: 'laboratory_test_completed' }),
-      expect.objectContaining({ actorId: 'player-b', commandId: 'b-5-bid', kind: 'contract_bid_assessed' }),
+    rounds: expect.arrayContaining([
+      expect.objectContaining({
+        round: 2,
+        laboratory: expect.arrayContaining([
+          expect.objectContaining({ mode: 'deep', playerId: 'player-a' }),
+        ]),
+      }),
     ]),
   })
   expect(completedView.audit?.privateMeasurementsByPlayer['player-a']).toEqual(expect.arrayContaining([
@@ -2143,6 +2284,7 @@ test('completes the Tender after Contracts in round five', async () => {
 test('projects public Laboratory results into the participant audit view', async () => {
   const tender = createTenderModule({ seedGenerator: () => 'seed-1' })
   const { tenderId } = await tender.createTender({
+    ruleset: 'tender-v1',
     players: [
       { id: 'player-a', tiePriority: 1 },
       { id: 'player-b', tiePriority: 2 },
@@ -2174,8 +2316,8 @@ test('projects public Laboratory results into the participant audit view', async
       await tender.execute({ commandId: `a-${round}-recon`, tenderId, actorId: 'player-a', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
       await tender.execute({ commandId: `b-${round}-recon`, tenderId, actorId: 'player-b', type: 'conduct-reconnaissance', targets: ['cinder', 'unknown-sector'] })
     } else {
-      await tender.execute({ commandId: `a-${round}-lab`, tenderId, actorId: 'player-a', type: 'run-laboratory-test', laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'delta' } } })
-      await tender.execute({ commandId: `b-${round}-lab`, tenderId, actorId: 'player-b', type: 'run-laboratory-test', laboratory: { mode: 'deep', pair: { sourceSignal: 'cinder', receiverSignal: 'eclipse' } } })
+      await tender.execute({ commandId: `a-${round}-lab`, tenderId, actorId: 'player-a', type: 'run-laboratory-test', protocol: 'continuous', sourceSignal: 'cinder', receiverSignal: 'delta' })
+      await tender.execute({ commandId: `b-${round}-lab`, tenderId, actorId: 'player-b', type: 'run-laboratory-test', protocol: 'continuous', sourceSignal: 'cinder', receiverSignal: 'eclipse' })
     }
     await tender.execute({ commandId: `a-${round}-reserve`, tenderId, actorId: 'player-a', type: 'reserve-contract', contractId: `round-${round}-contract-1` })
     await tender.execute({ commandId: `a-${round}-bid`, tenderId, actorId: 'player-a', type: 'submit-contract-bid', contractId: `round-${round}-contract-1`, claimedPublicResult: 'unstable_collapse', requestedFunding: 1 })

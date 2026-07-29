@@ -38,6 +38,8 @@ import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import { runTenderAction } from './run-tender-action'
+import type { WorkingModelSaveStatus } from './working-model-draft'
+import { tenderRulesetPolicy } from './ruleset-policy'
 
 type ModelAnalysisPanelProps = {
   knownSignals: SignalId[]
@@ -50,6 +52,14 @@ type ModelAnalysisPanelProps = {
   ruleset?: TenderView['ruleset']
   disabled?: boolean
   workingModelDisabled?: boolean
+  workingModelDialog?: {
+    onOpenChange: (open: boolean) => void
+    onSaveStatusChange: (status: WorkingModelSaveStatus) => void
+    open: boolean
+    openDisabled: boolean
+    showTimerWarning: boolean
+  }
+  workingModelSignals?: SignalId[]
   error?: string | null
   onConfirmThesis: (input: { signalId: SignalId; fieldType: FieldType; polarity: Polarity }) => Promise<void>
   onFinish: () => Promise<void>
@@ -71,6 +81,8 @@ export function ModelAnalysisPanel({
   ruleset,
   disabled,
   workingModelDisabled,
+  workingModelDialog,
+  workingModelSignals = knownSignals,
   error,
   onConfirmThesis,
   onFinish,
@@ -81,7 +93,7 @@ export function ModelAnalysisPanel({
   const [polarity, setPolarity] = useState<Polarity | ''>('')
   const { t } = useI18n()
   const isValid = signalId !== '' && fieldType !== '' && polarity !== ''
-  const isPrivateAnalysis = ruleset === 'tender-v2'
+  const isPrivateAnalysis = tenderRulesetPolicy(ruleset).sharedModelAnalysis
   const privateThesisHistory = privateTheses ?? []
   const currentRoundPrivateTheses = privateThesisHistory.filter((thesis) => thesis.round === round)
   const visibleTheses = isPrivateAnalysis
@@ -112,9 +124,10 @@ export function ModelAnalysisPanel({
           <WorkingModelWorkspace
             disabled={workingModelDisabled}
             inlineOnDesktop
-            knownSignals={knownSignals}
+            knownSignals={workingModelSignals}
             model={model}
             onSave={onSaveWorkingModel}
+            {...workingModelDialog}
           />
         </section>
 

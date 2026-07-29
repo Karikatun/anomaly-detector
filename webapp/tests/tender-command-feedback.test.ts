@@ -96,6 +96,20 @@ test('an expired Tender command uses a specific localized message', () => {
   })).toBe('tender.command.deadlineExpired')
 })
 
+test('stale Contract evidence uses a recoverable localized message', () => {
+  expect(getTenderCommandErrorKey({
+    actorId: 'player-a',
+    command: {
+      contractId: 'contract-1',
+      evidenceTestIds: ['r1-t1'],
+      type: 'submit-contract-bid',
+    },
+    error: new ApiRequestError(409, 'TENDER_EVIDENCE_UNAVAILABLE', 'raw backend message'),
+    latestView: { version: 11, publicTheses: [] },
+    startingView: { version: 10, publicTheses: [] },
+  })).toBe('tender.command.evidenceUnavailable')
+})
+
 test('an unknown backend message never reaches the player', () => {
   expect(getTenderCommandErrorKey({
     actorId: 'player-a',

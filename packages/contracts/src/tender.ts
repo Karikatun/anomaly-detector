@@ -305,6 +305,19 @@ export const publicContractSchema = z.object({
   contractId: contractIdSchema,
   eligibleForPlayer: z.boolean().optional(),
   kind: contractKindSchema.optional(),
+  planning: z.object({
+    eligible: z.boolean(),
+    missingConditions: z.array(z.enum([
+      'already_resolved',
+      'corporate_trust',
+      'evidence',
+      'final_round',
+      'reserved',
+    ])),
+    requiredPower: z.literal(1),
+    suitableEvidenceTestIds: z.array(z.string().min(1).max(128)),
+    suitableResearchCertificationSignals: z.array(signalIdSchema),
+  }).strict().optional(),
   ratingReward: z.number().int().min(0).optional(),
   requiredPublicResult: publicResultSchema,
   requiredSecondaryPublicResult: publicResultSchema.optional(),
@@ -369,6 +382,67 @@ export const finalScientificModelAuditSchema = z.object({
   submitted: z.boolean(),
 }).strict()
 
+export const tenderAuditAccessSlotSchema = z.object({
+  assignedSlot: z.number().int().min(1).max(6).optional(),
+  playerId: playerIdSchema,
+  requestedSlot: z.number().int().min(1).max(6).optional(),
+  resolution: z.enum(['confirmed', 'timeout']),
+}).strict()
+
+export const tenderAuditPowerAllocationSchema = z.object({
+  allocation: powerAllocationSchema,
+  playerId: playerIdSchema,
+  resolution: z.enum(['confirmed', 'timeout']),
+}).strict()
+
+export const tenderAuditReconnaissanceSchema = z.object({
+  playerId: playerIdSchema,
+  resolution: z.enum(['completed', 'timeout']),
+  targets: z.array(reconnaissanceTargetSchema).max(2),
+}).strict()
+
+export const tenderAuditLaboratoryTestSchema = scientificJournalEntrySchema.extend({
+  usedByContractId: contractIdSchema.optional(),
+}).strict()
+
+export const tenderAuditLaboratoryActionSchema = z.object({
+  mode: z.enum(['impulse', 'deep', 'broad']),
+  playerId: playerIdSchema,
+  privateMeasurements: z.array(privateMeasurementSchema).max(1).optional(),
+  resolution: z.enum(['completed', 'timeout']).default('completed'),
+  tests: z.array(tenderAuditLaboratoryTestSchema).max(2),
+}).strict()
+
+export const tenderAuditThesisSchema = privateThesisSchema.extend({
+  playerId: playerIdSchema,
+}).strict()
+
+export const tenderAuditContractSchema = z.object({
+  contractId: contractIdSchema.optional(),
+  evidenceTestIds: z.array(z.string().min(1).max(128)).max(2),
+  outcome: z.enum(['awarded', 'skipped', 'timeout_released']),
+  playerId: playerIdSchema,
+  ratingAward: z.number().int().min(0),
+  researchCertificationSignal: signalIdSchema.optional(),
+}).strict()
+
+export const tenderAuditRatingChangeSchema = z.object({
+  playerId: playerIdSchema,
+  points: z.number().int(),
+  source: z.enum(['contract', 'final_model', 'thesis', 'other']),
+}).strict()
+
+export const tenderAuditRoundSchema = z.object({
+  accessSlots: z.array(tenderAuditAccessSlotSchema),
+  contracts: z.array(tenderAuditContractSchema),
+  laboratory: z.array(tenderAuditLaboratoryActionSchema),
+  powerAllocations: z.array(tenderAuditPowerAllocationSchema),
+  ratingChanges: z.array(tenderAuditRatingChangeSchema),
+  reconnaissance: z.array(tenderAuditReconnaissanceSchema),
+  round: z.number().int().min(1).max(5),
+  theses: z.array(tenderAuditThesisSchema),
+}).strict()
+
 export const tenderAuditViewSchema = z.object({
   anomalyConfiguration: anomalyConfigurationSchema,
   completionReason: z.enum([
@@ -377,7 +451,6 @@ export const tenderAuditViewSchema = z.object({
     'last_active_player',
     'all_players_forfeited',
   ]),
-  events: z.array(tenderAuditEventSchema),
   finalScientificModelsByPlayer: z.record(playerIdSchema, finalScientificModelAuditSchema),
   forfeitedAtByPlayer: z.record(playerIdSchema, z.string().datetime()),
   placementByPlayer: z.record(playerIdSchema, z.number().int().min(1)),
@@ -387,6 +460,7 @@ export const tenderAuditViewSchema = z.object({
   publicLaboratoryResults: z.array(publicLaboratoryResultSchema),
   publicScientificJournal: z.array(scientificJournalEntrySchema).optional(),
   ratingBreakdownByPlayer: z.record(playerIdSchema, ratingBreakdownSchema),
+  rounds: z.array(tenderAuditRoundSchema),
   ruleset: tenderRulesetSchema,
 }).strict()
 
@@ -466,6 +540,7 @@ export type ScientificJournalEntry = z.infer<typeof scientificJournalEntrySchema
 export type PublicThesis = z.infer<typeof publicThesisSchema>
 export type PrivateThesis = z.infer<typeof privateThesisSchema>
 export type TenderAuditEvent = z.infer<typeof tenderAuditEventSchema>
+export type TenderAuditRound = z.infer<typeof tenderAuditRoundSchema>
 export type RatingBreakdown = z.infer<typeof ratingBreakdownSchema>
 export type TenderAuditView = z.infer<typeof tenderAuditViewSchema>
 export type WorkingModel = z.infer<typeof workingModelSchema>
