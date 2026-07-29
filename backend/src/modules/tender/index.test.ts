@@ -27,6 +27,54 @@ test('gives planning phases a 90-second deadline', async () => {
   })
 })
 
+test('accepts dueAt - 1 ms, rejects dueAt and dueAt + 1 ms, and keeps an idempotent receipt', async () => {
+  let now = new Date('2026-07-20T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+      { id: 'player-c', tiePriority: 3 },
+    ],
+  })
+
+  now = new Date('2026-07-20T12:01:29.999Z')
+  const accepted = await tender.execute({
+    actorId: 'player-b',
+    commandId: 'slot-b-before-deadline',
+    slot: 2,
+    tenderId,
+    type: 'request-access-slot',
+  })
+
+  now = new Date('2026-07-20T12:01:30.000Z')
+
+  expect(await tender.execute({
+    actorId: 'player-b',
+    commandId: 'slot-b-before-deadline',
+    slot: 2,
+    tenderId,
+    type: 'request-access-slot',
+  })).toEqual(accepted)
+
+  await expect(tender.execute({
+    actorId: 'player-c',
+    commandId: 'slot-c-at-deadline',
+    slot: 3,
+    tenderId,
+    type: 'request-access-slot',
+  })).rejects.toMatchObject({ kind: 'tender_deadline_expired' })
+
+  now = new Date('2026-07-20T12:01:30.001Z')
+  await expect(tender.execute({
+    actorId: 'player-c',
+    commandId: 'slot-c-after-deadline',
+    slot: 3,
+    tenderId,
+    type: 'request-access-slot',
+  })).rejects.toMatchObject({ kind: 'tender_deadline_expired' })
+})
+
 test('abandons a Tender five seconds after every player explicitly leaves and cancels when one resumes', async () => {
   let now = new Date('2026-07-26T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })

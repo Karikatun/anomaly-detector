@@ -666,6 +666,10 @@
   gap: .5rem;
 }
 
+.analysisFormGrid select {
+  min-height: 2.75rem;
+}
+
 .analysisHistory {
   padding-top: .65rem;
   border-top: 1px solid rgba(72, 128, 164, .22);
@@ -738,6 +742,18 @@
 }
 
 @media (max-width: 36rem) {
+  .analysisPanel {
+    padding-bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .analysisPanel > .footer {
+    position: fixed;
+    right: .75rem;
+    bottom: env(safe-area-inset-bottom, 0px);
+    left: .75rem;
+    z-index: 70;
+  }
+
   .contractSelection {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -55,8 +55,11 @@
 }
 
 .backButton {
+  display: inline-flex;
   min-height: 2.7rem;
+  align-items: center;
   gap: .55rem;
+  line-height: 1;
 }
 
 .backButton svg {

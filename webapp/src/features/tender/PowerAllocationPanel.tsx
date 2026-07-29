@@ -16,6 +16,14 @@ import type { CSSProperties } from 'react'
 import { useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import styles from './PowerAllocationPanel.module.css'
@@ -96,6 +104,7 @@ export function PowerAllocationPanel({
     modelAnalysis: confirmedAllocation?.modelAnalysis ?? 0,
     contracts: confirmedAllocation?.contracts ?? 0,
   }))
+  const [showUnallocatedWarning, setShowUnallocatedWarning] = useState(false)
   const { t } = useI18n()
   const total = useMemo(() => actionPower(allocation), [allocation])
   const reserve = 4 - total
@@ -126,6 +135,19 @@ export function PowerAllocationPanel({
       if (current[key] <= 0) return current
       return { ...current, [key]: current[key] - 1 }
     })
+  }
+
+  const confirmAllocation = () => runTenderAction(() => onConfirm({
+    ...allocation,
+    ...(reserve > 0 ? { reserve } : {}),
+  }))
+
+  const requestConfirmation = () => {
+    if (reserve > 0) {
+      setShowUnallocatedWarning(true)
+      return
+    }
+    void confirmAllocation()
   }
 
   return (
@@ -295,7 +317,7 @@ export function PowerAllocationPanel({
           <Typography as="strong" variant="bodySmMedium">{total} / 4</Typography>
         </span>
         <span>
-          <Typography as="span" variant="bodySm">{t('tender.power.reserve')}</Typography>
+          <Typography as="span" variant="bodySm">{t('tender.power.unallocated')}</Typography>
           <Typography as="strong" variant="bodySmMedium">{reserve}</Typography>
         </span>
       </div>
@@ -341,10 +363,7 @@ export function PowerAllocationPanel({
             size="lg"
             className={styles.confirmButton}
             disabled={disabled || problem !== null}
-            onClick={() => void runTenderAction(() => onConfirm({
-              ...allocation,
-              ...(reserve > 0 ? { reserve } : {}),
-            }))}
+            onClick={requestConfirmation}
           >
             {t('tender.power.confirm')}
           </Button>
@@ -354,6 +373,36 @@ export function PowerAllocationPanel({
           </div>
         </footer>
       )}
+
+      <Dialog open={showUnallocatedWarning} onOpenChange={setShowUnallocatedWarning}>
+        <DialogContent closeLabel={t('tender.power.unallocatedWarning.cancel')}>
+          <DialogHeader>
+            <DialogTitle>{t('tender.power.unallocatedWarning.title')}</DialogTitle>
+            <DialogDescription>
+              {t('tender.power.unallocatedWarning.description', { count: reserve })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowUnallocatedWarning(false)}
+            >
+              {t('tender.power.unallocatedWarning.cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                setShowUnallocatedWarning(false)
+                void confirmAllocation()
+              }}
+            >
+              {t('tender.power.unallocatedWarning.confirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

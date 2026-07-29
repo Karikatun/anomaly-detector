@@ -79,7 +79,7 @@ export function ModelAnalysisPanel({
   }
 
   return (
-    <section className={styles.panel} aria-labelledby="analysis-heading">
+    <section className={`${styles.panel} ${styles.analysisPanel}`} aria-labelledby="analysis-heading">
       <div className={styles.analysisSplit}>
         <section className={`${styles.surface} ${styles.analysisModel}`}>
           <div className={styles.sectionHeader}>

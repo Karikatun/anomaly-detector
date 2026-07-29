@@ -1,1 +1,2 @@
-export { RulesReferenceDialog } from './RulesReferenceDialog'
+export { LaboratoryInterpretation, RulesReferenceDialog } from './RulesReferenceDialog'
+export { LaboratoryInterpretationDialog } from './LaboratoryInterpretationDialog'

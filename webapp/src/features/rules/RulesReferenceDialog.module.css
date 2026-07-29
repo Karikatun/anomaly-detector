@@ -18,6 +18,22 @@
     var(--popover);
 }
 
+.bookIcon {
+  width: 1.15rem;
+  height: 1.15rem;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M3 5.5A2.5 2.5 0 0 1 5.5 3H11v17H5.5A2.5 2.5 0 0 0 3 22zm18 0A2.5 2.5 0 0 0 18.5 3H13v17h5.5A2.5 2.5 0 0 1 21 22z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.timerWarning {
+  margin: .75rem 1.25rem 0;
+  padding: .65rem .75rem;
+  border: 1px solid rgba(244, 165, 28, .35);
+  border-radius: .65rem;
+  color: #ffd583;
+  background: rgba(103, 67, 6, .18);
+}
+
 .scrollArea {
   min-height: 0;
   overflow-y: auto;

@@ -109,8 +109,18 @@ export function RulesReferenceDialog({
   triggerLabelKey = 'rules.open',
   triggerTextClassName,
   belowTenderHeader = false,
+  disabled = false,
+  open,
+  onOpenChange,
+  showTimerWarning = false,
+  triggerIcon = 'information',
 }: {
   belowTenderHeader?: boolean
+  disabled?: boolean
+  onOpenChange?: (open: boolean) => void
+  open?: boolean
+  showTimerWarning?: boolean
+  triggerIcon?: 'book' | 'information'
   triggerVariant?: 'default' | 'outline' | 'ghost'
   triggerClassName?: string
   triggerIconOnly?: boolean
@@ -132,17 +142,21 @@ export function RulesReferenceDialog({
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button
           type="button"
           variant={triggerVariant}
           size={triggerIconOnly ? 'icon-sm' : 'sm'}
           className={cn(triggerClassName)}
+          disabled={disabled}
           title={triggerIconOnly ? t(triggerLabelKey) : undefined}
         >
-          {triggerIconOnly && (
+          {(triggerIconOnly || triggerIcon !== 'information') && triggerIcon === 'information' && (
             <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
+          )}
+          {(triggerIconOnly || triggerIcon !== 'information') && triggerIcon === 'book' && (
+            <span className={styles.bookIcon} aria-hidden="true" />
           )}
           <Typography
             as="span"
@@ -161,6 +175,11 @@ export function RulesReferenceDialog({
           <DialogTitle>{t('rules.title')}</DialogTitle>
           <DialogDescription>{t('rules.description')}</DialogDescription>
         </DialogHeader>
+        {showTimerWarning && (
+          <Typography role="status" variant="bodySm" className={styles.timerWarning}>
+            {t('rules.timerContinues')}
+          </Typography>
+        )}
 
         <div className={styles.scrollArea}>
           <div className={styles.accordion}>
@@ -265,6 +284,11 @@ function RuleSectionContent({ section }: { section: RuleSectionId }) {
     )
   }
 
+  return <LaboratoryInterpretation />
+}
+
+export function LaboratoryInterpretation() {
+  const { t } = useI18n()
   return (
     <div className={styles.laboratory}>
       <Typography variant="bodySm">{t('rules.laboratory.direction')}</Typography>
