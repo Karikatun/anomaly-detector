@@ -23,6 +23,9 @@ const missingConditionKeys = {
   already_resolved: 'tender.contractPlanning.missing.alreadyResolved',
   corporate_trust: 'tender.contractPlanning.missing.corporateTrust',
   evidence: 'tender.contractPlanning.missing.evidence',
+  evidence_result: 'tender.contractPlanning.missing.evidenceResult',
+  evidence_role: 'tender.contractPlanning.missing.evidenceRole',
+  evidence_used: 'tender.contractPlanning.missing.evidenceUsed',
   final_round: 'tender.contractPlanning.missing.finalRound',
   reserved: 'tender.contractPlanning.missing.reserved',
 } as const

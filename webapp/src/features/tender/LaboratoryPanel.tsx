@@ -12,11 +12,14 @@ import { signalLabelKeys } from './catalog'
 import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
+import { isLaboratoryPairResearched } from './laboratory-pair'
 import { runTenderAction } from './run-tender-action'
 import { tenderRulesetPolicy } from './ruleset-policy'
 
 type LaboratoryPanelProps = {
+  journal: TenderView['publicScientificJournal']
   mySamples: SignalId[]
+  playerId: string
   privateMeasurements: TenderView['privateMeasurements']
   powerAllocation: number
   ruleset?: TenderView['ruleset']
@@ -30,7 +33,9 @@ const signalStyle = (signal?: SignalId) => ({
 } as CSSProperties)
 
 export function LaboratoryPanel({
+  journal,
   mySamples,
+  playerId,
   privateMeasurements,
   powerAllocation,
   ruleset,
@@ -53,6 +58,15 @@ export function LaboratoryPanel({
   const { t } = useI18n()
   const signalName = (signal: SignalId) => t(signalLabelKeys[signal])
   const latestMeasurement = privateMeasurements.at(-1)
+  const pairAlreadyResearched = isValid && isLaboratoryPairResearched({
+    journal,
+    playerId,
+    receiverSignal: receiver,
+    sourceSignal: source,
+  })
+  const pairError = pairAlreadyResearched
+    ? `Вы уже исследовали ${signalName(source)} → ${signalName(receiver)}. Выберите другую направленную пару.`
+    : null
 
   const handleTest = async () => {
     if (!isValid || mode === null) return
@@ -270,7 +284,11 @@ export function LaboratoryPanel({
         </section>
       </div>
 
-      {error && <div className={styles.error} role="alert"><Typography variant="bodySm">{error}</Typography></div>}
+      {(pairError || error) && (
+        <div className={styles.error} role="alert">
+          <Typography variant="bodySm">{pairError ?? error}</Typography>
+        </div>
+      )}
 
       <footer className={styles.footer}>
         <div className={styles.info}>
@@ -285,7 +303,7 @@ export function LaboratoryPanel({
           type="button"
           size="lg"
           className={styles.actionButton}
-          disabled={disabled || !isValid || mode === null}
+          disabled={disabled || !isValid || mode === null || pairAlreadyResearched}
           onClick={() => void handleTest()}
         >
           <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />

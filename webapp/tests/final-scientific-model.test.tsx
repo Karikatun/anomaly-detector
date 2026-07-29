@@ -38,7 +38,16 @@ test('submitted Final Scientific Model is locked and server-confirmed', () => {
   const html = renderToStaticMarkup(
     <I18nProvider>
       <FinalScientificModelPanel
-        draft={{ signals: {} }}
+        draft={{
+          signals: {
+            aster: { fieldType: 'inertial', polarity: 'negative' },
+            boreal: { fieldType: 'inertial', polarity: 'positive' },
+            cinder: { fieldType: 'electromagnetic', polarity: 'negative' },
+            delta: { fieldType: 'phase', polarity: 'negative' },
+            eclipse: { fieldType: 'electromagnetic', polarity: 'positive' },
+            ferro: { fieldType: 'phase', polarity: 'positive' },
+          },
+        }}
         dueAt="2026-07-29T12:03:00.000Z"
         evidence={{
           privateMeasurements: [],
@@ -54,6 +63,8 @@ test('submitted Final Scientific Model is locked and server-confirmed', () => {
     </I18nProvider>,
   )
 
-  expect(html).toContain('Финальная модель отправлена')
+  expect(html).toContain('Финальная модель отправлена · 12/12')
+  expect(html).toContain('aria-label="Заполнено параметров: 12 из 12"')
+  expect(html.match(/data-selected=""/g)).toHaveLength(12)
   expect(html).toContain('disabled=""')
 })

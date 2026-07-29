@@ -311,10 +311,14 @@ export const publicContractSchema = z.object({
       'already_resolved',
       'corporate_trust',
       'evidence',
+      'evidence_result',
+      'evidence_role',
+      'evidence_used',
       'final_round',
       'reserved',
     ])),
     requiredPower: z.literal(1),
+    suitableEvidenceSelections: z.array(z.array(z.string().min(1).max(128)).min(1).max(2)),
     suitableEvidenceTestIds: z.array(z.string().min(1).max(128)),
     suitableResearchCertificationSignals: z.array(signalIdSchema),
   }).strict().optional(),
@@ -397,7 +401,8 @@ export const tenderAuditPowerAllocationSchema = z.object({
 
 export const tenderAuditReconnaissanceSchema = z.object({
   playerId: playerIdSchema,
-  resolution: z.enum(['completed', 'timeout']),
+  resolution: z.enum(['completed', 'skipped', 'timeout']),
+  skipReason: z.enum(['all_samples_collected']).optional(),
   targets: z.array(reconnaissanceTargetSchema).max(2),
 }).strict()
 
@@ -409,7 +414,8 @@ export const tenderAuditLaboratoryActionSchema = z.object({
   mode: z.enum(['impulse', 'deep', 'broad']),
   playerId: playerIdSchema,
   privateMeasurements: z.array(privateMeasurementSchema).max(1).optional(),
-  resolution: z.enum(['completed', 'timeout']).default('completed'),
+  resolution: z.enum(['completed', 'skipped', 'timeout']).default('completed'),
+  skipReason: z.enum(['all_pairs_researched', 'insufficient_samples']).optional(),
   tests: z.array(tenderAuditLaboratoryTestSchema).max(2),
 }).strict()
 
@@ -493,6 +499,15 @@ export const tenderViewSchema = z.object({
   privateMeasurements: z.array(privateMeasurementSchema),
   privateTheses: z.array(privateThesisSchema).optional(),
   privateFinalScientificModelDraft: scientificModelDraftSchema.optional(),
+  privateFinalScientificModelSubmission: z.object({
+    scientificModel: scientificModelSchema,
+    submittedAt: z.string().datetime(),
+  }).strict().optional(),
+  privateAutomaticOperationalSkip: z.object({
+    phase: z.enum(['laboratory', 'reconnaissance']),
+    reason: z.enum(['all_pairs_researched', 'all_samples_collected', 'insufficient_samples']),
+    round: z.number().int().min(1).max(5),
+  }).strict().optional(),
   privateResearchCertifications: z.array(signalIdSchema).optional(),
   privateTelemetry: z.array(privateMeasurementSchema).optional(),
   privateUsedContractEvidenceTestIds: z.array(z.string().min(1)).optional(),
@@ -503,6 +518,10 @@ export const tenderViewSchema = z.object({
     total: z.number().int().min(0),
   }).strict().optional(),
   finalScientificModelProgress: z.object({
+    completed: z.number().int().min(0),
+    total: z.number().int().min(0),
+  }).strict().optional(),
+  sequentialPhaseProgress: z.object({
     completed: z.number().int().min(0),
     total: z.number().int().min(0),
   }).strict().optional(),

@@ -95,15 +95,17 @@ function WaitingForTurn({
   finalScientificModelSubmitted,
   phase,
   playerName,
+  progress,
 }: {
   finalScientificModelSubmitted?: boolean
   phase: TenderView['phase']
   playerName?: string
+  progress?: TenderView['sequentialPhaseProgress']
 }) {
   return (
     <PhaseNotice
       kind="waiting"
-      description={getWaitingForTurnDescription(phase, playerName, finalScientificModelSubmitted)}
+      description={getWaitingForTurnDescription(phase, playerName, finalScientificModelSubmitted, progress)}
     >
       Ожидание хода
     </PhaseNotice>
@@ -153,6 +155,7 @@ function PhasePanel({
           finalScientificModelSubmitted={myPlayer?.finalScientificModelSubmitted}
           phase={view.phase}
           playerName={activePlayer?.displayName}
+          progress={view.sequentialPhaseProgress}
         />
       )}
       {content}
@@ -209,7 +212,9 @@ function PhasePanel({
       const labPower = myPower?.laboratory ?? 0
       return labPower > 0 ? withWaitingState(
         <LaboratoryPanel
+          journal={view.publicScientificJournal}
           mySamples={mySamples}
+          playerId={auth.user?.id ?? ''}
           privateMeasurements={view.privateMeasurements}
           powerAllocation={labPower}
           ruleset={view.ruleset}
@@ -290,7 +295,9 @@ function PhasePanel({
     case 'final-scientific-model': {
       return withWaitingState(
         <FinalScientificModelPanel
-          draft={view.privateFinalScientificModelDraft ?? { signals: {} }}
+          draft={view.privateFinalScientificModelSubmission?.scientificModel
+            ?? view.privateFinalScientificModelDraft
+            ?? { signals: {} }}
           dueAt={view.dueAt ?? null}
           evidence={{
             privateMeasurements: view.privateMeasurements,
@@ -694,6 +701,19 @@ function TenderContent() {
           </Dialog>
         </div>
       </header>
+      {tenderView.privateAutomaticOperationalSkip && (
+        <PhaseNotice
+          description={tenderView.privateAutomaticOperationalSkip.reason === 'all_pairs_researched'
+            ? 'Все доступные направленные пары уже исследованы.'
+            : tenderView.privateAutomaticOperationalSkip.reason === 'insufficient_samples'
+              ? 'Нужны два разных Образца.'
+              : 'Все шесть Образцов уже получены.'}
+        >
+          {tenderView.privateAutomaticOperationalSkip.phase === 'laboratory'
+            ? 'Лаборатория пропущена'
+            : 'Разведка пропущена'}
+        </PhaseNotice>
+      )}
 
       <div className={styles.content}>
         {!connected && (

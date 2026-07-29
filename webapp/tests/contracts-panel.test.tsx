@@ -132,6 +132,14 @@ test('keeps only complete evidence paths selectable for a reserved complex Contr
   const html = renderPanel({
     ...baseContract,
     kind: 'complex',
+    planning: {
+      eligible: true,
+      missingConditions: [],
+      requiredPower: 1,
+      suitableEvidenceSelections: [['complete-continuous']],
+      suitableEvidenceTestIds: ['complete-continuous'],
+      suitableResearchCertificationSignals: [],
+    },
     requiredSecondaryPublicResult: 'attenuation',
     reservedByPlayerId: 'player-a',
   }, { journal })

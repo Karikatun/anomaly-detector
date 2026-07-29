@@ -5,6 +5,7 @@ export type TenderFailureKind =
   | 'invalid_tender_command'
   | 'invalid_tender_state'
   | 'invalid_tender_view_query'
+  | 'laboratory_pair_already_researched'
   | 'player_not_in_tender'
   | 'player_forfeited'
   | 'tender_deadline_expired'

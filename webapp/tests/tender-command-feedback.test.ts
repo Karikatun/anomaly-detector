@@ -110,6 +110,22 @@ test('stale Contract evidence uses a recoverable localized message', () => {
   })).toBe('tender.command.evidenceUnavailable')
 })
 
+test('a repeated own Laboratory pair uses a specific recoverable message', () => {
+  expect(getTenderCommandErrorKey({
+    actorId: 'player-a',
+    command: {
+      laboratory: {
+        mode: 'impulse',
+        pair: { receiverSignal: 'boreal', sourceSignal: 'aster' },
+      },
+      type: 'run-laboratory-test',
+    },
+    error: new ApiRequestError(409, 'TENDER_LABORATORY_PAIR_ALREADY_RESEARCHED', 'raw backend message'),
+    latestView: { version: 11, publicTheses: [] },
+    startingView: { version: 10, publicTheses: [] },
+  })).toBe('tender.command.laboratoryPairAlreadyResearched')
+})
+
 test('an unknown backend message never reaches the player', () => {
   expect(getTenderCommandErrorKey({
     actorId: 'player-a',
@@ -159,5 +175,16 @@ test('an unsubmitted final Scientific Model is described as a local draft', () =
 test('a submitted final Scientific Model is confirmed by the server state', () => {
   expect(getWaitingForTurnDescription('final-scientific-model', 'Игрок 2', true)).toBe(
     'Сейчас действует Игрок 2. Ваша финальная модель отправлена и принята сервером.',
+  )
+})
+
+test('sequential waiting state reports server receipt and phase progress', () => {
+  expect(getWaitingForTurnDescription(
+    'laboratory',
+    'Игрок 2',
+    false,
+    { completed: 1, total: 2 },
+  )).toBe(
+    'Сейчас действует Игрок 2. Завершили обязательное действие: 1 из 2. Ваш подтверждённый выбор принят сервером.',
   )
 })

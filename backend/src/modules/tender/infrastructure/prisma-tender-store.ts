@@ -37,6 +37,7 @@ type PersistedTenderState = Pick<
   StoredTender,
   | 'accessSlots'
   | 'anomalyConfiguration'
+  | 'automaticOperationalSkipsByPlayer'
   | 'budgetByPlayer'
   | 'corporateTrustByPlayer'
   | 'corporateReviewActive'
@@ -48,6 +49,7 @@ type PersistedTenderState = Pick<
   | 'finalScientificModelCompletedByPlayer'
   | 'finalScientificModelDraftsByPlayer'
   | 'finalScientificModelsByPlayer'
+  | 'finalScientificModelSubmittedAtByPlayer'
   | 'forfeitedAtByPlayer'
   | 'knownSignals'
   | 'powerAllocations'
@@ -77,9 +79,15 @@ type PersistedTenderState = Pick<
 
 const playerIntegerRecordSchema = z.record(playerIdSchema, z.number().int())
 const playerBooleanRecordSchema = z.record(playerIdSchema, z.boolean())
+const automaticOperationalSkipSchema = z.object({
+  phase: z.enum(['laboratory', 'reconnaissance']),
+  reason: z.enum(['all_pairs_researched', 'all_samples_collected', 'insufficient_samples']),
+  round: z.number().int().min(1).max(5),
+}).strict()
 const persistedTenderStateSchema = z.object({
   accessSlots: z.record(playerIdSchema, z.number().int().min(1).max(6)),
   anomalyConfiguration: anomalyConfigurationSchema,
+  automaticOperationalSkipsByPlayer: z.record(playerIdSchema, automaticOperationalSkipSchema).optional(),
   budgetByPlayer: playerIntegerRecordSchema.optional(),
   corporateTrustByPlayer: z.record(playerIdSchema, z.number().int().min(0)).optional(),
   corporateReviewActive: z.boolean().optional(),
@@ -92,6 +100,7 @@ const persistedTenderStateSchema = z.object({
   finalScientificModelCompletedByPlayer: playerBooleanRecordSchema.optional(),
   finalScientificModelDraftsByPlayer: z.record(playerIdSchema, scientificModelDraftSchema).optional(),
   finalScientificModelsByPlayer: z.record(playerIdSchema, scientificModelSchema).optional(),
+  finalScientificModelSubmittedAtByPlayer: z.record(playerIdSchema, z.string().datetime()).optional(),
   forfeitedAtByPlayer: z.record(playerIdSchema, z.string().datetime()).optional(),
   knownSignals: z.array(signalIdSchema).optional(),
   powerAllocations: z.record(playerIdSchema, powerAllocationSchema).optional(),
@@ -121,6 +130,7 @@ const persistedTenderStateSchema = z.object({
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   accessSlots: tender.accessSlots,
   anomalyConfiguration: tender.anomalyConfiguration,
+  automaticOperationalSkipsByPlayer: tender.automaticOperationalSkipsByPlayer,
   budgetByPlayer: tender.budgetByPlayer,
   corporateTrustByPlayer: tender.corporateTrustByPlayer,
   corporateReviewActive: tender.corporateReviewActive,
@@ -133,6 +143,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   finalScientificModelCompletedByPlayer: tender.finalScientificModelCompletedByPlayer,
   finalScientificModelDraftsByPlayer: tender.finalScientificModelDraftsByPlayer,
   finalScientificModelsByPlayer: tender.finalScientificModelsByPlayer,
+  finalScientificModelSubmittedAtByPlayer: tender.finalScientificModelSubmittedAtByPlayer,
   forfeitedAtByPlayer: tender.forfeitedAtByPlayer,
   knownSignals: tender.knownSignals,
   powerAllocations: tender.powerAllocations,
@@ -180,6 +191,7 @@ const toStoredTender = (record: {
     accessSlots: state.accessSlots,
     abandonmentDueAt: record.abandonmentDueAt,
     anomalyConfiguration: state.anomalyConfiguration,
+    automaticOperationalSkipsByPlayer: state.automaticOperationalSkipsByPlayer ?? {},
     budgetByPlayer: state.budgetByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 2])),
     corporateTrustByPlayer: state.corporateTrustByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 0])),
     corporateReviewActive: state.corporateReviewActive ?? false,
@@ -193,6 +205,7 @@ const toStoredTender = (record: {
     finalScientificModelCompletedByPlayer: state.finalScientificModelCompletedByPlayer ?? {},
     finalScientificModelDraftsByPlayer: state.finalScientificModelDraftsByPlayer ?? {},
     finalScientificModelsByPlayer: state.finalScientificModelsByPlayer ?? {},
+    finalScientificModelSubmittedAtByPlayer: state.finalScientificModelSubmittedAtByPlayer ?? {},
     forfeitedAtByPlayer: state.forfeitedAtByPlayer ?? {},
     id: record.id,
     knownSignals: state.knownSignals ?? [
