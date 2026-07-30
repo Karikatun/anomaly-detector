@@ -281,8 +281,19 @@ Each backend instance should publish domain events to Valkey and subscribe to th
 
 ## Static Webapp And Website
 
-The current single-VM production path may serve the built webapp and proxy the
-API through Caddy. Use
+The current production baseline serves the built webapp and proxies the API
+through Caddy on one Yandex VM. It also runs the API, worker, and Docker
+PostgreSQL on that VM. Immutable release directories, a database dump before
+migrations, retained rollback artifacts, container-internal health checks, and
+public HTTPS checks protect this baseline. It is operational, but it is not the
+target production-like topology: there is no instance-group/ALB failover,
+Managed PostgreSQL recovery, Lockbox delivery, Cloud Logging alerting, or edge
+WAF validation yet. Track that migration in
+[#21](https://github.com/Karikatun/anomaly-detector/issues/21) and distributed
+edge/application protection in
+[#19](https://github.com/Karikatun/anomaly-detector/issues/19).
+
+Use
 [`deploy/yandex/Caddyfile.example`](../deploy/yandex/Caddyfile.example) as the
 source configuration: set `ANOMALY_WEBAPP_ROOT` to the absolute directory that
 contains the deployed `webapp/dist` contents, validate with `caddy validate`,

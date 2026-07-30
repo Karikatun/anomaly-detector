@@ -13,8 +13,8 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 - **Milestone 1 (Tender Foundation)** — ✅ 100% завершён
 - **Milestone 2 (Game Core)** — ✅ целевой набор правил реализован на авторитетном сервере и защищён симуляциями для 2-4 игроков
 - **Milestone 3 (Identity, Rooms, Realtime)** — 🔶 основной путь готов; единый активный матч и корректное досрочное завершение реализованы, остаётся production-защита auth
-- **Milestone 4 (Game Interface)** — 🔶 возврат в активный матч, справочник правил и Chromium E2E полного пятираундового матча готовы; остаются полный аудит/replay, финальная проверка i18n, обучение и браузерная матрица
-- **Milestone 5 (Operations, Public Test)** — 🔶 юридические тексты и доказательство согласия реализованы, входящая почта и DNS-защита домена проверены, добавлены worker health/readiness и локальный recovery drill; production-развёртывание, исходящая почта и облачный мониторинг ещё не проверены
+- **Milestone 4 (Game Interface)** — 🔶 полный пятираундовый Tender и Working Model проверены в изолированных desktop/mobile Chromium-контекстах; остаются отдельные пробелы итогового аудита, финальная проверка i18n и визуальной системы, обучение и браузерная матрица
+- **Milestone 5 (Operations, Public Test)** — 🔶 текущий single-VM production baseline развёрнут и проходит внутренние/публичные health checks; остаются целевая Yandex-топология, edge-защита, Managed PostgreSQL recovery drill, облачный мониторинг, исходящая почта и контролируемый публичный тест
 
 ## Delivery Rules
 
@@ -253,14 +253,14 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [x] Reconnecting subscriber receives the current state after a timeout
 7. [x] Enforce the single-current-match invariant and expose the current match to the home page, as specified in «Один Незавершённый Матч На Игрока».
 8. [x] Add explicit leave/resume and five-second all-player abandonment through the Tender Module and worker.
-9. [-] Complete auth abuse protection.
+9. [-] Complete auth abuse protection ([#19](https://github.com/Karikatun/anomaly-detector/issues/19)).
    - [x] Bound auth request bodies.
    - [x] Add a bounded per-instance client-address limiter and trusted-proxy configuration.
    - [x] Add shared password-attempt counters, unknown-user dummy verification, and registration device quota.
    - [x] Add a shared PostgreSQL issuance budget for realtime tickets.
    - [ ] Configure and validate route-scoped Yandex edge limits for auth, the general API, and WebSocket handshakes.
    - [ ] Move room-join limiting to PostgreSQL and add shared Tender-command plus authenticated-mutation budgets.
-10. [-] Verify password storage and account recovery posture.
+10. [-] Verify password storage and account recovery posture ([#20](https://github.com/Karikatun/anomaly-detector/issues/20)).
    - [x] Use salted PHC Argon2id hashes with explicit parameters and verify without storing plaintext.
    - [x] Support opportunistic compare-and-set rehash on successful login.
    - [ ] Benchmark Argon2id on the target Yandex container and decide the recovery path before public launch.
@@ -274,15 +274,15 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 **Outcome:** players can finish a Tender from a portrait mobile browser while desktop remains efficient.
 
 1. [x] Build login, profile, home, room creation, room waiting, readiness, host-confirmation, and match-history flows.
-2. [-] Complete the live Tender screen for the target ruleset: timer, phase status, Access Slot order, private simultaneous Power planning, public Rating, legal actions, reconnect, and final state exist; continue browser-level validation of the full five-round path.
-3. [-] Complete Reconnaissance, Directed Test, Thesis, Contract Evidence, and Final Scientific Model interactions for the target ruleset.
-4. [-] Complete the interactive Working Model without exposing hidden Anomaly Configuration data; the private workspace exists, but accessibility and mobile/desktop playtest treatment are still in progress.
-5. [-] Complete end-of-round score breakdown and the final participant-only audit/replay. A final screen and audit projection exist, but phase-by-phase replay and complete score explanation remain incomplete.
-6. [-] Store every visible string in domain i18n chunks. Russian is the default, but player-visible literals still require a final repository scan.
-7. [-] Apply and verify the realistic corporate sci-fi visual system across all phases, mobile portrait, and desktop workspace.
+2. [x] Complete the live Tender screen for the target ruleset: timer, phase status, Access Slot order, private simultaneous Power planning, public Rating, legal actions, reconnect, and final state are covered by a full five-round two-player Chromium E2E using isolated desktop and `390×844` mobile contexts.
+3. [x] Complete Reconnaissance, Directed Test, Thesis, Contract Evidence, and Final Scientific Model interactions for the target ruleset in the full five-round browser path.
+4. [x] Complete the interactive Working Model without exposing hidden Anomaly Configuration data and verify its accessibility plus desktop/mobile treatment.
+5. [-] Complete the final participant-only audit/replay ([#9](https://github.com/Karikatun/anomaly-detector/issues/9)). The chronological round view, priorities, Power, laboratory evidence, Thesis field type and polarity, Contract conditions/evidence, Rating breakdown, final Scientific Models, and winner outcome exist. Remaining work is to explain Corporate Trust and the Budget tie-break explicitly, handle unavailable or malformed historical data safely, and complete dedicated mobile plus non-participant browser validation.
+6. [-] Store every visible string in domain i18n chunks ([#22](https://github.com/Karikatun/anomaly-detector/issues/22)). Russian is the default, but player-visible literals still require migration and a final repository scan.
+7. [-] Apply and verify the realistic corporate sci-fi visual system across all phases, mobile portrait, and desktop workspace as part of the release matrix ([#23](https://github.com/Karikatun/anomaly-detector/issues/23)).
 8. [x] Replace create/join cards with the full-width «Вернуться в матч» state when the current-match endpoint reports an unfinished session.
 9. [x] Finish the accordion Rules Reference and laboratory-result interpretation section described in P1, keeping the close action visible while the dialog is open.
-10. [ ] Add the short guided solo tutorial already required by `GAME_DESIGN_BRIEF.md`, or explicitly remove it from MVP scope through a product-doc decision before release.
+10. [ ] Add the short guided solo tutorial already required by `GAME_DESIGN_BRIEF.md`, or explicitly remove it from MVP scope through a product-doc decision before release ([#10](https://github.com/Karikatun/anomaly-detector/issues/10)).
 
 **Skills:** `prototype` for the Working Model and dense mobile interactions; `browser:control-in-app-browser` for mobile and desktop verification; `imagegen` only when original raster assets are needed; `tdd` for client state that affects correctness; `code-review` for each completed journey.
 
@@ -292,11 +292,12 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
 
 **Outcome:** a secure Russian public test deployment runs on Yandex Cloud and provides actionable match evidence. The site is publicly reachable without an allowlist; the first audience arrives through direct links sent to known testers, without a marketing campaign.
 
-1. [-] Configure Yandex Cloud using `yc`: Compute Cloud instance group, Application Load Balancer, Managed PostgreSQL, Container Registry, Object Storage only if required, Lockbox/secrets, logs, backups, and monitoring.
+1. [-] Move from the current single-VM production baseline to the target Yandex Cloud topology using `yc`: Compute Cloud instance group, Application Load Balancer, Managed PostgreSQL, Container Registry, Object Storage only if required, Lockbox/secrets, logs, backups, and monitoring ([#21](https://github.com/Karikatun/anomaly-detector/issues/21)).
    - [x] Document the target topology, environment, private backend network, custom-domain auth requirements, WebSocket ingress, and Smart Web Security.
    - [x] Replace the incompatible long-running Serverless API/worker topology with a fixed-size Compute Cloud instance group, separate API/worker containers, Application Load Balancer WebSocket ingress, private worker health checks, and Smart Web Security.
-   - [ ] Provision and verify the production-like environment; deployment has not started.
-2. [-] Keep production data and operational configuration within the Russian launch boundary.
+   - [x] Deploy the current single-VM baseline with Caddy, API, worker, and Docker PostgreSQL; preserve immutable release and rollback artifacts, take a database dump before migrations, and verify container-internal plus public health endpoints.
+   - [ ] Provision and verify the target production-like instance-group, load-balancer, Managed PostgreSQL, Lockbox, logging, monitoring, and autohealing environment.
+2. [-] Keep production data and operational configuration within the Russian launch boundary ([#2](https://github.com/Karikatun/anomaly-detector/issues/2)).
    - [x] Record the Russian data-location decision and Yandex Cloud target.
    - [-] Complete legal readiness before collecting production users.
      - [x] Prepare and fill the personal-data processing policy with the individual operator's details, current data model, authentication providers, Russian hosting target, retention periods, support mailbox, and anti-abuse cookies.
@@ -315,11 +316,11 @@ The source of truth for product scope is [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIE
    - [-] Verify that API and worker are both deployed, monitored, and restart-safe; alert on worker lag, overdue Tenders, auth throttling, elevated 5xx, DB saturation, and abnormal realtime reconnects.
      - [x] Add internal worker liveness/readiness with per-loop success, failure, and stale-heartbeat tracking.
      - [ ] Connect API and worker health checks to Compute instance-group autohealing and production alerts.
-4. [ ] Add production abuse and performance validation: auth/login load with Argon2id, registration quota races, multi-instance edge-limit enforcement, room-code enumeration, authenticated mutation and Tender-command bursts, invalid/valid WebSocket connection limits, mobile reconnect, 2-4 player Tender load, request-size limits, and log redaction.
-5. [ ] Run the complete release acceptance matrix on current mobile Safari/Chrome and desktop Chrome/Firefox, including reconnect, refresh, multi-tab session, active-match return, all-player abandonment, audit privacy, and account deletion.
-6. [ ] Measure real matches with 2, 3, and 4 players; tune deadlines only when data shows the five-round target is materially missed.
-7. [ ] Run a public test without marketing, distributing links directly to known testers. Capture audit-derived defects, balance observations, accessibility problems, rules misunderstandings, support requests, abuse, and operational incidents as GitHub issues.
-8. [-] Decide and document support ownership before public MVP: the mailbox is active and the responsible operator/public contact are identified, while account recovery, privacy-request handling, match disputes, retention, and the response when a worker/deployment interrupts an active match remain incomplete.
+4. [ ] Add production abuse and performance validation: auth/login load with Argon2id, registration quota races, multi-instance edge-limit enforcement, room-code enumeration, authenticated mutation and Tender-command bursts, invalid/valid WebSocket connection limits, mobile reconnect, 2-4 player Tender load, request-size limits, and log redaction ([#19](https://github.com/Karikatun/anomaly-detector/issues/19), [#20](https://github.com/Karikatun/anomaly-detector/issues/20)).
+5. [ ] Run the complete release acceptance matrix on current mobile Safari/Chrome and desktop Chrome/Firefox, including reconnect, refresh, multi-tab session, active-match return, all-player abandonment, audit privacy, account deletion, and cross-phase visual/accessibility review ([#23](https://github.com/Karikatun/anomaly-detector/issues/23)).
+6. [ ] Measure real matches with 2, 3, and 4 players; tune deadlines only when data shows the five-round target is materially missed ([#24](https://github.com/Karikatun/anomaly-detector/issues/24)).
+7. [ ] Run a public test without marketing, distributing links directly to known testers. Capture audit-derived defects, balance observations, accessibility problems, rules misunderstandings, support requests, abuse, and operational incidents as GitHub issues ([#24](https://github.com/Karikatun/anomaly-detector/issues/24)).
+8. [-] Decide and document support ownership before public MVP: the mailbox is active and the responsible operator/public contact are identified, while account recovery, privacy-request handling, match disputes, retention, and the response when a worker/deployment interrupts an active match remain incomplete ([#2](https://github.com/Karikatun/anomaly-detector/issues/2), [#20](https://github.com/Karikatun/anomaly-detector/issues/20), [#21](https://github.com/Karikatun/anomaly-detector/issues/21)).
 
 **Skills:** `tdd` for deployment configuration and privacy-sensitive deletion paths; `diagnosing-bugs` for nondeterminism, concurrency, or performance regressions; `improve-codebase-architecture` after several working verticals and before the public test; `triage` for tester reports; `code-review` before release.
 
@@ -340,3 +341,19 @@ MVP is ready for the public test only when all of the following hold:
 - Russian is the default UI language, and all visible text is loaded from i18n resources.
 - Automated contract, backend, and browser coverage protects the critical flows.
 - Yandex Cloud deployment, data handling, monitoring, and recovery procedures have been verified.
+
+## GitHub Tracking
+
+Открытые MVP-задачи являются источником текущего delivery-статуса:
+
+- [#2](https://github.com/Karikatun/anomaly-detector/issues/2) — внешние Yandex OAuth, privacy, legal и support operations (`ready-for-human`);
+- [#9](https://github.com/Karikatun/anomaly-detector/issues/9) — оставшиеся детали participant-only audit (`ready-for-agent`);
+- [#10](https://github.com/Karikatun/anomaly-detector/issues/10) — guided solo tutorial (`ready-for-agent`);
+- [#19](https://github.com/Karikatun/anomaly-detector/issues/19) — distributed application и edge abuse limits (`ready-for-agent`);
+- [#20](https://github.com/Karikatun/anomaly-detector/issues/20) — production Argon2id benchmark и account recovery decision (`ready-for-human`);
+- [#21](https://github.com/Karikatun/anomaly-detector/issues/21) — целевая Yandex production topology, monitoring и recovery (`ready-for-human`);
+- [#22](https://github.com/Karikatun/anomaly-detector/issues/22) — завершение MVP i18n (`ready-for-agent`);
+- [#23](https://github.com/Karikatun/anomaly-detector/issues/23) — browser/device/visual release acceptance matrix (`ready-for-human`);
+- [#24](https://github.com/Karikatun/anomaly-detector/issues/24) — контролируемый public MVP test и реальные матчи 2–4 игроков (`ready-for-human`).
+
+Issues #1–#8, кроме остающейся открытой #2, относятся к историческим этапам прототипа и прежнему набору правил. Закрытые задачи с `wontfix` не являются скрытыми пробелами текущего MVP; актуальные остатки перечислены выше.

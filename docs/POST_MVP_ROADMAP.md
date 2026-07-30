@@ -4,6 +4,21 @@
 
 **Статусы:** `[x]` выполнено, `[-]` начато частично, `[ ]` не начато.
 
+## GitHub Tracking
+
+GitHub Issues являются источником текущего состояния и delivery-зависимостей. Этот roadmap описывает продуктовые направления и не дублирует полные agent briefs:
+
+| Направление | Issue | Состояние | Зависимости |
+| --- | --- | --- | --- |
+| Production-grade PWA | [#11](https://github.com/Karikatun/anomaly-detector/issues/11) | `ready-for-agent` | Production MVP |
+| Глобальный рейтинг | [#12](https://github.com/Karikatun/anomaly-detector/issues/12) | `needs-triage` | Решение владельца продукта о формуле и волатильности |
+| Недельные и месячные таблицы | [#13](https://github.com/Karikatun/anomaly-detector/issues/13) | `ready-for-agent` | #12 |
+| Публичные профили | [#14](https://github.com/Karikatun/anomaly-detector/issues/14) | `ready-for-agent` | #12 только для rating/rank; базовый privacy-safe профиль можно делать отдельно |
+| Друзья, privacy и блокировки | [#15](https://github.com/Karikatun/anomaly-detector/issues/15) | `ready-for-agent` | #14 |
+| Приглашения и Web Push | [#16](https://github.com/Karikatun/anomaly-detector/issues/16) | `ready-for-agent` | #11, #15 |
+| Боты и оценка offline-режима | [#17](https://github.com/Karikatun/anomaly-detector/issues/17) | `needs-triage` | Решение владельца продукта о назначении и сложности ботов |
+| Продающий SEO-лендинг | [#18](https://github.com/Karikatun/anomaly-detector/issues/18) | `ready-for-human` | Позиционирование, claims, визуальные материалы и conversion goal |
+
 ## Полноценное PWA для Android и iOS
 
 **Результат:** webapp надёжно устанавливается на поддерживаемые Android- и iOS-устройства, запускается как отдельное приложение и корректно переживает временную потерю сети и выпуск новой версии.
