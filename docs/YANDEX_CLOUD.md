@@ -342,9 +342,12 @@ Current alert:
 - evaluation window `5m`, delay `30s`, and missing metric selector state
   `No data`.
 
-The alert has no notification recipient until an operator notification channel
-is selected. Creating an alert without a channel makes its state visible in
-Monitoring but does not notify a person.
+The intended notification recipient is `support@anomaly-detector.ru`, but
+Yandex Monitoring does not accept an arbitrary mailbox as an email-channel
+recipient. The address must belong to a Yandex Cloud user that has at least the
+`monitoring.viewer` role for this folder and has enabled Monitoring for email in
+the account notification settings. Until that account is created or connected,
+the alert remains visible in Monitoring but does not notify a person.
 
 Do not treat the dashboard as the complete P0 observability contract yet. The
 current application does not publish the following metrics, so truthful graphs
