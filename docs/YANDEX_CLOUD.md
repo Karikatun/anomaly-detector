@@ -317,6 +317,59 @@ records into Cloud Logging and configure alerts at minimum for:
 Retain the request ID in API responses and log search results so an incident can
 be correlated without recording sensitive request data.
 
+### Current Monitoring Baseline
+
+The current single-VM production baseline sends Linux host and Unified Agent
+health metrics to Yandex Monitoring through the
+`anomaly-detector-monitoring` service account. The agent is pinned to the
+installed release and its automatic latest-version installer is disabled so a
+VM reboot cannot introduce an unreviewed agent update.
+
+Operator dashboard:
+
+- `Anomaly Detector — Production Operations`
+- `https://monitoring.yandex.cloud/folders/b1gd0r9jgets6d8stahp/dashboards/anomaly-detector-production-operations`
+- current live panels: root/PostgreSQL-volume free space, available/total RAM,
+  VM CPU, load average, Unified Agent errors/lost metrics, and VM network
+  receive/transmit rate.
+
+Current alert:
+
+- `P0: production disk space low`
+- query: root filesystem free bytes from Unified Agent;
+- `Warning` below `3,000,000,000` bytes;
+- `Alarm` below `2,000,000,000` bytes;
+- evaluation window `5m`, delay `30s`, and missing metric selector state
+  `No data`.
+
+The alert has no notification recipient until an operator notification channel
+is selected. Creating an alert without a channel makes its state visible in
+Monitoring but does not notify a person.
+
+Do not treat the dashboard as the complete P0 observability contract yet. The
+current application does not publish the following metrics, so truthful graphs
+and alerts cannot be configured for them:
+
+- API availability, `5xx` rate, and request latency;
+- worker last successful cycle timestamp;
+- overdue Tender count;
+- container restart count;
+- PostgreSQL connection count;
+- WebSocket reconnect rate;
+- auth throttling and exceptional security-event counts;
+- active, completed, and early-finished match counts.
+
+Close this gap with one operational metrics endpoint scraped by Unified Agent
+in Prometheus format. Instrument the owning application and worker paths rather
+than deriving business state from fragile log text. Caddy or the API request
+boundary should own HTTP status/latency metrics; the worker health module should
+own its last-success timestamps; the Tender persistence boundary should own
+overdue and match-state counts; realtime should own reconnects; auth/security
+events should increment stable reason-labelled counters. Add container and
+PostgreSQL runtime collectors separately. Only then create the remaining
+mandatory alerts: API unavailable, worker stale, growing `5xx`, and any overdue
+Tender.
+
 Deploy `webapp` and fully prerendered `website` output as static websites in Yandex Object Storage. Once `website` uses SSR/on-demand rendering or Astro server islands, that surface needs an Astro adapter and must move to a Serverless Container runtime instead of static hosting. When server islands appear on cached pages or rolling deploys, generate a stable key with `astro create-key` and configure `ASTRO_KEY` as a secret in both build and runtime environments. Never commit it, expose it as `PUBLIC_*`, print it in logs, or bake it into static output.
 
 Use shared CDN caching only for anonymous, public-equivalent website responses. Auth-dependent or personalized routes and server islands must use `private` or `no-store`, or a deliberately supported `Vary: Cookie`/`Authorization` strategy. `ASTRO_KEY` is not a cache privacy boundary.
@@ -459,5 +512,8 @@ After deployment:
 - Object Storage AWS CLI: https://yandex.cloud/en/docs/storage/tools/aws-cli
 - Uploading objects to Object Storage: https://yandex.cloud/en/docs/storage/operations/objects/upload
 - Yandex Cloud CDN overview: https://yandex.cloud/en/docs/cdn/concepts/
+- Yandex Monitoring dashboards: https://yandex.cloud/en/docs/monitoring/concepts/visualization/
+- Yandex Monitoring alerts: https://yandex.cloud/en/docs/monitoring/concepts/alerting/alert
+- Yandex Unified Agent: https://yandex.cloud/en/docs/monitoring/concepts/data-collection/unified-agent/
 - Yandex Cloud Marketplace Image Resizer: https://yandex.cloud/en/marketplace/products/yc/image-resizer
 - Thumbor on Yandex Cloud: https://yandex.cloud/en/docs/marketplace/tutorials/thumbor
