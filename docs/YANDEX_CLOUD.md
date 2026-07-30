@@ -181,8 +181,9 @@ client heartbeat/reconnect window. The load balancer must never target worker po
 
 Attach Smart Web Security and Advanced Rate Limiter to the API virtual host before DNS
 is switched. Enable access logs with redaction and alerts for elevated `4xx`, `5xx`, and
-backend latency. Use `https://api.anomaly-detector.ru` as `VITE_API_URL` and the exact
-`https://anomaly-detector.ru` origin in `CORS_ORIGINS`.
+backend latency. Use `https://api.anomaly-detector.ru` as both `VITE_API_URL`
+and `VITE_OAUTH_API_URL`, and the exact `https://anomaly-detector.ru` origin in
+`CORS_ORIGINS`.
 
 ## Support Mailbox
 
@@ -312,11 +313,23 @@ Use shared CDN caching only for anonymous, public-equivalent website responses. 
 Build locally or in CI:
 
 ```bash
-VITE_API_URL=https://api.anomaly-detector.ru bun run build:webapp
+VITE_API_URL=https://api.anomaly-detector.ru \
+VITE_OAUTH_API_URL=https://api.anomaly-detector.ru \
+bun run build:webapp
 PUBLIC_WEBSITE_URL=https://anomaly-detector.ru bun run build:website
 ```
 
-Both values are embedded at build time. `VITE_API_URL` must point to the Application Load Balancer custom host. `PUBLIC_WEBSITE_URL` must be the public canonical origin of the website; without it, the generated pages intentionally omit canonical and `og:url` metadata. Rebuild after either origin changes. Add `PUBLIC_WEBAPP_URL` only when the public website intentionally links to the authenticated webapp.
+The webapp API values are embedded at build time and must point to the
+Application Load Balancer custom host. `VITE_API_URL` owns ordinary requests;
+`VITE_OAUTH_API_URL` owns the browser-visible OAuth start request. Rebuild after
+either origin changes, then verify that the generated main JavaScript bundle
+contains the production API origin for both paths and does not contain
+`http://localhost:3000`.
+
+`PUBLIC_WEBSITE_URL` is also embedded at build time and must be the public
+canonical origin of the website; without it, the generated pages intentionally
+omit canonical and `og:url` metadata. Add `PUBLIC_WEBAPP_URL` only when the
+public website intentionally links to the authenticated webapp.
 
 Before uploading, create a Yandex Object Storage static access key for a service account and configure the AWS CLI with it. Yandex's Object Storage docs recommend `aws configure` with the static key and `ru-central1` as the region.
 

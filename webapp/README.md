@@ -46,7 +46,12 @@ VITE_API_URL=http://localhost:3000
 # VITE_OAUTH_API_URL=https://api.example.com
 ```
 
-`VITE_API_URL` is build-time config for ordinary API requests. Use `VITE_OAUTH_API_URL` only when OAuth must reach a separate public API origin for provider callbacks; otherwise it falls back to `VITE_API_URL`. If either value changes, redeploy the App Platform Static Site so the built bundle stops using the old URL.
+`VITE_API_URL` is build-time config for ordinary API requests.
+`VITE_OAUTH_API_URL` owns the browser-visible start of the OAuth flow. Local
+development may omit it and use the `VITE_API_URL` fallback, but production
+builds must set it explicitly even when both values use the same public API
+origin. If either value changes, rebuild and redeploy the static site so the
+built bundle stops using the old URL.
 
 ## Deployment
 

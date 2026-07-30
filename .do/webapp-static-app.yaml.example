@@ -20,3 +20,7 @@ static_sites:
         value: "https://REPLACE_WITH_BACKEND_DEFAULT_INGRESS"
         scope: BUILD_TIME
         type: GENERAL
+      - key: VITE_OAUTH_API_URL
+        value: "https://REPLACE_WITH_BACKEND_DEFAULT_INGRESS"
+        scope: BUILD_TIME
+        type: GENERAL
