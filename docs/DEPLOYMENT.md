@@ -265,13 +265,22 @@ Required component shape:
 - Source directory/build context: repository root.
 - Build command: `bun install --frozen-lockfile && bun run build:webapp`.
 - Output directory: `webapp/dist`.
-- Build-time env: `VITE_API_URL=https://api.example.com`.
+- Build-time env:
+  - `VITE_API_URL=https://api.example.com`;
+  - `VITE_OAUTH_API_URL=https://api.example.com`.
 - Index document: `index.html`.
 - Catch-all document: `index.html`, because the React app uses client-side routing.
 
 App Platform Static Sites are served through DigitalOcean's global CDN by default. Do not disable the CDN cache unless the product needs a specific behavior that the built-in CDN cannot provide.
 
-`VITE_API_URL` is embedded at build time. If it is empty, the browser app can call its own static-site origin at `/api/*` instead of the backend. After changing `VITE_API_URL`, redeploy the static site; runtime env changes alone do not rewrite the already built bundle.
+Both API URLs are embedded at build time. `VITE_API_URL` owns ordinary API
+requests. `VITE_OAUTH_API_URL` owns the browser-visible start of the OAuth flow
+and should normally use the same public backend origin; it falls back to
+`VITE_API_URL` only when omitted intentionally. After changing either value,
+rebuild and redeploy the static site because runtime env changes do not rewrite
+an existing bundle. Before publishing, inspect the generated main bundle and
+reject it if it contains a development origin such as
+`http://localhost:3000`.
 
 ## Website Static Site
 
@@ -317,7 +326,8 @@ Set `DO_AUTH_SITE_DOMAIN` to the registrable site (`example.com` in the example)
 - backend CORS: exact HTTPS origins only, `credentials: true`, no wildcard fallback;
 - every cookie-based auth write (`register`, `login`, `refresh`, and `logout`): requires an `Origin` header that exactly matches `CORS_ORIGINS`;
 - webapp API client: `credentials: include`;
-- webapp static build: concrete `VITE_API_URL` pointing at the backend origin.
+- webapp static build: concrete `VITE_API_URL` and `VITE_OAUTH_API_URL`
+  pointing at the public backend origin.
 
 The backend env validator rejects empty/wildcard/path-bearing `CORS_ORIGINS`, requires HTTPS origins and secure cookies in production, and requires a generated hexadecimal `JWT_SECRET` in production.
 
@@ -378,11 +388,15 @@ After deployment:
 ## Failure Modes This Template Guards Against
 
 - `GitHub user not authenticated`: App Platform GitHub integration was not connected or did not have repository access before `doctl apps create`.
-- Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`, and `VITE_API_URL` must be concrete before deployment.
+- Empty secrets or URLs in generated specs: `JWT_SECRET`, `CORS_ORIGINS`,
+  `VITE_API_URL`, and `VITE_OAUTH_API_URL` must be concrete before deployment.
 - Dirty or ambiguous release source: deployment tooling must stop when the worktree has uncommitted/untracked files, the checkout branch differs from `DO_GIT_BRANCH`, or the branch is not pushed and in sync.
 - Backend crash on startup: production requires a generated 64-or-more-character hexadecimal `JWT_SECRET`, so the spec generator must fail before App Platform deploys an unsafe value.
 - Broken browser auth CORS: production CORS must use exact HTTPS origins, not wildcard or empty values.
-- Webapp calling its own `/api/*`: missing `VITE_API_URL` at static build time makes the bundle use the wrong origin.
+- Webapp calling its own `/api/*`, or OAuth calling localhost: missing or stale
+  `VITE_API_URL` / `VITE_OAUTH_API_URL` at static build time makes the bundle
+  use the wrong origin. Rebuild and verify the generated main bundle before
+  publishing.
 - Stale remote build dependencies: `.bun-version` pins the Static Site build runtime and build commands run `bun install --frozen-lockfile` before `bun run build:*`.
 - Frozen backend install failures: `backend/Dockerfile` copies all workspace manifests before `bun install --frozen-lockfile`.
 - Wrong App Platform port: backend specs set both `http_port: 8080` and `PORT=8080`.

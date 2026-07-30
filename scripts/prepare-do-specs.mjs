@@ -434,7 +434,7 @@ function assertSafeProductionEnv(outputName, contents) {
     assertCorsOrigins(outputName, corsOrigins)
   }
 
-  for (const key of ['VITE_API_URL', 'PUBLIC_WEBAPP_URL']) {
+  for (const key of ['VITE_API_URL', 'VITE_OAUTH_API_URL', 'PUBLIC_WEBAPP_URL']) {
     const value = findEnvValue(contents, key)
     if (value !== undefined) {
       assertBuildTimeHttpsUrl(outputName, key, value)

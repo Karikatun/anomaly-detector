@@ -181,6 +181,19 @@ describe('prepare-do-specs', () => {
     expect(`${result.stdout}\n${result.stderr}`).toContain('DO_WEBAPP_URL hostname must belong to DO_AUTH_SITE_DOMAIN');
   });
 
+  test('generates both ordinary and OAuth API build-time URLs for the webapp', () => {
+    const result = runPrepareSpecs({}, { target: 'webapp' });
+
+    expect(result.status).toBe(0);
+    const spec = readFileSync(resolve(repoRoot, '.scratch/deploy/webapp-static-app.yaml'), 'utf8');
+    expect(spec).toContain(`      - key: VITE_API_URL
+        value: "https://api.example.com"
+        scope: BUILD_TIME`);
+    expect(spec).toContain(`      - key: VITE_OAUTH_API_URL
+        value: "https://api.example.com"
+        scope: BUILD_TIME`);
+  });
+
   test('rejects ICANN and private public suffixes as the declared auth site', () => {
     for (const publicSuffix of ['co.uk', 'pages.dev']) {
       const result = runPrepareSpecs({
