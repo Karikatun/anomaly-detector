@@ -154,8 +154,6 @@ export function AccessSlotPanel({
         </div>
       </div>
 
-      <div className={styles.stationBackdrop} aria-hidden="true" />
-
       {children && (
         <div className={styles.researchContext}>
           {children}

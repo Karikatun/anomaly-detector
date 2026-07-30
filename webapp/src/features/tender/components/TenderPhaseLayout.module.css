@@ -1,6 +1,5 @@
 .shell,
-.main,
-.supporting {
+.main {
   display: grid;
   min-width: 0;
   gap: 1rem;
@@ -17,13 +16,10 @@
   gap: 1rem;
 }
 
-.mobilePlayers {
-  min-width: 0;
-}
-
 .sidebar {
-  display: none;
+  display: grid;
   min-width: 0;
+  gap: 1rem;
 }
 
 @media (min-width: 64rem) {
@@ -32,13 +28,14 @@
     gap: 1.5rem;
   }
 
-  .mobilePlayers {
-    display: none;
-  }
-
   .sidebar {
     display: grid;
     align-self: start;
     gap: 1rem;
+    position: sticky;
+    top: calc(var(--tender-sticky-header-height, 4.5rem) + 1rem);
+    max-height: calc(100dvh - var(--tender-sticky-header-height, 4.5rem) - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }

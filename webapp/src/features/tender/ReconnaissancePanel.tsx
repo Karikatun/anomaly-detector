@@ -134,14 +134,7 @@ export function ReconnaissancePanel({
 
   return (
     <section className={styles.panel} aria-labelledby="recon-heading">
-      <div className={`${styles.surface} ${styles.intro}`}>
-        <Typography id="recon-heading" as="h2" variant="h4" className={styles.title}>
-          {maxSignals === 1 ? 'Выберите цель разведки' : `Выберите ${maxSignals} разные цели разведки`}
-        </Typography>
-        <Typography variant="bodySm" className={styles.description}>
-          Выбор остаётся приватным до подтверждения. Новый сигнал станет публичным, образец получите только вы.
-        </Typography>
-      </div>
+      <Typography id="recon-heading" as="h2" variant="srOnly">Разведка</Typography>
 
       <div className={styles.split}>
         <div className={styles.surface}>

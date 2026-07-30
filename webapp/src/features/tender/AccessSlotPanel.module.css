@@ -82,16 +82,6 @@
   color: var(--success);
 }
 
-.stationBackdrop {
-  height: 7rem;
-  margin-top: -.75rem;
-  background:
-    linear-gradient(90deg, rgba(1, 10, 22, .98), transparent 18%, transparent 82%, rgba(1, 10, 22, .98)),
-    linear-gradient(180deg, rgba(1, 10, 22, .12), rgba(1, 10, 22, .92)),
-    url('/assets/lobby/station-background.webp') center 42% / cover no-repeat;
-  opacity: .8;
-}
-
 .researchContext {
   min-width: 0;
 }
@@ -367,10 +357,6 @@
     display: flex;
   }
 
-  .stationBackdrop {
-    display: none;
-  }
-
   .rule {
     font-size: .75rem;
   }
@@ -392,11 +378,6 @@
 @media (min-width: 48rem) {
   .panel {
     gap: .75rem;
-  }
-
-  .stationBackdrop {
-    height: 3.5rem;
-    margin-top: -.5rem;
   }
 
   .playerCount {
