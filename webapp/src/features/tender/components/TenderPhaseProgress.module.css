@@ -1,32 +1,44 @@
 .progress {
-  display: grid;
+  display: flex;
   min-width: 0;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: .15rem;
+  align-items: start;
   padding: .5rem .55rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
   border: 1px solid rgba(65, 127, 169, .28);
   border-radius: .72rem;
   background: rgba(1, 13, 27, .88);
 }
 
+.progress::-webkit-scrollbar {
+  display: none;
+}
+
 .stage {
-  position: relative;
   display: grid;
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr);
+  flex: 0 0 4.8rem;
+  grid-template-rows: auto auto;
   align-items: center;
-  gap: .32rem;
+  justify-items: center;
+  gap: .3rem;
   color: rgba(189, 207, 220, .42);
 }
 
 .connector {
-  position: absolute;
-  top: 50%;
-  right: calc(100% - .1rem);
-  width: calc(100% - 2rem);
-  height: 1px;
+  flex: 0 0 1.15rem;
+  margin-top: .72rem;
+  height: 2px;
+  border-radius: 999px;
   background: rgba(86, 137, 171, .3);
-  transform: translateY(-50%);
+}
+
+.connector[data-state='completed'] {
+  background: var(--success);
+}
+
+.connector[data-state='active'] {
+  background: var(--primary);
 }
 
 .marker {
@@ -52,24 +64,21 @@
   z-index: 1;
   display: grid;
   min-width: 0;
-  width: fit-content;
-  padding: .12rem .24rem;
+  width: 100%;
+  padding: .1rem .18rem;
   border-radius: .2rem;
   background: rgba(1, 13, 27, .98);
   line-height: 1;
 }
 
 .copy > span {
-  overflow: hidden;
+  display: block;
+  min-height: 2.2em;
   font-size: .58rem;
   line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.copy > :last-child {
-  color: currentColor;
-  font-size: .52rem;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
 }
 
 .longLabel {
@@ -90,7 +99,8 @@
 
 @media (max-width: 24rem) {
   .stage {
-    gap: .2rem;
+    flex-basis: 4.35rem;
+    gap: .18rem;
   }
 
   .marker {
@@ -99,7 +109,7 @@
   }
 
   .copy {
-    padding-inline: .08rem;
+    padding-inline: .04rem;
   }
 
   .copy > .shortLabel {
@@ -110,11 +120,14 @@
 
 @media (min-width: 48rem) {
   .progress {
-    gap: 1rem;
     padding: .65rem 1rem;
   }
 
   .stage {
+    flex: 0 0 auto;
+    grid-template-columns: auto minmax(6rem, 1fr);
+    grid-template-rows: none;
+    justify-items: start;
     gap: .6rem;
   }
 
@@ -124,23 +137,34 @@
   }
 
   .connector {
-    right: calc(100% + .1rem);
-    width: calc(100% - 2.8rem);
+    flex: 1 1 2rem;
+    min-width: 1.35rem;
+    margin: 1.02rem .7rem 0;
   }
 
   .copy > span {
+    min-height: 0;
     font-size: .72rem;
-  }
-
-  .copy > :last-child {
-    font-size: .62rem;
+    overflow-wrap: normal;
+    text-align: left;
+    white-space: nowrap;
   }
 
   .longLabel {
     display: inline;
   }
 
-  .shortLabel {
+  .copy > .shortLabel {
     display: none;
+  }
+}
+
+@media (min-width: 64rem) {
+  .progress {
+    overflow-x: hidden;
+  }
+
+  .stage {
+    min-width: max-content;
   }
 }

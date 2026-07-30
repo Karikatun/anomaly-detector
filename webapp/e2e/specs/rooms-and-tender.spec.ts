@@ -585,7 +585,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expectPhase(guestPage, headings.access)
     await expectSynchronizedTimers(page, guestPage)
     await expect(page.getByRole('heading', { name: 'Ваши образцы' })).toHaveCount(0)
-    await expect(page.getByText('Данные исследования', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^Данные исследований/ })).toBeVisible()
     await expect(page.getByText('Хост E2E → Гость E2E', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', {
       name: 'Слот доступа 5: Ночной. Порядок действия: 5. Компенсация: 1 образец сигнала',
@@ -630,14 +630,14 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await allocatePower(guestPage, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
 
     await expectPhase(page, headings.reconnaissance)
-    await expect(page.getByText(/^Контракты этого раунда · \d+$/).filter({ visible: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Контракты этого раунда · \d+$/ })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Правила' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Трактовка анализов' })).toBeDisabled()
     await runReconnaissance(page)
     await expect(page.getByRole('button', { name: 'Правила' })).toBeEnabled()
     await expect(page.getByRole('button', { name: 'Трактовка анализов' })).toBeEnabled()
     await expectPhase(guestPage, headings.reconnaissance)
-    await expect(guestPage.getByText(/^Контракты этого раунда · \d+$/).filter({ visible: true })).toBeVisible()
+    await expect(guestPage.getByRole('button', { name: /^Контракты этого раунда · \d+$/ })).toBeVisible()
     await runReconnaissance(guestPage)
 
     await expectPhase(page, headings.laboratory)
@@ -656,14 +656,13 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await expectPhase(guestPage, headings.access)
       await expectSynchronizedTimers(page, guestPage)
       await expect(page.getByRole('heading', { name: 'Ваши образцы' })).toBeVisible()
-      await expect(page.getByText('Данные исследования', { exact: true })).toBeVisible()
-      await expect(page.getByText('Лаборатория, личные измерения и тезисы', { exact: true })).toBeVisible()
+      const researchButton = page.getByRole('button', { name: /^Данные исследований/ })
+      await expect(researchButton).toBeVisible()
       if (round > 2) {
-        const researchData = page
-          .getByText('Данные исследования', { exact: true })
-          .locator('xpath=ancestor::details')
-        await researchData.locator('summary').click()
-        await expect(researchData.locator('[data-private-thesis]')).toHaveCount(round - 2)
+        await researchButton.click()
+        const researchDialog = page.getByRole('dialog')
+        await expect(researchDialog.locator('[data-private-thesis]')).toHaveCount(round - 2)
+        await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
       }
       await chooseAccessSlot(page, 1)
       await chooseAccessSlot(guestPage, 2)
@@ -696,9 +695,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
         await expectPhase(page, headings.analysis)
       }
       await expect(guestPage.getByText('История лаборатории')).toHaveCount(0)
-      await expect(
-        guestPage.getByText('Данные исследования', { exact: true }).filter({ visible: true }),
-      ).toHaveCount(1)
+      await expect(guestPage.getByRole('button', { name: /^Данные исследований/ })).toBeVisible()
       if (round === 2) {
         const mobileActionFooter = guestPage
           .getByRole('button', { name: 'Выдвинуть тезис' })
@@ -741,7 +738,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
       const [minutes = 0, seconds = 0] = (await finalTimer.textContent() ?? '').split(':').map(Number)
       return minutes * 60 + seconds
     }).toBeGreaterThan(170)
-    await expect(page.getByRole('heading', { name: 'Игроки' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Игроки' })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: /^Данные исследований/ })).toBeVisible()
     await expect(page.getByText('Рабочая модель', { exact: true })).toHaveCount(0)
     await expect(page.locator('#final-evidence [data-private-thesis]')).toHaveCount(4)
     await expect(guestPage.locator('#final-evidence [data-private-thesis]')).toHaveCount(4)

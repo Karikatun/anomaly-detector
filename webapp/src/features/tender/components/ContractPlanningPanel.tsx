@@ -1,6 +1,5 @@
 import type { TenderView } from '@anomaly-detector/contracts'
 import type { CSSProperties } from 'react'
-import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -17,6 +16,7 @@ import { signalLabelKeys } from '../catalog'
 import { SignalGlyph } from './SignalGlyph'
 import { contractKindAccents, signalAccent } from './signal-visuals'
 import styles from './ContractPlanningPanel.module.css'
+import dialogStyles from './TenderContextDialog.module.css'
 import phaseStyles from './PhasePanel.module.css'
 
 const missingConditionKeys = {
@@ -31,17 +31,16 @@ const missingConditionKeys = {
 } as const
 
 export function ContractPlanningPanel({
-  closeSheet = false,
+  onOpenChange,
+  open,
   view,
 }: {
-  closeSheet?: boolean
+  onOpenChange: (open: boolean) => void
+  open: boolean
   view: TenderView
 }) {
   const { t } = useI18n()
-  const [sheetState, setSheetState] = useState({ closeSheet, open: false })
-  const sheetOpen = sheetState.closeSheet === closeSheet && sheetState.open
   const contracts = [...view.publicContracts, ...(view.publicFinalContract ? [view.publicFinalContract] : [])]
-  const nearestContract = contracts.find((contract) => contract.planning?.eligible) ?? contracts[0]
 
   const renderList = () => (
     <div className={styles.list}>
@@ -155,46 +154,19 @@ export function ContractPlanningPanel({
   )
 
   return (
-    <>
-      <section className={`${styles.panel} ${styles.desktopPanel}`}>
-        <header className={styles.summary}>
-          <Typography as="strong" variant="bodySmMedium">
-            {t('tender.contractPlanning.title', { count: contracts.length })}
-          </Typography>
-          <Typography as="span" variant="caption" tone="muted">
-            {t('tender.contractPlanning.readOnly')}
-          </Typography>
-        </header>
-        {renderList()}
-      </section>
-      <Dialog
-        open={sheetOpen && !closeSheet}
-        onOpenChange={(open) => setSheetState({ closeSheet, open })}
-      >
+    <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogTrigger asChild>
-          <Button type="button" variant="outline" className={styles.mobileTrigger}>
+          <Button type="button" variant="outline" className={dialogStyles.trigger}>
             {t('tender.contractPlanning.title', { count: contracts.length })}
           </Button>
         </DialogTrigger>
-        {nearestContract && (
-          <Typography variant="caption" tone="muted" className={styles.nearest}>
-            {t('tender.contractPlanning.nearest', {
-              contract: t(`tender.contracts.kind.${nearestContract.kind ?? 'light'}`),
-            })}
-          </Typography>
-        )}
-        <DialogContent
-          placement="viewport"
-          className={styles.sheet}
-          closeLabel={t('rules.close')}
-        >
-          <DialogHeader>
+        <DialogContent placement="viewport" className={dialogStyles.dialog} closeLabel={t('rules.close')}>
+          <DialogHeader className={dialogStyles.header}>
             <DialogTitle>{t('tender.contractPlanning.title', { count: contracts.length })}</DialogTitle>
             <DialogDescription>{t('tender.contractPlanning.readOnly')}</DialogDescription>
           </DialogHeader>
-          {renderList()}
+          <div className={dialogStyles.content}>{renderList()}</div>
         </DialogContent>
-      </Dialog>
-    </>
+    </Dialog>
   )
 }

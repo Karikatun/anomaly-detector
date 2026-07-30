@@ -52,6 +52,10 @@
   padding-right: 2.7rem;
 }
 
+.dialog :global([data-slot='dialog-close']) {
+  z-index: 2;
+}
+
 .header > span:first-child {
   display: grid;
   gap: .1rem;
@@ -72,16 +76,16 @@
 @media (min-width: 48rem) {
   .dialog {
     top: calc(var(--tender-sticky-header-height, 4.5rem) + 1.5rem) !important;
-    right: auto !important;
+    right: max(1rem, calc((100vw - 72rem) / 2)) !important;
     bottom: 1rem !important;
-    left: 50% !important;
-    width: min(72rem, calc(100vw - 3rem)) !important;
-    max-width: min(72rem, calc(100vw - 3rem)) !important;
+    left: max(1rem, calc((100vw - 72rem) / 2)) !important;
+    width: auto !important;
+    max-width: none !important;
     height: auto !important;
     max-height: none !important;
     padding: 1.25rem;
     border-radius: 1rem;
-    translate: -50% 0;
+    translate: none;
     transform: none;
   }
 

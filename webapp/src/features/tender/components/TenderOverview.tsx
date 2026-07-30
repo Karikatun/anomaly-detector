@@ -35,11 +35,13 @@ export function TenderPlayers({
   activePlayerId,
   compact = false,
   currentUserId,
+  phase,
   players,
 }: {
   activePlayerId?: string
   compact?: boolean
   currentUserId?: string
+  phase?: TenderView['phase']
   players: TenderView['players']
 }) {
   const orderedPlayers = players
@@ -58,6 +60,11 @@ export function TenderPlayers({
           const stableIndex = players.findIndex((candidate) => candidate.playerId === player.playerId)
           const accentIndex = (stableIndex >= 0 ? stableIndex : index) % playerAccents.length
           const playerName = player.displayName ?? player.playerId.slice(0, 8)
+          const status = phase === 'access-slot-selection'
+            ? player.requestedAccessSlot !== undefined ? 'подтвердил' : 'выбирает'
+            : phase === 'power-allocation'
+              ? player.powerAllocationConfirmed ? 'подтвердил' : 'выбирает'
+              : isActive ? 'активен' : 'ожидает'
           return (
             <div
               key={player.playerId}
@@ -70,7 +77,7 @@ export function TenderPlayers({
                 {isCurrent ? `Вы · ${playerName}` : playerName}
               </Typography>
               <Typography as="span" variant="caption" className={styles.playerStatus}>
-                {isActive ? 'активен' : 'ожидает'}
+                {player.accessSlot !== undefined ? `слот ${player.accessSlot} · ${status}` : status}
               </Typography>
             </div>
           )
@@ -287,10 +294,8 @@ export function TenderResearchData({ view }: { view: TenderView }) {
 
 export function TenderPlanningContext({
   samples,
-  view,
 }: {
   samples: SignalId[]
-  view: TenderView
 }) {
   const { t } = useI18n()
 
@@ -317,7 +322,6 @@ export function TenderPlanningContext({
         </div>
       </section>
 
-      <TenderResearchData view={view} />
     </div>
   )
 }

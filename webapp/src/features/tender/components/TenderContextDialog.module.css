@@ -1,0 +1,63 @@
+.trigger {
+  width: 100%;
+  justify-content: flex-start;
+  border-color: rgba(65, 127, 169, .35);
+  background: rgba(2, 16, 29, .82);
+}
+
+.count {
+  margin-left: auto;
+  padding: .1rem .4rem;
+  border: 1px solid rgba(104, 146, 174, .32);
+  border-radius: 999px;
+  color: rgba(225, 238, 246, .78);
+}
+
+.dialog {
+  top: calc(var(--tender-sticky-header-height, 5.75rem) + .75rem) !important;
+  right: .5rem !important;
+  bottom: .75rem !important;
+  left: .5rem !important;
+  width: auto !important;
+  max-width: none !important;
+  height: auto !important;
+  max-height: none !important;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: .7rem;
+  overflow: hidden;
+  padding: .8rem;
+  border-radius: .75rem;
+  translate: none;
+  transform: none;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-right: 2.7rem;
+  background: var(--background);
+}
+
+.dialog :global([data-slot='dialog-close']) {
+  z-index: 2;
+}
+
+.content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 48rem) {
+  .dialog {
+    top: calc(var(--tender-sticky-header-height, 4.5rem) + 1rem) !important;
+    right: max(1rem, calc((100vw - 72rem) / 2)) !important;
+    bottom: 1rem !important;
+    left: max(1rem, calc((100vw - 72rem) / 2)) !important;
+    width: auto !important;
+    max-width: none !important;
+    border-radius: 1rem;
+  }
+}

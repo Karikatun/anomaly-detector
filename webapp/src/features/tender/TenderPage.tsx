@@ -41,14 +41,13 @@ import { PhaseNotice, UnavailablePhaseCard } from './components/TenderActionPane
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import { TenderPhaseLayout } from './components/TenderPhaseLayout'
 import {
-  TenderLaboratoryJournal,
   TenderPlanningContext,
   TenderPlayers,
-  TenderResearchData,
 } from './components/TenderOverview'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import { CompletedTenderPanel } from './components/CompletedTenderPanel'
 import { ContractPlanningPanel } from './components/ContractPlanningPanel'
+import { TenderResearchDialog } from './components/TenderResearchDialog'
 import {
   useTenderCommands,
   type TenderCommandInput,
@@ -59,11 +58,11 @@ import {
 } from './realtime'
 import {
   getTenderCommandErrorKey,
-  getWaitingForTurnDescription,
 } from './tender-command-feedback'
 import styles from './TenderPage.module.css'
 import type { WorkingModelSaveStatus } from './working-model-draft'
 import { tenderRulesetPolicy } from './ruleset-policy'
+import { getPhaseContextMenuVisibility, shouldLockPhaseOverlays } from './phase-ui'
 
 const phaseLabels: Record<string, string> = {
   'access-slot-selection': '1. Выбор слота доступа',
@@ -92,20 +91,14 @@ const realtimeErrorKeys = {
 } as const satisfies Record<RealtimeErrorCode, TranslationKey>
 
 function WaitingForTurn({
-  finalScientificModelSubmitted,
-  phase,
   playerName,
-  progress,
 }: {
-  finalScientificModelSubmitted?: boolean
-  phase: TenderView['phase']
   playerName?: string
-  progress?: TenderView['sequentialPhaseProgress']
 }) {
   return (
     <PhaseNotice
       kind="waiting"
-      description={getWaitingForTurnDescription(phase, playerName, finalScientificModelSubmitted, progress)}
+      description={`Сейчас ходит: ${playerName ?? 'игрок'}`}
     >
       Ожидание хода
     </PhaseNotice>
@@ -152,10 +145,7 @@ function PhasePanel({
     <>
       {isWaitingForTurn && (
         <WaitingForTurn
-          finalScientificModelSubmitted={myPlayer?.finalScientificModelSubmitted}
-          phase={view.phase}
           playerName={activePlayer?.displayName}
-          progress={view.sequentialPhaseProgress}
         />
       )}
       {content}
@@ -174,7 +164,7 @@ function PhasePanel({
           tiePriorityOrder={view.players}
         >
           {view.round > 1 && (
-            <TenderPlanningContext samples={mySamples} view={view} />
+            <TenderPlanningContext samples={mySamples} />
           )}
         </AccessSlotPanel>
       )
@@ -363,6 +353,8 @@ function TenderContent() {
   const [laboratoryHelpOpen, setLaboratoryHelpOpen] = useState(false)
   const [exitOpen, setExitOpen] = useState(false)
   const [workingModelOpen, setWorkingModelOpen] = useState(false)
+  const [contextModal, setContextModal] = useState<'research' | 'working-model' | 'contracts' | null>(null)
+  const [overlayPhase, setOverlayPhase] = useState<string | null>(null)
   const [workingModelSaveError, setWorkingModelSaveError] = useState<string | null>(null)
   const commandInFlightRef = useRef<{ promise: Promise<void>; token: symbol } | null>(null)
   const headerRef = useRef<HTMLElement>(null)
@@ -558,19 +550,8 @@ function TenderContent() {
   const isMyTurn = !isSequentialPhase || tenderView.activePlayerId === auth.user?.id
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
   const isPowerAllocation = tenderView.phase === 'power-allocation'
-  const isReconnaissancePhase = tenderView.phase === 'reconnaissance'
-  const isLaboratoryPhase = tenderView.phase === 'laboratory'
   const isComplete = tenderView.phase === 'complete'
-  const isPlanningPhase = isAccessSlotSelection || isPowerAllocation
-  const isOperationalPhase = !isPlanningPhase && !isComplete
-  const showPhasePlayers = isOperationalPhase && tenderView.phase !== 'final-scientific-model'
-  const showRightSidebar = showPhasePlayers
-  const showGenericTools = !isPlanningPhase
-    && tenderView.phase !== 'model-analysis'
-    && tenderView.phase !== 'final-scientific-model'
-    && !isComplete
-  const showContractPlanning = isPowerAllocation || isReconnaissancePhase || isLaboratoryPhase
-  const showMobileAnalysisResearchData = tenderView.phase === 'model-analysis'
+  const contextMenuVisibility = getPhaseContextMenuVisibility(tenderView.phase)
   const hasPendingAction = isAccessSlotSelection
     ? myPlayer?.requestedAccessSlot === undefined
     : isPowerAllocation
@@ -580,9 +561,22 @@ function TenderContent() {
           ? !myPlayer?.modelAnalysisCompleted
           : !myPlayer?.finalScientificModelSubmitted
         : isSequentialPhase && isMyTurn
-  const referenceHelpUrgentlyLocked = hasPendingAction && remainingSeconds <= 10
+  const referenceHelpUrgentlyLocked = shouldLockPhaseOverlays({
+    phase: tenderView.phase,
+    remainingSeconds,
+  })
   const referenceHelpLockedForTurn = isSequentialPhase && isMyTurn && Boolean(hasPendingAction)
   const referenceHelpLocked = referenceHelpUrgentlyLocked || referenceHelpLockedForTurn
+  const setOverlayOpen = (
+    kind: 'rules' | 'interpretation' | 'research' | 'working-model' | 'contracts',
+    open: boolean,
+  ) => {
+    setRulesOpen(open && kind === 'rules')
+    setLaboratoryHelpOpen(open && kind === 'interpretation')
+    setWorkingModelOpen(open && kind === 'working-model')
+    setContextModal(open && (kind === 'research' || kind === 'working-model' || kind === 'contracts') ? kind : null)
+    if (open) setOverlayPhase(tenderView.phase)
+  }
   const handleWorkingModelSaveStatus = (status: WorkingModelSaveStatus) => {
     setWorkingModelSaveError(status.state === 'error' ? status.message : null)
   }
@@ -615,7 +609,7 @@ function TenderContent() {
           )}
           {isSharedModelAnalysis && tenderView.modelAnalysisProgress && (
             <Badge variant="outline">
-              {t('tender.analysis.progress', {
+              {t('tender.phase.completed', {
                 completed: tenderView.modelAnalysisProgress.completed,
                 total: tenderView.modelAnalysisProgress.total,
               })}
@@ -623,7 +617,7 @@ function TenderContent() {
           )}
           {isSharedFinalScientificModel && tenderView.finalScientificModelProgress && (
             <Badge variant="outline">
-              {t('tender.finalDraft.progress', {
+              {t('tender.phase.completed', {
                 completed: tenderView.finalScientificModelProgress.completed,
                 total: tenderView.finalScientificModelProgress.total,
               })}
@@ -639,8 +633,8 @@ function TenderContent() {
           <RulesReferenceDialog
             belowTenderHeader
             disabled={referenceHelpLocked}
-            onOpenChange={setRulesOpen}
-            open={rulesOpen && !referenceHelpLocked}
+            onOpenChange={(open) => setOverlayOpen('rules', open)}
+            open={rulesOpen && overlayPhase === tenderView.phase && !referenceHelpLocked}
             showTimerWarning={!isComplete}
             ruleset={tenderView.ruleset}
             triggerClassName={styles.rulesAction}
@@ -650,8 +644,8 @@ function TenderContent() {
           <LaboratoryInterpretationDialog
             belowTenderHeader
             disabled={referenceHelpLocked}
-            onOpenChange={setLaboratoryHelpOpen}
-            open={laboratoryHelpOpen && !referenceHelpLocked}
+            onOpenChange={(open) => setOverlayOpen('interpretation', open)}
+            open={laboratoryHelpOpen && overlayPhase === tenderView.phase && !referenceHelpLocked}
             ruleset={tenderView.ruleset}
             showTimerWarning={!isComplete}
             triggerClassName={styles.laboratoryAction}
@@ -729,19 +723,7 @@ function TenderContent() {
         )}
 
         <TenderPhaseLayout
-          progress={isOperationalPhase
-            ? <TenderPhaseProgress phase={tenderView.phase} />
-            : undefined}
-          mobilePlayers={showPhasePlayers
-            ? (
-                <TenderPlayers
-                  activePlayerId={tenderView.activePlayerId}
-                  compact
-                  currentUserId={auth.user?.id}
-                  players={tenderView.players}
-                />
-              )
-            : undefined}
+          progress={!isComplete ? <TenderPhaseProgress phase={tenderView.phase} /> : undefined}
           primary={(
             <div
               ref={primaryContentRef}
@@ -756,76 +738,51 @@ function TenderContent() {
               onSaveWorkingModel={saveWorkingModel}
               activePlayerId={tenderView.activePlayerId}
               workingModelDialog={{
-                onOpenChange: setWorkingModelOpen,
+                onOpenChange: (open) => setOverlayOpen('working-model', open),
                 onSaveStatusChange: handleWorkingModelSaveStatus,
-                open: workingModelOpen && !referenceHelpLocked,
+                open: workingModelOpen && overlayPhase === tenderView.phase && !referenceHelpLocked,
                 openDisabled: referenceHelpLocked,
                 showTimerWarning: !isComplete,
               }}
             />
 
-            {isLaboratoryPhase && (
-              <div className="min-[64rem]:hidden">
-                <TenderLaboratoryJournal
-                  players={tenderView.players}
-                  results={tenderView.publicLaboratoryResults}
-                />
-              </div>
-            )}
             </div>
           )}
-          supporting={showGenericTools || showContractPlanning || showMobileAnalysisResearchData
-            ? (
-                <>
-                  {showContractPlanning && (
-                    <ContractPlanningPanel
-                      closeSheet={referenceHelpUrgentlyLocked}
-                      view={tenderView}
-                    />
-                  )}
-                  {showGenericTools && (
-                    <>
-                  <WorkingModelWorkspace
-                    disabled={!connected}
-                    inlineOnDesktop
-                    knownSignals={tenderView.privateSamples}
-                    model={tenderView.privateWorkingModel}
-                    onSave={saveWorkingModel}
-                    onOpenChange={setWorkingModelOpen}
-                    onSaveStatusChange={handleWorkingModelSaveStatus}
-                    open={workingModelOpen && !referenceHelpLocked}
-                    openDisabled={referenceHelpLocked}
-                    showTimerWarning={!isComplete}
-                  />
-                  <TenderResearchData view={tenderView} />
-                    </>
-                  )}
-                  {showMobileAnalysisResearchData && (
-                    <div className="min-[64rem]:hidden">
-                      <TenderResearchData view={tenderView} />
-                    </div>
-                  )}
-                </>
-              )
-            : undefined}
-          sidebar={showRightSidebar
-            ? (
-              <>
+          sidebar={!isComplete ? (
+            <>
               <TenderPlayers
                 activePlayerId={tenderView.activePlayerId}
                 currentUserId={auth.user?.id}
+                phase={tenderView.phase}
                 players={tenderView.players}
               />
-              {isLaboratoryPhase && (
-                <TenderLaboratoryJournal
-                  players={tenderView.players}
-                  results={tenderView.publicLaboratoryResults}
+              <TenderResearchDialog
+                open={contextModal === 'research' && overlayPhase === tenderView.phase && !referenceHelpUrgentlyLocked}
+                onOpenChange={(open) => setOverlayOpen('research', open)}
+                view={tenderView}
+              />
+              {contextMenuVisibility.workingModel && (
+                <WorkingModelWorkspace
+                  disabled={!connected}
+                  knownSignals={tenderView.privateSamples}
+                  model={tenderView.privateWorkingModel}
+                  onSave={saveWorkingModel}
+                  onOpenChange={(open) => setOverlayOpen('working-model', open)}
+                  onSaveStatusChange={handleWorkingModelSaveStatus}
+                  open={contextModal === 'working-model' && overlayPhase === tenderView.phase && !referenceHelpUrgentlyLocked}
+                  openDisabled={referenceHelpUrgentlyLocked}
+                  showTimerWarning={!isComplete}
                 />
               )}
-              {tenderView.phase === 'model-analysis' && <TenderResearchData view={tenderView} />}
-              </>
-            )
-            : undefined}
+              {contextMenuVisibility.contracts && (
+                <ContractPlanningPanel
+                  open={contextModal === 'contracts' && !referenceHelpUrgentlyLocked}
+                  onOpenChange={(open) => setOverlayOpen('contracts', open)}
+                  view={tenderView}
+                />
+              )}
+            </>
+          ) : undefined}
         />
       </div>
     </section>

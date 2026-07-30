@@ -334,6 +334,7 @@ const ru = {
   'tender.analysis.polarityCorrect': 'Полярность верна',
   'tender.analysis.polarityIncorrect': 'Полярность неверна',
   'tender.analysis.progress': 'Завершили {completed} из {total} исследователей',
+  'tender.phase.completed': 'Завершили {completed} из {total}',
   'tender.analysis.privateInfo': 'Тезис приватен и необратим. Результат не раскрывает правильное значение.',
   'tender.analysis.publicInfo': 'Тезис публичен и необратим.',
   'tender.analysis.privateWarning': 'Верный тезис даёт +1 Рейтинг и личную сертификацию. Ошибка включает вашу персональную проверку.',
