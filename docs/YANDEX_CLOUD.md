@@ -293,6 +293,29 @@ WAF validation yet. Track that migration in
 edge/application protection in
 [#19](https://github.com/Karikatun/anomaly-detector/issues/19).
 
+After a release has passed container-internal and public health checks, retain
+exactly two application backend images on the VM:
+
+- the image used by the active Compose configuration;
+- the immediately preceding image referenced by the retained rollback Compose
+  configuration.
+
+Remove older `anomaly-detector-backend:<commit>` images, dangling images, and
+unused Docker build cache. Keep the active PostgreSQL and Caddy images,
+PostgreSQL volumes, the current and rollback Compose files, the corresponding
+release directories, and the latest pre-migration database dump. Resolve and
+inspect the two retained image references before deleting explicitly listed
+older tags; do not use a broad `docker system prune --volumes`.
+
+After cleanup, require all of the following:
+
+- both retained backend image references pass `docker image inspect`;
+- API, worker, and PostgreSQL containers remain healthy;
+- public `GET https://api.anomaly-detector.ru/health/ready` returns
+  `{"status":"ok"}`;
+- `docker builder prune` reports no remaining unused build cache;
+- root filesystem usage and free space are recorded for the release report.
+
 Use
 [`deploy/yandex/Caddyfile.example`](../deploy/yandex/Caddyfile.example) as the
 source configuration: set `ANOMALY_WEBAPP_ROOT` to the absolute directory that
