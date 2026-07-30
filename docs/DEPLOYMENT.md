@@ -2,16 +2,18 @@
 
 Use this document only after the user has asked for deployment. Read the root [README.md](../README.md) and active surface READMEs first; they record the installed project's active surfaces, deferred surfaces, release targets, and validation scope.
 
-The default production path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Ask for product-facing release details instead:
+The default production path for this repository is Yandex Cloud with Compute Cloud containers, Application Load Balancer, and managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Ask for product-facing release details instead:
 
 - which active surfaces should be released now: backend/API, webapp, website, or full-stack;
 - production domains/URLs for API, webapp, and website;
-- whether uploads, images, media, exports, or downloads need DigitalOcean Spaces in this release;
+- whether uploads, images, media, exports, or downloads need object storage in this release;
 - whether real-time chat, presence, collaboration, live notifications, or WebSocket-style updates must work across multiple backend instances;
 - whether mobile is active; if yes, switch to the `mobile` branch before mobile release planning;
 - whether an external CDN is required for advanced bot, rate-limit, or geographic traffic controls.
 
 Local setup from `README.md` and [LOCAL_DATABASE.md](LOCAL_DATABASE.md) does not require cloud credentials.
+
+DigitalOcean App Platform sections below are preserved for legacy/explicitly requested deployments; for the current repository default, follow [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 
 If the user explicitly asks for Yandex Cloud, use [YANDEX_CLOUD.md](YANDEX_CLOUD.md) as the provider runbook. Anomaly Detector's confirmed Yandex topology is a Compute Cloud instance group with separate API and worker containers, Application Load Balancer for HTTPS/WebSocket ingress, Managed Service for PostgreSQL for production data, Object Storage for files and static websites, and Cloud CDN for public static/media delivery. Serverless Containers remain appropriate only for bounded one-shot tasks such as scheduled auth cleanup.
 
