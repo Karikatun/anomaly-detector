@@ -48,6 +48,23 @@ const roundRatingLabels = {
   thesis: 'Тезис',
 } as const
 
+const contractKindLabels = {
+  complex: 'Сложный контракт',
+  final: 'Финальный контракт',
+  light: 'Лёгкий контракт',
+  scientific: 'Научный контракт',
+} as const
+
+const laboratoryProtocolLabels = {
+  continuous: 'Непрерывный',
+  impulse: 'Импульс',
+} as const
+
+const contractRoleLabels = {
+  receiver: 'приёмник',
+  source: 'источник',
+} as const
+
 function AuditGroup({
   accent,
   children,
@@ -322,6 +339,19 @@ export function CompletedTenderPanel({ view }: Props) {
                 </summary>
 
                 <div className={styles.roundAuditContent}>
+                  <section className={styles.roundPriority} aria-label={`Приоритет игроков в раунде ${round.round}`}>
+                    <Typography as="h4" variant="caption">Приоритет при коллизии</Typography>
+                    <ol>
+                      {round.priorityPlayerIds.map((playerId, index) => (
+                        <li key={playerId}>
+                          <Typography as="span" variant="caption">
+                            {index + 1}. {playerName(playerId)}
+                          </Typography>
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+
                   <AuditGroup
                     accent="#f4a51c"
                     icon={UserGroupIcon}
@@ -379,7 +409,6 @@ export function CompletedTenderPanel({ view }: Props) {
                             ['Лаборатория', entry.allocation.laboratory],
                             ['Анализ', entry.allocation.modelAnalysis],
                             ['Контракты', entry.allocation.contracts],
-                            ['Резерв', entry.allocation.reserve ?? 0],
                           ].map(([label, value]) => (
                             <span key={label}>
                               <Typography as="small" variant="caption">{label}</Typography>
@@ -469,9 +498,6 @@ export function CompletedTenderPanel({ view }: Props) {
                           <div className={styles.laboratoryTests}>
                             {entry.tests.map((test) => (
                               <div key={test.testId} className={styles.laboratoryTest}>
-                                <Typography as="span" variant="caption" className={styles.testIdBadge}>
-                                  {test.testId}
-                                </Typography>
                                 <Typography as="strong" variant="caption" className={styles.testRoute}>
                                   {t(signalLabelKeys[test.sourceSignal])}
                                   {' → '}
@@ -482,7 +508,7 @@ export function CompletedTenderPanel({ view }: Props) {
                                 </Typography>
                                 {test.usedByContractId && (
                                   <Typography as="span" variant="caption" className={styles.contractUseBadge}>
-                                    Контракт {test.usedByContractId}
+                                    Использовано как доказательство выполненного контракта
                                   </Typography>
                                 )}
                               </div>
@@ -524,10 +550,10 @@ export function CompletedTenderPanel({ view }: Props) {
                         </div>
                         <div className={styles.correctness}>
                           <Typography as="span" variant="caption" data-correct={entry.fieldTypeCorrect || undefined}>
-                            Тип поля: {entry.fieldTypeCorrect ? 'верно' : 'неверно'}
+                            Тип поля: {t(fieldTypeLabelKeys[entry.fieldType])} · {entry.fieldTypeCorrect ? 'верно' : 'неверно'}
                           </Typography>
                           <Typography as="span" variant="caption" data-correct={entry.polarityCorrect || undefined}>
-                            Полярность: {entry.polarityCorrect ? 'верно' : 'неверно'}
+                            Полярность: {t(polarityLabelKeys[entry.polarity])} · {entry.polarityCorrect ? 'верно' : 'неверно'}
                           </Typography>
                         </div>
                       </li>
@@ -546,9 +572,9 @@ export function CompletedTenderPanel({ view }: Props) {
                           <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
                             {playerName(entry.playerId)}
                           </Typography>
-                          {entry.contractId && (
-                            <Typography as="span" variant="caption" className={styles.contractIdBadge}>
-                              {entry.contractId}
+                          {entry.conditions && (
+                            <Typography as="span" variant="caption" className={styles.auditModeBadge}>
+                              {contractKindLabels[entry.conditions.kind]} · {entry.conditions.ratingReward} Rating
                             </Typography>
                           )}
                         </div>
@@ -564,15 +590,46 @@ export function CompletedTenderPanel({ view }: Props) {
                             Подходящих доказательств нет
                           </Typography>
                         ) : entry.outcome === 'awarded' && (
-                          <div className={styles.auditTagList}>
-                            {(entry.evidenceTestIds.length > 0
-                              ? entry.evidenceTestIds
-                              : [entry.researchCertificationSignal ?? '—']
-                            ).map((evidence) => (
-                              <Typography key={evidence} as="span" variant="caption">
-                                {evidence}
+                          <div className={styles.contractDetails}>
+                            {entry.conditions && (
+                              <>
+                                <Typography as="span" variant="caption">
+                                  Цель: {t(signalLabelKeys[entry.conditions.targetSignal])} · {contractRoleLabels[entry.conditions.targetRole]}
+                                </Typography>
+                                <Typography as="span" variant="caption">
+                                  {entry.conditions.kind === 'scientific'
+                                    ? `Условия: сертификат исследования сигнала ${t(signalLabelKeys[entry.conditions.targetSignal])}`
+                                    : `Условия: ${[
+                                        t(`tender.result.${entry.conditions.requiredPublicResult}`),
+                                        ...((entry.conditions.kind === 'complex' || entry.conditions.kind === 'final')
+                                          && entry.conditions.requiredSecondaryPublicResult
+                                          ? [t(`tender.result.${entry.conditions.requiredSecondaryPublicResult}`)]
+                                          : []),
+                                      ].join(' + ')}`}
+                                </Typography>
+                                {(entry.conditions.kind === 'complex' || entry.conditions.kind === 'final') && (
+                                  <Typography as="span" variant="caption">
+                                    Допустимое доказательство: один Непрерывный опыт или два Импульсных опыта
+                                  </Typography>
+                                )}
+                              </>
+                            )}
+                            {entry.evidenceTests.map((evidence) => (
+                              <Typography key={evidence.testId} as="span" variant="caption">
+                                Доказательство: {t(signalLabelKeys[evidence.sourceSignal])}
+                                {' → '}
+                                {t(signalLabelKeys[evidence.receiverSignal])}
+                                {' · '}
+                                {laboratoryProtocolLabels[evidence.protocol]}
+                                {' · '}
+                                {t(`tender.result.${evidence.publicResult}`)}
                               </Typography>
                             ))}
+                            {entry.researchCertificationSignal && (
+                              <Typography as="span" variant="caption">
+                                Доказательство: сертификат исследования {t(signalLabelKeys[entry.researchCertificationSignal])}
+                              </Typography>
+                            )}
                           </div>
                         )}
                       </li>

@@ -16,8 +16,9 @@ import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '
 import { createParticipantAuditRounds } from './application/audit-view'
 import type { StoredTender, TenderStore } from './application/tender-store'
 import type { DbClient } from '../../db'
-import { resolveAccessSlots } from './domain/access-slots'
+import { resolveAccessSlots, rotateTiePriority } from './domain/access-slots'
 import { createAnomalyConfiguration, resolvePublicResult, signalIds, type SignalId } from './domain/anomaly-configuration'
+import { createRoundContracts } from './domain/contracts'
 import { TenderFailure } from './domain/errors'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 import { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
@@ -128,27 +129,6 @@ const reservePowerAllocation: PowerAllocation = {
   reserve: 4,
 }
 
-const deckOffset = (seed: string) => [...seed].reduce((total, character) => (total * 31 + character.charCodeAt(0)) % 1_000_003, 0)
-
-const createRoundContracts = (round: number, playerCount: number, seed: string) => {
-  // Round one is the published onboarding deck. Later rounds rotate from the Tender
-  // seed, so the complete five-round deck is reproducible without depending on play.
-  const offset = (round - 1) * (playerCount + 1 + deckOffset(seed))
-  const publicResults = ['reflection', 'attenuation', 'transmission_gain', 'unstable_collapse'] as const
-  return Array.from(
-  { length: playerCount + 1 },
-  (_, index) => ({
-    contractId: `round-${round}-contract-${index + 1}`,
-    requiredPublicResult: publicResults[(offset + index) % publicResults.length],
-    requiredSecondaryPublicResult: publicResults[(offset + index + 1) % publicResults.length],
-    targetSignal: signalIds[(offset + index) % signalIds.length],
-    kind: index === 0 ? 'scientific' as const : index === 1 ? 'complex' as const : 'light' as const,
-    ratingReward: index === 0 ? 3 : index === 1 ? 4 : 2,
-    targetRole: (offset + index) % 2 === 0 ? 'source' as const : 'receiver' as const,
-  }),
-  )
-}
-
 const accessSlotBudgetDelta = (slot: number) => {
   if (slot === 1) return -2
   if (slot === 2) return -1
@@ -161,15 +141,6 @@ const receivesAccessSlotSampleCompensation = (slot: number) => slot === 5 || slo
 const nextCompensationSample = (knownSignals: SignalId[], currentSamples: SignalId[]) =>
   signalIds.find((signalId) => !knownSignals.includes(signalId))
   ?? signalIds.find((signalId) => !currentSamples.includes(signalId))
-
-const rotateTiePriority = (players: TenderPlayer[], round: number) => {
-  const playerCount = players.length
-  const offset = (round - 1) % playerCount
-  return players.map((player) => ({
-    ...player,
-    tiePriority: ((player.tiePriority - 1 - offset + playerCount) % playerCount) + 1,
-  }))
-}
 
 export function createTenderModule({
   now = () => new Date(),

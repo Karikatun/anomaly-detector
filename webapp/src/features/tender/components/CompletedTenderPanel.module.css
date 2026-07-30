@@ -131,6 +131,40 @@
   border-top: 1px solid rgba(70, 128, 164, .22);
 }
 
+.roundPriority {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .5rem;
+  padding: .52rem .6rem;
+  border: 1px solid rgba(244, 165, 28, .28);
+  border-radius: .5rem;
+  background: rgba(96, 61, 7, .13);
+}
+
+.roundPriority h4 {
+  flex: none;
+  color: #ffc866;
+}
+
+.roundPriority ol {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: .25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.roundPriority li {
+  padding: .18rem .38rem;
+  border: 1px solid rgba(244, 165, 28, .24);
+  border-radius: 999px;
+  color: rgba(255, 220, 154, .9);
+  background: rgba(96, 61, 7, .18);
+}
+
 .roundAuditSection {
   --audit-accent: var(--primary);
   display: grid;
@@ -246,7 +280,6 @@
 .auditModeBadge,
 .auditTimeoutBadge,
 .signalNameBadge,
-.contractIdBadge,
 .ratingChangeBadge {
   display: inline-flex;
   min-width: 0;
@@ -267,8 +300,7 @@
 }
 
 .auditModeBadge,
-.signalNameBadge,
-.contractIdBadge {
+.signalNameBadge {
   color: color-mix(in srgb, var(--audit-accent) 76%, white);
 }
 
@@ -315,14 +347,14 @@
 
 .powerFacts {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: .3rem;
 }
 
 .powerFacts > span {
-  display: grid;
-  justify-items: center;
-  gap: .05rem;
+  display: flex;
+  justify-content: space-between;
+  gap: .35rem;
 }
 
 .auditTagList {
@@ -350,7 +382,7 @@
 .laboratoryTest {
   display: grid;
   min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: .38rem;
   padding: .42rem;
@@ -359,15 +391,6 @@
   background:
     linear-gradient(100deg, rgba(169, 104, 232, .08), transparent 58%),
     rgba(2, 15, 27, .62);
-}
-
-.testIdBadge {
-  padding: .18rem .34rem;
-  border: 1px solid rgba(169, 104, 232, .38);
-  border-radius: .3rem;
-  color: #c999f3;
-  background: rgba(80, 34, 120, .24);
-  font-variant-numeric: tabular-nums;
 }
 
 .testRoute {
@@ -386,7 +409,7 @@
 }
 
 .contractUseBadge {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   color: #ffc866;
 }
 
@@ -413,6 +436,19 @@
 
 .contractOutcome {
   color: rgba(234, 244, 250, .9);
+}
+
+.contractDetails {
+  display: grid;
+  gap: .28rem;
+}
+
+.contractDetails > span {
+  padding: .32rem .42rem;
+  border: 1px solid rgba(244, 165, 28, .2);
+  border-radius: .36rem;
+  color: rgba(239, 224, 194, .84);
+  background: rgba(72, 48, 10, .14);
 }
 
 .ratingChangeBadge {
@@ -494,16 +530,20 @@
   }
 
   .laboratoryTest {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .testResultBadge {
-    grid-column: 2;
     justify-self: start;
   }
 
   .contractUseBadge {
     grid-column: 1 / -1;
+  }
+
+  .roundPriority {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

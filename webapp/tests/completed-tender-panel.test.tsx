@@ -23,8 +23,24 @@ const view = {
     rounds: [{
       accessSlots: [{ assignedSlot: 1, playerId: 'player-a', requestedSlot: 1, resolution: 'confirmed' }],
       contracts: [{
+        conditions: {
+          kind: 'complex',
+          ratingReward: 4,
+          requiredPublicResult: 'reflection',
+          requiredSecondaryPublicResult: 'attenuation',
+          targetRole: 'source',
+          targetSignal: 'aster',
+        },
         contractId: 'contract-1',
         evidenceTestIds: ['r1-t1'],
+        evidenceTests: [{
+          playerId: 'player-a',
+          protocol: 'impulse',
+          publicResult: 'reflection',
+          receiverSignal: 'boreal',
+          sourceSignal: 'aster',
+          testId: 'r1-t1',
+        }],
         outcome: 'awarded',
         playerId: 'player-a',
         ratingAward: 4,
@@ -53,6 +69,7 @@ const view = {
         playerId: 'player-a',
         resolution: 'confirmed',
       }],
+      priorityPlayerIds: ['player-a', 'player-b'],
       ratingChanges: [{ playerId: 'player-a', points: 4, source: 'contract' }],
       reconnaissance: [{ playerId: 'player-b', resolution: 'timeout', targets: [] }],
       round: 1,
@@ -155,9 +172,12 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('Полностью раскрытые сигналы')
   expect(html).toContain('Бонус полной модели')
   expect(html).toContain('Начислений рейтинга нет')
+  expect(html).toContain('Приоритет при коллизии')
+  expect(html).toContain('1. Альфа')
+  expect(html).toContain('2. Бета')
   expect(html).toContain('Тезисы')
-  expect(html).toContain('Тип поля: верно')
-  expect(html).toContain('Полярность: неверно')
+  expect(html).toContain('Тип поля: Инерционное · верно')
+  expect(html).toContain('Полярность: Отрицательная · неверно')
   expect(html).not.toContain('Приватные тезисы')
   expect(html).toContain('Официальные финальные модели')
   expect(html).toContain('Финальная модель не отправлена')
@@ -166,8 +186,13 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('Распределение Мощности')
   expect(html).toContain('Широкое исследование')
   expect(html).toContain('Исследование игрока Альфа')
-  expect(html).toContain('r1-t1')
-  expect(html).toContain('contract-1')
+  expect(html).toContain('Сложный контракт')
+  expect(html).toContain('Цель: Aster · источник')
+  expect(html).toContain('Условия: Отражение + Ослабление')
+  expect(html).toContain('Доказательство: Aster → Boreal · Импульс · Отражение')
+  expect(html).not.toContain('r1-t1')
+  expect(html).not.toContain('contract-1')
+  expect(html).not.toContain('Резерв')
   expect(html).toContain('Тайм-аут')
   expect(html).not.toMatch(/<details[^>]*data-audit-round[^>]*open/)
 })

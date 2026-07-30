@@ -3,6 +3,8 @@ import type {
   TenderAuditEvent,
   TenderAuditRound,
 } from '@anomaly-detector/contracts'
+import { rotateTiePriority } from '../domain/access-slots'
+import { createRoundContracts } from '../domain/contracts'
 import type { StoredTender } from './tender-store'
 
 const timeoutAllocation: PowerAllocation = {
@@ -13,11 +15,14 @@ const timeoutAllocation: PowerAllocation = {
   reserve: 4,
 }
 
-const emptyRound = (round: number): TenderAuditRound => ({
+const emptyRound = (tender: StoredTender, round: number): TenderAuditRound => ({
   accessSlots: [],
   contracts: [],
   laboratory: [],
   powerAllocations: [],
+  priorityPlayerIds: rotateTiePriority(tender.players, round)
+    .sort((left, right) => left.tiePriority - right.tiePriority)
+    .map((player) => player.id),
   ratingChanges: [],
   reconnaissance: [],
   round,
@@ -34,9 +39,32 @@ export function createParticipantAuditRounds(
   tender: StoredTender,
   events: TenderAuditEvent[],
 ): TenderAuditRound[] {
-  const rounds = Array.from({ length: tender.round }, (_, index) => emptyRound(index + 1))
+  const rounds = Array.from({ length: tender.round }, (_, index) => emptyRound(tender, index + 1))
   const roundAt = (round: number) => rounds[Math.min(Math.max(round, 1), rounds.length) - 1]!
   const contractByEvidence = new Map<string, string>()
+  const journalByTestId = new Map(tender.publicScientificJournal.map((entry) => [entry.testId, entry]))
+  const contractConditions = (round: number, contractId: string) => {
+    const contract = contractId === 'final-contract'
+      ? tender.publicFinalContract
+      : createRoundContracts(round, tender.players.length, tender.anomalyConfiguration.seed)
+          .find((candidate) => candidate.contractId === contractId)
+    if (
+      !contract?.kind
+      || contract.ratingReward === undefined
+      || !contract.targetSignal
+      || !contract.targetRole
+    ) return undefined
+    return {
+      kind: contract.kind,
+      ratingReward: contract.ratingReward,
+      requiredPublicResult: contract.requiredPublicResult,
+      ...(contract.requiredSecondaryPublicResult
+        ? { requiredSecondaryPublicResult: contract.requiredSecondaryPublicResult }
+        : {}),
+      targetRole: contract.targetRole,
+      targetSignal: contract.targetSignal,
+    }
+  }
 
   for (const event of events) {
     if (event.kind !== 'contract_bid_assessed' || event.payload.awarded !== true) continue
@@ -213,8 +241,13 @@ export function createParticipantAuditRounds(
       if (awarded && contractId) {
         const ratingAward = integerValue(event.payload.ratingAward) ?? 0
         round.contracts.push({
+          ...(contractConditions(currentRound, contractId)
+            ? { conditions: contractConditions(currentRound, contractId) }
+            : {}),
           contractId,
           evidenceTestIds: stringArray(event.payload.evidenceTestIds),
+          evidenceTests: stringArray(event.payload.evidenceTestIds)
+            .flatMap((testId) => journalByTestId.get(testId) ?? []),
           outcome: 'awarded',
           playerId,
           ratingAward,
@@ -232,6 +265,7 @@ export function createParticipantAuditRounds(
     if (event.kind === 'contract_skipped_no_eligible_contract' && playerId) {
       round.contracts.push({
         evidenceTestIds: [],
+        evidenceTests: [],
         outcome: 'skipped',
         playerId,
         ratingAward: 0,
@@ -241,8 +275,13 @@ export function createParticipantAuditRounds(
 
     if (event.kind === 'contract_reservation_timeout_released' && playerId) {
       round.contracts.push({
+        ...(stringValue(event.payload.contractId)
+          && contractConditions(currentRound, stringValue(event.payload.contractId)!)
+          ? { conditions: contractConditions(currentRound, stringValue(event.payload.contractId)!) }
+          : {}),
         ...(stringValue(event.payload.contractId) ? { contractId: stringValue(event.payload.contractId) } : {}),
         evidenceTestIds: [],
+        evidenceTests: [],
         outcome: 'timeout_released',
         playerId,
         ratingAward: 0,

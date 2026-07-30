@@ -413,7 +413,29 @@ describe('Tender contracts', () => {
       completionReason: 'standard',
       rounds: [{
         accessSlots: [],
-        contracts: [],
+        contracts: [{
+          conditions: {
+            kind: 'complex',
+            ratingReward: 4,
+            requiredPublicResult: 'transmission_gain',
+            requiredSecondaryPublicResult: 'reflection',
+            targetRole: 'source',
+            targetSignal: 'aster',
+          },
+          contractId: 'round-1-contract-2',
+          evidenceTestIds: ['r1-t1'],
+          evidenceTests: [{
+            playerId: 'player-a',
+            protocol: 'continuous',
+            publicResult: 'transmission_gain',
+            receiverSignal: 'cinder',
+            sourceSignal: 'aster',
+            testId: 'r1-t1',
+          }],
+          outcome: 'awarded',
+          playerId: 'player-a',
+          ratingAward: 4,
+        }],
         laboratory: [{
           mode: 'deep',
           playerId: 'player-a',
@@ -427,6 +449,7 @@ describe('Tender contracts', () => {
           }],
         }],
         powerAllocations: [],
+        priorityPlayerIds: ['player-a'],
         ratingChanges: [],
         reconnaissance: [],
         round: 1,
@@ -471,7 +494,15 @@ describe('Tender contracts', () => {
       }],
       ruleset: 'tender-v2',
     })).toMatchObject({
-      rounds: [{ laboratory: [{ mode: 'deep', tests: [{ testId: 'r1-t1' }] }], round: 1 }],
+      rounds: [{
+        contracts: [{
+          conditions: { kind: 'complex', targetSignal: 'aster' },
+          evidenceTests: [{ testId: 'r1-t1' }],
+        }],
+        laboratory: [{ mode: 'deep', tests: [{ testId: 'r1-t1' }] }],
+        priorityPlayerIds: ['player-a'],
+        round: 1,
+      }],
       ratingBreakdownByPlayer: {
         'player-a': { contractPoints: 4, thesisPoints: 2, total: 21 },
       },
