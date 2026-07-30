@@ -31,6 +31,7 @@ test('keeps consecutive all-timeout rounds separate in the participant audit', (
   ] satisfies TenderAuditEvent[]
 
   const rounds = createParticipantAuditRounds({
+    players: [{ id: 'player-a', tiePriority: 1 }],
     privateMeasurementsByPlayer: {},
     privateThesesByPlayer: {},
     publicScientificJournal: [],
@@ -46,6 +47,7 @@ test('keeps consecutive all-timeout rounds separate in the participant audit', (
 
 test('projects automatic operational skips with player-facing reasons into the audit', () => {
   const rounds = createParticipantAuditRounds({
+    players: [{ id: 'player-a', tiePriority: 1 }],
     privateMeasurementsByPlayer: {},
     privateThesesByPlayer: {},
     publicScientificJournal: [],
@@ -65,6 +67,89 @@ test('projects automatic operational skips with player-facing reasons into the a
     skipReason: 'all_pairs_researched',
     tests: [],
   }])
+})
+
+test('projects round priority and complete Contract evidence into the participant audit', () => {
+  const journalEntry = {
+    playerId: 'player-a',
+    protocol: 'continuous' as const,
+    publicResult: 'attenuation' as const,
+    receiverSignal: 'boreal' as const,
+    sourceSignal: 'aster' as const,
+    testId: 'r1-t1',
+  }
+  const rounds = createParticipantAuditRounds({
+    anomalyConfiguration: { seed: 'seed-1' },
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+    privateMeasurementsByPlayer: {},
+    privateThesesByPlayer: {},
+    publicFinalContract: {},
+    publicScientificJournal: [journalEntry],
+    round: 2,
+  } as never, [
+    {
+      kind: 'access_slots_resolved',
+      payload: { accessSlots: { 'player-a': 1, 'player-b': 2 } },
+      sequence: 1,
+    },
+    {
+      actorId: 'player-a',
+      kind: 'laboratory_test_completed',
+      payload: {
+        mode: 'deep',
+        playerId: 'player-a',
+        results: [{
+          protocol: 'continuous',
+          publicResult: 'attenuation',
+          receiverSignal: 'boreal',
+          sourceSignal: 'aster',
+        }],
+      },
+      sequence: 2,
+    },
+    {
+      actorId: 'player-a',
+      kind: 'contract_bid_assessed',
+      payload: {
+        awarded: true,
+        contractId: 'round-1-contract-2',
+        evidenceTestIds: ['r1-t1'],
+        playerId: 'player-a',
+        ratingAward: 4,
+      },
+      sequence: 3,
+    },
+    {
+      actorId: 'player-b',
+      kind: 'access_slot_requested',
+      payload: { playerId: 'player-b', slot: 1 },
+      sequence: 4,
+    },
+    {
+      kind: 'access_slots_resolved',
+      payload: { accessSlots: { 'player-a': 2, 'player-b': 1 } },
+      sequence: 5,
+    },
+  ])
+
+  expect(rounds[0]).toMatchObject({
+    contracts: [{
+      conditions: {
+        kind: 'complex',
+        ratingReward: 4,
+        requiredPublicResult: 'attenuation',
+        requiredSecondaryPublicResult: 'transmission_gain',
+        targetRole: 'receiver',
+        targetSignal: 'boreal',
+      },
+      evidenceTests: [journalEntry],
+    }],
+    priorityPlayerIds: ['player-a', 'player-b'],
+  })
+  expect(rounds[1]?.priorityPlayerIds).toEqual(['player-b', 'player-a'])
 })
 
 test('gives planning phases a 90-second deadline', async () => {

@@ -2,6 +2,15 @@ import type { TenderPlayer } from '@anomaly-detector/contracts'
 
 const accessSlotCount = 6
 
+export function rotateTiePriority(players: TenderPlayer[], round: number): TenderPlayer[] {
+  const playerCount = players.length
+  const offset = (round - 1) % playerCount
+  return players.map((player) => ({
+    ...player,
+    tiePriority: ((player.tiePriority - 1 - offset + playerCount) % playerCount) + 1,
+  }))
+}
+
 export function resolveAccessSlots(
   players: TenderPlayer[],
   requestedSlots: Record<string, number>,

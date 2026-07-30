@@ -423,9 +423,20 @@ export const tenderAuditThesisSchema = privateThesisSchema.extend({
   playerId: playerIdSchema,
 }).strict()
 
+export const tenderAuditContractConditionsSchema = z.object({
+  kind: contractKindSchema,
+  ratingReward: z.number().int().min(0),
+  requiredPublicResult: publicResultSchema,
+  requiredSecondaryPublicResult: publicResultSchema.optional(),
+  targetRole: contractSignalRoleSchema,
+  targetSignal: signalIdSchema,
+}).strict()
+
 export const tenderAuditContractSchema = z.object({
+  conditions: tenderAuditContractConditionsSchema.optional(),
   contractId: contractIdSchema.optional(),
   evidenceTestIds: z.array(z.string().min(1).max(128)).max(2),
+  evidenceTests: z.array(scientificJournalEntrySchema).max(2).default([]),
   outcome: z.enum(['awarded', 'skipped', 'timeout_released']),
   playerId: playerIdSchema,
   ratingAward: z.number().int().min(0),
@@ -443,6 +454,7 @@ export const tenderAuditRoundSchema = z.object({
   contracts: z.array(tenderAuditContractSchema),
   laboratory: z.array(tenderAuditLaboratoryActionSchema),
   powerAllocations: z.array(tenderAuditPowerAllocationSchema),
+  priorityPlayerIds: z.array(playerIdSchema).min(1).max(4),
   ratingChanges: z.array(tenderAuditRatingChangeSchema),
   reconnaissance: z.array(tenderAuditReconnaissanceSchema),
   round: z.number().int().min(1).max(5),
