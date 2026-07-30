@@ -85,12 +85,7 @@ export function LaboratoryPanel({
 
   const selectMode = (nextMode: 'broad' | 'deep') => {
     if (mode === nextMode) return
-    if (nextMode === 'broad') {
-      if (isValid) {
-        setFirstBroadPair({ sourceSignal: source, receiverSignal: receiver })
-        setSelectedSamples([])
-      }
-    } else if (firstBroadPair) {
+    if (nextMode === 'deep' && firstBroadPair) {
       setSelectedSamples([firstBroadPair.sourceSignal, firstBroadPair.receiverSignal])
       setFirstBroadPair(null)
     }

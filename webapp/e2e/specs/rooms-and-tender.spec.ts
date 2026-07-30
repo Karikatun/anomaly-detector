@@ -74,14 +74,21 @@ async function runLaboratory(page: Page, mode: 'broad' | 'deep' = 'deep', pairIn
     name: mode === 'broad' ? 'Широкое' : 'Глубокое',
     exact: true,
   })
-  if (await modeButton.isVisible()) await modeButton.click()
-  await selectLaboratoryPair(page, pairIndex)
   if (mode === 'broad' && await modeButton.isVisible()) {
+    await selectLaboratoryPair(page, pairIndex)
+    await expect(page.getByRole('button', { name: 'Глубокое', exact: true })).toHaveAttribute('aria-pressed', 'false')
+    await expect(modeButton).toHaveAttribute('aria-pressed', 'false')
+    await modeButton.click()
+    await expect(page.getByRole('button', { name: /^Источник:/ })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: /^Приёмник:/ })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: 'Сохранить первую пару' })).toBeEnabled()
     await page.getByRole('button', { name: 'Сохранить первую пару' }).click()
     await selectLaboratoryPair(page, pairIndex + 1)
     await page.getByRole('button', { name: 'Провести два опыта' }).click()
     return
   }
+  if (await modeButton.isVisible()) await modeButton.click()
+  await selectLaboratoryPair(page, pairIndex)
   await page.getByRole('button', { name: /^Провести опыт:/ }).click()
 }
 
