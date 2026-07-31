@@ -1911,7 +1911,7 @@ test('rejects only the same Player repeating the same directed Laboratory pair',
     laboratory: { mode: 'impulse', pair: { receiverSignal: 'delta', sourceSignal: 'cinder' } },
     tenderId,
     type: 'run-laboratory-test',
-  })).rejects.toMatchObject({ kind: 'invalid_tender_command' })
+  })).rejects.toMatchObject({ kind: 'laboratory_pair_already_researched' })
 
   expect((await tender.readTenderView({ tenderId, playerId: 'player-a' })).publicScientificJournal).toHaveLength(1)
 
