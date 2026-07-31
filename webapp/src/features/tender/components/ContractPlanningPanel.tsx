@@ -19,17 +19,6 @@ import styles from './ContractPlanningPanel.module.css'
 import dialogStyles from './TenderContextDialog.module.css'
 import phaseStyles from './PhasePanel.module.css'
 
-const missingConditionKeys = {
-  already_resolved: 'tender.contractPlanning.missing.alreadyResolved',
-  corporate_trust: 'tender.contractPlanning.missing.corporateTrust',
-  evidence: 'tender.contractPlanning.missing.evidence',
-  evidence_result: 'tender.contractPlanning.missing.evidenceResult',
-  evidence_role: 'tender.contractPlanning.missing.evidenceRole',
-  evidence_used: 'tender.contractPlanning.missing.evidenceUsed',
-  final_round: 'tender.contractPlanning.missing.finalRound',
-  reserved: 'tender.contractPlanning.missing.reserved',
-} as const
-
 export function ContractPlanningPanel({
   onOpenChange,
   open,
@@ -52,20 +41,13 @@ export function ContractPlanningPanel({
           '--contract-accent': contractKindAccents[kind],
           ...(target ? { '--signal-accent': signalAccent(target) } : {}),
         } as CSSProperties
-        const planningDetail = planning?.suitableEvidenceTestIds.length
-          ? t('tender.contractPlanning.evidence', {
-              count: planning.suitableEvidenceTestIds.length,
-            })
-          : planning?.suitableResearchCertificationSignals.length
-            ? t('tender.contractPlanning.certification')
-            : t('tender.contractPlanning.missing')
         return (
           <article
             key={contract.contractId}
             className={`${phaseStyles.contractCard} ${kind === 'final' ? phaseStyles.finalContract : ''}`}
             style={contractStyle}
           >
-            <header className={`${phaseStyles.contractHeader} ${styles.contractHeader}`}>
+            <header className={phaseStyles.contractHeader}>
               <SignalGlyph signal={target} className={phaseStyles.signalGlyph} />
               <span className={phaseStyles.signalCopy}>
                 <Typography as="span" variant="caption" className={phaseStyles.contractKind}>
@@ -77,7 +59,7 @@ export function ContractPlanningPanel({
                     : t('tender.contractPlanning.noTarget')}
                 </Typography>
               </span>
-              <span className={`${phaseStyles.contractReward} ${styles.contractReward}`}>
+              <span className={phaseStyles.contractReward}>
                 <Typography as="strong" variant="bodySmMedium">
                   +{contract.ratingReward ?? 0}
                 </Typography>
@@ -96,7 +78,7 @@ export function ContractPlanningPanel({
                   {t(`tender.result.${contract.requiredPublicResult}`)}
                 </Typography>
               </span>
-              {contract.requiredSecondaryPublicResult && (
+              {contract.requiredSecondaryPublicResult && (kind === 'complex' || kind === 'final') && (
                 <span className={phaseStyles.contractFact}>
                   <Typography as="span" variant="caption">
                     {t('tender.contractPlanning.additionalResult')}
@@ -106,14 +88,6 @@ export function ContractPlanningPanel({
                   </Typography>
                 </span>
               )}
-              <span className={phaseStyles.contractFact}>
-                <Typography as="span" variant="caption">
-                  {t('tender.contractPlanning.powerLabel')}
-                </Typography>
-                <Typography as="span" variant="caption">
-                  {planning?.requiredPower ?? 1}
-                </Typography>
-              </span>
               <span className={phaseStyles.contractFact}>
                 <Typography as="span" variant="caption">
                   {t('tender.contractPlanning.status')}
@@ -126,27 +100,11 @@ export function ContractPlanningPanel({
               </span>
             </div>
 
-            <div className={styles.planningState} data-eligible={planning?.eligible || undefined}>
-              <Typography as="strong" variant="bodySmMedium">
-                {planning?.eligible
-                  ? t('tender.contractPlanning.eligible')
-                  : t('tender.contractPlanning.notEligible')}
+            {!planning?.eligible && (
+              <Typography variant="bodySm" className={phaseStyles.noSuitableEvidence}>
+                {t('tender.contractPlanning.notEligible')}
               </Typography>
-              <Typography variant="caption" tone="muted">
-                {planningDetail}
-              </Typography>
-              {planning && planning.missingConditions.length > 0 && (
-                <ul className={styles.missingConditions}>
-                  {planning.missingConditions.map((condition) => (
-                    <li key={condition}>
-                      <Typography variant="caption" tone="muted">
-                        {t(missingConditionKeys[condition])}
-                      </Typography>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            )}
           </article>
         )
       })}

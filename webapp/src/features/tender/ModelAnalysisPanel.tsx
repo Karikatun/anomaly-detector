@@ -57,7 +57,6 @@ type ModelAnalysisPanelProps = {
     onSaveStatusChange: (status: WorkingModelSaveStatus) => void
     open: boolean
     openDisabled: boolean
-    showTimerWarning: boolean
   }
   workingModelSignals?: SignalId[]
   error?: string | null

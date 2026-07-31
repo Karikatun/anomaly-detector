@@ -275,7 +275,7 @@ export function FinalScientificModelPanel({
                 <a className={styles.finalBackLink} href="#final-model-heading">К модели ↑</a>
               </Typography>
             </div>
-            <TenderEvidence data={evidence} />
+            <TenderEvidence data={evidence} compactLaboratoryInsets laboratoryCountBelowResults />
           </section>
           <section className={styles.surface}>
             <div className={styles.sectionHeader}>

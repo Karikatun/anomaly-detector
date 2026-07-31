@@ -302,7 +302,7 @@ const ru = {
   'tender.contractPlanning.readOnly': 'Планирование',
   'tender.contractPlanning.noTarget': 'Без целевого сигнала',
   'tender.contractPlanning.eligible': 'У вас уже есть подходящее доказательство',
-  'tender.contractPlanning.notEligible': 'Подходящих собственных исследований пока нет',
+  'tender.contractPlanning.notEligible': 'Подходящих собственных исследований нет',
   'tender.contractPlanning.missing.evidenceResult': 'Результат исследования не соответствует условиям контракта.',
   'tender.contractPlanning.missing.evidenceRole': 'Целевой сигнал исследован не в требуемой роли.',
   'tender.contractPlanning.missing.evidenceUsed': 'Подходящее доказательство уже использовано другим контрактом.',

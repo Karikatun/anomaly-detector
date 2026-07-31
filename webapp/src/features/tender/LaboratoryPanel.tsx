@@ -12,7 +12,7 @@ import { signalLabelKeys } from './catalog'
 import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
-import { isLaboratoryPairResearched } from './laboratory-pair'
+import { areLaboratoryPairsEqual, isLaboratoryPairResearched } from './laboratory-pair'
 import { runTenderAction } from './run-tender-action'
 import { tenderRulesetPolicy } from './ruleset-policy'
 
@@ -64,9 +64,15 @@ export function LaboratoryPanel({
     receiverSignal: receiver,
     sourceSignal: source,
   })
-  const pairError = pairAlreadyResearched
-    ? `Вы уже исследовали ${signalName(source)} → ${signalName(receiver)}. Выберите другую направленную пару.`
-    : null
+  const duplicateBroadPair = mode === 'broad'
+    && firstBroadPair !== null
+    && isValid
+    && areLaboratoryPairsEqual(firstBroadPair, { receiverSignal: receiver, sourceSignal: source })
+  const pairError = duplicateBroadPair
+    ? 'Вы уже выбрали эту направленную пару. Выберите другую.'
+    : pairAlreadyResearched
+      ? `Вы уже исследовали ${signalName(source)} → ${signalName(receiver)}. Выберите другую направленную пару.`
+      : null
 
   const handleTest = async () => {
     if (!isValid || mode === null) return
@@ -76,11 +82,15 @@ export function LaboratoryPanel({
       setSelectedSamples([])
       return
     }
-    await runTenderAction(
+    const succeeded = await runTenderAction(
       () => onConfirm(mode === 'broad'
         ? { mode, pairs: [firstBroadPair!, pair] }
         : { mode, pair }),
     )
+    if (succeeded) {
+      setFirstBroadPair(null)
+      setSelectedSamples([])
+    }
   }
 
   const selectMode = (nextMode: 'broad' | 'deep') => {
@@ -298,7 +308,7 @@ export function LaboratoryPanel({
           type="button"
           size="lg"
           className={styles.actionButton}
-          disabled={disabled || !isValid || mode === null || pairAlreadyResearched}
+          disabled={disabled || !isValid || mode === null || pairAlreadyResearched || duplicateBroadPair}
           onClick={() => void handleTest()}
         >
           <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />

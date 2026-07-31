@@ -1911,7 +1911,7 @@ test('rejects only the same Player repeating the same directed Laboratory pair',
     laboratory: { mode: 'impulse', pair: { receiverSignal: 'delta', sourceSignal: 'cinder' } },
     tenderId,
     type: 'run-laboratory-test',
-  })).rejects.toMatchObject({ kind: 'laboratory_pair_already_researched' })
+  })).rejects.toMatchObject({ kind: 'invalid_tender_command' })
 
   expect((await tender.readTenderView({ tenderId, playerId: 'player-a' })).publicScientificJournal).toHaveLength(1)
 
@@ -2048,6 +2048,54 @@ test('rejects a broad Laboratory action atomically when either pair was already 
   })).rejects.toMatchObject({ kind: 'laboratory_pair_already_researched' })
 
   expect((await store.read(tenderId))?.publicScientificJournal).toHaveLength(1)
+  expect((await store.read(tenderId))?.laboratoryCompletedByPlayer['player-a']).toBeUndefined()
+})
+
+test('rejects a broad Laboratory action atomically when both selected pairs are identical', async () => {
+  const store = createInMemoryTenderStore()
+  const tender = createTenderModule({ store })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  const initial = await store.read(tenderId)
+  if (!initial) throw new Error('Tender was not created')
+  await store.commit({
+    auditEvents: [],
+    expectedVersion: initial.version,
+    nextTender: {
+      ...initial,
+      accessSlots: { 'player-a': 1, 'player-b': 2 },
+      phase: 'laboratory',
+      powerAllocations: {
+        'player-a': { contracts: 0, laboratory: 2, modelAnalysis: 0, reconnaissance: 0, reserve: 2 },
+        'player-b': { contracts: 0, laboratory: 0, modelAnalysis: 0, reconnaissance: 0, reserve: 4 },
+      },
+      samplesByPlayer: {
+        'player-a': ['cinder', 'delta'],
+        'player-b': [],
+      },
+    },
+    tenderId,
+  })
+
+  await expect(tender.execute({
+    actorId: 'player-a',
+    commandId: 'broad-with-duplicate',
+    laboratory: {
+      mode: 'broad',
+      pairs: [
+        { receiverSignal: 'delta', sourceSignal: 'cinder' },
+        { receiverSignal: 'delta', sourceSignal: 'cinder' },
+      ],
+    },
+    tenderId,
+    type: 'run-laboratory-test',
+  })).rejects.toMatchObject({ kind: 'invalid_tender_command' })
+
+  expect((await store.read(tenderId))?.publicScientificJournal).toHaveLength(0)
   expect((await store.read(tenderId))?.laboratoryCompletedByPlayer['player-a']).toBeUndefined()
 })
 

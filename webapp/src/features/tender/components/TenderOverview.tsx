@@ -151,7 +151,15 @@ type EvidenceData = Pick<
   'privateMeasurements' | 'privateTheses' | 'publicLaboratoryResults' | 'publicTheses'
 >
 
-export function TenderEvidence({ data }: { data: EvidenceData }) {
+export function TenderEvidence({
+  compactLaboratoryInsets = false,
+  data,
+  laboratoryCountBelowResults = false,
+}: {
+  compactLaboratoryInsets?: boolean
+  data: EvidenceData
+  laboratoryCountBelowResults?: boolean
+}) {
   const { t } = useI18n()
   const privateTheses = data.privateTheses ?? []
   const isEmpty = data.publicLaboratoryResults.length === 0
@@ -160,7 +168,11 @@ export function TenderEvidence({ data }: { data: EvidenceData }) {
     && data.publicTheses.length === 0
 
   return (
-    <div className={styles.evidence}>
+    <div
+      className={styles.evidence}
+      data-compact-laboratory-insets={compactLaboratoryInsets || undefined}
+      data-laboratory-count-below-results={laboratoryCountBelowResults || undefined}
+    >
       {isEmpty && (
         <Typography variant="bodySm" tone="muted">Данные появятся после лабораторных опытов и тезисов.</Typography>
       )}
@@ -168,7 +180,9 @@ export function TenderEvidence({ data }: { data: EvidenceData }) {
         <section className={styles.evidenceSection}>
           <div className={styles.evidenceHeading}>
             <Typography as="h3" variant="control">Результаты лаборатории</Typography>
-            <Typography as="span" variant="caption">Публично · {data.publicLaboratoryResults.length}</Typography>
+            <Typography as="span" variant="caption" className={styles.evidencePublicCountMobile}>
+              Публично · {data.publicLaboratoryResults.length}
+            </Typography>
           </div>
           <div className={styles.evidenceGrid}>
             {data.publicLaboratoryResults.map((result, index) => (
@@ -186,6 +200,9 @@ export function TenderEvidence({ data }: { data: EvidenceData }) {
               </div>
             ))}
           </div>
+          <Typography as="span" variant="caption" className={styles.evidencePublicCountDesktop}>
+            Публично · {data.publicLaboratoryResults.length}
+          </Typography>
         </section>
       )}
 

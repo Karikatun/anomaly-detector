@@ -1305,7 +1305,7 @@
 
   .finalModelHead {
     display: grid;
-    grid-template-columns: minmax(9rem, .7fr) minmax(0, 1.25fr) minmax(0, 1fr);
+    grid-template-columns: minmax(7rem, .52fr) minmax(0, 1.4fr) minmax(0, 1fr);
     gap: .65rem;
     padding: 0 .65rem .35rem;
     color: rgba(194, 214, 227, .48);
@@ -1313,7 +1313,7 @@
   }
 
   .finalModelTable .modelRow {
-    grid-template-columns: minmax(9rem, .7fr) minmax(0, 1.25fr) minmax(0, 1fr);
+    grid-template-columns: minmax(7rem, .52fr) minmax(0, 1.4fr) minmax(0, 1fr);
     gap: .65rem;
     padding: .5rem .65rem;
   }

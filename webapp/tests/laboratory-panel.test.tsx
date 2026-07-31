@@ -1,5 +1,8 @@
 import { expect, test } from 'bun:test'
-import { isLaboratoryPairResearched } from '../src/features/tender/laboratory-pair'
+import {
+  areLaboratoryPairsEqual,
+  isLaboratoryPairResearched,
+} from '../src/features/tender/laboratory-pair'
 
 test('marks an own researched directed pair unavailable without blocking another direction', () => {
   const journal = [{
@@ -29,4 +32,15 @@ test('marks an own researched directed pair unavailable without blocking another
     receiverSignal: 'boreal',
     sourceSignal: 'aster',
   })).toBe(false)
+})
+
+test('identifies a repeated directed pair before confirming Broad research', () => {
+  expect(areLaboratoryPairsEqual(
+    { receiverSignal: 'boreal', sourceSignal: 'aster' },
+    { receiverSignal: 'boreal', sourceSignal: 'aster' },
+  )).toBe(true)
+  expect(areLaboratoryPairsEqual(
+    { receiverSignal: 'aster', sourceSignal: 'boreal' },
+    { receiverSignal: 'boreal', sourceSignal: 'aster' },
+  )).toBe(false)
 })

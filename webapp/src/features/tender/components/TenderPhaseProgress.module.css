@@ -118,6 +118,12 @@
   }
 }
 
+@media (max-width: 47.999rem) {
+  .copy {
+    display: none;
+  }
+}
+
 @media (min-width: 48rem) {
   .progress {
     padding: .65rem 1rem;

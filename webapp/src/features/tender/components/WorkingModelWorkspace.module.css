@@ -45,11 +45,9 @@
 .header {
   display: flex;
   min-width: 0;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-right: 2.7rem;
+  gap: .2rem;
+  padding: .15rem 3rem .65rem 0;
+  border-bottom: 1px solid rgba(104, 146, 174, .2);
 }
 
 .dialog :global([data-slot='dialog-close']) {
