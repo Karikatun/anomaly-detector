@@ -1,8 +1,34 @@
 import { expect, test } from 'bun:test'
+import { renderToStaticMarkup } from 'react-dom/server'
+
 import {
   areLaboratoryPairsEqual,
   isLaboratoryPairResearched,
 } from '../src/features/tender/laboratory-pair'
+import { LaboratoryPanel } from '../src/features/tender/LaboratoryPanel'
+import { I18nProvider } from '../src/platform/i18n'
+
+test('requires an explicit Laboratory mode before enabling sample selection for two Power', () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <LaboratoryPanel
+        journal={[]}
+        mySamples={['aster', 'boreal']}
+        playerId="player-a"
+        privateMeasurements={[]}
+        powerAllocation={2}
+        ruleset="tender-v2"
+        onConfirm={async () => undefined}
+      />
+    </I18nProvider>,
+  )
+
+  expect(html).toContain('Шаг 1 из 2')
+  expect(html).toContain('Один непрерывный опыт')
+  expect(html).toContain('Два импульсных опыта')
+  expect(html).toContain('Сначала выберите тип исследования')
+  expect(html.match(/<button[^>]*aria-label="Образец: Aster"[^>]*>/)?.[0]).toContain('disabled')
+})
 
 test('marks an own researched directed pair unavailable without blocking another direction', () => {
   const journal = [{
