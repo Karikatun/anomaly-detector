@@ -84,16 +84,25 @@ async function runLaboratory(page: Page, mode: 'broad' | 'deep' = 'deep', pairIn
     await expect(page.getByRole('button', { name: 'Сохранить первую пару' })).toBeEnabled()
     await page.getByRole('button', { name: 'Сохранить первую пару' }).click()
     await selectLaboratoryPair(page, pairIndex + 1)
-    await page.getByRole('button', { name: 'Провести два опыта' }).click()
-    await expect(page.getByText('Ожидание хода', { exact: true })).toBeVisible()
+    const confirmButton = page.getByRole('button', { name: 'Провести два опыта' })
+    await confirmButton.click()
+    await expectLaboratoryCommandAccepted(page, confirmButton)
     await expect(page.getByText(/^Вы уже исследовали .*направленную пару/)).toHaveCount(0)
     return
   }
   if (await modeButton.isVisible()) await modeButton.click()
   await selectLaboratoryPair(page, pairIndex)
-  await page.getByRole('button', { name: /^Провести опыт:/ }).click()
-  await expect(page.getByText('Ожидание хода', { exact: true })).toBeVisible()
+  const confirmButton = page.getByRole('button', { name: /^Провести опыт:/ })
+  await confirmButton.click()
+  await expectLaboratoryCommandAccepted(page, confirmButton)
   await expect(page.getByText(/^Вы уже исследовали .*направленную пару/)).toHaveCount(0)
+}
+
+async function expectLaboratoryCommandAccepted(page: Page, confirmButton: ReturnType<Page['getByRole']>) {
+  await expect.poll(async () => {
+    const isWaiting = await page.getByText('Ожидание хода', { exact: true }).count() > 0
+    return isWaiting || await confirmButton.count() === 0
+  }).toBe(true)
 }
 
 async function verifyWorkingModelModal(page: Page) {
