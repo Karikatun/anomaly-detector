@@ -131,8 +131,8 @@ test('keeps the Working Model dialog below the Tender header and inside the view
     await expectDialogInsideViewport(page)
 
     await page.setViewportSize({ width: 1280, height: 720 })
-    await expect(page.getByRole('button', { name: /Рабочая модель/ })).toHaveCount(0)
-    await expect(page.getByTestId('working-model-table')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Рабочая модель/ })).toBeVisible()
+    await expect(page.getByTestId('working-model-table')).toHaveCount(0)
   } finally {
     await guestContext.close()
   }
