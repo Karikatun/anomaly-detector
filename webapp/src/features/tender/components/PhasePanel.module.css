@@ -678,21 +678,46 @@
   min-height: 2.75rem;
 }
 
+.laboratoryModeStep {
+  margin-bottom: .65rem;
+}
+
+.laboratoryModeIntro {
+  display: grid;
+  gap: .12rem;
+  margin-bottom: .45rem;
+}
+
+.laboratoryModeIntro > strong {
+  color: var(--primary);
+}
+
 .laboratoryModeSwitch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-bottom: .65rem;
   overflow: hidden;
   border: 1px solid rgba(69, 126, 163, .38);
   border-radius: .55rem;
 }
 
 .laboratoryModeSwitch button {
+  display: grid;
+  justify-items: start;
+  gap: .12rem;
   min-height: 2.75rem;
   padding: .55rem .75rem;
   border: 0;
   color: rgba(215, 231, 241, .68);
   background: rgba(4, 18, 31, .82);
+}
+
+.laboratoryModeSwitch button span:last-child {
+  color: rgba(215, 231, 241, .64);
+  text-align: left;
+}
+
+.laboratoryModeSwitch button[data-selected] span:last-child {
+  color: rgba(223, 244, 255, .82);
 }
 
 .laboratoryModeSwitch button + button {

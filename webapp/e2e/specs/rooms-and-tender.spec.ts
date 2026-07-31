@@ -1,5 +1,4 @@
 import type { Page } from '@playwright/test'
-
 import { expect, registerBrowserUser, test } from '../helpers/test'
 
 const headings = {
@@ -697,6 +696,11 @@ test('two players complete every Tender stage and receive each realtime phase tr
 
       await expectPhase(page, headings.laboratory)
       await expectPhase(guestPage, headings.laboratory)
+      if (round === 2) {
+        await expect(page.getByText('Шаг 1 из 2 · выберите тип исследования')).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Сначала выберите тип исследования' })).toBeDisabled()
+        await expect(page.getByLabel('Образец: Aster')).toBeDisabled()
+      }
       await runLaboratory(page, 'deep', round - 1)
       await expect(page.getByText('История', { exact: true })).toBeVisible()
       await runLaboratory(guestPage, round === 2 ? 'broad' : 'deep', round === 2 ? 1 : round)

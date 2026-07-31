@@ -55,6 +55,7 @@ export function LaboratoryPanel({
   const source = selectedSamples[0] ?? null
   const receiver = selectedSamples[1] ?? null
   const isValid = source !== null && receiver !== null && source !== receiver
+  const requiresModeChoice = powerAllocation === 2 && policy.versionedLaboratory && mode === null
   const { t } = useI18n()
   const signalName = (signal: SignalId) => t(signalLabelKeys[signal])
   const latestMeasurement = privateMeasurements.at(-1)
@@ -126,25 +127,33 @@ export function LaboratoryPanel({
           </div>
 
           {powerAllocation === 2 && policy.versionedLaboratory && (
-            <div className={styles.laboratoryModeSwitch} role="group" aria-label={t('tender.lab.mode.aria')}>
-              <button
-                type="button"
-                aria-pressed={mode === 'deep'}
-                data-selected={mode === 'deep' || undefined}
-                disabled={disabled}
-                onClick={() => selectMode('deep')}
-              >
-                <Typography as="span" variant="bodySmMedium">{t('tender.lab.mode.deep')}</Typography>
-              </button>
-              <button
-                type="button"
-                aria-pressed={mode === 'broad'}
-                data-selected={mode === 'broad' || undefined}
-                disabled={disabled}
-                onClick={() => selectMode('broad')}
-              >
-                <Typography as="span" variant="bodySmMedium">{t('tender.lab.mode.broad')}</Typography>
-              </button>
+            <div className={styles.laboratoryModeStep}>
+              <div className={styles.laboratoryModeIntro}>
+                <Typography as="strong" variant="caption">{t('tender.lab.mode.step')}</Typography>
+                <Typography as="span" variant="bodySm">{t('tender.lab.mode.description')}</Typography>
+              </div>
+              <div className={styles.laboratoryModeSwitch} role="group" aria-label={t('tender.lab.mode.aria')}>
+                <button
+                  type="button"
+                  aria-pressed={mode === 'deep'}
+                  data-selected={mode === 'deep' || undefined}
+                  disabled={disabled}
+                  onClick={() => selectMode('deep')}
+                >
+                  <Typography as="span" variant="bodySmMedium">{t('tender.lab.mode.deep')}</Typography>
+                  <Typography as="span" variant="caption">{t('tender.lab.mode.deepDescription')}</Typography>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={mode === 'broad'}
+                  data-selected={mode === 'broad' || undefined}
+                  disabled={disabled}
+                  onClick={() => selectMode('broad')}
+                >
+                  <Typography as="span" variant="bodySmMedium">{t('tender.lab.mode.broad')}</Typography>
+                  <Typography as="span" variant="caption">{t('tender.lab.mode.broadDescription')}</Typography>
+                </button>
+              </div>
             </div>
           )}
 
@@ -187,7 +196,7 @@ export function LaboratoryPanel({
                   data-role={role}
                   aria-label={ariaLabel}
                   aria-pressed={role !== undefined}
-                  disabled={disabled}
+                  disabled={disabled || requiresModeChoice}
                   onClick={() => handleSampleClick(signal)}
                 >
                   <SignalGlyph signal={signal} className={styles.signalGlyph} />
@@ -299,7 +308,9 @@ export function LaboratoryPanel({
         <div className={styles.info}>
           <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
           <Typography variant="bodySm">
-            {source && receiver
+            {requiresModeChoice
+              ? t('tender.lab.mode.selectFirst')
+              : source && receiver
               ? `${signalName(source)} → ${signalName(receiver)}`
               : 'Выберите сначала источник, затем приёмник'}
           </Typography>
@@ -314,7 +325,9 @@ export function LaboratoryPanel({
           <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
           {mode === 'broad' && firstBroadPair === null && source && receiver
             ? t('tender.lab.mode.continueBroad')
-            : source && receiver
+            : mode === null
+              ? t('tender.lab.mode.selectFirst')
+              : source && receiver
               ? mode === 'broad'
                 ? t('tender.lab.mode.confirmBroad')
                 : `Провести опыт: ${signalName(source)} → ${signalName(receiver)}`
