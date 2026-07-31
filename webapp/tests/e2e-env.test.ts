@@ -49,6 +49,12 @@ test('e2eBackendEnv gives API and worker processes one valid JWT secret', () => 
   expect(env.JWT_SECRET).toBe('web-e2e-secret-at-least-thirty-two-characters')
 })
 
+test('e2eBackendEnv keeps auth rate limiting out of the browser smoke-test budget', () => {
+  const env = e2eBackendEnv()
+
+  expect(env.AUTH_RATE_LIMIT_MAX).toBe('1000')
+})
+
 test('e2eBackendEnv preserves an explicitly configured JWT secret', () => {
   process.env.JWT_SECRET = 'explicit-web-e2e-secret-at-least-thirty-two-chars'
 
