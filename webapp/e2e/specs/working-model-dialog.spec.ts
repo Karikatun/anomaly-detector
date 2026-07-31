@@ -113,7 +113,7 @@ test('keeps the Working Model dialog below the Tender header and inside the view
 
     await expect(page.getByRole('heading', { name: '3. Разведка' })).toBeVisible()
     const workingModelButton = page.getByRole('button', { name: /Рабочая модель/ })
-    await expect(workingModelButton).toBeDisabled()
+    await expect(workingModelButton).toBeEnabled()
     await page.getByRole('button', { name: /^Сигнал для разведки:/ }).first().click()
     await page.getByRole('button', { name: 'Исследовать' }).click()
     await expect(guestPage.getByRole('heading', { name: '3. Разведка' })).toBeVisible()
