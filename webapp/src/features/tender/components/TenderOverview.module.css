@@ -234,6 +234,10 @@
   padding: 0 .75rem .75rem;
 }
 
+.evidence[data-compact-laboratory-insets] {
+  padding-inline: .35rem;
+}
+
 .evidenceSection {
   display: grid;
   min-width: 0;
@@ -257,6 +261,11 @@
 }
 
 .evidenceHeading > span {
+  color: var(--primary);
+}
+
+.evidencePublicCountDesktop {
+  display: none;
   color: var(--primary);
 }
 
@@ -310,6 +319,16 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (min-width: 48rem) {
+  .evidence[data-laboratory-count-below-results] .evidencePublicCountMobile {
+    display: none;
+  }
+
+  .evidence[data-laboratory-count-below-results] .evidencePublicCountDesktop {
+    display: inline;
+  }
 }
 
 .thesisChecks {

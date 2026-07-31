@@ -125,7 +125,6 @@ function PhasePanel({
     onSaveStatusChange: (status: WorkingModelSaveStatus) => void
     open: boolean
     openDisabled: boolean
-    showTimerWarning: boolean
   }
 }) {
   const auth = useAuth()
@@ -742,7 +741,6 @@ function TenderContent() {
                 onSaveStatusChange: handleWorkingModelSaveStatus,
                 open: workingModelOpen && overlayPhase === tenderView.phase && !referenceHelpLocked,
                 openDisabled: referenceHelpLocked,
-                showTimerWarning: !isComplete,
               }}
             />
 
@@ -771,7 +769,6 @@ function TenderContent() {
                   onSaveStatusChange={handleWorkingModelSaveStatus}
                   open={contextModal === 'working-model' && overlayPhase === tenderView.phase && !referenceHelpUrgentlyLocked}
                   openDisabled={referenceHelpUrgentlyLocked}
-                  showTimerWarning={!isComplete}
                 />
               )}
               {contextMenuVisibility.contracts && (

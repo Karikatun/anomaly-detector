@@ -27,7 +27,6 @@ type Props = {
   onSaveStatusChange?: (status: WorkingModelSaveStatus) => void
   open?: boolean
   openDisabled?: boolean
-  showTimerWarning?: boolean
 }
 
 function WorkspaceModelPanel({
@@ -58,7 +57,6 @@ export function WorkingModelWorkspace({
   onSaveStatusChange,
   open,
   openDisabled,
-  showTimerWarning,
 }: Props) {
   return (
     <>
@@ -99,11 +97,6 @@ export function WorkingModelWorkspace({
             </span>
           </DialogHeader>
           <div className={styles.content}>
-            {showTimerWarning && (
-              <Typography role="status" variant="bodySm" tone="muted">
-                Таймер матча продолжает идти
-              </Typography>
-            )}
             <WorkspaceModelPanel
               disabled={disabled}
               knownSignals={knownSignals}
