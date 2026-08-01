@@ -491,7 +491,7 @@ const typographyPolicyPlugin = {
 }
 
 export default defineConfig([
-  globalIgnores(['dist', 'e2e/.artifacts', 'src/features/tender/prototype']),
+  globalIgnores(['dist', 'e2e/.artifacts']),
   {
     files: ['**/*.{ts,tsx}'],
     plugins: {

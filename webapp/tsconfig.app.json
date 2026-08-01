@@ -26,6 +26,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
-  "exclude": ["src/features/tender/prototype"]
+  "include": ["src"]
 }
