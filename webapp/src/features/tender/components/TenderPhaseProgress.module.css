@@ -81,7 +81,7 @@
   white-space: normal;
 }
 
-.longLabel {
+.copy > .shortLabel {
   display: none;
 }
 
@@ -112,16 +112,6 @@
     padding-inline: .04rem;
   }
 
-  .copy > .shortLabel {
-    font-size: .5rem;
-    letter-spacing: -.025em;
-  }
-}
-
-@media (max-width: 47.999rem) {
-  .copy {
-    display: none;
-  }
 }
 
 @media (min-width: 48rem) {
@@ -156,12 +146,8 @@
     white-space: nowrap;
   }
 
-  .longLabel {
+  .copy > .longLabel {
     display: inline;
-  }
-
-  .copy > .shortLabel {
-    display: none;
   }
 }
 

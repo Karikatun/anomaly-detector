@@ -288,12 +288,6 @@ function PhasePanel({
             ?? view.privateFinalScientificModelDraft
             ?? { signals: {} }}
           dueAt={view.dueAt ?? null}
-          evidence={{
-            privateMeasurements: view.privateMeasurements,
-            privateTheses: view.privateTheses,
-            publicLaboratoryResults: view.publicLaboratoryResults,
-            publicTheses: view.publicTheses,
-          }}
           disabled={disabled || isWaitingForTurn}
           error={error}
           onConfirm={(scientificModel) => onCommand({ type: 'submit-scientific-model', scientificModel })}
@@ -729,6 +723,13 @@ function TenderContent() {
               tabIndex={-1}
               className="grid min-w-0 self-start gap-4 outline-none"
             >
+            {isSharedFinalScientificModel && (
+              <TenderResearchDialog
+                open={contextModal === 'research' && overlayPhase === tenderView.phase && !referenceHelpUrgentlyLocked}
+                onOpenChange={(open) => setOverlayOpen('research', open)}
+                view={tenderView}
+              />
+            )}
             <PhasePanel
               view={tenderView}
               disabled={submitting || !connected}
@@ -754,11 +755,13 @@ function TenderContent() {
                 phase={tenderView.phase}
                 players={tenderView.players}
               />
-              <TenderResearchDialog
-                open={contextModal === 'research' && overlayPhase === tenderView.phase && !referenceHelpUrgentlyLocked}
-                onOpenChange={(open) => setOverlayOpen('research', open)}
-                view={tenderView}
-              />
+              {!isSharedFinalScientificModel && (
+                <TenderResearchDialog
+                  open={contextModal === 'research' && overlayPhase === tenderView.phase && !referenceHelpUrgentlyLocked}
+                  onOpenChange={(open) => setOverlayOpen('research', open)}
+                  view={tenderView}
+                />
+              )}
               {contextMenuVisibility.workingModel && (
                 <WorkingModelWorkspace
                   disabled={!connected}
