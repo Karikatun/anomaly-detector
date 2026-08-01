@@ -23,6 +23,52 @@ For TDD-first work, list the expected behavior and important edge cases before i
 
 Do not add E2E coverage just because a branch exists. Add it when it prevents a plausible product regression and can stay stable through explicit setup, stable selectors/test IDs, isolated test data, and deterministic assertions. Do not skip important edge cases just because they are not E2E-worthy; cover them through integration, contract, or unit tests. Keep exhaustive validation matrices and combinatorial edge cases out of E2E.
 
+## UX Behavior Validation
+
+For a new or behaviorally significant UI flow, select the applicable states from
+[UX_CHECKLIST.md](UX_CHECKLIST.md) before implementation. The goal is not to
+automate every visual variation; it is to prove the user-visible contract at the
+highest practical boundary.
+
+| Concern | Preferred evidence |
+|---|---|
+| Critical cross-layer journey | Playwright E2E through real backend and browser |
+| Accepted command, persistence after refresh, reconnect recovery | Playwright E2E for the highest-risk representative flow |
+| Authorization, deadline, conflict, duplicate command, stable error shape | Backend integration test through real routes and PostgreSQL |
+| Pure validation and domain matrices | Contract or unit test |
+| Client retry, cache, local draft and ambiguous-response reconciliation | Focused webapp test unless stable E2E adds materially more confidence |
+| Hierarchy, spacing, responsive composition, visual prominence | Code review plus runtime inspection or screenshots |
+| Keyboard, focus, labels and announcements | Focused component/runtime check; E2E when part of a critical journey |
+| Public/private information boundary | Contract/backend test plus isolated-player E2E for the representative journey |
+
+The representative server-authoritative flow should prove the distinctions
+between local selection, server-saved draft, final submission, and accepted
+server result whenever those states exist. It should also prove that an
+ambiguous response or reconnect does not encourage a duplicate irreversible
+command.
+
+### Manual UX Review
+
+Manual review is required when the primary risk is perception rather than a
+machine-verifiable behavior. Record only evidence relevant to the changed flow:
+
+- desktop and mobile portrait at supported viewport sizes;
+- loading, empty, ready, disabled/waiting, submitting, accepted and relevant
+  recovery states;
+- timer, primary action, public/private labels and connection status visibility;
+- readable hierarchy without horizontal scrolling of critical actions;
+- keyboard focus and modal return focus;
+- no browser console error, unhandled rejection, or failed request hidden by a
+  visually plausible screen.
+
+Use isolated browser contexts for competitive players. A player context must not
+receive another player's private samples, strategy, thesis values, private
+measurements, or draft. Exchange only room data needed to join the same flow.
+
+Cosmetic UI details such as exact CSS classes, shadows, radius, or spacing values
+do not need automated assertions. Use screenshots as review evidence, not as a
+substitute for proving command acceptance, persistence, privacy, or recovery.
+
 ## Backend
 
 ```bash

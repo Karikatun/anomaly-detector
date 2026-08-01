@@ -80,6 +80,54 @@ The webapp follows these client rules:
 - Routes and `src/main.tsx` are thin composition files and import features through their public `index.ts`. Lazy route components may use explicit `features/<context>/public/*` entry points so unrelated screens do not collapse into one browser chunk.
 - `src/components/ui` and `src/platform` never import product features. Features may use platform code and UI primitives; cross-feature imports must use the target feature's public index.
 
+### Client Interaction State Ownership
+
+Server-authoritative workflows must keep four kinds of state distinct:
+
+1. **Server view**: the latest authorized representation returned by the API.
+   TanStack Query owns its cache and invalidation.
+2. **Local selection**: reversible input that exists only in the current form or
+   component until the user explicitly saves or submits it.
+3. **Server draft**: mutable work persisted by the backend but not yet final,
+   scored, revealed, or treated as a submitted action.
+4. **Accepted command result**: an action the authoritative backend has applied
+   and exposed through a newer server view or an explicit stable receipt.
+
+Components must not describe a local request completion as server acceptance.
+When a request has an ambiguous outcome, refetch the authoritative view and
+determine whether the command's result is present before offering a retry. A
+retry must not create an accidental duplicate action.
+
+The owning feature coordinates the command lifecycle:
+
+```text
+ready -> submitting -> accepted
+                    -> validation error
+                    -> conflict -> refetch -> ready or accepted
+                    -> connection loss -> reconnect -> refetch -> recovered
+                    -> deadline -> refetch -> authoritative timeout result
+```
+
+- Pages and phase shells compose status, navigation, and feature panels; they do
+  not duplicate business rules already owned by contracts or the backend.
+- Feature panels own reversible selection and presentation-specific state. They
+  do not repair an invalid upstream server view with fallback business logic.
+- Shared hooks may encapsulate transport and recovery mechanics, but must not
+  become universal service locators or hide product decisions.
+- Realtime messages accelerate invalidation and delivery. They are not a second
+  source of truth; reconnect recovery always refetches the authorized API view.
+- During reconnect or an unresolved command outcome, commands that could spend
+  resources or finalize a choice stay disabled. Read-only exploration may remain
+  available when it cannot expose stale or private information incorrectly.
+- A mode change does not save, clear, or submit a consequential selection unless
+  the product explicitly defines and communicates that behavior.
+
+Tender is the reference implementation for this contract: the server owns
+hidden state, deadlines, ruleset selection, validation, scoring, and phase
+advancement; the client owns only authorized presentation and reversible input.
+Use the state matrix in [UX_CHECKLIST.md](UX_CHECKLIST.md) when changing such a
+flow.
+
 Auth in `src/features/auth` is the client golden path: its API adapter owns auth endpoints and refresh/retry, its provider exposes only auth behavior, and pages never receive a universal API service locator. Future providers should receive narrow context APIs such as `BillingApi` or `NotificationsApi` from composition.
 
 Do not create a new form, query, auth, or API abstraction until the existing pattern stops solving the current problem.
@@ -131,6 +179,21 @@ For image optimization, generate app-owned variants in the backend, a worker, or
 ## Current Upstream Documentation
 
 For framework and API questions, consult the current upstream documentation linked here first. This document describes repository conventions; upstream docs are authoritative for tool behavior.
+
+The following resources are non-normative engineering references. Use them to
+name and compare an already-observed design problem, not as a checklist that
+requires introducing every pattern or abstraction:
+
+- [Martin Fowler](https://martinfowler.com/) for discovering relevant material
+  about architecture, refactoring, delivery, and software design. A specific
+  article may influence a project decision only after it has been read in full
+  and checked against the current problem and repository constraints. The
+  reviewed shortlist, project applications, and limitations live in
+  [ENGINEERING_REFERENCES.md](ENGINEERING_REFERENCES.md).
+- [Patterns.dev](https://www.patterns.dev/) for JavaScript, React, rendering,
+  and performance patterns.
+- [Catalog of Refactorings](https://refactoring.com/catalog/) for established
+  refactoring vocabulary.
 
 - [Bun docs](https://bun.sh/docs)
 - [Hono docs](https://hono.dev/docs)
