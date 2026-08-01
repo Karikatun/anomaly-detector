@@ -39,7 +39,6 @@
     "dev:webapp": "bun run --cwd webapp dev",
     "dev:website": "bun run --cwd website dev",
     "dev:backend": "bun run --cwd backend dev",
-    "prototype:round": "node --experimental-strip-types backend/src/modules/match/prototype/tui.ts",
     "build": "bun run --filter '*' --sequential build",
     "build:webapp": "bun run --cwd webapp build",
     "build:website": "bun run --cwd website build",
