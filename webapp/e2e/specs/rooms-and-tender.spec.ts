@@ -235,13 +235,20 @@ async function completeContract(page: Page) {
 
 async function completeAndSubmitFinalModel(page: Page) {
   for (const signal of ['Aster', 'Boreal', 'Cinder', 'Delta', 'Eclipse', 'Ferro']) {
-    const fieldTypes = page.getByRole('button', { name: new RegExp(`^${signal}: тип поля `) })
-    if (!await fieldTypes.evaluateAll((buttons) => buttons.some((button) => button.getAttribute('aria-pressed') === 'true'))) {
-      await fieldTypes.first().click()
-    }
-    const polarities = page.getByRole('button', { name: new RegExp(`^${signal}: полярность `) })
-    if (!await polarities.evaluateAll((buttons) => buttons.some((button) => button.getAttribute('aria-pressed') === 'true'))) {
-      await polarities.first().click()
+    const fieldTypeSelect = page.getByRole('combobox', { name: `${signal}: тип поля`, exact: true })
+    const polaritySelect = page.getByRole('combobox', { name: `${signal}: полярность`, exact: true })
+    if (await fieldTypeSelect.isVisible()) {
+      if (await fieldTypeSelect.inputValue() === '') await fieldTypeSelect.selectOption({ index: 1 })
+      if (await polaritySelect.inputValue() === '') await polaritySelect.selectOption({ index: 1 })
+    } else {
+      const fieldTypes = page.getByRole('button', { name: new RegExp(`^${signal}: тип поля `) })
+      if (!await fieldTypes.evaluateAll((buttons) => buttons.some((button) => button.getAttribute('aria-pressed') === 'true'))) {
+        await fieldTypes.first().click()
+      }
+      const polarities = page.getByRole('button', { name: new RegExp(`^${signal}: полярность `) })
+      if (!await polarities.evaluateAll((buttons) => buttons.some((button) => button.getAttribute('aria-pressed') === 'true'))) {
+        await polarities.first().click()
+      }
     }
   }
   await expect(page.getByLabel('Заполнено параметров: 12 из 12')).toBeVisible()
@@ -755,12 +762,27 @@ test('two players complete every Tender stage and receive each realtime phase tr
       return minutes * 60 + seconds
     }).toBeGreaterThan(170)
     await expect(page.getByRole('heading', { name: 'Игроки' })).toHaveCount(1)
-    await expect(page.getByRole('button', { name: /^Данные исследований/ })).toBeVisible()
+    const hostResearchButton = page.getByRole('button', { name: /^Данные исследований/ })
+    await expect(hostResearchButton).toBeVisible()
     await expect(page.getByText('Рабочая модель', { exact: true })).toHaveCount(0)
-    await expect(page.locator('#final-evidence [data-private-thesis]')).toHaveCount(4)
-    await expect(guestPage.locator('#final-evidence [data-private-thesis]')).toHaveCount(4)
+    await hostResearchButton.click()
+    await expect(page.getByRole('dialog').locator('[data-private-thesis]')).toHaveCount(4)
+    await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+    const guestResearchButton = guestPage.getByRole('button', { name: /^Данные исследований/ })
+    await expect(guestResearchButton).toBeVisible()
+    await guestResearchButton.click()
+    await expect(guestPage.getByRole('dialog').locator('[data-private-thesis]')).toHaveCount(4)
+    await guestPage.getByRole('button', { name: 'Закрыть данные исследований' }).click()
     await expect(guestPage.getByText('Подтвердили 0 из 2 исследователей').first()).toBeVisible()
+    await expect(guestPage.getByRole('combobox', { name: 'Aster: тип поля', exact: true })).toBeVisible()
+    await expect(guestPage.getByRole('combobox', { name: 'Aster: полярность', exact: true })).toBeVisible()
+    await expect(
+      guestPage.getByRole('navigation', { name: 'Прогресс фаз раунда' }).getByText('Финал', { exact: true }),
+    ).toBeVisible()
     await expect(guestPage.getByRole('button', { name: 'Отправить финальную модель' })).toBeEnabled()
+    await expect(
+      guestPage.getByRole('button', { name: 'Отправить финальную модель' }).locator('xpath=ancestor::footer'),
+    ).toHaveCSS('position', 'sticky')
     const finalDraftSaved = page.waitForResponse((response) => {
       if (response.request().method() !== 'POST' || !response.url().endsWith('/commands')) return false
       const command = response.request().postDataJSON() as { type?: string } | null

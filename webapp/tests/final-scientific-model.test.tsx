@@ -14,11 +14,6 @@ test('Final Scientific Model restores its private server draft and aggregate pro
           },
         }}
         dueAt="2026-07-29T12:03:00.000Z"
-        evidence={{
-          privateMeasurements: [],
-          publicLaboratoryResults: [],
-          publicTheses: [],
-        }}
         onConfirm={async () => undefined}
         onSaveDraft={async () => undefined}
         progress={{ completed: 1, total: 2 }}
@@ -32,6 +27,35 @@ test('Final Scientific Model restores its private server draft and aggregate pro
   expect(html).toContain('aria-label="Aster: полярность Отрицательная"')
   expect(html.match(/data-selected=""/g)).toHaveLength(2)
   expect(html).not.toContain('Рабочая модель')
+})
+
+test('Final Scientific Model exposes separate mobile selects for field type and polarity', () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <FinalScientificModelPanel
+        draft={{
+          signals: {
+            aster: { fieldType: 'inertial', polarity: 'negative' },
+          },
+        }}
+        dueAt="2026-07-29T12:03:00.000Z"
+        onConfirm={async () => undefined}
+        onSaveDraft={async () => undefined}
+        serverTime="2026-07-29T12:00:00.000Z"
+      />
+    </I18nProvider>,
+  )
+
+  expect(html.match(/data-final-model-mobile-select=""/g)).toHaveLength(12)
+  expect(html.match(/data-final-model-signal-row=""/g)).toHaveLength(6)
+  expect(html.match(/data-final-model-mobile-controls=""/g)).toHaveLength(6)
+  expect(html).toContain('aria-label="Aster: тип поля"')
+  expect(html).toContain('aria-label="Aster: полярность"')
+  expect(html).toMatch(/<option[^>]*value="">Не выбрано<\/option>/)
+  expect(html).toMatch(/<option[^>]*value="inertial" selected="">Инерционное<\/option>/)
+  expect(html).toMatch(/<option[^>]*value="negative" selected="">Отрицательная<\/option>/)
+  expect(html).not.toContain('href="#final-evidence"')
+  expect(html).not.toContain('id="final-evidence"')
 })
 
 test('submitted Final Scientific Model is locked and server-confirmed', () => {
@@ -49,11 +73,6 @@ test('submitted Final Scientific Model is locked and server-confirmed', () => {
           },
         }}
         dueAt="2026-07-29T12:03:00.000Z"
-        evidence={{
-          privateMeasurements: [],
-          publicLaboratoryResults: [],
-          publicTheses: [],
-        }}
         onConfirm={async () => undefined}
         onSaveDraft={async () => undefined}
         progress={{ completed: 1, total: 2 }}

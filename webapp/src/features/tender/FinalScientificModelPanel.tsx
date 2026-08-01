@@ -13,6 +13,7 @@ import type {
 } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { useSynchronizedCountdown } from '@/platform/time/synchronized-countdown'
@@ -26,7 +27,6 @@ import {
 } from './catalog'
 import styles from './components/PhasePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
-import { TenderEvidence } from './components/TenderOverview'
 import { signalAccent } from './components/signal-visuals'
 import { runTenderAction } from './run-tender-action'
 import {
@@ -38,10 +38,6 @@ type Props = {
   disabled?: boolean
   draft: ScientificModelDraft
   dueAt: string | null
-  evidence: Pick<
-    TenderView,
-    'privateMeasurements' | 'privateTheses' | 'publicLaboratoryResults' | 'publicTheses'
-  >
   error?: string | null
   onConfirm: (model: ScientificModel) => Promise<void>
   onSaveDraft: (draft: ScientificModelDraft) => Promise<void>
@@ -69,7 +65,6 @@ export function FinalScientificModelPanel({
   disabled,
   draft: initialDraft,
   dueAt,
-  evidence,
   error,
   onConfirm,
   onSaveDraft,
@@ -108,30 +103,28 @@ export function FinalScientificModelPanel({
     }
   }, [draftController])
 
-  const toggleFieldType = (signal: SignalId, value: FieldType) => {
+  const setFieldType = (signal: SignalId, value: FieldType | undefined) => {
     const previous = draft.signals
     const current = previous[signal] ?? {}
-      const fieldType = current.fieldType === value ? undefined : value
-      if (!fieldType && !current.polarity) {
-        const next = { ...previous }
-        delete next[signal]
-        draftController.update({ signals: next })
-        return
-      }
-    draftController.update({ signals: { ...previous, [signal]: { ...current, fieldType } } })
+    if (!value && !current.polarity) {
+      const next = { ...previous }
+      delete next[signal]
+      draftController.update({ signals: next })
+      return
+    }
+    draftController.update({ signals: { ...previous, [signal]: { ...current, fieldType: value } } })
   }
 
-  const togglePolarity = (signal: SignalId, value: Polarity) => {
+  const setPolarity = (signal: SignalId, value: Polarity | undefined) => {
     const previous = draft.signals
     const current = previous[signal] ?? {}
-      const polarity = current.polarity === value ? undefined : value
-      if (!current.fieldType && !polarity) {
-        const next = { ...previous }
-        delete next[signal]
-        draftController.update({ signals: next })
-        return
-      }
-    draftController.update({ signals: { ...previous, [signal]: { ...current, polarity } } })
+    if (!current.fieldType && !value) {
+      const next = { ...previous }
+      delete next[signal]
+      draftController.update({ signals: next })
+      return
+    }
+    draftController.update({ signals: { ...previous, [signal]: { ...current, polarity: value } } })
   }
 
   const handleSubmit = async () => {
@@ -191,18 +184,6 @@ export function FinalScientificModelPanel({
             </div>
           )}
 
-          <a className={styles.finalEvidenceSummary} href="#final-evidence">
-            <span>
-              <Typography as="strong" variant="bodySmMedium">Данные для решения</Typography>
-              <Typography as="span" variant="caption" tone="muted">
-                {evidence.publicLaboratoryResults.length} публичных опытов ·{' '}
-                {evidence.privateMeasurements.length} личных измерений ·{' '}
-                {(evidence.privateTheses?.length ?? 0) + evidence.publicTheses.length} тезисов
-              </Typography>
-            </span>
-            <Typography as="span" variant="control">К данным ↓</Typography>
-          </a>
-
           <div className={styles.finalModelTable}>
             <div className={styles.finalModelHead} aria-hidden="true">
               <Typography as="span" variant="caption">Сигнал</Typography>
@@ -214,13 +195,18 @@ export function FinalScientificModelPanel({
               const claim = model[signal]
               const signalName = t(signalLabelKeys[signal])
               return (
-                <div key={signal} className={styles.modelRow} style={rowStyle(signal)}>
+                <div
+                  key={signal}
+                  className={styles.modelRow}
+                  style={rowStyle(signal)}
+                  data-final-model-signal-row=""
+                >
                   <span className={styles.modelSignal}>
                     <SignalGlyph signal={signal} className={styles.signalGlyph} />
                     <Typography as="strong" variant="bodySmMedium">{signalName}</Typography>
                   </span>
 
-                  <div className={styles.segmented}>
+                  <div className={`${styles.segmented} ${styles.finalDesktopControl}`}>
                     {fieldTypes.map((fieldType) => (
                       <button
                         aria-label={`${signalName}: тип поля ${t(fieldTypeLabelKeys[fieldType])}`}
@@ -229,7 +215,10 @@ export function FinalScientificModelPanel({
                         type="button"
                         disabled={formDisabled}
                         data-selected={claim?.fieldType === fieldType ? '' : undefined}
-                        onClick={() => toggleFieldType(signal, fieldType)}
+                        onClick={() => setFieldType(
+                          signal,
+                          claim?.fieldType === fieldType ? undefined : fieldType,
+                        )}
                       >
                         <Typography as="span" variant="caption" className={styles.finalOptionLong}>
                           {t(fieldTypeLabelKeys[fieldType])}
@@ -241,7 +230,7 @@ export function FinalScientificModelPanel({
                     ))}
                   </div>
 
-                  <div className={styles.segmented} data-options="2">
+                  <div className={`${styles.segmented} ${styles.finalDesktopControl}`} data-options="2">
                     {polarities.map((polarity) => (
                       <button
                         aria-label={`${signalName}: полярность ${t(polarityLabelKeys[polarity])}`}
@@ -250,7 +239,10 @@ export function FinalScientificModelPanel({
                         type="button"
                         disabled={formDisabled}
                         data-selected={claim?.polarity === polarity ? '' : undefined}
-                        onClick={() => togglePolarity(signal, polarity)}
+                        onClick={() => setPolarity(
+                          signal,
+                          claim?.polarity === polarity ? undefined : polarity,
+                        )}
                       >
                         <Typography as="span" variant="caption" className={styles.finalOptionLong}>
                           {`${polarity === 'positive' ? '+' : '−'} ${t(polarityLabelKeys[polarity])}`}
@@ -261,6 +253,55 @@ export function FinalScientificModelPanel({
                       </button>
                     ))}
                   </div>
+
+                  <div className={styles.finalMobileControls} data-final-model-mobile-controls="">
+                    <label className={styles.finalMobileControl}>
+                      <Typography as="span" variant="caption" tone="muted">Тип поля</Typography>
+                      <NativeSelect
+                        size="sm"
+                        aria-label={`${signalName}: тип поля`}
+                        data-final-model-mobile-select=""
+                        disabled={formDisabled}
+                        value={claim?.fieldType ?? ''}
+                        onChange={(event) => setFieldType(
+                          signal,
+                          event.currentTarget.value === ''
+                            ? undefined
+                            : event.currentTarget.value as FieldType,
+                        )}
+                      >
+                        <NativeSelectOption value="">Не выбрано</NativeSelectOption>
+                        {fieldTypes.map((fieldType) => (
+                          <NativeSelectOption value={fieldType} key={fieldType}>
+                            {t(fieldTypeLabelKeys[fieldType])}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </label>
+                    <label className={styles.finalMobileControl}>
+                      <Typography as="span" variant="caption" tone="muted">Полярность</Typography>
+                      <NativeSelect
+                        size="sm"
+                        aria-label={`${signalName}: полярность`}
+                        data-final-model-mobile-select=""
+                        disabled={formDisabled}
+                        value={claim?.polarity ?? ''}
+                        onChange={(event) => setPolarity(
+                          signal,
+                          event.currentTarget.value === ''
+                            ? undefined
+                            : event.currentTarget.value as Polarity,
+                        )}
+                      >
+                        <NativeSelectOption value="">Не выбрано</NativeSelectOption>
+                        {polarities.map((polarity) => (
+                          <NativeSelectOption value={polarity} key={polarity}>
+                            {t(polarityLabelKeys[polarity])}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </label>
+                  </div>
                 </div>
               )
             })}
@@ -268,15 +309,6 @@ export function FinalScientificModelPanel({
         </div>
 
         <aside className={styles.finalSidebar}>
-          <section className={styles.surface} id="final-evidence">
-            <div className={styles.sectionHeader}>
-              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Данные для анализа</Typography>
-              <Typography asChild variant="control">
-                <a className={styles.finalBackLink} href="#final-model-heading">К модели ↑</a>
-              </Typography>
-            </div>
-            <TenderEvidence data={evidence} compactLaboratoryInsets laboratoryCountBelowResults />
-          </section>
           <section className={styles.surface}>
             <div className={styles.sectionHeader}>
               <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Прогресс</Typography>
@@ -342,13 +374,7 @@ export function FinalScientificModelPanel({
         <div className={styles.error} role="alert"><Typography variant="bodySm">{saveStatus.message}</Typography></div>
       )}
 
-      <footer className={styles.footer}>
-        <div className={styles.info}>
-          <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-          <Typography variant="bodySm">
-            Полностью верная модель даёт дополнительный бонус +3.
-          </Typography>
-        </div>
+      <footer className={`${styles.footer} ${styles.finalFooter}`}>
         <Button
           type="button"
           size="lg"
