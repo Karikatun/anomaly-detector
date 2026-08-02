@@ -161,7 +161,7 @@ const view = {
 test('shows what contributed to every player rating in the final audit', () => {
   const html = renderToStaticMarkup(
     <I18nProvider>
-      <CompletedTenderPanel view={{ ...view, audit: view.audit }} />
+      <CompletedTenderPanel currentUserId="player-a" view={{ ...view, audit: view.audit }} />
     </I18nProvider>,
   )
 
@@ -179,9 +179,14 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('Тип поля: Инерционное · верно')
   expect(html).toContain('Полярность: Отрицательная · неверно')
   expect(html).not.toContain('Приватные тезисы')
-  expect(html).toContain('Официальные финальные модели')
+  expect(html).toContain('Модели остальных игроков')
   expect(html).toContain('Финальная модель не отправлена')
   expect(html).toContain('Фильтр итогового аудита по игроку')
+  expect(html).toContain('value="player-a" selected=""')
+  expect(html).toContain('Моя финальная модель')
+  expect(html).toContain('Другие игроки')
+  expect(html).toContain('Полный аудит по раундам')
+  expect(html).not.toMatch(/<details[^>]*data-audit-section[^>]*open/)
   expect(html).toContain('Раунд 1')
   expect(html).toContain('Распределение Мощности')
   expect(html).toContain('Широкое исследование')
@@ -193,6 +198,5 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).not.toContain('r1-t1')
   expect(html).not.toContain('contract-1')
   expect(html).not.toContain('Резерв')
-  expect(html).toContain('Тайм-аут')
   expect(html).not.toMatch(/<details[^>]*data-audit-round[^>]*open/)
 })

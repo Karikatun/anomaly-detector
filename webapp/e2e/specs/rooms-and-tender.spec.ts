@@ -114,8 +114,10 @@ async function verifyWorkingModelModal(page: Page) {
     await expect(sharedTimer).toBeVisible()
     const initialTime = await sharedTimer.textContent()
 
-    await page.getByRole('button', { name: 'Трактовка анализов' }).click()
-    const laboratoryDialog = page.getByRole('dialog')
+    await page.getByRole('button', { name: 'Справка' }).click()
+    const helpDialog = page.getByRole('dialog', { name: 'Справка' })
+    await helpDialog.getByRole('button', { name: 'Трактовка анализов' }).click()
+    const laboratoryDialog = page.getByRole('dialog', { name: 'Трактовка лабораторных анализов' })
     const laboratoryWarning = laboratoryDialog.getByRole('status')
     const laboratoryCopy = laboratoryDialog.getByText('Источник и приёмник нельзя менять местами при трактовке результата.')
     const laboratoryClose = laboratoryDialog.getByRole('button', { name: 'Закрыть трактовку анализов' })
@@ -473,22 +475,27 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     await page.setViewportSize({ width: 390, height: 844 })
     const tenderHeader = page.locator('header[aria-label="Текущая фаза игры"]')
     const leaveButton = page.getByRole('button', { name: 'Выйти из матча' })
-    const rulesButton = page.getByRole('button', { name: 'Правила' })
-    const laboratoryButton = page.getByRole('button', { name: 'Трактовка анализов' })
-    const [leaveBox, rulesBox, laboratoryBox] = await Promise.all([
+    const helpButton = page.getByRole('button', { name: 'Справка' })
+    const [leaveBox, helpBox] = await Promise.all([
       leaveButton.boundingBox(),
-      rulesButton.boundingBox(),
-      laboratoryButton.boundingBox(),
+      helpButton.boundingBox(),
     ])
     expect(leaveBox).not.toBeNull()
-    expect(rulesBox).not.toBeNull()
-    expect(laboratoryBox).not.toBeNull()
-    expect(leaveBox!.y).toBeLessThan(rulesBox!.y)
-    expect(leaveBox!.y).toBeLessThan(laboratoryBox!.y)
+    expect(helpBox).not.toBeNull()
+    expect(leaveBox!.y).toBeLessThan(helpBox!.y)
     expect(await tenderHeader.evaluate((header) => header.scrollWidth <= header.clientWidth)).toBe(true)
+    await helpButton.click()
+    const helpDialog = page.getByRole('dialog', { name: 'Справка' })
+    await expect(helpDialog.getByRole('button', { name: 'Правила игры' })).toBeVisible()
+    await expect(helpDialog.getByRole('button', { name: 'Трактовка анализов' })).toBeVisible()
+    await helpDialog.getByRole('button', { name: 'Правила игры' }).click()
+    const mobileRulesDialog = page.getByRole('dialog', { name: 'Справочник правил' })
+    await expect(mobileRulesDialog).toBeVisible()
+    await page.getByRole('button', { name: 'Закрыть правила' }).click()
+    await expect(mobileRulesDialog).toBeHidden()
 
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.getByRole('button', { name: 'Правила' }).click()
+    await page.getByRole('button', { name: 'Правила', exact: true }).click()
     const rulesDialog = page.getByRole('dialog')
     await expect(rulesDialog).toBeVisible()
     expect(await rulesDialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true)
@@ -522,6 +529,7 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
 
 test('two players complete every Tender stage and receive each realtime phase transition', async ({ browser, page }) => {
   test.setTimeout(300_000)
+  page.setDefaultTimeout(15_000)
   await page.setViewportSize({ width: 1440, height: 900 })
   await registerBrowserUser(page, 'Хост E2E', 'room-host')
   const webOrigin = new URL(page.url()).origin
@@ -537,6 +545,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     viewport: { width: 390, height: 844 },
   })
   const guestPage = await guestContext.newPage()
+  guestPage.setDefaultTimeout(15_000)
   const guestRealtimeViews: Array<Record<string, unknown>> = []
   guestPage.on('websocket', (socket) => {
     socket.on('framereceived', ({ payload }) => {
@@ -777,7 +786,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestPage.getByRole('combobox', { name: 'Aster: тип поля', exact: true })).toBeVisible()
     await expect(guestPage.getByRole('combobox', { name: 'Aster: полярность', exact: true })).toBeVisible()
     await expect(
-      guestPage.getByRole('navigation', { name: 'Прогресс фаз раунда' }).getByText('Финал', { exact: true }),
+      guestPage.getByRole('navigation', { name: 'Прогресс фаз раунда' })
+        .getByText('Этап 7 из 7 · Финальная модель', { exact: true }),
     ).toBeVisible()
     await expect(guestPage.getByRole('button', { name: 'Отправить финальную модель' })).toBeEnabled()
     await expect(
@@ -811,6 +821,15 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await completeAndSubmitFinalModel(guestPage)
     await expect(page.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
+    await expect(guestPage.getByText('Ваш итог', { exact: true })).toBeVisible()
+    await expect(guestPage.locator('details[data-audit-section="own-model"] > summary')).toBeVisible()
+    await expect(guestPage.locator('details[data-audit-section="other-players"] > summary')).toBeVisible()
+    const guestFullAudit = guestPage.locator('details[data-audit-section="full-audit"]')
+    await expect(guestFullAudit).not.toHaveAttribute('open', '')
+    await guestPage.locator('details[data-audit-section="full-audit"] > summary').click()
+    await expect(guestFullAudit.getByRole('combobox', { name: 'Фильтр итогового аудита по игроку' })
+      .locator('option:checked')).toHaveText('Гость E2E')
+    await expect(guestFullAudit.getByRole('option', { name: 'Все игроки' })).toHaveCount(1)
     await expect(page.getByText('Итоговый рейтинг', { exact: true })).toBeVisible()
     await expect(page.getByText('За что начислен рейтинг', { exact: true }).first()).toBeVisible()
     await expect(page.getByLabel('За что начислен рейтинг игроку Хост E2E')).toContainText(
