@@ -11,7 +11,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
 import type { CSSProperties, ReactNode } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { TenderView } from '@anomaly-detector/contracts'
 
@@ -29,6 +29,7 @@ import { signalAccent } from './signal-visuals'
 import styles from './CompletedTenderPanel.module.css'
 
 type Props = {
+  currentUserId?: string
   view: TenderView & { audit: NonNullable<TenderView['audit']> }
 }
 
@@ -101,9 +102,8 @@ function AuditGroup({
   )
 }
 
-export function CompletedTenderPanel({ view }: Props) {
+export function CompletedTenderPanel({ currentUserId, view }: Props) {
   const { t } = useI18n()
-  const [selectedPlayerId, setSelectedPlayerId] = useState('all')
   const winnerIds = new Set(view.winnerPlayerIds ?? [])
   const winnerNames = view.players
     .filter((player) => winnerIds.has(player.playerId))
@@ -112,9 +112,22 @@ export function CompletedTenderPanel({ view }: Props) {
     (view.audit.placementByPlayer[left.playerId] ?? 99)
     - (view.audit.placementByPlayer[right.playerId] ?? 99),
   )
-  const selectedPlayers = selectedPlayerId === 'all'
-    ? rankedPlayers
-    : rankedPlayers.filter((player) => player.playerId === selectedPlayerId)
+  const currentPlayer = rankedPlayers.find((player) => player.playerId === currentUserId)
+    ?? rankedPlayers[0]
+  const otherPlayers = rankedPlayers.filter((player) => player.playerId !== currentPlayer?.playerId)
+  const [selectedPlayerId, setSelectedPlayerId] = useState(currentPlayer?.playerId ?? 'all')
+  const [desktopAudit, setDesktopAudit] = useState(false)
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 48rem)')
+    const applyViewport = () => {
+      setDesktopAudit(media.matches)
+      setSelectedPlayerId(media.matches ? 'all' : currentPlayer?.playerId ?? 'all')
+    }
+    applyViewport()
+    media.addEventListener('change', applyViewport)
+    return () => media.removeEventListener('change', applyViewport)
+  }, [currentPlayer?.playerId])
   const playerName = (playerId: string) =>
     view.players.find((player) => player.playerId === playerId)?.displayName ?? playerId
   const completionReasonLabel = {
@@ -123,6 +136,65 @@ export function CompletedTenderPanel({ view }: Props) {
     last_active_player: 'Завершён досрочно: остался один активный игрок',
     all_players_forfeited: 'Завершён досрочно без победителя: все игроки выбыли',
   }[view.audit.completionReason]
+  const ratingEntries = (playerId: string) => {
+    const breakdown = view.audit.ratingBreakdownByPlayer[playerId]
+    return breakdown
+      ? Object.entries(ratingLabels)
+          .map(([key, label]) => ({
+            label,
+            points: breakdown[key as keyof typeof ratingLabels],
+          }))
+          .filter(({ points }) => points !== 0)
+      : []
+  }
+  const renderPlayerModels = (players: typeof rankedPlayers) => (
+    <div className={styles.auditPlayerList}>
+      {players.map((player) => {
+        const result = view.audit.finalScientificModelsByPlayer[player.playerId]
+        return (
+          <article key={player.playerId} className={styles.auditPlayer}>
+            <Typography as="h4" variant="bodySmMedium">
+              {player.displayName ?? player.playerId.slice(0, 8)}
+            </Typography>
+            {!result?.submitted ? (
+              <Typography variant="caption" tone="muted">Финальная модель не отправлена</Typography>
+            ) : (
+              <ul className={styles.auditEntries}>
+                {signalIds.map((signal) => {
+                  const claim = result.signals[signal]
+                  if (!claim) return null
+                  return (
+                    <li
+                      key={signal}
+                      className={styles.signalAuditEntry}
+                      style={{ '--signal-accent': signalAccent(signal) } as CSSProperties}
+                    >
+                      <SignalGlyph signal={signal} className={styles.auditSignalGlyph} />
+                      <span className={styles.auditEntryCopy}>
+                        <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
+                        <span className={styles.correctness}>
+                          {claim.fieldType && (
+                            <Typography as="span" variant="caption" data-correct={claim.fieldTypeCorrect || undefined}>
+                              {t(fieldTypeLabelKeys[claim.fieldType])}: {claim.fieldTypeCorrect ? 'верно' : 'неверно'}
+                            </Typography>
+                          )}
+                          {claim.polarity && (
+                            <Typography as="span" variant="caption" data-correct={claim.polarityCorrect || undefined}>
+                              {t(polarityLabelKeys[claim.polarity])}: {claim.polarityCorrect ? 'верно' : 'неверно'}
+                            </Typography>
+                          )}
+                        </span>
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </article>
+        )
+      })}
+    </div>
+  )
 
   return (
     <section className={styles.panel} aria-labelledby="completed-tender-heading">
@@ -154,7 +226,67 @@ export function CompletedTenderPanel({ view }: Props) {
         </span>
       </header>
 
-      <section className={styles.section} aria-labelledby="completed-signals-heading">
+      {currentPlayer && (
+        <section className={styles.mobileOwnResult} aria-labelledby="completed-own-result-heading">
+          <span>
+            <Typography as="span" variant="caption" className={styles.eyebrow}>Ваш итог</Typography>
+            <Typography id="completed-own-result-heading" as="h3" variant="h4">
+              {view.audit.placementByPlayer[currentPlayer.playerId] ?? '—'} место
+            </Typography>
+            <Typography as="strong" variant="h3" className={styles.ownRating}>
+              {view.audit.ratingBreakdownByPlayer[currentPlayer.playerId]?.total ?? 0} Rating
+            </Typography>
+          </span>
+          <span className={styles.ownResultPlayer}>
+            <Typography as="strong" variant="bodySmMedium">
+              {currentPlayer.displayName ?? currentPlayer.playerId.slice(0, 8)}
+            </Typography>
+            <Typography as="span" variant="caption" tone="muted">
+              Итоговый рейтинг: {currentPlayer.rating}
+            </Typography>
+          </span>
+          <ul className={styles.mobileBreakdown} aria-label="Ваши начисления рейтинга">
+            {ratingEntries(currentPlayer.playerId).map(({ label, points }) => (
+              <li key={label}>
+                <Typography as="span" variant="caption">{label}</Typography>
+                <Typography as="strong" variant="caption">
+                  {points > 0 ? '+' : ''}{points}
+                </Typography>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <details className={styles.auditDisclosure} data-audit-section="own-model" open={desktopAudit || undefined}>
+        <summary>
+          <Typography as="strong" variant="bodySmMedium">Моя финальная модель</Typography>
+          <Typography as="span" variant="caption">Открыть ›</Typography>
+        </summary>
+        <div className={styles.disclosureBody}>
+          <section className={styles.section} aria-labelledby="completed-own-model-heading">
+            <div className={styles.sectionHeader}>
+              <span>
+                <Typography id="completed-own-model-heading" as="h3" variant="bodySmMedium">
+                  Моя финальная модель
+                </Typography>
+                <Typography variant="caption" tone="muted">
+                  Неотправленный серверный черновик не раскрывается
+                </Typography>
+              </span>
+            </div>
+            {renderPlayerModels(currentPlayer ? [currentPlayer] : [])}
+          </section>
+        </div>
+      </details>
+
+      <details className={styles.auditDisclosure} data-audit-section="configuration" open={desktopAudit || undefined}>
+        <summary>
+          <Typography as="strong" variant="bodySmMedium">Конфигурация аномалии</Typography>
+          <Typography as="span" variant="caption">6 сигналов ›</Typography>
+        </summary>
+        <div className={styles.disclosureBody}>
+        <section className={styles.section} aria-labelledby="completed-signals-heading">
         <div className={styles.sectionHeader}>
           <span>
             <Typography id="completed-signals-heading" as="h3" variant="bodySmMedium">
@@ -186,9 +318,23 @@ export function CompletedTenderPanel({ view }: Props) {
             )
           })}
         </div>
-      </section>
+        </section>
+        </div>
+      </details>
 
-      <section className={styles.section} aria-labelledby="completed-ranking-heading">
+      <details
+        className={`${styles.auditDisclosure} ${styles.otherPlayersDisclosure}`}
+        data-audit-section="other-players"
+        open={desktopAudit || undefined}
+      >
+        <summary>
+          <Typography as="strong" variant="bodySmMedium">Другие игроки</Typography>
+          <Typography as="span" variant="caption">
+            {otherPlayers.length === 1 ? '1 участник' : `${otherPlayers.length} участников`} ›
+          </Typography>
+        </summary>
+        <div className={styles.disclosureBody}>
+        <section className={styles.section} aria-labelledby="completed-ranking-heading">
         <div className={styles.sectionHeader}>
           <span>
             <Typography id="completed-ranking-heading" as="h3" variant="bodySmMedium">
@@ -203,17 +349,14 @@ export function CompletedTenderPanel({ view }: Props) {
           {rankedPlayers.map((player) => {
             const isWinner = winnerIds.has(player.playerId)
             const placement = view.audit.placementByPlayer[player.playerId] ?? 1
-            const breakdown = view.audit.ratingBreakdownByPlayer[player.playerId]
-            const earnedRating = breakdown
-              ? Object.entries(ratingLabels)
-                  .map(([key, label]) => ({
-                    label,
-                    points: breakdown[key as keyof typeof ratingLabels],
-                  }))
-                  .filter(({ points }) => points !== 0)
-              : []
+            const earnedRating = ratingEntries(player.playerId)
             return (
-              <li key={player.playerId} className={styles.player} data-winner={isWinner || undefined}>
+              <li
+                key={player.playerId}
+                className={styles.player}
+                data-current-player={player.playerId === currentPlayer?.playerId || undefined}
+                data-winner={isWinner || undefined}
+              >
                 <div className={styles.playerSummary}>
                   <Typography as="span" variant="h5" className={styles.position}>
                     {String(placement).padStart(2, '0')}
@@ -273,7 +416,28 @@ export function CompletedTenderPanel({ view }: Props) {
           })}
         </ol>
       </section>
+        <section className={styles.section} aria-labelledby="completed-other-models-heading">
+          <div className={styles.sectionHeader}>
+            <span>
+              <Typography id="completed-other-models-heading" as="h3" variant="bodySmMedium">
+                Модели остальных игроков
+              </Typography>
+              <Typography variant="caption" tone="muted">
+                Только официально отправленные модели
+              </Typography>
+            </span>
+          </div>
+          {renderPlayerModels(otherPlayers)}
+        </section>
+        </div>
+      </details>
 
+      <details className={styles.auditDisclosure} data-audit-section="full-audit" open={desktopAudit || undefined}>
+        <summary>
+          <Typography as="strong" variant="bodySmMedium">Полный аудит по раундам</Typography>
+          <Typography as="span" variant="caption">Все действия ›</Typography>
+        </summary>
+        <div className={styles.disclosureBody}>
       <label className={styles.playerFilter}>
         <Typography as="span" variant="caption">Показать детали игрока</Typography>
         <NativeSelect
@@ -670,65 +834,8 @@ export function CompletedTenderPanel({ view }: Props) {
           })}
         </div>
       </section>
-
-      <section className={styles.section} aria-labelledby="completed-final-models-heading">
-        <div className={styles.sectionHeader}>
-          <span>
-            <Typography id="completed-final-models-heading" as="h3" variant="bodySmMedium">
-              Официальные финальные модели
-            </Typography>
-            <Typography variant="caption" tone="muted">
-              Неотправленные серверные черновики не раскрываются
-            </Typography>
-          </span>
         </div>
-        <div className={styles.auditPlayerList}>
-          {selectedPlayers.map((player) => {
-            const result = view.audit.finalScientificModelsByPlayer[player.playerId]
-            return (
-              <article key={player.playerId} className={styles.auditPlayer}>
-                <Typography as="h4" variant="bodySmMedium">
-                  {player.displayName ?? player.playerId.slice(0, 8)}
-                </Typography>
-                {!result?.submitted ? (
-                  <Typography variant="caption" tone="muted">Финальная модель не отправлена</Typography>
-                ) : (
-                  <ul className={styles.auditEntries}>
-                    {signalIds.map((signal) => {
-                      const claim = result.signals[signal]
-                      if (!claim) return null
-                      return (
-                        <li
-                          key={signal}
-                          className={styles.signalAuditEntry}
-                          style={{ '--signal-accent': signalAccent(signal) } as CSSProperties}
-                        >
-                          <SignalGlyph signal={signal} className={styles.auditSignalGlyph} />
-                          <span className={styles.auditEntryCopy}>
-                            <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
-                            <span className={styles.correctness}>
-                              {claim.fieldType && (
-                                <Typography as="span" variant="caption" data-correct={claim.fieldTypeCorrect || undefined}>
-                                  {t(fieldTypeLabelKeys[claim.fieldType])}: {claim.fieldTypeCorrect ? 'верно' : 'неверно'}
-                                </Typography>
-                              )}
-                              {claim.polarity && (
-                                <Typography as="span" variant="caption" data-correct={claim.polarityCorrect || undefined}>
-                                  {t(polarityLabelKeys[claim.polarity])}: {claim.polarityCorrect ? 'верно' : 'неверно'}
-                                </Typography>
-                              )}
-                            </span>
-                          </span>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
-              </article>
-            )
-          })}
-        </div>
-      </section>
+      </details>
       {view.ruleset && (
         <Typography variant="caption" tone="muted">
           {t('rules.ruleset', { version: view.ruleset === 'tender-v2' ? '2' : '1' })}

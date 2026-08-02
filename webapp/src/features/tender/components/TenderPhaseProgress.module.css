@@ -1,34 +1,130 @@
 .progress {
-  display: flex;
   min-width: 0;
-  align-items: start;
-  padding: .5rem .55rem;
-  overflow-x: auto;
-  scrollbar-width: none;
-  scroll-behavior: smooth;
+  padding: .65rem .6rem;
   border: 1px solid rgba(65, 127, 169, .28);
   border-radius: .72rem;
   background: rgba(1, 13, 27, .88);
 }
 
-.progress::-webkit-scrollbar {
+.compactProgress {
+  display: grid;
+  gap: .15rem;
+}
+
+.compactHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.compactTitle {
+  min-width: 0;
+  color: var(--primary);
+  font-size: .72rem;
+  line-height: 1.2;
+}
+
+.progress .allStagesAction {
+  position: relative;
+  height: 1rem !important;
+  min-height: 1rem !important;
+  flex: none;
+  padding-inline: .2rem;
+  color: rgba(195, 220, 235, .72);
+  font-size: .68rem;
+  line-height: 1;
+}
+
+.allStagesAction::before {
+  position: absolute;
+  content: '';
+  inset: -.25rem;
+}
+
+.compactSegments {
+  display: grid;
+  gap: .28rem;
+}
+
+.compactSegments > span {
+  height: .18rem;
+  border-radius: 999px;
+  background: rgba(86, 137, 171, .3);
+}
+
+.compactSegments > span[data-state='completed'] {
+  background: var(--success);
+}
+
+.compactSegments > span[data-state='active'] {
+  background: var(--primary);
+  box-shadow: 0 0 .55rem color-mix(in srgb, var(--primary) 42%, transparent);
+}
+
+.stageList {
+  display: grid;
+  gap: .4rem;
+}
+
+.stageList li {
+  display: grid;
+  min-height: 2.75rem;
+  grid-template-columns: 1.8rem minmax(0, 1fr);
+  align-items: center;
+  gap: .55rem;
+  padding: .45rem .55rem;
+  border: 1px solid rgba(65, 127, 169, .24);
+  border-radius: .52rem;
+  color: rgba(198, 216, 228, .58);
+  background: rgba(2, 16, 29, .78);
+}
+
+.stageList li > span {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: .68rem;
+}
+
+.stageList li > span svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.stageList li[data-completed] {
+  color: var(--success);
+}
+
+.stageList li[data-active] {
+  border-color: color-mix(in srgb, var(--primary) 58%, transparent);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, rgba(2, 16, 29, .88));
+}
+
+.stages {
   display: none;
 }
 
 .stage {
   display: grid;
-  flex: 0 0 4.8rem;
-  grid-template-rows: auto auto;
+  flex: 0 0 auto;
+  grid-template-columns: auto minmax(6rem, 1fr);
   align-items: center;
-  justify-items: center;
-  gap: .3rem;
+  justify-items: start;
+  gap: .6rem;
   color: rgba(189, 207, 220, .42);
 }
 
 .connector {
-  flex: 0 0 1.15rem;
-  margin-top: .72rem;
+  flex: 1 1 2rem;
+  min-width: 1.35rem;
   height: 2px;
+  margin: 1.02rem .7rem 0;
   border-radius: 999px;
   background: rgba(86, 137, 171, .3);
 }
@@ -45,8 +141,8 @@
   position: relative;
   z-index: 1;
   display: grid;
-  width: 1.65rem;
-  height: 1.65rem;
+  width: 2.15rem;
+  height: 2.15rem;
   place-items: center;
   border: 1px solid currentColor;
   border-radius: 50%;
@@ -72,17 +168,11 @@
 }
 
 .copy > span {
-  display: block;
-  min-height: 2.2em;
-  font-size: .58rem;
+  min-height: 0;
+  font-size: .72rem;
   line-height: 1.1;
-  overflow-wrap: anywhere;
-  text-align: center;
-  white-space: normal;
-}
-
-.copy > .shortLabel {
-  display: none;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .stage[data-completed] {
@@ -97,62 +187,30 @@
   box-shadow: 0 0 .8rem color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
-@media (max-width: 24rem) {
-  .stage {
-    flex-basis: 4.35rem;
-    gap: .18rem;
-  }
-
-  .marker {
-    width: 1.45rem;
-    height: 1.45rem;
-  }
-
-  .copy {
-    padding-inline: .04rem;
-  }
-
-}
-
 @media (min-width: 48rem) {
   .progress {
     padding: .65rem 1rem;
   }
 
-  .stage {
-    flex: 0 0 auto;
-    grid-template-columns: auto minmax(6rem, 1fr);
-    grid-template-rows: none;
-    justify-items: start;
-    gap: .6rem;
+  .compactProgress {
+    display: none;
   }
 
-  .marker {
-    width: 2.15rem;
-    height: 2.15rem;
+  .stages {
+    display: flex;
+    min-width: 0;
+    align-items: start;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
-  .connector {
-    flex: 1 1 2rem;
-    min-width: 1.35rem;
-    margin: 1.02rem .7rem 0;
-  }
-
-  .copy > span {
-    min-height: 0;
-    font-size: .72rem;
-    overflow-wrap: normal;
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  .copy > .longLabel {
-    display: inline;
+  .stages::-webkit-scrollbar {
+    display: none;
   }
 }
 
 @media (min-width: 64rem) {
-  .progress {
+  .stages {
     overflow-x: hidden;
   }
 

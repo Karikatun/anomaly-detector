@@ -34,15 +34,35 @@
   background: rgba(64, 25, 96, .5);
 }
 
+.helpAction {
+  display: none;
+  min-height: 2.75rem;
+  border-radius: .72rem;
+  border-color: rgba(43, 154, 255, .62);
+  color: #9bd5ff;
+  background: rgba(7, 39, 78, .56);
+}
+
+.helpMenu {
+  display: grid;
+  gap: .55rem;
+}
+
+.helpMenu > button {
+  min-height: 2.75rem;
+  justify-content: flex-start;
+}
+
 .leaveAction {
   min-height: 2.75rem;
+  border-radius: .72rem;
 }
 
 @media (max-width: 47.999rem) {
   .header {
     grid-template-areas:
       "info timer leave"
-      "meta rules laboratory";
+      "meta help help";
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: .45rem;
   }
@@ -75,30 +95,16 @@
     border: 0;
   }
 
-  .headerActionLabel {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
   .rulesAction,
   .laboratoryAction {
+    display: none;
+  }
+
+  .helpAction {
+    display: inline-flex;
     width: 100%;
-    min-width: 2.75rem;
-    padding-inline: 0;
-  }
-
-  .rulesAction {
-    grid-area: rules;
-  }
-
-  .laboratoryAction {
-    grid-area: laboratory;
+    grid-area: help;
+    justify-content: flex-start;
   }
 
   .leaveAction {
@@ -107,8 +113,7 @@
     padding-inline: .55rem;
   }
 
-  .rulesAction svg,
-  .laboratoryAction svg,
+  .helpAction svg,
   .leaveAction svg {
     width: 1rem;
     height: 1rem;

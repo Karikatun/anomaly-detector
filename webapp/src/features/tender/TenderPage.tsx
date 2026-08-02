@@ -1,4 +1,4 @@
-import { Logout01Icon } from '@hugeicons/core-free-icons'
+import { InformationCircleIcon, Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -17,6 +17,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
@@ -303,7 +304,7 @@ function PhasePanel({
 
     case 'complete':
       return view.audit ? (
-        <CompletedTenderPanel view={{ ...view, audit: view.audit }} />
+        <CompletedTenderPanel currentUserId={auth.user?.id} view={{ ...view, audit: view.audit }} />
       ) : (
         <Card>
           <CardHeader><CardTitle>Тендер завершён</CardTitle></CardHeader>
@@ -344,6 +345,7 @@ function TenderContent() {
   const [submitting, setSubmitting] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [laboratoryHelpOpen, setLaboratoryHelpOpen] = useState(false)
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [exitOpen, setExitOpen] = useState(false)
   const [workingModelOpen, setWorkingModelOpen] = useState(false)
   const [contextModal, setContextModal] = useState<'research' | 'working-model' | 'contracts' | null>(null)
@@ -623,6 +625,51 @@ function TenderContent() {
           ) : (
             <Badge variant="outline" className={`${styles.connectionBadge} text-amber-400`}>{t('tender.realtime.reconnecting')}</Badge>
           )}
+          <Dialog
+            open={helpMenuOpen && !referenceHelpLocked}
+            onOpenChange={(open) => setHelpMenuOpen(open && !referenceHelpLocked)}
+          >
+            <DialogTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={styles.helpAction}
+                disabled={referenceHelpLocked}
+              >
+                <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
+                <Typography as="span" variant="control">Справка</Typography>
+              </Button>
+            </DialogTrigger>
+            <DialogContent closeLabel="Закрыть справку">
+              <DialogHeader>
+                <DialogTitle>Справка</DialogTitle>
+                <DialogDescription>Правила игры и трактовка результатов исследований.</DialogDescription>
+              </DialogHeader>
+              <div className={styles.helpMenu}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setHelpMenuOpen(false)
+                    setOverlayOpen('rules', true)
+                  }}
+                >
+                  Правила игры
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setHelpMenuOpen(false)
+                    setOverlayOpen('interpretation', true)
+                  }}
+                >
+                  Трактовка анализов
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
           <RulesReferenceDialog
             belowTenderHeader
             disabled={referenceHelpLocked}
@@ -632,7 +679,6 @@ function TenderContent() {
             ruleset={tenderView.ruleset}
             triggerClassName={styles.rulesAction}
             triggerIcon="book"
-            triggerTextClassName={styles.headerActionLabel}
           />
           <LaboratoryInterpretationDialog
             belowTenderHeader
@@ -642,7 +688,6 @@ function TenderContent() {
             ruleset={tenderView.ruleset}
             showTimerWarning={!isComplete}
             triggerClassName={styles.laboratoryAction}
-            triggerTextClassName={styles.headerActionLabel}
           />
           <Button
             type="button"
