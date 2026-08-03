@@ -21,7 +21,7 @@ import { LoginForm } from './LoginForm'
 export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode }) {
   const { t } = useI18n()
   const auth = useAuth()
-  const [mode, setMode] = useState<'choice' | 'login' | 'register'>('choice')
+  const [mode, setMode] = useState<'login' | 'register'>('login')
   const [oauthConsentOpen, setOauthConsentOpen] = useState(() => {
     if (typeof window === 'undefined') return false
     return new URL(window.location.href).searchParams.get('auth_error') === 'oauth_registration_consent_required'
@@ -36,47 +36,53 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
   const [oauthBusy, setOauthBusy] = useState(false)
 
   return (
-    <section className={styles.screen} aria-label={t('auth.title')}>
+    <section className={styles.screen} aria-labelledby="auth-screen-title">
       <div className={styles.background} aria-hidden="true" />
       <div className={styles.panel}>
         <header className={styles.brand}>
+          <Typography as="h1" id="auth-screen-title" variant="srOnly">
+            {t(mode === 'register' ? 'auth.register' : 'auth.title')}
+          </Typography>
           <Typography as="span" className={styles.wordmark}>ANOMALY</Typography>
           <Typography as="span" className={styles.detector}>DETECTOR</Typography>
+          <Typography className={styles.tagline}>{t('auth.tagline')}</Typography>
         </header>
 
-        {mode === 'choice' ? (
-          <div key="choice" className={`${styles.content} ${styles.choiceContent}`}>
+        <div className={styles.content}>
+          <div className={styles.modeTabs} role="tablist" aria-label={t('auth.mode.label')}>
             <Button
+              id="auth-login-tab"
               type="button"
-              size="lg"
-              className={styles.choiceButton}
+              role="tab"
+              aria-controls="auth-credentials-panel"
+              aria-selected={mode === 'login'}
+              variant={mode === 'login' ? 'default' : 'ghost'}
+              className={styles.modeTab}
               onClick={() => setMode('login')}
             >
-              {t('auth.login')}
+              {t('auth.title')}
             </Button>
             <Button
+              id="auth-register-tab"
               type="button"
-              size="lg"
-              variant="outline"
-              className={styles.choiceButton}
+              role="tab"
+              aria-controls="auth-credentials-panel"
+              aria-selected={mode === 'register'}
+              variant={mode === 'register' ? 'default' : 'ghost'}
+              className={styles.modeTab}
               onClick={() => setMode('register')}
             >
               {t('auth.register')}
             </Button>
           </div>
-        ) : (
-          <div key="credentials" className={styles.content}>
-            <Button
-              type="button"
-              variant="ghost"
-              className={styles.backButton}
-              onClick={() => setMode('choice')}
-            >
-              Назад
-            </Button>
+          <div
+            id="auth-credentials-panel"
+            role="tabpanel"
+            aria-labelledby={mode === 'register' ? 'auth-register-tab' : 'auth-login-tab'}
+          >
             <LoginForm key={mode} mode={mode} />
           </div>
-        )}
+        </div>
 
         <footer className={styles.footer}>
           {footerRulesAction ?? <Typography as="span">Правила игры</Typography>}

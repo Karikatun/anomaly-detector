@@ -1,12 +1,15 @@
 import { e2ePassword, expect, registerBrowserUser, test } from '../helpers/test'
 
-test('opens login and registration forms from the anonymous choice screen', async ({ page }) => {
+test('shows the primary sign-in paths immediately and exposes accurate auth headings', async ({ page }) => {
   await page.goto('/')
 
+  await expect(page.getByRole('heading', { name: 'Вход', exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Вход', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Регистрация', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Яндекс ID' })).toHaveCount(0)
-  await expect(page.getByLabel('Логин')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
+  await expect(page.getByLabel('Логин')).toBeVisible()
+  await expect(page.getByText('Соревновательная игра о научной дедукции для 2–4 игроков.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Правила' })).toBeVisible()
   await expect(page.getByText('Пользовательское соглашение', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Правила' }).click()
@@ -28,19 +31,31 @@ test('opens login and registration forms from the anonymous choice screen', asyn
   await expect(closeRules).toBeInViewport()
   await closeRules.click()
 
-  await page.getByRole('button', { name: 'Войти', exact: true }).click()
-  await expect(page.getByLabel('Логин')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
-  await page.getByRole('button', { name: 'Назад' }).click()
-
-  await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
+  await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Регистрация', exact: true })).toBeVisible()
   await expect(page.getByLabel('Имя')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
 })
 
+test('submits registration as a native form when Enter is pressed from any field', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
+
+  const login = `native-form-${Date.now()}`
+  await page.getByLabel('Логин').fill(login)
+  await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
+  await page.getByLabel('Имя').fill('Нативная форма')
+  await page.getByRole('checkbox', { name: 'Я даю согласие на обработку персональных данных' }).check()
+
+  await expect(page.locator('form')).toHaveCount(1)
+  await page.getByLabel('Имя').press('Enter')
+
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
+})
+
 test('requires separate personal-data consent and links both registration documents', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
+  await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
   await page.getByLabel('Имя').fill('Ян')
   await page.getByLabel('Логин').fill('explicit-consent')
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
@@ -64,7 +79,6 @@ test('requires separate personal-data consent and links both registration docume
 
 test('shows and hides the password in login and registration modes', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Войти', exact: true }).click()
 
   const password = page.locator('#auth-password')
   await expect(password).toHaveAttribute('type', 'password')
@@ -74,8 +88,7 @@ test('shows and hides the password in login and registration modes', async ({ pa
   await page.getByRole('button', { name: 'Скрыть пароль' }).click()
   await expect(password).toHaveAttribute('type', 'password')
 
-  await page.getByRole('button', { name: 'Назад' }).click()
-  await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
+  await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
   await expect(password).toHaveAttribute('type', 'password')
   await page.getByRole('button', { name: 'Показать пароль' }).click()
   await expect(password).toHaveAttribute('type', 'text')
@@ -106,9 +119,8 @@ test('registers, restores the browser session, opens the profile, and logs out',
 
   await page.getByRole('button', { name: 'Назад' }).click()
   await page.getByRole('button', { name: 'Выйти' }).click()
-  await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Вход', exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
   await page.getByRole('button', { name: 'Войти' }).click()
@@ -160,7 +172,7 @@ test('deletes an account from the profile only after confirmation and explains r
 
   await openDeletionDialog.click()
   await dialog.getByRole('button', { name: 'Удалить аккаунт' }).click()
-  await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Вход', exact: true })).toBeVisible()
   await expect
     .poll(async () =>
       (await page.context().cookies()).some(
@@ -171,13 +183,12 @@ test('deletes an account from the profile only after confirmation and explains r
 
   await page.goto('/profile')
   await expect(page).toHaveURL('/')
-  await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Вход', exact: true })).toBeVisible()
 })
 
 test('shows a neutral retry window after five failed password attempts', async ({ page }) => {
   const { login } = await registerBrowserUser(page, 'Лимит входа E2E', 'login-limit')
   await page.getByRole('button', { name: 'Выйти' }).click()
-  await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль', { exact: true }).fill('wrong-password')
 
@@ -195,7 +206,6 @@ test('shows a neutral retry window after five failed password attempts', async (
 
 test('uses the configured API transport when OAuth is unavailable', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Войти', exact: true }).click()
 
   const oauthButton = page.getByRole('button', { name: 'Яндекс ID' })
   await oauthButton.click()
@@ -257,7 +267,27 @@ test('keeps the authenticated menu and allows retry when logout fails', async ({
 
   shouldFail = false
   await page.getByRole('button', { name: 'Выйти' }).click()
-  await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Вход', exact: true })).toBeVisible()
+})
+
+test('blocks new room actions and allows retry when the active match cannot be checked', async ({ page }) => {
+  await registerBrowserUser(page, 'Проверка матча E2E', 'current-match-retry')
+  await page.route('**/api/rooms/current', async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Временная ошибка матча' } }),
+    })
+  })
+
+  await page.reload()
+  await expect(page.getByRole('alert')).toContainText('Не удалось проверить активный матч')
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' })).toHaveCount(0)
+
+  await page.unroute('**/api/rooms/current')
+  await page.getByRole('button', { name: 'Повторить проверку' }).click()
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
 })
 
 test('keeps profile input and exposes server errors until a successful retry', async ({ page }) => {

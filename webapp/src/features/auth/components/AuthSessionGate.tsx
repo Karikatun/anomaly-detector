@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { useAuth } from '../use-auth'
+import styles from './AuthSessionGate.module.css'
 
 export function AuthSessionGate({
   anonymous,
@@ -45,10 +46,13 @@ export function ProtectedPage({ children }: { children: ReactNode }) {
 function SessionLoadingState() {
   const { t } = useI18n()
   return (
-    <section className="flex flex-col items-center justify-center gap-6 px-5 py-32">
-      <Spinner />
-      <Typography variant="bodySm" tone="muted">{t('loading.session')}</Typography>
-    </section>
+    <SessionStateShell>
+      <div className={styles.loading} role="status">
+        <Typography as="h1" variant="srOnly">{t('loading.session')}</Typography>
+        <Spinner />
+        <Typography variant="bodySm" tone="muted">{t('loading.session')}</Typography>
+      </div>
+    </SessionStateShell>
   )
 }
 
@@ -70,10 +74,10 @@ function SessionErrorState({ retry }: { retry: () => Promise<void> }) {
   }
 
   return (
-    <section className="mx-auto grid w-full max-w-2xl gap-6 px-5 py-16">
+    <SessionStateShell>
       <Card>
-        <CardContent className="grid gap-4 py-8">
-          <Typography variant="h4" tone="destructive">{t('error.session.title')}</Typography>
+        <CardContent className={styles.errorContent}>
+          <Typography as="h1" variant="h4" tone="destructive">{t('error.session.title')}</Typography>
           <Typography>{t('error.session.description')}</Typography>
           <Button
             className="w-fit"
@@ -89,6 +93,21 @@ function SessionErrorState({ retry }: { retry: () => Promise<void> }) {
           )}
         </CardContent>
       </Card>
+    </SessionStateShell>
+  )
+}
+
+function SessionStateShell({ children }: { children: ReactNode }) {
+  return (
+    <section className={styles.screen}>
+      <div className={styles.background} aria-hidden="true" />
+      <div className={styles.content}>
+        <header className={styles.brand} aria-hidden="true">
+          <Typography as="span" className={styles.wordmark}>ANOMALY</Typography>
+          <Typography as="span" className={styles.detector}>DETECTOR</Typography>
+        </header>
+        {children}
+      </div>
     </section>
   )
 }

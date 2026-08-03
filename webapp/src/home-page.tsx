@@ -9,6 +9,8 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMemo, useState } from 'react'
 
+import { ExpeditionBackground } from '@/components/ExpeditionBackground'
+import expeditionStyles from '@/components/ExpeditionShell.module.css'
 import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
 import {
@@ -68,9 +70,9 @@ function AuthenticatedHome({
   }
 
   return (
-    <section className={styles.screen} aria-label="Главное меню">
-      <div className={styles.background} aria-hidden="true" />
-      <div className={styles.panel}>
+    <section className={expeditionStyles.screen} aria-label="Главное меню">
+      <ExpeditionBackground />
+      <div className={`${expeditionStyles.panel} ${styles.panel}`}>
         <header className={styles.header}>
           <Typography variant="h1" className={styles.title}>ГЛАВНОЕ МЕНЮ</Typography>
           <div className={styles.account}>
@@ -114,6 +116,25 @@ function AuthenticatedHome({
               icon={Login03Icon}
               onClick={() => undefined}
             />
+          ) : currentMatch.isError ? (
+            <div className={styles.matchError} role="alert">
+              <div className={styles.matchErrorCopy}>
+                <Typography variant="h4">{t('home.currentMatch.error.title')}</Typography>
+                <Typography variant="bodySm" tone="muted">
+                  {t('home.currentMatch.error.description')}
+                </Typography>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={currentMatch.isFetching}
+                onClick={() => void currentMatch.refetch()}
+              >
+                {currentMatch.isFetching
+                  ? t('home.currentMatch.error.retrying')
+                  : t('home.currentMatch.error.retry')}
+              </Button>
+            </div>
           ) : currentMatch.data ? (
             <MenuCard
               accent="aqua"

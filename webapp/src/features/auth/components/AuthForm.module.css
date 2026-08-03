@@ -57,7 +57,8 @@
 }
 
 .tagline {
-  margin-top: 1rem;
+  max-width: 28rem;
+  margin-top: .35rem;
   color: #c3d0df;
   font-size: clamp(.72rem, 1.5vw, .98rem);
   font-weight: 400;
@@ -69,20 +70,22 @@
 .content {
   display: grid;
   width: min(100%, 31rem);
-  margin-top: 5rem;
-  gap: 1.25rem;
+  margin-top: clamp(2rem, 5vh, 3.25rem);
+  gap: 1rem;
 }
 
-.content.choiceContent {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  margin: 0;
-  transform: translate(-50%, -50%);
+.modeTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .5rem;
+  padding: .3rem;
+  border: 1px solid rgba(114, 151, 181, .32);
+  border-radius: 9px;
+  background: rgba(2, 13, 25, .62);
 }
-.choiceButton { min-height: 4rem; border-radius: 8px; font-size: 1rem !important; }
-.backButton { width: fit-content; min-height: 2rem; padding-inline: 0; color: #aabdd0; }
-.backButton:hover { color: #e9f2fb; background: transparent; }
+
+.modeTab { min-height: 2.8rem; border-radius: 7px; }
+.modeTab[aria-selected='false'] { color: #aabdd0; }
 
 .yandexButton {
   height: 70px;
@@ -164,19 +167,13 @@
       #010408 url('/assets/home/expedition-mobile.webp') center top / 100% auto no-repeat;
   }
   .panel { min-height: 100svh; width: 100%; padding: 2.4rem 1.2rem 1.5rem; border-radius: 0 0 14px 14px; }
-  .content.choiceContent { width: min(calc(100% - 2.4rem), 31rem); }
   .wordmark { font-size: clamp(2rem, 11vw, 2.7rem); }
   .detector { font-size: clamp(.8rem, 4vw, 1rem); }
   .tagline { max-width: 20rem; margin-top: .6rem; font-size: .7rem; }
-  .content { margin-top: clamp(5rem, 18vw, 7rem); gap: 1rem; }
-  .content:has(.consents) { margin-top: 2.25rem; }
+  .content { margin-top: 2rem; gap: .8rem; }
   .yandexButton { height: 70px; min-height: 70px; font-size: 1.2rem !important; }
   .yandexLogo { width: 2.55rem; }
   .credentials { padding: 1.2rem; }
-  .credentials:has(.consents) { gap: .85rem; }
-  .credentials:has(.consents) .yandexButton { height: 70px; min-height: 70px; }
-  .credentials:has(.consents) .fields { gap: .25rem; }
-  .credentials:has(.consents) .fieldErrorSlot { min-height: .75rem; }
   .consent { align-items: flex-start; }
   .consent :global([data-slot='checkbox']) { width: 1.2rem; height: 1.2rem; margin-top: .05rem; border-radius: 4px; }
   .passwordToggle { width: 2.75rem; height: 2.75rem; }
@@ -192,6 +189,5 @@
 
 @media (max-width: 390px) {
   .panel { padding-inline: 1rem; }
-  .content.choiceContent { width: calc(100% - 2rem); }
-  .content { margin-top: 4rem; }
+  .content { margin-top: 1.5rem; }
 }
