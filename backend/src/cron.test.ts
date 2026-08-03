@@ -14,11 +14,12 @@ describe('runCronTask', () => {
     await expect(runCronTask('missing', runtime)).rejects.toThrow('Unknown cron task')
   })
 
-  test('deletes expired and revoked auth sessions after the retention window', async () => {
+  test('deletes expired auth data and waiting rooms older than 24 hours', async () => {
     const calls: unknown[] = []
     const abuseCalls: unknown[] = []
     const oauthCalls: unknown[] = []
     const realtimeCalls: unknown[] = []
+    const roomCalls: unknown[] = []
     const cleanupRuntime = {
       env: { SESSION_ABSOLUTE_TTL_DAYS: 90, SESSION_RETENTION_DAYS: 7 },
       prisma: {
@@ -46,11 +47,17 @@ describe('runCronTask', () => {
             return { count: 5 }
           },
         },
+        tenderRoom: {
+          deleteMany: async (input: unknown) => {
+            roomCalls.push(input)
+            return { count: 6 }
+          },
+        },
       },
     } as unknown as BackendRuntime
 
     const now = new Date('2026-04-08T12:00:00.000Z')
-    await runCronTask('auth:sessions:cleanup', cleanupRuntime, now)
+    await runCronTask('maintenance:cleanup', cleanupRuntime, now)
 
     expect(calls).toHaveLength(1)
     expect(abuseCalls).toEqual([{
@@ -62,6 +69,12 @@ describe('runCronTask', () => {
     expect(realtimeCalls).toEqual([{
       where: { expiresAt: { lt: now } },
     }])
+    expect(roomCalls).toEqual([{
+      where: {
+        createdAt: { lt: new Date('2026-04-07T12:00:00.000Z') },
+        status: 'waiting',
+      },
+    }])
     expect(calls[0]).toMatchObject({
       where: {
         OR: [
@@ -71,5 +84,10 @@ describe('runCronTask', () => {
         ],
       },
     })
+
+    await expect(
+      runCronTask('auth:sessions:cleanup', cleanupRuntime, now),
+    ).resolves.toBeUndefined()
+    expect(roomCalls).toHaveLength(2)
   })
 })

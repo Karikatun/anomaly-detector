@@ -63,7 +63,7 @@ When enabling Yandex ID or VK ID, set both provider credentials and `OAUTH_CALLB
 
 Auth writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind a trusted proxy, set `TRUST_PROXY=true` together with the provider's authoritative `TRUSTED_PROXY_CLIENT_IP_HEADER`; use `TRUSTED_PROXY_CLIENT_IP_POSITION=last` only when the provider appends the client to a comma-separated chain. DigitalOcean App Platform uses `do-connecting-ip`; the documented Yandex Application Load Balancer path uses the first `X-Forwarded-For` value. Before horizontally scaling, keep shared PostgreSQL auth buckets and add an edge/WAF layer for request-rate protection.
 
-`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `auth:sessions:cleanup` on a schedule to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`; the same task removes expired abuse buckets, unfinished OAuth transactions, and one-time realtime tickets.
+`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `maintenance:cleanup` daily to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`; the same task removes expired abuse buckets, unfinished OAuth transactions, one-time realtime tickets, and waiting rooms older than 24 hours. `auth:sessions:cleanup` remains a backwards-compatible alias for the same maintenance task.
 
 DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete Spaces group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
 
@@ -73,7 +73,7 @@ The backend is one workspace with one Prisma schema and one Dockerfile, but it h
 
 - API: `bun run start:api`, backed by `src/index.ts`.
 - Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases and scheduled Room starts. `bun run dev` starts both API and worker locally; production runs them as separate processes. The worker serves internal `/health/live` and `/health/ready` endpoints on `WORKER_HEALTH_PORT` or `PORT + 1`; readiness requires recent successful passes from both polling loops.
-- Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, and `auth:sessions:cleanup`.
+- Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, `maintenance:cleanup`, and the backwards-compatible `auth:sessions:cleanup` alias.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
 
