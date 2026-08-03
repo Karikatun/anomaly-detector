@@ -7,6 +7,7 @@ import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createApiBodyLimit, createAuthSecurity } from './http/security'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
+import { createAdminModule } from './modules/admin'
 import { createProfileModule } from './modules/profile'
 import { createRoomModule } from './modules/room'
 import {
@@ -48,6 +49,12 @@ export function createApp({
   const profile = createProfileModule({
     db: prisma,
     requireAuth: auth.requireAuth,
+  })
+  const admin = createAdminModule({
+    adminUserIds: new Set(env.ADMIN_USER_IDS),
+    authenticate: auth.authenticateAccessToken,
+    db: prisma,
+    securityEvents,
   })
   const app = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
@@ -114,6 +121,7 @@ export function createApp({
   })
 
   app.route('/api/auth', auth.routes)
+  app.route('/api/operations', admin.routes)
   app.route('/api/profile', profile.routes)
   app.route('/api/rooms', rooms.routes)
   app.route('/api/tenders', createTenderRoutes({ requireAuth: auth.requireAuth, tender }))

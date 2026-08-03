@@ -22,6 +22,32 @@ www.anomaly-detector.ru {
 	redir https://anomaly-detector.ru{uri} permanent
 }
 
+ops.anomaly-detector.ru {
+	basic_auth {
+		{$ANOMALY_ADMIN_USER} {$ANOMALY_ADMIN_PASSWORD_HASH}
+	}
+
+	root * {$ANOMALY_ADMIN_ROOT}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; connect-src https://api.anomaly-detector.ru"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		X-Frame-Options "DENY"
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		Cache-Control "no-store"
+		-Server
+	}
+
+	route {
+		try_files {path} /index.html
+		file_server
+	}
+}
+
 api.anomaly-detector.ru {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

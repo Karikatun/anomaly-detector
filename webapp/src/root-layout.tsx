@@ -10,14 +10,11 @@ export function RootLayout() {
   const { t } = useI18n()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const logoutAction = useLogoutAction()
-  const isInTender = pathname.startsWith('/tenders/')
-  const isInRoomLobby = pathname.startsWith('/rooms/')
-  const isInMatchHistory = pathname === '/app'
-  const isInProfile = pathname === '/profile'
+  const usesDefaultHeader = ['/privacy', '/personal-data-consent', '/terms'].includes(pathname)
 
   return (
     <div className="min-h-svh min-w-0 overflow-x-clip bg-background/60 text-foreground">
-      {auth.isAuthenticated && pathname !== '/' && !isInTender && !isInRoomLobby && !isInMatchHistory && !isInProfile && (
+      {auth.isAuthenticated && usesDefaultHeader && (
         <header className="border-b bg-background/95 backdrop-blur">
           <div className="mx-auto flex min-h-16 w-full min-w-0 max-w-6xl flex-wrap items-center gap-3 px-5 py-3">
             <Link to="/" className="flex items-center gap-2">

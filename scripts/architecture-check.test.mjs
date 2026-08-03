@@ -97,10 +97,19 @@ describe('dependency direction', () => {
       .toBe('client-feature-public-api')
   })
 
+  test('keeps the operator application independent from the player client', () => {
+    const violation = check([
+      file('adminapp/src/app.tsx', "import { AuthApi } from '../../webapp/src/features/auth/api'"),
+    ])[0]
+
+    expect(violation?.rule).toBe('client-workspace-boundary')
+  })
+
   test('keeps contracts framework- and product-independent', () => {
     expect(check([file('packages/contracts/src/auth.ts', "import { z } from 'zod'")])).toEqual([])
     expect(check([file('packages/contracts/src/auth.ts', "import { Hono } from 'hono'")])[0]?.rule).toBe('contracts-dependency-direction')
     expect(check([file('packages/contracts/src/auth.ts', "import { jwtVerify } from 'jose'")])[0]?.rule).toBe('contracts-dependency-direction')
+    expect(check([file('packages/contracts/src/auth.ts', "import { AdminApi } from '../../../adminapp/src/api'")])[0]?.rule).toBe('contracts-dependency-direction')
   })
 
   test('checks dynamic imports and CommonJS require calls', () => {

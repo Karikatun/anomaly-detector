@@ -37,7 +37,8 @@ Do not store secrets in the repository. Minimum backend production env:
 ```bash
 DATABASE_URL=postgresql://...
 JWT_SECRET=<64-or-more-hex-characters>
-CORS_ORIGINS=https://webapp.example.com,https://website.example.com
+ADMIN_USER_IDS=<comma-separated-operator-user-uuids>
+CORS_ORIGINS=https://webapp.example.com,https://ops.example.com,https://website.example.com
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 REFRESH_REUSE_GRACE_SECONDS=10
@@ -55,6 +56,8 @@ COOKIE_SECURE=true
 `CORS_ORIGINS` must include every browser origin that calls the API with credentials. Use exact origins only, for example `https://webapp.example.com`; do not use wildcards, empty values, or paths.
 
 `JWT_SECRET` belongs in the production backend runtime env. Generate it with `openssl rand -hex 32`; that command creates 32 random bytes encoded as 64 hex characters. Do not use the placeholder from `.env.example`, repeated characters, or human phrases.
+
+`ADMIN_USER_IDS` may be empty to disable the read-only operator overview. To enable it, use immutable UUIDs from the intended users' profiles, not logins. Build `adminapp` separately from `webapp`, serve it only from a dedicated operator hostname protected at the edge, and include that exact origin in `CORS_ORIGINS`. Never publish the operator build from the player domain or an unprotected public static bucket. The edge policy is defense in depth; backend allowlisting and identical `404` responses remain mandatory.
 
 `AUTH_BODY_LIMIT_BYTES` retains its historical name for deployment
 compatibility, but the backend enforces it globally before parsing request

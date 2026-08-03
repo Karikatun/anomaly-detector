@@ -20,6 +20,7 @@ maybeDescribe('profile statistics API integration', () => {
     CORS_ORIGINS: ['http://localhost:5173'],
     DATABASE_URL: databaseUrl,
     JWT_SECRET: '12345678901234567890123456789012',
+    ADMIN_USER_IDS: [],
     PORT: 3000,
     REFRESH_REUSE_GRACE_SECONDS: 10,
     REFRESH_TOKEN_TTL_DAYS: 30,

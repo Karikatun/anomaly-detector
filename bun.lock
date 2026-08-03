@@ -8,6 +8,29 @@
         "tldts": "^7.4.9",
       },
     },
+    "adminapp": {
+      "name": "@anomaly-detector/adminapp",
+      "version": "0.0.0",
+      "dependencies": {
+        "@anomaly-detector/contracts": "workspace:*",
+        "react": "^19.2.6",
+        "react-dom": "^19.2.6",
+      },
+      "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^24.12.2",
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^6.0.1",
+        "eslint": "^10.2.1",
+        "eslint-plugin-react-hooks": "^7.0.1",
+        "eslint-plugin-react-refresh": "^0.5.2",
+        "globals": "^17.5.0",
+        "typescript": "~6.0.2",
+        "typescript-eslint": "^8.58.2",
+        "vite": "^8.1.5",
+      },
+    },
     "backend": {
       "name": "@anomaly-detector/backend",
       "version": "0.0.0",
@@ -110,6 +133,8 @@
     "yaml": "^2.9.0",
   },
   "packages": {
+    "@anomaly-detector/adminapp": ["@anomaly-detector/adminapp@workspace:adminapp"],
+
     "@anomaly-detector/backend": ["@anomaly-detector/backend@workspace:backend"],
 
     "@anomaly-detector/contracts": ["@anomaly-detector/contracts@workspace:packages/contracts"],

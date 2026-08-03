@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sourceRoots = [
+  'adminapp/src',
   'backend/src',
   'packages/contracts/src',
   'webapp/src',
@@ -157,11 +158,19 @@ function checkBackendModuleBoundary(filePath, specifier, report) {
 }
 
 function checkClientBoundary(filePath, specifier, report) {
-  const client = filePath.match(/^(webapp|mobile)\/src\//)?.[1]
+  const client = filePath.match(/^(adminapp|webapp|mobile)\/src\//)?.[1]
   if (!client) return
 
   const target = resolveRepositoryImport(filePath, specifier)
   if (!target) return
+
+  const targetClient = target.match(/^(adminapp|webapp|mobile)\/src\//)?.[1]
+  if (targetClient && targetClient !== client) {
+    report(
+      'client-workspace-boundary',
+      `client ${client} must not import another client workspace ${targetClient} (${specifier}).`,
+    )
+  }
 
   const sourceFeature = filePath.match(new RegExp(`^${client}/src/features/([^/]+)/`))?.[1]
   const targetFeature = target.match(new RegExp(`^${client}/src/features/([^/]+)(?:/(.*))?$`))
@@ -209,7 +218,7 @@ function checkContracts(filePath, specifier, report) {
   if (!filePath.startsWith('packages/contracts/src/')) return
 
   const target = resolveRepositoryImport(filePath, specifier)
-  const forbiddenTarget = target && /^(backend|webapp|website|mobile)\//.test(target)
+  const forbiddenTarget = target && /^(adminapp|backend|webapp|website|mobile)\//.test(target)
   const forbiddenPackage = contractForbiddenPackages.some((name) => packageMatches(specifier, name))
   if (forbiddenTarget || forbiddenPackage) {
     report(
@@ -229,7 +238,7 @@ function resolveRepositoryImport(importer, specifier) {
     return `${workspace}/src/${specifier.slice(2)}`
   }
 
-  const workspaceAlias = specifier.match(/^@(anomaly-detector)\/(backend|contracts|webapp|website|mobile)(?:\/(.*))?$/)
+  const workspaceAlias = specifier.match(/^@(anomaly-detector)\/(adminapp|backend|contracts|webapp|website|mobile)(?:\/(.*))?$/)
   if (workspaceAlias) {
     return `${workspaceAlias[2]}/src/${workspaceAlias[3] ?? 'index'}`
   }

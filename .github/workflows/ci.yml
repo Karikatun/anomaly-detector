@@ -44,8 +44,8 @@ jobs:
       - name: Architecture boundaries
         run: bun run architecture:check
 
-      - name: Webapp lint
-        run: bun run --cwd webapp lint
+      - name: Client lint
+        run: bun run lint
 
       - name: Deployment and script tests
         run: bun run test:deploy
@@ -58,6 +58,9 @@ jobs:
 
       - name: Webapp client tests
         run: bun run test:webapp
+
+      - name: Admin client tests
+        run: bun run test:adminapp
 
       - name: Backend tests
         run: bun run test:backend

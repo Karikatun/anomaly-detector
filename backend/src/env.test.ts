@@ -16,12 +16,30 @@ describe('loadEnv', () => {
     expect(env.REFRESH_REUSE_GRACE_SECONDS).toBe(10)
     expect(env.SESSION_ABSOLUTE_TTL_DAYS).toBe(90)
     expect(env.COOKIE_SECURE).toBe(false)
+    expect(env.ADMIN_USER_IDS).toEqual([])
     expect(env.CORS_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:8081'])
     expect(env.SPACES_REGION).toBeUndefined()
     expect(env.SPACES_UPLOAD_MAX_BYTES).toBe(10 * 1024 * 1024)
     expect(env.SPACES_UPLOAD_URL_TTL_SECONDS).toBe(900)
     expect(env.SPACES_DOWNLOAD_URL_TTL_SECONDS).toBe(300)
     expect(env.SPACES_PUBLIC_CACHE_CONTROL).toBe('public, max-age=31536000, immutable')
+  })
+
+  test('parses and validates the administrator UUID allowlist', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+
+    expect(loadEnv({
+      ...baseEnv,
+      ADMIN_USER_IDS: '019f8099-7e26-7760-ad08-66d1d66b2718, 019f8099-7e26-7760-ad08-66d1d66b2719',
+    }).ADMIN_USER_IDS).toEqual([
+      '019f8099-7e26-7760-ad08-66d1d66b2718',
+      '019f8099-7e26-7760-ad08-66d1d66b2719',
+    ])
+
+    expect(() => loadEnv({ ...baseEnv, ADMIN_USER_IDS: 'operator' })).toThrow('ADMIN_USER_IDS')
   })
 
   test('accepts a dedicated worker health port', () => {
@@ -32,6 +50,16 @@ describe('loadEnv', () => {
     })
 
     expect(env.WORKER_HEALTH_PORT).toBe(3001)
+  })
+
+  test('allows both local browser clients by default', () => {
+    const env = loadEnv({
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    })
+
+    expect(env.CORS_ORIGINS).toContain('http://localhost:5173')
+    expect(env.CORS_ORIGINS).toContain('http://localhost:5174')
   })
 
   test('requires complete DigitalOcean Spaces configuration when storage is enabled', () => {
