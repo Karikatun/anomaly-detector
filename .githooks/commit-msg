@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(git rev-parse --show-toplevel)
+cd "$repository_root"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo 'commit-msg: Bun is required. Install the version from package.json and retry.' >&2
+  exit 1
+fi
+
+exec bun scripts/validate-commit-message.mjs "$1"

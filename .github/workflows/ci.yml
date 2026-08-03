@@ -32,6 +32,9 @@ jobs:
       - name: Dependency security audit
         run: bun audit --audit-level=low
 
+      - name: Secret hygiene
+        run: bun run security:secrets
+
       - name: Typecheck
         run: bun run typecheck
 
@@ -46,6 +49,9 @@ jobs:
 
       - name: Deployment and script tests
         run: bun run test:deploy
+
+      - name: Repository tooling tests
+        run: bun run test:tooling
 
       - name: Contract tests
         run: bun run test:contracts

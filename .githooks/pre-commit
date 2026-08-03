@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(git rev-parse --show-toplevel)
+cd "$repository_root"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo 'pre-commit: Bun is required. Install the version from package.json and retry.' >&2
+  exit 1
+fi
+
+echo 'pre-commit: checking staged secrets and repository quality'
+bun run security:secrets:staged
+exec bun run check:commit

@@ -1,0 +1,31 @@
+import { expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const root = resolve(import.meta.dirname, '..')
+const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
+const workflow = readFileSync(resolve(root, '.github/workflows/ci.yml'), 'utf8')
+
+test('defines fast commit and complete push quality gates', () => {
+  expect(packageJson.scripts.prepare).toBe('bun scripts/install-git-hooks.mjs')
+  expect(packageJson.scripts['security:secrets']).toContain('--tracked')
+  expect(packageJson.scripts['security:secrets:staged']).toContain('--staged')
+  expect(packageJson.scripts['check:commit']).toContain('test:backend:unit')
+  expect(packageJson.scripts['check:commit']).not.toContain('e2e:webapp')
+  expect(packageJson.scripts['check:push']).toBe('bun run check')
+  expect(packageJson.scripts.check).toContain('smoke:backend:docker')
+  expect(packageJson.scripts.check).toContain('e2e:webapp')
+})
+
+test('runs secret hygiene and tooling contracts in remote CI', () => {
+  expect(workflow).toContain('run: bun run security:secrets')
+  expect(workflow).toContain('run: bun run test:tooling')
+})
+
+test('keeps every required versioned hook installed', () => {
+  const installer = readFileSync(resolve(root, 'scripts/install-git-hooks.mjs'), 'utf8')
+  for (const hook of ['commit-msg', 'pre-commit', 'pre-push']) {
+    expect(installer).toContain(`'${hook}'`)
+    expect(readFileSync(resolve(root, '.githooks', hook), 'utf8')).toContain('#!/bin/sh')
+  }
+})

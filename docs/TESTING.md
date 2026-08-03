@@ -1,6 +1,15 @@
 # Testing
 
-The goal of this template's tests is to show future agents where behavior should be verified and how to keep E2E broad enough to protect valuable behavior without turning it into exhaustive matrices.
+## Repository quality gates
+
+- `bun run check:commit` — быстрый локальный gate: tracked secret hygiene, lint, Prisma validation, typecheck, architecture, script/contracts/backend unit/webapp tests.
+- `bun run check:push` и `bun run check` — полный gate: все тесты, production build, backend Docker smoke и Playwright E2E.
+- `pre-commit` отдельно сканирует staged Git index, поэтому проверяет именно содержимое будущего commit, а не игнорируемый локальный `backend/.env`.
+- GitHub Actions повторяет secret hygiene и tooling contracts независимо от локальных hooks, которые можно обойти через `--no-verify`.
+
+Для полной проверки нужны Bun, Docker и установленный Chromium для версии Playwright из `webapp`.
+
+The goal of this project's tests is to show future agents where behavior should be verified and how to keep E2E broad enough to protect valuable behavior without turning it into exhaustive matrices.
 
 ## Pyramid
 
