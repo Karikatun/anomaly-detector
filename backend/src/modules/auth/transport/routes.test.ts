@@ -30,6 +30,38 @@ const env: AppEnv = {
 }
 
 describe('auth routes', () => {
+  test('allows the configured trusted client IP header only for the browser E2E runtime', async () => {
+    const app = createApp({
+      env: {
+        ...env,
+        NODE_ENV: 'test',
+        TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-e2e-client-ip',
+      },
+      prisma: {} as DbClient,
+    })
+    const response = await app.request('/api/auth/register', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://web.example.com',
+        'Access-Control-Request-Headers': 'content-type,x-e2e-client-ip',
+        'Access-Control-Request-Method': 'POST',
+      },
+    })
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get('access-control-allow-headers')).toContain('x-e2e-client-ip')
+
+    const productionResponse = await createApp({ env, prisma: {} as DbClient }).request('/api/auth/register', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://web.example.com',
+        'Access-Control-Request-Headers': 'content-type,do-connecting-ip',
+        'Access-Control-Request-Method': 'POST',
+      },
+    })
+    expect(productionResponse.headers.get('access-control-allow-headers')).not.toContain('do-connecting-ip')
+  })
+
   test('uses a stable callback code when OAuth registration needs legal consent', () => {
     expect(oauthCallbackErrorCode(new AuthFailure(
       'oauth_registration_consent_required',

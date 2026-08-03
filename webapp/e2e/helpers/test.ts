@@ -3,6 +3,15 @@ import { expect, type Page } from '@playwright/test'
 export { expect, test } from '@playwright/test'
 
 export const e2ePassword = 'password123'
+let e2eClientIpSuffix = 1
+
+function nextE2eClientIp() {
+  const suffix = e2eClientIpSuffix
+  e2eClientIpSuffix += 1
+  const thirdOctet = Math.floor((suffix - 1) / 254)
+  const fourthOctet = ((suffix - 1) % 254) + 1
+  return `198.18.${thirdOctet}.${fourthOctet}`
+}
 
 export function uniqueLogin(prefix = 'web-e2e') {
   const timestamp = new Date().toISOString().replace(/[^0-9]/g, '')
@@ -18,6 +27,7 @@ export async function registerBrowserUser(
   startUrl = '/',
 ) {
   const login = uniqueLogin(prefix)
+  await page.context().setExtraHTTPHeaders({ 'x-e2e-client-ip': nextE2eClientIp() })
   await page.goto(startUrl)
   await page.getByRole('tab', { name: 'Регистрация' }).click()
   await page.getByLabel('Имя').fill(displayName)
