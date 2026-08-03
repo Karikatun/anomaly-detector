@@ -16,7 +16,7 @@ const admin: AuthenticatedPrincipal = {
 const overview = {
   generatedAt: '2026-08-03T12:00:00.000Z',
   totals: { users: 3, activeSessions: 2, rooms: 1, tenders: 1 },
-  roomsByStatus: { waiting: 1, starting: 0, started: 0 },
+  roomsByStatus: { waiting: 1, active: 0, completed: 0 },
   tendersByPhase: [{ phase: 'reconnaissance', count: 1 }],
   users: { page: 1, pageSize: 20, totalItems: 3, totalPages: 1, items: [] },
 }

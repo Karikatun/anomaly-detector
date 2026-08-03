@@ -20,6 +20,7 @@ export function createPrismaAdminOverviewReader(
         rooms,
         tenders,
         roomGroups,
+        completedRooms,
         tenderGroups,
         userItems,
       ] = await Promise.all([
@@ -32,6 +33,12 @@ export function createPrismaAdminOverviewReader(
         db.tenderRoom.count(),
         db.tender.count(),
         db.tenderRoom.groupBy({ by: ['status'], _count: { _all: true } }),
+        db.tenderRoom.count({
+          where: {
+            status: 'started',
+            tender: { is: { phase: 'complete' } },
+          },
+        }),
         db.tender.groupBy({ by: ['phase'], _count: { _all: true } }),
         db.user.findMany({
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -46,11 +53,17 @@ export function createPrismaAdminOverviewReader(
         }),
       ])
 
-      const roomsByStatus = Object.fromEntries(roomStatuses.map((status) => [status, 0])) as Record<(typeof roomStatuses)[number], number>
+      const rawRoomsByStatus = Object.fromEntries(roomStatuses.map((status) => [status, 0])) as Record<(typeof roomStatuses)[number], number>
       for (const group of roomGroups) {
         if (roomStatuses.includes(group.status as (typeof roomStatuses)[number])) {
-          roomsByStatus[group.status as (typeof roomStatuses)[number]] = group._count._all
+          rawRoomsByStatus[group.status as (typeof roomStatuses)[number]] = group._count._all
         }
+      }
+
+      const roomsByStatus = {
+        waiting: rawRoomsByStatus.waiting,
+        active: rawRoomsByStatus.starting + rawRoomsByStatus.started - completedRooms,
+        completed: completedRooms,
       }
 
       return {

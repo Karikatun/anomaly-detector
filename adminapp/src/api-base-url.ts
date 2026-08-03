@@ -1,7 +1,8 @@
 export function getApiBaseUrl() {
-  const configured = import.meta.env.VITE_API_URL?.trim()
-  if (configured) return configured.replace(/\/$/, '')
+  return resolveApiBaseUrl(import.meta.env.VITE_API_URL)
+}
 
-  const hostname = typeof window === 'undefined' ? 'localhost' : window.location.hostname
-  return `http://${hostname}:3000`
+export function resolveApiBaseUrl(configured: string | undefined) {
+  const value = configured?.trim()
+  return value ? value.replace(/\/$/, '') : ''
 }

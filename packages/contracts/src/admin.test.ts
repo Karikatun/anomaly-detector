@@ -14,8 +14,8 @@ describe('adminOverviewSchema', () => {
       },
       roomsByStatus: {
         waiting: 1,
-        starting: 1,
-        started: 1,
+        active: 1,
+        completed: 1,
       },
       tendersByPhase: [{ phase: 'laboratory', count: 2 }],
       users: {

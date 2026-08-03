@@ -24,7 +24,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:validate": "prisma validate",
-    "dev:kill": "kill -9 $(lsof -ti:3000) 2>/dev/null; true"
+    "dev:kill": "bun scripts/stop-dev-ports.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1048.0",

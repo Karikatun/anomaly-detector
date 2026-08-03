@@ -9,7 +9,7 @@ bun run dev:backend
 bun run dev:adminapp
 ```
 
-Backend должен содержать UUID оператора в `ADMIN_USER_IDS`. По умолчанию приложение открывается на `http://localhost:5174`, а API ожидается на `http://localhost:3000`. Нестандартный API задаётся при сборке через `VITE_API_URL`.
+Backend должен содержать UUID оператора в `ADMIN_USER_IDS`. По умолчанию приложение открывается на `http://localhost:5174`, а локальный Vite-сервер проксирует same-origin запросы `/api` в backend на `http://localhost:3000`. Нестандартный или production API задаётся при сборке через `VITE_API_URL`.
 
 Production-сборка:
 

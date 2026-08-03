@@ -9,7 +9,7 @@ test('renders operational data without mutation controls', () => {
       data={{
         generatedAt: '2026-08-03T12:00:00.000Z',
         totals: { users: 12, activeSessions: 4, rooms: 3, tenders: 2 },
-        roomsByStatus: { waiting: 1, starting: 1, started: 1 },
+        roomsByStatus: { waiting: 1, active: 2, completed: 3 },
         tendersByPhase: [{ phase: 'laboratory', count: 2 }],
         users: {
           page: 2,
@@ -33,6 +33,10 @@ test('renders operational data without mutation controls', () => {
 
   expect(html).toContain('Системный обзор')
   expect(html).toContain('Все пользователи')
+  expect(html).toContain('Ожидают игроков')
+  expect(html).toContain('Идут сейчас')
+  expect(html).toContain('Завершены')
+  expect(html).not.toContain('Запускаются')
   expect(html).toContain('researcher')
   expect(html).toContain('Страница 2 из 3')
   expect(html).toContain('Назад')

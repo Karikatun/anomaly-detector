@@ -42,6 +42,7 @@ test('CORS preflight allows the standard mutation methods exposed by the client 
 
   expect(response.status).toBe(204)
   expect(response.headers.get('access-control-allow-methods')).toContain('PATCH')
+  expect(response.headers.get('cross-origin-resource-policy')).toBe('cross-origin')
 })
 
 test('limits request bodies for non-authenticated product routes before route validation', async () => {

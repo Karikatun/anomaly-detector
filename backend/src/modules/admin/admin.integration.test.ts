@@ -74,7 +74,7 @@ maybeDescribe('concealed operations API integration', () => {
     expect(response.headers.get('x-robots-tag')).toContain('noindex')
     expect(body).toMatchObject({
       totals: { users: 2, activeSessions: 2, rooms: 0, tenders: 0 },
-      roomsByStatus: { waiting: 0, starting: 0, started: 0 },
+      roomsByStatus: { waiting: 0, active: 0, completed: 0 },
       users: { page: 1, pageSize: 20, totalItems: 2, totalPages: 1 },
     })
     expect(JSON.stringify(body)).not.toContain('passwordHash')
