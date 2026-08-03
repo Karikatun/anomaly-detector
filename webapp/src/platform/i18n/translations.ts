@@ -13,6 +13,8 @@ const ru = {
 
   // Auth page
   'auth.title': 'Вход',
+  'auth.tagline': 'Соревновательная игра о научной дедукции для 2–4 игроков.',
+  'auth.mode.label': 'Способ авторизации',
   'auth.description': 'Войдите через один из сервисов или логин.',
   'auth.login': 'Войти',
   'auth.register': 'Регистрация',
@@ -42,6 +44,10 @@ const ru = {
   'app.profile.badge': 'Текущий пользователь',
   'app.profile.userId': 'ID пользователя',
   'app.profile.created': 'Создан',
+  'home.currentMatch.error.title': 'Не удалось проверить активный матч',
+  'home.currentMatch.error.description': 'Новые игровые действия временно недоступны, чтобы не потерять уже начатый матч.',
+  'home.currentMatch.error.retry': 'Повторить проверку',
+  'home.currentMatch.error.retrying': 'Проверяем…',
 
   // Match history
   'matches.title': 'История матчей',

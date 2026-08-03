@@ -3,6 +3,8 @@ import { CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { ExpeditionBackground } from '@/components/ExpeditionBackground'
+import expeditionStyles from '@/components/ExpeditionShell.module.css'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
@@ -146,8 +148,9 @@ function RoomLobbyContent() {
   const canLeave = isMember && currentRoom.status === 'waiting'
 
   return (
-    <main className={styles.screen}>
-      <section className={styles.panel} aria-label={t('lobby.title')}>
+    <main className={expeditionStyles.screen}>
+      <ExpeditionBackground />
+      <section className={expeditionStyles.panel} aria-label={t('lobby.title')}>
         <header className={styles.header}>
           <button type="button" className={styles.roomCode} onClick={() => void handleCopy()}>
             <Typography as="span" variant="control">{t('lobby.room.id')}</Typography>

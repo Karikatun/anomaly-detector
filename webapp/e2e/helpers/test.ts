@@ -19,7 +19,7 @@ export async function registerBrowserUser(
 ) {
   const login = uniqueLogin(prefix)
   await page.goto(startUrl)
-  await page.getByRole('button', { name: 'Регистрация' }).click()
+  await page.getByRole('tab', { name: 'Регистрация' }).click()
   await page.getByLabel('Имя').fill(displayName)
   await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)

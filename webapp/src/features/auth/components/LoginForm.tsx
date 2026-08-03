@@ -72,7 +72,14 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
   })
 
   return (
-    <div className={styles.credentials}>
+    <form
+      className={styles.credentials}
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault()
+        void form.handleSubmit()
+      }}
+    >
       <form.Subscribe selector={(state) => state.values.privacyConsent}>
         {(privacyConsent) => (
           <OAuthButton
@@ -118,6 +125,8 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                   value={field.state.value}
                   className={styles.input}
                   placeholder="Логин"
+                  aria-invalid={loginError || undefined}
+                  aria-describedby={loginError ? 'auth-login-error' : undefined}
                   onBlur={field.handleBlur}
                   onChange={(event) => {
                     field.handleChange(event.target.value)
@@ -145,13 +154,12 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                     autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                     value={field.state.value}
                     className={`${styles.input} ${styles.passwordInput}`}
+                    aria-invalid={passwordError || undefined}
+                    aria-describedby={passwordError ? 'auth-password-error' : undefined}
                     onBlur={field.handleBlur}
                     onChange={(event) => {
                       field.handleChange(event.target.value)
                       setError(null)
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') void form.handleSubmit()
                     }}
                   />
                   <button
@@ -193,6 +201,8 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                       value={field.state.value}
                       className={styles.input}
                       placeholder="Игрок 1"
+                      aria-invalid={displayNameError || undefined}
+                      aria-describedby={displayNameError ? 'auth-name-error' : undefined}
                       onBlur={field.handleBlur}
                       onChange={(event) => {
                         field.handleChange(event.target.value)
@@ -262,7 +272,7 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
             const isValid = parseCredentialsForm(mode, values).success
             return (
               <Button
-                type="button"
+                type="submit"
                 size="lg"
                 className={styles.submit}
                 disabled={!isValid || isSubmitting}
@@ -280,6 +290,6 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
           }}
         </form.Subscribe>
       </FieldGroup>
-    </div>
+    </form>
   )
 }

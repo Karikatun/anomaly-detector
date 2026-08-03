@@ -4,6 +4,8 @@ import { ArrowLeft01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMemo } from 'react'
 
+import { ExpeditionBackground } from '@/components/ExpeditionBackground'
+import expeditionStyles from '@/components/ExpeditionShell.module.css'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
@@ -37,9 +39,9 @@ function MyMatchesContent() {
   })
 
   return (
-    <main className={styles.screen}>
-      <div className={styles.background} aria-hidden="true" />
-      <section className={styles.panel} aria-labelledby="match-history-title">
+    <main className={expeditionStyles.screen}>
+      <ExpeditionBackground />
+      <section className={expeditionStyles.panel} aria-labelledby="match-history-title">
         <header className={styles.header}>
           <Typography variant="h1" id="match-history-title" className={styles.title}>
             {t('matches.title')}
