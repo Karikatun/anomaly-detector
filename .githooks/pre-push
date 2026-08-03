@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(git rev-parse --show-toplevel)
+cd "$repository_root"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo 'pre-push: Bun is required. Install the version from package.json and retry.' >&2
+  exit 1
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo 'pre-push: Docker with Compose is required for the full repository check.' >&2
+  exit 1
+fi
+
+echo 'pre-push: running the full repository check'
+exec bun run check:push

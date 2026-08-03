@@ -38,3 +38,17 @@ bun run dev:webapp
 ```
 
 API будет доступен по адресу `http://localhost:3000`, адрес webapp появится в терминале. Подробности о локальной базе данных и её сбросе находятся в [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md).
+
+## Проверки перед commit и push
+
+После `bun install` проект автоматически подключает версионируемые Git hooks из `.githooks`. Если зависимости были установлены до появления hooks, подключите их один раз:
+
+```bash
+bun run hooks:install
+```
+
+- `commit-msg` проверяет формат Conventional Commits: `type(scope): lowercase imperative subject`;
+- `pre-commit` проверяет staged-файлы на секреты и запускает быстрый `bun run check:commit` без integration, Docker и E2E;
+- `pre-push` запускает полный `bun run check`, включая PostgreSQL integration, build, backend Docker smoke и Playwright E2E.
+
+Локальные hooks можно обойти через `--no-verify`, поэтому обязательной удалённой гарантией остаётся GitHub Actions CI. Штатный игнорируемый `backend/.env` не сканируется; tracked или staged `.env`, credential-файлы и известные token/private-key patterns блокируются без вывода найденного значения.
