@@ -15,7 +15,7 @@ Local setup from `README.md` and [LOCAL_DATABASE.md](LOCAL_DATABASE.md) does not
 
 DigitalOcean App Platform sections below are preserved for legacy/explicitly requested deployments; for the current repository default, follow [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 
-If the user explicitly asks for Yandex Cloud, use [YANDEX_CLOUD.md](YANDEX_CLOUD.md) as the provider runbook. Anomaly Detector's confirmed Yandex topology is a Compute Cloud instance group with separate API and worker containers, Application Load Balancer for HTTPS/WebSocket ingress, Managed Service for PostgreSQL for production data, Object Storage for files and static websites, and Cloud CDN for public static/media delivery. Serverless Containers remain appropriate only for bounded one-shot tasks such as scheduled auth cleanup.
+If the user explicitly asks for Yandex Cloud, use [YANDEX_CLOUD.md](YANDEX_CLOUD.md) as the provider runbook. Anomaly Detector's confirmed Yandex topology is a Compute Cloud instance group with separate API and worker containers, Application Load Balancer for HTTPS/WebSocket ingress, Managed Service for PostgreSQL for production data, Object Storage for files and static websites, and Cloud CDN for public static/media delivery. Serverless Containers remain appropriate only for bounded one-shot tasks such as scheduled maintenance cleanup.
 
 ## Release Source Preflight
 
@@ -235,15 +235,15 @@ export DO_BACKEND_WORKER_ENABLED=true
 export DO_BACKEND_WORKER_RUN_COMMAND="bun run start:worker:real-handler"
 
 # Add the auth-session retention job for production.
-export DO_BACKEND_CRON_NAME=auth-session-cleanup
-export DO_BACKEND_CRON_TASK=auth:sessions:cleanup
+export DO_BACKEND_CRON_NAME=maintenance-cleanup
+export DO_BACKEND_CRON_TASK=maintenance:cleanup
 export DO_BACKEND_CRON_SCHEDULE="0 3 * * *"
 export DO_BACKEND_CRON_TIME_ZONE=UTC
 
 bun run deploy:do:specs backend-final
 ```
 
-Use worker components only after a real long-running handler exists. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND` and refuses the template placeholder `bun run start:worker`, because that placeholder exits immediately and should not be deployed as an App Platform worker. Production auth should schedule `auth:sessions:cleanup`; it removes revoked sessions and sessions past either sliding or absolute lifetime only after `SESSION_RETENTION_DAYS`. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes. Both optional components use `backend/Dockerfile`, the repository-root build context, and the same managed PostgreSQL binding as the API. Add Spaces or other runtime secrets to those components when the specific background task needs them.
+Use worker components only after a real long-running handler exists. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND` and refuses the template placeholder `bun run start:worker`, because that placeholder exits immediately and should not be deployed as an App Platform worker. Production should schedule `maintenance:cleanup`; it removes stale authentication data and waiting rooms older than 24 hours. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes. Both optional components use `backend/Dockerfile`, the repository-root build context, and the same managed PostgreSQL binding as the API. Add Spaces or other runtime secrets to those components when the specific background task needs them.
 
 ## Real-Time And Horizontal Scaling
 

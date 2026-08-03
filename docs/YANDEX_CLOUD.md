@@ -223,21 +223,21 @@ bun run --cwd backend prisma:deploy
 
 Do not run `prisma migrate dev` in production and do not hand-write Prisma migration SQL.
 
-## Auth Session Cleanup Timer
+## Maintenance Cleanup Timer
 
-Production must run `auth:sessions:cleanup` on a schedule; setting `SESSION_RETENTION_DAYS` alone does not delete rows. The same task also removes expired login and registration anti-abuse buckets, unfinished OAuth transactions, and one-time realtime tickets after their TTL. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+Production must run `maintenance:cleanup` daily; setting `SESSION_RETENTION_DAYS` alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, and waiting rooms older than 24 hours. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
 
 Create the cleanup container and deploy its revision. The image `WORKDIR` is already `/app/backend`, so the command can call the existing cron runner directly:
 
 ```bash
-yc serverless container create --name <project>-auth-cleanup
+yc serverless container create --name <project>-maintenance-cleanup
 
 yc serverless container revision deploy \
-  --container-name <project>-auth-cleanup \
+  --container-name <project>-maintenance-cleanup \
   --image cr.yandex/$REGISTRY_ID/<project>-backend:<immutable-tag> \
   --runtime task \
   --command bun \
-  --args src/cron.ts,auth:sessions:cleanup \
+  --args src/cron.ts,maintenance:cleanup \
   --cores 1 \
   --memory 256MB \
   --execution-timeout 60s \
@@ -250,21 +250,21 @@ Configure the cleanup revision with the same production `DATABASE_URL`, `JWT_SEC
 Create a narrowly scoped service account for the timer, grant it invocation access only to the cleanup container, and schedule the task daily at 03:00 UTC. Yandex timer expressions have six fields and use UTC:
 
 ```bash
-yc iam service-account create --name <project>-auth-cleanup-trigger
+yc iam service-account create --name <project>-maintenance-cleanup-trigger
 TRIGGER_SA_ID=$(yc iam service-account get \
-  --name <project>-auth-cleanup-trigger \
+  --name <project>-maintenance-cleanup-trigger \
   --format json | jq -r .id)
 CLEANUP_CONTAINER_ID=$(yc serverless container get \
-  --name <project>-auth-cleanup \
+  --name <project>-maintenance-cleanup \
   --format json | jq -r .id)
 
 yc serverless container add-access-binding \
-  --name <project>-auth-cleanup \
+  --name <project>-maintenance-cleanup \
   --service-account-id "$TRIGGER_SA_ID" \
   --role serverless-containers.containerInvoker
 
 yc serverless trigger create timer \
-  --name <project>-auth-cleanup-daily \
+  --name <project>-maintenance-cleanup-daily \
   --cron-expression '0 3 ? * * *' \
   --invoke-container-id "$CLEANUP_CONTAINER_ID" \
   --invoke-container-service-account-id "$TRIGGER_SA_ID" \
@@ -272,7 +272,7 @@ yc serverless trigger create timer \
   --retry-interval 30s
 ```
 
-After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-auth-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron auth:sessions:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, and ... realtime tickets.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
+After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, ... realtime tickets, and ... expired waiting rooms.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
 
 ## Real-Time Pub/Sub
 
@@ -520,7 +520,7 @@ After deployment:
 - verify the webapp and API use same-site custom domains and that a reload restores the cookie-backed session in a browser with third-party cookies blocked;
 - verify through the Application Load Balancer that register returns `Set-Cookie`, refresh receives that cookie, `/me` receives the bearer `Authorization` header, logout clears the cookie, and the next refresh returns 401;
 - verify Managed PostgreSQL connectivity and that Prisma migrations applied exactly once;
-- verify the private auth cleanup timer is active and its most recent scheduled invocation completed with task exit code `0`;
+- verify the private maintenance cleanup timer is active and its most recent scheduled invocation completed with task exit code `0`;
 - verify `webapp` route refreshes load the SPA fallback instead of a broken 404 page;
 - verify `website` static assets load from the production domain;
 - verify public media loads through the Cloud CDN domain when storage is active;

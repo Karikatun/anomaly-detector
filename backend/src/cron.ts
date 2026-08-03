@@ -2,6 +2,48 @@ import { createBackendRuntime, type BackendRuntime } from './runtime'
 
 type CronTask = (runtime: BackendRuntime, now: Date) => Promise<void>
 
+const waitingRoomTtlMs = 24 * 60 * 60 * 1000
+
+const cleanupMaintenance: CronTask = async ({ env, prisma }, now) => {
+  const dayMs = 24 * 60 * 60 * 1000
+  const retentionCutoff = new Date(
+    now.getTime() - env.SESSION_RETENTION_DAYS * dayMs,
+  )
+  const absoluteRetentionCutoff = new Date(
+    now.getTime() - (env.SESSION_ABSOLUTE_TTL_DAYS + env.SESSION_RETENTION_DAYS) * dayMs,
+  )
+  const waitingRoomCutoff = new Date(now.getTime() - waitingRoomTtlMs)
+  const [sessions, abuseBuckets, oauthTransactions, realtimeTickets, waitingRooms] = await Promise.all([
+    prisma.authSession.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: retentionCutoff } },
+          { revokedAt: { lt: retentionCutoff } },
+          { createdAt: { lt: absoluteRetentionCutoff } },
+        ],
+      },
+    }),
+    prisma.authAbuseBucket.deleteMany({
+      where: { expiresAt: { lt: now } },
+    }),
+    prisma.oAuthTransaction.deleteMany({
+      where: { expiresAt: { lt: now } },
+    }),
+    prisma.realtimeTicket.deleteMany({
+      where: { expiresAt: { lt: now } },
+    }),
+    prisma.tenderRoom.deleteMany({
+      where: {
+        createdAt: { lt: waitingRoomCutoff },
+        status: 'waiting',
+      },
+    }),
+  ])
+  console.log(
+    `Cron maintenance:cleanup removed ${sessions.count} stale sessions, ${abuseBuckets.count} expired abuse buckets, ${oauthTransactions.count} OAuth transactions, ${realtimeTickets.count} realtime tickets, and ${waitingRooms.count} expired waiting rooms.`,
+  )
+}
+
 const cronTasks = {
   noop: async () => {
     console.log('Cron noop task completed.')
@@ -10,38 +52,8 @@ const cronTasks = {
     await prisma.$queryRaw`SELECT 1`
     console.log('Cron db:ping task completed.')
   },
-  'auth:sessions:cleanup': async ({ env, prisma }, now) => {
-    const dayMs = 24 * 60 * 60 * 1000
-    const retentionCutoff = new Date(
-      now.getTime() - env.SESSION_RETENTION_DAYS * dayMs,
-    )
-    const absoluteRetentionCutoff = new Date(
-      now.getTime() - (env.SESSION_ABSOLUTE_TTL_DAYS + env.SESSION_RETENTION_DAYS) * dayMs,
-    )
-    const { count } = await prisma.authSession.deleteMany({
-      where: {
-        OR: [
-          { expiresAt: { lt: retentionCutoff } },
-          { revokedAt: { lt: retentionCutoff } },
-          { createdAt: { lt: absoluteRetentionCutoff } },
-        ],
-      },
-    })
-    const [abuseBuckets, oauthTransactions, realtimeTickets] = await Promise.all([
-      prisma.authAbuseBucket.deleteMany({
-        where: { expiresAt: { lt: now } },
-      }),
-      prisma.oAuthTransaction.deleteMany({
-        where: { expiresAt: { lt: now } },
-      }),
-      prisma.realtimeTicket.deleteMany({
-        where: { expiresAt: { lt: now } },
-      }),
-    ])
-    console.log(
-      `Cron auth:sessions:cleanup removed ${count} stale sessions, ${abuseBuckets.count} expired abuse buckets, ${oauthTransactions.count} OAuth transactions, and ${realtimeTickets.count} realtime tickets.`,
-    )
-  },
+  'maintenance:cleanup': cleanupMaintenance,
+  'auth:sessions:cleanup': cleanupMaintenance,
 } satisfies Record<string, CronTask>
 
 export type CronTaskName = keyof typeof cronTasks
