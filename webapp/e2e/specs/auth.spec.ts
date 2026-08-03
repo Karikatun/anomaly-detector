@@ -127,6 +127,20 @@ test('registers, restores the browser session, opens the profile, and logs out',
   await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
 })
 
+test('does not expose the operator application from the player domain', async ({ page }) => {
+  await registerBrowserUser(page, 'Обычный пользователь', 'operations-denied')
+
+  let operationsRequests = 0
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/operations/overview')) operationsRequests += 1
+  })
+  await page.goto('/system/overview')
+
+  await expect(page.getByRole('heading', { name: 'Страница не найдена' })).toBeVisible()
+  expect(operationsRequests).toBe(0)
+  await expect(page.getByRole('navigation')).toHaveCount(0)
+})
+
 test('deletes an account from the profile only after confirmation and explains recent sign-in recovery', async ({
   page,
 }) => {

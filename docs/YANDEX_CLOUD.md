@@ -127,7 +127,8 @@ PORT=3000
 WORKER_HEALTH_PORT=3001
 DATABASE_URL=postgresql://...
 JWT_SECRET=<64-or-more-hex-characters>
-CORS_ORIGINS=https://anomaly-detector.ru
+ADMIN_USER_IDS=<comma-separated-operator-user-uuids>
+CORS_ORIGINS=https://anomaly-detector.ru,https://ops.anomaly-detector.ru
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 REFRESH_REUSE_GRACE_SECONDS=10
@@ -142,6 +143,8 @@ TRUSTED_PROXY_CLIENT_IP_HEADER=x-forwarded-for
 TRUSTED_PROXY_CLIENT_IP_POSITION=first
 COOKIE_SECURE=true
 ```
+
+Leave `ADMIN_USER_IDS` empty to disable the read-only operator overview. When enabled, use immutable user UUIDs from the intended operators' profiles. Build and serve `adminapp` only from the separately protected `ops.anomaly-detector.ru` host; never include it in the player `webapp` output. Backend authorization and identical `404` responses remain mandatory behind the edge check.
 
 Yandex Application Load Balancer places the source client address first in
 `X-Forwarded-For`. Validate this in the production-like smoke test before relying on IP
@@ -318,11 +321,15 @@ After cleanup, require all of the following:
 
 Use
 [`deploy/yandex/Caddyfile.example`](../deploy/yandex/Caddyfile.example) as the
-source configuration: set `ANOMALY_WEBAPP_ROOT` to the absolute directory that
-contains the deployed `webapp/dist` contents, validate with `caddy validate`,
-then reload Caddy. The file owns the browser CSP, HSTS, clickjacking protection,
-content-type protection, referrer policy, permissions policy, SPA fallback, API
-proxy, and `www` redirect. Keep these headers in the serving layer; HTML
+source configuration: set `ANOMALY_WEBAPP_ROOT` and `ANOMALY_ADMIN_ROOT` to the
+absolute directories that contain the deployed `webapp/dist` and
+`adminapp/dist` contents. Set `ANOMALY_ADMIN_USER` and the Caddy-generated
+`ANOMALY_ADMIN_PASSWORD_HASH` only in the Caddy process environment. Generate
+the hash interactively with `caddy hash-password` so the plaintext is not added
+to shell history. Validate with `caddy validate`, then reload Caddy. The file
+owns the browser CSP, HSTS, clickjacking protection, content-type protection,
+referrer policy, permissions policy, SPA fallbacks, operator Basic Auth, API
+proxy, and `www` redirect. Keep these controls in the serving layer; HTML
 `<meta>` tags are not an equivalent replacement.
 
 Backend security events are emitted as single-line JSON with
@@ -396,7 +403,7 @@ PostgreSQL runtime collectors separately. Only then create the remaining
 mandatory alerts: API unavailable, worker stale, growing `5xx`, and any overdue
 Tender.
 
-Deploy `webapp` and fully prerendered `website` output as static websites in Yandex Object Storage. Once `website` uses SSR/on-demand rendering or Astro server islands, that surface needs an Astro adapter and must move to a Serverless Container runtime instead of static hosting. When server islands appear on cached pages or rolling deploys, generate a stable key with `astro create-key` and configure `ASTRO_KEY` as a secret in both build and runtime environments. Never commit it, expose it as `PUBLIC_*`, print it in logs, or bake it into static output.
+Deploy `webapp` and fully prerendered `website` output as static websites in Yandex Object Storage. Keep `adminapp` out of public website buckets: in the current VM topology Caddy serves it from the protected operator hostname. Once `website` uses SSR/on-demand rendering or Astro server islands, that surface needs an Astro adapter and must move to a Serverless Container runtime instead of static hosting. When server islands appear on cached pages or rolling deploys, generate a stable key with `astro create-key` and configure `ASTRO_KEY` as a secret in both build and runtime environments. Never commit it, expose it as `PUBLIC_*`, print it in logs, or bake it into static output.
 
 Use shared CDN caching only for anonymous, public-equivalent website responses. Auth-dependent or personalized routes and server islands must use `private` or `no-store`, or a deliberately supported `Vary: Cookie`/`Authorization` strategy. `ASTRO_KEY` is not a cache privacy boundary.
 
@@ -406,10 +413,11 @@ Build locally or in CI:
 VITE_API_URL=https://api.anomaly-detector.ru \
 VITE_OAUTH_API_URL=https://api.anomaly-detector.ru \
 bun run build:webapp
+VITE_API_URL=https://api.anomaly-detector.ru bun run build:adminapp
 PUBLIC_WEBSITE_URL=https://anomaly-detector.ru bun run build:website
 ```
 
-The webapp API values are embedded at build time and must point to the
+The webapp and adminapp API values are embedded at build time and must point to the
 Application Load Balancer custom host. `VITE_API_URL` owns ordinary requests;
 `VITE_OAUTH_API_URL` owns the browser-visible OAuth start request. Rebuild after
 either origin changes, then verify that the generated main JavaScript bundle
@@ -436,6 +444,8 @@ Upload built assets to public website buckets:
 aws --endpoint-url=https://storage.yandexcloud.net/ s3 cp --recursive webapp/dist/ s3://<webapp-bucket>/
 aws --endpoint-url=https://storage.yandexcloud.net/ s3 cp --recursive website/dist/ s3://<website-bucket>/
 ```
+
+Do not add `adminapp/dist` to these uploads. Copy it into the immutable VM release directory referenced by `ANOMALY_ADMIN_ROOT`, then verify that the operator hostname returns `401` without Basic Auth before testing application login.
 
 Configure Object Storage static website hosting with `index.html` as the home page. For the React SPA, also use `index.html` as the error document or configure equivalent CDN routing so route refreshes do not break client-side routing.
 

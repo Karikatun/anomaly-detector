@@ -7,6 +7,7 @@ const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8
 const workflow = readFileSync(resolve(root, '.github/workflows/ci.yml'), 'utf8')
 
 test('defines fast commit and complete push quality gates', () => {
+  expect(packageJson.workspaces).toContain('adminapp')
   expect(packageJson.scripts.prepare).toBe('bun scripts/install-git-hooks.mjs')
   expect(packageJson.scripts['security:secrets']).toContain('--tracked')
   expect(packageJson.scripts['security:secrets:staged']).toContain('--staged')
@@ -15,11 +16,14 @@ test('defines fast commit and complete push quality gates', () => {
   expect(packageJson.scripts['check:push']).toBe('bun run check')
   expect(packageJson.scripts.check).toContain('smoke:backend:docker')
   expect(packageJson.scripts.check).toContain('e2e:webapp')
+  expect(packageJson.scripts.lint).toContain('adminapp')
+  expect(packageJson.scripts.test).toContain('test:adminapp')
 })
 
 test('runs secret hygiene and tooling contracts in remote CI', () => {
   expect(workflow).toContain('run: bun run security:secrets')
   expect(workflow).toContain('run: bun run test:tooling')
+  expect(workflow).toContain('run: bun run test:adminapp')
 })
 
 test('keeps every required versioned hook installed', () => {

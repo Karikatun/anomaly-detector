@@ -1,12 +1,12 @@
 # Product Modules Architecture
 
-This repository defines a golden path for web and backend products: shared contracts, a modular-monolith backend, one CSR browser app (`webapp`), one Astro SSG/SSR site (`website`), and little custom infrastructure. The runnable mobile app lives on the `mobile` branch and extends this architecture only when mobile is active.
+This repository defines a golden path for web and backend products: shared contracts, a modular-monolith backend, one player CSR browser app (`webapp`), one isolated read-only operator CSR app (`adminapp`), one Astro SSG/SSR site (`website`), and little custom infrastructure. The runnable mobile app lives on the `mobile` branch and extends this architecture only when mobile is active.
 
 The approach is **progressive DDD-lite**. Product contexts get explicit ownership and dependency direction without forcing every context to have every layer. Add a `domain` directory only when the feature has real policies, calculations, or state transitions. Do not add empty layers, generic/base repositories, CQRS, event sourcing, or extra services as architecture decoration.
 
 ## Contracts
 
-`packages/contracts` is the source of truth for API payloads, DTOs, and error shapes. New endpoints should start with Zod schemas in contracts. The backend then uses those schemas for request validation, while the webapp uses them in TanStack Form and API clients.
+`packages/contracts` is the source of truth for API payloads, DTOs, and error shapes. New endpoints should start with Zod schemas in contracts. The backend then uses those schemas for request validation, while browser consumers use them in their narrow API clients.
 
 Do not hand-copy API shapes into clients. When a contract changes, validate producer and consumers in one pass: backend route/service and webapp API client/form. On the `mobile` branch, include the mobile API client/form in that same pass.
 

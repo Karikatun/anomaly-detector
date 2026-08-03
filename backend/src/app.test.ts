@@ -99,3 +99,30 @@ test('records authentication denials as structured security events', async () =>
     }),
   ])
 })
+
+test('conceals and records denied operator access without publishing the route', async () => {
+  const events: SecurityEvent[] = []
+  const app = createApp({
+    env,
+    prisma: {} as DbClient,
+    securityEvents: { emit: (event) => { events.push(event) } },
+  })
+
+  const response = await app.request('/api/operations/overview')
+  const openApi = await (await app.request('/openapi.json')).text()
+
+  expect(response.status).toBe(404)
+  expect(await response.json()).toEqual({
+    error: { code: 'NOT_FOUND', message: 'Route not found' },
+  })
+  expect(openApi).not.toContain('/api/operations')
+  expect(events).toEqual([
+    expect.objectContaining({
+      code: 'NOT_FOUND',
+      outcome: 'denied',
+      path: '/api/operations/overview',
+      reason: 'operations_access_concealed',
+      type: 'authentication_rejected',
+    }),
+  ])
+})

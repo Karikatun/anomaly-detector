@@ -25,3 +25,11 @@ test('Yandex VM Caddy config permits only the production API realtime origins', 
     "connect-src 'self' https://api.anomaly-detector.ru wss://api.anomaly-detector.ru",
   )
 })
+
+test('Yandex VM Caddy config protects the separate operator application before serving files', () => {
+  expect(caddyfile).toContain('ops.anomaly-detector.ru {')
+  expect(caddyfile).toContain('basic_auth {')
+  expect(caddyfile).toContain('{$ANOMALY_ADMIN_USER} {$ANOMALY_ADMIN_PASSWORD_HASH}')
+  expect(caddyfile).toContain('root * {$ANOMALY_ADMIN_ROOT}')
+  expect(caddyfile).toContain('X-Robots-Tag "noindex, nofollow, noarchive"')
+})

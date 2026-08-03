@@ -39,7 +39,7 @@ bun run --cwd backend prisma:deploy
 
 On Windows PowerShell, use `Copy-Item backend/.env.example backend/.env` instead of `cp`. Workspace aliases are also available from the repository root: `bun run dev:backend`, `bun run build:backend`, `bun run typecheck:backend`, and `bun run test:backend`.
 
-`bun run test:integration` starts `postgres_test` from `../docker-compose.yml`, applies Prisma migrations to `anomaly_detector_test`, and runs DB-backed auth, Room, Tender, and realtime tests. If Docker is managed separately, set `TEST_SKIP_DOCKER=1` and `TEST_DATABASE_URL`. The test database name must end with `_test` unless `TEST_ALLOW_NON_TEST_DATABASE=1` is set intentionally.
+`bun run test:integration` starts `postgres_test` from `../docker-compose.yml`, applies Prisma migrations to `anomaly_detector_test`, and runs DB-backed auth, operator-access, Room, Tender, and realtime tests. If Docker is managed separately, set `TEST_SKIP_DOCKER=1` and `TEST_DATABASE_URL`. The test database name must end with `_test` unless `TEST_ALLOW_NON_TEST_DATABASE=1` is set intentionally.
 
 `bun run smoke:docker` builds the backend Docker image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created.
 
@@ -52,6 +52,8 @@ The example `TEST_DATABASE_URL` matches the Docker Compose `postgres_test` servi
 Keep an explicit username and password in Prisma connection URLs even on local native PostgreSQL installs. Peer-auth style URLs without a user can make Prisma schema-engine commands such as `migrate dev`, `migrate deploy`, and `db push` fail with an unhelpful generic engine error.
 
 `JWT_SECRET` must be at least 32 characters locally. Production accepts the 64-or-more-character hexadecimal output of `openssl rand -hex 32`; do not use the `.env.example` placeholder, repeated characters, or human phrases.
+
+`ADMIN_USER_IDS` is an optional comma-separated allowlist of immutable user UUIDs for the separate read-only operator application. Empty means that nobody has access. The backend returns the same `404 NOT_FOUND` to anonymous and ordinary authenticated users and does not publish the route in OpenAPI. Obtain an operator UUID from that user's profile and configure it only in backend runtime env; changing a login or display name does not change access. The separate Caddy-host is an additional edge boundary, not a replacement for this backend check.
 
 `COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
 

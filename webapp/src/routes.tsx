@@ -7,9 +7,11 @@ import {
 } from '@tanstack/react-router'
 
 import { RootLayout } from './root-layout'
+import { NotFoundPage } from './not-found-page'
 
 const rootRoute = createRootRoute({
   component: RootLayout,
+  notFoundComponent: NotFoundPage,
 })
 
 const indexRoute = createRoute({

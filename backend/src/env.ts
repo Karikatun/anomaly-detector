@@ -32,15 +32,22 @@ const stringWithDefault = (defaultValue: string) =>
     return trimmed === '' ? undefined : trimmed
   }, z.string().min(1).default(defaultValue))
 
+const uuidListSchema = z
+  .string()
+  .default('')
+  .transform((value) => value.split(',').map((item) => item.trim()).filter(Boolean))
+  .pipe(z.array(z.string().uuid()))
+
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
   WORKER_HEALTH_PORT: z.coerce.number().int().positive().optional(),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
+  ADMIN_USER_IDS: uuidListSchema,
   CORS_ORIGINS: z
     .string()
-    .default('http://localhost:5173,http://localhost:8081,http://localhost:19006')
+    .default('http://localhost:5173,http://localhost:5174,http://localhost:8081,http://localhost:19006')
     .transform((value) =>
       value
         .split(',')
