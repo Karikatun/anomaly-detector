@@ -1020,8 +1020,11 @@ maybeDescribe('auth API integration', () => {
       { ready: false, userId: member.user.id },
     ])
 
-    await setReady(host.accessToken, room.roomId, true)
-    await setReady(member.accessToken, room.roomId, true)
+    const concurrentReady = await Promise.all([
+      setReady(host.accessToken, room.roomId, true),
+      setReady(member.accessToken, room.roomId, true),
+    ])
+    expect(concurrentReady.map((response) => response.status)).toEqual([200, 200])
     const startRoom = await app.request(`/api/rooms/${room.roomId}/start`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${host.accessToken}` },

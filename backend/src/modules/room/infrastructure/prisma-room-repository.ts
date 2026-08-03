@@ -300,36 +300,47 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
     },
 
     async setReady(input) {
-      return db.$transaction(async (tx) => {
-        const room = await tx.tenderRoom.findFirst({
-          where: {
-            id: input.roomId,
-            members: { some: { userId: input.actorId } },
-          },
-          include: { members: { orderBy: { seat: 'asc' } } },
-        })
-        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
-        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await db.$transaction(async (tx) => {
+            const room = await tx.tenderRoom.findFirst({
+              where: {
+                id: input.roomId,
+                members: { some: { userId: input.actorId } },
+              },
+              include: { members: { orderBy: { seat: 'asc' } } },
+            })
+            if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+            if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
 
-        const updatedMember = await tx.tenderRoomMember.update({
-          where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
-          data: { ready: input.ready },
-        })
-        return {
-          capacity: room.capacity as 2 | 3 | 4,
-          hostId: room.hostId,
-          id: room.id,
-          joinCode: room.joinCode,
-          members: room.members.map((member) => ({
-            ready: member.userId === updatedMember.userId ? updatedMember.ready : member.ready,
-            seat: member.seat,
-            userId: member.userId,
-          })),
-          status: 'waiting' as const,
-          startsAt: null,
-          tenderId: room.tenderId,
+            const updatedMember = await tx.tenderRoomMember.update({
+              where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
+              data: { ready: input.ready },
+            })
+            return {
+              capacity: room.capacity as 2 | 3 | 4,
+              hostId: room.hostId,
+              id: room.id,
+              joinCode: room.joinCode,
+              members: room.members.map((member) => ({
+                ready: member.userId === updatedMember.userId ? updatedMember.ready : member.ready,
+                seat: member.seat,
+                userId: member.userId,
+              })),
+              status: 'waiting' as const,
+              startsAt: null,
+              tenderId: room.tenderId,
+            }
+          }, { isolationLevel: 'Serializable' })
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) {
+            await waitForTransactionRetry(attempt)
+            continue
+          }
+          throw error
         }
-      }, { isolationLevel: 'Serializable' })
+      }
+      throw new Error('Unreachable room readiness transaction retry state')
     },
 
     async start(input) {
@@ -414,10 +425,30 @@ function isJoinCodeUniqueConstraintError(error: unknown) {
 }
 
 function isRetryableTransactionError(error: unknown) {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && error.code === 'P2034'
+  if (typeof error !== 'object' || error === null) return false
+  if ('code' in error && error.code === 'P2034') return true
+
+  const cause = 'cause' in error ? error.cause : undefined
+  if (isTransactionWriteConflict(cause)) return true
+
+  const meta = 'meta' in error ? error.meta : undefined
+  if (typeof meta !== 'object' || meta === null || !('driverAdapterError' in meta)) return false
+  const driverAdapterError = meta.driverAdapterError
+  return typeof driverAdapterError === 'object'
+    && driverAdapterError !== null
+    && 'cause' in driverAdapterError
+    && isTransactionWriteConflict(driverAdapterError.cause)
+}
+
+function isTransactionWriteConflict(value: unknown) {
+  return typeof value === 'object'
+    && value !== null
+    && 'kind' in value
+    && value.kind === 'TransactionWriteConflict'
+}
+
+function waitForTransactionRetry(attempt: number) {
+  return new Promise((resolve) => setTimeout(resolve, 10 * (2 ** attempt)))
 }
 
 function readTenderCompletionReason(state: Prisma.JsonValue | undefined) {

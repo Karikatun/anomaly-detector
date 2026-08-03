@@ -63,6 +63,7 @@ async function expectWorkingModelTableToStayStillWhileSaving(page: Page) {
   const fieldButton = dialog.getByRole('button', {
     name: /: гипотеза, тип поля Инерционное$/,
   }).first()
+  await fieldButton.scrollIntoViewIfNeeded()
   const before = await table.boundingBox()
   expect(before).not.toBeNull()
 

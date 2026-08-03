@@ -63,7 +63,13 @@ export function createApp({
         if (!origin) return env.CORS_ORIGINS[0] ?? null
         return env.CORS_ORIGINS.includes(origin) ? origin : null
       },
-      allowHeaders: ['Content-Type', 'Authorization'],
+      allowHeaders: [
+        'Content-Type',
+        'Authorization',
+        ...(env.NODE_ENV === 'test' && env.TRUSTED_PROXY_CLIENT_IP_HEADER
+          ? [env.TRUSTED_PROXY_CLIENT_IP_HEADER]
+          : []),
+      ],
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,
       maxAge: 600,

@@ -32,6 +32,8 @@ export function e2eBackendEnv(extra: NodeJS.ProcessEnv = {}) {
     JWT_SECRET: jwtSecret,
     COOKIE_SECURE: 'false',
     AUTH_RATE_LIMIT_MAX: '1000',
+    TRUST_PROXY: 'true',
+    TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-e2e-client-ip',
     YANDEX_OAUTH_CLIENT_ID: '',
     YANDEX_OAUTH_CLIENT_SECRET: '',
     VK_OAUTH_CLIENT_ID: '',
