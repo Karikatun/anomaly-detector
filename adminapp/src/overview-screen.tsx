@@ -10,8 +10,8 @@ type OverviewScreenProps = {
 
 const roomLabels: Record<keyof AdminOverview['roomsByStatus'], string> = {
   waiting: 'Ожидают игроков',
-  starting: 'Запускаются',
-  started: 'Идут сейчас',
+  active: 'Идут сейчас',
+  completed: 'Завершены',
 }
 
 export function OverviewScreen({ data, isRefreshing, onLogout, onPageChange, onRefresh }: OverviewScreenProps) {

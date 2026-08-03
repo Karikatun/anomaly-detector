@@ -22,8 +22,8 @@ export const adminOverviewSchema = z.object({
   }).strict(),
   roomsByStatus: z.object({
     waiting: z.number().int().nonnegative(),
-    starting: z.number().int().nonnegative(),
-    started: z.number().int().nonnegative(),
+    active: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(),
   }).strict(),
   tendersByPhase: z.array(z.object({
     phase: z.string().min(1),

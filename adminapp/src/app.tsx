@@ -52,9 +52,20 @@ export default function App() {
     return () => { active = false }
   }, [api, loadOverview])
 
+  const logout = async () => {
+    try {
+      await api.logout()
+      setState({ kind: 'anonymous' })
+    } catch {
+      setState({ kind: 'error', message: 'Не удалось завершить сессию' })
+    }
+  }
+
   if (state.kind === 'bootstrapping') return <StateScreen title="Проверяем сессию…" />
   if (state.kind === 'anonymous') return <LoginScreen api={api} initialError={state.error} onAuthenticated={loadOverview} />
-  if (state.kind === 'concealed') return <StateScreen title="Ресурс недоступен" />
+  if (state.kind === 'concealed') {
+    return <ConcealedScreen onSwitchUser={() => void logout()} />
+  }
   if (state.kind === 'error') {
     return <StateScreen title={state.message} actionLabel="Повторить" onAction={loadOverview} />
   }
@@ -69,15 +80,6 @@ export default function App() {
     await loadOverview(page)
     setIsRefreshing(false)
   }
-  const logout = async () => {
-    try {
-      await api.logout()
-      setState({ kind: 'anonymous' })
-    } catch {
-      setState({ kind: 'error', message: 'Не удалось завершить сессию' })
-    }
-  }
-
   return (
     <OverviewScreen
       data={state.data}
@@ -85,6 +87,16 @@ export default function App() {
       onLogout={() => void logout()}
       onPageChange={(page) => void changePage(page)}
       onRefresh={() => void refresh()}
+    />
+  )
+}
+
+export function ConcealedScreen({ onSwitchUser }: { onSwitchUser: () => void }) {
+  return (
+    <StateScreen
+      title="Ресурс недоступен"
+      actionLabel="Войти другим пользователем"
+      onAction={onSwitchUser}
     />
   )
 }

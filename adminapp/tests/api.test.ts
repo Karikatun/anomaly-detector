@@ -20,7 +20,7 @@ test('restores the cookie session and reads the overview with its access token',
     return Response.json({
       generatedAt: '2026-08-03T12:00:00.000Z',
       totals: { users: 2, activeSessions: 1, rooms: 0, tenders: 0 },
-      roomsByStatus: { waiting: 0, starting: 0, started: 0 },
+      roomsByStatus: { waiting: 0, active: 0, completed: 0 },
       tendersByPhase: [],
       users: { page: 2, pageSize: 20, totalItems: 21, totalPages: 2, items: [] },
     })
@@ -72,4 +72,18 @@ test('coalesces concurrent cookie-session restores into one refresh request', as
   await Promise.all([api.restoreSession(), api.restoreSession()])
 
   expect(refreshRequests).toBe(1)
+})
+
+test('invokes the default browser fetch with its global receiver', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = function () {
+    expect(this).toBe(globalThis)
+    return Promise.resolve(Response.json({ accessToken: 'access-token' }))
+  } as typeof fetch
+
+  try {
+    await expect(new AdminApi().restoreSession()).resolves.toBeUndefined()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })

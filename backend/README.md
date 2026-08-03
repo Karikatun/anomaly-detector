@@ -47,6 +47,8 @@ On Windows PowerShell, use `Copy-Item backend/.env.example backend/.env` instead
 
 Copy `backend/.env.example` to `backend/.env` for local development. The example `DATABASE_URL` matches the Docker Compose `postgres` service documented in [../docs/LOCAL_DATABASE.md](../docs/LOCAL_DATABASE.md): database `anomaly_detector`, user `superuser`, password `superpassword`, host port `54329`.
 
+`bun run dev` performs a port preflight before starting the API and worker. It gracefully stops stale listeners owned by this backend workspace on `PORT` and `WORKER_HEALTH_PORT` (defaults `3000` and `3001`). It refuses to stop a listener whose process belongs to another workspace, so a port collision remains visible instead of terminating an unrelated application.
+
 The example `TEST_DATABASE_URL` matches the Docker Compose `postgres_test` service: database `anomaly_detector_test`, user `superuser`, password `superpassword`, manual host port `54330`. Automated runners may replace the port with a repository-derived value so parallel checkouts do not collide.
 
 Keep an explicit username and password in Prisma connection URLs even on local native PostgreSQL installs. Peer-auth style URLs without a user can make Prisma schema-engine commands such as `migrate dev`, `migrate deploy`, and `db push` fail with an unhelpful generic engine error.

@@ -28,7 +28,7 @@ export class AdminApi {
   private readonly baseUrl: string
   private readonly fetcher: Fetcher
 
-  constructor(baseUrl = '', fetcher: Fetcher = fetch) {
+  constructor(baseUrl = '', fetcher: Fetcher = (input, init) => globalThis.fetch(input, init)) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
     this.fetcher = fetcher
   }

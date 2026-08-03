@@ -60,7 +60,7 @@ export function createApp({
     defaultHook: validationErrorHook,
   })
 
-  app.use(secureHeaders())
+  app.use(secureHeaders({ crossOriginResourcePolicy: 'cross-origin' }))
   app.use('*', createSecurityRequestContext())
   app.use('*', createApiBodyLimit(env.AUTH_BODY_LIMIT_BYTES, securityEvents))
   app.use(
