@@ -1,9 +1,13 @@
 import js from '@eslint/js'
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
+
+const tsconfigRootDir = dirname(fileURLToPath(import.meta.url))
 
 const lineHeightShorthandPattern =
   String.raw`(?:\/(?:none|tight|snug|normal|relaxed|loose|\d+|\[[^\]]+\]))?`
@@ -505,6 +509,7 @@ export default defineConfig([
     ],
     languageOptions: {
       globals: globals.browser,
+      parserOptions: { tsconfigRootDir },
     },
   },
   {
