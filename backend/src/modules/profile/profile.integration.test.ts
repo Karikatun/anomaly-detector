@@ -162,4 +162,39 @@ maybeDescribe('profile statistics API integration', () => {
       winRate: 1,
     })
   })
+
+  test('persists one idempotent tutorial completion marker for the authenticated account', async () => {
+    const registration = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'tutorial-player',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const { accessToken } = await registration.json()
+    const headers = { Authorization: `Bearer ${accessToken}` }
+
+    const initial = await app.request('/api/profile/tutorial', { headers })
+    expect(await initial.json()).toEqual({ completedAt: null })
+
+    const completed = await app.request('/api/profile/tutorial/completion', {
+      method: 'PUT',
+      headers,
+    })
+    const firstMarker = await completed.json() as { completedAt: string }
+    expect(firstMarker.completedAt).toBeString()
+
+    const repeated = await app.request('/api/profile/tutorial/completion', {
+      method: 'PUT',
+      headers,
+    })
+    expect(await repeated.json()).toEqual(firstMarker)
+
+    const stored = await app.request('/api/profile/tutorial', { headers })
+    expect(await stored.json()).toEqual(firstMarker)
+  })
 })

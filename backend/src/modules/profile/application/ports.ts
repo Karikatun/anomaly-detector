@@ -20,3 +20,8 @@ export type CompletedProfileMatch = {
 export type ProfileStatisticsRepository = {
   listCompletedMatches(userId: string): Promise<CompletedProfileMatch[]>
 }
+
+export type TutorialProgressRepository = {
+  complete(userId: string, completedAt: Date): Promise<Date>
+  read(userId: string): Promise<Date | null>
+}

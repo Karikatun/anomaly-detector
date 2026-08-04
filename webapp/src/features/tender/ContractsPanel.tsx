@@ -38,6 +38,7 @@ type ContractsPanelProps = {
   round: number
   disabled?: boolean
   error?: string | null
+  separateReservation?: boolean
   onReserve: (contractId: string) => Promise<void>
   onSkip: () => Promise<void>
   onBid: (contractId: string, bid: ContractBid) => Promise<void>
@@ -54,6 +55,7 @@ export function ContractsPanel({
   round,
   disabled,
   error,
+  separateReservation = false,
   onReserve,
   onSkip,
   onBid,
@@ -75,6 +77,7 @@ export function ContractsPanel({
     try {
       if (!alreadyReserved) {
         await onReserve(contractId)
+        if (separateReservation) return
       }
       await onBid(contractId, bid)
       setBids((previous) => {
@@ -330,13 +333,17 @@ export function ContractsPanel({
                       <Button
                         type="button"
                         size="sm"
-                        aria-label={translate('tender.contractsPanel.copy.025', { value1: contract.contractId })}
+                        aria-label={separateReservation && !reservedBySelf
+                          ? t('tender.contracts.reserveAria', { id: contract.contractId })
+                          : translate('tender.contractsPanel.copy.025', { value1: contract.contractId })}
                         disabled={disabled || !bidIsComplete}
                         onClick={() => void handleConfirmContract(contract.contractId, bid, reservedBySelf)}
                       >
                         <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={1.7} aria-hidden="true" />
                         
-                        {translate('tender.contractsPanel.copy.026')}
+                        {separateReservation && !reservedBySelf
+                          ? t('tender.contracts.reserve')
+                          : translate('tender.contractsPanel.copy.026')}
                       </Button>
                     </div>
                   )}

@@ -28,6 +28,7 @@ export function LaboratoryInterpretationDialog({
   showTimerWarning = false,
   triggerClassName,
   triggerIconOnly = false,
+  triggerTestId,
   triggerTextClassName,
 }: {
   belowTenderHeader?: boolean
@@ -38,6 +39,7 @@ export function LaboratoryInterpretationDialog({
   showTimerWarning?: boolean
   triggerClassName?: string
   triggerIconOnly?: boolean
+  triggerTestId?: string
   triggerTextClassName?: string
 }) {
   const { t } = useI18n()
@@ -50,6 +52,7 @@ export function LaboratoryInterpretationDialog({
           variant="outline"
           size={triggerIconOnly ? 'icon-sm' : 'sm'}
           className={cn(triggerClassName)}
+          data-testid={triggerTestId}
           disabled={disabled}
           title={triggerIconOnly ? t('rules.laboratory.open') : undefined}
         >

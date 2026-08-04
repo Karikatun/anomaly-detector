@@ -1,1 +1,6 @@
-export { profileQueryKeys } from './queries'
+export { ProfileApi } from './api'
+export {
+  profileQueryKeys,
+  useCompleteTutorialMutation,
+  useTutorialProgressQuery,
+} from './queries'

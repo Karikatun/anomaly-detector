@@ -18,6 +18,7 @@ model User {
   termsVersion String? @map("terms_version")
   termsAcceptedAt DateTime? @map("terms_accepted_at")
   anonymizedAt DateTime?     @map("anonymized_at")
+  tutorialCompletedAt DateTime? @map("tutorial_completed_at")
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
   sessions     AuthSession[]
