@@ -326,7 +326,11 @@ absolute directories that contain the deployed `webapp/dist` and
 `adminapp/dist` contents. Set `ANOMALY_ADMIN_USER` and the Caddy-generated
 `ANOMALY_ADMIN_PASSWORD_HASH` only in the Caddy process environment. Generate
 the hash interactively with `caddy hash-password` so the plaintext is not added
-to shell history. Validate with `caddy validate`, then reload Caddy. The file
+to shell history. When Caddy receives this environment through Docker Compose,
+declare the Caddy `env_file` entry with `format: raw` and store the bcrypt hash
+with its original single `$` characters. Do not escape them as `$$`: a later
+container recreation can otherwise change the value and reject the correct
+Basic Auth password. Validate with `caddy validate`, then reload Caddy. The file
 owns the browser CSP, HSTS, clickjacking protection, content-type protection,
 referrer policy, permissions policy, SPA fallbacks, operator Basic Auth, API
 proxy, and `www` redirect. Keep these controls in the serving layer; HTML
