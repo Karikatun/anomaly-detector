@@ -1,0 +1,29 @@
+.statePage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-height: 100dvh;
+  padding: 1rem;
+  place-items: center;
+}
+
+.stateCard {
+  position: relative;
+  z-index: 1;
+  width: min(42rem, 100%);
+}
+.stateContent, .completeContent { display: grid; gap: 1rem; }
+.completeActions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.saveError { display: grid; gap: .75rem; padding: .9rem; border: 1px solid rgba(248, 113, 113, .5); border-radius: .6rem; }
+.coach { display: grid; max-width: 24rem; gap: .55rem; text-align: left; }
+.coach button { width: fit-content; margin-top: .25rem; }
+.hint { padding: .65rem; border-left: 2px solid #38bdf8; background: rgba(56, 189, 248, .08); }
+
+:global(.react-joyride__spotlight path) {
+  pointer-events: none !important;
+}
+
+@media (max-width: 600px) {
+  .completeActions { display: grid; }
+  .completeActions button { width: 100%; }
+}

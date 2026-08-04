@@ -45,6 +45,7 @@ type Props = {
   progress?: TenderView['finalScientificModelProgress']
   serverTime: string
   submitted?: boolean
+  untimed?: boolean
 }
 
 const rowStyle = (signal: SignalId) => ({
@@ -72,6 +73,7 @@ export function FinalScientificModelPanel({
   progress,
   serverTime,
   submitted,
+  untimed = false,
 }: Props) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<ScientificModelDraft>(initialDraft)
@@ -86,7 +88,7 @@ export function FinalScientificModelPanel({
     schedule: (callback, delayMs) => setTimeout(callback, delayMs),
   }))
   const remainingSeconds = useSynchronizedCountdown(dueAt, serverTime, { maximumSeconds: 180 })
-  const formDisabled = disabled || submitted || remainingSeconds === 0
+  const formDisabled = disabled || submitted || (!untimed && remainingSeconds === 0)
   const model = draft.signals
 
   useEffect(() => {
@@ -176,7 +178,7 @@ export function FinalScientificModelPanel({
               <Typography variant="bodySm">{t('tender.finalDraft.submitted')}</Typography>
             </div>
           )}
-          {!submitted && remainingSeconds <= 30 && (
+          {!untimed && !submitted && remainingSeconds <= 30 && (
             <div className={styles.warning} role="alert">
               <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
               <Typography variant="bodySm">

@@ -19,18 +19,19 @@
     "ui:info": "shadcn info"
   },
   "dependencies": {
+    "@anomaly-detector/contracts": "workspace:*",
     "@fontsource-variable/figtree": "^5.2.10",
     "@hugeicons/core-free-icons": "^4.1.3",
     "@hugeicons/react": "^1.1.6",
     "@tanstack/react-form": "^1.26.0",
     "@tanstack/react-query": "^5.90.12",
     "@tanstack/react-router": "1.169.2",
-    "@anomaly-detector/contracts": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "radix-ui": "^1.4.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-joyride": "^3.2.0",
     "tailwind-merge": "^3.6.0",
     "tw-animate-css": "^1.4.0",
     "zod": "^4.1.13"

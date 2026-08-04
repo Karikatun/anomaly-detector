@@ -50,6 +50,7 @@ import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import { CompletedTenderPanel } from './components/CompletedTenderPanel'
 import { ContractPlanningPanel } from './components/ContractPlanningPanel'
 import { TenderResearchDialog } from './components/TenderResearchDialog'
+import { TenderHeaderFrame } from './components/TenderHeaderFrame'
 import {
   useTenderCommands,
   type TenderCommandInput,
@@ -108,7 +109,7 @@ function WaitingForTurn({
   )
 }
 
-function PhasePanel({
+export function PhasePanel({
   view,
   disabled,
   error,
@@ -116,6 +117,7 @@ function PhasePanel({
   onSaveWorkingModel,
   activePlayerId,
   workingModelDialog,
+  training,
 }: {
   view: TenderView
   disabled: boolean
@@ -128,6 +130,11 @@ function PhasePanel({
     onSaveStatusChange: (status: WorkingModelSaveStatus) => void
     open: boolean
     openDisabled: boolean
+  }
+  training?: {
+    separateContractReservation?: boolean
+    unlimitedThesisRetries?: boolean
+    untimed?: boolean
   }
 }) {
   const auth = useAuth()
@@ -237,6 +244,7 @@ function PhasePanel({
         <ModelAnalysisPanel
           knownSignals={view.knownSignals}
           maxTheses={maPower}
+          unlimitedTrainingRetries={training?.unlimitedThesisRetries}
           model={view.privateWorkingModel}
           publicTheses={view.publicTheses}
           privateTheses={view.privateTheses}
@@ -273,6 +281,7 @@ function PhasePanel({
           round={view.round}
           disabled={disabled || isWaitingForTurn}
           error={error}
+          separateReservation={training?.separateContractReservation}
           onReserve={(contractId) => onCommand({ type: 'reserve-contract', contractId })}
           onSkip={() => onCommand({ type: 'skip-contract' })}
           onBid={(contractId, bid) =>
@@ -300,6 +309,7 @@ function PhasePanel({
           progress={view.finalScientificModelProgress}
           serverTime={view.serverTime}
           submitted={myPlayer?.finalScientificModelSubmitted}
+          untimed={training?.untimed}
         />,
       )
     }
@@ -580,22 +590,21 @@ function TenderContent() {
 
   return (
     <section className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}>
-      <header
-        ref={headerRef}
-        aria-label={t('tender.phase.status')}
-        className={`${styles.header} sticky top-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-xl border bg-background/95 px-3 py-2 shadow-sm backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:px-5 sm:py-3`}
-      >
-        <div className={`${styles.headerInfo} grid min-w-0 gap-0.5`}>
+      <TenderHeaderFrame
+        ariaLabel={t('tender.phase.status')}
+        headerRef={headerRef}
+        info={(
+          <>
           <Typography variant="shortcut" tone="muted" className="uppercase">
             
             {translate('tender.header.round', { round: tenderView.round })}
           </Typography>
           <Typography as="h3" variant="bodySmMedium" className="truncate">{phase}</Typography>
-        </div>
-        <div className={`${styles.headerTimer} justify-self-end`}>
-          <TenderTimer remainingSeconds={tenderView.dueAt ? remainingSeconds : null} />
-        </div>
-        <div className={`${styles.headerMeta} flex min-w-0 flex-wrap items-center gap-2`}>
+          </>
+        )}
+        timer={<TenderTimer remainingSeconds={tenderView.dueAt ? remainingSeconds : null} />}
+        meta={(
+          <>
           {mySlot && <Badge variant="outline">{translate('tender.header.slot', { slot: mySlot })}</Badge>}
           {isAccessSlotSelection && (
             <Badge variant="outline">{translate('tender.header.budget', { budget: myPlayer?.budget ?? 0 })}</Badge>
@@ -621,8 +630,10 @@ function TenderContent() {
               })}
             </Badge>
           )}
-        </div>
-        <div className={`${styles.headerActions} flex items-center justify-self-end gap-1`}>
+          </>
+        )}
+        actions={(
+          <>
           {connected ? (
             <Badge variant="outline" className={`${styles.connectionBadge} text-emerald-400`}>{t('tender.realtime.live')}</Badge>
           ) : (
@@ -736,8 +747,9 @@ function TenderContent() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
-      </header>
+          </>
+        )}
+      />
       {tenderView.privateAutomaticOperationalSkip && (
         <PhaseNotice
           description={tenderView.privateAutomaticOperationalSkip.reason === 'all_pairs_researched'

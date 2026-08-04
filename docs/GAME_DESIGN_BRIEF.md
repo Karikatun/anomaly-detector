@@ -158,8 +158,10 @@ Closing, reloading, losing the network, or choosing Collapse only leaves the gam
 
 - Standard rooms are private, invite-code rooms for exactly 2, 3, or 4 real players.
 - The host chooses the room size. A game cannot start until every chosen slot is occupied, and the host must explicitly confirm start.
-- There are no bots, public matchmaking, global ranks, chat, monetisation, purchases, random crisis events, or permanent upgrades in the MVP.
-- A short solo tutorial teaches one guided round.
+- Standard matches have no bots, public matchmaking, global ranks, chat, monetisation, purchases, random crisis events, or permanent upgrades in the MVP.
+- A repeatable solo tutorial uses the real Tender interface for two deterministic rounds against a visible scripted Training Opponent. It has no timers, Rating, history entry, or server-side match state; only the account completion marker is persisted.
+- The tutorial teaches Access Slots, Power allocation, Reconnaissance, one Continuous and one Impulse Directed Test, Help and laboratory interpretation, the Working Model, retryable penalty-free Theses, Contract reservation and Bid, and an interactive Final Scientific Model. Its result explains that a standard Tender has five rounds, every Contract kind, timers, and the full six-Signal final submission.
+- Reloading the same browser tab restores the current tutorial step. Explicit exit, repeat, or a new tab starts from the beginning, and an active real Tender blocks tutorial entry.
 - A non-ranked learning room for 2-4 friends uses four signals and three rounds, without trust penalties or the final contract.
 
 ## Audit, History, And Privacy

@@ -4,6 +4,7 @@ import {
   File01Icon,
   Login03Icon,
   Logout01Icon,
+  Mortarboard01Icon,
   UserCircleIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -19,6 +20,10 @@ import {
   useAuth,
   useLogoutAction,
 } from '@/features/auth'
+import {
+  ProfileApi,
+  useTutorialProgressQuery,
+} from '@/features/profile'
 import {
   CreateRoomDialog,
   JoinRoomDialog,
@@ -57,7 +62,9 @@ function AuthenticatedHome({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false)
   const roomsApi = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
+  const profileApi = useMemo(() => new ProfileApi(auth.transport), [auth.transport])
   const currentMatch = useCurrentMatchQuery(roomsApi)
+  const tutorialProgress = useTutorialProgressQuery(profileApi)
 
   const returnToCurrentMatch = () => {
     const match = currentMatch.data
@@ -157,6 +164,13 @@ function AuthenticatedHome({
                 title={t('home.room.join')}
                 icon={Login03Icon}
                 onClick={() => setIsJoinDialogOpen(true)}
+              />
+              <MenuCard
+                accent="plain"
+                fullRow
+                title={t(tutorialProgress.data?.completedAt ? 'tutorial.menu.repeat' : 'tutorial.menu.start')}
+                icon={Mortarboard01Icon}
+                onClick={() => void navigate({ to: '/tutorial' })}
               />
             </>
           )}

@@ -13,4 +13,9 @@ export const profileStatisticsSchema = z.object({
   winRate: nullableRatioSchema,
 }).strict()
 
+export const tutorialProgressSchema = z.object({
+  completedAt: z.string().datetime().nullable(),
+}).strict()
+
 export type ProfileStatistics = z.infer<typeof profileStatisticsSchema>
+export type TutorialProgress = z.infer<typeof tutorialProgressSchema>
