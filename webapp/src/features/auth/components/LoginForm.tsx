@@ -107,9 +107,9 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
           />
         )}
       </form.Subscribe>
-      <Typography as="div" variant="control" className={styles.separator}>ИЛИ</Typography>
+      <Typography as="div" variant="control" className={styles.separator}>{t('auth.separator')}</Typography>
       <Typography as="p" className={styles.credentialsTitle}>
-        {mode === 'register' ? t('auth.register') : 'ВОЙТИ ЧЕРЕЗ ЛОГИН И ПАРОЛЬ'}
+        {mode === 'register' ? t('auth.register') : t('auth.credentials.title')}
       </Typography>
       <FieldGroup className={styles.fields}>
         <form.Field name="login">
@@ -124,7 +124,7 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                   autoComplete="username"
                   value={field.state.value}
                   className={styles.input}
-                  placeholder="Логин"
+                  placeholder={t('auth.loginName')}
                   aria-invalid={loginError || undefined}
                   aria-describedby={loginError ? 'auth-login-error' : undefined}
                   onBlur={field.handleBlur}
@@ -200,7 +200,7 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                       autoComplete="name"
                       value={field.state.value}
                       className={styles.input}
-                      placeholder="Игрок 1"
+                      placeholder={t('auth.displayName.placeholder')}
                       aria-invalid={displayNameError || undefined}
                       aria-describedby={displayNameError ? 'auth-name-error' : undefined}
                       onBlur={field.handleBlur}
@@ -233,13 +233,13 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                       }}
                     />
                     <Label htmlFor="auth-privacy-consent">
-                      Я даю согласие на{' '}
+                      {t('auth.consent.prefix')}{' '}
                       <Link
                         className={styles.inlineLegalLink}
                         to="/personal-data-consent"
                         target="_blank"
                       >
-                        обработку персональных данных
+                        {t('auth.consent.link')}
                       </Link>
                     </Label>
                   </div>
@@ -247,13 +247,13 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
               </form.Field>
               {consentReminder && (
                 <Typography role="alert" variant="bodyXs" tone="destructive">
-                  Отметьте согласие на обработку персональных данных, чтобы продолжить через Яндекс.
+                  {t('auth.consent.oauthReminder')}
                 </Typography>
               )}
               <Typography variant="bodyXs" className={styles.termsNotice}>
-                Нажимая «Регистрация», вы принимаете{' '}
+                {t('auth.terms.prefix')}{' '}
                 <Link className={styles.inlineLegalLink} to="/terms" target="_blank">
-                  Пользовательское соглашение
+                  {t('auth.terms.link')}
                 </Link>
                 .
               </Typography>
@@ -280,8 +280,8 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
               >
                 {isSubmitting
                   ? mode === 'register'
-                    ? 'Регистрируем...'
-                    : 'Входим...'
+                    ? t('auth.registering')
+                    : t('auth.loggingIn')
                   : mode === 'register'
                     ? t('auth.register')
                     : t('auth.login')}

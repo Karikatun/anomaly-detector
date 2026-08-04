@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import {
   Alert01Icon,
   CheckmarkCircle02Icon,
@@ -87,7 +88,7 @@ export function ContractsPanel({
   }
 
   const evidenceLabel = (entry: ScientificJournalEntry) =>
-    `${t(signalLabelKeys[entry.sourceSignal])} → ${t(signalLabelKeys[entry.receiverSignal])} · ${t(`tender.result.${entry.publicResult}`)} · ${entry.protocol === 'continuous' ? 'непрерывный' : 'импульсный'}`
+    translate('tender.contractsPanel.copy.001', { value1: t(signalLabelKeys[entry.sourceSignal]), value2: t(signalLabelKeys[entry.receiverSignal]), value3: t(`tender.result.${entry.publicResult}`), value4: t(entry.protocol === 'continuous' ? 'tender.protocol.continuous' : 'tender.protocol.impulse') })
 
   return (
     <section className={styles.contractsWorkspace} aria-labelledby="contracts-heading">
@@ -95,12 +96,14 @@ export function ContractsPanel({
         <div className={`${styles.surface} ${styles.intro}`}>
           <div className={styles.sectionHeader}>
             <Typography id="contracts-heading" as="h2" variant="h4" className={styles.title}>
-              Доступные контракты
+              
+              {translate('tender.contractsPanel.copy.002')}
             </Typography>
-            <Typography as="span" variant="caption" className={styles.sectionMeta}>{maxPower} мощности</Typography>
+            <Typography as="span" variant="caption" className={styles.sectionMeta}>{maxPower}  {translate('tender.contractsPanel.copy.003')}</Typography>
           </div>
           <Typography variant="bodySm" className={styles.description}>
-            Выберите контракт и заранее проверьте подходящие исследования.
+            
+            {translate('tender.contractsPanel.copy.004')}
           </Typography>
         </div>
 
@@ -109,7 +112,8 @@ export function ContractsPanel({
           {!reservedContract && eligibleContracts.length === 0 && contracts.length > 0 && (
             <div className={styles.contractSelection}>
               <Button type="button" variant="outline" disabled={disabled} onClick={() => void onSkip()}>
-                Пропустить ход
+                
+                {translate('tender.contractsPanel.copy.005')}
               </Button>
             </div>
           )}
@@ -196,33 +200,33 @@ export function ContractsPanel({
                     </span>
                     <span className={styles.contractReward}>
                       <Typography as="strong" variant="bodySmMedium">+{contract.ratingReward ?? 2}</Typography>
-                      <Typography as="span" variant="caption">рейтинга</Typography>
+                      <Typography as="span" variant="caption">{translate('tender.contractsPanel.copy.006')}</Typography>
                     </span>
                   </header>
 
                   <div className={styles.contractFacts}>
                     <span className={styles.contractFact}>
-                      <Typography as="span" variant="caption">Результат</Typography>
+                      <Typography as="span" variant="caption">{translate('tender.contractsPanel.copy.007')}</Typography>
                       <Typography as="span" variant="caption">{t(`tender.result.${contract.requiredPublicResult}`)}</Typography>
                     </span>
                     {contract.requiredSecondaryPublicResult && (kind === 'complex' || isFinal) && (
                       <span className={styles.contractFact}>
-                        <Typography as="span" variant="caption">Альтернатива</Typography>
+                        <Typography as="span" variant="caption">{translate('tender.contractsPanel.copy.008')}</Typography>
                         <Typography as="span" variant="caption">{t(`tender.result.${contract.requiredSecondaryPublicResult}`)}</Typography>
                       </span>
                     )}
                     <span className={styles.contractFact}>
-                      <Typography as="span" variant="caption">Статус</Typography>
+                      <Typography as="span" variant="caption">{translate('tender.contractsPanel.copy.009')}</Typography>
                       <Typography as="span" variant="caption">
                         {contract.bidOutcome === 'awarded'
-                          ? 'Выполнен'
+                          ? translate('tender.contractsPanel.copy.010')
                           : contract.bidOutcome === 'failed'
-                            ? 'Заявка отклонена'
+                            ? translate('tender.contractsPanel.copy.011')
                             : reservedByOther
-                            ? `Зарезервирован · ${reservedByName ?? 'игрок'}`
+                            ? translate('tender.contractsPanel.copy.012', { value1: reservedByName ?? t('tender.player.fallback') })
                             : reservedBySelf
-                              ? 'Зарезервирован · вами'
-                              : isFinal && !canResolve ? 'Доступен в раунде 5' : 'Свободен'}
+                              ? translate('tender.contractsPanel.copy.013')
+                              : isFinal && !canResolve ? translate('tender.contractsPanel.copy.014') : translate('tender.contractsPanel.copy.015')}
                       </Typography>
                     </span>
                   </div>
@@ -232,10 +236,11 @@ export function ContractsPanel({
                       {kind === 'scientific' ? (
                         <>
                           <Typography variant="caption" tone="muted">
-                            Научная сертификация по целевому сигналу
+                            
+                            {translate('tender.contractsPanel.copy.016')}
                           </Typography>
                           <NativeSelect
-                            aria-label="Подходящая сертификация"
+                            aria-label={translate('tender.contractsPanel.copy.017')}
                             value={bid.researchCertificationSignal ?? ''}
                             onChange={(event) => setBids((previous) => ({
                               ...previous,
@@ -247,7 +252,7 @@ export function ContractsPanel({
                               },
                             }))}
                           >
-                            <option value="">Выберите сертификат</option>
+                            <option value="">{translate('tender.contractsPanel.copy.018')}</option>
                             {fittingCertifications.map((signal) => (
                               <option key={signal} value={signal}>{t(signalLabelKeys[signal])}</option>
                             ))}
@@ -256,10 +261,11 @@ export function ContractsPanel({
                       ) : (
                         <>
                           <Typography variant="caption" tone="muted">
-                            Подходящее неиспользованное исследование
+                            
+                            {translate('tender.contractsPanel.copy.019')}
                           </Typography>
                           <NativeSelect
-                            aria-label="Подходящее исследование"
+                            aria-label={translate('tender.contractsPanel.copy.020')}
                             value={bid.evidenceTestIds[0] ?? ''}
                             onChange={(event) => {
                               const testId = event.target.value
@@ -281,7 +287,7 @@ export function ContractsPanel({
                               }))
                             }}
                           >
-                            <option value="">Выберите исследование</option>
+                            <option value="">{translate('tender.contractsPanel.copy.021')}</option>
                             {selectablePrimaryEvidence.map((entry) => (
                               <option key={entry.testId} value={entry.testId}>{evidenceLabel(entry)}</option>
                             ))}
@@ -290,10 +296,11 @@ export function ContractsPanel({
                           {(kind === 'complex' || kind === 'final') && (
                             <>
                               <Typography variant="caption" tone="muted">
-                                Непрерывного опыта достаточно. Для импульсного выберите второй опыт.
+                                
+                                {translate('tender.contractsPanel.copy.022')}
                               </Typography>
                               <NativeSelect
-                                aria-label="Дополнительное исследование"
+                                aria-label={translate('tender.contractsPanel.copy.023')}
                                 value={bid.evidenceTestIds[1] ?? ''}
                                 disabled={!requiresSecondaryEvidence}
                                 onChange={(event) => {
@@ -310,7 +317,7 @@ export function ContractsPanel({
                                   }))
                                 }}
                               >
-                                <option value="">Выберите второй опыт</option>
+                                <option value="">{translate('tender.contractsPanel.copy.024')}</option>
                                 {selectableSecondaryEvidence.map((entry) => (
                                   <option key={entry.testId} value={entry.testId}>{evidenceLabel(entry)}</option>
                                 ))}
@@ -323,12 +330,13 @@ export function ContractsPanel({
                       <Button
                         type="button"
                         size="sm"
-                        aria-label={`Подтвердить контракт ${contract.contractId}`}
+                        aria-label={translate('tender.contractsPanel.copy.025', { value1: contract.contractId })}
                         disabled={disabled || !bidIsComplete}
                         onClick={() => void handleConfirmContract(contract.contractId, bid, reservedBySelf)}
                       >
                         <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={1.7} aria-hidden="true" />
-                        Подтвердить контракт
+                        
+                        {translate('tender.contractsPanel.copy.026')}
                       </Button>
                     </div>
                   )}
@@ -338,13 +346,14 @@ export function ContractsPanel({
                     && contract.bidOutcome === undefined
                     && (!isFinal || canResolve) && (
                     <Typography variant="bodySm" className={styles.noSuitableEvidence}>
-                      Для этого контракта нет подходящих исследований.
+                      
+                      {translate('tender.contractsPanel.copy.027')}
                     </Typography>
                   )}
 
                   {contract.bidOutcome !== undefined && (
                     <Typography variant="caption" className={styles.reservedHint}>
-                      {contract.bidOutcome === 'awarded' ? 'Контракт выполнен' : 'Заявка завершена'}
+                      {contract.bidOutcome === 'awarded' ? translate('tender.contractsPanel.copy.028') : translate('tender.contractsPanel.copy.029')}
                     </Typography>
                   )}
                 </article>
@@ -356,11 +365,11 @@ export function ContractsPanel({
         {error && <div className={styles.error} role="alert"><Typography variant="bodySm">{error}</Typography></div>}
         <div className={styles.warning}>
           <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
-          <Typography variant="bodySm">Резервирование нельзя отменить или переключить на другой контракт.</Typography>
+          <Typography variant="bodySm">{translate('tender.contractsPanel.copy.030')}</Typography>
         </div>
         <div className={styles.info}>
           <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-          <Typography variant="bodySm">Успех обычного контракта: +1 Корпоративное доверие, без Бюджета.</Typography>
+          <Typography variant="bodySm">{translate('tender.contractsPanel.copy.031')}</Typography>
           <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} aria-hidden="true" />
         </div>
       </div>

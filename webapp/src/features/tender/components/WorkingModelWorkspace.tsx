@@ -1,3 +1,4 @@
+import { translate } from '../../../platform/i18n'
 import { Analytics01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 
@@ -80,20 +81,20 @@ export function WorkingModelWorkspace({
             className={inlineOnDesktop ? styles.mobileTrigger : styles.trigger}
           >
             <HugeiconsIcon icon={Analytics01Icon} strokeWidth={1.7} aria-hidden="true" />
-            <Typography as="span" variant="bodySmMedium">Рабочая модель</Typography>
+            <Typography as="span" variant="bodySmMedium">{translate('tender.workingModelWorkspace.copy.001')}</Typography>
             <Typography as="span" variant="caption" className={styles.count}>{knownSignals.length} / 6</Typography>
           </Button>
         </DialogTrigger>
         <DialogContent
           className={styles.dialog}
-          closeLabel="Закрыть рабочую модель"
+          closeLabel={translate('tender.workingModelWorkspace.copy.002')}
           placement="viewport"
           showCloseButton
         >
           <DialogHeader className={styles.header}>
             <span>
-              <DialogTitle>Рабочая модель</DialogTitle>
-              <DialogDescription>Ваши приватные гипотезы</DialogDescription>
+              <DialogTitle>{translate('tender.workingModelWorkspace.copy.003')}</DialogTitle>
+              <DialogDescription>{translate('tender.workingModelWorkspace.copy.004')}</DialogDescription>
             </span>
           </DialogHeader>
           <div className={styles.content}>
@@ -106,7 +107,8 @@ export function WorkingModelWorkspace({
             />
           </div>
           <Typography variant="caption" tone="muted" className={styles.hint}>
-            Изменения сохраняются автоматически
+            
+            {translate('tender.workingModelWorkspace.copy.005')}
           </Typography>
         </DialogContent>
       </Dialog>

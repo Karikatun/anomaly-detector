@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import { useEffect, useState } from 'react'
 
 import type {
@@ -110,7 +111,8 @@ export function WorkingModelPanel({
       <div className={styles.saveStatus}>
         {saveStatus.state === 'saving' && (
           <Typography role="status" variant="control" tone="muted">
-            Сохраняем рабочую модель…
+            
+            {translate('tender.workingModelPanel.copy.001')}
           </Typography>
         )}
         {saveStatus.state === 'error' && (
@@ -119,7 +121,8 @@ export function WorkingModelPanel({
               {saveStatus.message}
             </Typography>
             <Button type="button" variant="outline" size="sm" onClick={() => void draftController.retry()}>
-              Повторить сохранение
+              
+              {translate('tender.workingModelPanel.copy.002')}
             </Button>
           </div>
         )}
@@ -138,10 +141,10 @@ export function WorkingModelPanel({
                 <Typography as="strong" variant="bodySmMedium">{signalName}</Typography>
               </span>
 
-              <div className={styles.segmented} role="group" aria-label={`${signalName}: гипотеза, тип поля`}>
+              <div className={styles.segmented} role="group" aria-label={translate('tender.workingModelPanel.copy.003', { value1: signalName })}>
                 {fieldTypes.map((fieldType) => (
                   <button
-                    aria-label={`${signalName}: гипотеза, тип поля ${t(fieldTypeLabelKeys[fieldType])}`}
+                    aria-label={translate('tender.workingModelPanel.copy.004', { value1: signalName, value2: t(fieldTypeLabelKeys[fieldType]) })}
                     aria-pressed={hypothesis?.fieldType === fieldType}
                     data-selected={hypothesis?.fieldType === fieldType || undefined}
                     key={fieldType}
@@ -154,10 +157,10 @@ export function WorkingModelPanel({
                 ))}
               </div>
 
-              <div className={styles.segmented} data-options="2" role="group" aria-label={`${signalName}: гипотеза, полярность`}>
+              <div className={styles.segmented} data-options="2" role="group" aria-label={translate('tender.workingModelPanel.copy.005', { value1: signalName })}>
                 {polarities.map((polarity) => (
                   <button
-                    aria-label={`${signalName}: гипотеза, полярность ${t(polarityLabelKeys[polarity])}`}
+                    aria-label={translate('tender.workingModelPanel.copy.006', { value1: signalName, value2: t(polarityLabelKeys[polarity]) })}
                     aria-pressed={hypothesis?.polarity === polarity}
                     data-selected={hypothesis?.polarity === polarity || undefined}
                     key={polarity}

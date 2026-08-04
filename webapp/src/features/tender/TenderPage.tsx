@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import { InformationCircleIcon, Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
@@ -66,14 +67,14 @@ import { tenderRulesetPolicy } from './ruleset-policy'
 import { getPhaseContextMenuVisibility, shouldLockPhaseOverlays } from './phase-ui'
 
 const phaseLabels: Record<string, string> = {
-  'access-slot-selection': '1. Выбор слота доступа',
-  'power-allocation': '2. Распределение мощности',
-  'reconnaissance': '3. Разведка',
-  'laboratory': '4. Лаборатория',
-  'model-analysis': '5. Анализ модели',
-  'contracts': '6. Контракты',
-  'final-scientific-model': '7. Финальная модель',
-  'complete': 'Завершён',
+  'access-slot-selection': translate('tender.tenderPage.copy.001'),
+  'power-allocation': translate('tender.tenderPage.copy.002'),
+  'reconnaissance': translate('tender.tenderPage.copy.003'),
+  'laboratory': translate('tender.tenderPage.copy.004'),
+  'model-analysis': translate('tender.tenderPage.copy.005'),
+  'contracts': translate('tender.tenderPage.copy.006'),
+  'final-scientific-model': translate('tender.tenderPage.copy.007'),
+  'complete': translate('tender.tenderPage.copy.008'),
 }
 
 const sequentialPhases = new Set([
@@ -99,9 +100,10 @@ function WaitingForTurn({
   return (
     <PhaseNotice
       kind="waiting"
-      description={`Сейчас ходит: ${playerName ?? 'игрок'}`}
+      description={translate('tender.tenderPage.copy.009', { value1: playerName ?? translate('tender.player.fallback') })}
     >
-      Ожидание хода
+      
+      {translate('tender.tenderPage.copy.010')}
     </PhaseNotice>
   )
 }
@@ -225,7 +227,7 @@ function PhasePanel({
           }}
         />,
       ) : (
-        <UnavailablePhaseCard>Вы не выделили мощность на лабораторию.</UnavailablePhaseCard>
+        <UnavailablePhaseCard>{translate('tender.tenderPage.copy.011')}</UnavailablePhaseCard>
       )
     }
 
@@ -251,7 +253,7 @@ function PhasePanel({
           onSaveWorkingModel={onSaveWorkingModel}
         />,
       ) : (
-        <UnavailablePhaseCard>Вы не выделили мощность на анализ модели.</UnavailablePhaseCard>
+        <UnavailablePhaseCard>{translate('tender.tenderPage.copy.012')}</UnavailablePhaseCard>
       )
     }
 
@@ -278,7 +280,7 @@ function PhasePanel({
           }
         />,
       ) : (
-        <UnavailablePhaseCard>Нет доступной мощности для контрактов.</UnavailablePhaseCard>
+        <UnavailablePhaseCard>{translate('tender.tenderPage.copy.013')}</UnavailablePhaseCard>
       )
     }
 
@@ -307,8 +309,8 @@ function PhasePanel({
         <CompletedTenderPanel currentUserId={auth.user?.id} view={{ ...view, audit: view.audit }} />
       ) : (
         <Card>
-          <CardHeader><CardTitle>Тендер завершён</CardTitle></CardHeader>
-          <CardContent><Typography tone="muted">Ожидание данных аудита...</Typography></CardContent>
+          <CardHeader><CardTitle>{translate('tender.tenderPage.copy.014')}</CardTitle></CardHeader>
+          <CardContent><Typography tone="muted">{translate('tender.tenderPage.copy.015')}</Typography></CardContent>
         </Card>
       )
 
@@ -316,7 +318,7 @@ function PhasePanel({
       return (
         <Card>
           <CardHeader><CardTitle>{phaseLabels[view.phase] ?? view.phase}</CardTitle></CardHeader>
-          <CardContent><Typography tone="muted">Эта фаза в разработке.</Typography></CardContent>
+          <CardContent><Typography tone="muted">{translate('tender.tenderPage.copy.016')}</Typography></CardContent>
         </Card>
       )
   }
@@ -476,7 +478,7 @@ function TenderContent() {
   const saveWorkingModel = useCallback(
     async (workingModel: TenderView['privateWorkingModel']) => {
       if (!connected) {
-        throw new Error('Соединение с игрой потеряно. Подключитесь снова перед сохранением.')
+        throw new Error(translate('tender.tenderPage.copy.017'))
       }
       await execute({
         type: 'update-working-model',
@@ -521,7 +523,7 @@ function TenderContent() {
         <div className="flex items-center gap-3">
           <Spinner />
           <Typography variant="bodySm" tone="muted">
-            {connected ? 'Загрузка тендера...' : 'Подключение...'}
+            {connected ? translate('tender.tenderPage.copy.018') : translate('tender.tenderPage.copy.019')}
           </Typography>
         </div>
       </section>
@@ -585,7 +587,8 @@ function TenderContent() {
       >
         <div className={`${styles.headerInfo} grid min-w-0 gap-0.5`}>
           <Typography variant="shortcut" tone="muted" className="uppercase">
-            Раунд {tenderView.round} / 5
+            
+            {translate('tender.header.round', { round: tenderView.round })}
           </Typography>
           <Typography as="h3" variant="bodySmMedium" className="truncate">{phase}</Typography>
         </div>
@@ -593,13 +596,13 @@ function TenderContent() {
           <TenderTimer remainingSeconds={tenderView.dueAt ? remainingSeconds : null} />
         </div>
         <div className={`${styles.headerMeta} flex min-w-0 flex-wrap items-center gap-2`}>
-          {mySlot && <Badge variant="outline">Слот {mySlot}</Badge>}
+          {mySlot && <Badge variant="outline">{translate('tender.header.slot', { slot: mySlot })}</Badge>}
           {isAccessSlotSelection && (
-            <Badge variant="outline">Бюджет: {myPlayer?.budget ?? 0} M</Badge>
+            <Badge variant="outline">{translate('tender.header.budget', { budget: myPlayer?.budget ?? 0 })}</Badge>
           )}
           {isSequentialPhase && (
             <Badge variant={isMyTurn ? 'default' : 'outline'}>
-              {isMyTurn ? 'Ваш ход' : `Ход: ${activePlayer?.displayName ?? 'игрока'}`}
+              {isMyTurn ? translate('tender.tenderPage.copy.023') : translate('tender.tenderPage.copy.024', { value1: activePlayer?.displayName ?? translate('tender.player.fallbackGenitive') })}
             </Badge>
           )}
           {isSharedModelAnalysis && tenderView.modelAnalysisProgress && (
@@ -638,13 +641,13 @@ function TenderContent() {
                 disabled={referenceHelpLocked}
               >
                 <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-                <Typography as="span" variant="control">Справка</Typography>
+                <Typography as="span" variant="control">{translate('tender.tenderPage.copy.025')}</Typography>
               </Button>
             </DialogTrigger>
-            <DialogContent closeLabel="Закрыть справку">
+            <DialogContent closeLabel={translate('tender.tenderPage.copy.026')}>
               <DialogHeader>
-                <DialogTitle>Справка</DialogTitle>
-                <DialogDescription>Правила игры и трактовка результатов исследований.</DialogDescription>
+                <DialogTitle>{translate('tender.tenderPage.copy.027')}</DialogTitle>
+                <DialogDescription>{translate('tender.tenderPage.copy.028')}</DialogDescription>
               </DialogHeader>
               <div className={styles.helpMenu}>
                 <Button
@@ -655,7 +658,8 @@ function TenderContent() {
                     setOverlayOpen('rules', true)
                   }}
                 >
-                  Правила игры
+                  
+                  {translate('tender.tenderPage.copy.029')}
                 </Button>
                 <Button
                   type="button"
@@ -665,7 +669,8 @@ function TenderContent() {
                     setOverlayOpen('interpretation', true)
                   }}
                 >
-                  Трактовка анализов
+                  
+                  {translate('tender.tenderPage.copy.030')}
                 </Button>
               </div>
             </DialogContent>
@@ -736,14 +741,14 @@ function TenderContent() {
       {tenderView.privateAutomaticOperationalSkip && (
         <PhaseNotice
           description={tenderView.privateAutomaticOperationalSkip.reason === 'all_pairs_researched'
-            ? 'Все доступные направленные пары уже исследованы.'
+            ? translate('tender.tenderPage.copy.031')
             : tenderView.privateAutomaticOperationalSkip.reason === 'insufficient_samples'
-              ? 'Нужны два разных Образца.'
-              : 'Все шесть Образцов уже получены.'}
+              ? translate('tender.tenderPage.copy.032')
+              : translate('tender.tenderPage.copy.033')}
         >
           {tenderView.privateAutomaticOperationalSkip.phase === 'laboratory'
-            ? 'Лаборатория пропущена'
-            : 'Разведка пропущена'}
+            ? translate('tender.tenderPage.copy.034')
+            : translate('tender.tenderPage.copy.035')}
         </PhaseNotice>
       )}
 

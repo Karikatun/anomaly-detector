@@ -313,10 +313,10 @@ function RoomLobbyContent() {
               {roomQuery.error ? (
                 <div className="grid gap-2">
                   <Typography role="alert" className={styles.error}>
-                    Не удалось обновить состояние комнаты. Показаны последние полученные данные.
+                    {t('lobby.refresh.failed')}
                   </Typography>
                   <Button type="button" variant="outline" onClick={() => void roomQuery.refetch()}>
-                    Повторить обновление
+                    {t('lobby.refresh.retry')}
                   </Button>
                 </div>
               ) : null}

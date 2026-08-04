@@ -70,16 +70,16 @@ function AuthenticatedHome({
   }
 
   return (
-    <section className={expeditionStyles.screen} aria-label="Главное меню">
+    <section className={expeditionStyles.screen} aria-label={t('home.menu.aria')}>
       <ExpeditionBackground />
       <div className={`${expeditionStyles.panel} ${styles.panel}`}>
         <header className={styles.header}>
-          <Typography variant="h1" className={styles.title}>ГЛАВНОЕ МЕНЮ</Typography>
+          <Typography variant="h1" className={styles.title}>{t('home.menu.title')}</Typography>
           <div className={styles.account}>
             <Link
               to="/profile"
               className={styles.profileLink}
-              aria-label={`Открыть профиль пользователя ${displayName}`}
+              aria-label={t('home.profile.open', { name: displayName })}
             >
               <div className={styles.avatar} aria-hidden="true"><span className={styles.avatarCore} /></div>
               <div className={styles.identity}>
@@ -92,10 +92,10 @@ function AuthenticatedHome({
               className={styles.logout}
               disabled={logoutAction.isPending}
               onClick={() => void logoutAction.logout()}
-              aria-label="Выйти"
+              aria-label={t('button.logout')}
             >
               <HugeiconsIcon icon={Logout01Icon} strokeWidth={1.6} aria-hidden="true" />
-              <Typography variant="control" className={styles.logoutLabel}>ВЫЙТИ</Typography>
+              <Typography variant="control" className={styles.logoutLabel}>{t('button.logout').toUpperCase()}</Typography>
             </Button>
             {logoutAction.error && (
               <Typography role="alert" variant="bodySm" tone="destructive">
@@ -112,7 +112,7 @@ function AuthenticatedHome({
               accent="plain"
               disabled
               fullRow
-              title="ПРОВЕРЯЕМ АКТИВНЫЙ МАТЧ"
+              title={t('home.currentMatch.checking')}
               icon={Login03Icon}
               onClick={() => undefined}
             />
@@ -139,8 +139,8 @@ function AuthenticatedHome({
             <MenuCard
               accent="aqua"
               fullRow
-              title="ВЕРНУТЬСЯ В МАТЧ"
-              description="У вас есть активный незавершённый матч"
+              title={t('home.currentMatch.return')}
+              description={t('home.currentMatch.description')}
               icon={Login03Icon}
               onClick={returnToCurrentMatch}
             />
@@ -148,13 +148,13 @@ function AuthenticatedHome({
             <>
               <MenuCard
                 accent="violet"
-                title="СОЗДАТЬ КОМНАТУ"
+                title={t('home.room.create')}
                 icon={Add01Icon}
                 onClick={() => setIsCreateDialogOpen(true)}
               />
               <MenuCard
                 accent="aqua"
-                title="ВОЙТИ ПО КОДУ"
+                title={t('home.room.join')}
                 icon={Login03Icon}
                 onClick={() => setIsJoinDialogOpen(true)}
               />
@@ -168,7 +168,7 @@ function AuthenticatedHome({
           />
           <MenuCard
             accent="plain"
-            title="ПРОФИЛЬ"
+            title={t('nav.profile').toUpperCase()}
             icon={UserCircleIcon}
             onClick={() => void navigate({ to: '/profile' })}
           />

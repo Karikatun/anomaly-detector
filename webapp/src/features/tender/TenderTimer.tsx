@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import { Typography } from '@/components/ui/typography'
 
 type TenderTimerProps = {
@@ -13,7 +14,7 @@ export function TenderTimer({ remainingSeconds }: TenderTimerProps) {
 
   return (
     <Typography
-      aria-label="До конца фазы"
+      aria-label={translate('tender.tenderTimer.copy.001')}
       role="timer"
       variant="timer"
       className={urgent ? 'text-red-400 animate-pulse' : 'text-primary'}

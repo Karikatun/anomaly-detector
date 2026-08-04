@@ -1,3 +1,4 @@
+import { translate } from '../../../platform/i18n'
 import { CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Fragment } from 'react'
@@ -21,22 +22,27 @@ export function TenderPhaseProgress({ phase }: { phase: string }) {
   const activeStage = stages[activeIndex]
 
   return (
-    <nav className={styles.progress} aria-label="Прогресс фаз раунда">
+    <nav className={styles.progress} aria-label={translate('tender.tenderPhaseProgress.copy.001')}>
       <div className={styles.compactProgress}>
         <div className={styles.compactHeader}>
           <Typography as="strong" variant="bodySmMedium" className={styles.compactTitle}>
-            Этап {activeIndex + 1} из {stages.length} · {activeStage?.label}
+            {translate('tender.phaseProgress.current', {
+              current: activeIndex + 1,
+              total: stages.length,
+              label: activeStage?.label ?? '',
+            })}
           </Typography>
           <Dialog>
             <DialogTrigger asChild>
               <Button type="button" size="xs" variant="ghost" className={styles.allStagesAction}>
-                Все этапы
+                
+                {translate('tender.tenderPhaseProgress.copy.004')}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Этапы раунда</DialogTitle>
-                <DialogDescription>Текущий прогресс и оставшиеся этапы.</DialogDescription>
+                <DialogTitle>{translate('tender.tenderPhaseProgress.copy.005')}</DialogTitle>
+                <DialogDescription>{translate('tender.tenderPhaseProgress.copy.006')}</DialogDescription>
               </DialogHeader>
               <ol className={styles.stageList}>
                 {stages.map((stage, index) => (

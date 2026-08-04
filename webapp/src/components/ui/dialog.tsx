@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { translate } from "@/platform/i18n"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
@@ -123,7 +124,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="outline">{translate('app.close')}</Button>
         </DialogPrimitive.Close>
       )}
     </div>

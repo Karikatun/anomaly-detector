@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { ApiRequestError } from '@/platform/api'
@@ -78,14 +79,14 @@ export function getWaitingForTurnDescription(
   finalScientificModelSubmitted = false,
   progress?: TenderView['sequentialPhaseProgress'],
 ) {
-  if (!playerName) return 'Ожидаем синхронизацию следующего хода.'
+  if (!playerName) return translate('tender.tender-command-feedback.copy.001')
   const progressText = progress
-    ? ` Завершили обязательное действие: ${progress.completed} из ${progress.total}.`
+    ? translate('tender.tender-command-feedback.copy.002', { value1: progress.completed, value2: progress.total })
     : ''
   if (phase === 'final-scientific-model') {
     return finalScientificModelSubmitted
-      ? `Сейчас действует ${playerName}. Ваша финальная модель отправлена и принята сервером.`
-      : `Сейчас действует ${playerName}. Ваш черновик финальной модели сохранён только в этой форме и ещё не отправлен.`
+      ? translate('tender.tender-command-feedback.copy.003', { value1: playerName })
+      : translate('tender.tender-command-feedback.copy.004', { value1: playerName })
   }
-  return `Сейчас действует ${playerName}.${progressText} Ваш подтверждённый выбор принят сервером.`
+  return translate('tender.tender-command-feedback.copy.005', { value1: playerName, value2: progressText })
 }

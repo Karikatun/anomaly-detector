@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import {
   Alert01Icon,
   CheckmarkCircle02Icon,
@@ -256,7 +257,7 @@ export function AccessSlotPanel({
             type="button"
             variant="outline"
             disabled
-            aria-label="Выбор принят — ожидаем игроков"
+            aria-label={translate('tender.accessSlotPanel.copy.001')}
             className={styles.confirmedButton}
           >
             {t('tender.access.confirmed.button')}
