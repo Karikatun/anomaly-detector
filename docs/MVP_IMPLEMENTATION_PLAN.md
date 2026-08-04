@@ -8,11 +8,11 @@ ADR в `docs/adr/`.
 
 **Статусы:** `[-]` начато частично, `[ ]` не начато.
 
-## 1. Защита публичного API и восстановление аккаунта
+## 1. Защита публичного трафика и восстановление аккаунта
 
-**Результат:** публичные auth-, API- и realtime-маршруты имеют распределённые
-ограничения, а пользователь заранее понимает доступный путь восстановления
-password-аккаунта.
+**Результат:** публичные браузерные, auth-, API- и realtime-маршруты защищены от
+автоматизированных атак и имеют распределённые ограничения, а пользователь
+заранее понимает доступный путь восстановления password-аккаунта.
 
 1. [ ] Подключить Yandex Smart Web Security Advanced Rate Limiter или
    эквивалентный edge/WAF limiter перед API и WebSocket ingress:
@@ -21,22 +21,36 @@ password-аккаунта.
      запросы с невалидным или отсутствующим билетом;
    - выделить health checks в отдельное правило или доверенный источник;
    - проверить корректное получение trusted client IP через балансировщик.
-2. [ ] Перенести room-join budget `20 попыток / 60 секунд` из памяти процесса в
+2. [ ] Подключить защиту от вредоносного автоматизированного трафика на базе
+   Yandex Smart Web Security bot management и Smart Protection
+   ([#25](https://github.com/Karikatun/anomaly-detector/issues/25)):
+   - сначала собрать baseline в observe-only режиме, затем включать challenge и
+     блокировку поэтапно с контролем ложных срабатываний;
+   - направлять подозрительный браузерный трафик регистрации и входа в
+     SmartCaptcha, но не возвращать captcha HTML из JSON API и WebSocket;
+   - сохранить работу OAuth callback, health checks, shared NAT, mobile reconnect,
+     клавиатурной навигации и доступного fallback/support-пути;
+   - не добавлять собственный browser/hardware fingerprinting и не заменять
+     серверные auth-, room- и Tender-бюджеты edge-защитой;
+   - документировать логи, метрики, rollback, владельца реакции на false positive,
+     обработку и сроки хранения bot-detection telemetry.
+3. [ ] Перенести room-join budget `20 попыток / 60 секунд` из памяти процесса в
    атомарный PostgreSQL bucket по пользователю, сохранив `Retry-After`,
    стабильный `429 RATE_LIMITED` и security event.
-3. [ ] Добавить атомарный PostgreSQL budget Tender-команд по
+4. [ ] Добавить атомарный PostgreSQL budget Tender-команд по
    `userId + tenderId`. Начальная граница для нагрузочной проверки —
    `60 запросов / 60 секунд` с допустимым коротким burst; окончательное значение
    определить по нормальному пятираундовому матчу и нагрузочному тесту.
-4. [ ] Добавить страховочный budget authenticated mutations по пользователю.
+5. [ ] Добавить страховочный budget authenticated mutations по пользователю.
    Начальная граница — `120 запросов / 60 секунд`; route-specific budgets должны
    срабатывать независимо и раньше общего.
-5. [ ] Провести abuse/load validation: несколько API-инстансов, общий NAT,
+6. [ ] Провести abuse/load validation: несколько API-инстансов, общий NAT,
    mobile reconnect, room-code enumeration, burst Tender-команд, невалидные
-   WebSocket tickets, registration quota races и очистка истёкших buckets.
-6. [ ] Провести Argon2id benchmark на целевом Yandex-контейнере и закрепить
+   WebSocket tickets, registration quota races, bot challenge/block policy,
+   ложные срабатывания и очистка истёкших buckets.
+7. [ ] Провести Argon2id benchmark на целевом Yandex-контейнере и закрепить
    допустимый диапазон latency и памяти в тесте или runbook.
-7. [ ] До публичного теста выбрать и документировать восстановление
+8. [ ] До публичного теста выбрать и документировать восстановление
    password-аккаунта через подтверждённую внешнюю identity либо support-процесс.
 
 Обычные authenticated GET и polling не получают отдельные application-level
@@ -44,8 +58,10 @@ password-аккаунта.
 edge budget.
 
 **Gate:** распределённый трафик нельзя обойти переключением между
-API-инстансами; атаки получают контролируемый `429` до дорогой работы, а обычный
-вход, reconnect и полный матч не упираются в лимиты.
+API-инстансами; подозрительный браузерный трафик получает проверку, API-трафик —
+подходящий машинному клиенту отказ, а автоматизированные атаки блокируются до
+дорогой работы. Обычный вход, shared NAT, reconnect и полный матч не упираются в
+лимиты и не получают ложную блокировку.
 
 ## 2. Игровой интерфейс
 
@@ -177,4 +193,6 @@ access-control и полный Tender flow; проверен безопасны�
 - [#23](https://github.com/Karikatun/anomaly-detector/issues/23) — browser,
   device и visual release matrix;
 - [#24](https://github.com/Karikatun/anomaly-detector/issues/24) — public MVP
-  test и реальные матчи 2–4 игроков.
+  test и реальные матчи 2–4 игроков;
+- [#25](https://github.com/Karikatun/anomaly-detector/issues/25) — защита от
+  вредоносного автоматизированного трафика и безопасный bot challenge.
