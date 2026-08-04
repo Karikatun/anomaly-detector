@@ -275,7 +275,7 @@ export function ModelAnalysisPanel({
 
       {error && <div className={styles.error} role="alert"><Typography variant="bodySm">{error}</Typography></div>}
 
-      <footer className={styles.footer}>
+      <footer className={styles.footer} data-tutorial-action-container="">
         <div className={styles.info}>
           <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
           <Typography variant="bodySm">
@@ -311,6 +311,7 @@ export function ModelAnalysisPanel({
           type="button"
           size="lg"
           className={styles.actionButton}
+          data-tutorial-confirm-ready={isValid || undefined}
           disabled={disabled || !isValid}
           onClick={() => void handleSubmit()}
         >

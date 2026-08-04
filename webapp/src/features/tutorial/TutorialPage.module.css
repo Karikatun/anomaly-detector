@@ -25,6 +25,7 @@
 .coach { display: grid; max-width: 24rem; gap: .55rem; text-align: left; }
 .coach button { width: fit-content; margin-top: .25rem; }
 .hint { padding: .65rem; border-left: 2px solid #38bdf8; background: rgba(56, 189, 248, .08); }
+.confirmAction { display: none; color: #7dd3fc; }
 
 :global(.react-joyride__spotlight path) {
   pointer-events: none !important;
@@ -81,5 +82,13 @@
     top: 17.25rem !important;
     bottom: .75rem !important;
     height: auto !important;
+  }
+
+  :global(body:has([data-tutorial-confirm-ready='true']) [data-testid='floater']) {
+    inset: auto .75rem 8.75rem !important;
+  }
+
+  :global(body:has([data-tutorial-confirm-ready='true'])) .confirmAction {
+    display: block;
   }
 }

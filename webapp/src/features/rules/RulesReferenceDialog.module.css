@@ -304,6 +304,37 @@
     grid-template-columns: 1fr;
   }
 
+  .tableScroll {
+    overflow-x: hidden;
+  }
+
+  .resultTable {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .resultTable th,
+  .resultTable td {
+    padding: .5rem .35rem;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+  }
+
+  .resultTable th:nth-child(1),
+  .resultTable td:nth-child(1) {
+    width: 35%;
+  }
+
+  .resultTable th:nth-child(2),
+  .resultTable td:nth-child(2) {
+    width: 25%;
+  }
+
+  .resultTable th:nth-child(3),
+  .resultTable td:nth-child(3) {
+    width: 40%;
+  }
+
   .footer {
     padding: .75rem 1rem;
   }

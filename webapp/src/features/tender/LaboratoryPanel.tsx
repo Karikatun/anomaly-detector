@@ -307,7 +307,7 @@ export function LaboratoryPanel({
         </div>
       )}
 
-      <footer className={styles.footer}>
+      <footer className={styles.footer} data-tutorial-action-container="">
         <div className={styles.info}>
           <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
           <Typography variant="bodySm">
@@ -322,6 +322,7 @@ export function LaboratoryPanel({
           type="button"
           size="lg"
           className={styles.actionButton}
+          data-tutorial-confirm-ready={isValid && mode !== null && !pairAlreadyResearched && !duplicateBroadPair || undefined}
           disabled={disabled || !isValid || mode === null || pairAlreadyResearched || duplicateBroadPair}
           onClick={() => void handleTest()}
         >

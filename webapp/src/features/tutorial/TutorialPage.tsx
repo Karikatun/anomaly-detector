@@ -88,6 +88,17 @@ function TutorialContent() {
   const [commandError, setCommandError] = useState<string | null>(null)
   const [exitOpen, setExitOpen] = useState(false)
   const [createRoomOpen, setCreateRoomOpen] = useState(false)
+  const [compactHeader, setCompactHeader] = useState(
+    () => window.matchMedia('(max-width: 47.999rem)').matches,
+  )
+
+  useLayoutEffect(() => {
+    const media = window.matchMedia('(max-width: 47.999rem)')
+    const syncViewport = () => setCompactHeader(media.matches)
+    syncViewport()
+    media.addEventListener('change', syncViewport)
+    return () => media.removeEventListener('change', syncViewport)
+  }, [])
 
   const saveCompletion = async () => {
     try {
@@ -202,7 +213,6 @@ function TutorialContent() {
     )
   }
 
-  const compactHeader = window.matchMedia('(max-width: 47.999rem)').matches
   const visibleSteps = compactHeader
     ? orderedSteps
     : orderedSteps.filter((tutorialStep) => tutorialStep !== 'interpretation')
@@ -310,17 +320,18 @@ function TutorialContent() {
     placement: 'auto',
     scrollOffset: 20,
     scrollTarget: targetConfig.anchor,
-    skipScroll: compactHeader || state.step === 'interpretation-open',
+    skipScroll: true,
     spotlightTarget: targetConfig.spotlight ?? targetConfig.anchor,
     target: targetConfig.anchor,
   }
 
   return (
     <>
-      {compactHeader && state.step !== 'interpretation-open' && (
+      {state.step !== 'interpretation-open' && (
         <TutorialViewportAnchor
           anchorSelector={targetConfig.anchor}
           coachAtTop={coachAtTop}
+          compactHeader={compactHeader}
           spotlightSelector={targetConfig.spotlight}
         />
       )}
@@ -393,18 +404,20 @@ function TutorialContent() {
 function TutorialViewportAnchor({
   anchorSelector,
   coachAtTop,
+  compactHeader,
   spotlightSelector,
 }: {
   anchorSelector: string
   coachAtTop: boolean
+  compactHeader: boolean
   spotlightSelector?: string
 }) {
   useLayoutEffect(() => {
     const anchor = document.querySelector<HTMLElement>(anchorSelector)
     if (!anchor) return
 
-    const safeTop = coachAtTop ? 288 : 120
-    const safeBottom = coachAtTop ? window.innerHeight - 12 : window.innerHeight - 288
+    const safeTop = compactHeader ? (coachAtTop ? 288 : 120) : 88
+    const safeBottom = compactHeader && !coachAtTop ? window.innerHeight - 288 : window.innerHeight - 12
     const safeHeight = safeBottom - safeTop
     const spotlight = spotlightSelector
       ? document.querySelector<HTMLElement>(spotlightSelector)
@@ -420,7 +433,7 @@ function TutorialViewportAnchor({
         top: rect.top - safeTop - 12,
       })
     }
-  }, [anchorSelector, coachAtTop, spotlightSelector])
+  }, [anchorSelector, coachAtTop, compactHeader, spotlightSelector])
 
   return null
 }
@@ -445,6 +458,9 @@ function CoachContent({
       <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{t('tutorial.coach.task')}</Typography>
       <Typography variant="bodySm">{task}</Typography>
       {hint && <Typography variant="bodySm" className={styles.hint}>{hint}</Typography>}
+      <Typography as="strong" variant="bodySmMedium" className={styles.confirmAction}>
+        {t('tutorial.coach.confirmAction')}
+      </Typography>
       <Button type="button" variant="ghost" size="sm" onClick={onExit}>{t('tutorial.exit')}</Button>
     </div>
   )
