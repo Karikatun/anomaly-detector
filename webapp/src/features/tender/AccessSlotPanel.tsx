@@ -270,12 +270,13 @@ export function AccessSlotPanel({
           </Button>
         </div>
       ) : (
-        <div className={styles.footer}>
+        <div className={styles.footer} data-tutorial-action-container="">
           <Button
             type="button"
             size="lg"
             aria-label={t('tender.access.confirm')}
             className={styles.confirmButton}
+            data-tutorial-confirm-ready={selected !== null || undefined}
             disabled={disabled || selected === null}
             onClick={() => void (async () => {
               if (selected === null) return

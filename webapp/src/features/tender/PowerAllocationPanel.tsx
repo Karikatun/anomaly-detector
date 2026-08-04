@@ -363,11 +363,12 @@ export function PowerAllocationPanel({
       )}
 
       {!isConfirmed && (
-        <footer className={styles.footer}>
+        <footer className={styles.footer} data-tutorial-action-container="">
           <Button
             type="button"
             size="lg"
             className={styles.confirmButton}
+            data-tutorial-confirm-ready={total === 4 || undefined}
             disabled={disabled || problem !== null}
             onClick={requestConfirmation}
           >

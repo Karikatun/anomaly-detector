@@ -1,10 +1,12 @@
 import { expect, registerBrowserUser, test } from '../helpers/test'
 
 const tasks = {
-  roundOneRecon: 'Исследуйте Неизвестный сектор, чтобы получить второй Образец.',
-  roundOneThesis: 'Отправьте Тезис по Астеру. Тип поля и полярность проверяются отдельно, а в обучении ошибку можно исправить без штрафа.',
-  roundTwoThesis: 'Подтвердите свойства Бореала вторым Тезисом.',
+  roundOneRecon: 'Выберите Неизвестный сектор и нажмите «Исследовать», чтобы получить второй Образец.',
+  roundOneThesis: 'Отправьте Тезис по Aster. Тип поля и полярность проверяются отдельно, а в обучении ошибку можно исправить без штрафа.',
+  roundTwoThesis: 'Выберите подтверждённые свойства Boreal и нажмите «Выдвинуть тезис».',
   contractBid: 'Проверьте выбранный опыт и отправьте заявку на контракт.',
+  finalModel: 'В черновик Финальной научной модели уже перенесены подтверждённые свойства Aster и Boreal; остальные Сигналы оставлены пустыми. Нажмите «Отправить финальную модель».',
+  helpDesktop: 'Откройте «Трактовку анализов» в шапке Тендера.',
 } as const
 
 function currentTask(page: Parameters<typeof registerBrowserUser>[0], task: string) {
@@ -51,9 +53,43 @@ async function expectTargetInMobileInteractiveArea(
   ).toBeLessThanOrEqual(viewport!.height - 288)
 }
 
+async function expectRequiredActionAvailable(
+  page: Parameters<typeof registerBrowserUser>[0],
+  action: ReturnType<Parameters<typeof registerBrowserUser>[0]['getByRole']>,
+) {
+  if ((page.viewportSize()?.width ?? 0) > 600) return
+
+  const coach = page.getByTestId('floater').locator('[data-joyride-step]')
+  const [actionBox, coachBox] = await Promise.all([action.boundingBox(), coach.boundingBox()])
+  await expect(coach.getByText('Подтвердите действие', { exact: true })).toBeVisible()
+  expect(actionBox, 'required tutorial action must have measurable geometry').not.toBeNull()
+  expect(coachBox, 'tutorial coach must have measurable geometry').not.toBeNull()
+  expect(
+    actionBox!.y,
+    'required tutorial action must remain below the raised coach',
+  ).toBeGreaterThanOrEqual(coachBox!.y + coachBox!.height + 8)
+  expect(
+    actionBox!.y + actionBox!.height,
+    'required tutorial action must remain visible inside the viewport before Playwright scrolls to it',
+  ).toBeLessThanOrEqual(page.viewportSize()!.height - 8)
+}
+
+async function expectDesktopTargetBelowStickyHeader(
+  page: Parameters<typeof registerBrowserUser>[0],
+  selector: string,
+) {
+  if ((page.viewportSize()?.width ?? 0) <= 600) return
+
+  const box = await page.locator(selector).boundingBox()
+  expect(box, 'desktop tutorial target must have measurable geometry').not.toBeNull()
+  expect(box!.y, 'desktop tutorial target must stay below the sticky Tender header').toBeGreaterThanOrEqual(80)
+}
+
 async function chooseAccessSlot(page: Parameters<typeof registerBrowserUser>[0], slot: 4 | 5) {
   await page.getByRole('button', { name: new RegExp(`^Слот доступа ${slot}:`) }).click()
-  await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
+  const confirm = page.getByRole('button', { name: 'Подтвердить выбор' })
+  await expectRequiredActionAvailable(page, confirm)
+  await confirm.click()
 }
 
 async function allocatePower(
@@ -65,12 +101,16 @@ async function allocatePower(
       await page.getByRole('button', { name: `Увеличить мощность: ${category}` }).click()
     }
   }
-  await page.getByRole('button', { name: 'Подтвердить распределение' }).click()
+  const confirm = page.getByRole('button', { name: 'Подтвердить распределение' })
+  await expectRequiredActionAvailable(page, confirm)
+  await confirm.click()
 }
 
 async function runReconnaissance(page: Parameters<typeof registerBrowserUser>[0]) {
   await page.getByRole('button', { name: 'Сигнал для разведки: Неизвестный сигнал A' }).click()
-  await page.getByRole('button', { name: 'Исследовать' }).click()
+  const confirm = page.getByRole('button', { name: 'Исследовать' })
+  await expectRequiredActionAvailable(page, confirm)
+  await confirm.click()
 }
 
 async function runLaboratoryTest(
@@ -82,7 +122,9 @@ async function runLaboratoryTest(
   if (mode) await page.getByRole('button', { name: mode }).click()
   await page.getByRole('button', { name: `Образец: ${source}` }).click()
   await page.getByRole('button', { name: `Образец: ${receiver}` }).click()
-  await page.getByRole('button', { name: `Провести опыт: ${source} → ${receiver}` }).click()
+  const confirm = page.getByRole('button', { name: `Провести опыт: ${source} → ${receiver}` })
+  await expectRequiredActionAvailable(page, confirm)
+  await confirm.click()
 }
 
 async function saveHypothesis(
@@ -94,6 +136,11 @@ async function saveHypothesis(
   const isMobile = (page.viewportSize()?.width ?? 0) <= 600
   if (isMobile) {
     await page.getByRole('button', { name: 'Рабочая модель' }).click()
+  } else {
+    await expectDesktopTargetBelowStickyHeader(
+      page,
+      `[data-tutorial-working-model-row="${signal.toLowerCase()}"]`,
+    )
   }
   await fieldButton.click()
   await page.getByRole('button', { name: `${signal}: гипотеза, полярность Положительная` }).click()
@@ -109,7 +156,9 @@ async function submitThesis(
   await page.getByLabel('Сигнал для тезиса').selectOption(signal)
   await page.getByLabel('Тип поля для тезиса').selectOption(fieldType)
   await page.getByLabel('Полярность для тезиса').selectOption('positive')
-  await page.getByRole('button', { name: 'Выдвинуть тезис' }).click()
+  const confirm = page.getByRole('button', { name: 'Выдвинуть тезис' })
+  await expectRequiredActionAvailable(page, confirm)
+  await confirm.click()
 }
 
 test('completes the two-round tutorial, restores its tab-local step, and records only completion', async ({ page }) => {
@@ -148,6 +197,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   )).toBeVisible()
   await expect(page.getByRole('button', { name: 'Справка', exact: true })).toBeHidden()
   await expect(page.getByRole('button', { name: 'Правила', exact: true })).toBeVisible()
+  await expect(currentTask(page, tasks.helpDesktop)).toBeVisible()
   await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('Цикл типов поля')
   await expectCoachWithinViewport(page)
@@ -191,6 +241,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await page.getByRole('button', { name: 'Подтвердить контракт tutorial-light-contract' }).click()
 
   await expect(page.getByLabel('Заполнено параметров: 4')).toBeVisible()
+  await expect(currentTask(page, tasks.finalModel)).toBeVisible()
   await expectCoachWithinViewport(page)
   await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
@@ -229,6 +280,12 @@ test('keeps the next mobile tutorial action available after laboratory interpret
   await page.getByRole('button', { name: 'Справка', exact: true }).click()
   await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Трактовка лабораторных анализов' })).toBeVisible()
+  const interpretationTable = page.getByRole('dialog').getByRole('table')
+  await expect(interpretationTable.getByRole('columnheader', { name: 'Публичный результат' })).toBeVisible()
+  await expect.poll(async () => interpretationTable.evaluate((table) => {
+    const scrollArea = table.parentElement
+    return scrollArea ? scrollArea.scrollWidth - scrollArea.clientWidth : Number.POSITIVE_INFINITY
+  })).toBeLessThanOrEqual(1)
   await page.getByRole('button', { name: 'Закрыть трактовку анализов' }).click()
 
   await expect(page.getByText('Правила игры и трактовка результатов исследований.', { exact: true })).toBeHidden()

@@ -178,7 +178,7 @@ export function ReconnaissancePanel({
         </div>
       )}
 
-      <footer className={styles.footer}>
+      <footer className={styles.footer} data-tutorial-action-container="">
         <div className={styles.info}>
           <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
           <Typography as="span" variant="bodySm">{translate('tender.reconnaissancePanel.copy.016')}</Typography>
@@ -189,6 +189,7 @@ export function ReconnaissancePanel({
           type="button"
           size="lg"
           className={styles.actionButton}
+          data-tutorial-confirm-ready={selected.size === maxSignals || undefined}
           disabled={disabled || selected.size !== maxSignals}
           onClick={() => void handleConfirm()}
         >
