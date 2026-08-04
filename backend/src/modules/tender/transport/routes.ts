@@ -10,6 +10,7 @@ import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'
 
 import { AppError, validationErrorHook } from '../../../http/errors'
+import type { RequestBudget } from '../../../security/request-budget'
 import type { AuthHttpEnv } from '../../auth'
 import type { createTenderModule } from '../index'
 import { executeTender, executeTenderRead } from './errors'
@@ -41,17 +42,42 @@ const executeTenderCommandRoute = createRoute({
     403: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Command identity mismatch' },
     404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Tender not found' },
     409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Tender command conflict' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Tender command rate limited' },
   },
 })
 
 type TenderModule = ReturnType<typeof createTenderModule>
 
 export function createTenderRoutes(input: {
+  authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
+  commandBudget: RequestBudget
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   tender: TenderModule
 }) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
+  routes.use('/:tenderId/commands', async (c, next) => {
+    const tenderId = c.req.param('tenderId')
+    const budget = await input.commandBudget.consume({
+      key: `${c.var.user.id}:${tenderId}`,
+      limit: 60,
+      now: new Date(),
+      scope: 'tender_command',
+      windowMs: 60_000,
+    })
+    if (!budget.allowed) {
+      c.header('Retry-After', String(budget.retryAfterSeconds))
+      throw new AppError(
+        429,
+        'RATE_LIMITED',
+        'Too many Tender command requests',
+        undefined,
+        'tender_command_budget',
+      )
+    }
+    await next()
+  })
+  routes.use('*', input.authenticatedMutationBudget)
   routes.openapi(readTenderRoute, async (c) => c.json(
     await executeTenderRead(() => input.tender.readTenderView({
       playerId: c.var.user.id,

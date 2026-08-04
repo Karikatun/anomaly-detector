@@ -287,6 +287,7 @@ const deleteAccountRoute = createRoute({
   responses: {
     204: { description: 'Account deleted and anonymised' },
     401: { content: errorResponseContent, description: 'Authentication required' },
+    429: { content: errorResponseContent, description: 'Authenticated mutation rate limited' },
   },
 })
 
@@ -306,6 +307,7 @@ const updateProfileRoute = createRoute({
     204: { description: 'Profile updated' },
     400: { content: errorResponseContent, description: 'Invalid payload' },
     401: { content: errorResponseContent, description: 'Authentication required' },
+    429: { content: errorResponseContent, description: 'Authenticated mutation rate limited' },
   },
 })
 
@@ -351,6 +353,7 @@ const oauthCallbackRoute = createRoute({
 // ── Factory ──────────────────────────────────────────────────────────────────
 
 type CreateAuthRoutesOptions = {
+  authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   deviceTokens: DeviceTokens
   env: AppEnv
   oauthCallbackBaseUrl?: string
@@ -360,6 +363,7 @@ type CreateAuthRoutesOptions = {
 }
 
 export function createAuthRoutes({
+  authenticatedMutationBudget,
   deviceTokens,
   env,
   oauthCallbackBaseUrl,
@@ -426,6 +430,7 @@ export function createAuthRoutes({
     return c.json({ user: userDtoFromPrincipal(c.var.user) }, 200)
   })
   protectedRoutes.use('/account', requireAuth)
+  protectedRoutes.use('/account', authenticatedMutationBudget)
   protectedRoutes.openapi(deleteAccountRoute, async (c) => {
     const user = c.var.user
     await executeAuth(() => service.deleteAccount({
@@ -436,6 +441,7 @@ export function createAuthRoutes({
     return c.body(null, 204)
   })
   protectedRoutes.use('/profile', requireAuth)
+  protectedRoutes.use('/profile', authenticatedMutationBudget)
   protectedRoutes.openapi(updateProfileRoute, async (c) => {
     const userId = c.var.user.id
     await executeAuth(() => service.updateProfile(userId, c.req.valid('json')))

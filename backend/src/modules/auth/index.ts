@@ -22,6 +22,8 @@ import { OAuthProviderRegistry } from './infrastructure/oauth-registry'
 import { createYandexOAuthProvider } from './infrastructure/oauth-yandex'
 import { createPrismaAuthAbuseProtection } from './infrastructure/auth-abuse-protection'
 import { createDeviceTokens } from './infrastructure/device-token'
+import { createPrismaRequestBudget } from '../../security/request-budget'
+import { createAuthenticatedMutationBudget } from './transport/authenticated-mutation-budget'
 
 type CreateAuthModuleOptions = {
   clock?: Clock
@@ -85,8 +87,12 @@ export function createAuthModule({
     repository: createPrismaAuthRepository(db, env.JWT_SECRET),
   })
   const requireAuth = createRequireAuth((accessToken) => service.authenticateAccessToken(accessToken))
+  const authenticatedMutationBudget = createAuthenticatedMutationBudget(
+    createPrismaRequestBudget(db),
+  )
 
   return {
+    authenticatedMutationBudget,
     authenticateAccessToken: (accessToken: string | undefined) =>
       service.authenticateAccessToken(accessToken),
     requireAuth,
@@ -94,6 +100,7 @@ export function createAuthModule({
       deviceTokens: createDeviceTokens(env.JWT_SECRET),
       env,
       oauthCallbackBaseUrl: env.OAUTH_CALLBACK_BASE_URL,
+      authenticatedMutationBudget,
       requireAuth,
       service,
       webappUrl: env.CORS_ORIGINS[0],

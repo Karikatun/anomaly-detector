@@ -6,6 +6,7 @@ import type { DbClient } from './db'
 import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createApiBodyLimit, createAuthSecurity } from './http/security'
+import { createPrismaRequestBudget } from './security/request-budget'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 import { createAdminModule } from './modules/admin'
 import { createProfileModule } from './modules/profile'
@@ -43,6 +44,7 @@ export function createApp({
     env,
   })
   const rooms = createRoomModule({
+    authenticatedMutationBudget: auth.authenticatedMutationBudget,
     db: prisma,
     requireAuth: auth.requireAuth,
   })
@@ -124,11 +126,17 @@ export function createApp({
   app.route('/api/operations', admin.routes)
   app.route('/api/profile', profile.routes)
   app.route('/api/rooms', rooms.routes)
-  app.route('/api/tenders', createTenderRoutes({ requireAuth: auth.requireAuth, tender }))
+  app.route('/api/tenders', createTenderRoutes({
+    authenticatedMutationBudget: auth.authenticatedMutationBudget,
+    commandBudget: createPrismaRequestBudget(prisma),
+    requireAuth: auth.requireAuth,
+    tender,
+  }))
   app.route('/api/realtime', createRealtimeTicketRoutes({
+    authenticatedMutationBudget: auth.authenticatedMutationBudget,
+    issueBudget: createPrismaRequestBudget(prisma),
     issuer: createPrismaRealtimeTicketIssuer(prisma),
     requireAuth: auth.requireAuth,
-    securityEvents,
   }))
 
   app.doc('/openapi.json', {

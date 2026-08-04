@@ -13,6 +13,7 @@ import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'
 
 import { AppError, validationErrorHook } from '../../../http/errors'
+import type { RequestBudget } from '../../../security/request-budget'
 import type { TenderRoomService } from '../application/room-service'
 import type { AuthHttpEnv } from '../../auth'
 import { executeRoom } from './errors'
@@ -24,6 +25,7 @@ const createRoomRoute = createRoute({
   responses: {
     201: { content: { 'application/json': { schema: roomViewSchema } }, description: 'Created private room' },
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
   },
 })
 
@@ -57,6 +59,7 @@ const joinRoomByCodeRoute = createRoute({
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
     404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
     409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room cannot be joined' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room join rate limited' },
   },
 })
 
@@ -80,6 +83,7 @@ const leaveRoomRoute = createRoute({
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
     404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
     409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room cannot be left' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
   },
 })
 
@@ -92,6 +96,7 @@ const startRoomRoute = createRoute({
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
     404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
     409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room cannot be started' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
   },
 })
 
@@ -107,6 +112,7 @@ const setRoomReadyRoute = createRoute({
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
     404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
     409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Readiness cannot be changed' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
   },
 })
 
@@ -119,16 +125,39 @@ const cancelRoomStartRoute = createRoute({
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
     404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
     409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room start cannot be cancelled' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
   },
 })
 
 export function createRoomRoutes(input: {
+  authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
+  joinBudget: RequestBudget
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   service: TenderRoomService
 }) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
-  const joinAttempts = new Map<string, { count: number; resetAt: number }>()
   routes.use('*', input.requireAuth)
+  routes.use('/join', async (c, next) => {
+    const budget = await input.joinBudget.consume({
+      key: c.var.user.id,
+      limit: 20,
+      now: new Date(),
+      scope: 'room_join',
+      windowMs: 60_000,
+    })
+    if (!budget.allowed) {
+      c.header('Retry-After', String(budget.retryAfterSeconds))
+      throw new AppError(
+        429,
+        'RATE_LIMITED',
+        'Too many room join attempts',
+        undefined,
+        'room_join_budget',
+      )
+    }
+    await next()
+  })
+  routes.use('*', input.authenticatedMutationBudget)
   routes.openapi(listMatchesRoute, async (c) => c.json({ matches: await executeRoom(() => input.service.listMatches(c.var.user.id)) }, 200))
   routes.openapi(currentMatchRoute, async (c) => c.json({
     match: await executeRoom(() => input.service.getCurrentMatch(c.var.user.id)),
@@ -138,24 +167,6 @@ export function createRoomRoutes(input: {
     201,
   ))
   routes.openapi(joinRoomByCodeRoute, async (c) => {
-    const now = Date.now()
-    const previous = joinAttempts.get(c.var.user.id)
-    const bucket = !previous || previous.resetAt <= now
-      ? { count: 1, resetAt: now + 60_000 }
-      : { ...previous, count: previous.count + 1 }
-    joinAttempts.set(c.var.user.id, bucket)
-    if (joinAttempts.size > 10_000) {
-      for (const [userId, attempt] of joinAttempts) {
-        if (attempt.resetAt <= now) joinAttempts.delete(userId)
-      }
-      if (joinAttempts.size > 10_000) {
-        const oldestUserId = joinAttempts.keys().next().value
-        if (oldestUserId) joinAttempts.delete(oldestUserId)
-      }
-    }
-    if (bucket.count > 20) {
-      throw new AppError(429, 'RATE_LIMITED', 'Too many room join attempts')
-    }
     return c.json(await executeRoom(() => input.service.joinRoomByCode({
       actorId: c.var.user.id,
       code: c.req.valid('json').code,

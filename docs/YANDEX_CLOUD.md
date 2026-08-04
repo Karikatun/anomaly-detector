@@ -188,6 +188,58 @@ backend latency. Use `https://api.anomaly-detector.ru` as both `VITE_API_URL`
 and `VITE_OAUTH_API_URL`, and the exact `https://anomaly-detector.ru` origin in
 `CORS_ORIGINS`.
 
+### Edge abuse-protection profile
+
+Application budgets remain authoritative across API instances: room joins use
+`20 requests / 60 seconds` per user, Tender commands use `60 / 60 seconds` per
+user and Tender, and authenticated mutations use a wider `120 / 60 seconds` per
+user. Edge rules complement these PostgreSQL budgets; they must reject abusive
+traffic before authentication or other expensive application work and must not
+replace application authorization.
+
+Create separate Smart Web Security and Advanced Rate Limiter rules for these
+traffic classes instead of one global threshold:
+
+| Traffic | Edge key and action | Required exception or check |
+| --- | --- | --- |
+| Password registration | trusted client address; observe, then limit or challenge | preserve legitimate shared-NAT registration and the application device/IP quotas |
+| Password login | trusted client address; observe, then limit or challenge | do not reveal whether a login exists; benchmark Argon2id before setting the enforcement threshold |
+| Refresh, logout, and OAuth start/callback | route-specific address budget | preserve normal multi-tab refresh races and allow the exact configured OAuth callback |
+| General JSON API | trusted client address with a deliberately wider budget | use API protection rather than an HTML captcha response; do not add route-level limits to ordinary authenticated GET/polling without load evidence |
+| `/api/realtime/tickets` | trusted client address plus the application user budget | preserve normal reconnect while bounding ticket churn |
+| `/api/realtime/ws` handshake | trusted client address, including missing, malformed, expired, or used tickets | use API protection or a stable rejection; never return captcha HTML to a WebSocket client |
+| `/health/live` and `/health/ready` | separate rule for the load-balancer health-check source | do not let public traffic consume the health-check allowance; worker health remains private |
+
+Do not guess enforcement thresholds from the application budgets. Start every
+edge rule in logging or observe-only mode, record normal browser login, shared
+NAT, multi-tab refresh, mobile reconnect, and a complete 2–4-player Tender, then
+set the narrowest threshold that preserves those flows with a documented burst.
+Move one traffic class at a time to enforcement.
+
+Before enforcement, verify all of the following without logging credentials,
+cookies, authorization headers, room codes, or request bodies:
+
+1. A request from a known external address has the same actual client address in
+   Application Load Balancer/Smart Web Security evidence and in the backend's
+   trusted-address handling; the proxy address must not become the budget key.
+2. Bursts distributed across at least two API instances still receive stable
+   application `429 RATE_LIMITED` responses with `Retry-After` when the
+   PostgreSQL budget is reached.
+3. Shared NAT, supported browsers, multi-tab refresh, mobile reconnect, and a
+   complete Tender stay below both application and edge thresholds.
+4. Room-code enumeration, Tender-command bursts, registration races, and valid
+   or invalid WebSocket-ticket churn are rejected before sustained expensive
+   work, with visible metrics and redacted security events.
+5. Health checks remain available during abusive API traffic, and ordinary
+   authenticated reads do not consume the application mutation budget.
+
+Alert separately on edge rejects/challenges and application
+`room_join_budget`, `tender_command_budget`,
+`authenticated_mutation_budget`, and `realtime_ticket_issue_budget` events.
+Record the rule owner, observation window, chosen thresholds, false-positive
+response, and rollback command in the release evidence. Roll back a faulty rule
+to observe-only mode; do not weaken the PostgreSQL budgets during recovery.
+
 ## Support Mailbox
 
 Use one real mailbox, `support@anomaly-detector.ru`, rather than forwarding to a
@@ -542,6 +594,8 @@ After deployment:
 - Serverless Containers task runtime: https://yandex.cloud/en/docs/serverless-containers/operations/update-runtime
 - Serverless Containers timer trigger: https://yandex.cloud/en/docs/serverless-containers/operations/timer-create
 - Smart Web Security Advanced Rate Limiter: https://yandex.cloud/en/docs/smartwebsecurity/concepts/arl
+- Smart Web Security rules: https://yandex.cloud/ru/docs/smartwebsecurity/concepts/rules
+- Smart Web Security logging: https://yandex.cloud/en/docs/smartwebsecurity/operations/configure-logging
 - Yandex Container Registry quickstart: https://yandex.cloud/en/docs/container-registry/quickstart
 - Yandex Managed Service for PostgreSQL: https://yandex.cloud/en/docs/managed-postgresql/
 - Managed PostgreSQL connection pre-configuration: https://yandex.cloud/en/docs/managed-postgresql/operations/connect/
