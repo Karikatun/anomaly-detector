@@ -161,7 +161,12 @@ export function AccessSlotPanel({
         </div>
       )}
 
-      <div className={styles.slotGrid} role="group" aria-label={t('tender.access.gridLabel')}>
+      <div
+        className={styles.slotGrid}
+        role="group"
+        aria-label={t('tender.access.gridLabel')}
+        data-tutorial-access-options=""
+      >
         {accessSlots.map(({ accent, effects, labelKey, slot, termsKey }) => {
           const isSelected = selectedSlot === slot
           const label = t(labelKey)
@@ -174,6 +179,7 @@ export function AccessSlotPanel({
               aria-label={t('tender.access.aria', { slot, name: label, order: slot, terms })}
               aria-pressed={isSelected}
               className={styles.slotCard}
+              data-tutorial-access-slot={slot}
               data-selected={isSelected || undefined}
               disabled={disabled || isConfirmed}
               onClick={() => setSelected(slot)}

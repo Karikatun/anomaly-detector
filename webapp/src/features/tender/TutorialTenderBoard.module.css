@@ -1,4 +1,8 @@
 .directInterpretation { display: inline-flex; }
+.board {
+  min-height: 100dvh;
+  padding-bottom: 15rem !important;
+}
 
 [data-tutorial-active='true'] {
   position: relative;
@@ -9,6 +13,29 @@
   box-shadow: 0 0 0 6px rgba(56, 189, 248, .12), 0 0 28px rgba(56, 189, 248, .32);
 }
 
+[data-tutorial-highlight='primary'][data-tutorial-phase='access-slot-selection'][data-tutorial-round='1'] [data-tutorial-access-slot='5'],
+[data-tutorial-highlight='primary'][data-tutorial-phase='access-slot-selection'][data-tutorial-round='2'] [data-tutorial-access-slot='4'],
+[data-tutorial-highlight='primary'][data-tutorial-phase='power-allocation'] [data-tutorial-power-options],
+[data-tutorial-highlight='primary'][data-tutorial-phase='reconnaissance'] [data-tutorial-recon-options],
+[data-tutorial-highlight='primary'][data-tutorial-phase='laboratory'] [data-tutorial-lab-options],
+[data-tutorial-highlight='primary'][data-tutorial-phase='model-analysis'] [data-tutorial-thesis],
+[data-tutorial-highlight='primary'][data-tutorial-phase='contracts'] [data-contract-id='tutorial-light-contract'],
+[data-tutorial-highlight='primary'][data-tutorial-phase='final-scientific-model'] [data-tutorial-final-submit],
+[data-tutorial-highlight='working-model'][data-tutorial-round='1'] [data-tutorial-working-model-row='aster'],
+[data-tutorial-highlight='working-model'][data-tutorial-round='2'] [data-tutorial-working-model-row='boreal'],
+[data-tutorial-highlight='working-model'] [data-tutorial-working-model-trigger] {
+  position: relative;
+  z-index: 2;
+  border-radius: .75rem;
+  outline: 2px solid #38bdf8;
+  outline-offset: 5px;
+  box-shadow: 0 0 0 6px rgba(56, 189, 248, .12), 0 0 28px rgba(56, 189, 248, .32);
+}
+
 @media (max-width: 47.999rem) {
   .directInterpretation { display: none; }
+  .board { padding-bottom: 18rem !important; }
+  [data-tutorial-highlight='working-model'] [data-tutorial-working-model-trigger] {
+    margin-top: 3rem;
+  }
 }

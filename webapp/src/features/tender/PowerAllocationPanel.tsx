@@ -226,7 +226,11 @@ export function PowerAllocationPanel({
         </div>
       )}
 
-      <div className={styles.categoryGrid} data-locked={isConfirmed || undefined}>
+      <div
+        className={styles.categoryGrid}
+        data-locked={isConfirmed || undefined}
+        data-tutorial-power-options=""
+      >
         {categories.map(({ accent, icon, key, labelKey, oneEffectKey, twoEffectKey }) => {
           const label = t(labelKey)
           const limit = limits[key]
@@ -238,6 +242,7 @@ export function PowerAllocationPanel({
             <article
               key={key}
               className={styles.categoryCard}
+              data-tutorial-power-category={key}
               data-invalid={isCategoryInvalid || undefined}
               style={categoryStyle(accent)}
             >

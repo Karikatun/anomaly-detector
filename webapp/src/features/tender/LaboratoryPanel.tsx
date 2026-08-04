@@ -119,7 +119,7 @@ export function LaboratoryPanel({
   return (
     <section className={styles.panel} aria-labelledby="laboratory-heading">
       <div className={`${styles.split} ${styles.laboratorySplit}`}>
-        <section className={styles.surface}>
+        <section className={styles.surface} data-tutorial-lab-options="">
           <div className={styles.sectionHeader}>
             <Typography id="laboratory-heading" as="h2" variant="bodySmMedium" className={styles.sectionTitle}>
               
@@ -193,6 +193,7 @@ export function LaboratoryPanel({
                   key={signal}
                   type="button"
                   className={styles.sampleChoice}
+                  data-tutorial-lab-sample={signal}
                   style={signalStyle(signal)}
                   data-selected={role || undefined}
                   data-role={role}

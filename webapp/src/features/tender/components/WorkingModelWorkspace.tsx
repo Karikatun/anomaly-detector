@@ -79,6 +79,7 @@ export function WorkingModelWorkspace({
             variant="outline"
             disabled={openDisabled}
             className={inlineOnDesktop ? styles.mobileTrigger : styles.trigger}
+            data-tutorial-working-model-trigger=""
           >
             <HugeiconsIcon icon={Analytics01Icon} strokeWidth={1.7} aria-hidden="true" />
             <Typography as="span" variant="bodySmMedium">{translate('tender.workingModelWorkspace.copy.001')}</Typography>
@@ -88,6 +89,7 @@ export function WorkingModelWorkspace({
         <DialogContent
           className={styles.dialog}
           closeLabel={translate('tender.workingModelWorkspace.copy.002')}
+          data-working-model-dialog=""
           placement="viewport"
           showCloseButton
         >

@@ -114,6 +114,8 @@ export function ReconnaissancePanel({
         key={target}
         type="button"
         className={styles.signalCard}
+        data-tutorial-recon-anchor={!signal && index === 0 ? '' : undefined}
+        data-tutorial-recon-target={target}
         data-selected={isSelected || undefined}
         disabled={disabled || (!isSelected && selected.size >= maxSignals)}
         onClick={() => toggle(target)}
@@ -143,7 +145,7 @@ export function ReconnaissancePanel({
           {available.length === 0 && <Typography tone="muted">{t('tender.recon.empty')}</Typography>}
 
           {unknownTargets.length > 0 && (
-            <section>
+            <section data-tutorial-recon-options="">
               <div className={styles.sectionHeader}>
                 <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.012')}</Typography>
                 <Typography as="span" variant="caption" className={styles.sectionMeta}>{translate('tender.reconnaissancePanel.copy.013')}</Typography>

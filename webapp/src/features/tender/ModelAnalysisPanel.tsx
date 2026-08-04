@@ -45,7 +45,6 @@ import { tenderRulesetPolicy } from './ruleset-policy'
 type ModelAnalysisPanelProps = {
   knownSignals: SignalId[]
   maxTheses: number
-  unlimitedTrainingRetries?: boolean
   model: WorkingModel
   publicTheses: PublicThesis[]
   privateTheses?: TenderView['privateTheses']
@@ -74,7 +73,6 @@ const previewStyle = (signal?: SignalId) => ({
 export function ModelAnalysisPanel({
   knownSignals,
   maxTheses,
-  unlimitedTrainingRetries = false,
   model,
   publicTheses,
   privateTheses,
@@ -144,7 +142,7 @@ export function ModelAnalysisPanel({
             </Typography>
           </div>
 
-          <div className={styles.analysisFormGrid}>
+          <div className={styles.analysisFormGrid} data-tutorial-thesis="">
             <label className={styles.field}>
               <Typography as="span" variant="caption" tone="muted">{t('tender.analysis.signal')}</Typography>
               <NativeSelect
@@ -208,9 +206,7 @@ export function ModelAnalysisPanel({
           <div className={styles.warning}>
             <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
             <Typography variant="bodySm">
-              {unlimitedTrainingRetries
-                ? t('tutorial.thesis.warning')
-                : isPrivateAnalysis
+              {isPrivateAnalysis
                 ? t('tender.analysis.privateWarning')
                 : t('tender.analysis.publicWarning')}
             </Typography>
@@ -221,9 +217,7 @@ export function ModelAnalysisPanel({
                 {t('tender.analysis.history')}
               </Typography>
               <Typography as="span" variant="caption" className={styles.sectionMeta}>
-                {unlimitedTrainingRetries
-                  ? t('tutorial.thesis.retries', { count: currentRoundPrivateTheses.length })
-                  : isPrivateAnalysis
+                {isPrivateAnalysis
                   ? t('tender.analysis.historyCount', {
                       current: currentRoundPrivateTheses.length,
                       max: maxTheses,
@@ -290,7 +284,7 @@ export function ModelAnalysisPanel({
               : t('tender.analysis.publicInfo')}
           </Typography>
         </div>
-        {!unlimitedTrainingRetries && isPrivateAnalysis && maxTheses === 2 && currentRoundPrivateTheses.length === 1 && !disabled && (
+        {isPrivateAnalysis && maxTheses === 2 && currentRoundPrivateTheses.length === 1 && !disabled && (
           <Dialog>
             <DialogTrigger asChild>
               <Button type="button" size="lg" variant="outline">
