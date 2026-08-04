@@ -500,7 +500,7 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     await expect(rulesDialog).toBeVisible()
     expect(await rulesDialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true)
     const timerWarning = rulesDialog.getByRole('status')
-    const rulesetNotice = rulesDialog.getByText(/^Этот Tender использует/)
+    const rulesetNotice = rulesDialog.getByText(/^Этот Тендер использует/)
     const firstRule = rulesDialog.getByRole('button', { name: 'Детальные правила по фазам' })
     await expect(firstRule).toBeVisible()
     const [dialogBox, timerWarningBox, rulesetNoticeBox, firstRuleBox] = await Promise.all([
