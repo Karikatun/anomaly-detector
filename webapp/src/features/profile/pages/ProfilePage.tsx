@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
 import { ApiRequestError } from '@/platform/api/http-client'
+import { useI18n } from '@/platform/i18n'
 
 import { ProfileApi } from '../api'
 import { useProfileStatisticsQuery } from '../queries'
@@ -39,6 +40,7 @@ export function ProfilePage() {
 }
 
 function ProfileContent() {
+  const { t } = useI18n()
   const auth = useAuth()
   const navigate = useNavigate()
   const user = auth.user
@@ -53,7 +55,7 @@ function ProfileContent() {
       <section className={styles.panel} aria-labelledby="profile-page-title">
         <header className={styles.pageHeader}>
           <Typography variant="h1" id="profile-page-title" className={styles.pageTitle}>
-            ПРОФИЛЬ
+            {t('profile.title')}
           </Typography>
           <Button
             type="button"
@@ -62,7 +64,7 @@ function ProfileContent() {
             onClick={() => void navigate({ to: '/' })}
           >
             <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={1.7} aria-hidden="true" />
-            Назад
+            {t('profile.back')}
           </Button>
         </header>
 
@@ -84,7 +86,7 @@ function ProfileContent() {
           <StatisticsContent statistics={statistics} />
 
           <Typography className={styles.memberSince}>
-            В игре с {formatRegistrationDate(user.createdAt)}
+            {t('profile.memberSince', { date: formatRegistrationDate(user.createdAt) })}
           </Typography>
         </div>
 
@@ -104,6 +106,7 @@ function DeleteAccountControl({
 }: {
   onDelete: () => Promise<void>
 }) {
+  const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deletionError, setDeletionError] = useState<string | null>(null)
@@ -122,8 +125,8 @@ function DeleteAccountControl({
     } catch (error) {
       setDeletionError(
         error instanceof ApiRequestError && error.status === 403
-          ? 'Для удаления аккаунта выйдите, войдите снова и повторите действие в течение 10 минут.'
-          : 'Не удалось удалить аккаунт. Попробуйте ещё раз.',
+          ? t('profile.delete.reauthenticate')
+          : t('profile.delete.failed'),
       )
       setIsDeleting(false)
     }
@@ -133,25 +136,24 @@ function DeleteAccountControl({
     <section className={styles.dangerZone} aria-labelledby="delete-account-title">
       <span className={styles.dangerCopy}>
         <Typography as="h2" id="delete-account-title" className={styles.dangerTitle}>
-          Удаление аккаунта
+          {t('profile.delete.sectionTitle')}
         </Typography>
         <Typography className={styles.dangerDescription}>
-          Удаляет данные входа и обезличивает вашу историю матчей. Потребуется недавний вход.
+          {t('profile.delete.sectionDescription')}
         </Typography>
       </span>
 
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogTrigger asChild>
           <Button type="button" variant="destructive" className={styles.deleteAccountButton}>
-            Удалить аккаунт
+            {t('profile.delete.action')}
           </Button>
         </DialogTrigger>
         <DialogContent className={styles.deletionDialog} showCloseButton={!isDeleting}>
           <DialogHeader>
-            <DialogTitle>Удалить аккаунт?</DialogTitle>
+            <DialogTitle>{t('profile.delete.dialogTitle')}</DialogTitle>
             <DialogDescription>
-              Это действие необратимо. Данные входа будут удалены. История матчей останется только
-              в обезличенном виде.
+              {t('profile.delete.dialogDescription')}
             </DialogDescription>
           </DialogHeader>
 
@@ -164,7 +166,7 @@ function DeleteAccountControl({
           <DialogFooter className={styles.deletionActions}>
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isDeleting}>
-                Отмена
+                {t('profile.name.cancel')}
               </Button>
             </DialogClose>
             <Button
@@ -173,7 +175,7 @@ function DeleteAccountControl({
               disabled={isDeleting}
               onClick={() => void deleteAccount()}
             >
-              {isDeleting ? 'Удаляем…' : 'Удалить аккаунт'}
+              {isDeleting ? t('profile.delete.pending') : t('profile.delete.action')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -191,6 +193,7 @@ function DisplayNameEditor({
   displayName: string
   onSave: (input: { displayName: string }) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [isEditing, setIsEditing] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   const form = useForm({
@@ -204,7 +207,7 @@ function DisplayNameEditor({
         await onSave({ displayName })
         setIsEditing(false)
       } catch (saveError) {
-        setServerError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить имя')
+        setServerError(saveError instanceof Error ? saveError.message : t('profile.name.saveFailed'))
       }
     },
   })
@@ -224,7 +227,7 @@ function DisplayNameEditor({
           variant="ghost"
           size="icon"
           className={styles.editButton}
-          aria-label="Редактировать имя"
+          aria-label={t('profile.name.edit')}
           onClick={() => {
             form.reset({ displayName: currentName })
             setServerError(null)
@@ -246,7 +249,7 @@ function DisplayNameEditor({
       }}
     >
       <Typography asChild className={styles.srOnly}>
-        <label htmlFor="profile-display-name">Отображаемое имя</label>
+        <label htmlFor="profile-display-name">{t('profile.name.label')}</label>
       </Typography>
       <form.Field name="displayName">
         {(field) => {
@@ -280,7 +283,7 @@ function DisplayNameEditor({
                         type="submit"
                         size="icon"
                         className={styles.saveButton}
-                        aria-label="Сохранить"
+                        aria-label={t('profile.name.save')}
                         disabled={isSubmitting || !isValid || trimmedName === currentName}
                       >
                         <HugeiconsIcon icon={Tick02Icon} strokeWidth={1.8} aria-hidden="true" />
@@ -290,7 +293,7 @@ function DisplayNameEditor({
                         variant="ghost"
                         size="icon"
                         className={styles.cancelButton}
-                        aria-label="Отмена"
+                        aria-label={t('profile.name.cancel')}
                         disabled={isSubmitting}
                         onClick={cancel}
                       >
@@ -302,7 +305,7 @@ function DisplayNameEditor({
               </div>
               {!isValid && field.state.value.length > 0 && (
                 <Typography role="alert" className={styles.formError}>
-                  Имя должно содержать от 2 до 80 символов.
+                  {t('profile.name.invalid')}
                 </Typography>
               )}
               {serverError && (
@@ -321,12 +324,13 @@ function StatisticsContent({
 }: {
   statistics: ReturnType<typeof useProfileStatisticsQuery>
 }) {
+  const { t } = useI18n()
   if (statistics.isPending) {
     const skeletons = Array.from({ length: 7 }, (_, index) => (
       <span className={styles.skeleton} key={index} />
     ))
     return (
-      <Typography as="div" className={styles.statisticsLoading} role="status" aria-label="Загружаем статистику">
+      <Typography as="div" className={styles.statisticsLoading} role="status" aria-label={t('profile.statistics.loading')}>
         {skeletons}
       </Typography>
     )
@@ -335,10 +339,10 @@ function StatisticsContent({
   if (statistics.isError) {
     return (
       <div className={styles.statisticsError}>
-        <Typography role="alert">Не удалось загрузить статистику.</Typography>
+        <Typography role="alert">{t('profile.statistics.failed')}</Typography>
         <Button type="button" variant="outline" onClick={() => void statistics.refetch()}>
           <HugeiconsIcon icon={Refresh01Icon} strokeWidth={1.7} aria-hidden="true" />
-          Повторить
+          {t('profile.statistics.retry')}
         </Button>
       </div>
     )
@@ -346,15 +350,15 @@ function StatisticsContent({
 
   const data = statistics.data
   const summary = [
-    { label: 'Сыграно матчей', value: String(data.matchesPlayed) },
-    { label: 'Побед', value: String(data.wins) },
-    { label: 'Процент побед', value: formatPercent(data.winRate) },
+    { label: t('profile.statistics.matches'), value: String(data.matchesPlayed) },
+    { label: t('profile.statistics.wins'), value: String(data.wins) },
+    { label: t('profile.statistics.winRate'), value: formatPercent(data.winRate) },
   ]
   const details = [
-    { label: 'Среднее место', value: formatAverage(data.averagePlacement) },
-    { label: 'Средний рейтинг', value: formatAverage(data.averageRating) },
-    { label: 'Точность модели', value: formatPercent(data.modelAccuracy) },
-    { label: 'Успешность контрактов', value: formatPercent(data.contractSuccessRate) },
+    { label: t('profile.statistics.averagePlacement'), value: formatAverage(data.averagePlacement) },
+    { label: t('profile.statistics.averageRating'), value: formatAverage(data.averageRating) },
+    { label: t('profile.statistics.modelAccuracy'), value: formatPercent(data.modelAccuracy) },
+    { label: t('profile.statistics.contractSuccess'), value: formatPercent(data.contractSuccessRate) },
   ]
 
   return (
@@ -370,7 +374,7 @@ function StatisticsContent({
 
       <section className={styles.details} aria-labelledby="profile-statistics-title">
         <Typography as="h3" id="profile-statistics-title" className={styles.detailsTitle}>
-          ОСНОВНАЯ СТАТИСТИКА
+          {t('profile.statistics.title')}
         </Typography>
         <dl className={styles.detailsList}>
           {details.map((item) => (
@@ -382,7 +386,7 @@ function StatisticsContent({
         </dl>
         {data.matchesPlayed === 0 && (
           <Typography className={styles.emptyHint}>
-            Завершите первый матч, чтобы появилась статистика.
+            {t('profile.statistics.empty')}
           </Typography>
         )}
       </section>

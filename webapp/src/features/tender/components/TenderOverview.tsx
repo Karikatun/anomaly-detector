@@ -1,3 +1,4 @@
+import { translate } from '../../../platform/i18n'
 import type { CSSProperties } from 'react'
 
 import type { SignalId, TenderView } from '@anomaly-detector/contracts'
@@ -15,20 +16,20 @@ import styles from './TenderOverview.module.css'
 const playerAccents = ['#36b8ff', '#f4a51c', '#b767ec', '#68d47a', '#ff665f', '#35d2d8']
 
 const laboratoryResultLabels: Record<string, string> = {
-  transmission_gain: 'Усиление',
-  attenuation: 'Ослабление',
-  reflection: 'Отражение',
-  unstable_collapse: 'Нестабильный срыв',
+  transmission_gain: translate('tender.tenderOverview.copy.001'),
+  attenuation: translate('tender.tenderOverview.copy.002'),
+  reflection: translate('tender.tenderOverview.copy.003'),
+  unstable_collapse: translate('tender.tenderOverview.copy.004'),
 }
 
 const verificationLabels: Record<string, string> = {
-  standard: 'Стандартная проверка',
-  extended: 'Расширенная проверка',
+  standard: translate('tender.tenderOverview.copy.005'),
+  extended: translate('tender.tenderOverview.copy.006'),
 }
 
 const polarityRelationLabels: Record<string, string> = {
-  same: 'Одинаковая полярность',
-  different: 'Разная полярность',
+  same: translate('tender.tenderOverview.copy.007'),
+  different: translate('tender.tenderOverview.copy.008'),
 }
 
 export function TenderPlayers({
@@ -51,7 +52,8 @@ export function TenderPlayers({
   return (
     <section className={styles.playersPanel} data-compact={compact || undefined} aria-labelledby="tender-players-heading">
       <Typography id="tender-players-heading" as="h2" variant="control" className={styles.playersTitle}>
-        Игроки
+        
+        {translate('tender.tenderOverview.copy.009')}
       </Typography>
       <div className={styles.playerList}>
         {orderedPlayers.map((player, index) => {
@@ -61,10 +63,10 @@ export function TenderPlayers({
           const accentIndex = (stableIndex >= 0 ? stableIndex : index) % playerAccents.length
           const playerName = player.displayName ?? player.playerId.slice(0, 8)
           const status = phase === 'access-slot-selection'
-            ? player.requestedAccessSlot !== undefined ? 'подтвердил' : 'выбирает'
+            ? player.requestedAccessSlot !== undefined ? translate('tender.tenderOverview.copy.010') : translate('tender.tenderOverview.copy.011')
             : phase === 'power-allocation'
-              ? player.powerAllocationConfirmed ? 'подтвердил' : 'выбирает'
-              : isActive ? 'активен' : 'ожидает'
+              ? player.powerAllocationConfirmed ? translate('tender.tenderOverview.copy.012') : translate('tender.tenderOverview.copy.013')
+              : isActive ? translate('tender.tenderOverview.copy.014') : translate('tender.tenderOverview.copy.015')
           return (
             <div
               key={player.playerId}
@@ -74,10 +76,10 @@ export function TenderPlayers({
             >
               <span className={styles.playerDot} aria-hidden="true" />
               <Typography as="span" variant="bodySm" className={styles.playerName}>
-                {isCurrent ? `Вы · ${playerName}` : playerName}
+                {isCurrent ? translate('tender.tenderOverview.copy.016', { value1: playerName }) : playerName}
               </Typography>
               <Typography as="span" variant="caption" className={styles.playerStatus}>
-                {player.accessSlot !== undefined ? `слот ${player.accessSlot} · ${status}` : status}
+                {player.accessSlot !== undefined ? translate('tender.tenderOverview.copy.017', { value1: player.accessSlot, value2: status }) : status}
               </Typography>
             </div>
           )
@@ -104,9 +106,10 @@ export function TenderLaboratoryJournal({
     <section className={styles.journalPanel} aria-labelledby="laboratory-journal-heading">
       <div className={styles.journalHeader}>
         <Typography id="laboratory-journal-heading" as="h2" variant="control" className={styles.playersTitle}>
-          Публичный журнал
+          
+          {translate('tender.tenderOverview.copy.018')}
         </Typography>
-        <Typography as="span" variant="caption" tone="muted">Видят все</Typography>
+        <Typography as="span" variant="caption" tone="muted">{translate('tender.tenderOverview.copy.019')}</Typography>
       </div>
 
       {latest ? (
@@ -117,20 +120,21 @@ export function TenderLaboratoryJournal({
               {`${t(signalLabelKeys[latest.sourceSignal])} → ${t(signalLabelKeys[latest.receiverSignal])}: ${laboratoryResultLabels[latest.publicResult] ?? latest.publicResult}`}
             </Typography>
             <Typography as="span" variant="caption" tone="muted">
-              {playerName ?? 'Игрок'}
+              {playerName ?? translate('tender.tenderOverview.copy.020')}
             </Typography>
           </span>
         </div>
       ) : (
         <Typography variant="bodySm" tone="muted">
-          Результаты появятся после первого проведённого опыта.
+          
+          {translate('tender.tenderOverview.copy.021')}
         </Typography>
       )}
 
       {results.length > 0 && (
         <details className={styles.journalHistory}>
           <summary>
-            <Typography as="span" variant="bodySmMedium">История журнала</Typography>
+            <Typography as="span" variant="bodySmMedium">{translate('tender.tenderOverview.copy.022')}</Typography>
             <Typography as="span" variant="caption">{results.length}</Typography>
           </summary>
           <div className={styles.journalHistoryList}>
@@ -174,14 +178,15 @@ export function TenderEvidence({
       data-laboratory-count-below-results={laboratoryCountBelowResults || undefined}
     >
       {isEmpty && (
-        <Typography variant="bodySm" tone="muted">Данные появятся после лабораторных опытов и тезисов.</Typography>
+        <Typography variant="bodySm" tone="muted">{translate('tender.tenderOverview.copy.023')}</Typography>
       )}
       {data.publicLaboratoryResults.length > 0 && (
         <section className={styles.evidenceSection}>
           <div className={styles.evidenceHeading}>
-            <Typography as="h3" variant="control">Результаты лаборатории</Typography>
+            <Typography as="h3" variant="control">{translate('tender.tenderOverview.copy.024')}</Typography>
             <Typography as="span" variant="caption" className={styles.evidencePublicCountMobile}>
-              Публично · {data.publicLaboratoryResults.length}
+              
+              {translate('tender.research.publicCount', { count: data.publicLaboratoryResults.length })}
             </Typography>
           </div>
           <div className={styles.evidenceGrid}>
@@ -201,7 +206,8 @@ export function TenderEvidence({
             ))}
           </div>
           <Typography as="span" variant="caption" className={styles.evidencePublicCountDesktop}>
-            Публично · {data.publicLaboratoryResults.length}
+            
+            {translate('tender.research.publicCount', { count: data.publicLaboratoryResults.length })}
           </Typography>
         </section>
       )}
@@ -209,8 +215,8 @@ export function TenderEvidence({
       {data.privateMeasurements.length > 0 && (
         <section className={styles.evidenceSection}>
           <div className={styles.evidenceHeading}>
-            <Typography as="h3" variant="control">Личные измерения</Typography>
-            <Typography as="span" variant="caption">Только вы · {data.privateMeasurements.length}</Typography>
+            <Typography as="h3" variant="control">{translate('tender.tenderOverview.copy.027')}</Typography>
+            <Typography as="span" variant="caption">{translate('tender.research.privateCount', { count: data.privateMeasurements.length })}</Typography>
           </div>
           <div className={styles.evidenceGrid}>
             {data.privateMeasurements.slice().reverse().map((measurement, index) => (
@@ -234,8 +240,8 @@ export function TenderEvidence({
       {privateTheses.length > 0 && (
         <section className={styles.evidenceSection}>
           <div className={styles.evidenceHeading}>
-            <Typography as="h3" variant="control">Личные тезисы</Typography>
-            <Typography as="span" variant="caption">Только вы · {privateTheses.length}</Typography>
+            <Typography as="h3" variant="control">{translate('tender.tenderOverview.copy.029')}</Typography>
+            <Typography as="span" variant="caption">{translate('tender.research.privateCount', { count: privateTheses.length })}</Typography>
           </div>
           <div className={styles.evidenceGrid}>
             {privateTheses.slice().reverse().map((thesis) => (
@@ -249,10 +255,10 @@ export function TenderEvidence({
                 </Typography>
                 <span className={styles.thesisChecks}>
                   <Typography as="span" variant="caption" data-correct={thesis.fieldTypeCorrect}>
-                    {thesis.fieldTypeCorrect ? 'Тип верен' : 'Тип неверен'}
+                    {thesis.fieldTypeCorrect ? translate('tender.tenderOverview.copy.031') : translate('tender.tenderOverview.copy.032')}
                   </Typography>
                   <Typography as="span" variant="caption" data-correct={thesis.polarityCorrect}>
-                    {thesis.polarityCorrect ? 'Полярность верна' : 'Полярность неверна'}
+                    {thesis.polarityCorrect ? translate('tender.tenderOverview.copy.033') : translate('tender.tenderOverview.copy.034')}
                   </Typography>
                 </span>
               </div>
@@ -264,7 +270,7 @@ export function TenderEvidence({
       {data.publicTheses.length > 0 && (
         <section className={styles.evidenceSection}>
           <div className={styles.evidenceHeading}>
-            <Typography as="h3" variant="control">Публичные тезисы</Typography>
+            <Typography as="h3" variant="control">{translate('tender.tenderOverview.copy.035')}</Typography>
             <Typography as="span" variant="caption">{data.publicTheses.length}</Typography>
           </div>
           <div className={styles.evidenceGrid}>
@@ -278,7 +284,10 @@ export function TenderEvidence({
                   {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
                 </Typography>
                 <Typography variant="caption" tone={thesis.correct ? 'default' : 'destructive'}>
-                  {thesis.correct ? 'Верно' : 'Неверно'} · {verificationLabels[thesis.verification] ?? thesis.verification}
+                  {translate('tender.research.verification', {
+                    correctness: thesis.correct ? translate('tender.tenderOverview.copy.036') : translate('tender.tenderOverview.copy.037'),
+                    verification: verificationLabels[thesis.verification] ?? thesis.verification,
+                  })}
                 </Typography>
               </div>
             ))}
@@ -299,8 +308,8 @@ export function TenderResearchData({ view }: { view: TenderView }) {
     <details className={styles.researchData}>
       <summary>
         <span>
-          <Typography as="strong" variant="bodySmMedium">Данные исследования</Typography>
-          <Typography as="small" variant="caption" tone="muted">Лаборатория, личные измерения и тезисы</Typography>
+          <Typography as="strong" variant="bodySmMedium">{translate('tender.tenderOverview.copy.038')}</Typography>
+          <Typography as="small" variant="caption" tone="muted">{translate('tender.tenderOverview.copy.039')}</Typography>
         </span>
         <Typography as="span" variant="caption" className={styles.researchCount}>{count}</Typography>
       </summary>
@@ -321,7 +330,8 @@ export function TenderPlanningContext({
       <section className={styles.sampleInventory} aria-labelledby="planning-samples-heading">
         <div className={styles.sampleInventoryHeading}>
           <Typography id="planning-samples-heading" as="h2" variant="bodySmMedium">
-            Ваши образцы
+            
+            {translate('tender.tenderOverview.copy.040')}
           </Typography>
           <Typography as="span" variant="caption" className={styles.sampleInventoryCount}>
             {samples.length} / 6
@@ -334,7 +344,7 @@ export function TenderPlanningContext({
               <Typography as="strong" variant="caption">{t(signalLabelKeys[signal])}</Typography>
             </span>
           )) : (
-            <Typography variant="caption" tone="muted">Образцов пока нет</Typography>
+            <Typography variant="caption" tone="muted">{translate('tender.tenderOverview.copy.041')}</Typography>
           )}
         </div>
       </section>

@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import { InformationCircleIcon, SignalFullIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
@@ -35,18 +36,18 @@ function SampleInventory({ mySamples }: { mySamples: SignalId[] }) {
   return (
     <aside className={styles.surface}>
       <div className={styles.sectionHeader}>
-        <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Ваши образцы</Typography>
+        <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.001')}</Typography>
         <Typography as="span" variant="caption" className={styles.sectionMeta}>{mySamples.length} / 6</Typography>
       </div>
       {mySamples.length === 0 ? (
-        <Typography variant="bodySm" tone="muted">Пока нет образцов.</Typography>
+        <Typography variant="bodySm" tone="muted">{translate('tender.reconnaissancePanel.copy.002')}</Typography>
       ) : (
         <div className={styles.compactList}>
           {mySamples.map((signal) => (
             <div key={signal} className={styles.compactSignal} style={targetStyle(signal)}>
               <SignalGlyph signal={signal} className={styles.signalGlyph} />
               <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
-              <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} aria-label="Образец сигнала получен" />
+              <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} aria-label={translate('tender.reconnaissancePanel.copy.003')} />
             </div>
           ))}
         </div>
@@ -57,9 +58,10 @@ function SampleInventory({ mySamples }: { mySamples: SignalId[] }) {
 
 export function ReconnaissanceUnavailable({ mySamples }: { mySamples: SignalId[] }) {
   return (
-    <section className={styles.panel} aria-label="Разведка недоступна">
-      <PhaseNotice description="Цели выбирать не нужно — ход будет пропущен.">
-        Мощность на разведку не выделена
+    <section className={styles.panel} aria-label={translate('tender.reconnaissancePanel.copy.004')}>
+      <PhaseNotice description={translate('tender.reconnaissancePanel.copy.005')}>
+        
+        {translate('tender.reconnaissancePanel.copy.006')}
       </PhaseNotice>
       <SampleInventory mySamples={mySamples} />
     </section>
@@ -104,7 +106,7 @@ export function ReconnaissancePanel({
     const selectionIndex = isSelected ? [...selected].indexOf(target) + 1 : null
     const label = signal
       ? signalName(signal)
-      : `Неизвестный сигнал ${String.fromCharCode(65 + index)}`
+      : translate('tender.reconnaissancePanel.copy.007', { value1: String.fromCharCode(65 + index) })
 
     return (
       <button
@@ -124,17 +126,17 @@ export function ReconnaissancePanel({
         <span className={styles.signalCopy}>
           <Typography as="strong" variant="bodySmMedium" className={styles.signalName}>{label}</Typography>
           <Typography as="span" variant="caption" className={styles.signalDetail}>
-            {signal ? 'Открытый сигнал · образца ещё нет' : 'Откроет новый сигнал'}
+            {signal ? translate('tender.reconnaissancePanel.copy.008') : translate('tender.reconnaissancePanel.copy.009')}
           </Typography>
         </span>
-        {isSelected && <Typography as="span" variant="caption" className={styles.selectedTag}>Выбран</Typography>}
+        {isSelected && <Typography as="span" variant="caption" className={styles.selectedTag}>{translate('tender.reconnaissancePanel.copy.010')}</Typography>}
       </button>
     )
   }
 
   return (
     <section className={styles.panel} aria-labelledby="recon-heading">
-      <Typography id="recon-heading" as="h2" variant="srOnly">Разведка</Typography>
+      <Typography id="recon-heading" as="h2" variant="srOnly">{translate('tender.reconnaissancePanel.copy.011')}</Typography>
 
       <div className={styles.split}>
         <div className={styles.surface}>
@@ -143,8 +145,8 @@ export function ReconnaissancePanel({
           {unknownTargets.length > 0 && (
             <section>
               <div className={styles.sectionHeader}>
-                <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Неизвестные сигналы</Typography>
-                <Typography as="span" variant="caption" className={styles.sectionMeta}>Новый сигнал + образец</Typography>
+                <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.012')}</Typography>
+                <Typography as="span" variant="caption" className={styles.sectionMeta}>{translate('tender.reconnaissancePanel.copy.013')}</Typography>
               </div>
               <div className={styles.signalGrid}>
                 {unknownTargets.map(renderTarget)}
@@ -155,8 +157,8 @@ export function ReconnaissancePanel({
           {revealedTargets.length > 0 && (
             <section className={unknownTargets.length > 0 ? 'mt-4' : undefined}>
               <div className={styles.sectionHeader}>
-                <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Открытые сигналы</Typography>
-                <Typography as="span" variant="caption" className={styles.sectionMeta}>Получить недостающий образец</Typography>
+                <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.014')}</Typography>
+                <Typography as="span" variant="caption" className={styles.sectionMeta}>{translate('tender.reconnaissancePanel.copy.015')}</Typography>
               </div>
               <div className={styles.signalGrid}>
                 {revealedTargets.map((target, index) => renderTarget(target, index))}
@@ -177,9 +179,9 @@ export function ReconnaissancePanel({
       <footer className={styles.footer}>
         <div className={styles.info}>
           <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-          <Typography as="span" variant="bodySm">Выбрано</Typography>
+          <Typography as="span" variant="bodySm">{translate('tender.reconnaissancePanel.copy.016')}</Typography>
           <Typography as="strong" variant="bodySmMedium">{selected.size}</Typography>
-          <Typography as="span" variant="bodySm">из {maxSignals}</Typography>
+          <Typography as="span" variant="bodySm">{translate('tender.recon.selectionLimit', { total: maxSignals })}</Typography>
         </div>
         <Button
           type="button"

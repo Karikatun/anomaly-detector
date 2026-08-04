@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Loading03Icon } from "@hugeicons/core-free-icons"
+import { translate } from "@/platform/i18n"
 
 function Spinner({
   className,
@@ -13,7 +14,7 @@ function Spinner({
       icon={Loading03Icon}
       strokeWidth={Number(strokeWidth)}
       role="status"
-      aria-label="Loading"
+      aria-label={translate('app.loading')}
       className={cn("size-4 animate-spin", className)}
     />
   )

@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import {
   Alert01Icon,
   Atom01Icon,
@@ -274,7 +275,7 @@ export function PowerAllocationPanel({
                 <div className={styles.lockedValue}>
                   <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={1.8} aria-hidden="true" />
                   <Typography as="strong" variant="h3">{value}</Typography>
-                  <Typography as="span" variant="caption">выбрано</Typography>
+                  <Typography as="span" variant="caption">{translate('tender.powerAllocationPanel.copy.001')}</Typography>
                 </div>
               ) : (
                 <div className={styles.stepper}>

@@ -98,13 +98,14 @@ function SessionErrorState({ retry }: { retry: () => Promise<void> }) {
 }
 
 function SessionStateShell({ children }: { children: ReactNode }) {
+  const { t } = useI18n()
   return (
     <section className={styles.screen}>
       <div className={styles.background} aria-hidden="true" />
       <div className={styles.content}>
         <header className={styles.brand} aria-hidden="true">
-          <Typography as="span" className={styles.wordmark}>ANOMALY</Typography>
-          <Typography as="span" className={styles.detector}>DETECTOR</Typography>
+          <Typography as="span" className={styles.wordmark}>{t('app.brand.primary')}</Typography>
+          <Typography as="span" className={styles.detector}>{t('app.brand.secondary')}</Typography>
         </header>
         {children}
       </div>

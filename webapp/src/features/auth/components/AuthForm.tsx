@@ -43,8 +43,8 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
           <Typography as="h1" id="auth-screen-title" variant="srOnly">
             {t(mode === 'register' ? 'auth.register' : 'auth.title')}
           </Typography>
-          <Typography as="span" className={styles.wordmark}>ANOMALY</Typography>
-          <Typography as="span" className={styles.detector}>DETECTOR</Typography>
+          <Typography as="span" className={styles.wordmark}>{t('app.brand.primary')}</Typography>
+          <Typography as="span" className={styles.detector}>{t('app.brand.secondary')}</Typography>
           <Typography className={styles.tagline}>{t('auth.tagline')}</Typography>
         </header>
 
@@ -85,26 +85,26 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
         </div>
 
         <footer className={styles.footer}>
-          {footerRulesAction ?? <Typography as="span">Правила игры</Typography>}
-          <Link className={styles.legalLink} to="/terms">Пользовательское соглашение</Link>
+          {footerRulesAction ?? <Typography as="span">{t('auth.rules')}</Typography>}
+          <Link className={styles.legalLink} to="/terms">{t('auth.terms.link')}</Link>
         </footer>
       </div>
       <Dialog open={oauthConsentOpen} onOpenChange={setOauthConsentOpen}>
         <DialogContent className={styles.oauthConsentDialog}>
           <DialogHeader>
-            <DialogTitle>Создание аккаунта через Яндекс</DialogTitle>
+            <DialogTitle>{t('auth.oauthConsent.title')}</DialogTitle>
             <DialogDescription>
-              Аккаунт ещё не зарегистрирован. Для продолжения подтвердите согласие на обработку персональных данных.
+              {t('auth.oauthConsent.description')}
             </DialogDescription>
           </DialogHeader>
           <Typography variant="bodySm">
-            Я даю согласие на{' '}
+            {t('auth.consent.prefix')}{' '}
             <Link className={styles.inlineLegalLink} to="/personal-data-consent" target="_blank">
-              обработку персональных данных
+              {t('auth.consent.link')}
             </Link>
-            {' '}и принимаю{' '}
+            {' '}{t('auth.oauthConsent.andTerms')}{' '}
             <Link className={styles.inlineLegalLink} to="/terms" target="_blank">
-              Пользовательское соглашение
+              {t('auth.terms.link')}
             </Link>
             .
           </Typography>
@@ -121,7 +121,7 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
                 }).catch(() => setOauthBusy(false))
               }}
             >
-              {oauthBusy ? 'Переходим в Яндекс…' : 'Согласен и продолжить'}
+              {oauthBusy ? t('auth.oauthConsent.pending') : t('auth.oauthConsent.confirm')}
             </Button>
           </DialogFooter>
         </DialogContent>

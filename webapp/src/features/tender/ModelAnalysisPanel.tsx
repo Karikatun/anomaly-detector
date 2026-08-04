@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import { Alert01Icon, InformationCircleIcon, SignalFullIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
@@ -116,9 +117,10 @@ export function ModelAnalysisPanel({
         <section className={`${styles.surface} ${styles.analysisModel}`}>
           <div className={styles.sectionHeader}>
             <Typography id="analysis-heading" as="h2" variant="bodySmMedium" className={styles.sectionTitle}>
-              Рабочая модель
+              
+              {translate('tender.modelAnalysisPanel.copy.001')}
             </Typography>
-            <Typography as="span" variant="caption" className={styles.sectionMeta}>Видите только вы</Typography>
+            <Typography as="span" variant="caption" className={styles.sectionMeta}>{translate('tender.modelAnalysisPanel.copy.002')}</Typography>
           </div>
           <WorkingModelWorkspace
             disabled={workingModelDisabled}
@@ -191,12 +193,12 @@ export function ModelAnalysisPanel({
             <SignalGlyph signal={signalId || undefined} className={styles.signalGlyph} />
             <span className={styles.previewCopy}>
               <Typography as="strong" variant="bodySmMedium">
-                {signalId ? t(signalLabelKeys[signalId]) : 'Выберите сигнал'}
+                {signalId ? t(signalLabelKeys[signalId]) : translate('tender.modelAnalysisPanel.copy.003')}
               </Typography>
               <Typography variant="bodySm" tone="muted">
-                {fieldType ? t(fieldTypeLabelKeys[fieldType]) : 'Тип поля не выбран'}
+                {fieldType ? t(fieldTypeLabelKeys[fieldType]) : translate('tender.modelAnalysisPanel.copy.004')}
                 {' · '}
-                {polarity ? t(polarityLabelKeys[polarity]) : 'полярность не выбрана'}
+                {polarity ? t(polarityLabelKeys[polarity]) : translate('tender.modelAnalysisPanel.copy.005')}
               </Typography>
             </span>
           </div>

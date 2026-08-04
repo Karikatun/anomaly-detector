@@ -7,6 +7,7 @@ import personalDataConsent from '../../../../docs/personal-data-consent.md?raw'
 import privacyPolicy from '../../../../docs/privacy-policy.md?raw'
 import termsOfUse from '../../../../docs/terms-of-use.md?raw'
 import { Typography } from '@/components/ui/typography'
+import { useI18n } from '@/platform/i18n'
 import styles from './LegalDocumentPage.module.css'
 
 type LegalDocumentId = 'personal-data-consent' | 'privacy' | 'terms'
@@ -27,6 +28,7 @@ const legalDocuments: Record<LegalDocumentId, { bodyStart: string; markdown: str
 }
 
 export function LegalDocumentPage({ documentId }: { documentId: LegalDocumentId }) {
+  const { t } = useI18n()
   const document = legalDocuments[documentId]
   const lines = document.markdown.split(/\r?\n/)
   const title = cleanInline(lines[0]?.replace(/^#\s+/, '') ?? '')
@@ -37,7 +39,7 @@ export function LegalDocumentPage({ documentId }: { documentId: LegalDocumentId 
     <section className={styles.page}>
       <article className={styles.document}>
         <header className={styles.header}>
-          <Link className={styles.back} to="/" aria-label="Вернуться к регистрации">
+          <Link className={styles.back} to="/" aria-label={t('legal.backToRegistration')}>
             <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={1.7} aria-hidden="true" />
           </Link>
           <Typography variant="h1">{title}</Typography>

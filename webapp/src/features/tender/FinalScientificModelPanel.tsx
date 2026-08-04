@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import { Alert01Icon, InformationCircleIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
@@ -51,14 +52,14 @@ const rowStyle = (signal: SignalId) => ({
 } as CSSProperties)
 
 const compactFieldTypeLabels: Record<FieldType, string> = {
-  inertial: 'Инерц.',
-  electromagnetic: 'ЭМ',
-  phase: 'Фаза',
+  inertial: translate('tender.finalScientificModelPanel.copy.001'),
+  electromagnetic: translate('tender.finalScientificModelPanel.copy.002'),
+  phase: translate('tender.finalScientificModelPanel.copy.003'),
 }
 
 const compactPolarityLabels: Record<Polarity, string> = {
-  positive: '+ Полож.',
-  negative: '− Отриц.',
+  positive: translate('tender.finalScientificModelPanel.copy.004'),
+  negative: translate('tender.finalScientificModelPanel.copy.005'),
 }
 
 export function FinalScientificModelPanel({
@@ -148,13 +149,15 @@ export function FinalScientificModelPanel({
           <div className={styles.sectionHeader}>
             <span className={styles.intro}>
               <Typography id="final-model-heading" as="h2" variant="bodySmMedium" className={styles.title}>
-                Ваша финальная модель
+                
+                {translate('tender.finalScientificModelPanel.copy.006')}
               </Typography>
               <Typography variant="bodySm" className={styles.description}>
-                Ваши гипотезы видите только вы до завершения тендера.
+                
+                {translate('tender.finalScientificModelPanel.copy.007')}
               </Typography>
             </span>
-            <span className={styles.modelProgress} aria-label={`Заполнено параметров: ${propertyCount} из 12`}>
+            <span className={styles.modelProgress} aria-label={translate('tender.finalScientificModelPanel.copy.008', { value1: propertyCount })}>
               <Typography as="strong" variant="bodySmMedium">{propertyCount}</Typography>
               <Typography as="span" variant="caption">/ 12</Typography>
             </span>
@@ -186,9 +189,9 @@ export function FinalScientificModelPanel({
 
           <div className={styles.finalModelTable}>
             <div className={styles.finalModelHead} aria-hidden="true">
-              <Typography as="span" variant="caption">Сигнал</Typography>
-              <Typography as="span" variant="caption">Тип поля</Typography>
-              <Typography as="span" variant="caption">Полярность</Typography>
+              <Typography as="span" variant="caption">{translate('tender.finalScientificModelPanel.copy.009')}</Typography>
+              <Typography as="span" variant="caption">{translate('tender.finalScientificModelPanel.copy.010')}</Typography>
+              <Typography as="span" variant="caption">{translate('tender.finalScientificModelPanel.copy.011')}</Typography>
             </div>
 
             {signalIds.map((signal) => {
@@ -209,7 +212,7 @@ export function FinalScientificModelPanel({
                   <div className={`${styles.segmented} ${styles.finalDesktopControl}`}>
                     {fieldTypes.map((fieldType) => (
                       <button
-                        aria-label={`${signalName}: тип поля ${t(fieldTypeLabelKeys[fieldType])}`}
+                        aria-label={translate('tender.finalScientificModelPanel.copy.012', { value1: signalName, value2: t(fieldTypeLabelKeys[fieldType]) })}
                         aria-pressed={claim?.fieldType === fieldType}
                         key={fieldType}
                         type="button"
@@ -233,7 +236,7 @@ export function FinalScientificModelPanel({
                   <div className={`${styles.segmented} ${styles.finalDesktopControl}`} data-options="2">
                     {polarities.map((polarity) => (
                       <button
-                        aria-label={`${signalName}: полярность ${t(polarityLabelKeys[polarity])}`}
+                        aria-label={translate('tender.finalScientificModelPanel.copy.013', { value1: signalName, value2: t(polarityLabelKeys[polarity]) })}
                         aria-pressed={claim?.polarity === polarity}
                         key={polarity}
                         type="button"
@@ -256,10 +259,10 @@ export function FinalScientificModelPanel({
 
                   <div className={styles.finalMobileControls} data-final-model-mobile-controls="">
                     <label className={styles.finalMobileControl}>
-                      <Typography as="span" variant="caption" tone="muted">Тип поля</Typography>
+                      <Typography as="span" variant="caption" tone="muted">{translate('tender.finalScientificModelPanel.copy.014')}</Typography>
                       <NativeSelect
                         size="sm"
-                        aria-label={`${signalName}: тип поля`}
+                        aria-label={translate('tender.finalScientificModelPanel.copy.015', { value1: signalName })}
                         data-final-model-mobile-select=""
                         disabled={formDisabled}
                         value={claim?.fieldType ?? ''}
@@ -270,7 +273,7 @@ export function FinalScientificModelPanel({
                             : event.currentTarget.value as FieldType,
                         )}
                       >
-                        <NativeSelectOption value="">Не выбрано</NativeSelectOption>
+                        <NativeSelectOption value="">{translate('tender.finalScientificModelPanel.copy.016')}</NativeSelectOption>
                         {fieldTypes.map((fieldType) => (
                           <NativeSelectOption value={fieldType} key={fieldType}>
                             {t(fieldTypeLabelKeys[fieldType])}
@@ -279,10 +282,10 @@ export function FinalScientificModelPanel({
                       </NativeSelect>
                     </label>
                     <label className={styles.finalMobileControl}>
-                      <Typography as="span" variant="caption" tone="muted">Полярность</Typography>
+                      <Typography as="span" variant="caption" tone="muted">{translate('tender.finalScientificModelPanel.copy.017')}</Typography>
                       <NativeSelect
                         size="sm"
-                        aria-label={`${signalName}: полярность`}
+                        aria-label={translate('tender.finalScientificModelPanel.copy.018', { value1: signalName })}
                         data-final-model-mobile-select=""
                         disabled={formDisabled}
                         value={claim?.polarity ?? ''}
@@ -293,7 +296,7 @@ export function FinalScientificModelPanel({
                             : event.currentTarget.value as Polarity,
                         )}
                       >
-                        <NativeSelectOption value="">Не выбрано</NativeSelectOption>
+                        <NativeSelectOption value="">{translate('tender.finalScientificModelPanel.copy.019')}</NativeSelectOption>
                         {polarities.map((polarity) => (
                           <NativeSelectOption value={polarity} key={polarity}>
                             {t(polarityLabelKeys[polarity])}
@@ -311,47 +314,47 @@ export function FinalScientificModelPanel({
         <aside className={styles.finalSidebar}>
           <section className={styles.surface}>
             <div className={styles.sectionHeader}>
-              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Прогресс</Typography>
+              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.finalScientificModelPanel.copy.020')}</Typography>
             </div>
             <div className={styles.finalProgressList}>
               <span>
                 <Typography as="strong" variant="bodySmMedium">{propertyCount} / 12</Typography>
-                <Typography as="span" variant="caption" tone="muted">свойств заполнено</Typography>
+                <Typography as="span" variant="caption" tone="muted">{translate('tender.finalScientificModelPanel.copy.021')}</Typography>
               </span>
               <span>
                 <Typography as="strong" variant="bodySmMedium">{completeCount} / 6</Typography>
-                <Typography as="span" variant="caption" tone="muted">сигналов готовы</Typography>
+                <Typography as="span" variant="caption" tone="muted">{translate('tender.finalScientificModelPanel.copy.022')}</Typography>
               </span>
             </div>
           </section>
 
           <section className={styles.surface}>
             <div className={styles.sectionHeader}>
-              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Подсчёт</Typography>
+              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.finalScientificModelPanel.copy.023')}</Typography>
             </div>
             <div className={styles.scoringRules}>
               <span>
                 <Typography as="strong" variant="bodySmMedium">+1</Typography>
-                <Typography as="span" variant="caption">за верный тип поля</Typography>
-                <Typography as="small" variant="caption">макс. 6</Typography>
+                <Typography as="span" variant="caption">{translate('tender.finalScientificModelPanel.copy.024')}</Typography>
+                <Typography as="small" variant="caption">{translate('tender.finalScientificModelPanel.copy.025')}</Typography>
               </span>
               <span>
                 <Typography as="strong" variant="bodySmMedium">+1</Typography>
-                <Typography as="span" variant="caption">за верную полярность</Typography>
-                <Typography as="small" variant="caption">макс. 6</Typography>
+                <Typography as="span" variant="caption">{translate('tender.finalScientificModelPanel.copy.026')}</Typography>
+                <Typography as="small" variant="caption">{translate('tender.finalScientificModelPanel.copy.027')}</Typography>
               </span>
               <span>
                 <Typography as="strong" variant="bodySmMedium">+1</Typography>
-                <Typography as="span" variant="caption">за оба свойства сигнала</Typography>
-                <Typography as="small" variant="caption">макс. 6</Typography>
+                <Typography as="span" variant="caption">{translate('tender.finalScientificModelPanel.copy.028')}</Typography>
+                <Typography as="small" variant="caption">{translate('tender.finalScientificModelPanel.copy.029')}</Typography>
               </span>
               <span>
                 <Typography as="strong" variant="bodySmMedium">+3</Typography>
-                <Typography as="span" variant="caption">за полную конфигурацию</Typography>
-                <Typography as="small" variant="caption">макс. 3</Typography>
+                <Typography as="span" variant="caption">{translate('tender.finalScientificModelPanel.copy.030')}</Typography>
+                <Typography as="small" variant="caption">{translate('tender.finalScientificModelPanel.copy.031')}</Typography>
               </span>
               <span className={styles.maximum}>
-                <Typography as="b" variant="bodySmMedium">Максимум</Typography>
+                <Typography as="b" variant="bodySmMedium">{translate('tender.finalScientificModelPanel.copy.032')}</Typography>
                 <Typography as="strong" variant="bodySmMedium">21</Typography>
               </span>
             </div>
@@ -360,7 +363,8 @@ export function FinalScientificModelPanel({
           <div className={styles.warning}>
             <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
             <Typography variant="bodySm">
-              Отправка необратима. Незаполненные параметры не принесут рейтинг.
+              
+              {translate('tender.finalScientificModelPanel.copy.033')}
             </Typography>
           </div>
         </aside>
@@ -385,8 +389,8 @@ export function FinalScientificModelPanel({
           {submitted
             ? t('tender.finalDraft.submitted')
             : claimedCount === 0
-              ? 'Укажите хотя бы одно свойство'
-              : 'Отправить финальную модель'}
+              ? translate('tender.finalScientificModelPanel.copy.034')
+              : translate('tender.finalScientificModelPanel.copy.035')}
         </Button>
       </footer>
     </section>

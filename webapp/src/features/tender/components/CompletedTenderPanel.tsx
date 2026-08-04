@@ -1,3 +1,4 @@
+import { translate } from '../../../platform/i18n'
 import {
   Analytics01Icon,
   ArrowDown01Icon,
@@ -34,36 +35,36 @@ type Props = {
 }
 
 const ratingLabels = {
-  completeModelBonus: 'Бонус полной модели',
-  contractPoints: 'Выполненные контракты',
-  correctPropertyPoints: 'Верные свойства модели',
-  correctSignalPoints: 'Полностью раскрытые сигналы',
-  otherPoints: 'Другие начисления',
-  thesisPoints: 'Верные тезисы',
+  completeModelBonus: translate('tender.completedTenderPanel.copy.001'),
+  contractPoints: translate('tender.completedTenderPanel.copy.002'),
+  correctPropertyPoints: translate('tender.completedTenderPanel.copy.003'),
+  correctSignalPoints: translate('tender.completedTenderPanel.copy.004'),
+  otherPoints: translate('tender.completedTenderPanel.copy.005'),
+  thesisPoints: translate('tender.completedTenderPanel.copy.006'),
 } as const
 
 const roundRatingLabels = {
-  contract: 'Контракт',
-  final_model: 'Финальная модель',
-  other: 'Другое начисление',
-  thesis: 'Тезис',
+  contract: translate('tender.completedTenderPanel.copy.007'),
+  final_model: translate('tender.completedTenderPanel.copy.008'),
+  other: translate('tender.completedTenderPanel.copy.009'),
+  thesis: translate('tender.completedTenderPanel.copy.010'),
 } as const
 
 const contractKindLabels = {
-  complex: 'Сложный контракт',
-  final: 'Финальный контракт',
-  light: 'Лёгкий контракт',
-  scientific: 'Научный контракт',
+  complex: translate('tender.completedTenderPanel.copy.011'),
+  final: translate('tender.completedTenderPanel.copy.012'),
+  light: translate('tender.completedTenderPanel.copy.013'),
+  scientific: translate('tender.completedTenderPanel.copy.014'),
 } as const
 
 const laboratoryProtocolLabels = {
-  continuous: 'Непрерывный',
-  impulse: 'Импульс',
+  continuous: translate('tender.completedTenderPanel.copy.015'),
+  impulse: translate('tender.completedTenderPanel.copy.016'),
 } as const
 
 const contractRoleLabels = {
-  receiver: 'приёмник',
-  source: 'источник',
+  receiver: translate('tender.completedTenderPanel.copy.017'),
+  source: translate('tender.completedTenderPanel.copy.018'),
 } as const
 
 function AuditGroup({
@@ -131,10 +132,10 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
   const playerName = (playerId: string) =>
     view.players.find((player) => player.playerId === playerId)?.displayName ?? playerId
   const completionReasonLabel = {
-    standard: 'Завершён после полного финального аудита',
-    all_players_left: 'Завершён: все игроки покинули матч',
-    last_active_player: 'Завершён досрочно: остался один активный игрок',
-    all_players_forfeited: 'Завершён досрочно без победителя: все игроки выбыли',
+    standard: translate('tender.completedTenderPanel.copy.019'),
+    all_players_left: translate('tender.completedTenderPanel.copy.020'),
+    last_active_player: translate('tender.completedTenderPanel.copy.021'),
+    all_players_forfeited: translate('tender.completedTenderPanel.copy.022'),
   }[view.audit.completionReason]
   const ratingEntries = (playerId: string) => {
     const breakdown = view.audit.ratingBreakdownByPlayer[playerId]
@@ -157,7 +158,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
               {player.displayName ?? player.playerId.slice(0, 8)}
             </Typography>
             {!result?.submitted ? (
-              <Typography variant="caption" tone="muted">Финальная модель не отправлена</Typography>
+              <Typography variant="caption" tone="muted">{translate('tender.completedTenderPanel.copy.023')}</Typography>
             ) : (
               <ul className={styles.auditEntries}>
                 {signalIds.map((signal) => {
@@ -175,12 +176,12 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                         <span className={styles.correctness}>
                           {claim.fieldType && (
                             <Typography as="span" variant="caption" data-correct={claim.fieldTypeCorrect || undefined}>
-                              {t(fieldTypeLabelKeys[claim.fieldType])}: {claim.fieldTypeCorrect ? 'верно' : 'неверно'}
+                              {t(fieldTypeLabelKeys[claim.fieldType])}: {claim.fieldTypeCorrect ? translate('tender.completedTenderPanel.copy.024') : translate('tender.completedTenderPanel.copy.025')}
                             </Typography>
                           )}
                           {claim.polarity && (
                             <Typography as="span" variant="caption" data-correct={claim.polarityCorrect || undefined}>
-                              {t(polarityLabelKeys[claim.polarity])}: {claim.polarityCorrect ? 'верно' : 'неверно'}
+                              {t(polarityLabelKeys[claim.polarity])}: {claim.polarityCorrect ? translate('tender.completedTenderPanel.copy.026') : translate('tender.completedTenderPanel.copy.027')}
                             </Typography>
                           )}
                         </span>
@@ -204,10 +205,12 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
         </span>
         <span className={styles.heroCopy}>
           <Typography as="span" variant="caption" className={styles.eyebrow}>
-            Исследование завершено
+            
+            {translate('tender.completedTenderPanel.copy.028')}
           </Typography>
           <Typography id="completed-tender-heading" as="h2" variant="h3">
-            Тендер завершён
+            
+            {translate('tender.completedTenderPanel.copy.029')}
           </Typography>
           <Typography variant="bodySm" tone="muted">
             {completionReasonLabel}
@@ -217,7 +220,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
           <HugeiconsIcon icon={Award02Icon} strokeWidth={1.8} aria-hidden="true" />
           <span>
             <Typography as="small" variant="caption">
-              {winnerNames.length > 1 ? 'Победители' : 'Победитель'}
+              {winnerNames.length > 1 ? translate('tender.completedTenderPanel.copy.030') : translate('tender.completedTenderPanel.copy.031')}
             </Typography>
             <Typography as="strong" variant="bodySmMedium">
               {winnerNames.join(', ') || '—'}
@@ -229,12 +232,16 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
       {currentPlayer && (
         <section className={styles.mobileOwnResult} aria-labelledby="completed-own-result-heading">
           <span>
-            <Typography as="span" variant="caption" className={styles.eyebrow}>Ваш итог</Typography>
+            <Typography as="span" variant="caption" className={styles.eyebrow}>{translate('tender.completedTenderPanel.copy.032')}</Typography>
             <Typography id="completed-own-result-heading" as="h3" variant="h4">
-              {view.audit.placementByPlayer[currentPlayer.playerId] ?? '—'} место
+              {translate('tender.completed.placement', {
+                placement: view.audit.placementByPlayer[currentPlayer.playerId] ?? '—',
+              })}
             </Typography>
             <Typography as="strong" variant="h3" className={styles.ownRating}>
-              {view.audit.ratingBreakdownByPlayer[currentPlayer.playerId]?.total ?? 0} Rating
+              {translate('tender.completed.ratingValue', {
+                rating: view.audit.ratingBreakdownByPlayer[currentPlayer.playerId]?.total ?? 0,
+              })}
             </Typography>
           </span>
           <span className={styles.ownResultPlayer}>
@@ -242,10 +249,11 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
               {currentPlayer.displayName ?? currentPlayer.playerId.slice(0, 8)}
             </Typography>
             <Typography as="span" variant="caption" tone="muted">
-              Итоговый рейтинг: {currentPlayer.rating}
+              
+              {translate('tender.completed.rating', { rating: currentPlayer.rating })}
             </Typography>
           </span>
-          <ul className={styles.mobileBreakdown} aria-label="Ваши начисления рейтинга">
+          <ul className={styles.mobileBreakdown} aria-label={translate('tender.completedTenderPanel.copy.035')}>
             {ratingEntries(currentPlayer.playerId).map(({ label, points }) => (
               <li key={label}>
                 <Typography as="span" variant="caption">{label}</Typography>
@@ -260,18 +268,20 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
 
       <details className={styles.auditDisclosure} data-audit-section="own-model" open={desktopAudit || undefined}>
         <summary>
-          <Typography as="strong" variant="bodySmMedium">Моя финальная модель</Typography>
-          <Typography as="span" variant="caption">Открыть ›</Typography>
+          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.036')}</Typography>
+          <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.037')}</Typography>
         </summary>
         <div className={styles.disclosureBody}>
           <section className={styles.section} aria-labelledby="completed-own-model-heading">
             <div className={styles.sectionHeader}>
               <span>
                 <Typography id="completed-own-model-heading" as="h3" variant="bodySmMedium">
-                  Моя финальная модель
+                  
+                  {translate('tender.completedTenderPanel.copy.038')}
                 </Typography>
                 <Typography variant="caption" tone="muted">
-                  Неотправленный серверный черновик не раскрывается
+                  
+                  {translate('tender.completedTenderPanel.copy.039')}
                 </Typography>
               </span>
             </div>
@@ -282,17 +292,18 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
 
       <details className={styles.auditDisclosure} data-audit-section="configuration" open={desktopAudit || undefined}>
         <summary>
-          <Typography as="strong" variant="bodySmMedium">Конфигурация аномалии</Typography>
-          <Typography as="span" variant="caption">6 сигналов ›</Typography>
+          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.040')}</Typography>
+          <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.041')}</Typography>
         </summary>
         <div className={styles.disclosureBody}>
         <section className={styles.section} aria-labelledby="completed-signals-heading">
         <div className={styles.sectionHeader}>
           <span>
             <Typography id="completed-signals-heading" as="h3" variant="bodySmMedium">
-              Конфигурация аномалии
+              
+              {translate('tender.completedTenderPanel.copy.042')}
             </Typography>
-            <Typography variant="caption" tone="muted">Раскрытые свойства шести сигналов</Typography>
+            <Typography variant="caption" tone="muted">{translate('tender.completedTenderPanel.copy.043')}</Typography>
           </span>
           <Typography as="span" variant="caption" className={styles.count}>6 / 6</Typography>
         </div>
@@ -328,9 +339,9 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
         open={desktopAudit || undefined}
       >
         <summary>
-          <Typography as="strong" variant="bodySmMedium">Другие игроки</Typography>
+          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.044')}</Typography>
           <Typography as="span" variant="caption">
-            {otherPlayers.length === 1 ? '1 участник' : `${otherPlayers.length} участников`} ›
+            {otherPlayers.length === 1 ? translate('tender.completedTenderPanel.copy.045') : translate('tender.completedTenderPanel.copy.046', { value1: otherPlayers.length })} ›
           </Typography>
         </summary>
         <div className={styles.disclosureBody}>
@@ -338,9 +349,10 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
         <div className={styles.sectionHeader}>
           <span>
             <Typography id="completed-ranking-heading" as="h3" variant="bodySmMedium">
-              Итоговый рейтинг
+              
+              {translate('tender.completedTenderPanel.copy.047')}
             </Typography>
-            <Typography variant="caption" tone="muted">Результаты участников тендера</Typography>
+            <Typography variant="caption" tone="muted">{translate('tender.completedTenderPanel.copy.048')}</Typography>
           </span>
           <HugeiconsIcon icon={UserGroupIcon} strokeWidth={1.7} aria-hidden="true" />
         </div>
@@ -365,34 +377,35 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                     <Typography as="strong" variant="bodySmMedium">
                       {player.displayName ?? player.playerId.slice(0, 8)}
                     </Typography>
-                    <Typography as="span" variant="caption" tone="muted">Слот {player.accessSlot ?? '—'}</Typography>
+                    <Typography as="span" variant="caption" tone="muted">{translate('tender.completed.slot', { slot: player.accessSlot ?? '—' })}</Typography>
                     {player.forfeited && (
-                      <Typography as="span" variant="caption" tone="destructive">Окончательно выбыл</Typography>
+                      <Typography as="span" variant="caption" tone="destructive">{translate('tender.completedTenderPanel.copy.050')}</Typography>
                     )}
                   </span>
                   <span className={styles.playerStats}>
                     <span>
-                      <Typography as="small" variant="caption">Рейтинг</Typography>
+                      <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.051')}</Typography>
                       <Typography as="strong" variant="bodySmMedium">{player.rating}</Typography>
                     </span>
                     <span>
-                      <Typography as="small" variant="caption">Бюджет</Typography>
-                      <Typography as="strong" variant="bodySmMedium">{player.budget} M</Typography>
+                      <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.052')}</Typography>
+                      <Typography as="strong" variant="bodySmMedium">{translate('tender.completed.budgetValue', { budget: player.budget })}</Typography>
                     </span>
                   </span>
                   {isWinner && (
                     <span className={styles.winnerBadge}>
                       <HugeiconsIcon icon={Award02Icon} strokeWidth={1.8} aria-hidden="true" />
-                      <Typography as="span" variant="caption">Победитель</Typography>
+                      <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.053')}</Typography>
                     </span>
                   )}
                 </div>
                 <div
                   className={styles.ratingBreakdown}
-                  aria-label={`За что начислен рейтинг игроку ${player.displayName ?? player.playerId.slice(0, 8)}`}
+                  aria-label={translate('tender.completedTenderPanel.copy.054', { value1: player.displayName ?? player.playerId.slice(0, 8) })}
                 >
                   <Typography as="span" variant="caption" className={styles.breakdownTitle}>
-                    За что начислен рейтинг
+                    
+                    {translate('tender.completedTenderPanel.copy.055')}
                   </Typography>
                   {earnedRating.length > 0 ? (
                     <ul className={styles.breakdownList}>
@@ -407,7 +420,8 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                     </ul>
                   ) : (
                     <Typography variant="caption" tone="muted" className={styles.noRatingAwards}>
-                      Начислений рейтинга нет
+                      
+                      {translate('tender.completedTenderPanel.copy.056')}
                     </Typography>
                   )}
                 </div>
@@ -420,10 +434,12 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
           <div className={styles.sectionHeader}>
             <span>
               <Typography id="completed-other-models-heading" as="h3" variant="bodySmMedium">
-                Модели остальных игроков
+                
+                {translate('tender.completedTenderPanel.copy.057')}
               </Typography>
               <Typography variant="caption" tone="muted">
-                Только официально отправленные модели
+                
+                {translate('tender.completedTenderPanel.copy.058')}
               </Typography>
             </span>
           </div>
@@ -434,18 +450,18 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
 
       <details className={styles.auditDisclosure} data-audit-section="full-audit" open={desktopAudit || undefined}>
         <summary>
-          <Typography as="strong" variant="bodySmMedium">Полный аудит по раундам</Typography>
-          <Typography as="span" variant="caption">Все действия ›</Typography>
+          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.059')}</Typography>
+          <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.060')}</Typography>
         </summary>
         <div className={styles.disclosureBody}>
       <label className={styles.playerFilter}>
-        <Typography as="span" variant="caption">Показать детали игрока</Typography>
+        <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.061')}</Typography>
         <NativeSelect
-          aria-label="Фильтр итогового аудита по игроку"
+          aria-label={translate('tender.completedTenderPanel.copy.062')}
           value={selectedPlayerId}
           onChange={(event) => setSelectedPlayerId(event.target.value)}
         >
-          <option value="all">Все игроки</option>
+          <option value="all">{translate('tender.completedTenderPanel.copy.063')}</option>
           {rankedPlayers.map((player) => (
             <option key={player.playerId} value={player.playerId}>
               {player.displayName ?? player.playerId.slice(0, 8)}
@@ -458,10 +474,12 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
         <div className={styles.sectionHeader}>
           <span>
             <Typography id="completed-rounds-heading" as="h3" variant="bodySmMedium">
-              Аудит по раундам
+              
+              {translate('tender.completedTenderPanel.copy.064')}
             </Typography>
             <Typography variant="caption" tone="muted">
-              Фактический порядок действий, тайм-аутов, доказательств и начислений
+              
+              {translate('tender.completedTenderPanel.copy.065')}
             </Typography>
           </span>
         </div>
@@ -494,8 +512,8 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                     {String(round.round).padStart(2, '0')}
                   </Typography>
                   <span className={styles.roundSummaryCopy}>
-                    <Typography as="strong" variant="bodySmMedium">Раунд {round.round}</Typography>
-                    <Typography as="span" variant="caption" tone="muted">{entryCount} записей</Typography>
+                    <Typography as="strong" variant="bodySmMedium">{translate('tender.completed.auditRound', { round: round.round })}</Typography>
+                    <Typography as="span" variant="caption" tone="muted">{entryCount}  {translate('tender.completedTenderPanel.copy.067')}</Typography>
                   </span>
                   <span className={styles.roundToggle} aria-hidden="true">
                     <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={1.8} />
@@ -503,8 +521,8 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                 </summary>
 
                 <div className={styles.roundAuditContent}>
-                  <section className={styles.roundPriority} aria-label={`Приоритет игроков в раунде ${round.round}`}>
-                    <Typography as="h4" variant="caption">Приоритет при коллизии</Typography>
+                  <section className={styles.roundPriority} aria-label={translate('tender.completedTenderPanel.copy.068', { value1: round.round })}>
+                    <Typography as="h4" variant="caption">{translate('tender.completedTenderPanel.copy.069')}</Typography>
                     <ol>
                       {round.priorityPlayerIds.map((playerId, index) => (
                         <li key={playerId}>
@@ -519,7 +537,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   <AuditGroup
                     accent="#f4a51c"
                     icon={UserGroupIcon}
-                    title="Слоты доступа"
+                    title={translate('tender.completedTenderPanel.copy.070')}
                     count={accessSlots.length}
                   >
                     {accessSlots.map((entry) => (
@@ -530,18 +548,19 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                           </Typography>
                           {entry.resolution === 'timeout' && (
                             <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
-                              Тайм-аут
+                              
+                              {translate('tender.completedTenderPanel.copy.071')}
                             </Typography>
                           )}
                         </div>
                         <div className={styles.auditFacts}>
                           <span>
-                            <Typography as="small" variant="caption">Запрошен</Typography>
+                            <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.072')}</Typography>
                             <Typography as="strong" variant="caption">{entry.requestedSlot ?? '—'}</Typography>
                           </span>
                           <Typography as="span" variant="caption" className={styles.auditArrow}>→</Typography>
                           <span>
-                            <Typography as="small" variant="caption">Назначен</Typography>
+                            <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.073')}</Typography>
                             <Typography as="strong" variant="caption">{entry.assignedSlot ?? '—'}</Typography>
                           </span>
                         </div>
@@ -552,7 +571,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   <AuditGroup
                     accent="#38bdf8"
                     icon={FlashIcon}
-                    title="Распределение Мощности"
+                    title={translate('tender.completedTenderPanel.copy.074')}
                     count={powerAllocations.length}
                   >
                     {powerAllocations.map((entry) => (
@@ -563,16 +582,17 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                           </Typography>
                           {entry.resolution === 'timeout' && (
                             <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
-                              Тайм-аут
+                              
+                              {translate('tender.completedTenderPanel.copy.075')}
                             </Typography>
                           )}
                         </div>
                         <div className={styles.powerFacts}>
                           {[
-                            ['Разведка', entry.allocation.reconnaissance],
-                            ['Лаборатория', entry.allocation.laboratory],
-                            ['Анализ', entry.allocation.modelAnalysis],
-                            ['Контракты', entry.allocation.contracts],
+                            [translate('tender.completedTenderPanel.copy.076'), entry.allocation.reconnaissance],
+                            [translate('tender.completedTenderPanel.copy.077'), entry.allocation.laboratory],
+                            [translate('tender.completedTenderPanel.copy.078'), entry.allocation.modelAnalysis],
+                            [translate('tender.completedTenderPanel.copy.079'), entry.allocation.contracts],
                           ].map(([label, value]) => (
                             <span key={label}>
                               <Typography as="small" variant="caption">{label}</Typography>
@@ -587,7 +607,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   <AuditGroup
                     accent="#38bdf8"
                     icon={Radar02Icon}
-                    title="Разведка"
+                    title={translate('tender.completedTenderPanel.copy.080')}
                     count={reconnaissance.length}
                   >
                     {reconnaissance.map((entry) => (
@@ -598,12 +618,14 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                           </Typography>
                           {entry.resolution === 'timeout' && (
                             <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
-                              Тайм-аут
+                              
+                              {translate('tender.completedTenderPanel.copy.081')}
                             </Typography>
                           )}
                           {entry.resolution === 'skipped' && (
                             <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
-                              Разведка пропущена: все Образцы уже получены
+                              
+                              {translate('tender.completedTenderPanel.copy.082')}
                             </Typography>
                           )}
                         </div>
@@ -611,12 +633,13 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                           {entry.targets.length > 0 ? entry.targets.map((target, targetIndex) => (
                             <Typography key={`${target}-${targetIndex}`} as="span" variant="caption">
                               {target === 'unknown-sector'
-                                ? 'Неизвестный сектор'
+                                ? translate('tender.completedTenderPanel.copy.083')
                                 : t(signalLabelKeys[target])}
                             </Typography>
                           )) : (
                             <Typography as="span" variant="caption" tone="muted">
-                              Без новых сигналов
+                              
+                              {translate('tender.completedTenderPanel.copy.084')}
                             </Typography>
                           )}
                         </div>
@@ -627,17 +650,17 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   <AuditGroup
                     accent="#a968e8"
                     icon={FlaskConicalIcon}
-                    title="Лаборатория"
+                    title={translate('tender.completedTenderPanel.copy.085')}
                     count={laboratory.length}
                   >
                     {laboratory.map((entry, index) => {
                       const modeLabel = entry.mode === 'broad'
-                        ? 'Широкое исследование'
-                        : entry.mode === 'deep' ? 'Глубокое исследование' : 'Импульсный опыт'
+                        ? translate('tender.completedTenderPanel.copy.086')
+                        : entry.mode === 'deep' ? translate('tender.completedTenderPanel.copy.087') : translate('tender.completedTenderPanel.copy.088')
                       return (
                         <li
                           key={`lab-${entry.playerId}-${index}`}
-                          aria-label={`Исследование игрока ${playerName(entry.playerId)}`}
+                          aria-label={translate('tender.completedTenderPanel.copy.089', { value1: playerName(entry.playerId) })}
                         >
                           <div className={styles.auditEntryHeader}>
                             <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
@@ -651,11 +674,11 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                                 : styles.auditModeBadge}
                             >
                               {entry.resolution === 'timeout'
-                                ? 'Тайм-аут'
+                                ? translate('tender.completedTenderPanel.copy.090')
                                 : entry.resolution === 'skipped'
                                   ? entry.skipReason === 'insufficient_samples'
-                                    ? 'Пропущено: нужны два Образца'
-                                    : 'Пропущено: все пары исследованы'
+                                    ? translate('tender.completedTenderPanel.copy.091')
+                                    : translate('tender.completedTenderPanel.copy.092')
                                   : modeLabel}
                             </Typography>
                           </div>
@@ -672,7 +695,8 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                                 </Typography>
                                 {test.usedByContractId && (
                                   <Typography as="span" variant="caption" className={styles.contractUseBadge}>
-                                    Использовано как доказательство выполненного контракта
+                                    
+                                    {translate('tender.completedTenderPanel.copy.093')}
                                   </Typography>
                                 )}
                               </div>
@@ -683,11 +707,11 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                               key={`${measurement.sourceSignal}-${measurement.receiverSignal}`}
                               className={styles.privateMeasurement}
                             >
-                              <Typography as="small" variant="caption">Приватное измерение</Typography>
+                              <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.094')}</Typography>
                               <Typography as="strong" variant="caption">
                                 {measurement.polarityRelation === 'same'
-                                  ? 'Одинаковые полярности'
-                                  : 'Разные полярности'}
+                                  ? translate('tender.completedTenderPanel.copy.095')
+                                  : translate('tender.completedTenderPanel.copy.096')}
                               </Typography>
                             </div>
                           ))}
@@ -699,7 +723,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   <AuditGroup
                     accent="#22d3ee"
                     icon={Analytics01Icon}
-                    title="Тезисы"
+                    title={translate('tender.completedTenderPanel.copy.097')}
                     count={theses.length}
                   >
                     {theses.map((entry) => (
@@ -714,10 +738,18 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                         </div>
                         <div className={styles.correctness}>
                           <Typography as="span" variant="caption" data-correct={entry.fieldTypeCorrect || undefined}>
-                            Тип поля: {t(fieldTypeLabelKeys[entry.fieldType])} · {entry.fieldTypeCorrect ? 'верно' : 'неверно'}
+                            
+                            {translate('tender.completed.fieldResult', {
+                              field: t(fieldTypeLabelKeys[entry.fieldType]),
+                              correctness: entry.fieldTypeCorrect ? translate('tender.completedTenderPanel.copy.099') : translate('tender.completedTenderPanel.copy.100'),
+                            })}
                           </Typography>
                           <Typography as="span" variant="caption" data-correct={entry.polarityCorrect || undefined}>
-                            Полярность: {t(polarityLabelKeys[entry.polarity])} · {entry.polarityCorrect ? 'верно' : 'неверно'}
+                            
+                            {translate('tender.completed.polarityResult', {
+                              polarity: t(polarityLabelKeys[entry.polarity]),
+                              correctness: entry.polarityCorrect ? translate('tender.completedTenderPanel.copy.102') : translate('tender.completedTenderPanel.copy.103'),
+                            })}
                           </Typography>
                         </div>
                       </li>
@@ -727,7 +759,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   <AuditGroup
                     accent="#f4a51c"
                     icon={ContractsIcon}
-                    title="Контракты"
+                    title={translate('tender.completedTenderPanel.copy.104')}
                     count={contracts.length}
                   >
                     {contracts.map((entry, index) => (
@@ -738,49 +770,59 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                           </Typography>
                           {entry.conditions && (
                             <Typography as="span" variant="caption" className={styles.auditModeBadge}>
-                              {contractKindLabels[entry.conditions.kind]} · {entry.conditions.ratingReward} Rating
+                              {translate('tender.completed.contractReward', {
+                                kind: contractKindLabels[entry.conditions.kind],
+                                rating: entry.conditions.ratingReward,
+                              })}
                             </Typography>
                           )}
                         </div>
                         <Typography as="strong" variant="caption" className={styles.contractOutcome}>
                           {entry.outcome === 'timeout_released'
-                            ? 'Резерв освобождён по тайм-ауту'
+                            ? translate('tender.completedTenderPanel.copy.105')
                             : entry.outcome === 'skipped'
-                              ? 'Контракт пропущен'
-                              : 'Контракт выполнен'}
+                              ? translate('tender.completedTenderPanel.copy.106')
+                              : translate('tender.completedTenderPanel.copy.107')}
                         </Typography>
                         {entry.outcome === 'skipped' ? (
                           <Typography variant="caption" tone="muted">
-                            Подходящих доказательств нет
+                            
+                            {translate('tender.completedTenderPanel.copy.108')}
                           </Typography>
                         ) : entry.outcome === 'awarded' && (
                           <div className={styles.contractDetails}>
                             {entry.conditions && (
                               <>
                                 <Typography as="span" variant="caption">
-                                  Цель: {t(signalLabelKeys[entry.conditions.targetSignal])} · {contractRoleLabels[entry.conditions.targetRole]}
+                                  
+                                  {translate('tender.completed.target', {
+                                    signal: t(signalLabelKeys[entry.conditions.targetSignal]),
+                                    role: contractRoleLabels[entry.conditions.targetRole],
+                                  })}
                                 </Typography>
                                 <Typography as="span" variant="caption">
                                   {entry.conditions.kind === 'scientific'
-                                    ? `Условия: сертификат исследования сигнала ${t(signalLabelKeys[entry.conditions.targetSignal])}`
-                                    : `Условия: ${[
+                                    ? translate('tender.completedTenderPanel.copy.110', { value1: t(signalLabelKeys[entry.conditions.targetSignal]) })
+                                    : translate('tender.completedTenderPanel.copy.111', { value1: [
                                         t(`tender.result.${entry.conditions.requiredPublicResult}`),
                                         ...((entry.conditions.kind === 'complex' || entry.conditions.kind === 'final')
                                           && entry.conditions.requiredSecondaryPublicResult
                                           ? [t(`tender.result.${entry.conditions.requiredSecondaryPublicResult}`)]
                                           : []),
-                                      ].join(' + ')}`}
+                                      ].join(' + ') })}
                                 </Typography>
                                 {(entry.conditions.kind === 'complex' || entry.conditions.kind === 'final') && (
                                   <Typography as="span" variant="caption">
-                                    Допустимое доказательство: один Непрерывный опыт или два Импульсных опыта
+                                    
+                                    {translate('tender.completedTenderPanel.copy.112')}
                                   </Typography>
                                 )}
                               </>
                             )}
                             {entry.evidenceTests.map((evidence) => (
                               <Typography key={evidence.testId} as="span" variant="caption">
-                                Доказательство: {t(signalLabelKeys[evidence.sourceSignal])}
+                                
+                                {translate('tender.completed.evidence', { signal: t(signalLabelKeys[evidence.sourceSignal]) })}
                                 {' → '}
                                 {t(signalLabelKeys[evidence.receiverSignal])}
                                 {' · '}
@@ -791,7 +833,8 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                             ))}
                             {entry.researchCertificationSignal && (
                               <Typography as="span" variant="caption">
-                                Доказательство: сертификат исследования {t(signalLabelKeys[entry.researchCertificationSignal])}
+                                
+                                {translate('tender.completed.certificationEvidence', { signal: t(signalLabelKeys[entry.researchCertificationSignal]) })}
                               </Typography>
                             )}
                           </div>
@@ -803,7 +846,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   <AuditGroup
                     accent="#2fcda3"
                     icon={Award02Icon}
-                    title="Изменения рейтинга"
+                    title={translate('tender.completedTenderPanel.copy.115')}
                     count={ratingChanges.length}
                   >
                     {ratingChanges.map((entry, index) => (
@@ -817,7 +860,8 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                           </Typography>
                         </div>
                         <Typography variant="caption" tone="muted">
-                          Источник: {roundRatingLabels[entry.source]}
+                          
+                          {translate('tender.completed.ratingSource', { source: roundRatingLabels[entry.source] })}
                         </Typography>
                       </li>
                     ))}
@@ -825,7 +869,8 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
 
                   {entryCount === 0 && (
                     <Typography variant="caption" tone="muted" className={styles.emptyRound}>
-                      Для выбранного игрока записей в этом раунде нет.
+                      
+                      {translate('tender.completedTenderPanel.copy.117')}
                     </Typography>
                   )}
                 </div>

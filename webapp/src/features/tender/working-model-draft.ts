@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import type { WorkingModel } from '@anomaly-detector/contracts'
 
 export type WorkingModelSaveStatus =
@@ -33,7 +34,7 @@ export class WorkingModelDraftController<TDraft = WorkingModel> {
   constructor(options: WorkingModelDraftControllerOptions<TDraft>) {
     this.cancel = options.cancel
     this.draft = options.initialModel
-    this.errorMessage = options.errorMessage ?? 'Не удалось сохранить рабочую модель'
+    this.errorMessage = options.errorMessage ?? translate('tender.working-model-draft.copy.001')
     this.onDraft = options.onDraft
     this.onStatus = options.onStatus
     this.save = options.save

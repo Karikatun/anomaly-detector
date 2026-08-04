@@ -1,3 +1,4 @@
+import { translate } from '../../platform/i18n'
 import { LockIcon, TestTube01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
@@ -70,9 +71,9 @@ export function LaboratoryPanel({
     && isValid
     && areLaboratoryPairsEqual(firstBroadPair, { receiverSignal: receiver, sourceSignal: source })
   const pairError = duplicateBroadPair
-    ? 'Вы уже выбрали эту направленную пару. Выберите другую.'
+    ? translate('tender.laboratoryPanel.copy.001')
     : pairAlreadyResearched
-      ? `Вы уже исследовали ${signalName(source)} → ${signalName(receiver)}. Выберите другую направленную пару.`
+      ? translate('tender.laboratoryPanel.copy.002', { value1: signalName(source), value2: signalName(receiver) })
       : null
 
   const handleTest = async () => {
@@ -121,9 +122,10 @@ export function LaboratoryPanel({
         <section className={styles.surface}>
           <div className={styles.sectionHeader}>
             <Typography id="laboratory-heading" as="h2" variant="bodySmMedium" className={styles.sectionTitle}>
-              Ваши образцы
+              
+              {translate('tender.laboratoryPanel.copy.003')}
             </Typography>
-            <Typography as="span" variant="caption" className={styles.sectionMeta}>{mySamples.length} доступно</Typography>
+            <Typography as="span" variant="caption" className={styles.sectionMeta}>{mySamples.length}  {translate('tender.laboratoryPanel.copy.004')}</Typography>
           </div>
 
           {powerAllocation === 2 && policy.versionedLaboratory && (
@@ -209,20 +211,20 @@ export function LaboratoryPanel({
 
         <section className={styles.surface}>
           <div className={styles.sectionHeader}>
-            <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>Направленный опыт</Typography>
+            <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.laboratoryPanel.copy.005')}</Typography>
           </div>
 
           <div className={styles.experiment}>
             <div className={styles.experimentNode} style={signalStyle(source ?? undefined)}>
               <SignalGlyph signal={source ?? undefined} className={styles.signalGlyph} />
               <Typography as="span" variant="caption" tone="muted">{t('tender.lab.source')}</Typography>
-              <Typography as="strong" variant="bodySmMedium">{source ? signalName(source) : 'Не выбран'}</Typography>
+              <Typography as="strong" variant="bodySmMedium">{source ? signalName(source) : translate('tender.laboratoryPanel.copy.006')}</Typography>
             </div>
             <Typography as="span" variant="h4" className={styles.experimentArrow}>→</Typography>
             <div className={styles.experimentNode} style={signalStyle(receiver ?? undefined)}>
               <SignalGlyph signal={receiver ?? undefined} className={styles.signalGlyph} />
               <Typography as="span" variant="caption" tone="muted">{t('tender.lab.receiver')}</Typography>
-              <Typography as="strong" variant="bodySmMedium">{receiver ? signalName(receiver) : 'Не выбран'}</Typography>
+              <Typography as="strong" variant="bodySmMedium">{receiver ? signalName(receiver) : translate('tender.laboratoryPanel.copy.007')}</Typography>
             </div>
           </div>
 
@@ -245,9 +247,9 @@ export function LaboratoryPanel({
               <span className={styles.privateMeasurementHeader}>
                 <span className={styles.privateMeasurementTitle}>
                   <HugeiconsIcon icon={LockIcon} strokeWidth={1.7} aria-hidden="true" />
-                  <Typography as="strong" variant="caption">Личные измерения</Typography>
+                  <Typography as="strong" variant="caption">{translate('tender.laboratoryPanel.copy.008')}</Typography>
                 </span>
-                <Typography as="span" variant="caption" tone="muted">Видите только вы</Typography>
+                <Typography as="span" variant="caption" tone="muted">{translate('tender.laboratoryPanel.copy.009')}</Typography>
               </span>
               {latestMeasurement ? (
                 <>
@@ -260,12 +262,12 @@ export function LaboratoryPanel({
                       <Typography as="strong" variant="caption">{signalName(latestMeasurement.receiverSignal)}</Typography>
                     </span>
                     <Typography variant="bodySmMedium" className={styles.measurementRelation}>
-                      {latestMeasurement.polarityRelation === 'same' ? 'одинаковая полярность' : 'противоположная полярность'}
+                      {latestMeasurement.polarityRelation === 'same' ? translate('tender.laboratoryPanel.copy.010') : translate('tender.laboratoryPanel.copy.011')}
                     </Typography>
                   </span>
                   <details className={styles.measurementHistory}>
                     <summary>
-                      <Typography as="span" variant="caption">История</Typography>
+                      <Typography as="span" variant="caption">{translate('tender.laboratoryPanel.copy.012')}</Typography>
                       <Typography as="span" variant="caption">{privateMeasurements.length}</Typography>
                     </summary>
                     <div>
@@ -282,7 +284,7 @@ export function LaboratoryPanel({
                             <Typography as="strong" variant="caption">{signalName(measurement.receiverSignal)}</Typography>
                           </span>
                           <Typography as="span" variant="caption" tone="muted">
-                            {measurement.polarityRelation === 'same' ? 'одинаковая полярность' : 'противоположная полярность'}
+                            {measurement.polarityRelation === 'same' ? translate('tender.laboratoryPanel.copy.013') : translate('tender.laboratoryPanel.copy.014')}
                           </Typography>
                         </span>
                       ))}
@@ -290,7 +292,7 @@ export function LaboratoryPanel({
                   </details>
                 </>
               ) : (
-                <Typography variant="caption" tone="muted">Появится после первого проведённого опыта.</Typography>
+                <Typography variant="caption" tone="muted">{translate('tender.laboratoryPanel.copy.015')}</Typography>
               )}
             </div>
 
@@ -312,7 +314,7 @@ export function LaboratoryPanel({
               ? t('tender.lab.mode.selectFirst')
               : source && receiver
               ? `${signalName(source)} → ${signalName(receiver)}`
-              : 'Выберите сначала источник, затем приёмник'}
+              : translate('tender.laboratoryPanel.copy.016')}
           </Typography>
         </div>
         <Button
@@ -330,7 +332,7 @@ export function LaboratoryPanel({
               : source && receiver
               ? mode === 'broad'
                 ? t('tender.lab.mode.confirmBroad')
-                : `Провести опыт: ${signalName(source)} → ${signalName(receiver)}`
+                : translate('tender.laboratoryPanel.copy.017', { value1: signalName(source), value2: signalName(receiver) })
             : t('tender.lab.confirm')}
         </Button>
       </footer>

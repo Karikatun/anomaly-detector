@@ -1,3 +1,4 @@
+import { translate } from '../../../platform/i18n'
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
@@ -31,14 +32,14 @@ export function TenderResearchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline" className={styles.trigger}>
-          <Typography as="span" variant="bodySmMedium">Данные исследований</Typography>
+          <Typography as="span" variant="bodySmMedium">{translate('tender.tenderResearchDialog.copy.001')}</Typography>
           <Typography as="span" variant="caption" className={styles.count}>{count}</Typography>
         </Button>
       </DialogTrigger>
-      <DialogContent className={styles.dialog} closeLabel="Закрыть данные исследований" placement="viewport">
+      <DialogContent className={styles.dialog} closeLabel={translate('tender.tenderResearchDialog.copy.002')} placement="viewport">
         <DialogHeader className={styles.header}>
-          <DialogTitle>Данные исследований</DialogTitle>
-          <DialogDescription>Публичные и личные результаты, а также история тезисов</DialogDescription>
+          <DialogTitle>{translate('tender.tenderResearchDialog.copy.003')}</DialogTitle>
+          <DialogDescription>{translate('tender.tenderResearchDialog.copy.004')}</DialogDescription>
         </DialogHeader>
         <div className={styles.content}><TenderEvidence data={view} /></div>
       </DialogContent>

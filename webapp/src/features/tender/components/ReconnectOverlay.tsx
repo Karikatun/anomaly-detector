@@ -1,3 +1,4 @@
+import { translate } from '../../../platform/i18n'
 import { Alert01Icon, Refresh01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 
@@ -15,9 +16,10 @@ export function ReconnectOverlay({ errorText, onRetry }: ReconnectOverlayProps) 
     <>
       <div className={styles.connectionBanner} role="status">
         <span className={styles.connectionPulse} aria-hidden="true" />
-        <Typography as="strong" variant="bodySmMedium">Соединение потеряно</Typography>
+        <Typography as="strong" variant="bodySmMedium">{translate('tender.reconnectOverlay.copy.001')}</Typography>
         <Typography as="span" variant="caption" tone="muted">
-          Восстанавливаем актуальное состояние игры
+          
+          {translate('tender.reconnectOverlay.copy.002')}
         </Typography>
       </div>
 
@@ -34,16 +36,19 @@ export function ReconnectOverlay({ errorText, onRetry }: ReconnectOverlayProps) 
           </span>
           <span className={styles.reconnectCopy}>
             <Typography id="reconnect-heading" as="h2" variant="h4">
-              Связь с сервером прервана
+              
+              {translate('tender.reconnectOverlay.copy.003')}
             </Typography>
             <Typography id="reconnect-description" variant="bodySm" tone="muted">
-              Серверный таймер продолжает идти. После подключения экран обновится автоматически.
+              
+              {translate('tender.reconnectOverlay.copy.004')}
             </Typography>
             {errorText && <Typography role="alert" variant="caption" tone="destructive">{errorText}</Typography>}
           </span>
           <Button type="button" size="lg" className={styles.actionButton} onClick={onRetry}>
             <HugeiconsIcon icon={Refresh01Icon} strokeWidth={1.7} aria-hidden="true" />
-            Переподключиться
+            
+            {translate('tender.reconnectOverlay.copy.005')}
           </Button>
         </section>
       </div>

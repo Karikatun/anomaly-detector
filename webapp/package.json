@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "i18n:audit": "bun scripts/i18n-source-audit.mjs",
     "typecheck": "tsc -b",
-    "test": "bun test tests",
+    "test": "bun run i18n:audit && bun test tests",
     "lint": "eslint .",
     "preview": "vite preview",
     "e2e": "playwright test",
