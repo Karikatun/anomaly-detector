@@ -385,6 +385,7 @@ export function FinalScientificModelPanel({
           type="button"
           size="lg"
           className={styles.actionButton}
+          data-tutorial-final-submit=""
           disabled={formDisabled || claimedCount === 0}
           onClick={() => void handleSubmit()}
         >

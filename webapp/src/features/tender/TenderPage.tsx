@@ -133,7 +133,6 @@ export function PhasePanel({
   }
   training?: {
     separateContractReservation?: boolean
-    unlimitedThesisRetries?: boolean
     untimed?: boolean
   }
 }) {
@@ -244,7 +243,6 @@ export function PhasePanel({
         <ModelAnalysisPanel
           knownSignals={view.knownSignals}
           maxTheses={maPower}
-          unlimitedTrainingRetries={training?.unlimitedThesisRetries}
           model={view.privateWorkingModel}
           publicTheses={view.publicTheses}
           privateTheses={view.privateTheses}

@@ -21,6 +21,7 @@ import styles from './RulesReferenceDialog.module.css'
 
 export function LaboratoryInterpretationDialog({
   belowTenderHeader = false,
+  contentTestId,
   disabled = false,
   onOpenChange,
   open,
@@ -32,6 +33,7 @@ export function LaboratoryInterpretationDialog({
   triggerTextClassName,
 }: {
   belowTenderHeader?: boolean
+  contentTestId?: string
   disabled?: boolean
   onOpenChange?: (open: boolean) => void
   open?: boolean
@@ -67,6 +69,7 @@ export function LaboratoryInterpretationDialog({
         </Button>
       </DialogTrigger>
       <DialogContent
+        data-testid={contentTestId}
         showCloseButton={false}
         className={cn(styles.content, belowTenderHeader && styles.belowTenderHeader)}
       >

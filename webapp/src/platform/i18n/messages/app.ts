@@ -1,8 +1,8 @@
 export const appMessages = {
   'app.brand.primary': 'ANOMALY',
   'app.brand.secondary': 'DETECTOR',
-  'app.loading': 'Loading',
-  'app.close': 'Close',
+  'app.loading': 'Загрузка',
+  'app.close': 'Закрыть',
   'app.logo': 'Anomaly Detector',
   'nav.rooms': 'Комнаты',
   'nav.matches': 'Мои матчи',

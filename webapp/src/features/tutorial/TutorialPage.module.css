@@ -12,9 +12,16 @@
   z-index: 1;
   width: min(42rem, 100%);
 }
+.stateLoading { display: flex; min-height: 6rem; align-items: center; justify-content: center; }
 .stateContent, .completeContent { display: grid; gap: 1rem; }
 .completeActions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .saveError { display: grid; gap: .75rem; padding: .9rem; border: 1px solid rgba(248, 113, 113, .5); border-radius: .6rem; }
+.coachCard {
+  width: min(24rem, calc(100vw - 1.5rem));
+  max-height: calc(100dvh - 1rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .coach { display: grid; max-width: 24rem; gap: .55rem; text-align: left; }
 .coach button { width: fit-content; margin-top: .25rem; }
 .hint { padding: .65rem; border-left: 2px solid #38bdf8; background: rgba(56, 189, 248, .08); }
@@ -23,7 +30,56 @@
   pointer-events: none !important;
 }
 
+:global([data-testid='floater']) {
+  position: fixed !important;
+  inset: auto 1rem 1rem auto !important;
+  width: min(24rem, calc(100vw - 2rem)) !important;
+  transform: none !important;
+}
+
+:global(body:has(
+  [data-tutorial-step='interpretation-open'],
+  [data-tutorial-step='round-1-working-model'],
+  [data-tutorial-step='round-2-working-model'],
+  [data-tutorial-step='final-model']
+) [data-testid='floater']) {
+  inset: 1rem 1rem auto auto !important;
+}
+
 @media (max-width: 600px) {
   .completeActions { display: grid; }
   .completeActions button { width: 100%; }
+  .coachCard {
+    width: 100%;
+    max-height: min(17rem, calc(100dvh - 1rem));
+  }
+
+  :global([data-testid='floater']) {
+    inset: auto .75rem .75rem !important;
+    width: auto !important;
+  }
+
+  :global(body:has(
+    [data-tutorial-step='interpretation-open'],
+    [data-tutorial-step='round-1-working-model'],
+    [data-tutorial-step='round-2-working-model'],
+    [data-tutorial-step='final-model']
+  ) [data-testid='floater']) {
+    inset: .75rem .75rem auto !important;
+  }
+
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+    top: 17.25rem !important;
+    bottom: .75rem !important;
+    height: auto !important;
+  }
+
+  :global(body:has(
+    [data-tutorial-step='round-1-working-model'],
+    [data-tutorial-step='round-2-working-model']
+  ) [data-working-model-dialog]) {
+    top: 17.25rem !important;
+    bottom: .75rem !important;
+    height: auto !important;
+  }
 }

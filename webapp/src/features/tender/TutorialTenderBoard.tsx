@@ -63,7 +63,7 @@ export function TutorialTenderBoard({
   onHelpMenuOpened: () => void
   onInterpretationClosed: () => void
   onInterpretationOpened: () => void
-  onSaveWorkingModel: (workingModel: WorkingModel) => Promise<void>
+  onSaveWorkingModel: (workingModel: WorkingModel) => Promise<boolean>
   view: TenderView
 }) {
   const { t } = useI18n()
@@ -79,6 +79,7 @@ export function TutorialTenderBoard({
   }
 
   const openInterpretation = (open: boolean) => {
+    if (open) setHelpMenuOpen(false)
     setInterpretationOpen(open)
     if (open) onInterpretationOpened()
     else {
@@ -93,6 +94,11 @@ export function TutorialTenderBoard({
     else onInterpretationClosed()
   }
 
+  const saveWorkingModel = async (workingModel: WorkingModel) => {
+    const progressed = await onSaveWorkingModel(workingModel)
+    if (progressed) setWorkingModelOpen(false)
+  }
+
   const myPlayer = view.players[0]
   const activePlayer = view.players.find((player) => player.playerId === view.activePlayerId)
   const isSequentialPhase = sequentialPhases.has(view.phase)
@@ -102,8 +108,11 @@ export function TutorialTenderBoard({
 
   return (
     <section
-      className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}
+      className={`${styles.page} ${tutorialStyles.board} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}
       aria-label={t('tutorial.title')}
+      data-tutorial-highlight={highlight}
+      data-tutorial-phase={view.phase}
+      data-tutorial-round={view.round}
     >
       <TenderHeaderFrame
         ariaLabel={t('tender.phase.status')}
@@ -182,14 +191,15 @@ export function TutorialTenderBoard({
                 }}>
                   {t('tender.tenderPage.copy.029')}
                 </Button>
-                <div
+                <Button
                   data-tutorial-active={highlight === 'interpretation' || undefined}
                   data-tutorial-interpretation=""
+                  type="button"
+                  variant="outline"
+                  onClick={() => openInterpretation(true)}
                 >
-                  <Button type="button" variant="outline" onClick={() => openInterpretation(true)}>
-                    {t('tender.tenderPage.copy.030')}
-                  </Button>
-                </div>
+                  {t('tender.tenderPage.copy.030')}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -208,6 +218,7 @@ export function TutorialTenderBoard({
           >
             <LaboratoryInterpretationDialog
               belowTenderHeader
+              contentTestId="tutorial-interpretation-dialog"
               open={interpretationOpen}
               onOpenChange={openDirectInterpretation}
               ruleset="tender-v2"
@@ -236,7 +247,6 @@ export function TutorialTenderBoard({
           progress={<TenderPhaseProgress phase={view.phase} />}
           primary={(
             <div
-              data-tutorial-active={(highlight === 'primary' || (highlight === 'working-model' && view.phase === 'model-analysis')) || undefined}
               data-tutorial-primary=""
               data-tutorial-working-model={view.phase === 'model-analysis' ? '' : undefined}
               className="grid min-w-0 self-start gap-4"
@@ -246,7 +256,7 @@ export function TutorialTenderBoard({
                 disabled={interpretationRequired}
                 error={commandError}
                 onCommand={onCommand}
-                onSaveWorkingModel={onSaveWorkingModel}
+                onSaveWorkingModel={saveWorkingModel}
                 activePlayerId={view.activePlayerId}
                 workingModelDialog={{
                   onOpenChange: setWorkingModelOpen,
@@ -256,7 +266,6 @@ export function TutorialTenderBoard({
                 }}
                 training={{
                   separateContractReservation: true,
-                  unlimitedThesisRetries: true,
                   untimed: true,
                 }}
               />
@@ -273,15 +282,13 @@ export function TutorialTenderBoard({
               <TenderResearchDialog open={researchOpen} onOpenChange={setResearchOpen} view={view} />
               {view.phase !== 'model-analysis' && (
                 <div
-                  data-tutorial-active={highlight === 'working-model' || undefined}
                   data-tutorial-working-model=""
                 >
                   <WorkingModelWorkspace
-                    inlineOnDesktop
                     knownSignals={view.privateSamples}
                     model={view.privateWorkingModel}
                     onOpenChange={setWorkingModelOpen}
-                    onSave={onSaveWorkingModel}
+                    onSave={saveWorkingModel}
                     open={workingModelOpen}
                     openDisabled={interpretationRequired}
                   />

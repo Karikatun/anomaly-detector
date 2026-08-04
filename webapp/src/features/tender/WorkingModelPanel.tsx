@@ -135,7 +135,12 @@ export function WorkingModelPanel({
           const signalName = t(signalLabelKeys[signal])
 
           return (
-            <div key={signal} className={styles.row} data-unknown={!isKnown || undefined}>
+            <div
+              key={signal}
+              className={styles.row}
+              data-unknown={!isKnown || undefined}
+              data-tutorial-working-model-row={signal}
+            >
               <span className={styles.signal}>
                 <SignalGlyph signal={signal} />
                 <Typography as="strong" variant="bodySmMedium">{signalName}</Typography>

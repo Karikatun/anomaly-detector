@@ -53,7 +53,7 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
-  closeLabel = "Close",
+  closeLabel = translate('app.close'),
   placement = "centered",
   showCloseButton = true,
   ...props
