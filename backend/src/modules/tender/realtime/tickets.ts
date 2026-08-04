@@ -18,10 +18,7 @@ export type RealtimeTicketIssuer = {
     sessionId: string
     ticketHash: string
     userId: string
-  }): Promise<
-    | { kind: 'issued' }
-    | { kind: 'limited'; retryAfterSeconds: number }
-  >
+  }): Promise<void>
 }
 
 export function hashRealtimeTicket(ticket: string) {

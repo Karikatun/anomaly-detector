@@ -1,5 +1,6 @@
 import type { DbClient } from '../../db'
 import type { MiddlewareHandler } from 'hono'
+import { createPrismaRequestBudget } from '../../security/request-budget'
 import type { AuthHttpEnv } from '../auth'
 import { TenderRoomService } from './application/room-service'
 import { createPrismaRoomMemberIdentityReader } from './infrastructure/prisma-room-member-identity-reader'
@@ -8,6 +9,7 @@ import { createRoomStartModule } from './infrastructure/prisma-room-start'
 import { createRoomRoutes } from './transport/routes'
 
 export function createRoomModule(input: {
+  authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   db: DbClient
   requireAuth: MiddlewareHandler<AuthHttpEnv>
 }) {
@@ -17,6 +19,8 @@ export function createRoomModule(input: {
   })
   return {
     routes: createRoomRoutes({
+      authenticatedMutationBudget: input.authenticatedMutationBudget,
+      joinBudget: createPrismaRequestBudget(input.db),
       requireAuth: input.requireAuth,
       service,
     }),

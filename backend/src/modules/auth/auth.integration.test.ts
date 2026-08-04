@@ -248,6 +248,336 @@ maybeDescribe('auth API integration', () => {
     expect(limitedAcrossSessions.status).toBe(429)
   })
 
+  test('shares the room join budget across API instances', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'shared-room-join-budget',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const { accessToken } = await register.json()
+    const secondApp = createApp({
+      env,
+      prisma,
+      securityEvents: {
+        emit: (event) => {
+          securityEvents.push(event)
+        },
+      },
+    })
+    const joinUnknownRoom = (targetApp: typeof app) => targetApp.request('/api/rooms/join', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: 'ABCDEFGHJK' }),
+    })
+
+    for (let attempt = 1; attempt <= 20; attempt += 1) {
+      const response = await joinUnknownRoom(attempt % 2 === 0 ? app : secondApp)
+      expect(response.status).toBe(404)
+    }
+
+    const limited = await joinUnknownRoom(app)
+    expect(limited.status).toBe(429)
+    expect(limited.headers.get('retry-after')).toBeTruthy()
+    expect(await limited.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many room join attempts',
+      },
+    })
+    expect(securityEvents).toContainEqual(expect.objectContaining({
+      code: 'RATE_LIMITED',
+      outcome: 'limited',
+      reason: 'room_join_budget',
+      type: 'request_rejected',
+    }))
+
+    const otherRegister = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'independent-room-join-budget',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const other = await otherRegister.json()
+    expect((await app.request('/api/rooms/join', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${other.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: 'ABCDEFGHJK' }),
+    })).status).toBe(404)
+
+    await prisma.authAbuseBucket.updateMany({
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+      where: { scope: 'room_join' },
+    })
+    expect((await joinUnknownRoom(app)).status).toBe(404)
+  })
+
+  test('atomically limits concurrent room joins across API instances', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'concurrent-room-join-budget',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const { accessToken } = await register.json()
+    const secondApp = createApp({ env, prisma })
+
+    const responses = await Promise.all(Array.from({ length: 21 }, (_, index) =>
+      (index % 2 === 0 ? app : secondApp).request('/api/rooms/join', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code: 'ABCDEFGHJK' }),
+      })))
+
+    expect(responses.map((response) => response.status).sort((left, right) => left - right))
+      .toEqual([...Array.from({ length: 20 }, () => 404), 429])
+  })
+
+  test('shares a Tender command budget per player and Tender across API instances', async () => {
+    const register = async (login: string) => {
+      const response = await app.request('/api/auth/token/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login,
+          password: 'password123',
+          privacyConsent: true,
+          privacyConsentVersion: '1.0',
+          termsVersion: '1.0',
+        }),
+      })
+      expect(response.status).toBe(201)
+      return response.json()
+    }
+    const player = await register('shared-tender-command-budget')
+    const opponent = await register('shared-tender-command-opponent')
+    const { tenderId } = await createPersistentTenderModule(prisma).createTender({
+      players: [
+        { displayName: 'Игрок', id: player.user.id, tiePriority: 1 },
+        { displayName: 'Оппонент', id: opponent.user.id, tiePriority: 2 },
+      ],
+    })
+    const secondApp = createApp({ env, prisma })
+    const submitCommand = (targetApp: typeof app) => targetApp.request(
+      `/api/tenders/${tenderId}/commands`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${player.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          actorId: player.user.id,
+          commandId: 'shared-budget-command',
+          slot: 3,
+          tenderId,
+          type: 'request-access-slot',
+        }),
+      },
+    )
+
+    for (let attempt = 1; attempt <= 60; attempt += 1) {
+      const response = await submitCommand(attempt % 2 === 0 ? app : secondApp)
+      expect(response.status).toBe(200)
+    }
+
+    const limited = await submitCommand(app)
+    expect(limited.status).toBe(429)
+    expect(limited.headers.get('retry-after')).toBeTruthy()
+    expect(await limited.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many Tender command requests',
+      },
+    })
+    expect(securityEvents).toContainEqual(expect.objectContaining({
+      code: 'RATE_LIMITED',
+      outcome: 'limited',
+      reason: 'tender_command_budget',
+      type: 'request_rejected',
+    }))
+
+    const opponentCommand = await app.request(`/api/tenders/${tenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${opponent.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: opponent.user.id,
+        commandId: 'independent-player-budget-command',
+        slot: 4,
+        tenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(opponentCommand.status).toBe(200)
+
+    const { tenderId: otherTenderId } = await createPersistentTenderModule(prisma).createTender({
+      players: [
+        { id: player.user.id, tiePriority: 1 },
+        { id: opponent.user.id, tiePriority: 2 },
+      ],
+    })
+    const otherTenderCommand = await app.request(`/api/tenders/${otherTenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${player.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: player.user.id,
+        commandId: 'independent-tender-budget-command',
+        slot: 3,
+        tenderId: otherTenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(otherTenderCommand.status).toBe(200)
+  })
+
+  test('shares a safety budget for authenticated mutations across API instances', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'shared-authenticated-mutation-budget',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsVersion: '1.0',
+      }),
+    })
+    const { accessToken } = await register.json()
+    const secondApp = createApp({ env, prisma })
+    const updateProfile = (targetApp: typeof app) => targetApp.request('/api/auth/profile', {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ displayName: 'Исследователь' }),
+    })
+
+    for (let attempt = 1; attempt <= 120; attempt += 1) {
+      const response = await updateProfile(attempt % 2 === 0 ? app : secondApp)
+      expect(response.status).toBe(204)
+    }
+
+    const limited = await updateProfile(app)
+    expect(limited.status).toBe(429)
+    expect(limited.headers.get('retry-after')).toBeTruthy()
+    expect(await limited.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many authenticated mutation requests',
+      },
+    })
+    expect(securityEvents).toContainEqual(expect.objectContaining({
+      code: 'RATE_LIMITED',
+      outcome: 'limited',
+      reason: 'authenticated_mutation_budget',
+      type: 'request_rejected',
+    }))
+
+    const limitedRoomMutation = await app.request('/api/rooms/join', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: 'ABCDEFGHJK' }),
+    })
+    expect(limitedRoomMutation.status).toBe(429)
+    expect(await limitedRoomMutation.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many authenticated mutation requests',
+      },
+    })
+
+    const player = await prisma.user.findUniqueOrThrow({
+      where: { login: 'shared-authenticated-mutation-budget' },
+    })
+    const opponent = await prisma.user.create({
+      data: { login: 'shared-mutation-opponent', passwordHash: 'hash' },
+    })
+    const { tenderId } = await createPersistentTenderModule(prisma).createTender({
+      players: [
+        { id: player.id, tiePriority: 1 },
+        { id: opponent.id, tiePriority: 2 },
+      ],
+    })
+    const limitedTenderMutation = await app.request(`/api/tenders/${tenderId}/commands`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: player.id,
+        commandId: 'general-budget-command',
+        slot: 3,
+        tenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(limitedTenderMutation.status).toBe(429)
+    expect(await limitedTenderMutation.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many authenticated mutation requests',
+      },
+    })
+
+    const limitedRealtimeMutation = await app.request('/api/realtime/tickets', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    expect(limitedRealtimeMutation.status).toBe(429)
+    expect(await limitedRealtimeMutation.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many authenticated mutation requests',
+      },
+    })
+
+    const me = await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    const currentRoom = await app.request('/api/rooms/current', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    const health = await app.request('/health/ready')
+    expect(me.status).toBe(200)
+    expect(currentRoom.status).toBe(200)
+    expect(health.status).toBe(200)
+  })
+
   test('creates a private room and lets another authenticated player join it', async () => {
     const register = await app.request('/api/auth/token/register', {
       method: 'POST',

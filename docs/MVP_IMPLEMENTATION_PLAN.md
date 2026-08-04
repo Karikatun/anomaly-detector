@@ -34,23 +34,19 @@ ADR в `docs/adr/`.
      серверные auth-, room- и Tender-бюджеты edge-защитой;
    - документировать логи, метрики, rollback, владельца реакции на false positive,
      обработку и сроки хранения bot-detection telemetry.
-3. [ ] Перенести room-join budget `20 попыток / 60 секунд` из памяти процесса в
-   атомарный PostgreSQL bucket по пользователю, сохранив `Retry-After`,
-   стабильный `429 RATE_LIMITED` и security event.
-4. [ ] Добавить атомарный PostgreSQL budget Tender-команд по
-   `userId + tenderId`. Начальная граница для нагрузочной проверки —
-   `60 запросов / 60 секунд` с допустимым коротким burst; окончательное значение
-   определить по нормальному пятираундовому матчу и нагрузочному тесту.
-5. [ ] Добавить страховочный budget authenticated mutations по пользователю.
-   Начальная граница — `120 запросов / 60 секунд`; route-specific budgets должны
-   срабатывать независимо и раньше общего.
-6. [ ] Провести abuse/load validation: несколько API-инстансов, общий NAT,
-   mobile reconnect, room-code enumeration, burst Tender-команд, невалидные
-   WebSocket tickets, registration quota races, bot challenge/block policy,
-   ложные срабатывания и очистка истёкших buckets.
-7. [ ] Провести Argon2id benchmark на целевом Yandex-контейнере и закрепить
+3. [-] Завершить production abuse/load validation. Локальная PostgreSQL
+   integration-проверка уже подтверждает атомарные общие budgets для room join
+   (`20 / 60 секунд` по пользователю), Tender-команд (`60 / 60 секунд` по
+   `userId + tenderId`), realtime tickets и authenticated mutations
+   (`120 / 60 секунд` по пользователю), включая несколько API-инстансов,
+   конкурентные запросы, независимые ключи, истечение окна, `Retry-After` и
+   security events. Осталось проверить общий NAT, mobile reconnect, полный матч,
+   room-code enumeration, command bursts, невалидные WebSocket tickets,
+   registration quota races, edge/bot policy, ложные срабатывания и очистку
+   истёкших buckets в production-like окружении.
+4. [ ] Провести Argon2id benchmark на целевом Yandex-контейнере и закрепить
    допустимый диапазон latency и памяти в тесте или runbook.
-8. [ ] До публичного теста выбрать и документировать восстановление
+5. [ ] До публичного теста выбрать и документировать восстановление
    password-аккаунта через подтверждённую внешнюю identity либо support-процесс.
 
 Обычные authenticated GET и polling не получают отдельные application-level
