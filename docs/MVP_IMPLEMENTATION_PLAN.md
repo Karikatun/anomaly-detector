@@ -6,7 +6,7 @@
 [RULES_REFERENCE.md](RULES_REFERENCE.md), [ARCHITECTURE.md](ARCHITECTURE.md) и
 ADR в `docs/adr/`.
 
-**Статусы:** `[-]` начато частично, `[ ]` не начато.
+**Статусы:** `[-]` начато частично, `[ ]` не начато, `[~]` отложено.
 
 ## 1. Защита публичного трафика и восстановление аккаунта
 
@@ -14,14 +14,21 @@ ADR в `docs/adr/`.
 автоматизированных атак и имеют распределённые ограничения, а пользователь
 заранее понимает доступный путь восстановления password-аккаунта.
 
-1. [ ] Подключить Yandex Smart Web Security Advanced Rate Limiter или
+**Решение от 4 августа 2026:** платные ALB/SWS отложены, пока проект не приносит
+выручку и работает примерно в бюджете `1 000 ₽/месяц`. Минимальный ALB увеличил
+бы текущие расходы почти в четыре раза ещё до оплаты обработки запросов SWS.
+До пересмотра бюджета production остаётся на single-VM ingress с уже включёнными
+PostgreSQL application budgets. Вернуться к edge-защите нужно при росте
+публичного трафика, подтверждённых атаках или появлении отдельного бюджета.
+
+1. [~] Подключить Yandex Smart Web Security Advanced Rate Limiter или
    эквивалентный edge/WAF limiter перед API и WebSocket ingress:
    - разделить бюджеты register, login, refresh/logout и OAuth;
    - ограничить WebSocket handshakes по доверенному адресу клиента, включая
      запросы с невалидным или отсутствующим билетом;
    - выделить health checks в отдельное правило или доверенный источник;
    - проверить корректное получение trusted client IP через балансировщик.
-2. [ ] Подключить защиту от вредоносного автоматизированного трафика на базе
+2. [~] Подключить защиту от вредоносного автоматизированного трафика на базе
    Yandex Smart Web Security bot management и Smart Protection
    ([#25](https://github.com/Karikatun/anomaly-detector/issues/25)):
    - сначала собрать baseline в observe-only режиме, затем включать challenge и
@@ -50,14 +57,13 @@ ADR в `docs/adr/`.
    password-аккаунта через подтверждённую внешнюю identity либо support-процесс.
 
 Обычные authenticated GET и polling не получают отдельные application-level
-лимиты без доказанной дорогой выборки или злоупотребления; их закрывает общий
-edge budget.
+лимиты без доказанной дорогой выборки или злоупотребления. Общий edge budget
+для них появится только после пересмотра решения по ALB/SWS.
 
-**Gate:** распределённый трафик нельзя обойти переключением между
-API-инстансами; подозрительный браузерный трафик получает проверку, API-трафик —
-подходящий машинному клиенту отказ, а автоматизированные атаки блокируются до
-дорогой работы. Обычный вход, shared NAT, reconnect и полный матч не упираются в
-лимиты и не получают ложную блокировку.
+**Gate текущего бюджетного этапа:** распределённые application budgets нельзя
+обойти переключением между API-инстансами, а обычный вход, reconnect и полный
+матч не упираются в них. Edge challenge и блокировка до дорогой работы остаются
+осознанно отложенным риском до роста трафика, атаки или отдельного бюджета.
 
 ## 2. Игровой интерфейс
 
@@ -113,12 +119,14 @@ mobile-браузерах, а завершённый аудит объясняе
 **Результат:** production-like Yandex Cloud окружение проходит миграции,
 восстановление, мониторинг и безопасный откат.
 
-1. [-] Перейти от single-VM baseline к целевой Yandex Cloud topology
+1. [~] Перейти от single-VM baseline к целевой Yandex Cloud topology
    ([#21](https://github.com/Karikatun/anomaly-detector/issues/21)):
    - создать и проверить Compute instance group и Application Load Balancer;
    - подключить Managed PostgreSQL, Lockbox, logging и monitoring;
    - настроить autohealing API и worker;
    - использовать Object Storage только при подтверждённой необходимости.
+   Переход, включая ALB/SWS, отложен по решению о бюджете; текущая single-VM
+   схема, immutable releases, backups и health checks сохраняются.
 2. [-] Завершить legal readiness в российском контуре
    ([#2](https://github.com/Karikatun/anomaly-detector/issues/2)):
    - провести юридическую проверку опубликованных текстов;
@@ -179,16 +187,16 @@ access-control и полный Tender flow; проверен безопасны�
 - [#10](https://github.com/Karikatun/anomaly-detector/issues/10) — guided solo
   tutorial;
 - [#19](https://github.com/Karikatun/anomaly-detector/issues/19) — distributed
-  application и edge abuse limits;
+  application limits работают, платная edge-часть отложена;
 - [#20](https://github.com/Karikatun/anomaly-detector/issues/20) — Argon2id
   benchmark и account recovery;
 - [#21](https://github.com/Karikatun/anomaly-detector/issues/21) — Yandex
-  production topology, monitoring и recovery;
+  production topology, monitoring и recovery; ALB-переход отложен по бюджету;
 - [#22](https://github.com/Karikatun/anomaly-detector/issues/22) — завершение
   MVP i18n;
 - [#23](https://github.com/Karikatun/anomaly-detector/issues/23) — browser,
   device и visual release matrix;
 - [#24](https://github.com/Karikatun/anomaly-detector/issues/24) — public MVP
   test и реальные матчи 2–4 игроков;
-- [#25](https://github.com/Karikatun/anomaly-detector/issues/25) — защита от
-  вредоносного автоматизированного трафика и безопасный bot challenge.
+- [#25](https://github.com/Karikatun/anomaly-detector/issues/25) — платная
+  edge-защита от автоматизированного трафика отложена до пересмотра бюджета.
