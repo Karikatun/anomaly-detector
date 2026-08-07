@@ -236,6 +236,11 @@
   border-bottom: 0;
 }
 
+.highlightedResultRow {
+  background: rgba(79, 164, 226, .18);
+  box-shadow: inset 3px 0 0 rgba(120, 201, 255, .9);
+}
+
 .resultTable strong {
   color: #b9e2ff;
   font-weight: 500;

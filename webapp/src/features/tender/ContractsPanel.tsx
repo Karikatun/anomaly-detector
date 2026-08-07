@@ -130,6 +130,9 @@ export function ContractsPanel({
               const reservedBySelf = contract.reservedByPlayerId === playerId
               const reservedByName = players.find((candidate) => candidate.playerId === contract.reservedByPlayerId)?.displayName
               const target = contract.targetSignal
+              const contractLabel = target
+                ? `${t(signalLabelKeys[target])} · ${t(`tender.contracts.role.${contract.targetRole ?? 'source'}`)}`
+                : t(`tender.contracts.kind.${kind}`)
               const planning = contract.planning
               const suitableEvidenceSelections = planning?.suitableEvidenceSelections
                 ?? ownJournal
@@ -243,7 +246,7 @@ export function ContractsPanel({
                             {translate('tender.contractsPanel.copy.016')}
                           </Typography>
                           <NativeSelect
-                            aria-label={translate('tender.contractsPanel.copy.017')}
+                            aria-label={translate('tender.contractsPanel.copy.017', { value1: contractLabel })}
                             value={bid.researchCertificationSignal ?? ''}
                             onChange={(event) => setBids((previous) => ({
                               ...previous,
@@ -268,7 +271,7 @@ export function ContractsPanel({
                             {translate('tender.contractsPanel.copy.019')}
                           </Typography>
                           <NativeSelect
-                            aria-label={translate('tender.contractsPanel.copy.020')}
+                            aria-label={translate('tender.contractsPanel.copy.020', { value1: contractLabel })}
                             value={bid.evidenceTestIds[0] ?? ''}
                             onChange={(event) => {
                               const testId = event.target.value
@@ -303,7 +306,7 @@ export function ContractsPanel({
                                 {translate('tender.contractsPanel.copy.022')}
                               </Typography>
                               <NativeSelect
-                                aria-label={translate('tender.contractsPanel.copy.023')}
+                                aria-label={translate('tender.contractsPanel.copy.023', { value1: contractLabel })}
                                 value={bid.evidenceTestIds[1] ?? ''}
                                 disabled={!requiresSecondaryEvidence}
                                 onChange={(event) => {
@@ -334,8 +337,8 @@ export function ContractsPanel({
                         type="button"
                         size="sm"
                         aria-label={separateReservation && !reservedBySelf
-                          ? t('tender.contracts.reserveAria', { id: contract.contractId })
-                          : translate('tender.contractsPanel.copy.025', { value1: contract.contractId })}
+                          ? t('tender.contracts.reserveAria', { id: contractLabel })
+                          : translate('tender.contractsPanel.copy.025', { value1: contractLabel })}
                         disabled={disabled || !bidIsComplete}
                         onClick={() => void handleConfirmContract(contract.contractId, bid, reservedBySelf)}
                       >

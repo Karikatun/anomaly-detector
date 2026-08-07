@@ -19,6 +19,7 @@ import type { WorkingModelSaveStatus } from '../working-model-draft'
 import styles from './WorkingModelWorkspace.module.css'
 
 type Props = {
+  actionError?: string | null
   disabled?: boolean
   inlineOnDesktop?: boolean
   knownSignals: SignalId[]
@@ -49,6 +50,7 @@ function WorkspaceModelPanel({
 }
 
 export function WorkingModelWorkspace({
+  actionError,
   disabled,
   inlineOnDesktop = false,
   knownSignals,
@@ -100,6 +102,16 @@ export function WorkingModelWorkspace({
             </span>
           </DialogHeader>
           <div className={styles.content}>
+            {actionError && (
+              <Typography
+                role="alert"
+                variant="bodySm"
+                tone="destructive"
+                className={styles.actionError}
+              >
+                {actionError}
+              </Typography>
+            )}
             <WorkspaceModelPanel
               disabled={disabled}
               knownSignals={knownSignals}

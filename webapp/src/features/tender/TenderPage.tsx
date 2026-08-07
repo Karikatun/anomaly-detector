@@ -126,6 +126,7 @@ export function PhasePanel({
   onSaveWorkingModel: (workingModel: TenderView['privateWorkingModel']) => Promise<void>
   activePlayerId?: string
   workingModelDialog: {
+    actionError?: string | null
     onOpenChange: (open: boolean) => void
     onSaveStatusChange: (status: WorkingModelSaveStatus) => void
     open: boolean

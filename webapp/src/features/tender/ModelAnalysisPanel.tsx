@@ -54,6 +54,7 @@ type ModelAnalysisPanelProps = {
   disabled?: boolean
   workingModelDisabled?: boolean
   workingModelDialog?: {
+    actionError?: string | null
     onOpenChange: (open: boolean) => void
     onSaveStatusChange: (status: WorkingModelSaveStatus) => void
     open: boolean

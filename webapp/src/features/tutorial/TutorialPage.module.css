@@ -16,6 +16,10 @@
 .stateContent, .completeContent { display: grid; gap: 1rem; }
 .completeActions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .saveError { display: grid; gap: .75rem; padding: .9rem; border: 1px solid rgba(248, 113, 113, .5); border-radius: .6rem; }
+
+:global(html[data-tutorial-autoscrolling]) :global(.react-joyride__spotlight) {
+  visibility: hidden;
+}
 .coachCard {
   width: min(24rem, calc(100vw - 1.5rem));
   max-height: calc(100dvh - 1rem);

@@ -12,11 +12,14 @@ const tasks = {
   roundOneRecon: 'Получим ещё один Образец. Выберите «Неизвестный Сигнал» и нажмите «Исследовать».',
   roundOneLabMode: 'Выберите, как потратить 2 Мощности. «Глубокое» исследование даст один опыт и личную подсказку о полярностях. «Широкое» даст два опыта, но без такой подсказки. Сейчас выберите «Глубокое».',
   roundOneLabPair: 'Теперь зададим направление опыта. Сначала выберите Aster — он будет источником. Затем выберите Boreal — он будет приёмником. Нажмите «Провести опыт».',
-  roundOneThesis: 'Пора проверить догадку. Выберите Aster и нажмите «Выдвинуть тезис». Игра отдельно проверит тип и полярность. Если ошибётесь, в обучении можно попробовать ещё раз без штрафа.',
+  researchResultsMobile: 'Опыт завершён. Его результат появился в разделе «Данные исследований» под игровым полем. Откройте этот раздел.',
+  roundOneModel: 'Запишем первую догадку. Откройте Рабочую модель и укажите для Aster тип «Инерционное» и полярность «Положительная». Изменения сохраняются автоматически — после выбора закройте окно.',
+  roundOneThesis: 'Пора проверить догадку. Выберите Сигнал Aster, тип «Инерционное» и полярность «Положительная», затем нажмите «Выдвинуть тезис». Игра отдельно проверит тип и полярность. Если ошибётесь, в обучении можно попробовать ещё раз без штрафа.',
   thesisResult: 'Тезис проверен. Откройте «Данные исследований» и посмотрите, что получилось.',
   contractsReview: 'Прежде чем распределять Мощность, заглянем в Контракты. Откройте их и проверьте, какие задания уже можно выполнить.',
-  roundTwoThesis: 'Проверим и эту догадку. Выберите Boreal, тип «Электромагнитное» и положительную полярность, затем нажмите «Выдвинуть тезис».',
-  contractBid: 'Доказательство выбрано. Проверьте его ещё раз и нажмите кнопку отправки заявки.',
+  roundTwoModel: 'Теперь попробуйте сделать вывод сами. Опыт Aster → Boreal дал «Отражение»: тип Boreal идёт сразу после типа Aster, а их полярности одинаковы. Откройте Рабочую модель, заполните Boreal и закройте окно. Изменения сохраняются автоматически.',
+  roundTwoThesis: 'Верно: Boreal — «Электромагнитное» с положительной полярностью. Теперь выберите Boreal, эти же тип и полярность, затем нажмите «Выдвинуть тезис».',
+  contractBid: 'Доказательство выбрано. Проверьте его ещё раз и нажмите «Подтвердить контракт».',
   finalModel: 'Подтверждённые свойства Aster и Boreal уже перенесены в Финальную модель. В обучении остальные Сигналы можно оставить пустыми. Нажмите «Отправить финальную модель».',
   helpDesktop: 'Теперь разберёмся, что означает «Отражение». Откройте «Трактовку анализов» в верхней части экрана.',
 } as const
@@ -241,10 +244,17 @@ async function expectTargetInMobileInteractiveArea(
     const safeTop = placement === 'below-coach'
       ? coachBox.y + coachBox.height + 12
       : Math.max(12, headerBox.y + headerBox.height + 20)
-    return Math.abs(box.y - safeTop)
+    const safeBottom = placement === 'below-coach'
+      ? page.viewportSize()!.height - 12
+      : coachBox.y - 12
+    return Math.max(
+      0,
+      box.y + box.height - safeBottom,
+      safeTop - box.y,
+    )
   }, {
-    message: 'tutorial target must align with the top of the available mobile area',
-  }).toBeLessThanOrEqual(24)
+    message: 'tutorial target must fit the available mobile area without forced top alignment',
+  }).toBeLessThanOrEqual(1)
 }
 
 async function expectRequiredActionAvailable(
@@ -376,6 +386,92 @@ async function expectTutorialFrameFullyVisible(
   expect(stroke, 'tutorial spotlight must draw one consistent visible frame').toBe('#38bdf8')
   expect(legacyFrame.outlineStyle, 'tutorial target must not keep a second CSS outline').toBe('none')
   expect(legacyFrame.boxShadow, 'tutorial target must not keep the old cyan CSS glow').not.toContain('56, 189, 248')
+}
+
+async function expectSpotlightMatchesTarget(
+  page: Parameters<typeof registerBrowserUser>[0],
+  selector: string,
+) {
+  await expect.poll(async () => page.evaluate((targetSelector) => {
+    const target = document.querySelector<HTMLElement>(targetSelector)
+    const spotlightPath = Array.from(
+      document.querySelectorAll<SVGGeometryElement>('[data-testid="spotlight"] path'),
+    ).find((path) => path.getAttribute('stroke') === '#38bdf8')
+    if (!target || !spotlightPath) return Number.POSITIVE_INFINITY
+
+    const targetRect = target.getBoundingClientRect()
+    const spotlightRect = spotlightPath.getBoundingClientRect()
+    const expectedPadding = 8
+    return Math.max(
+      Math.abs(spotlightRect.left - (targetRect.left - expectedPadding)),
+      Math.abs(spotlightRect.top - (targetRect.top - expectedPadding)),
+      Math.abs(spotlightRect.right - (targetRect.right + expectedPadding)),
+      Math.abs(spotlightRect.bottom - (targetRect.bottom + expectedPadding)),
+    )
+  }, selector), {
+    message: `tutorial spotlight must frame ${selector}, not a neighboring control`,
+  }).toBeLessThanOrEqual(1)
+}
+
+async function captureVisibleSpotlightMismatchDuringStepChange(
+  page: Parameters<typeof registerBrowserUser>[0],
+  task: string,
+  selector: string,
+  action: () => Promise<void>,
+) {
+  const [transition] = await Promise.all([
+    page.evaluate(({ selector: targetSelector, task: expectedTask }) => new Promise<{
+      hiddenWhileMoving: number
+      mismatches: number[]
+    }>((resolve) => {
+      const mismatches: number[] = []
+      let hiddenWhileMoving = 0
+      const deadline = performance.now() + 2_000
+      let startedAt: number | null = null
+      let previousScrollY = window.scrollY
+
+      const sample = () => {
+        const coach = document.querySelector<HTMLElement>('[data-testid="floater"]')
+        if (startedAt === null && coach?.textContent?.includes(expectedTask)) startedAt = performance.now()
+        if (startedAt !== null) {
+          const target = document.querySelector<HTMLElement>(targetSelector)
+          const spotlightPath = Array.from(
+            document.querySelectorAll<SVGGeometryElement>('[data-testid="spotlight"] path'),
+          ).find((path) => path.getAttribute('stroke') === '#38bdf8')
+          if (target && spotlightPath) {
+            const targetRect = target.getBoundingClientRect()
+            const spotlightRect = spotlightPath.getBoundingClientRect()
+            const spotlightStyle = getComputedStyle(spotlightPath)
+            const opacity = Number(spotlightStyle.opacity)
+            const visible = spotlightStyle.visibility !== 'hidden' && opacity > .05
+            const mismatch = Math.max(
+              Math.abs(spotlightRect.left - (targetRect.left - 8)),
+              Math.abs(spotlightRect.top - (targetRect.top - 8)),
+              Math.abs(spotlightRect.right - (targetRect.right + 8)),
+              Math.abs(spotlightRect.bottom - (targetRect.bottom + 8)),
+            )
+            if (visible && mismatch > 1) {
+              mismatches.push(mismatch)
+            }
+            if (!visible && Math.abs(window.scrollY - previousScrollY) > .5) {
+              hiddenWhileMoving += 1
+            }
+          }
+          previousScrollY = window.scrollY
+        }
+
+        if ((startedAt === null && performance.now() < deadline)
+          || (startedAt !== null && performance.now() - startedAt < 1_000)) {
+          window.requestAnimationFrame(sample)
+        } else {
+          resolve({ hiddenWhileMoving, mismatches })
+        }
+      }
+      window.requestAnimationFrame(sample)
+    }), { selector, task }),
+    action(),
+  ])
+  return transition
 }
 
 async function expectDesktopTargetBelowStickyHeader(
@@ -575,7 +671,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expectReadingDialogAvailable(page, contractsDialog)
   await expect(contractsDialog.getByText('Готов к подаче', { exact: true })).toBeVisible()
   await expect(contractsDialog.getByText('Нужно подготовить', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Закрыть' }).click()
+  await page.getByRole('button', { name: 'Закрыть контракты' }).click()
   await allocatePower(page, {
     'Разведка': 1,
     'Лаборатория': 1,
@@ -596,12 +692,12 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expectCoachWithinViewport(page)
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await page.locator('[data-contract-id="tutorial-light-contract"]')
-    .getByLabel('Подходящее исследование')
+    .getByLabel('Подходящее исследование для контракта Boreal · источник')
     .selectOption('tutorial-test-2')
-  await page.getByRole('button', { name: 'Зарезервировать контракт tutorial-light-contract' }).click()
+  await page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник' }).click()
   await expect(currentTask(page, tasks.contractBid)).toBeVisible()
   await expectCoachWithinViewport(page)
-  await page.getByRole('button', { name: 'Подтвердить контракт tutorial-light-contract' }).click()
+  await page.getByRole('button', { name: 'Подтвердить контракт: Boreal · источник' }).click()
 
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expect(page.getByLabel('Заполнено параметров: 4')).toBeVisible()
@@ -630,7 +726,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
 test('completes the full tutorial on mobile with each action clear of the coach', async ({ page }) => {
   test.setTimeout(120_000)
   page.setDefaultTimeout(15_000)
-  await page.setViewportSize({ width: 390, height: 844 })
+  await page.setViewportSize({ width: 390, height: 840 })
   await registerBrowserUser(page, 'Мобильный ученик E2E', 'tutorial-mobile-interpretation')
 
   await startTutorial(page)
@@ -655,10 +751,24 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-lab-modes]')
   await page.getByRole('button', { name: 'Глубокое' }).click()
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-lab-pair]')
-  await runLaboratoryTest(page, 'Aster', 'Boreal')
+  const spotlightTransition = await captureVisibleSpotlightMismatchDuringStepChange(
+    page,
+    tasks.researchResultsMobile,
+    '[data-testid="tutorial-research-trigger"]',
+    () => runLaboratoryTest(page, 'Aster', 'Boreal'),
+  )
+  expect(
+    spotlightTransition.mismatches,
+    'the tutorial must hide a stale spotlight until mobile autoscroll geometry catches up',
+  ).toEqual([])
+  expect(
+    spotlightTransition.hiddenWhileMoving,
+    'the tutorial must keep the spotlight frame hidden while mobile autoscroll is moving it',
+  ).toBeGreaterThan(0)
 
   await expectTargetInMobileInteractiveArea(page, '[data-testid="tutorial-research-trigger"]')
   await waitForScrollToSettle(page)
+  await expectSpotlightMatchesTarget(page, '[data-testid="tutorial-research-trigger"]')
   const scrollBeforeResearchDialog = await page.evaluate(() => window.scrollY)
   await page.getByTestId('tutorial-research-trigger').click()
   const mobileResearchDialog = page.getByRole('dialog', { name: 'Данные исследований' })
@@ -678,6 +788,17 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await expectReadingDialogAvailable(page, mobileInterpretationDialog)
   const interpretationTable = mobileInterpretationDialog.getByRole('table')
   await expect(interpretationTable.getByRole('columnheader', { name: 'Публичный результат' })).toBeVisible()
+  const reflectionRow = interpretationTable.getByRole('row').filter({ hasText: 'Отражение' })
+  await expect(reflectionRow).toHaveAttribute('aria-current', 'true')
+  await expect.poll(async () => reflectionRow.evaluate((row) => {
+    const scrollArea = row.closest('[data-interpretation-scroll-area]')
+    if (!scrollArea) return false
+    const rowRect = row.getBoundingClientRect()
+    const scrollRect = scrollArea.getBoundingClientRect()
+    return rowRect.top >= scrollRect.top && rowRect.bottom <= scrollRect.bottom
+  }), {
+    message: 'the tutorial must reveal the highlighted Reflection row without a manual inner swipe',
+  }).toBe(true)
   await expect.poll(async () => interpretationTable.evaluate((table) => {
     const scrollArea = table.parentElement
     return scrollArea ? scrollArea.scrollWidth - scrollArea.clientWidth : Number.POSITIVE_INFINITY
@@ -693,9 +814,11 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     '[data-tutorial-working-model-trigger]',
     'below-coach',
   )
+  await expect(currentTask(page, tasks.roundOneModel)).toBeVisible()
   await saveHypothesis(page, 'Aster', 'Инерционное')
 
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-thesis]')
+  await expect(currentTask(page, tasks.roundOneThesis)).toBeVisible()
   await submitThesis(page, 'aster', 'inertial')
   await expectTargetInMobileInteractiveArea(page, '[data-testid="tutorial-research-trigger"]')
   await page.getByTestId('tutorial-research-trigger').click()
@@ -711,7 +834,7 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   const mobileContractsDialog = page.getByRole('dialog', { name: 'Контракты этого раунда · 2' })
   await expectReadingDialogAvailable(page, mobileContractsDialog)
   await expect(mobileContractsDialog.getByText('Готов к подаче', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Закрыть' }).click()
+  await page.getByRole('button', { name: 'Закрыть контракты' }).click()
 
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-power-options]')
   await allocatePower(page, {
@@ -730,23 +853,54 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     '[data-tutorial-working-model-trigger]',
     'below-coach',
   )
-  await saveHypothesis(page, 'Boreal', 'Электромагнитное')
+  await expect(currentTask(page, tasks.roundTwoModel)).toBeVisible()
+  await page.getByRole('button', { name: 'Рабочая модель' }).click()
+  await page.getByRole('button', { name: 'Boreal: гипотеза, тип поля Фазовое' }).click()
+  await page.getByRole('button', { name: 'Boreal: гипотеза, полярность Положительная' }).click()
+  const modelCheckFeedback = page.locator('[data-working-model-dialog]').getByRole('alert')
+  await expect(modelCheckFeedback).toHaveText(
+    'Пока не сходится. «Отражение» означает следующий тип в цикле, а одинаковая полярность сохраняет знак Aster. Проверьте Boreal ещё раз.',
+  )
+  await expect(modelCheckFeedback).toBeVisible()
+  await expect.poll(async () => modelCheckFeedback.evaluate((feedback) => {
+    const rect = feedback.getBoundingClientRect()
+    return rect.top >= 0 && rect.bottom <= window.innerHeight
+  }), {
+    message: 'the independent-model feedback must be visible without an extra mobile swipe',
+  }).toBe(true)
+  await expect(page.locator('[data-working-model-dialog]')).toBeVisible()
+  await page.getByRole('button', { name: 'Boreal: гипотеза, тип поля Электромагнитное' }).click()
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-thesis]')
+  await expect(currentTask(page, tasks.roundTwoThesis)).toBeVisible()
   await submitThesis(page, 'boreal', 'electromagnetic')
 
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expectTargetInMobileInteractiveArea(page, '[data-contract-id="tutorial-light-contract"]')
   await page.locator('[data-contract-id="tutorial-light-contract"]')
-    .getByLabel('Подходящее исследование')
+    .getByLabel('Подходящее исследование для контракта Boreal · источник')
     .selectOption('tutorial-test-2')
-  await page.getByRole('button', { name: 'Зарезервировать контракт tutorial-light-contract' }).click()
+  await page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник' }).click()
   await expectTargetInMobileInteractiveArea(page, '[data-contract-id="tutorial-light-contract"]')
-  await page.getByRole('button', { name: 'Подтвердить контракт tutorial-light-contract' }).click()
+  await page.getByRole('button', { name: 'Подтвердить контракт: Boreal · источник' }).click()
 
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expect(page.getByLabel('Заполнено параметров: 4')).toBeVisible()
   await expectRequiredActionAvailable(page, page.getByRole('button', { name: 'Отправить финальную модель' }))
+  let completionAttempts = 0
+  await page.route('**/api/profile/tutorial/completion', async (route) => {
+    completionAttempts += 1
+    await route.fulfill({
+      contentType: 'application/json',
+      status: 503,
+      body: JSON.stringify({ error: { code: 'UNAVAILABLE', message: 'Temporary failure' } }),
+    })
+  })
   await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
+  await expect(page.getByText('Обучение завершено', { exact: true })).toBeHidden()
+  await expect(page.getByRole('alert')).toContainText('отметку об обучении пока не удалось сохранить')
+  expect(completionAttempts).toBe(1)
+  await page.unroute('**/api/profile/tutorial/completion')
+  await page.getByRole('button', { name: 'Сохранить отметку' }).click()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
 })
 

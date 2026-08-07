@@ -8,7 +8,7 @@ import {
   TestTube01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -316,8 +316,34 @@ function RuleSectionContent({
   return <LaboratoryInterpretation ruleset={ruleset} />
 }
 
-export function LaboratoryInterpretation({ ruleset = 'tender-v2' }: { ruleset?: TenderRuleset }) {
+export function LaboratoryInterpretation({
+  highlightResult,
+  ruleset = 'tender-v2',
+}: {
+  highlightResult?: 'reflection'
+  ruleset?: TenderRuleset
+}) {
   const { t } = useI18n()
+  const highlightedRowRef = useRef<HTMLTableRowElement>(null)
+
+  useEffect(() => {
+    if (!highlightResult) return
+    const frame = window.requestAnimationFrame(() => {
+      const row = highlightedRowRef.current
+      const scrollArea = row?.closest<HTMLElement>('[data-interpretation-scroll-area]')
+      if (!row || !scrollArea) return
+
+      const rowRect = row.getBoundingClientRect()
+      const scrollRect = scrollArea.getBoundingClientRect()
+      scrollArea.scrollTo({
+        top: scrollArea.scrollTop + rowRect.top - scrollRect.top - scrollArea.clientHeight / 3,
+        behavior: 'instant',
+      })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [highlightResult])
+
   return (
     <div className={styles.laboratory}>
       <Typography variant="bodySm">{t('rules.laboratory.direction')}</Typography>
@@ -354,19 +380,28 @@ export function LaboratoryInterpretation({ ruleset = 'tender-v2' }: { ruleset?: 
             </tr>
           </thead>
           <tbody>
-            {laboratoryRows.map(([relationKey, polarityKey, resultKey]) => (
-              <tr key={`${relationKey}-${polarityKey}`}>
-                <Typography asChild variant="bodyXs">
-                  <td>{t(relationKey)}</td>
-                </Typography>
-                <Typography asChild variant="bodyXs">
-                  <td>{t(polarityKey)}</td>
-                </Typography>
-                <Typography asChild variant="bodySmMedium">
-                  <td>{t(resultKey)}</td>
-                </Typography>
-              </tr>
-            ))}
+            {laboratoryRows.map(([relationKey, polarityKey, resultKey]) => {
+              const isHighlighted = highlightResult === 'reflection'
+                && resultKey === 'rules.laboratory.result.reflection'
+              return (
+                <tr
+                  key={`${relationKey}-${polarityKey}`}
+                  ref={isHighlighted ? highlightedRowRef : undefined}
+                  aria-current={isHighlighted ? 'true' : undefined}
+                  className={isHighlighted ? styles.highlightedResultRow : undefined}
+                >
+                  <Typography asChild variant="bodyXs">
+                    <td>{t(relationKey)}</td>
+                  </Typography>
+                  <Typography asChild variant="bodyXs">
+                    <td>{t(polarityKey)}</td>
+                  </Typography>
+                  <Typography asChild variant="bodySmMedium">
+                    <td>{t(resultKey)}</td>
+                  </Typography>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
