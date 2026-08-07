@@ -24,6 +24,8 @@ type LaboratoryPanelProps = {
   privateMeasurements: TenderView['privateMeasurements']
   powerAllocation: number
   ruleset?: TenderView['ruleset']
+  initialMode?: 'broad' | 'deep'
+  onModeSelect?: (mode: 'broad' | 'deep') => void
   disabled?: boolean
   error?: string | null
   onConfirm: (input: LaboratoryAction) => Promise<void>
@@ -40,6 +42,8 @@ export function LaboratoryPanel({
   privateMeasurements,
   powerAllocation,
   ruleset,
+  initialMode,
+  onModeSelect,
   disabled,
   error,
   onConfirm,
@@ -47,7 +51,7 @@ export function LaboratoryPanel({
   const [selectedSamples, setSelectedSamples] = useState<SignalId[]>([])
   const policy = tenderRulesetPolicy(ruleset)
   const [mode, setMode] = useState<'broad' | 'deep' | 'impulse' | null>(
-    powerAllocation === 1 ? 'impulse' : policy.versionedLaboratory ? null : 'deep',
+    powerAllocation === 1 ? 'impulse' : policy.versionedLaboratory ? initialMode ?? null : 'deep',
   )
   const [firstBroadPair, setFirstBroadPair] = useState<{
     receiverSignal: SignalId
@@ -102,6 +106,7 @@ export function LaboratoryPanel({
       setFirstBroadPair(null)
     }
     setMode(nextMode)
+    onModeSelect?.(nextMode)
   }
 
   const handleSampleClick = (signal: SignalId) => {
@@ -134,7 +139,12 @@ export function LaboratoryPanel({
                 <Typography as="strong" variant="caption">{t('tender.lab.mode.step')}</Typography>
                 <Typography as="span" variant="bodySm">{t('tender.lab.mode.description')}</Typography>
               </div>
-              <div className={styles.laboratoryModeSwitch} role="group" aria-label={t('tender.lab.mode.aria')}>
+              <div
+                className={styles.laboratoryModeSwitch}
+                role="group"
+                aria-label={t('tender.lab.mode.aria')}
+                data-tutorial-lab-modes=""
+              >
                 <button
                   type="button"
                   aria-pressed={mode === 'deep'}
@@ -179,7 +189,7 @@ export function LaboratoryPanel({
             </div>
           )}
 
-          <div className={styles.choiceMatrix}>
+          <div className={styles.choiceMatrix} data-tutorial-lab-pair="">
             {mySamples.map((signal) => {
               const role = source === signal ? 'source' : receiver === signal ? 'receiver' : undefined
               const ariaLabel = role === 'source'

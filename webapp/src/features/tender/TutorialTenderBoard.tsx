@@ -24,6 +24,7 @@ import { TenderPhaseLayout } from './components/TenderPhaseLayout'
 import { TenderHeaderFrame } from './components/TenderHeaderFrame'
 import { TenderPlayers } from './components/TenderOverview'
 import { TenderResearchDialog } from './components/TenderResearchDialog'
+import { ContractPlanningPanel } from './components/ContractPlanningPanel'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import styles from './TenderPage.module.css'
 import tutorialStyles from './TutorialTenderBoard.module.css'
@@ -45,24 +46,36 @@ export function TutorialTenderBoard({
   commandError,
   highlight,
   interpretationRequired,
+  laboratoryInitialMode,
   onCommand,
+  onContractsClosed,
+  onContractsOpened,
   onDirectInterpretationOpened,
   onExitRequest,
   onHelpMenuOpened,
   onInterpretationClosed,
   onInterpretationOpened,
+  onLaboratoryModeSelected,
+  onResearchClosed,
+  onResearchOpened,
   onSaveWorkingModel,
   view,
 }: {
   commandError: string | null
-  highlight: 'help' | 'interpretation' | 'primary' | 'working-model'
+  highlight: 'contracts' | 'header' | 'help' | 'interpretation' | 'none' | 'primary' | 'research' | 'sidebar' | 'working-model'
   interpretationRequired: boolean
+  laboratoryInitialMode?: 'broad' | 'deep'
   onCommand: (command: TenderCommandInput) => Promise<void>
+  onContractsClosed: () => void
+  onContractsOpened: () => void
   onDirectInterpretationOpened: () => void
   onExitRequest: () => void
   onHelpMenuOpened: () => void
   onInterpretationClosed: () => void
   onInterpretationOpened: () => void
+  onLaboratoryModeSelected: (mode: 'broad' | 'deep') => void
+  onResearchClosed: () => void
+  onResearchOpened: () => void
   onSaveWorkingModel: (workingModel: WorkingModel) => Promise<boolean>
   view: TenderView
 }) {
@@ -70,6 +83,7 @@ export function TutorialTenderBoard({
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [interpretationOpen, setInterpretationOpen] = useState(false)
   const [researchOpen, setResearchOpen] = useState(false)
+  const [contractsOpen, setContractsOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [workingModelOpen, setWorkingModelOpen] = useState(false)
 
@@ -94,6 +108,18 @@ export function TutorialTenderBoard({
     else onInterpretationClosed()
   }
 
+  const openResearch = (open: boolean) => {
+    setResearchOpen(open)
+    if (open) onResearchOpened()
+    else onResearchClosed()
+  }
+
+  const openContracts = (open: boolean) => {
+    setContractsOpen(open)
+    if (open) onContractsOpened()
+    else onContractsClosed()
+  }
+
   const saveWorkingModel = async (workingModel: WorkingModel) => {
     const progressed = await onSaveWorkingModel(workingModel)
     if (progressed) setWorkingModelOpen(false)
@@ -110,6 +136,7 @@ export function TutorialTenderBoard({
     <section
       className={`${styles.page} ${tutorialStyles.board} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}
       aria-label={t('tutorial.title')}
+      data-tutorial-board
       data-tutorial-highlight={highlight}
       data-tutorial-phase={view.phase}
       data-tutorial-round={view.round}
@@ -168,7 +195,6 @@ export function TutorialTenderBoard({
           <Dialog open={helpMenuOpen} onOpenChange={openHelp}>
             <DialogTrigger asChild>
               <Button
-                data-tutorial-active={highlight === 'help' || undefined}
                 data-tutorial-help=""
                 type="button"
                 variant="outline"
@@ -192,7 +218,6 @@ export function TutorialTenderBoard({
                   {t('tender.tenderPage.copy.029')}
                 </Button>
                 <Button
-                  data-tutorial-active={highlight === 'interpretation' || undefined}
                   data-tutorial-interpretation=""
                   type="button"
                   variant="outline"
@@ -213,7 +238,6 @@ export function TutorialTenderBoard({
           />
           <div
             className={tutorialStyles.directInterpretation}
-            data-tutorial-active={highlight === 'interpretation' || undefined}
             data-tutorial-interpretation-direct=""
           >
             <LaboratoryInterpretationDialog
@@ -265,6 +289,8 @@ export function TutorialTenderBoard({
                   openDisabled: interpretationRequired,
                 }}
                 training={{
+                  laboratoryInitialMode,
+                  onLaboratoryModeSelect: onLaboratoryModeSelected,
                   separateContractReservation: true,
                   untimed: true,
                 }}
@@ -272,14 +298,25 @@ export function TutorialTenderBoard({
             </div>
           )}
           sidebar={(
-            <>
+            <div
+              className={tutorialStyles.sidebar}
+              data-tutorial-sidebar=""
+            >
               <TenderPlayers
                 activePlayerId={view.activePlayerId}
                 currentUserId={view.players[0]?.playerId}
                 phase={view.phase}
                 players={view.players}
               />
-              <TenderResearchDialog open={researchOpen} onOpenChange={setResearchOpen} view={view} />
+              <div>
+                <TenderResearchDialog
+                  contentTestId="tutorial-research-dialog"
+                  open={researchOpen}
+                  onOpenChange={openResearch}
+                  triggerTestId="tutorial-research-trigger"
+                  view={view}
+                />
+              </div>
               {view.phase !== 'model-analysis' && (
                 <div
                   data-tutorial-working-model=""
@@ -294,7 +331,18 @@ export function TutorialTenderBoard({
                   />
                 </div>
               )}
-            </>
+              <div
+                data-tutorial-contracts=""
+              >
+                <ContractPlanningPanel
+                  contentTestId="tutorial-contracts-dialog"
+                  open={contractsOpen}
+                  onOpenChange={openContracts}
+                  triggerTestId="tutorial-contracts-trigger"
+                  view={view}
+                />
+              </div>
+            </div>
           )}
         />
       </div>
