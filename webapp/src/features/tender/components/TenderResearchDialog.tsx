@@ -15,12 +15,16 @@ import { TenderEvidence } from './TenderOverview'
 import styles from './TenderContextDialog.module.css'
 
 export function TenderResearchDialog({
+  contentTestId,
   onOpenChange,
   open,
+  triggerTestId,
   view,
 }: {
+  contentTestId?: string
   onOpenChange: (open: boolean) => void
   open: boolean
+  triggerTestId?: string
   view: TenderView
 }) {
   const count = view.publicLaboratoryResults.length
@@ -31,12 +35,17 @@ export function TenderResearchDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" className={styles.trigger}>
+        <Button data-testid={triggerTestId} type="button" variant="outline" className={styles.trigger}>
           <Typography as="span" variant="bodySmMedium">{translate('tender.tenderResearchDialog.copy.001')}</Typography>
           <Typography as="span" variant="caption" className={styles.count}>{count}</Typography>
         </Button>
       </DialogTrigger>
-      <DialogContent className={styles.dialog} closeLabel={translate('tender.tenderResearchDialog.copy.002')} placement="viewport">
+      <DialogContent
+        className={styles.dialog}
+        closeLabel={translate('tender.tenderResearchDialog.copy.002')}
+        data-testid={contentTestId}
+        placement="viewport"
+      >
         <DialogHeader className={styles.header}>
           <DialogTitle>{translate('tender.tenderResearchDialog.copy.003')}</DialogTitle>
           <DialogDescription>{translate('tender.tenderResearchDialog.copy.004')}</DialogDescription>

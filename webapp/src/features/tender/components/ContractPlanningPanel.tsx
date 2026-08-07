@@ -20,12 +20,16 @@ import dialogStyles from './TenderContextDialog.module.css'
 import phaseStyles from './PhasePanel.module.css'
 
 export function ContractPlanningPanel({
+  contentTestId,
   onOpenChange,
   open,
+  triggerTestId,
   view,
 }: {
+  contentTestId?: string
   onOpenChange: (open: boolean) => void
   open: boolean
+  triggerTestId?: string
   view: TenderView
 }) {
   const { t } = useI18n()
@@ -114,11 +118,16 @@ export function ContractPlanningPanel({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogTrigger asChild>
-          <Button type="button" variant="outline" className={dialogStyles.trigger}>
+          <Button data-testid={triggerTestId} type="button" variant="outline" className={dialogStyles.trigger}>
             {t('tender.contractPlanning.title', { count: contracts.length })}
           </Button>
         </DialogTrigger>
-        <DialogContent placement="viewport" className={dialogStyles.dialog} closeLabel={t('rules.close')}>
+        <DialogContent
+          placement="viewport"
+          className={dialogStyles.dialog}
+          closeLabel={t('rules.close')}
+          data-testid={contentTestId}
+        >
           <DialogHeader className={dialogStyles.header}>
             <DialogTitle>{t('tender.contractPlanning.title', { count: contracts.length })}</DialogTitle>
             <DialogDescription>{t('tender.contractPlanning.readOnly')}</DialogDescription>

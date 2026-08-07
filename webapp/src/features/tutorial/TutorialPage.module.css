@@ -27,24 +27,18 @@
 .hint { padding: .65rem; border-left: 2px solid #38bdf8; background: rgba(56, 189, 248, .08); }
 .confirmAction { display: none; color: #7dd3fc; }
 
-:global(.react-joyride__spotlight path) {
-  pointer-events: none !important;
-}
-
 :global([data-testid='floater']) {
   position: fixed !important;
+  z-index: 102 !important;
   inset: auto 1rem 1rem auto !important;
   width: min(24rem, calc(100vw - 2rem)) !important;
   transform: none !important;
 }
 
-:global(body:has(
-  [data-tutorial-step='interpretation-open'],
-  [data-tutorial-step='round-1-working-model'],
-  [data-tutorial-step='round-2-working-model'],
-  [data-tutorial-step='final-model']
-) [data-testid='floater']) {
-  inset: 1rem 1rem auto auto !important;
+:global([data-testid='tutorial-research-dialog']),
+:global([data-testid='tutorial-contracts-dialog']),
+:global([data-testid='tutorial-interpretation-dialog']) {
+  z-index: 101 !important;
 }
 
 @media (max-width: 600px) {
@@ -52,7 +46,8 @@
   .completeActions button { width: 100%; }
   .coachCard {
     width: 100%;
-    max-height: min(17rem, calc(100dvh - 1rem));
+    max-height: none;
+    overflow: clip !important;
   }
 
   :global([data-testid='floater']) {
@@ -61,6 +56,10 @@
   }
 
   :global(body:has(
+    [data-tutorial-step='round-1-contracts'],
+    [data-tutorial-step='research-results-open'],
+    [data-tutorial-step='round-1-thesis-result-open'],
+    [data-tutorial-step='round-2-contracts-review-open'],
     [data-tutorial-step='interpretation-open'],
     [data-tutorial-step='round-1-working-model'],
     [data-tutorial-step='round-2-working-model'],
@@ -69,8 +68,26 @@
     inset: .75rem .75rem auto !important;
   }
 
+  :global([data-testid='floater']),
+  :global([data-testid='overlay']),
+  :global(body:has([data-tutorial-step]) [data-slot='dialog-content']) {
+    animation-duration: 220ms !important;
+    animation-timing-function: cubic-bezier(.22, 1, .36, 1) !important;
+  }
+
+  :global([data-testid='floater']) {
+    animation-name: tutorial-coach-enter;
+  }
+
+  :global([data-testid='overlay']) {
+    animation-name: tutorial-overlay-enter;
+  }
+
+  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
   :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
-    top: 17.25rem !important;
+    top: calc(var(--tutorial-mobile-coach-bottom, 16.5rem) + .75rem) !important;
     bottom: .75rem !important;
     height: auto !important;
   }
@@ -79,7 +96,8 @@
     [data-tutorial-step='round-1-working-model'],
     [data-tutorial-step='round-2-working-model']
   ) [data-working-model-dialog]) {
-    top: 17.25rem !important;
+    z-index: 101 !important;
+    top: calc(var(--tutorial-mobile-coach-bottom, 16.5rem) + .75rem) !important;
     bottom: .75rem !important;
     height: auto !important;
   }
@@ -90,5 +108,28 @@
 
   :global(body:has([data-tutorial-confirm-ready='true'])) .confirmAction {
     display: block;
+  }
+
+  :global(body:has([data-tutorial-step='final-model'])) .confirmAction {
+    display: block;
+  }
+}
+
+@keyframes tutorial-coach-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes tutorial-overlay-enter {
+  from { opacity: .35; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 600px) and (prefers-reduced-motion: reduce) {
+  :global([data-testid='floater']),
+  :global([data-testid='overlay']),
+  :global(body:has([data-tutorial-step]) [data-slot='dialog-content']) {
+    animation: none !important;
+    transition: none !important;
   }
 }

@@ -132,6 +132,8 @@ export function PhasePanel({
     openDisabled: boolean
   }
   training?: {
+    laboratoryInitialMode?: 'broad' | 'deep'
+    onLaboratoryModeSelect?: (mode: 'broad' | 'deep') => void
     separateContractReservation?: boolean
     untimed?: boolean
   }
@@ -216,6 +218,8 @@ export function PhasePanel({
           privateMeasurements={view.privateMeasurements}
           powerAllocation={labPower}
           ruleset={view.ruleset}
+          initialMode={training?.laboratoryInitialMode}
+          onModeSelect={training?.onLaboratoryModeSelect}
           disabled={disabled || isWaitingForTurn}
           error={error}
           onConfirm={(laboratory) => {

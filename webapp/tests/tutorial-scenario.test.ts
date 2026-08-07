@@ -22,16 +22,45 @@ const expectedRoundTwoPower = {
   reconnaissance: 1,
 }
 
+function continueTutorial(state: ReturnType<typeof createTutorialState>) {
+  const result = advanceTutorial(state, { type: 'continue' })
+  expect(result.progressed).toBe(true)
+  return result.state
+}
+
 test('player completes the deterministic two-round tutorial through real Tender actions', () => {
   let state = createTutorialState('player-a')
+
+  expect(state.step).toBe('prologue')
+  state = advanceTutorial(state, { type: 'start-tutorial' }).state
+  expect(state.step).toBe('interaction-guide')
+  state = continueTutorial(state)
+  expect(state.step).toBe('round-1-header')
+  state = continueTutorial(state)
+  expect(state.step).toBe('round-1-sidebar')
+  state = continueTutorial(state)
+  expect(state.step).toBe('round-1-contracts')
+  state = continueTutorial(state)
+  expect(state.step).toBe('round-1-access-intro')
+  state = continueTutorial(state)
+  expect(state.step).toBe('round-1-access')
 
   const wrongSlot = advanceTutorial(state, { type: 'request-access-slot', slot: 1 })
   expect(wrongSlot.progressed).toBe(false)
   expect(wrongSlot.state.step).toBe('round-1-access')
 
   state = advanceTutorial(state, { type: 'request-access-slot', slot: 5 }).state
+  expect(state.step).toBe('round-1-power-intro')
+  state = continueTutorial(state)
   state = advanceTutorial(state, { type: 'allocate-power', allocation: expectedRoundOnePower }).state
+  expect(state.step).toBe('round-1-recon-intro')
+  state = continueTutorial(state)
   state = advanceTutorial(state, { type: 'conduct-reconnaissance', targets: ['unknown-sector'] }).state
+  expect(state.step).toBe('round-1-lab-intro')
+  state = continueTutorial(state)
+  expect(state.step).toBe('round-1-lab-mode')
+  state = advanceTutorial(state, { type: 'select-laboratory-mode', mode: 'deep' }).state
+  expect(state.step).toBe('round-1-lab-pair')
   state = advanceTutorial(state, {
     type: 'run-laboratory-test',
     laboratory: {
@@ -40,11 +69,17 @@ test('player completes the deterministic two-round tutorial through real Tender 
     },
   }).state
 
+  expect(state.step).toBe('research-results')
+  state = advanceTutorial(state, { type: 'open-research-results' }).state
+  expect(state.step).toBe('research-results-open')
+  state = advanceTutorial(state, { type: 'close-research-results' }).state
   expect(state.step).toBe('help-menu')
   state = advanceTutorial(state, { type: 'open-help-menu' }).state
   state = advanceTutorial(state, { type: 'open-interpretation' }).state
   expect(state.step).toBe('interpretation-open')
   state = advanceTutorial(state, { type: 'close-interpretation' }).state
+  expect(state.step).toBe('round-1-model-intro')
+  state = continueTutorial(state)
   state = advanceTutorial(state, {
     type: 'update-working-model',
     workingModel: {
@@ -58,10 +93,20 @@ test('player completes the deterministic two-round tutorial through real Tender 
     polarity: 'positive',
   }).state
 
+  expect(state.step).toBe('round-1-thesis-result')
+  state = advanceTutorial(state, { type: 'open-research-results' }).state
+  expect(state.step).toBe('round-1-thesis-result-open')
+  state = advanceTutorial(state, { type: 'close-research-results' }).state
   expect(state.step).toBe('round-2-access')
   expect(state.round).toBe(2)
 
   state = advanceTutorial(state, { type: 'request-access-slot', slot: 4 }).state
+  expect(state.step).toBe('round-2-contracts-review')
+  expect(tutorialView(state).publicContracts.map((contract) => contract.planning?.eligible)).toEqual([true, false])
+  state = advanceTutorial(state, { type: 'open-contracts-review' }).state
+  expect(state.step).toBe('round-2-contracts-review-open')
+  state = advanceTutorial(state, { type: 'close-contracts-review' }).state
+  expect(state.step).toBe('round-2-power')
   state = advanceTutorial(state, { type: 'allocate-power', allocation: expectedRoundTwoPower }).state
   state = advanceTutorial(state, { type: 'conduct-reconnaissance', targets: ['unknown-sector'] }).state
   state = advanceTutorial(state, {
@@ -86,6 +131,8 @@ test('player completes the deterministic two-round tutorial through real Tender 
     fieldType: 'electromagnetic',
     polarity: 'positive',
   }).state
+  expect(state.step).toBe('round-2-contracts-intro')
+  state = continueTutorial(state)
   state = advanceTutorial(state, { type: 'reserve-contract', contractId: tutorialContractId }).state
   state = advanceTutorial(state, {
     type: 'submit-contract-bid',
@@ -93,6 +140,8 @@ test('player completes the deterministic two-round tutorial through real Tender 
     evidenceTestIds: ['tutorial-test-2'],
   }).state
 
+  expect(state.step).toBe('final-model-intro')
+  state = continueTutorial(state)
   expect(state.step).toBe('final-model')
   const completed = advanceTutorial(state, {
     type: 'submit-scientific-model',
@@ -141,11 +190,15 @@ test('tutorial projects valid participant-scoped Tender views without timers or 
   expect(initial.phase).toBe('access-slot-selection')
   expect(initial.dueAt).toBeNull()
   expect(initial.players.map((player) => player.displayName)).toEqual(['Исследователь', 'Учебный соперник'])
+  expect(initial.knownSignals).toEqual(['aster', 'boreal'])
+  expect(initial.publicContracts).toHaveLength(2)
+  expect(initial.players.every((player) => player.accessSlot === undefined)).toBe(true)
+  expect(initial.players.every((player) => player.requestedAccessSlot === undefined)).toBe(true)
   expect('anomalyConfiguration' in initial).toBe(false)
 
   const laboratory = tutorialView({
     ...createTutorialState('player-a'),
-    step: 'help-menu',
+    step: 'research-results',
   })
   expect(tenderViewSchema.parse(laboratory)).toEqual(laboratory)
   expect(laboratory.publicScientificJournal).toEqual([
@@ -161,4 +214,5 @@ test('tutorial projects valid participant-scoped Tender views without timers or 
   expect(laboratory.privateMeasurements).toEqual([
     { receiverSignal: 'boreal', sourceSignal: 'aster', polarityRelation: 'same' },
   ])
+  expect(laboratory.publicContracts).toHaveLength(2)
 })
