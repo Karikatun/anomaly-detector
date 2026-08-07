@@ -243,6 +243,7 @@ export function TutorialTenderBoard({
             <LaboratoryInterpretationDialog
               belowTenderHeader
               contentTestId="tutorial-interpretation-dialog"
+              highlightResult="reflection"
               open={interpretationOpen}
               onOpenChange={openDirectInterpretation}
               ruleset="tender-v2"
@@ -283,6 +284,7 @@ export function TutorialTenderBoard({
                 onSaveWorkingModel={saveWorkingModel}
                 activePlayerId={view.activePlayerId}
                 workingModelDialog={{
+                  actionError: workingModelOpen ? commandError : null,
                   onOpenChange: setWorkingModelOpen,
                   onSaveStatusChange: () => undefined,
                   open: workingModelOpen,

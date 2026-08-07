@@ -125,7 +125,7 @@ export function ContractPlanningPanel({
         <DialogContent
           placement="viewport"
           className={dialogStyles.dialog}
-          closeLabel={t('rules.close')}
+          closeLabel={t('tender.contractPlanning.close')}
           data-testid={contentTestId}
         >
           <DialogHeader className={dialogStyles.header}>

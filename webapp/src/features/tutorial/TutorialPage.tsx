@@ -21,7 +21,6 @@ import { ProtectedPage, useAuth } from '@/features/auth'
 import {
   ProfileApi,
   useCompleteTutorialMutation,
-  useTutorialProgressQuery,
 } from '@/features/profile'
 import {
   CreateRoomDialog,
@@ -120,9 +119,11 @@ function TutorialContent() {
   const roomsApi = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
   const profileApi = useMemo(() => new ProfileApi(auth.transport), [auth.transport])
   const currentMatch = useCurrentMatchQuery(roomsApi)
-  const tutorialProgress = useTutorialProgressQuery(profileApi)
   const completeTutorial = useCompleteTutorialMutation(profileApi)
   const [state, setState] = useState(() => loadTutorialSession(sessionStorage, playerId))
+  const [completionSaveStatus, setCompletionSaveStatus] = useState<'idle' | 'pending' | 'saved' | 'error'>(
+    () => state.step === 'complete' ? 'error' : 'idle',
+  )
   const [commandError, setCommandError] = useState<string | null>(null)
   const [exitOpen, setExitOpen] = useState(false)
   const [createRoomOpen, setCreateRoomOpen] = useState(false)
@@ -139,11 +140,13 @@ function TutorialContent() {
   }, [])
 
   const saveCompletion = async () => {
+    setCompletionSaveStatus('pending')
     try {
       await completeTutorial.mutateAsync()
       clearTutorialSession(sessionStorage)
+      setCompletionSaveStatus('saved')
     } catch {
-      // The result screen keeps the retry action visible.
+      setCompletionSaveStatus('error')
     }
   }
 
@@ -158,7 +161,9 @@ function TutorialContent() {
     const isThesisAttempt = action.type === 'submit-thesis' && result.thesisFeedback !== undefined
     setCommandError(result.progressed || isDraftSave || isThesisAttempt
       ? null
-      : t('tutorial.coach.invalid'))
+      : t(state.step === 'round-2-working-model'
+        ? 'tutorial.coach.modelCheck'
+        : 'tutorial.coach.invalid'))
 
     if (result.state.step === 'complete' && state.step !== 'complete') {
       await saveCompletion()
@@ -182,6 +187,7 @@ function TutorialContent() {
     const fresh = createTutorialState(playerId)
     saveTutorialSession(sessionStorage, fresh)
     setCommandError(null)
+    setCompletionSaveStatus('idle')
     setState(fresh)
   }
 
@@ -253,14 +259,29 @@ function TutorialContent() {
   }
 
   if (state.step === 'complete') {
-    const completionSaved = Boolean(tutorialProgress.data?.completedAt)
+    const completionSaved = completionSaveStatus === 'saved'
+    const completionFailed = completionSaveStatus === 'error'
     return (
       <TutorialStateCard showExpeditionBackground={false}>
-        <CardHeader><CardTitle>{t('tutorial.complete.title')}</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>
+            {t(completionSaved
+              ? 'tutorial.complete.title'
+              : completionFailed
+                ? 'tutorial.complete.saveErrorTitle'
+                : 'tutorial.complete.savingTitle')}
+          </CardTitle>
+        </CardHeader>
         <CardContent className={styles.completeContent}>
-          <Typography>{t('tutorial.complete.description')}</Typography>
-          <Typography tone="muted">{t('tutorial.complete.realMatch')}</Typography>
-          {!completionSaved && (
+          {completionSaved ? (
+            <>
+              <Typography>{t('tutorial.complete.description')}</Typography>
+              <Typography tone="muted">{t('tutorial.complete.realMatch')}</Typography>
+            </>
+          ) : !completionFailed ? (
+            <Typography tone="muted">{t('tutorial.complete.savingDescription')}</Typography>
+          ) : null}
+          {completionFailed && (
             <div className={styles.saveError} role="alert">
               <Typography variant="bodySm" tone="destructive">{t('tutorial.complete.saveError')}</Typography>
               <Button
@@ -272,11 +293,13 @@ function TutorialContent() {
               </Button>
             </div>
           )}
-          <div className={styles.completeActions}>
-            <Button onClick={() => setCreateRoomOpen(true)}>{t('tutorial.complete.create')}</Button>
-            <Button variant="outline" onClick={() => void navigate({ to: '/' })}>{t('tutorial.complete.home')}</Button>
-            <Button variant="ghost" onClick={restart}>{t('tutorial.complete.repeat')}</Button>
-          </div>
+          {completionSaved && (
+            <div className={styles.completeActions}>
+              <Button onClick={() => setCreateRoomOpen(true)}>{t('tutorial.complete.create')}</Button>
+              <Button variant="outline" onClick={() => void navigate({ to: '/' })}>{t('tutorial.complete.home')}</Button>
+              <Button variant="ghost" onClick={restart}>{t('tutorial.complete.repeat')}</Button>
+            </div>
+          )}
           <CreateRoomDialog open={createRoomOpen} onOpenChange={setCreateRoomOpen} />
         </CardContent>
       </TutorialStateCard>
@@ -544,11 +567,26 @@ function TutorialViewportAnchor({
   useLayoutEffect(() => {
     let coachObserver: ResizeObserver | undefined
     let layoutSettleTimer: number | undefined
+    let revealSpotlightTimer: number | undefined
     let scrollEndHandler: (() => void) | undefined
+    let scrollHandler: (() => void) | undefined
     let lastRequestedScrollTop: number | undefined
+    const revealSpotlight = () => {
+      delete document.documentElement.dataset.tutorialAutoscrolling
+    }
+    const scheduleSpotlightReveal = (delay = 140) => {
+      if (revealSpotlightTimer !== undefined) window.clearTimeout(revealSpotlightTimer)
+      revealSpotlightTimer = window.setTimeout(revealSpotlight, delay)
+    }
+    if (compactHeader) {
+      document.documentElement.dataset.tutorialAutoscrolling = ''
+    }
     const frame = window.requestAnimationFrame(() => {
       const anchor = document.querySelector<HTMLElement>(anchorSelector)
-      if (!anchor) return
+      if (!anchor) {
+        scheduleSpotlightReveal()
+        return
+      }
 
       const positionTarget = () => {
         const coach = document.querySelector<HTMLElement>('[data-testid="floater"]')
@@ -578,9 +616,7 @@ function TutorialViewportAnchor({
             `${coachRect.bottom}px`,
           )
         }
-        const shouldPositionTarget = compactHeader
-          ? Math.abs(rect.top - safeTop) > 1
-          : rect.top < safeTop || rect.bottom > safeBottom
+        const shouldPositionTarget = rect.top < safeTop || rect.bottom > safeBottom
         if (shouldPositionTarget) {
           const contentScrollLimit = Math.max(
             0,
@@ -595,20 +631,34 @@ function TutorialViewportAnchor({
             && Math.abs(lastRequestedScrollTop - targetScrollTop) < 1
             && Math.abs(window.scrollY - targetScrollTop) < 1) return
           lastRequestedScrollTop = targetScrollTop
+          const smoothScroll = compactHeader
+            && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          if (smoothScroll) {
+            document.documentElement.dataset.tutorialAutoscrolling = ''
+            scheduleSpotlightReveal(1_000)
+          }
           window.scrollTo({
-            behavior: compactHeader
-              && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-              ? 'smooth'
-              : 'instant',
+            behavior: smoothScroll ? 'smooth' : 'instant',
             top: targetScrollTop,
           })
+        } else if ('tutorialAutoscrolling' in document.documentElement.dataset) {
+          scheduleSpotlightReveal()
         }
       }
 
       positionTarget()
       layoutSettleTimer = window.setTimeout(positionTarget, 260)
-      scrollEndHandler = positionTarget
+      scrollEndHandler = () => {
+        positionTarget()
+        scheduleSpotlightReveal()
+      }
       window.addEventListener('scrollend', scrollEndHandler)
+      scrollHandler = () => {
+        if ('tutorialAutoscrolling' in document.documentElement.dataset) {
+          scheduleSpotlightReveal()
+        }
+      }
+      window.addEventListener('scroll', scrollHandler, { passive: true })
       const coach = document.querySelector<HTMLElement>('[data-testid="floater"]')
       if (coach) {
         coachObserver = new ResizeObserver(positionTarget)
@@ -619,8 +669,11 @@ function TutorialViewportAnchor({
     return () => {
       window.cancelAnimationFrame(frame)
       if (layoutSettleTimer !== undefined) window.clearTimeout(layoutSettleTimer)
+      if (revealSpotlightTimer !== undefined) window.clearTimeout(revealSpotlightTimer)
       if (scrollEndHandler) window.removeEventListener('scrollend', scrollEndHandler)
+      if (scrollHandler) window.removeEventListener('scroll', scrollHandler)
       coachObserver?.disconnect()
+      revealSpotlight()
       document.documentElement.style.removeProperty('--tutorial-mobile-coach-bottom')
     }
   }, [anchorSelector, coachAtTop, compactHeader, spotlightSelector])

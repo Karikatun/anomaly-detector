@@ -64,7 +64,7 @@ test('requires a complete research selection before Contract confirmation', () =
       }],
     },
   )
-  const confirmButton = html.match(/<button[^>]*aria-label="Подтвердить контракт contract-1"[^>]*>/)?.[0]
+  const confirmButton = html.match(/<button[^>]*aria-label="Подтвердить контракт: Aster · источник"[^>]*>/)?.[0]
 
   expect(html).toContain('Выберите исследование')
   expect(html).toContain('>Подтвердить контракт<')
@@ -91,7 +91,7 @@ test('puts research selection inside an eligible Contract before reservation', (
   const card = html.slice(cardStart, cardEnd)
 
   expect(html).not.toContain('aria-label="Подходящий контракт"')
-  expect(card).toContain('aria-label="Подходящее исследование"')
+  expect(card).toContain('aria-label="Подходящее исследование для контракта Aster · источник"')
   expect(card).toContain('value="suitable"')
   expect(card).toContain('>Подтвердить контракт<')
 })
@@ -107,11 +107,32 @@ test('offers only suitable unused research in a reserved light Contract selector
     { journal, privateUsedContractEvidenceTestIds: ['used'] },
   )
 
-  expect(html).toContain('aria-label="Подходящее исследование"')
+  expect(html).toContain('aria-label="Подходящее исследование для контракта Aster · источник"')
   expect(html).toContain('value="suitable"')
   expect(html).not.toContain('value="used"')
   expect(html).not.toContain('value="wrong-result"')
   expect(html).not.toContain('Ваши доказательства')
+})
+
+test('names controls by the player-facing Contract instead of an internal id', () => {
+  const html = renderPanel([
+    { ...baseContract, eligibleForPlayer: true },
+    {
+      ...baseContract,
+      contractId: 'contract-2',
+      eligibleForPlayer: true,
+      targetSignal: 'boreal',
+    },
+  ], {
+    journal: [
+      { playerId: 'player-a', protocol: 'impulse', publicResult: 'reflection', receiverSignal: 'boreal', sourceSignal: 'aster', testId: 'aster-evidence' },
+      { playerId: 'player-a', protocol: 'impulse', publicResult: 'reflection', receiverSignal: 'cinder', sourceSignal: 'boreal', testId: 'boreal-evidence' },
+    ],
+  })
+
+  expect(html).toContain('aria-label="Подходящее исследование для контракта Aster · источник"')
+  expect(html).toContain('aria-label="Подходящее исследование для контракта Boreal · источник"')
+  expect(html).not.toContain('aria-label="Подтвердить контракт contract-')
 })
 
 test('explains when a reserved Contract has no suitable research', () => {
@@ -146,7 +167,7 @@ test('keeps only complete evidence paths selectable for a reserved complex Contr
 
   expect(html).toContain('value="complete-continuous"')
   expect(html).not.toContain('value="incomplete-impulse"')
-  expect(html).toContain('aria-label="Дополнительное исследование"')
+  expect(html).toContain('aria-label="Дополнительное исследование для контракта Aster · источник"')
 })
 
 test('removes every Contract control after the player confirms one Contract', () => {

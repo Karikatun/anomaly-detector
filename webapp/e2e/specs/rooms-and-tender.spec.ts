@@ -207,7 +207,7 @@ async function submitThesis(page: Page) {
 
 async function completeContract(page: Page) {
   const skip = page.getByRole('button', { name: 'Пропустить ход' })
-  const confirm = page.getByRole('button', { name: /^Подтвердить контракт / }).first()
+  const confirm = page.getByRole('button', { name: /^Подтвердить контракт: / }).first()
   await expect.poll(async () => await confirm.isVisible() || await skip.isEnabled()).toBe(true)
   if (!await confirm.isVisible()) {
     await skip.click()
@@ -231,7 +231,7 @@ async function completeContract(page: Page) {
     await selectedContractCard.getByText('Контракт выполнен', { exact: true }).isVisible()
     || !await page.getByRole('heading', { name: headings.contracts }).isVisible(),
   ).toBe(true)
-  await expect(page.getByRole('button', { name: /^Подтвердить контракт / })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Подтвердить контракт: / })).toHaveCount(0)
   await expect(page.getByRole('combobox', { name: /Подходящее исследование|Подходящая сертификация|Дополнительное исследование/ })).toHaveCount(0)
 }
 

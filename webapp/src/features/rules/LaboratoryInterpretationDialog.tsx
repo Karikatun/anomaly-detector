@@ -23,6 +23,7 @@ export function LaboratoryInterpretationDialog({
   belowTenderHeader = false,
   contentTestId,
   disabled = false,
+  highlightResult,
   onOpenChange,
   open,
   ruleset,
@@ -35,6 +36,7 @@ export function LaboratoryInterpretationDialog({
   belowTenderHeader?: boolean
   contentTestId?: string
   disabled?: boolean
+  highlightResult?: 'reflection'
   onOpenChange?: (open: boolean) => void
   open?: boolean
   ruleset?: TenderRuleset
@@ -83,8 +85,8 @@ export function LaboratoryInterpretationDialog({
               {t('rules.timerContinues')}
             </Typography>
           )}
-          <div className={styles.scrollArea}>
-            <LaboratoryInterpretation ruleset={ruleset} />
+          <div className={styles.scrollArea} data-interpretation-scroll-area>
+            <LaboratoryInterpretation highlightResult={highlightResult} ruleset={ruleset} />
           </div>
         </div>
         <DialogFooter className={styles.footer}>

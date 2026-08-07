@@ -67,6 +67,17 @@
   overscroll-behavior: contain;
 }
 
+.actionError {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: .65rem;
+  padding: .65rem .75rem;
+  border: 1px solid color-mix(in srgb, var(--destructive) 55%, transparent);
+  border-radius: .55rem;
+  background: color-mix(in srgb, var(--background) 92%, var(--destructive));
+}
+
 .hint {
   text-align: center;
 }
