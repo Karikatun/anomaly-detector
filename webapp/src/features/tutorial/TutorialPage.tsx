@@ -627,9 +627,11 @@ function TutorialViewportAnchor({
             0,
             Math.min(window.scrollY + rect.top - safeTop, contentScrollLimit),
           )
-          if (lastRequestedScrollTop !== undefined
+          const repeatsLastTarget = lastRequestedScrollTop !== undefined
             && Math.abs(lastRequestedScrollTop - targetScrollTop) < 1
-            && Math.abs(window.scrollY - targetScrollTop) < 1) return
+          const autoScrollInProgress = 'tutorialAutoscrolling' in document.documentElement.dataset
+          if (repeatsLastTarget
+            && (autoScrollInProgress || Math.abs(window.scrollY - targetScrollTop) < 1)) return
           lastRequestedScrollTop = targetScrollTop
           const smoothScroll = compactHeader
             && !window.matchMedia('(prefers-reduced-motion: reduce)').matches

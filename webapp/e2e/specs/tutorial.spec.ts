@@ -89,6 +89,42 @@ function expectSmoothAutoScroll(transitions: number[][]) {
   ).toBeGreaterThanOrEqual(2)
 }
 
+async function captureScrollRequests(
+  page: Parameters<typeof registerBrowserUser>[0],
+  action: () => Promise<void>,
+) {
+  await page.evaluate(() => {
+    type ScrollRecorder = typeof window & {
+      __tutorialOriginalScrollTo?: typeof window.scrollTo
+      __tutorialScrollRequests?: Array<{ time: number; top: number }>
+    }
+    const recorder = window as ScrollRecorder
+    recorder.__tutorialScrollRequests = []
+    recorder.__tutorialOriginalScrollTo = window.scrollTo.bind(window)
+    window.scrollTo = ((...args: Parameters<typeof window.scrollTo>) => {
+      const options = typeof args[0] === 'object' ? args[0] : undefined
+      recorder.__tutorialScrollRequests!.push({
+        time: performance.now(),
+        top: options?.top ?? Number(args[1] ?? window.scrollY),
+      })
+      recorder.__tutorialOriginalScrollTo!(...args)
+    }) as typeof window.scrollTo
+  })
+  await action()
+  await page.waitForTimeout(700)
+  return page.evaluate(() => {
+    const recorder = window as typeof window & {
+      __tutorialOriginalScrollTo?: typeof window.scrollTo
+      __tutorialScrollRequests?: Array<{ time: number; top: number }>
+    }
+    const requests = recorder.__tutorialScrollRequests ?? []
+    if (recorder.__tutorialOriginalScrollTo) window.scrollTo = recorder.__tutorialOriginalScrollTo
+    delete recorder.__tutorialOriginalScrollTo
+    delete recorder.__tutorialScrollRequests
+    return requests
+  })
+}
+
 async function waitForScrollToSettle(page: Parameters<typeof registerBrowserUser>[0]) {
   await page.evaluate(() => new Promise<void>((resolve) => {
     let settledTimer = window.setTimeout(done, 80)
@@ -779,7 +815,20 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     message: 'opening a tutorial dialog must not cause a visible page jump',
   }).toBeLessThanOrEqual(12)
   await expect(mobileResearchDialog).toContainText('Отражение')
-  await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+  const helpMenuScrollRequests = await captureScrollRequests(
+    page,
+    () => page.getByRole('button', { name: 'Закрыть данные исследований' }).click(),
+  )
+  const initialHelpMenuRequest = helpMenuScrollRequests[0]
+  expect(initialHelpMenuRequest, 'closing research results must scroll to the Help target').toBeDefined()
+  const repeatedHelpMenuRequests = helpMenuScrollRequests.slice(1).filter((request) => (
+    request.time - initialHelpMenuRequest!.time > 100
+      && Math.abs(request.top - initialHelpMenuRequest!.top) < 1
+  ))
+  expect(
+    repeatedHelpMenuRequests,
+    'the Help target scroll must not restart while the first smooth movement is active',
+  ).toEqual([])
 
   await page.getByRole('button', { name: 'Справка', exact: true }).click()
   await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
