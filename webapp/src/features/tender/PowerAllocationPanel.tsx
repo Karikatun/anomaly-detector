@@ -339,13 +339,6 @@ export function PowerAllocationPanel({
                 </div>
               )}
 
-              {key === 'reconnaissance' && (
-                <Typography variant="caption" className={styles.limitNote}>
-                  {t('tender.power.availableTargets', {
-                    count: 6 - sampleCount,
-                  })}
-                </Typography>
-              )}
             </article>
           )
         })}
