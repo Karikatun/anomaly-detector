@@ -9,7 +9,9 @@
 остаётся в [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIEF.md), пользовательская
 терминология — в [RULES_REFERENCE.md](RULES_REFERENCE.md), архитектурное
 владение состоянием — в [ARCHITECTURE.md](ARCHITECTURE.md), проверка изменений —
-в [UX_CHECKLIST.md](UX_CHECKLIST.md) и [TESTING.md](TESTING.md).
+в [UX_CHECKLIST.md](UX_CHECKLIST.md) и [TESTING.md](TESTING.md). Измеренный
+baseline значений, повторяющиеся patterns и порядок их постепенной нормализации
+зафиксированы в [UI_FOUNDATION_AUDIT.md](UI_FOUNDATION_AUDIT.md).
 
 ## Принципы интерфейса
 
@@ -69,8 +71,12 @@ Primary для действий и активных состояний:
 }
 ```
 
-Компоненты и feature CSS используют семантические токены (`--background`,
-`--card`, `--primary`, `--destructive`), а не повторяют значения цветов.
+Целевой контракт: компоненты и feature CSS используют семантические токены
+(`--background`, `--card`, `--primary`, `--destructive`), а не повторяют
+значения цветов. Текущий код ещё содержит значительное число hardcoded
+hex/rgba и локальных вариантов; миграция выполняется по ролям согласно
+[UI_FOUNDATION_AUDIT.md](UI_FOUNDATION_AUDIT.md), без механической глобальной
+замены.
 
 ### Типографика
 
