@@ -7,7 +7,7 @@
   gap: 0;
   overflow: hidden;
   padding: 0;
-  border-radius: 1.25rem;
+  border-radius: var(--radius-elevated);
 }
 
 .body {
@@ -37,7 +37,7 @@
   margin: .75rem 1.25rem 0;
   padding: .65rem .75rem;
   border: 1px solid rgba(244, 165, 28, .35);
-  border-radius: .65rem;
+  border-radius: var(--radius-panel);
   color: #ffd583;
   background: rgba(103, 67, 6, .18);
 }
@@ -65,7 +65,7 @@
 .section {
   overflow: clip;
   border: 1px solid rgba(126, 166, 198, .18);
-  border-radius: .85rem;
+  border-radius: var(--radius-elevated);
   background: rgba(10, 27, 42, .34);
 }
 
@@ -88,8 +88,8 @@
 }
 
 .sectionTrigger:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: -2px;
+  outline: none;
+  box-shadow: var(--focus-ring-inset);
 }
 
 .sectionHeading,
@@ -104,7 +104,7 @@
   height: 1.15rem;
   flex: none;
   color: var(--muted-foreground);
-  transition: transform 160ms ease;
+  transition: transform var(--motion-standard) var(--ease-standard);
 }
 
 .chevronOpen {
@@ -140,7 +140,7 @@
   align-items: start;
   gap: .65rem;
   padding: .75rem;
-  border-radius: .65rem;
+  border-radius: var(--radius-panel);
   background: rgba(68, 132, 182, .08);
 }
 
@@ -149,7 +149,7 @@
   width: 2rem;
   height: 2rem;
   place-items: center;
-  border-radius: .55rem;
+  border-radius: var(--radius-control);
   color: #91cfff;
   background: rgba(62, 149, 216, .14);
 }
@@ -179,7 +179,7 @@
   height: 1.75rem;
   place-items: center;
   border: 1px solid rgba(93, 171, 229, .28);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   color: #a9dcff;
   background: rgba(61, 143, 205, .1);
 }
@@ -201,14 +201,14 @@
   gap: .3rem;
   padding: .75rem;
   border: 1px solid rgba(126, 166, 198, .14);
-  border-radius: .65rem;
+  border-radius: var(--radius-panel);
   background: rgba(68, 132, 182, .06);
 }
 
 .tableScroll {
   overflow-x: auto;
   border: 1px solid rgba(126, 166, 198, .16);
-  border-radius: .65rem;
+  border-radius: var(--radius-panel);
 }
 
 .resultTable {
@@ -251,7 +251,7 @@
   gap: .3rem;
   padding: .8rem;
   border-left: 3px solid rgba(79, 164, 226, .75);
-  border-radius: 0 .65rem .65rem 0;
+  border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
   background: rgba(55, 135, 196, .09);
 }
 

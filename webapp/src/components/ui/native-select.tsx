@@ -17,7 +17,7 @@ function NativeSelect({
   return (
     <div
       className={cn(
-        "group/native-select relative w-full min-w-0 has-[select:disabled]:opacity-50",
+        "group/native-select relative w-full min-w-0",
         className
       )}
       data-slot="native-select-wrapper"
@@ -27,7 +27,7 @@ function NativeSelect({
         <select
           data-slot="native-select"
           data-size={size}
-          className="h-12 w-full min-w-0 appearance-none rounded-lg border border-[rgba(74,139,181,.52)] bg-[rgba(3,18,31,.88)] py-2 pr-11 pl-4 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,.025)] transition-[border-color,background-color,box-shadow] outline-none select-none selection:bg-primary selection:text-primary-foreground hover:border-[rgba(71,170,229,.72)] hover:bg-[rgba(5,26,44,.94)] focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/25 disabled:pointer-events-none disabled:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 data-[size=sm]:h-11 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
+          className="h-12 w-full min-w-0 appearance-none rounded-[var(--radius-control)] border border-[var(--border-game-strong)] bg-[var(--surface-control)] py-2 pr-11 pl-4 text-foreground shadow-[var(--shadow-inset-subtle)] transition-[color,background-color,border-color,box-shadow,opacity] duration-[var(--motion-standard)] ease-[var(--ease-standard)] outline-none select-none selection:bg-primary selection:text-primary-foreground hover:border-primary/60 hover:bg-input/40 focus-visible:border-primary focus-visible:shadow-[var(--focus-ring-shadow)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-[var(--opacity-disabled)] aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 data-[size=sm]:h-11 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
           {...props}
         />
       </Typography>

@@ -42,8 +42,9 @@ baseline значений, повторяющиеся patterns и порядок
 
 | Роль | Цвет | Применение |
 |---|---|---|
-| Фон страницы | `#0a0e1a` (глубокий сине-чёрный) | `--background` |
-| Фон карточек/панелей | `#111827` / `oklch(0.205 0 0)` | `--card` |
+| Фон страницы | `oklch(0.12 0.02 260)` (глубокий сине-чёрный) | `--background` |
+| Фон карточек/панелей | `oklch(0.17 0.02 260)` | `--card` |
+| Всплывающая поверхность | `oklch(0.19 0.02 260)` | `--popover` |
 | Обводка | `oklch(1 0 0 / 10%)` (белый 10%) | `--border` |
 | Основной текст | `oklch(0.985 0 0)` (почти белый) | `--foreground` |
 | Вторичный текст | `oklch(0.708 0 0)` (серый) | `--muted-foreground` |
@@ -77,6 +78,22 @@ Primary для действий и активных состояний:
 hex/rgba и локальных вариантов; миграция выполняется по ролям согласно
 [UI_FOUNDATION_AUDIT.md](UI_FOUNDATION_AUDIT.md), без механической глобальной
 замены.
+
+### Foundation scales
+
+- Spacing: `--space-1` … `--space-8` = 4/8/10/12/16/20/24/32px.
+- Radius: compact 6px, control 8px, panel 10px, elevated 16px, full.
+- Borders: `--border-game-subtle`, `--border-game`,
+  `--border-game-strong`; уникальный цвет допустим только для игровой
+  семантики или feature accent.
+- Shadows: inset hairline, surface depth, sticky separator и overlay elevation.
+- Focus: единый внешний `--focus-ring-shadow`; inset-вариант только когда
+  внешний ring будет обрезан контейнером. Focus не использует selected accent.
+- Motion: 120ms fast, 160ms standard controls, 220ms panel; перечислять
+  свойства явно, не использовать `transition: all`.
+
+Runtime source of truth для точных значений — `webapp/src/index.css`. Новые
+global tokens не добавляются для единичного исключения.
 
 ### Типографика
 

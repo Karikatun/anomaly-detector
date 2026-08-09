@@ -323,9 +323,13 @@
   border-left: 1px solid rgba(86, 137, 171, .26);
 }
 
-.stepper button:hover:not(:disabled),
-.stepper button:focus-visible {
+.stepper button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--power-accent) 11%, transparent);
+}
+
+.stepper button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-inset);
 }
 
 .stepper button:disabled {

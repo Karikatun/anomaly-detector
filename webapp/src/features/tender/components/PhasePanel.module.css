@@ -2,17 +2,17 @@
   display: grid;
   width: 100%;
   min-width: 0;
-  gap: .65rem;
+  gap: var(--space-3);
 }
 
 .surface {
   min-width: 0;
-  padding: .7rem;
-  border: 1px solid rgba(65, 127, 169, .32);
-  border-radius: .72rem;
+  padding: var(--space-4);
+  border: 1px solid var(--border-game);
+  border-radius: var(--radius-panel);
   background:
     radial-gradient(circle at 50% 0%, rgba(31, 157, 218, .06), transparent 42%),
-    rgba(1, 13, 27, .9);
+    var(--surface-game);
 }
 
 .intro {
@@ -37,8 +37,8 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: .65rem;
-  margin-bottom: .55rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 .sectionTitle {
@@ -60,10 +60,10 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: .55rem;
-  padding: .55rem .65rem;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid rgba(67, 132, 174, .28);
-  border-radius: .58rem;
+  border-radius: var(--radius-control);
   background: rgba(3, 20, 35, .8);
 }
 
@@ -102,7 +102,7 @@
   display: grid;
   min-width: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .5rem;
+  gap: var(--space-2);
 }
 
 .signalCard {
@@ -113,11 +113,11 @@
   min-height: 5.8rem;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: .5rem;
+  gap: var(--space-2);
   overflow: hidden;
-  padding: .55rem;
+  padding: var(--space-2);
   border: 1px solid rgba(73, 127, 163, .4);
-  border-radius: .58rem;
+  border-radius: var(--radius-control);
   outline: none;
   color: #eaf6fd;
   background:
@@ -127,9 +127,13 @@
   cursor: pointer;
 }
 
-.signalCard:hover:not(:disabled),
-.signalCard:focus-visible {
+.signalCard:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--signal-accent) 70%, white);
+}
+
+.signalCard:focus-visible {
+  border-color: var(--ring);
+  box-shadow: var(--focus-ring-shadow);
 }
 
 .signalCard[data-selected] {
@@ -209,7 +213,7 @@
   gap: .55rem;
   padding: .42rem .55rem;
   border: 1px solid rgba(69, 126, 163, .32);
-  border-radius: .48rem;
+  border-radius: var(--radius-control);
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--signal-accent) 7%, transparent), transparent 40%),
     rgba(3, 18, 31, .78);
@@ -230,7 +234,7 @@
   gap: .4rem;
   padding: .5rem;
   border: 1px solid rgba(65, 127, 169, .3);
-  border-radius: .72rem;
+  border-radius: var(--radius-panel);
   background: rgba(1, 13, 27, .97);
   box-shadow: none;
 }
@@ -239,13 +243,13 @@
   position: sticky;
   z-index: 20;
   bottom: env(safe-area-inset-bottom, 0px);
-  box-shadow: 0 -.7rem 1.5rem rgba(1, 8, 17, .78);
+  box-shadow: var(--shadow-sticky);
 }
 
 .actionButton {
   width: 100%;
   min-height: 2.75rem;
-  border-radius: .55rem;
+  border-radius: var(--radius-control);
   box-shadow: 0 .45rem 1.25rem rgba(13, 126, 255, .18);
 }
 
@@ -363,7 +367,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+  transition: border-color var(--motion-standard) var(--ease-standard), background-color var(--motion-standard) var(--ease-standard), box-shadow var(--motion-standard) var(--ease-standard);
 }
 
 .sampleChoice .signalGlyph {
@@ -376,7 +380,8 @@
 }
 
 .sampleChoice:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--signal-accent) 72%, transparent);
+  border-color: var(--ring);
+  box-shadow: var(--focus-ring-shadow);
 }
 
 .sampleChoice[data-selected] {
@@ -1134,7 +1139,7 @@
 
 .reconnectBackdrop {
   position: fixed;
-  z-index: 60;
+  z-index: var(--layer-system);
   inset: 0;
   display: grid;
   place-items: center;

@@ -1,24 +1,24 @@
 .content {
-  gap: 1.4rem;
+  gap: var(--space-7);
   padding: 1.65rem;
   border: 1px solid rgba(0, 184, 191, .7);
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   color: #eaf5ff;
   background:
     linear-gradient(145deg, rgba(0, 20, 26, .97), rgba(1, 8, 16, .99)),
     url('/assets/home/expedition-desktop.webp') center / cover no-repeat;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .6), inset 0 0 36px rgba(0, 188, 174, .025);
+  box-shadow: var(--shadow-overlay), inset 0 0 36px rgba(0, 188, 174, .025);
 }
 
-.header { gap: .5rem; }
+.header { gap: var(--space-2); }
 .title { color: #ecf7ff; font-size: 1.35rem !important; font-stretch: condensed; font-weight: 500 !important; letter-spacing: -.035em !important; text-transform: uppercase; }
 .description { color: #a8c1d8; }
-.form { display: grid; gap: 1rem; }
-.field { gap: .45rem; }
+.form { display: grid; gap: var(--space-5); }
+.field { gap: var(--space-2); }
 .label { color: #c2d8ea; font-size: .82rem; }
-.input { height: 3.35rem; border-color: rgba(92, 157, 198, .66); border-radius: 7px; color: #eff8ff; background: rgba(1, 13, 27, .72); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.input { height: 3.35rem; border-color: rgba(92, 157, 198, .66); border-radius: var(--radius-control); color: #eff8ff; background: rgba(1, 13, 27, .72); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .error { color: #ffafaf; }
-.footer { display: flex; flex-direction: row; justify-content: flex-end; gap: .7rem; }
+.footer { display: flex; flex-direction: row; justify-content: flex-end; gap: var(--space-4); }
 .cancel { border-color: rgba(105, 145, 178, .55); color: #c1d4e5; background: rgba(5, 20, 36, .5); }
 .submit { border: 1px solid rgba(0, 215, 203, .78); color: #eaffff; background: linear-gradient(135deg, rgba(0, 139, 147, .94), rgba(0, 77, 88, .96)); }
 .submit:hover { background: linear-gradient(135deg, rgba(0, 175, 180, .98), rgba(0, 102, 113, .98)); }
@@ -27,7 +27,7 @@
   background:
     linear-gradient(145deg, rgba(24, 11, 37, .97), rgba(8, 4, 18, .99)),
     url('/assets/home/expedition-desktop.webp') center / cover no-repeat;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .6), inset 0 0 36px rgba(171, 62, 224, .025);
+  box-shadow: var(--shadow-overlay), inset 0 0 36px rgba(171, 62, 224, .025);
 }
 .createSubmit { border: 1px solid rgba(192, 104, 242, .8); color: #fff0ff; background: linear-gradient(135deg, rgba(126, 42, 172, .94), rgba(77, 25, 118, .96)); }
 .createSubmit:hover { background: linear-gradient(135deg, rgba(151, 55, 205, .98), rgba(94, 30, 141, .98)); }
