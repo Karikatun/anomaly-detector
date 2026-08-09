@@ -102,7 +102,6 @@ export function AccessSlotPanel({
   const { t } = useI18n()
   const confirmedSlotInfo = accessSlots.find(({ slot }) => slot === confirmedSlot)
   const selectedSlot = confirmedSlot ?? selected
-  const selectedSlotInfo = accessSlots.find(({ slot }) => slot === selectedSlot)
   const isConfirmed = confirmedSlotInfo !== undefined
   const tiePriorityPlayers = tiePriorityOrder
     .filter((player) => player.tiePriority !== undefined)
@@ -285,19 +284,6 @@ export function AccessSlotPanel({
         </div>
       ) : (
         <div className={styles.footer} data-tutorial-action-container="">
-          <div className={styles.selectionSummary} data-empty={!selectedSlotInfo || undefined}>
-            <Typography as="strong" variant="bodySmMedium">
-              {selectedSlotInfo
-                ? t('tender.access.selectionSummary', {
-                  name: t(selectedSlotInfo.labelKey),
-                  slot: String(selectedSlotInfo.slot).padStart(2, '0'),
-                })
-                : t('tender.access.selectionEmpty')}
-            </Typography>
-            <Typography variant="caption" tone="muted">
-              {selectedSlotInfo ? t(selectedSlotInfo.termsKey) : t('tender.access.selectionPrompt')}
-            </Typography>
-          </div>
           <div className={styles.confirmationAction}>
             <Button
               type="button"
@@ -312,9 +298,7 @@ export function AccessSlotPanel({
                 if (succeeded) setSelected(null)
               })()}
             >
-              {selectedSlotInfo
-                ? t('tender.access.confirmSlot', { slot: String(selectedSlotInfo.slot).padStart(2, '0') })
-                : t('tender.access.confirm')}
+              {t('tender.access.confirm')}
             </Button>
             <div className={styles.lockWarning}>
               <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.8} aria-hidden="true" />
