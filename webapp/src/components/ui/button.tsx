@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { Typography } from "@/components/ui/typography"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-transparent bg-clip-padding transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-[var(--motion-standard)] ease-[var(--ease-standard)] outline-none select-none focus-visible:border-ring focus-visible:shadow-[var(--focus-ring-shadow)] active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-[var(--opacity-disabled)] aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-transparent bg-clip-padding transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-[var(--motion-normal)] ease-[var(--ease-standard)] outline-none select-none focus-visible:border-ring focus-visible:shadow-[var(--focus-ring-shadow)] active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-[var(--opacity-disabled)] aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

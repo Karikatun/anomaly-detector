@@ -93,6 +93,8 @@ const mobileTaskKeys: Partial<Record<Exclude<TutorialStep, 'complete' | 'prologu
 }
 
 const orderedSteps = Object.keys(taskKeys) as Array<Exclude<TutorialStep, 'complete' | 'prologue'>>
+const spotlightRevealDelayMs = 140
+const layoutSettleDelayMs = 280
 const informationalSteps = new Set<TutorialStep>([
   'interaction-guide',
   'round-1-header',
@@ -330,7 +332,7 @@ function TutorialContent() {
     'round-1-header': { anchor: '[data-tutorial-highlight="header"] > header' },
     'round-1-sidebar': { anchor: '[data-tutorial-sidebar]' },
     'round-1-contracts': { anchor: '[data-tutorial-contracts]' },
-    'round-1-access-intro': { anchor: '[data-tutorial-primary]' },
+    'round-1-access-intro': { anchor: '[data-tutorial-access-intro]' },
     'round-1-access': {
       anchor: '[data-tutorial-access-slot="5"]',
     },
@@ -417,6 +419,12 @@ function TutorialContent() {
     || state.step === 'round-1-thesis-result-open'
     || state.step === 'round-2-contracts-review-open'
     || state.step === 'interpretation-open'
+  const powerAllocationStep = state.step === 'round-1-power' || state.step === 'round-2-power'
+  const mobileFreeInteractionStep = powerAllocationStep
+    || state.step === 'round-1-lab-pair'
+    || state.step === 'round-2-lab'
+    || state.step === 'round-1-thesis'
+    || state.step === 'round-2-thesis'
   const coachAtTop = (compactHeader && state.step === 'round-1-contracts')
     || readingDialogOpen
     || state.step === 'round-1-working-model'
@@ -460,11 +468,14 @@ function TutorialContent() {
       />
     ),
     data: { tutorialStep: state.step },
+    hideOverlay: compactHeader && mobileFreeInteractionStep,
     placement: 'auto',
     scrollOffset: 20,
     scrollTarget: targetConfig.anchor,
     skipScroll: true,
-    spotlightTarget: targetConfig.spotlight ?? targetConfig.anchor,
+    spotlightTarget: compactHeader
+      ? targetConfig.anchor
+      : targetConfig.spotlight ?? targetConfig.anchor,
     target: targetConfig.anchor,
   }
 
@@ -475,7 +486,7 @@ function TutorialContent() {
           anchorSelector={targetConfig.anchor}
           coachAtTop={coachAtTop}
           compactHeader={compactHeader}
-          spotlightSelector={targetConfig.spotlight}
+          spotlightSelector={compactHeader ? undefined : targetConfig.spotlight}
         />
       )}
       {!exitOpen && <Joyride
@@ -578,11 +589,12 @@ function TutorialViewportAnchor({
     let revealSpotlightTimer: number | undefined
     let scrollEndHandler: (() => void) | undefined
     let scrollHandler: (() => void) | undefined
+    let autoScrollPending = false
     let lastRequestedScrollTop: number | undefined
     const revealSpotlight = () => {
       delete document.documentElement.dataset.tutorialAutoscrolling
     }
-    const scheduleSpotlightReveal = (delay = 140) => {
+    const scheduleSpotlightReveal = (delay = spotlightRevealDelayMs) => {
       if (revealSpotlightTimer !== undefined) window.clearTimeout(revealSpotlightTimer)
       revealSpotlightTimer = window.setTimeout(revealSpotlight, delay)
     }
@@ -590,13 +602,12 @@ function TutorialViewportAnchor({
       document.documentElement.dataset.tutorialAutoscrolling = ''
     }
     const frame = window.requestAnimationFrame(() => {
-      const anchor = document.querySelector<HTMLElement>(anchorSelector)
-      if (!anchor) {
-        scheduleSpotlightReveal()
-        return
-      }
-
       const positionTarget = () => {
+        const anchor = document.querySelector<HTMLElement>(anchorSelector)
+        if (!anchor) {
+          scheduleSpotlightReveal()
+          return
+        }
         const coach = document.querySelector<HTMLElement>('[data-testid="floater"]')
         const header = document.querySelector<HTMLElement>('[data-tutorial-board] > header')
         const coachRect = coach?.getBoundingClientRect()
@@ -645,14 +656,13 @@ function TutorialViewportAnchor({
           if (repeatsLastTarget
             && (autoScrollInProgress || Math.abs(window.scrollY - targetScrollTop) < 1)) return
           lastRequestedScrollTop = targetScrollTop
-          const smoothScroll = compactHeader
-            && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-          if (smoothScroll) {
+          if (compactHeader) {
             document.documentElement.dataset.tutorialAutoscrolling = ''
-            scheduleSpotlightReveal(1_000)
+            scheduleSpotlightReveal()
           }
+          autoScrollPending = true
           window.scrollTo({
-            behavior: smoothScroll ? 'smooth' : 'instant',
+            behavior: 'instant',
             top: targetScrollTop,
           })
         } else if ('tutorialAutoscrolling' in document.documentElement.dataset) {
@@ -661,8 +671,10 @@ function TutorialViewportAnchor({
       }
 
       positionTarget()
-      layoutSettleTimer = window.setTimeout(positionTarget, 260)
+      layoutSettleTimer = window.setTimeout(positionTarget, layoutSettleDelayMs)
       scrollEndHandler = () => {
+        if (!autoScrollPending) return
+        autoScrollPending = false
         positionTarget()
         scheduleSpotlightReveal()
       }

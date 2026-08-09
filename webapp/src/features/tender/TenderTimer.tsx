@@ -17,7 +17,9 @@ export function TenderTimer({ remainingSeconds }: TenderTimerProps) {
       aria-label={translate('tender.tenderTimer.copy.001')}
       role="timer"
       variant="timer"
-      className={urgent ? 'text-red-400 animate-pulse' : 'text-primary'}
+      className={urgent
+        ? 'text-red-400 animate-pulse [animation-duration:var(--motion-loop)] motion-reduce:animate-none'
+        : 'text-primary'}
     >
       {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
     </Typography>

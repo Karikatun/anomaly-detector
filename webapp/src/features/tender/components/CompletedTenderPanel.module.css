@@ -223,7 +223,7 @@
   border-radius: 50%;
   color: rgba(173, 208, 229, .72);
   background: rgba(5, 29, 48, .72);
-  transition: color var(--motion-standard) var(--ease-standard), transform var(--motion-standard) var(--ease-standard);
+  transition: color var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard);
 }
 
 .roundToggle svg {
@@ -1094,7 +1094,7 @@
   height: 1rem;
   flex: none;
   color: rgba(54, 184, 255, .72);
-  transition: transform var(--motion-standard) var(--ease-standard);
+  transition: transform var(--motion-normal) var(--ease-standard);
 }
 
 .ratingBreakdown[open] .breakdownSummary > svg {

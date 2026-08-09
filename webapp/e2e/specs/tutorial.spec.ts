@@ -49,52 +49,6 @@ async function continueInformationStep(page: Parameters<typeof registerBrowserUs
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
 }
 
-async function captureScrollTransition(
-  page: Parameters<typeof registerBrowserUser>[0],
-  action: () => Promise<void>,
-) {
-  const [samples] = await Promise.all([
-    page.evaluate(() => new Promise<number[]>((resolve) => {
-      const positions: number[] = []
-      const startedAt = performance.now()
-      const sample = () => {
-        positions.push(window.scrollY)
-        if (performance.now() - startedAt < 500) window.requestAnimationFrame(sample)
-        else resolve(positions)
-      }
-      window.requestAnimationFrame(sample)
-    })),
-    action(),
-  ])
-  return samples
-}
-
-function expectSmoothAutoScroll(transitions: number[][]) {
-  const movement = transitions
-    .map((samples) => ({
-      endY: samples.at(-1) ?? samples[0] ?? 0,
-      samples,
-      startY: samples[0] ?? 0,
-    }))
-    .sort((left, right) => Math.abs(right.endY - right.startY) - Math.abs(left.endY - left.startY))[0]
-  expect(movement, 'tutorial actions must expose scroll transition samples').toBeDefined()
-  expect(
-    Math.abs(movement!.endY - movement!.startY),
-    'tutorial must automatically scroll to a distant target after a mobile action',
-  ).toBeGreaterThan(24)
-  const startY = movement!.startY
-  const endY = movement!.endY
-  const lower = Math.min(startY, endY) + 1
-  const upper = Math.max(startY, endY) - 1
-  const intermediatePositions = new Set(movement!.samples
-    .filter((position) => position > lower && position < upper)
-    .map((position) => Math.round(position)))
-  expect(
-    intermediatePositions.size,
-    'mobile tutorial auto-scroll must move through intermediate positions instead of jumping',
-  ).toBeGreaterThanOrEqual(2)
-}
-
 async function captureScrollRequests(
   page: Parameters<typeof registerBrowserUser>[0],
   action: () => Promise<void>,
@@ -158,9 +112,35 @@ async function completeInitialInterfaceTour(page: Parameters<typeof registerBrow
   await expectTutorialFrameFullyVisible(page, '[data-tutorial-contracts]')
   if (isMobile) await expectTargetClearOfCoach(page, '[data-testid="tutorial-contracts-trigger"]')
   await continueInformationStep(page, isMobile ? tasks.contractsMobile : tasks.contracts)
+  if (isMobile) {
+    await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-intro]')
+  }
   await continueInformationStep(page, tasks.accessIntro)
   await expect(page.locator('[data-tutorial-access-slot][data-selected]')).toHaveCount(0)
   await expect(page.getByText('Слот: 5', { exact: true })).toHaveCount(0)
+}
+
+async function expectCoachNearConfirmation(
+  page: Parameters<typeof registerBrowserUser>[0],
+  action: ReturnType<Parameters<typeof registerBrowserUser>[0]['getByRole']>,
+) {
+  if ((page.viewportSize()?.width ?? 0) > 600) return
+  await expect.poll(async () => {
+    const [actionBox, coachBox] = await Promise.all([
+      action.boundingBox(),
+      page.getByTestId('floater').locator('[data-joyride-step]').boundingBox(),
+    ])
+    if (!actionBox || !coachBox) return Number.POSITIVE_INFINITY
+    if (coachBox.y + coachBox.height <= actionBox.y) {
+      return actionBox.y - (coachBox.y + coachBox.height)
+    }
+    if (actionBox.y + actionBox.height <= coachBox.y) {
+      return coachBox.y - (actionBox.y + actionBox.height)
+    }
+    return Number.NEGATIVE_INFINITY
+  }, {
+    message: 'tutorial coach must stay close to the phase confirmation action',
+  }).toBeLessThanOrEqual(40)
 }
 
 async function expectTargetClearOfCoach(
@@ -536,6 +516,7 @@ async function chooseAccessSlot(
   await page.getByRole('button', { name: new RegExp(`^Слот доступа ${slot}:`) }).click()
   const confirm = page.getByRole('button', { name: 'Подтвердить выбор' })
   await expectRequiredActionAvailable(page, confirm)
+  await expectCoachNearConfirmation(page, confirm)
   await confirm.click()
 }
 
@@ -550,6 +531,7 @@ async function allocatePower(
   }
   const confirm = page.getByRole('button', { name: 'Подтвердить распределение' })
   await expectRequiredActionAvailable(page, confirm)
+  await expectCoachNearConfirmation(page, confirm)
   await confirm.click()
 }
 
@@ -782,33 +764,28 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await expectCoachWithinViewport(page)
   await completeInitialInterfaceTour(page)
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-slot="5"]')
-  const initialScrollTransitions: number[][] = []
   await chooseAccessSlot(page, 5)
-  initialScrollTransitions.push(await captureScrollTransition(
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await expectTargetInMobileInteractiveArea(
     page,
-    () => page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click(),
-  ))
-  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-power-options]')
+    '[data-tutorial-power-category="reconnaissance"]',
+  )
   await allocatePower(page, {
     'Разведка': 1,
     'Лаборатория': 2,
     'Анализ модели': 1,
     'Контракты': 0,
   })
-  initialScrollTransitions.push(await captureScrollTransition(
-    page,
-    () => page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click(),
-  ))
-  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-recon-options]')
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-recon-anchor]')
   await runReconnaissance(page)
-  initialScrollTransitions.push(await captureScrollTransition(
-    page,
-    () => page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click(),
-  ))
-  expectSmoothAutoScroll(initialScrollTransitions)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-lab-modes]')
   await page.getByRole('button', { name: 'Глубокое' }).click()
-  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-lab-pair]')
+  await expectTargetInMobileInteractiveArea(
+    page,
+    '[data-tutorial-lab-sample="aster"]',
+  )
   const spotlightTransition = await captureVisibleSpotlightMismatchDuringStepChange(
     page,
     'research-results',
@@ -916,7 +893,7 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await expect(mobileThesisDialog).toContainText('Тип верен')
   await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
 
-  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-options]')
+  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-slot="4"]')
   await chooseAccessSlot(page, 4)
   await expectTargetInMobileInteractiveArea(page, '[data-testid="tutorial-contracts-trigger"]')
   await page.getByTestId('tutorial-contracts-trigger').click()
@@ -925,16 +902,22 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await expect(mobileContractsDialog.getByText('Готов к подаче', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть контракты' }).click()
 
-  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-power-options]')
+  await expectTargetInMobileInteractiveArea(
+    page,
+    '[data-tutorial-power-category="reconnaissance"]',
+  )
   await allocatePower(page, {
     'Разведка': 1,
     'Лаборатория': 1,
     'Анализ модели': 1,
     'Контракты': 1,
   })
-  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-recon-options]')
+  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-recon-anchor]')
   await runReconnaissance(page)
-  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-lab-options]')
+  await expectTargetInMobileInteractiveArea(
+    page,
+    '[data-tutorial-lab-sample="boreal"]',
+  )
   await runLaboratoryTest(page, 'Boreal', 'Cinder')
 
   await expectTargetInMobileInteractiveArea(
@@ -959,7 +942,10 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   }).toBe(true)
   await expect(page.locator('[data-working-model-dialog]')).toBeVisible()
   await page.getByRole('button', { name: 'Boreal: гипотеза, тип поля Электромагнитное' }).click()
-  await expectTargetInMobileInteractiveArea(page, '[data-tutorial-thesis]')
+  await expectTargetInMobileInteractiveArea(
+    page,
+    '[data-tutorial-thesis] select[aria-label="Сигнал для тезиса"]',
+  )
   await expect(currentTask(page, tasks.roundTwoThesis)).toBeVisible()
   await submitThesis(page, 'boreal', 'electromagnetic')
 

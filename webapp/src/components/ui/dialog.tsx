@@ -68,9 +68,9 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed z-[var(--layer-overlay)] grid w-full gap-6 rounded-[var(--radius-elevated)] bg-popover p-6 text-popover-foreground ring-1 ring-foreground/5 duration-[var(--motion-panel)] ease-[var(--ease-emphasized)] outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:animate-none",
+          "fixed z-[var(--layer-overlay)] grid w-full gap-6 rounded-[var(--radius-elevated)] bg-popover p-6 text-popover-foreground ring-1 ring-foreground/5 duration-[var(--motion-slow)] ease-[var(--ease-emphasized)] outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:animate-none",
           placement === "centered"
-            ? "top-1/2 left-1/2 max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 sm:max-w-md data-open:zoom-in-95 data-closed:zoom-out-95"
+            ? "top-1/2 left-1/2 max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 sm:max-w-md"
             : "translate-none",
           className
         )}

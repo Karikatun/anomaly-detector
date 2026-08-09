@@ -162,7 +162,7 @@ export function AccessSlotPanel({
         </div>
       )}
 
-      <div className={styles.decisionBar}>
+      <div className={styles.decisionBar} data-tutorial-access-intro="">
         <span className={styles.budgetStatus}>
           <span className={styles.budgetIcon} aria-hidden="true">
             <HugeiconsIcon icon={Coins01Icon} strokeWidth={1.8} />
@@ -183,9 +183,9 @@ export function AccessSlotPanel({
 
       <div
         className={styles.slotGrid}
+        data-tutorial-access-options=""
         role="group"
         aria-label={t('tender.access.gridLabel')}
-        data-tutorial-access-options=""
       >
         {accessSlots.map(({ accent, effects, labelKey, slot, termsKey }) => {
           const isSelected = selectedSlot === slot

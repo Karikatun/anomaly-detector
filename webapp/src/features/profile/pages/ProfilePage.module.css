@@ -299,7 +299,7 @@
     linear-gradient(90deg, transparent, rgba(137, 184, 216, .08), transparent),
     rgba(3, 17, 31, .88);
   background-size: 220% 100%;
-  animation: skeleton 1.3s ease-in-out infinite;
+  animation: skeleton var(--motion-loop) ease-in-out infinite;
 }
 
 .skeleton:nth-child(n + 4) {

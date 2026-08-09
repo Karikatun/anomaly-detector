@@ -34,7 +34,7 @@
   padding: .2rem .35rem;
   border-radius: var(--radius-control);
   text-decoration: none;
-  transition: background-color var(--motion-standard) var(--ease-standard), box-shadow var(--motion-standard) var(--ease-standard);
+  transition: background-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard);
 }
 
 .profileLink:hover {
@@ -121,7 +121,7 @@
   color: inherit;
   text-align: left;
   background: linear-gradient(110deg, rgba(5, 16, 31, .9), rgba(4, 12, 24, .73));
-  transition: transform var(--motion-standard) var(--ease-standard), background-color var(--motion-standard) var(--ease-standard), border-color var(--motion-standard) var(--ease-standard);
+  transition: background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard);
 }
 .menuCard:hover { transform: none; background: linear-gradient(110deg, rgba(9, 28, 50, .96), rgba(5, 16, 31, .9)); }
 
@@ -154,11 +154,10 @@
   background: rgba(2, 17, 38, .62);
   font-size: clamp(1.15rem, 1.75vw, 1.7rem) !important;
   font-weight: 500 !important;
-  transition: transform var(--motion-standard) var(--ease-standard), background-color var(--motion-standard) var(--ease-standard), border-color var(--motion-standard) var(--ease-standard);
+  transition: background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard);
 }
 
 .rulesTrigger:hover {
-  transform: translateY(-2px);
   background: rgba(7, 39, 78, .86);
 }
 
