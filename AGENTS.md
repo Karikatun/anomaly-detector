@@ -308,7 +308,8 @@ Before completing every substantial UI task:
 6. visually inspect the rendered result in a browser;
 7. inspect desktop;
 8. inspect mobile;
-9. test relevant interactions and states;
+9. run the quick UI QA and applicable state matrix from
+   `docs/UX_CHECKLIST.md`;
 10. fix observed visual problems before finishing.
 
 Do not stop when code merely compiles. A UI task is complete only after the
