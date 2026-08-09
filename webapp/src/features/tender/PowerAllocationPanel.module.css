@@ -7,13 +7,13 @@
 
 .playerBar,
 .sampleBar,
-.allocationSummary,
+.powerLedger,
 .waiting,
 .confirmedBanner,
 .error {
-  border: 1px solid rgba(72, 139, 183, .3);
-  border-radius: .72rem;
-  background: rgba(1, 13, 27, .9);
+  border: 1px solid var(--border-game);
+  border-radius: var(--radius-panel);
+  background: var(--surface-game);
 }
 
 .confirmedState {
@@ -129,6 +129,81 @@
   color: var(--success);
 }
 
+.powerLedger {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(8rem, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  box-shadow: var(--shadow-inset-subtle);
+}
+
+.powerAvailable {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-4);
+  border-right: 1px solid var(--border-game-subtle);
+}
+
+.powerIcon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 46%, transparent);
+  border-radius: var(--radius-control);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.powerIcon > svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.powerTrack {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(1.25rem, 1fr));
+  gap: var(--space-2);
+}
+
+.powerTrack > span {
+  height: .55rem;
+  border: 1px solid var(--border-game-strong);
+  border-radius: var(--radius-compact);
+  background: rgba(42, 76, 101, .18);
+  transition: border-color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
+}
+
+.powerTrack > span[data-filled] {
+  border-color: color-mix(in srgb, var(--primary) 75%, white);
+  background: var(--primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .24);
+}
+
+.remainingMetric {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border-game-subtle);
+  color: var(--warning);
+}
+
+.remainingMetric strong {
+  color: currentColor;
+}
+
+.remainingMetric[data-empty] {
+  color: var(--success);
+}
+
 .sampleBar {
   display: grid;
   min-width: 0;
@@ -190,24 +265,33 @@
   position: relative;
   display: grid;
   min-width: 0;
-  min-height: 8.5rem;
+  min-height: 9rem;
   grid-template-columns: minmax(0, 1fr) minmax(7.5rem, 42%);
   grid-template-rows: auto 1fr auto;
   gap: .35rem .6rem;
   overflow: hidden;
   padding: .65rem;
-  border: 1px solid rgba(76, 129, 164, .48);
-  border-radius: .7rem;
-  background:
-    radial-gradient(circle at 26% 45%, color-mix(in srgb, var(--power-accent) 9%, transparent), transparent 46%),
-    linear-gradient(180deg, rgba(3, 20, 35, .98), rgba(2, 13, 25, .99));
+  border: 1px solid color-mix(in srgb, var(--power-accent) 42%, #345069);
+  border-radius: var(--radius-panel);
+  background: rgba(2, 15, 29, .97);
+  box-shadow:
+    inset 0 2px 0 color-mix(in srgb, var(--power-accent) 28%, transparent),
+    var(--shadow-inset-subtle);
+  transition: border-color var(--motion-standard) var(--ease-standard), box-shadow var(--motion-standard) var(--ease-standard), background-color var(--motion-standard) var(--ease-standard);
+}
+
+.categoryCard[data-allocated] {
+  border-color: var(--power-accent);
+  background: color-mix(in srgb, var(--power-accent) 6%, rgba(2, 15, 29, .98));
+  box-shadow:
+    inset 0 2px 0 var(--power-accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--power-accent) 24%, transparent);
 }
 
 .categoryCard[data-invalid] {
   border-color: var(--destructive);
-  background:
-    radial-gradient(circle at 20% 40%, color-mix(in srgb, var(--destructive) 14%, transparent), transparent 48%),
-    linear-gradient(180deg, rgba(28, 15, 25, .98), rgba(13, 10, 20, .99));
+  background: color-mix(in srgb, var(--destructive) 8%, rgba(13, 10, 20, .99));
+  box-shadow: inset 0 2px 0 var(--destructive);
 }
 
 .categoryIntro {
@@ -224,7 +308,7 @@
   flex: none;
   place-items: center;
   border: 1px solid rgba(111, 153, 182, .52);
-  border-radius: 50%;
+  border-radius: var(--radius-control);
   color: var(--power-accent);
   background: rgba(3, 18, 32, .84);
 }
@@ -238,6 +322,20 @@
   display: grid;
   min-width: 0;
   gap: .05rem;
+}
+
+.maximumBadge {
+  display: inline-flex;
+  min-height: 1.5rem;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+  padding: 0 var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--power-accent) 38%, transparent);
+  border-radius: var(--radius-compact);
+  color: color-mix(in srgb, var(--power-accent) 78%, white);
+  background: color-mix(in srgb, var(--power-accent) 6%, transparent);
+  white-space: nowrap;
 }
 
 .categoryTitle h3 {
@@ -260,9 +358,9 @@
   display: grid;
   align-self: start;
   grid-column: 1;
-  gap: .18rem;
+  gap: var(--space-2);
   margin: 0;
-  padding: 0 0 0 3.05rem;
+  padding: 0;
   color: rgba(222, 235, 244, .76);
   font-size: .68rem;
   line-height: 1.22;
@@ -270,7 +368,16 @@
 }
 
 .effects li {
-  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  opacity: .58;
+  transition: border-color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
 }
 
 .effects span {
@@ -278,27 +385,67 @@
   line-height: 1.22;
 }
 
-.effects li::before {
-  position: absolute;
-  content: '';
-  top: .42rem;
-  left: -.68rem;
-  width: .25rem;
+.effects li[data-next] {
+  border-color: var(--border-game-subtle);
+  opacity: .82;
+}
+
+.effects li[data-reached] {
+  border-color: color-mix(in srgb, var(--power-accent) 34%, transparent);
+  opacity: 1;
+  background: color-mix(in srgb, var(--power-accent) 7%, transparent);
+}
+
+.effectLevel {
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  border: 1px solid var(--border-game-strong);
+  border-radius: var(--radius-compact);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.effects li[data-reached] .effectLevel {
+  border-color: var(--power-accent);
+  color: var(--power-accent);
+}
+
+.allocationControl {
+  display: grid;
+  min-width: 0;
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+  gap: var(--space-2);
+}
+
+.categoryGauge {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.categoryGauge > span {
   height: .25rem;
-  border-radius: 50%;
-  background: var(--primary);
+  flex: 1;
+  border-radius: var(--radius-compact);
+  background: rgba(88, 125, 151, .26);
+  transition: background-color var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
+}
+
+.categoryGauge > span[data-filled] {
+  background: var(--power-accent);
 }
 
 .stepper {
   display: grid;
   min-width: 0;
-  grid-column: 2;
-  grid-row: 1 / 3;
-  grid-template-columns: 1fr 1.15fr 1fr;
-  align-self: center;
+  grid-template-columns: 1fr 1.3fr 1fr;
   overflow: hidden;
-  border: 1px solid rgba(86, 137, 171, .48);
-  border-radius: .55rem;
+  border: 1px solid var(--border-game-strong);
+  border-radius: var(--radius-control);
   background: rgba(2, 14, 27, .78);
 }
 
@@ -324,7 +471,12 @@
 }
 
 .stepper button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--power-accent) 11%, transparent);
+  color: var(--power-accent);
+  background: color-mix(in srgb, var(--power-accent) 9%, transparent);
+}
+
+.stepper button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--power-accent) 15%, transparent);
 }
 
 .stepper button:focus-visible {
@@ -334,14 +486,23 @@
 
 .stepper button:disabled {
   color: rgba(130, 157, 176, .34);
-  cursor: default;
+  cursor: not-allowed;
 }
 
 .stepper button span {
   font-size: 1.45rem;
 }
 
-.stepper strong,
+.allocationValue {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--border-game-subtle);
+  border-left: 1px solid var(--border-game-subtle);
+}
+
+.allocationValue strong,
 .lockedValue strong {
   display: grid;
   place-items: center;
@@ -364,10 +525,8 @@
   column-gap: .42rem;
   padding: .45rem .7rem;
   border: 1px solid rgba(86, 137, 171, .38);
-  border-radius: .55rem;
-  background:
-    radial-gradient(circle at 50% 0, color-mix(in srgb, var(--power-accent) 11%, transparent), transparent 62%),
-    rgba(2, 14, 27, .74);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--power-accent) 6%, rgba(2, 14, 27, .86));
 }
 
 .lockedValue > svg {
@@ -394,25 +553,8 @@
   text-align: center;
 }
 
-.allocationSummary {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: center;
-  padding: .65rem .75rem;
-  text-align: center;
-}
-
-.allocationSummary > span + span {
-  border-left: 1px solid rgba(101, 151, 183, .25);
-}
-
-.allocationSummary strong {
-  margin-left: .3rem;
-  color: var(--primary);
-  font-size: .95rem;
-}
-
 .error {
+  min-height: 3.25rem;
   display: flex;
   align-items: flex-start;
   gap: .65rem;
@@ -427,11 +569,6 @@
   height: 1.3rem;
   flex: none;
   margin-top: .05rem;
-}
-
-.error span {
-  display: grid;
-  gap: .15rem;
 }
 
 .confirmedBanner {
@@ -507,20 +644,38 @@
   z-index: 10;
   bottom: 0;
   display: grid;
-  gap: .4rem;
-  padding-top: .4rem;
-  background: linear-gradient(180deg, transparent, var(--background) 22%);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--border-game);
+  border-radius: var(--radius-panel);
+  background: rgba(2, 15, 29, .97);
+  box-shadow: var(--shadow-sticky);
+}
+
+.confirmationAction {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.confirmationFeedback {
+  display: grid;
+  min-height: 3.25rem;
+  align-items: stretch;
 }
 
 .confirmButton {
   width: 100%;
   min-height: 2.8rem;
-  border-radius: .55rem;
-  box-shadow: 0 .45rem 1.25rem rgba(13, 126, 255, .2);
+  border-radius: var(--radius-control);
+  box-shadow: 0 .35rem .9rem rgba(13, 126, 255, .16);
 }
 
 .lockWarning {
   display: flex;
+  min-height: 3.25rem;
   align-items: center;
   justify-content: center;
   gap: .4rem;
@@ -531,6 +686,14 @@
   height: .95rem;
   flex: none;
   color: rgba(191, 211, 224, .5);
+}
+
+.lockWarning[data-ready] > svg {
+  color: var(--success);
+}
+
+.lockWarning[data-ready] p {
+  color: var(--success);
 }
 
 .lockWarning p {
@@ -551,6 +714,25 @@
     grid-template-columns: auto auto minmax(0, 1fr);
     gap: .4rem;
     padding: .45rem .55rem;
+  }
+
+  .powerLedger {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .powerAvailable {
+    padding-right: var(--space-3);
+  }
+
+  .remainingMetric {
+    padding-left: var(--space-2);
+  }
+
+  .powerTrack {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .sampleCount {
@@ -587,17 +769,17 @@
   }
 
   .categoryGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     order: 4;
     gap: .5rem;
   }
 
   .categoryCard {
-    min-height: 10.2rem;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(2.4rem, 1fr) auto auto;
-    gap: .3rem;
-    padding: .5rem;
+    min-height: 9rem;
+    grid-template-columns: minmax(0, 1fr) minmax(8rem, 38%);
+    grid-template-rows: auto 1fr auto;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3);
   }
 
   .categoryIntro {
@@ -615,48 +797,43 @@
   }
 
   .categoryTitle h3 {
-    font-size: .78rem;
-  }
-
-  .categoryTitle > span > span,
-  .categoryTitle strong {
-    font-size: .62rem;
+    font-size: .9rem;
   }
 
   .effects {
     grid-column: 1;
     grid-row: 2;
     align-self: start;
-    gap: .1rem;
-    padding: 0 0 0 .7rem;
+    gap: var(--space-1);
+    padding: 0;
+  }
+
+  .effects li {
+    grid-template-columns: 1.35rem minmax(0, 1fr);
+    gap: var(--space-1);
+    padding: var(--space-1);
   }
 
   .effects span {
-    font-size: .56rem;
-    line-height: 1.16;
+    font-size: .7rem;
+    line-height: 1.25;
   }
 
-  .effects li::before {
-    top: .32rem;
-    left: -.55rem;
-    width: .2rem;
-    height: .2rem;
-  }
-
-  .stepper,
+  .allocationControl,
   .lockedValue {
-    min-height: 2.35rem;
-    grid-column: 1;
-    grid-row: 3;
+    min-height: 2.75rem;
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: center;
   }
 
   .stepper button {
-    min-height: 2.35rem;
+    min-height: 2.75rem;
   }
 
-  .stepper strong,
+  .allocationValue strong,
   .lockedValue strong {
-    font-size: 1.35rem;
+    font-size: 1.55rem;
   }
 
   .stepper button span {
@@ -664,21 +841,15 @@
   }
 
   .limitNote {
-    grid-column: 1;
-    grid-row: 4;
-    font-size: .55rem;
-  }
-
-  .allocationSummary {
-    order: 5;
-    padding: .45rem .55rem;
+    grid-column: 2;
+    grid-row: 3;
+    font-size: .62rem;
   }
 
   .footer {
-    position: static;
+    position: sticky;
     order: 6;
-    padding-top: 0;
-    background: none;
+    background: rgba(2, 15, 29, .98);
   }
 
   .confirmButton {
@@ -696,8 +867,7 @@
   }
 
   .playerBar {
-    min-height: 2.8rem;
-    justify-content: space-between;
+    display: none;
   }
 
   .currentPlayer,
@@ -733,53 +903,47 @@
   }
 
   .categoryGrid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
     gap: .75rem;
   }
 
   .categoryCard {
-    min-height: 22rem;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(5rem, 1fr) auto auto;
-    justify-items: center;
-    gap: .65rem;
-    padding: 1.1rem .8rem .75rem;
+    min-height: 15rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(6rem, 1fr) auto auto;
+    gap: var(--space-2);
+    padding: var(--space-3);
   }
 
   .categoryIntro {
-    flex-direction: column;
-    gap: .7rem;
+    gap: var(--space-2);
   }
 
   .categoryIcon {
-    width: 4.7rem;
-    height: 4.7rem;
+    width: 2.75rem;
+    height: 2.75rem;
   }
 
   .categoryIcon > svg {
-    width: 2.7rem;
-    height: 2.7rem;
+    width: 1.65rem;
+    height: 1.65rem;
   }
 
   .categoryTitle {
-    justify-items: center;
+    justify-items: start;
   }
 
   .categoryTitle h3 {
-    font-size: 1.15rem;
-  }
-
-  .categoryTitle p,
-  .categoryTitle > span > span,
-  .categoryTitle strong {
-    font-size: .82rem;
+    font-size: 1rem;
   }
 
   .effects {
     grid-column: 1;
+    grid-row: 2;
     align-self: start;
-    gap: .45rem;
-    padding-left: 1.25rem;
+    gap: var(--space-1);
+    padding-left: 0;
     font-size: .76rem;
     line-height: 1.3;
   }
@@ -789,7 +953,7 @@
     line-height: 1.3;
   }
 
-  .stepper,
+  .allocationControl,
   .lockedValue {
     width: 100%;
     min-height: 3.4rem;
@@ -798,14 +962,10 @@
   }
 
   .limitNote {
-    min-height: 1.6rem;
+    min-height: 0;
     grid-column: 1;
     grid-row: 4;
     font-size: .68rem;
-  }
-
-  .allocationSummary {
-    padding: .75rem 1rem;
   }
 
   .error {
@@ -818,8 +978,27 @@
   }
 
   .footer {
-    position: static;
-    background: transparent;
+    position: sticky;
+    width: min(100%, 48rem);
+    justify-self: end;
+    background: rgba(2, 15, 29, .86);
+  }
+
+  .confirmationAction {
+    width: 100%;
+    grid-template-columns: minmax(18rem, 1fr) minmax(16rem, 1fr);
+    align-items: stretch;
+  }
+
+  .confirmationFeedback {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .confirmButton {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
   }
 
   .confirmButton {
@@ -828,7 +1007,36 @@
 }
 
 @media (min-width: 80rem) {
+  .categoryGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .categoryCard {
-    min-height: 26rem;
+    min-height: 17.5rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(6.25rem, 1fr) auto auto;
+    justify-items: stretch;
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+
+  .footer {
+    position: static;
+  }
+
+  .effects {
+    grid-column: 1;
+  }
+
+  .allocationControl,
+  .lockedValue {
+    width: 100%;
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .limitNote {
+    grid-column: 1;
+    grid-row: 4;
   }
 }

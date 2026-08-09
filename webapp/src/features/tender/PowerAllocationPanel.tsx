@@ -4,6 +4,7 @@ import {
   Atom01Icon,
   CheckmarkCircle02Icon,
   ContractsIcon,
+  FlashIcon,
   FlaskConicalIcon,
   InformationCircleIcon,
   LockIcon,
@@ -90,6 +91,14 @@ const actionPower = (allocation: PowerAllocation | PowerAllocationDraft) =>
   + allocation.modelAnalysis
   + allocation.contracts
 
+const totalPower = 4
+
+function PowerCells({ count, filled }: { count: number; filled: number }) {
+  return Array.from({ length: count }, (_, index) => (
+    <span key={index} data-filled={index < filled || undefined} aria-hidden="true" />
+  ))
+}
+
 export function PowerAllocationPanel({
   confirmedAllocation,
   currentUserId,
@@ -108,7 +117,7 @@ export function PowerAllocationPanel({
   const [showUnallocatedWarning, setShowUnallocatedWarning] = useState(false)
   const { t } = useI18n()
   const total = useMemo(() => actionPower(allocation), [allocation])
-  const reserve = 4 - total
+  const reserve = totalPower - total
   const limits = powerAllocationLimits(sampleCount)
   const problem = powerAllocationProblem({ allocation, sampleCount })
   const validationError = error ?? (problem ? t(`tender.power.problem.${problem}`) : null)
@@ -201,6 +210,32 @@ export function PowerAllocationPanel({
         </div>
       </div>
 
+      <div className={styles.powerLedger} data-complete={reserve === 0 || undefined}>
+        <span className={styles.powerAvailable}>
+          <span className={styles.powerIcon} aria-hidden="true">
+            <HugeiconsIcon icon={FlashIcon} strokeWidth={1.8} />
+          </span>
+          <Typography as="strong" variant="bodySmMedium">{t('tender.power.available')}</Typography>
+        </span>
+
+        <div
+          className={styles.powerTrack}
+          role="progressbar"
+          aria-label={t('tender.power.allocated')}
+          aria-valuemin={0}
+          aria-valuemax={totalPower}
+          aria-valuenow={total}
+        >
+          <PowerCells count={totalPower} filled={total} />
+        </div>
+
+        <span className={styles.remainingMetric} data-empty={reserve === 0 || undefined} aria-live="polite" aria-atomic="true">
+          <Typography as="span" variant="caption">{t('tender.power.remainingLabel')}</Typography>
+          <Typography as="strong" variant="h4">{reserve}</Typography>
+          <Typography as="span" variant="caption" tone="muted"> / {totalPower}</Typography>
+        </span>
+      </div>
+
       <div className={styles.sampleBar}>
         <span className={styles.sampleIcon} aria-hidden="true">
           <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} />
@@ -216,16 +251,6 @@ export function PowerAllocationPanel({
         </span>
       </div>
 
-      {validationError && (
-        <div className={styles.error} role="alert">
-          <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.8} aria-hidden="true" />
-          <span>
-            <Typography as="strong" variant="bodySmMedium">{t('tender.power.fixAllocation')}</Typography>
-            <Typography variant="bodySm">{validationError}</Typography>
-          </span>
-        </div>
-      )}
-
       <div
         className={styles.categoryGrid}
         data-locked={isConfirmed || undefined}
@@ -236,13 +261,15 @@ export function PowerAllocationPanel({
           const limit = limits[key]
           const value = isConfirmed ? confirmedAllocation[key] : allocation[key]
           const isCategoryInvalid = key === 'reconnaissance'
-            && value > limits.reconnaissance
+            ? value > limits.reconnaissance
+            : key === 'laboratory' && problem === 'laboratory-needs-two-samples' && value > 0
 
           return (
             <article
               key={key}
               className={styles.categoryCard}
               data-tutorial-power-category={key}
+              data-allocated={value > 0 || undefined}
               data-invalid={isCategoryInvalid || undefined}
               style={categoryStyle(accent)}
             >
@@ -252,25 +279,26 @@ export function PowerAllocationPanel({
                 </span>
                 <span className={styles.categoryTitle}>
                   <Typography as="h3" variant="h5">{label}</Typography>
-                  <span>
-                    <Typography as="strong" variant="bodySmMedium">0–{limit}</Typography>
-                    <Typography as="span" variant="bodySm">
-                      {' '}{limit === 1 ? t('tender.power.unit.one') : t('tender.power.unit.many')}
-                    </Typography>
-                  </span>
+                </span>
+                <span className={styles.maximumBadge}>
+                  <Typography as="span" variant="caption">{t('tender.power.maximum', { count: limit })}</Typography>
                 </span>
               </div>
 
               <ul className={styles.effects}>
-                <li>
+                <li data-reached={value >= 1 || undefined} data-next={value === 0 || undefined}>
+                  <Typography as="strong" variant="bodySmMedium" className={styles.effectLevel}>1</Typography>
                   <Typography as="span" variant="bodySm">
-                    {t(oneEffectKey).replace(/^1 мощность:\s*/u, '1: ')}
+                    <Typography as="span" variant="caption" className="sr-only">1: </Typography>
+                    {t(oneEffectKey).replace(/^1 мощность:\s*/u, '')}
                   </Typography>
                 </li>
                 {twoEffectKey && (
-                  <li>
+                  <li data-reached={value >= 2 || undefined} data-next={value === 1 || undefined}>
+                    <Typography as="strong" variant="bodySmMedium" className={styles.effectLevel}>2</Typography>
                     <Typography as="span" variant="bodySm">
-                      {t(twoEffectKey).replace(/^2 мощности:\s*/u, '2: ')}
+                      <Typography as="span" variant="caption" className="sr-only">2: </Typography>
+                      {t(twoEffectKey).replace(/^2 мощности:\s*/u, '')}
                     </Typography>
                   </li>
                 )}
@@ -283,49 +311,44 @@ export function PowerAllocationPanel({
                   <Typography as="span" variant="caption">{translate('tender.powerAllocationPanel.copy.001')}</Typography>
                 </div>
               ) : (
-                <div className={styles.stepper}>
-                  <button
-                    type="button"
-                    aria-label={t('tender.power.decrease', { category: label })}
-                    disabled={disabled || value <= 0}
-                    onClick={() => decrement(key)}
-                  >
-                    <Typography as="span" variant="h5">−</Typography>
-                  </button>
-                  <Typography as="strong" variant="h3">{value}</Typography>
-                  <button
-                    type="button"
-                    aria-label={t('tender.power.increase', { category: label })}
-                    disabled={disabled || value >= limit || total >= 4}
-                    onClick={() => increment(key, limit)}
-                  >
-                    <Typography as="span" variant="h5">+</Typography>
-                  </button>
+                <div className={styles.allocationControl}>
+                  <div className={styles.categoryGauge} aria-hidden="true">
+                    <PowerCells count={limit} filled={value} />
+                  </div>
+                  <div className={styles.stepper} role="group" aria-label={t('tender.power.categoryAllocation', { category: label })}>
+                    <button
+                      type="button"
+                      aria-label={t('tender.power.decrease', { category: label })}
+                      disabled={disabled || value <= 0}
+                      onClick={() => decrement(key)}
+                    >
+                      <Typography as="span" variant="h5">−</Typography>
+                    </button>
+                    <span className={styles.allocationValue} aria-live="polite" aria-atomic="true">
+                      <Typography as="strong" variant="h3">{value}</Typography>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={t('tender.power.increase', { category: label })}
+                      disabled={disabled || value >= limit || total >= totalPower}
+                      onClick={() => increment(key, limit)}
+                    >
+                      <Typography as="span" variant="h5">+</Typography>
+                    </button>
+                  </div>
                 </div>
               )}
 
-              <Typography variant="caption" className={styles.limitNote}>
-                {key === 'reconnaissance'
-                  ? t('tender.power.availableTargets', {
-                      count: 6 - sampleCount,
-                      max: limit,
-                    })
-                  : t('tender.power.maximum', { count: limit })}
-              </Typography>
+              {key === 'reconnaissance' && (
+                <Typography variant="caption" className={styles.limitNote}>
+                  {t('tender.power.availableTargets', {
+                    count: 6 - sampleCount,
+                  })}
+                </Typography>
+              )}
             </article>
           )
         })}
-      </div>
-
-      <div className={styles.allocationSummary}>
-        <span>
-          <Typography as="span" variant="bodySm">{t('tender.power.allocated')}</Typography>
-          <Typography as="strong" variant="bodySmMedium">{total} / 4</Typography>
-        </span>
-        <span>
-          <Typography as="span" variant="bodySm">{t('tender.power.unallocated')}</Typography>
-          <Typography as="strong" variant="bodySmMedium">{reserve}</Typography>
-        </span>
       </div>
 
       {isConfirmed && (
@@ -364,19 +387,37 @@ export function PowerAllocationPanel({
 
       {!isConfirmed && (
         <footer className={styles.footer} data-tutorial-action-container="">
-          <Button
-            type="button"
-            size="lg"
-            className={styles.confirmButton}
-            data-tutorial-confirm-ready={total === 4 || undefined}
-            disabled={disabled || problem !== null}
-            onClick={requestConfirmation}
-          >
-            {t('tender.power.confirm')}
-          </Button>
-          <div className={styles.lockWarning}>
-            <HugeiconsIcon icon={LockIcon} strokeWidth={1.7} aria-hidden="true" />
-            <Typography variant="bodySm" tone="muted">{t('tender.power.secretWarning')}</Typography>
+          <div className={styles.confirmationAction}>
+            <Button
+              type="button"
+              size="lg"
+              aria-label={t('tender.power.confirm')}
+              className={styles.confirmButton}
+              data-tutorial-confirm-ready={total === totalPower || undefined}
+              disabled={disabled || problem !== null}
+              onClick={requestConfirmation}
+            >
+              {t('tender.power.confirm')}
+            </Button>
+            <div className={styles.confirmationFeedback} aria-live="polite" aria-atomic="true">
+              {validationError ? (
+                <div className={styles.error} role="alert">
+                  <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.8} aria-hidden="true" />
+                  <Typography variant="bodySm">{validationError}</Typography>
+                </div>
+              ) : (
+                <div className={styles.lockWarning} data-ready={reserve === 0 || undefined}>
+                  <HugeiconsIcon
+                    icon={reserve === 0 ? CheckmarkCircle02Icon : LockIcon}
+                    strokeWidth={1.7}
+                    aria-hidden="true"
+                  />
+                  <Typography variant="bodySm" tone="muted">
+                    {reserve === 0 ? t('tender.power.ready') : t('tender.power.secretWarning')}
+                  </Typography>
+                </div>
+              )}
+            </div>
           </div>
         </footer>
       )}

@@ -628,12 +628,19 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await chooseAccessSlot(page, 5)
   await expectCoachWithinViewport(page)
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
-  await allocatePower(page, {
-    'Разведка': 1,
-    'Лаборатория': 2,
-    'Анализ модели': 1,
-    'Контракты': 0,
-  })
+  await page.getByRole('button', { name: 'Увеличить мощность: Разведка' }).click()
+  await page.getByRole('button', { name: 'Увеличить мощность: Разведка' }).click()
+  await page.getByRole('button', { name: 'Увеличить мощность: Анализ модели' }).click()
+  await page.getByRole('button', { name: 'Увеличить мощность: Контракты' }).click()
+  await page.getByRole('button', { name: 'Подтвердить распределение' }).click()
+  await expect(page.getByRole('alert')).toContainText(
+    'Для этого задания нужно: Разведка 1, Лаборатория 2, Анализ модели 1, Контракты 0.',
+  )
+  await page.getByRole('button', { name: 'Уменьшить мощность: Разведка' }).click()
+  await page.getByRole('button', { name: 'Уменьшить мощность: Контракты' }).click()
+  await page.getByRole('button', { name: 'Увеличить мощность: Лаборатория' }).click()
+  await page.getByRole('button', { name: 'Увеличить мощность: Лаборатория' }).click()
+  await page.getByRole('button', { name: 'Подтвердить распределение' }).click()
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expect(currentTask(page, tasks.roundOneRecon)).toBeVisible()
   await expectCoachWithinViewport(page)
