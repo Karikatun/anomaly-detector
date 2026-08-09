@@ -29,7 +29,13 @@ async function startTutorial(page: Parameters<typeof registerBrowserUser>[0]) {
   const prologue = page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
   await expect(prologue).toContainText('Корпорация объявила Тендер')
   await expect(prologue.getByRole('button', { name: 'Вернуться в главное меню' })).toBeVisible()
-  await prologue.getByRole('button', { name: 'Начать обучение' }).click()
+  const startAction = () => prologue.getByRole('button', { name: 'Начать обучение' }).click()
+  if ((page.viewportSize()?.width ?? 0) <= 600) {
+    const requests = await captureScrollRequests(page, startAction)
+    expect(requests, 'the before-start step must not scroll an oversized target').toEqual([])
+  } else {
+    await startAction()
+  }
   await expect(currentTask(page, tasks.interactionGuide)).toBeVisible()
   await expect(page.getByTestId('floater').getByText('Перед началом', { exact: true })).toBeVisible()
   await expect(page.locator('[data-tutorial-access-slot][data-selected]')).toHaveCount(0)
@@ -451,12 +457,12 @@ async function expectSpotlightMatchesTarget(
 
 async function captureVisibleSpotlightMismatchDuringStepChange(
   page: Parameters<typeof registerBrowserUser>[0],
-  task: string,
+  step: string,
   selector: string,
   action: () => Promise<void>,
 ) {
   const [transition] = await Promise.all([
-    page.evaluate(({ selector: targetSelector, task: expectedTask }) => new Promise<{
+    page.evaluate(({ selector: targetSelector, step: expectedStep }) => new Promise<{
       hiddenWhileMoving: number
       mismatches: number[]
     }>((resolve) => {
@@ -467,8 +473,10 @@ async function captureVisibleSpotlightMismatchDuringStepChange(
       let previousScrollY = window.scrollY
 
       const sample = () => {
-        const coach = document.querySelector<HTMLElement>('[data-testid="floater"]')
-        if (startedAt === null && coach?.textContent?.includes(expectedTask)) startedAt = performance.now()
+        const currentStep = document.querySelector<HTMLElement>(
+          '[data-testid="floater"] [data-tutorial-step]',
+        )?.dataset.tutorialStep
+        if (startedAt === null && currentStep === expectedStep) startedAt = performance.now()
         if (startedAt !== null) {
           const target = document.querySelector<HTMLElement>(targetSelector)
           const spotlightPath = Array.from(
@@ -504,7 +512,7 @@ async function captureVisibleSpotlightMismatchDuringStepChange(
         }
       }
       window.requestAnimationFrame(sample)
-    }), { selector, task }),
+    }), { selector, step }),
     action(),
   ])
   return transition
@@ -524,19 +532,16 @@ async function expectDesktopTargetBelowStickyHeader(
 async function chooseAccessSlot(
   page: Parameters<typeof registerBrowserUser>[0],
   slot: 4 | 5,
-  captureTransition = false,
 ) {
   await page.getByRole('button', { name: new RegExp(`^Слот доступа ${slot}:`) }).click()
   const confirm = page.getByRole('button', { name: 'Подтвердить выбор' })
   await expectRequiredActionAvailable(page, confirm)
-  if (captureTransition) return captureScrollTransition(page, () => confirm.click())
   await confirm.click()
 }
 
 async function allocatePower(
   page: Parameters<typeof registerBrowserUser>[0],
   allocation: Record<'Разведка' | 'Лаборатория' | 'Анализ модели' | 'Контракты', number>,
-  captureTransition = false,
 ) {
   for (const [category, count] of Object.entries(allocation)) {
     for (let index = 0; index < count; index += 1) {
@@ -545,18 +550,13 @@ async function allocatePower(
   }
   const confirm = page.getByRole('button', { name: 'Подтвердить распределение' })
   await expectRequiredActionAvailable(page, confirm)
-  if (captureTransition) return captureScrollTransition(page, () => confirm.click())
   await confirm.click()
 }
 
-async function runReconnaissance(
-  page: Parameters<typeof registerBrowserUser>[0],
-  captureTransition = false,
-) {
+async function runReconnaissance(page: Parameters<typeof registerBrowserUser>[0]) {
   await page.getByRole('button', { name: 'Сигнал для разведки: Неизвестный сигнал A' }).click()
   const confirm = page.getByRole('button', { name: 'Исследовать' })
   await expectRequiredActionAvailable(page, confirm)
-  if (captureTransition) return captureScrollTransition(page, () => confirm.click())
   await confirm.click()
 }
 
@@ -770,26 +770,35 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await completeInitialInterfaceTour(page)
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-slot="5"]')
   const initialScrollTransitions: number[][] = []
-  initialScrollTransitions.push((await chooseAccessSlot(page, 5, true))!)
-  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await chooseAccessSlot(page, 5)
+  initialScrollTransitions.push(await captureScrollTransition(
+    page,
+    () => page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click(),
+  ))
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-power-options]')
-  initialScrollTransitions.push((await allocatePower(page, {
+  await allocatePower(page, {
     'Разведка': 1,
     'Лаборатория': 2,
     'Анализ модели': 1,
     'Контракты': 0,
-  }, true))!)
-  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  })
+  initialScrollTransitions.push(await captureScrollTransition(
+    page,
+    () => page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click(),
+  ))
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-recon-options]')
-  initialScrollTransitions.push((await runReconnaissance(page, true))!)
+  await runReconnaissance(page)
+  initialScrollTransitions.push(await captureScrollTransition(
+    page,
+    () => page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click(),
+  ))
   expectSmoothAutoScroll(initialScrollTransitions)
-  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-lab-modes]')
   await page.getByRole('button', { name: 'Глубокое' }).click()
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-lab-pair]')
   const spotlightTransition = await captureVisibleSpotlightMismatchDuringStepChange(
     page,
-    tasks.researchResultsMobile,
+    'research-results',
     '[data-testid="tutorial-research-trigger"]',
     () => runLaboratoryTest(page, 'Aster', 'Boreal'),
   )
@@ -806,7 +815,16 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await waitForScrollToSettle(page)
   await expectSpotlightMatchesTarget(page, '[data-testid="tutorial-research-trigger"]')
   const scrollBeforeResearchDialog = await page.evaluate(() => window.scrollY)
-  await page.getByTestId('tutorial-research-trigger').click()
+  const researchDialogFrameTransition = await captureVisibleSpotlightMismatchDuringStepChange(
+    page,
+    'research-results-open',
+    '[data-testid="tutorial-research-dialog"]',
+    () => page.getByTestId('tutorial-research-trigger').click(),
+  )
+  expect(
+    researchDialogFrameTransition.mismatches,
+    'the research dialog spotlight must not visibly jump into place',
+  ).toEqual([])
   const mobileResearchDialog = page.getByRole('dialog', { name: 'Данные исследований' })
   await expectReadingDialogAvailable(page, mobileResearchDialog)
   await expect.poll(async () => Math.abs(
@@ -831,7 +849,16 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   ).toEqual([])
 
   await page.getByRole('button', { name: 'Справка', exact: true }).click()
-  await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
+  const interpretationDialogFrameTransition = await captureVisibleSpotlightMismatchDuringStepChange(
+    page,
+    'interpretation-open',
+    '[data-testid="tutorial-interpretation-dialog"]',
+    () => page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click(),
+  )
+  expect(
+    interpretationDialogFrameTransition.mismatches,
+    'step 18 must not show a moving dialog spotlight',
+  ).toEqual([])
   const mobileInterpretationDialog = page.getByRole('dialog', { name: 'Трактовка лабораторных анализов' })
   await expect(mobileInterpretationDialog).toBeVisible()
   await expectReadingDialogAvailable(page, mobileInterpretationDialog)
@@ -930,7 +957,11 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     .selectOption('tutorial-test-2')
   await page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник' }).click()
   await expectTargetInMobileInteractiveArea(page, '[data-contract-id="tutorial-light-contract"]')
-  await page.getByRole('button', { name: 'Подтвердить контракт: Boreal · источник' }).click()
+  const finalIntroScrollRequests = await captureScrollRequests(
+    page,
+    () => page.getByRole('button', { name: 'Подтвердить контракт: Boreal · источник' }).click(),
+  )
+  expect(finalIntroScrollRequests, 'step 35 must not scroll an oversized target').toEqual([])
 
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expect(page.getByLabel('Заполнено параметров: 4')).toBeVisible()
