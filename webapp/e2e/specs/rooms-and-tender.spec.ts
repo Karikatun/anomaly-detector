@@ -51,8 +51,21 @@ async function allocatePower(page: Page, allocation: Record<string, number>) {
 
 async function runReconnaissance(page: Page, signalCount = 2) {
   const targets = page.getByRole('button', { name: /^Сигнал для разведки:/ })
-  for (let index = 0; index < signalCount; index += 1) {
+  if (signalCount > 1) {
+    const firstTarget = targets.first()
+    await firstTarget.click()
+    await expect(firstTarget).toHaveAttribute('aria-pressed', 'true')
+    await firstTarget.click()
+    await expect(firstTarget).toHaveAttribute('aria-pressed', 'false')
+    await firstTarget.press('Enter')
+    await expect(firstTarget).toHaveAttribute('aria-pressed', 'true')
+  }
+  for (let index = signalCount > 1 ? 1 : 0; index < signalCount; index += 1) {
     await targets.nth(index).click()
+    await expect(targets.nth(index)).toHaveAttribute('aria-pressed', 'true')
+  }
+  if (signalCount > 1 && await targets.count() > signalCount) {
+    await expect(targets.nth(signalCount)).toBeDisabled()
   }
   await page.getByRole('button', { name: 'Исследовать' }).click()
 }
@@ -661,6 +674,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByRole('button', { name: 'Правила' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Трактовка анализов' })).toBeDisabled()
     await runReconnaissance(page)
+    await expect(page.getByText('Образцы: 2 / 6')).toBeVisible()
+    await expect(page.getByText('Изучено', { exact: true })).toHaveCount(2)
     await expect(page.getByRole('button', { name: 'Правила' })).toBeEnabled()
     await expect(page.getByRole('button', { name: 'Трактовка анализов' })).toBeEnabled()
     await expectPhase(guestPage, headings.reconnaissance)
