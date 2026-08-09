@@ -27,6 +27,7 @@ type LaboratoryPanelProps = {
   initialMode?: 'broad' | 'deep'
   onModeSelect?: (mode: 'broad' | 'deep') => void
   disabled?: boolean
+  pending?: boolean
   error?: string | null
   onConfirm: (input: LaboratoryAction) => Promise<void>
 }
@@ -45,6 +46,7 @@ export function LaboratoryPanel({
   initialMode,
   onModeSelect,
   disabled,
+  pending = false,
   error,
   onConfirm,
 }: LaboratoryPanelProps) {
@@ -63,6 +65,7 @@ export function LaboratoryPanel({
   const requiresModeChoice = powerAllocation === 2 && policy.versionedLaboratory && mode === null
   const { t } = useI18n()
   const signalName = (signal: SignalId) => t(signalLabelKeys[signal])
+  const ownResearch = (journal ?? []).filter((entry) => entry.playerId === playerId)
   const latestMeasurement = privateMeasurements.at(-1)
   const pairAlreadyResearched = isValid && isLaboratoryPairResearched({
     journal,
@@ -79,6 +82,19 @@ export function LaboratoryPanel({
     : pairAlreadyResearched
       ? translate('tender.laboratoryPanel.copy.002', { value1: signalName(source), value2: signalName(receiver) })
       : null
+  const actionReady = isValid
+    && mode !== null
+    && !pairAlreadyResearched
+    && !duplicateBroadPair
+  const nextStep = requiresModeChoice
+    ? t('tender.lab.mode.selectFirst')
+    : mySamples.length < 2
+      ? t('tender.lab.samples.needTwo')
+      : source === null
+        ? t('tender.lab.next.source')
+        : receiver === null
+          ? t('tender.lab.next.receiver')
+          : null
 
   const handleTest = async () => {
     if (!isValid || mode === null) return
@@ -122,21 +138,21 @@ export function LaboratoryPanel({
   }
 
   return (
-    <section className={styles.panel} aria-labelledby="laboratory-heading">
+    <section className={styles.panel} aria-labelledby="laboratory-heading" aria-busy={pending}>
       <div className={`${styles.split} ${styles.laboratorySplit}`}>
         <section className={styles.surface} data-tutorial-lab-options="">
           <div className={styles.sectionHeader}>
             <Typography id="laboratory-heading" as="h2" variant="bodySmMedium" className={styles.sectionTitle}>
-              
               {translate('tender.laboratoryPanel.copy.003')}
             </Typography>
-            <Typography as="span" variant="caption" className={styles.sectionMeta}>{mySamples.length}  {translate('tender.laboratoryPanel.copy.004')}</Typography>
           </div>
 
           {powerAllocation === 2 && policy.versionedLaboratory && (
             <div className={styles.laboratoryModeStep}>
               <div className={styles.laboratoryModeIntro}>
-                <Typography as="strong" variant="caption">{t('tender.lab.mode.step')}</Typography>
+                <Typography as="strong" variant="caption">
+                  {mode === null ? t('tender.lab.mode.step') : t('tender.lab.mode.selectedStep')}
+                </Typography>
                 <Typography as="span" variant="bodySm">{t('tender.lab.mode.description')}</Typography>
               </div>
               <div
@@ -152,8 +168,14 @@ export function LaboratoryPanel({
                   disabled={disabled}
                   onClick={() => selectMode('deep')}
                 >
-                  <Typography as="span" variant="bodySmMedium">{t('tender.lab.mode.deep')}</Typography>
-                  <Typography as="span" variant="caption">{t('tender.lab.mode.deepDescription')}</Typography>
+                  <span className={styles.laboratoryModeHeader}>
+                    <Typography as="strong" variant="bodySmMedium">{t('tender.lab.mode.deep')}</Typography>
+                    <Typography as="span" variant="caption">{t('tender.lab.mode.deepCount')}</Typography>
+                  </span>
+                  <Typography as="span" variant="bodySmMedium" className={styles.laboratoryModeBenefit}>
+                    {t('tender.lab.mode.deepBenefit')}
+                  </Typography>
+                  <Typography as="span" variant="caption">{t('tender.lab.mode.deepOutcome')}</Typography>
                 </button>
                 <button
                   type="button"
@@ -162,8 +184,14 @@ export function LaboratoryPanel({
                   disabled={disabled}
                   onClick={() => selectMode('broad')}
                 >
-                  <Typography as="span" variant="bodySmMedium">{t('tender.lab.mode.broad')}</Typography>
-                  <Typography as="span" variant="caption">{t('tender.lab.mode.broadDescription')}</Typography>
+                  <span className={styles.laboratoryModeHeader}>
+                    <Typography as="strong" variant="bodySmMedium">{t('tender.lab.mode.broad')}</Typography>
+                    <Typography as="span" variant="caption">{t('tender.lab.mode.broadCount')}</Typography>
+                  </span>
+                  <Typography as="span" variant="bodySmMedium" className={styles.laboratoryModeBenefit}>
+                    {t('tender.lab.mode.broadBenefit')}
+                  </Typography>
+                  <Typography as="span" variant="caption">{t('tender.lab.mode.broadOutcome')}</Typography>
                 </button>
               </div>
             </div>
@@ -189,35 +217,82 @@ export function LaboratoryPanel({
             </div>
           )}
 
-          <div className={styles.choiceMatrix} data-tutorial-lab-pair="">
-            {mySamples.map((signal) => {
-              const role = source === signal ? 'source' : receiver === signal ? 'receiver' : undefined
-              const ariaLabel = role === 'source'
-                ? t('tender.lab.sourceAria', { signal: signalName(signal) })
-                : role === 'receiver'
-                  ? t('tender.lab.receiverAria', { signal: signalName(signal) })
-                  : t('tender.lab.sampleAria', { signal: signalName(signal) })
-
-              return (
-                <button
-                  key={signal}
-                  type="button"
-                  className={styles.sampleChoice}
-                  data-tutorial-lab-sample={signal}
-                  style={signalStyle(signal)}
-                  data-selected={role || undefined}
-                  data-role={role}
-                  aria-label={ariaLabel}
-                  aria-pressed={role !== undefined}
-                  disabled={disabled || requiresModeChoice}
-                  onClick={() => handleSampleClick(signal)}
-                >
-                  <SignalGlyph signal={signal} className={styles.signalGlyph} />
-                  <Typography as="strong" variant="bodySmMedium">{signalName(signal)}</Typography>
-                </button>
-              )
-            })}
+          <div className={styles.sampleSelectionHeader}>
+            <span>
+              <Typography as="strong" variant="caption">{t('tender.lab.samples.step')}</Typography>
+              <Typography as="span" variant="bodySm" tone="muted">{t('tender.lab.samples.direction')}</Typography>
+            </span>
+            <Typography as="strong" variant="caption" className={styles.sampleSelectionCount}>
+              {selectedSamples.length} / 2
+            </Typography>
           </div>
+
+          {mySamples.length === 0 ? (
+            <div className={styles.laboratoryEmpty} data-tutorial-lab-pair="">
+              <Typography as="strong" variant="bodySmMedium">{t('tender.lab.samples.empty')}</Typography>
+              <Typography variant="caption" tone="muted">{t('tender.lab.samples.emptyDetail')}</Typography>
+            </div>
+          ) : (
+            <>
+              <div className={styles.choiceMatrix} data-tutorial-lab-pair="">
+                {mySamples.map((signal) => {
+                  const role = source === signal ? 'source' : receiver === signal ? 'receiver' : undefined
+                  const researchCount = ownResearch.filter((entry) => (
+                    entry.sourceSignal === signal || entry.receiverSignal === signal
+                  )).length
+                  const ariaLabel = role === 'source'
+                    ? t('tender.lab.sourceAria', { signal: signalName(signal) })
+                    : role === 'receiver'
+                      ? t('tender.lab.receiverAria', { signal: signalName(signal) })
+                      : t('tender.lab.sampleAria', { signal: signalName(signal) })
+
+                  return (
+                    <button
+                      key={signal}
+                      type="button"
+                      className={styles.sampleChoice}
+                      data-tutorial-lab-sample={signal}
+                      style={signalStyle(signal)}
+                      data-selected={role || undefined}
+                      data-role={role}
+                      aria-label={ariaLabel}
+                      aria-pressed={role !== undefined}
+                      disabled={disabled || requiresModeChoice}
+                      onClick={() => handleSampleClick(signal)}
+                    >
+                      <SignalGlyph signal={signal} className={styles.signalGlyph} />
+                      <span className={styles.sampleChoiceCopy}>
+                        <Typography as="strong" variant="bodySmMedium" className={styles.sampleChoiceName}>
+                          {signalName(signal)}
+                        </Typography>
+                        <Typography as="span" variant="caption" className={styles.sampleChoiceStatus}>
+                          {researchCount > 0
+                            ? t('tender.lab.sample.researched')
+                            : t('tender.lab.sample.unresearched')}
+                        </Typography>
+                        <Typography as="span" variant="caption" tone="muted">
+                          {t('tender.lab.sample.researchCount', { count: researchCount })}
+                        </Typography>
+                      </span>
+                      {role && (
+                        <Typography as="span" variant="caption" className={styles.sampleChoiceRole}>
+                          {role === 'source'
+                            ? t('tender.lab.sample.sourceRole')
+                            : t('tender.lab.sample.receiverRole')}
+                        </Typography>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              {mySamples.length === 1 && (
+                <div className={styles.sampleShortage} role="status">
+                  <Typography as="strong" variant="caption">{t('tender.lab.samples.one')}</Typography>
+                  <Typography as="span" variant="caption" tone="muted">{t('tender.lab.samples.needTwo')}</Typography>
+                </div>
+              )}
+            </>
+          )}
         </section>
 
         <section className={styles.surface}>
@@ -251,6 +326,33 @@ export function LaboratoryPanel({
                   : t(`tender.lab.protocol.${mode === 'deep' ? 'continuous' : 'impulse'}`)}
               </Typography>
             </span>
+          </div>
+
+          <div className={styles.completedResearch}>
+            <div className={styles.completedResearchHeader}>
+              <Typography as="strong" variant="caption">{t('tender.lab.research.title')}</Typography>
+              <Typography as="span" variant="caption">{ownResearch.length}</Typography>
+            </div>
+            {ownResearch.length > 0 ? (
+              <div className={styles.completedResearchList}>
+                {ownResearch.slice().reverse().map((entry) => (
+                  <span key={entry.testId} className={styles.completedResearchEntry}>
+                    <span className={styles.completedResearchRoute}>
+                      <SignalGlyph signal={entry.sourceSignal} className={styles.measurementHistoryGlyph} />
+                      <Typography as="strong" variant="caption">{signalName(entry.sourceSignal)}</Typography>
+                      <Typography as="span" variant="bodySmMedium" className={styles.measurementArrow}>→</Typography>
+                      <SignalGlyph signal={entry.receiverSignal} className={styles.measurementHistoryGlyph} />
+                      <Typography as="strong" variant="caption">{signalName(entry.receiverSignal)}</Typography>
+                    </span>
+                    <Typography as="span" variant="caption" tone="muted">
+                      {t(`tender.result.${entry.publicResult}`)} · {t(`tender.protocol.${entry.protocol}`)}
+                    </Typography>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <Typography variant="caption" tone="muted">{t('tender.lab.research.empty')}</Typography>
+            )}
           </div>
 
           <div className={styles.laboratoryActions}>
@@ -317,30 +419,27 @@ export function LaboratoryPanel({
         </div>
       )}
 
-      <footer className={styles.footer} data-tutorial-action-container="">
-        <div className={styles.info}>
-          <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
-          <Typography variant="bodySm">
-            {requiresModeChoice
-              ? t('tender.lab.mode.selectFirst')
-              : source && receiver
-              ? `${signalName(source)} → ${signalName(receiver)}`
-              : translate('tender.laboratoryPanel.copy.016')}
-          </Typography>
-        </div>
+      <footer
+        className={`${styles.footer} ${styles.laboratoryFooter}`}
+        data-solo=""
+        data-tutorial-action-container=""
+      >
         <Button
           type="button"
           size="lg"
           className={styles.actionButton}
-          data-tutorial-confirm-ready={isValid && mode !== null && !pairAlreadyResearched && !duplicateBroadPair || undefined}
-          disabled={disabled || !isValid || mode === null || pairAlreadyResearched || duplicateBroadPair}
+          aria-busy={pending}
+          data-tutorial-confirm-ready={actionReady || undefined}
+          disabled={disabled || !actionReady}
           onClick={() => void handleTest()}
         >
           <HugeiconsIcon icon={TestTube01Icon} strokeWidth={1.7} aria-hidden="true" />
-          {mode === 'broad' && firstBroadPair === null && source && receiver
+          {pending
+            ? t('tender.lab.pending')
+            : mode === 'broad' && firstBroadPair === null && source && receiver
             ? t('tender.lab.mode.continueBroad')
-            : mode === null
-              ? t('tender.lab.mode.selectFirst')
+            : nextStep
+              ? nextStep
               : source && receiver
               ? mode === 'broad'
                 ? t('tender.lab.mode.confirmBroad')

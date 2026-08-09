@@ -112,6 +112,7 @@ function WaitingForTurn({
 export function PhasePanel({
   view,
   disabled,
+  pending = false,
   error,
   onCommand,
   onSaveWorkingModel,
@@ -121,6 +122,7 @@ export function PhasePanel({
 }: {
   view: TenderView
   disabled: boolean
+  pending?: boolean
   error: string | null
   onCommand: (cmd: TenderCommandInput) => Promise<void>
   onSaveWorkingModel: (workingModel: TenderView['privateWorkingModel']) => Promise<void>
@@ -223,6 +225,7 @@ export function PhasePanel({
           initialMode={training?.laboratoryInitialMode}
           onModeSelect={training?.onLaboratoryModeSelect}
           disabled={disabled || isWaitingForTurn}
+          pending={pending}
           error={error}
           onConfirm={(laboratory) => {
             if (!policy.versionedLaboratory) {
@@ -799,6 +802,7 @@ function TenderContent() {
             <PhasePanel
               view={tenderView}
               disabled={submitting || !connected}
+              pending={submitting}
               error={visibleCommandError}
               onCommand={handleCommand}
               onSaveWorkingModel={saveWorkingModel}
