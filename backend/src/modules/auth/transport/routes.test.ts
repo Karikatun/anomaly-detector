@@ -3,9 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import { createApp } from '../../../app'
 import type { DbClient } from '../../../db'
 import type { AppEnv } from '../../../env'
-import { OAuthApplicationFailure, OAuthProviderFailure } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
-import { oauthCallbackDiagnostic, oauthCallbackErrorCode } from './routes'
+import { toAuthAppError } from './errors'
+import { oauthCallbackErrorCode } from './routes'
 
 const env: AppEnv = {
   PORT: 3000,
@@ -65,25 +65,13 @@ describe('auth routes', () => {
   })
 
   test('uses a stable callback code when OAuth registration needs legal consent', () => {
-    expect(oauthCallbackErrorCode(new AuthFailure(
+    const failure = new AuthFailure(
       'oauth_registration_consent_required',
       'localized message must not become a client contract',
-    ))).toBe('oauth_registration_consent_required')
+    )
+    expect(oauthCallbackErrorCode(failure)).toBe('oauth_registration_consent_required')
+    expect(oauthCallbackErrorCode(toAuthAppError(failure))).toBe('oauth_registration_consent_required')
     expect(oauthCallbackErrorCode(new Error('provider failed'))).toBe('oauth_failed')
-  })
-
-  test('logs only structured OAuth callback failure metadata', () => {
-    expect(oauthCallbackDiagnostic(
-      new OAuthProviderFailure('token_exchange', 'http_status', 400),
-    )).toEqual({ reason: 'http_status', stage: 'token_exchange', status: 400 })
-    expect(oauthCallbackDiagnostic(new Error('provider-secret-diagnostic'))).toEqual({
-      reason: 'unexpected',
-      stage: 'application',
-    })
-    expect(oauthCallbackDiagnostic(new OAuthApplicationFailure('session_create'))).toEqual({
-      reason: 'unexpected',
-      stage: 'session_create',
-    })
   })
 
   test('limits auth request bodies before validation or password work', async () => {

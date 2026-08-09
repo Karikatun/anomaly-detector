@@ -124,39 +124,6 @@ export type OAuthProvider = {
   }>
 }
 
-export type OAuthProviderFailureReason =
-  | 'http_status'
-  | 'invalid_response'
-  | 'network'
-  | 'provider_error'
-
-export type OAuthProviderStage = 'token_exchange' | 'user_info'
-
-export class OAuthProviderFailure extends Error {
-  constructor(
-    readonly stage: OAuthProviderStage,
-    readonly reason: OAuthProviderFailureReason,
-    readonly status?: number,
-  ) {
-    super(`OAuth provider ${stage} failed: ${reason}${status === undefined ? '' : ` (${status})`}`)
-    this.name = 'OAuthProviderFailure'
-  }
-}
-
-export type OAuthApplicationStage =
-  | 'identity_lookup'
-  | 'session_create'
-  | 'session_response'
-  | 'transaction_consume'
-  | 'user_registration'
-
-export class OAuthApplicationFailure extends Error {
-  constructor(readonly stage: OAuthApplicationStage) {
-    super(`OAuth application step failed: ${stage}`)
-    this.name = 'OAuthApplicationFailure'
-  }
-}
-
 export type OAuthProviderRegistry = {
   require(provider: OAuthProviderId): OAuthProvider
 }

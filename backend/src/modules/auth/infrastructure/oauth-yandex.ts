@@ -1,10 +1,6 @@
 import { z } from 'zod'
 
-import {
-  OAuthProviderFailure,
-  type OAuthProvider,
-  type OAuthProviderStage,
-} from '../application/ports'
+import type { OAuthProvider } from '../application/ports'
 
 type YandexOAuthConfig = {
   clientId: string
@@ -47,16 +43,16 @@ export function createYandexOAuthProvider(config: YandexOAuthConfig): OAuthProvi
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body,
         signal: AbortSignal.timeout(requestTimeoutMs),
-      }, 'token_exchange')
+      }, 'Yandex token exchange')
 
       if (!response.ok) {
-        throw new OAuthProviderFailure('token_exchange', 'http_status', response.status)
+        throw new Error(`Yandex token exchange failed: ${response.status}`)
       }
 
-      const data = await parseProviderResponse(response, tokenResponseSchema, 'token_exchange')
+      const data = tokenResponseSchema.parse(await response.json())
 
       if (data.error) {
-        throw new OAuthProviderFailure('token_exchange', 'provider_error')
+        throw new Error('Yandex token exchange returned an error')
       }
 
       return {
@@ -72,13 +68,13 @@ export function createYandexOAuthProvider(config: YandexOAuthConfig): OAuthProvi
           Authorization: `OAuth ${accessToken}`,
         },
         signal: AbortSignal.timeout(requestTimeoutMs),
-      }, 'user_info')
+      }, 'Yandex user info')
 
       if (!response.ok) {
-        throw new OAuthProviderFailure('user_info', 'http_status', response.status)
+        throw new Error(`Yandex user info failed: ${response.status}`)
       }
 
-      const data = await parseProviderResponse(response, userInfoResponseSchema, 'user_info')
+      const data = userInfoResponseSchema.parse(await response.json())
 
       return {
         displayName: data.display_name ?? data.real_name ?? null,
@@ -103,23 +99,11 @@ async function providerFetch(
   fetcher: NonNullable<YandexOAuthConfig['fetcher']>,
   input: string,
   init: RequestInit,
-  stage: OAuthProviderStage,
+  operation: string,
 ) {
   try {
     return await fetcher(input, init)
   } catch {
-    throw new OAuthProviderFailure(stage, 'network')
-  }
-}
-
-async function parseProviderResponse<Schema extends z.ZodType>(
-  response: Response,
-  schema: Schema,
-  stage: OAuthProviderStage,
-): Promise<z.infer<Schema>> {
-  try {
-    return schema.parse(await response.json())
-  } catch {
-    throw new OAuthProviderFailure(stage, 'invalid_response')
+    throw new Error(`${operation} failed before receiving a response`)
   }
 }

@@ -26,11 +26,7 @@ import type { AppEnv } from '../../../env'
 import { AppError, validationErrorHook } from '../../../http/errors'
 import { clientAddress } from '../../../http/security'
 import type { AuthService } from '../application/auth-service'
-import {
-  OAuthApplicationFailure,
-  OAuthProviderFailure,
-  type DeviceTokens,
-} from '../application/ports'
+import type { DeviceTokens } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
 import { userDtoFromPrincipal } from '../domain/user'
 import { executeAuth } from './errors'
@@ -41,20 +37,11 @@ const deviceCookieName = 'anomaly_detector_device'
 const deviceTokenTtlSeconds = 180 * 24 * 60 * 60
 
 export const oauthCallbackErrorCode = (error: unknown) =>
-  error instanceof AuthFailure ? error.kind : 'oauth_failed'
-
-export const oauthCallbackDiagnostic = (error: unknown) => error instanceof OAuthProviderFailure
-  ? {
-      reason: error.reason,
-      stage: error.stage,
-      ...(error.status === undefined ? {} : { status: error.status }),
-    }
-  : error instanceof OAuthApplicationFailure
-    ? { reason: 'unexpected', stage: error.stage }
-    : {
-      reason: error instanceof AuthFailure ? 'auth_failure' : 'unexpected',
-      stage: 'application',
-    }
+  error instanceof AuthFailure
+    ? error.kind
+    : error instanceof AppError && error.securityReason === 'oauth_registration_consent_required'
+      ? error.securityReason
+      : 'oauth_failed'
 
 const cookieAuthResponseContent = {
   'application/json': {
@@ -519,9 +506,8 @@ export function createAuthRoutes({
         },
       })
     } catch (error) {
-      console.error('[DEBUG-oauth-stage] OAuth callback failed', {
+      console.error('OAuth callback failed', {
         code: oauthCallbackErrorCode(error),
-        ...oauthCallbackDiagnostic(error),
       })
       const redirectUrl = new URL(webappUrl)
       redirectUrl.pathname = '/'

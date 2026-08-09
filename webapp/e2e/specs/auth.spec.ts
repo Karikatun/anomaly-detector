@@ -37,6 +37,19 @@ test('shows the primary sign-in paths immediately and exposes accurate auth head
   await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
 })
 
+test('explains how to register when a Yandex ID has no game account', async ({ page }) => {
+  await page.goto('/?auth_error=oauth_registration_consent_required')
+
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'Создание аккаунта через Яндекс' })).toBeVisible()
+  await expect(dialog.getByText(
+    'Аккаунт ещё не зарегистрирован. Для продолжения подтвердите согласие на обработку персональных данных.',
+  )).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Согласен и продолжить' })).toBeVisible()
+  await expect(page).toHaveURL('/')
+})
+
 test('submits registration as a native form when Enter is pressed from any field', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
