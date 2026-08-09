@@ -106,9 +106,10 @@
     --focus-ring-shadow: 0 0 0 3px var(--focus-ring-color);
     --focus-ring-inset: inset 0 0 0 2px var(--focus-ring-color);
     --opacity-disabled: .55;
-    --motion-fast: 120ms;
-    --motion-standard: 160ms;
-    --motion-panel: 220ms;
+    --motion-fast: 140ms;
+    --motion-normal: 200ms;
+    --motion-slow: 280ms;
+    --motion-loop: 1200ms;
     --ease-standard: ease;
     --ease-emphasized: cubic-bezier(.22, 1, .36, 1);
     --layer-background: -1;
@@ -125,6 +126,18 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.65 0.15 230);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    transition-delay: 0ms !important;
+  }
 }
 
 @layer base {

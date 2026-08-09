@@ -72,21 +72,6 @@
     inset: .75rem .75rem auto !important;
   }
 
-  :global([data-testid='floater']),
-  :global([data-testid='overlay']),
-  :global(body:has([data-tutorial-step]) [data-slot='dialog-content']) {
-    animation-duration: var(--motion-panel) !important;
-    animation-timing-function: var(--ease-emphasized) !important;
-  }
-
-  :global([data-testid='floater']) {
-    animation-name: tutorial-coach-enter;
-  }
-
-  :global([data-testid='overlay']) {
-    animation-name: tutorial-overlay-enter;
-  }
-
   :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
   :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
   :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
@@ -107,7 +92,14 @@
   }
 
   :global(body:has([data-tutorial-confirm-ready='true']) [data-testid='floater']) {
-    inset: auto .75rem 10.75rem !important;
+    inset: auto .75rem 6.75rem !important;
+  }
+
+  :global(body:has(
+    [data-tutorial-step='round-1-power'],
+    [data-tutorial-step='round-2-power']
+  ):has([data-tutorial-confirm-ready='true']) [data-testid='floater']) {
+    inset: auto .75rem 8.75rem !important;
   }
 
   :global(body:has([data-tutorial-confirm-ready='true'])) .confirmAction {
@@ -116,24 +108,5 @@
 
   :global(body:has([data-tutorial-step='final-model'])) .confirmAction {
     display: block;
-  }
-}
-
-@keyframes tutorial-coach-enter {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes tutorial-overlay-enter {
-  from { opacity: .35; }
-  to { opacity: 1; }
-}
-
-@media (max-width: 600px) and (prefers-reduced-motion: reduce) {
-  :global([data-testid='floater']),
-  :global([data-testid='overlay']),
-  :global(body:has([data-tutorial-step]) [data-slot='dialog-content']) {
-    animation: none !important;
-    transition: none !important;
   }
 }

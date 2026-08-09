@@ -104,7 +104,7 @@
   height: 1.15rem;
   flex: none;
   color: var(--muted-foreground);
-  transition: transform var(--motion-standard) var(--ease-standard);
+  transition: transform var(--motion-normal) var(--ease-standard);
 }
 
 .chevronOpen {

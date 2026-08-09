@@ -15,7 +15,7 @@ function Spinner({
       strokeWidth={Number(strokeWidth)}
       role="status"
       aria-label={translate('app.loading')}
-      className={cn("size-4 animate-spin", className)}
+      className={cn("size-4 animate-spin [animation-duration:var(--motion-loop)] motion-reduce:animate-none", className)}
     />
   )
 }
