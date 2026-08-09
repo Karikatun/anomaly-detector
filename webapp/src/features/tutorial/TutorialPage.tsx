@@ -507,7 +507,11 @@ function TutorialContent() {
           backgroundColor: 'var(--card)',
           zIndex: 100,
         }}
-        styles={{ spotlight: { stroke: '#38bdf8', strokeWidth: 3 } }}
+        styles={{
+          spotlight: readingDialogOpen
+            ? {}
+            : { stroke: '#38bdf8', strokeWidth: 3 },
+        }}
       />}
       <Typography aria-live="polite" variant="srOnly">{t(currentTaskKey)}</Typography>
       <TutorialTenderBoard
@@ -615,6 +619,10 @@ function TutorialViewportAnchor({
             '--tutorial-mobile-coach-bottom',
             `${coachRect.bottom}px`,
           )
+        }
+        if (rect.height > safeHeight) {
+          scheduleSpotlightReveal()
+          return
         }
         const shouldPositionTarget = rect.top < safeTop || rect.bottom > safeBottom
         if (shouldPositionTarget) {
