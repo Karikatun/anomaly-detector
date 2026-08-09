@@ -1,5 +1,5 @@
 import { translate } from '../../platform/i18n'
-import { InformationCircleIcon, SignalFullIcon } from '@hugeicons/core-free-icons'
+import { CheckmarkCircle02Icon, InformationCircleIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
 import { useState } from 'react'
@@ -10,10 +10,10 @@ import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { isSignalId, signalLabelKeys } from './catalog'
-import styles from './components/PhasePanel.module.css'
+import styles from './ReconnaissancePanel.module.css'
 import { SignalGlyph } from './components/SignalGlyph'
 import { signalAccent } from './components/signal-visuals'
-import { availableReconnaissanceTargets } from './reconnaissance-targets'
+import { availableReconnaissanceTargets, toggleReconnaissanceTarget } from './reconnaissance-targets'
 import { runTenderAction } from './run-tender-action'
 import { PhaseNotice } from './components/TenderActionPanel'
 
@@ -34,21 +34,36 @@ function SampleInventory({ mySamples }: { mySamples: SignalId[] }) {
   const { t } = useI18n()
 
   return (
-    <aside className={styles.surface}>
+    <aside className={styles.inventory} aria-labelledby="inspected-signals-heading">
       <div className={styles.sectionHeader}>
-        <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.001')}</Typography>
-        <Typography as="span" variant="caption" className={styles.sectionMeta}>{mySamples.length} / 6</Typography>
+        <span className={styles.sectionHeadingCopy}>
+          <Typography id="inspected-signals-heading" as="h3" variant="bodySmMedium" className={styles.sectionTitle}>
+            {t('tender.recon.inspectedTitle')}
+          </Typography>
+          <Typography as="span" variant="caption" tone="muted">{t('tender.recon.inspectedDescription')}</Typography>
+        </span>
+        <Typography as="span" variant="caption" className={styles.sectionMeta}>
+          {t('tender.recon.samplesCount', { count: mySamples.length })}
+        </Typography>
       </div>
       {mySamples.length === 0 ? (
-        <Typography variant="bodySm" tone="muted">{translate('tender.reconnaissancePanel.copy.002')}</Typography>
+        <div className={styles.emptyInventory}>
+          <Typography variant="bodySm" tone="muted">{translate('tender.reconnaissancePanel.copy.002')}</Typography>
+        </div>
       ) : (
         <div className={styles.compactList}>
           {mySamples.map((signal) => (
-            <div key={signal} className={styles.compactSignal} style={targetStyle(signal)}>
+            <article key={signal} className={styles.compactSignal} data-state="inspected" style={targetStyle(signal)}>
               <SignalGlyph signal={signal} className={styles.signalGlyph} />
-              <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
-              <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} aria-label={translate('tender.reconnaissancePanel.copy.003')} />
-            </div>
+              <span className={styles.inspectedCopy}>
+                <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
+                <Typography as="span" variant="caption" tone="muted">{t('tender.recon.inspectedDetail')}</Typography>
+              </span>
+              <span className={styles.stateBadge} data-state="inspected">
+                <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={1.8} aria-hidden="true" />
+                <Typography as="span" variant="caption">{t('tender.recon.state.inspected')}</Typography>
+              </span>
+            </article>
           ))}
         </div>
       )}
@@ -82,14 +97,10 @@ export function ReconnaissancePanel({
   const unknownTargets = available.filter((target) => target.startsWith('unknown-sector-'))
   const revealedTargets = available.filter(isSignalId)
   const signalName = (signal: SignalId) => t(signalLabelKeys[signal])
+  const selectedTargets = [...selected]
 
   const toggle = (signal: string) => {
-    setSelected((previous) => {
-      const next = new Set(previous)
-      if (next.has(signal)) next.delete(signal)
-      else if (next.size < maxSignals) next.add(signal)
-      return next
-    })
+    setSelected((previous) => toggleReconnaissanceTarget(previous, signal, maxSignals))
   }
 
   const handleConfirm = async () => {
@@ -103,7 +114,8 @@ export function ReconnaissancePanel({
   const renderTarget = (target: string, index: number) => {
     const signal = isSignalId(target) ? target : undefined
     const isSelected = selected.has(target)
-    const selectionIndex = isSelected ? [...selected].indexOf(target) + 1 : null
+    const selectionIndex = isSelected ? selectedTargets.indexOf(target) + 1 : null
+    const isAtLimit = !isSelected && selected.size >= maxSignals
     const label = signal
       ? signalName(signal)
       : translate('tender.reconnaissancePanel.copy.007', { value1: String.fromCharCode(65 + index) })
@@ -116,23 +128,54 @@ export function ReconnaissancePanel({
         className={styles.signalCard}
         data-tutorial-recon-anchor={!signal && index === 0 ? '' : undefined}
         data-tutorial-recon-target={target}
+        data-state={isSelected ? 'selected' : signal ? 'available' : 'unknown'}
         data-selected={isSelected || undefined}
-        disabled={disabled || (!isSelected && selected.size >= maxSignals)}
+        aria-pressed={isSelected}
+        disabled={disabled || isAtLimit}
         onClick={() => toggle(target)}
         style={targetStyle(signal)}
       >
-        {selectionIndex && (
-          <Typography as="span" variant="caption" className={styles.selectionIndex}>{selectionIndex}</Typography>
-        )}
         <SignalGlyph signal={signal} className={styles.signalGlyph} />
         <span className={styles.signalCopy}>
+          <span className={styles.targetStatusRow}>
+            <Typography as="span" variant="caption" className={styles.targetType}>
+              {signal ? t('tender.recon.state.available') : t('tender.recon.state.unknown')}
+            </Typography>
+            {selectionIndex && (
+              <Typography as="span" variant="caption" className={styles.selectionIndex}>
+                {t('tender.recon.state.selectedIndex', { index: selectionIndex })}
+              </Typography>
+            )}
+            {isAtLimit && (
+              <Typography as="span" variant="caption" className={styles.limitBadge}>
+                {t('tender.recon.state.limitReached')}
+              </Typography>
+            )}
+          </span>
           <Typography as="strong" variant="bodySmMedium" className={styles.signalName}>{label}</Typography>
           <Typography as="span" variant="caption" className={styles.signalDetail}>
             {signal ? translate('tender.reconnaissancePanel.copy.008') : translate('tender.reconnaissancePanel.copy.009')}
           </Typography>
         </span>
-        {isSelected && <Typography as="span" variant="caption" className={styles.selectedTag}>{translate('tender.reconnaissancePanel.copy.010')}</Typography>}
       </button>
+    )
+  }
+
+  const selectionSlotIndexes = Array.from({ length: maxSignals }, (_, index) => index)
+  const renderSelectionSlot = (index: number) => {
+    const target = selectedTargets[index]
+    const signal = target && isSignalId(target) ? target : undefined
+    const label = target
+      ? signal
+        ? signalName(signal)
+        : translate('tender.reconnaissancePanel.copy.007', { value1: String.fromCharCode(65 + unknownTargets.indexOf(target)) })
+      : t('tender.recon.selectionEmpty')
+
+    return (
+      <span key={index} className={styles.selectionSlot} data-filled={target ? '' : undefined}>
+        <Typography as="span" variant="caption">{t('tender.recon.selectionNumber', { index: index + 1 })}</Typography>
+        <Typography as="strong" variant="bodySmMedium">{label}</Typography>
+      </span>
     )
   }
 
@@ -140,61 +183,87 @@ export function ReconnaissancePanel({
     <section className={styles.panel} aria-labelledby="recon-heading">
       <Typography id="recon-heading" as="h2" variant="srOnly">{translate('tender.reconnaissancePanel.copy.011')}</Typography>
 
-      <div className={styles.split}>
-        <div className={styles.surface}>
+      <header className={styles.missionHeader}>
+        <span className={styles.missionCopy}>
+          <Typography as="h3" variant="h5">{t('tender.recon.missionTitle')}</Typography>
+          <Typography variant="bodySm" tone="muted">
+            {maxSignals === 1 ? t('tender.recon.description.one') : t('tender.recon.description.many')}
+          </Typography>
+        </span>
+        <span className={styles.actionCapacity}>
+          <Typography as="span" variant="caption">{t('tender.recon.availableActions')}</Typography>
+          <Typography as="strong" variant="h4">{maxSignals}</Typography>
+        </span>
+      </header>
+
+      <div className={styles.workspace}>
+        <div className={styles.targetsSurface}>
           {available.length === 0 && <Typography tone="muted">{t('tender.recon.empty')}</Typography>}
 
-          {unknownTargets.length > 0 && (
-            <section data-tutorial-recon-options="">
+          <div className={styles.targetGroups} data-tutorial-recon-options="">
+            {unknownTargets.length > 0 && (
+              <section className={styles.targetGroup}>
               <div className={styles.sectionHeader}>
-                <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.012')}</Typography>
-                <Typography as="span" variant="caption" className={styles.sectionMeta}>{translate('tender.reconnaissancePanel.copy.013')}</Typography>
+                  <span className={styles.sectionHeadingCopy}>
+                    <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.012')}</Typography>
+                    <Typography as="span" variant="caption" tone="muted">{translate('tender.reconnaissancePanel.copy.013')}</Typography>
+                  </span>
               </div>
               <div className={styles.signalGrid}>
                 {unknownTargets.map(renderTarget)}
               </div>
             </section>
-          )}
+            )}
 
-          {revealedTargets.length > 0 && (
-            <section className={unknownTargets.length > 0 ? 'mt-4' : undefined}>
+            {revealedTargets.length > 0 && (
+              <section className={styles.targetGroup}>
               <div className={styles.sectionHeader}>
-                <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.014')}</Typography>
-                <Typography as="span" variant="caption" className={styles.sectionMeta}>{translate('tender.reconnaissancePanel.copy.015')}</Typography>
+                  <span className={styles.sectionHeadingCopy}>
+                    <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.014')}</Typography>
+                    <Typography as="span" variant="caption" tone="muted">{translate('tender.reconnaissancePanel.copy.015')}</Typography>
+                  </span>
               </div>
               <div className={styles.signalGrid}>
                 {revealedTargets.map((target, index) => renderTarget(target, index))}
               </div>
             </section>
-          )}
+            )}
+          </div>
         </div>
 
         <SampleInventory mySamples={mySamples} />
       </div>
 
-      {error && (
-        <div className={styles.error} role="alert">
-          <Typography variant="bodySm">{error}</Typography>
-        </div>
-      )}
-
       <footer className={styles.footer} data-tutorial-action-container="">
-        <div className={styles.info}>
-          <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-          <Typography as="span" variant="bodySm">{translate('tender.reconnaissancePanel.copy.016')}</Typography>
-          <Typography as="strong" variant="bodySmMedium">{selected.size}</Typography>
-          <Typography as="span" variant="bodySm">{translate('tender.recon.selectionLimit', { total: maxSignals })}</Typography>
+        <div className={styles.selectionPanel} aria-live="polite" aria-atomic="true">
+          <span className={styles.selectionHeading}>
+            <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
+            <Typography as="strong" variant="bodySmMedium">{t('tender.recon.selectionTitle')}</Typography>
+            <Typography as="span" variant="caption" tone="muted">
+              {t('tender.recon.selected', { selected: selected.size, total: maxSignals })}
+            </Typography>
+          </span>
+          <div className={styles.selectionSlots}>
+            {selectionSlotIndexes.map(renderSelectionSlot)}
+          </div>
         </div>
-        <Button
-          type="button"
-          size="lg"
-          className={styles.actionButton}
-          data-tutorial-confirm-ready={selected.size === maxSignals || undefined}
-          disabled={disabled || selected.size !== maxSignals}
-          onClick={() => void handleConfirm()}
-        >
-          {t('tender.recon.confirm')}
-        </Button>
+        <div className={styles.confirmationArea}>
+          {error && (
+            <div className={styles.error} role="alert">
+              <Typography variant="bodySm">{error}</Typography>
+            </div>
+          )}
+          <Button
+            type="button"
+            size="lg"
+            className={styles.actionButton}
+            data-tutorial-confirm-ready={selected.size === maxSignals || undefined}
+            disabled={disabled || selected.size !== maxSignals}
+            onClick={() => void handleConfirm()}
+          >
+            {t('tender.recon.confirm')}
+          </Button>
+        </div>
       </footer>
     </section>
   )

@@ -1,0 +1,447 @@
+.panel {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.missionHeader,
+.targetsSurface,
+.inventory,
+.footer {
+  border: 1px solid var(--border-game);
+  border-radius: var(--radius-panel);
+  background: var(--surface-game);
+}
+
+.missionHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-inset-subtle);
+}
+
+.missionCopy,
+.sectionHeadingCopy,
+.inspectedCopy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.missionCopy h3 {
+  color: var(--text-strong);
+}
+
+.actionCapacity {
+  display: flex;
+  min-width: 8.5rem;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border-game-subtle);
+  color: var(--primary);
+}
+
+.workspace {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.targetsSurface,
+.inventory {
+  min-width: 0;
+  padding: var(--space-4);
+  box-shadow: var(--shadow-inset-subtle);
+}
+
+.targetGroups {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+}
+
+.targetGroup {
+  min-width: 0;
+}
+
+.targetGroup + .targetGroup {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-game-subtle);
+}
+
+.sectionHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.sectionTitle {
+  color: var(--text-strong);
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.sectionMeta,
+.stateBadge,
+.targetType,
+.selectionIndex,
+.limitBadge {
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.sectionMeta {
+  flex: none;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-game-subtle);
+  border-radius: var(--radius-compact);
+}
+
+.targetType {
+  color: var(--text-muted);
+}
+
+.signalGrid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.signalCard {
+  --signal-accent: var(--primary);
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 7rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  overflow: hidden;
+  padding: var(--space-3);
+  border: 1px solid var(--border-game-strong);
+  border-radius: var(--radius-control);
+  outline: none;
+  color: var(--text-strong);
+  background: rgba(2, 16, 30, .94);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
+}
+
+.signalCard::before {
+  position: absolute;
+  content: '';
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: color-mix(in srgb, var(--signal-accent) 68%, transparent);
+}
+
+.signalCard:hover:not(:disabled),
+.signalCard:focus-visible {
+  border-color: color-mix(in srgb, var(--signal-accent) 66%, white);
+  background: color-mix(in srgb, var(--signal-accent) 5%, rgba(2, 16, 30, .96));
+}
+
+.signalCard:focus-visible {
+  box-shadow: var(--focus-ring-shadow);
+}
+
+.signalCard[data-state='selected'] {
+  border-color: var(--signal-accent);
+  background: color-mix(in srgb, var(--signal-accent) 8%, rgba(2, 16, 30, .98));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal-accent) 28%, transparent);
+}
+
+.signalCard[data-state='selected']::before {
+  width: 4px;
+  background: var(--signal-accent);
+}
+
+.signalCard:disabled {
+  cursor: not-allowed;
+}
+
+.signalCard:disabled:not([data-selected]) {
+  opacity: .42;
+}
+
+.signalGlyph {
+  width: 3.5rem;
+  height: 3.5rem;
+  flex: none;
+}
+
+.signalCopy {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: var(--space-1);
+}
+
+.targetStatusRow {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.targetType,
+.selectionIndex,
+.limitBadge {
+  font-size: .6rem;
+}
+
+.selectionIndex {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--signal-accent) 60%, white);
+  border-radius: var(--radius-compact);
+  color: color-mix(in srgb, var(--signal-accent) 76%, white);
+  background: color-mix(in srgb, var(--signal-accent) 9%, transparent);
+}
+
+.limitBadge {
+  color: var(--text-muted);
+}
+
+.signalName {
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-size: .9rem;
+  line-height: 1.15;
+}
+
+.signalDetail {
+  color: var(--text-muted);
+  font-size: .68rem;
+  line-height: 1.3;
+}
+
+.compactList {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.compactSignal {
+  --signal-accent: var(--primary);
+  display: grid;
+  min-width: 0;
+  min-height: 4rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--signal-accent) 34%, var(--border-game));
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--signal-accent) 5%, rgba(3, 18, 31, .88));
+}
+
+.compactSignal .signalGlyph {
+  width: 2.35rem;
+  height: 2.35rem;
+}
+
+.stateBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--success);
+  white-space: nowrap;
+}
+
+.stateBadge > svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.emptyInventory {
+  display: grid;
+  min-height: 4rem;
+  place-items: center;
+  border: 1px dashed var(--border-game-subtle);
+  border-radius: var(--radius-control);
+  text-align: center;
+}
+
+.footer {
+  position: sticky;
+  z-index: 10;
+  bottom: env(safe-area-inset-bottom, 0px);
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-sticky);
+}
+
+.selectionPanel {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.selectionHeading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.selectionHeading > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--primary);
+}
+
+.selectionHeading > :last-child {
+  margin-left: auto;
+}
+
+.selectionSlots {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.selectionSlots > :only-child {
+  grid-column: 1 / -1;
+}
+
+.selectionSlot {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px dashed var(--border-game-strong);
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+}
+
+.selectionSlot[data-filled] {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--primary) 52%, transparent);
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.selectionSlot > :first-child {
+  display: grid;
+  width: 1.3rem;
+  height: 1.3rem;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-compact);
+}
+
+.selectionSlot strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confirmationArea {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.error {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--destructive) 52%, transparent);
+  border-radius: var(--radius-control);
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 9%, rgba(3, 20, 35, .94));
+}
+
+.actionButton {
+  width: 100%;
+  min-height: 2.85rem;
+  border-radius: var(--radius-control);
+  box-shadow: 0 .35rem .9rem rgba(13, 126, 255, .16);
+}
+
+@media (max-width: 47.999rem) {
+  .missionHeader,
+  .sectionHeader {
+    align-items: flex-start;
+  }
+
+  .missionHeader,
+  .targetsSurface,
+  .inventory {
+    padding: var(--space-3);
+  }
+
+  .actionCapacity {
+    min-width: auto;
+    padding-left: var(--space-3);
+  }
+
+  .signalCard {
+    min-height: 6.3rem;
+  }
+
+  .inventory {
+    order: 2;
+  }
+
+  .footer {
+    background: rgba(2, 15, 29, .98);
+  }
+
+  .selectionSlots {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 48rem) {
+  .signalGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .footer {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 32%);
+    align-items: end;
+  }
+}
+
+@media (min-width: 80rem) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    align-items: start;
+  }
+
+  .footer {
+    position: static;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signalCard {
+    transition: none;
+  }
+}

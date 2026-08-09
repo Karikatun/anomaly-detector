@@ -554,7 +554,13 @@ async function allocatePower(
 }
 
 async function runReconnaissance(page: Parameters<typeof registerBrowserUser>[0]) {
-  await page.getByRole('button', { name: 'Сигнал для разведки: Неизвестный сигнал A' }).click()
+  const target = page.getByRole('button', { name: 'Сигнал для разведки: Неизвестный сигнал A' })
+  await target.click()
+  await expect(target).toHaveAttribute('aria-pressed', 'true')
+  await target.click()
+  await expect(target).toHaveAttribute('aria-pressed', 'false')
+  await target.press('Enter')
+  await expect(target).toHaveAttribute('aria-pressed', 'true')
   const confirm = page.getByRole('button', { name: 'Исследовать' })
   await expectRequiredActionAvailable(page, confirm)
   await confirm.click()
