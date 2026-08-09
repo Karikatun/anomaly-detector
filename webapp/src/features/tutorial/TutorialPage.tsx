@@ -161,9 +161,13 @@ function TutorialContent() {
     const isThesisAttempt = action.type === 'submit-thesis' && result.thesisFeedback !== undefined
     setCommandError(result.progressed || isDraftSave || isThesisAttempt
       ? null
-      : t(state.step === 'round-2-working-model'
-        ? 'tutorial.coach.modelCheck'
-        : 'tutorial.coach.invalid'))
+      : t(state.step === 'round-1-power'
+        ? 'tutorial.coach.powerRound1Invalid'
+        : state.step === 'round-2-power'
+          ? 'tutorial.coach.powerRound2Invalid'
+          : state.step === 'round-2-working-model'
+            ? 'tutorial.coach.modelCheck'
+            : 'tutorial.coach.invalid'))
 
     if (result.state.step === 'complete' && state.step !== 'complete') {
       await saveCompletion()

@@ -25,6 +25,8 @@ export const tutorialMessages = {
   'tutorial.coach.progress': 'Шаг {current} из {total}',
   'tutorial.coach.task': 'Текущее задание',
   'tutorial.coach.invalid': 'Так можно сделать в обычной игре, но сейчас нам нужно другое действие. Посмотрите, что просит подсказка.',
+  'tutorial.coach.powerRound1Invalid': 'Для этого задания нужно: Разведка 1, Лаборатория 2, Анализ модели 1, Контракты 0.',
+  'tutorial.coach.powerRound2Invalid': 'Для этого задания распределите по 1 Мощности в каждую категорию.',
   'tutorial.coach.modelCheck': 'Пока не сходится. «Отражение» означает следующий тип в цикле, а одинаковая полярность сохраняет знак Aster. Проверьте Boreal ещё раз.',
   'tutorial.coach.hint': 'Не получается? Откройте «Справку» и сравните результат опыта с подсказкой о полярностях.',
   'tutorial.coach.confirmAction': 'Подтвердите действие',
