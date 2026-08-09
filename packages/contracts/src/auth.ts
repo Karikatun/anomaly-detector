@@ -1,7 +1,13 @@
 import { z } from 'zod'
 
+export const displayNameMinLength = 2
+export const displayNameMaxLength = 20
+
 const displayNameSchema = z
-  .union([z.string().trim().min(2).max(80), z.literal('')])
+  .union([
+    z.string().trim().min(displayNameMinLength).max(displayNameMaxLength),
+    z.literal(''),
+  ])
   .optional()
   .transform((value) => {
     if (value === '' || value === undefined) return undefined

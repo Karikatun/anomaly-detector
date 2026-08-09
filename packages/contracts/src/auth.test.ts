@@ -135,6 +135,27 @@ describe('auth contracts', () => {
     ).toThrow()
   })
 
+  test('limits new and updated display names to twenty characters', () => {
+    const legalAcceptance = {
+      privacyConsent: true as const,
+      privacyConsentVersion: '1.0' as const,
+      termsVersion: '1.0' as const,
+    }
+
+    expect(registerRequestSchema.safeParse({
+      ...legalAcceptance,
+      login: 'user',
+      password: 'password123',
+      displayName: 'Я'.repeat(20),
+    }).success).toBe(true)
+    expect(registerRequestSchema.safeParse({
+      ...legalAcceptance,
+      login: 'user',
+      password: 'password123',
+      displayName: 'Я'.repeat(21),
+    }).success).toBe(false)
+  })
+
   test('keeps cookie requests empty and requires explicit token transport credentials', () => {
     expect(cookieRefreshRequestSchema.parse(undefined)).toEqual({})
     expect(cookieRefreshRequestSchema.parse({})).toEqual({})

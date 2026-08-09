@@ -37,7 +37,7 @@ export const profileMessages = {
   'profile.name.label': 'Отображаемое имя',
   'profile.name.save': 'Сохранить',
   'profile.name.cancel': 'Отмена',
-  'profile.name.invalid': 'Имя должно содержать от 2 до 80 символов.',
+  'profile.name.invalid': 'Имя должно содержать от 2 до 20 символов.',
   'profile.statistics.loading': 'Загружаем статистику',
   'profile.statistics.failed': 'Не удалось загрузить статистику.',
   'profile.statistics.retry': 'Повторить',

@@ -16,7 +16,7 @@ export const authMessages = {
   'auth.ageNotice': 'Игра имеет возрастную маркировку 16+.',
   'auth.errors.loginName': 'От 3 до 64 символов: латинские буквы, цифры, «_» или «-»',
   'auth.errors.password': 'Минимум 8 символов',
-  'auth.errors.displayName': 'Минимум 1 символ',
+  'auth.errors.displayName': 'От 2 до 20 символов',
   'auth.errors.registerFailed': 'Не удалось зарегистрироваться',
   'auth.errors.loginFailed': 'Не удалось войти',
   'auth.errors.loginLimited': 'Слишком много неудачных попыток. Подождите от одной до пятнадцати минут и попробуйте снова.',
