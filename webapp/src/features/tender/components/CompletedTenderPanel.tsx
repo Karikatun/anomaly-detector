@@ -114,7 +114,6 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
     - (view.audit.placementByPlayer[right.playerId] ?? 99),
   )
   const currentPlayer = rankedPlayers.find((player) => player.playerId === currentUserId)
-    ?? rankedPlayers[0]
   const otherPlayers = rankedPlayers.filter((player) => player.playerId !== currentPlayer?.playerId)
   const [selectedPlayerId, setSelectedPlayerId] = useState(currentPlayer?.playerId ?? 'all')
   const [desktopAudit, setDesktopAudit] = useState(false)
@@ -249,110 +248,49 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
               {currentPlayer.displayName ?? currentPlayer.playerId.slice(0, 8)}
             </Typography>
             <Typography as="span" variant="caption" tone="muted">
-              
-              {translate('tender.completed.rating', { rating: currentPlayer.rating })}
+              {translate('tender.completed.slot', { slot: currentPlayer.accessSlot ?? '—' })}
             </Typography>
           </span>
           <ul className={styles.mobileBreakdown} aria-label={translate('tender.completedTenderPanel.copy.035')}>
-            {ratingEntries(currentPlayer.playerId).map(({ label, points }) => (
-              <li key={label}>
-                <Typography as="span" variant="caption">{label}</Typography>
-                <Typography as="strong" variant="caption">
-                  {points > 0 ? '+' : ''}{points}
-                </Typography>
+            {ratingEntries(currentPlayer.playerId).length > 0 ? (
+              ratingEntries(currentPlayer.playerId).map(({ label, points }) => (
+                <li key={label}>
+                  <Typography as="span" variant="caption">{label}</Typography>
+                  <Typography as="strong" variant="caption">
+                    {points > 0 ? '+' : ''}{points}
+                  </Typography>
+                </li>
+              ))
+            ) : (
+              <li className={styles.mobileNoAwards}>
+                <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.056')}</Typography>
               </li>
-            ))}
+            )}
           </ul>
         </section>
       )}
 
-      <details className={styles.auditDisclosure} data-audit-section="own-model" open={desktopAudit || undefined}>
-        <summary>
-          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.036')}</Typography>
-          <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.037')}</Typography>
-        </summary>
-        <div className={styles.disclosureBody}>
-          <section className={styles.section} aria-labelledby="completed-own-model-heading">
-            <div className={styles.sectionHeader}>
-              <span>
-                <Typography id="completed-own-model-heading" as="h3" variant="bodySmMedium">
-                  
-                  {translate('tender.completedTenderPanel.copy.038')}
-                </Typography>
-                <Typography variant="caption" tone="muted">
-                  
-                  {translate('tender.completedTenderPanel.copy.039')}
-                </Typography>
-              </span>
-            </div>
-            {renderPlayerModels(currentPlayer ? [currentPlayer] : [])}
-          </section>
-        </div>
-      </details>
-
-      <details className={styles.auditDisclosure} data-audit-section="configuration" open={desktopAudit || undefined}>
-        <summary>
-          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.040')}</Typography>
-          <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.041')}</Typography>
-        </summary>
-        <div className={styles.disclosureBody}>
-        <section className={styles.section} aria-labelledby="completed-signals-heading">
-        <div className={styles.sectionHeader}>
-          <span>
-            <Typography id="completed-signals-heading" as="h3" variant="bodySmMedium">
-              
-              {translate('tender.completedTenderPanel.copy.042')}
-            </Typography>
-            <Typography variant="caption" tone="muted">{translate('tender.completedTenderPanel.copy.043')}</Typography>
-          </span>
-          <Typography as="span" variant="caption" className={styles.count}>6 / 6</Typography>
-        </div>
-
-        <div className={styles.signalGrid}>
-          {signalIds.map((signal) => {
-            const properties = view.audit.anomalyConfiguration.signals[signal]
-            return (
-              <article
-                key={signal}
-                className={styles.signalCard}
-                style={{ '--signal-accent': signalAccent(signal) } as CSSProperties}
-              >
-                <SignalGlyph signal={signal} className={styles.signalGlyph} />
-                <span className={styles.signalCopy}>
-                  <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
-                  <span className={styles.signalProperties}>
-                    <Typography as="span" variant="caption">{t(fieldTypeLabelKeys[properties.fieldType])}</Typography>
-                    <Typography as="span" variant="caption">{t(polarityLabelKeys[properties.polarity])}</Typography>
-                  </span>
-                </span>
-              </article>
-            )
-          })}
-        </div>
-        </section>
-        </div>
-      </details>
-
       <details
-        className={`${styles.auditDisclosure} ${styles.otherPlayersDisclosure}`}
-        data-audit-section="other-players"
+        className={styles.auditDisclosure}
+        data-audit-section="ranking"
         open={desktopAudit || undefined}
       >
         <summary>
-          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.044')}</Typography>
+          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.047')}</Typography>
           <Typography as="span" variant="caption">
-            {otherPlayers.length === 1 ? translate('tender.completedTenderPanel.copy.045') : translate('tender.completedTenderPanel.copy.046', { value1: otherPlayers.length })} ›
+            {translate('tender.completedTenderPanel.copy.124', { value1: rankedPlayers.length })} ›
           </Typography>
         </summary>
         <div className={styles.disclosureBody}>
-        <section className={styles.section} aria-labelledby="completed-ranking-heading">
+        <section className={`${styles.section} ${styles.resultsBoard}`} aria-labelledby="completed-ranking-heading">
         <div className={styles.sectionHeader}>
           <span>
             <Typography id="completed-ranking-heading" as="h3" variant="bodySmMedium">
-              
               {translate('tender.completedTenderPanel.copy.047')}
             </Typography>
-            <Typography variant="caption" tone="muted">{translate('tender.completedTenderPanel.copy.048')}</Typography>
+            <Typography variant="caption" tone="muted">
+              {translate('tender.completedTenderPanel.copy.118')}
+            </Typography>
           </span>
           <HugeiconsIcon icon={UserGroupIcon} strokeWidth={1.7} aria-hidden="true" />
         </div>
@@ -374,9 +312,20 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                     {String(placement).padStart(2, '0')}
                   </Typography>
                   <span className={styles.playerIdentity}>
-                    <Typography as="strong" variant="bodySmMedium">
+                    <span className={styles.playerNameLine}>
+                    <Typography
+                      as="strong"
+                      variant="bodySmMedium"
+                      title={player.displayName ?? player.playerId.slice(0, 8)}
+                    >
                       {player.displayName ?? player.playerId.slice(0, 8)}
                     </Typography>
+                    {player.playerId === currentPlayer?.playerId && (
+                      <Typography as="span" variant="caption" className={styles.youBadge}>
+                        {translate('tender.completedTenderPanel.copy.119')}
+                      </Typography>
+                    )}
+                    </span>
                     <Typography as="span" variant="caption" tone="muted">{translate('tender.completed.slot', { slot: player.accessSlot ?? '—' })}</Typography>
                     {player.forfeited && (
                       <Typography as="span" variant="caption" tone="destructive">{translate('tender.completedTenderPanel.copy.050')}</Typography>
@@ -399,14 +348,16 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                     </span>
                   )}
                 </div>
-                <div
+                <details
                   className={styles.ratingBreakdown}
                   aria-label={translate('tender.completedTenderPanel.copy.054', { value1: player.displayName ?? player.playerId.slice(0, 8) })}
                 >
-                  <Typography as="span" variant="caption" className={styles.breakdownTitle}>
-                    
-                    {translate('tender.completedTenderPanel.copy.055')}
-                  </Typography>
+                  <summary className={styles.breakdownSummary}>
+                    <Typography as="span" variant="caption" className={styles.breakdownTitle}>
+                      {translate('tender.completedTenderPanel.copy.055')}
+                    </Typography>
+                    <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={1.8} aria-hidden="true" />
+                  </summary>
                   {earnedRating.length > 0 ? (
                     <ul className={styles.breakdownList}>
                       {earnedRating.map(({ label, points }) => (
@@ -424,12 +375,91 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                       {translate('tender.completedTenderPanel.copy.056')}
                     </Typography>
                   )}
-                </div>
+                </details>
               </li>
             )
           })}
         </ol>
       </section>
+        </div>
+      </details>
+
+      <details className={styles.auditDisclosure} data-audit-section="own-model" open={desktopAudit || undefined}>
+        <summary>
+          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.036')}</Typography>
+          <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.037')}</Typography>
+        </summary>
+        <div className={styles.disclosureBody}>
+          <section className={styles.section} aria-labelledby="completed-own-model-heading">
+            <div className={styles.sectionHeader}>
+              <span>
+                <Typography id="completed-own-model-heading" as="h3" variant="bodySmMedium">
+                  {translate('tender.completedTenderPanel.copy.038')}
+                </Typography>
+                <Typography variant="caption" tone="muted">
+                  {translate('tender.completedTenderPanel.copy.039')}
+                </Typography>
+              </span>
+            </div>
+            {renderPlayerModels(currentPlayer ? [currentPlayer] : [])}
+          </section>
+        </div>
+      </details>
+
+      <details className={styles.auditDisclosure} data-audit-section="configuration" open={desktopAudit || undefined}>
+        <summary>
+          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.040')}</Typography>
+          <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.041')}</Typography>
+        </summary>
+        <div className={styles.disclosureBody}>
+          <section className={styles.section} aria-labelledby="completed-signals-heading">
+            <div className={styles.sectionHeader}>
+              <span>
+                <Typography id="completed-signals-heading" as="h3" variant="bodySmMedium">
+                  {translate('tender.completedTenderPanel.copy.042')}
+                </Typography>
+                <Typography variant="caption" tone="muted">{translate('tender.completedTenderPanel.copy.043')}</Typography>
+              </span>
+              <Typography as="span" variant="caption" className={styles.count}>6 / 6</Typography>
+            </div>
+
+            <div className={styles.signalGrid}>
+              {signalIds.map((signal) => {
+                const properties = view.audit.anomalyConfiguration.signals[signal]
+                return (
+                  <article
+                    key={signal}
+                    className={styles.signalCard}
+                    style={{ '--signal-accent': signalAccent(signal) } as CSSProperties}
+                  >
+                    <SignalGlyph signal={signal} className={styles.signalGlyph} />
+                    <span className={styles.signalCopy}>
+                      <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
+                      <span className={styles.signalProperties}>
+                        <Typography as="span" variant="caption">{t(fieldTypeLabelKeys[properties.fieldType])}</Typography>
+                        <Typography as="span" variant="caption">{t(polarityLabelKeys[properties.polarity])}</Typography>
+                      </span>
+                    </span>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+        </div>
+      </details>
+
+      <details
+        className={styles.auditDisclosure}
+        data-audit-section="other-players"
+        open={desktopAudit || undefined}
+      >
+        <summary>
+          <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.057')}</Typography>
+          <Typography as="span" variant="caption">
+            {otherPlayers.length === 1 ? translate('tender.completedTenderPanel.copy.045') : translate('tender.completedTenderPanel.copy.046', { value1: otherPlayers.length })} ›
+          </Typography>
+        </summary>
+        <div className={styles.disclosureBody}>
         <section className={styles.section} aria-labelledby="completed-other-models-heading">
           <div className={styles.sectionHeader}>
             <span>

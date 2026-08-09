@@ -75,6 +75,15 @@
   font-size: .62rem;
 }
 
+.mobileBreakdown .mobileNoAwards {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.mobileBreakdown .mobileNoAwards > span {
+  color: rgba(202, 220, 231, .68);
+}
+
 .auditDisclosure {
   overflow: hidden;
   border: 1px solid rgba(70, 128, 164, .3);
@@ -112,10 +121,6 @@
   gap: .7rem;
   padding: .55rem;
   border-top: 1px solid rgba(70, 128, 164, .22);
-}
-
-.otherPlayersDisclosure .player[data-current-player] {
-  display: none;
 }
 
 .playerFilter {
@@ -860,6 +865,35 @@
 }
 
 @media (max-width: 30rem) {
+  .mobileOwnResult {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mobileOwnResult > span:first-child {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: .75rem;
+  }
+
+  .mobileOwnResult .eyebrow {
+    grid-column: 1 / -1;
+  }
+
+  .mobileOwnResult h3,
+  .ownRating {
+    white-space: nowrap;
+  }
+
+  .ownRating {
+    justify-self: end;
+    font-size: 1.1rem;
+  }
+
+  .ownResultPlayer {
+    justify-items: start;
+    text-align: left;
+  }
+
   .signalGlyph {
     width: 2.15rem;
     height: 2.15rem;
@@ -919,7 +953,7 @@
 .playerSummary {
   display: grid;
   min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: .5rem;
   padding: .52rem .58rem;
@@ -930,6 +964,11 @@
   background:
     linear-gradient(90deg, rgba(125, 82, 8, .2), transparent 64%),
     rgba(3, 18, 31, .78);
+}
+
+.player[data-current-player] {
+  border-color: rgba(54, 184, 255, .68);
+  box-shadow: inset .2rem 0 0 var(--primary);
 }
 
 .position {
@@ -949,12 +988,34 @@
   gap: .05rem;
 }
 
+.playerNameLine {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .38rem;
+}
+
+.playerNameLine > strong {
+  min-width: 0;
+}
+
+.youBadge {
+  flex: none;
+  padding: .08rem .3rem;
+  border: 1px solid rgba(54, 184, 255, .5);
+  border-radius: .25rem;
+  color: var(--primary);
+  background: rgba(12, 79, 111, .24);
+  font-size: .54rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
 .playerIdentity strong {
   overflow: hidden;
   color: #eef7fc;
   font-size: .72rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .playerIdentity > span {
@@ -963,13 +1024,15 @@
 
 .playerStats {
   display: flex;
+  grid-column: 2;
   align-items: center;
+  justify-content: flex-start;
   gap: .65rem;
 }
 
 .playerStats > span {
   display: grid;
-  justify-items: end;
+  justify-items: start;
   gap: .02rem;
 }
 
@@ -986,7 +1049,8 @@
 }
 
 .winnerBadge {
-  display: none;
+  display: flex;
+  grid-column: 2;
   align-items: center;
   gap: .25rem;
   color: #f4b43f;
@@ -1009,6 +1073,32 @@
   padding: .48rem .58rem .56rem;
   border-top: 1px solid rgba(70, 128, 164, .2);
   background: rgba(1, 12, 23, .48);
+}
+
+.breakdownSummary {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.breakdownSummary::-webkit-details-marker {
+  display: none;
+}
+
+.breakdownSummary > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: rgba(54, 184, 255, .72);
+  transition: transform var(--motion-standard) var(--ease-standard);
+}
+
+.ratingBreakdown[open] .breakdownSummary > svg {
+  transform: rotate(180deg);
 }
 
 .breakdownTitle {
@@ -1067,10 +1157,6 @@
   .disclosureBody {
     padding: 0;
     border-top: 0;
-  }
-
-  .otherPlayersDisclosure .player[data-current-player] {
-    display: list-item;
   }
 
   .panel {
@@ -1224,6 +1310,20 @@
     padding: .62rem .75rem;
   }
 
+  .playerIdentity strong {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .playerStats {
+    grid-column: auto;
+    justify-content: flex-end;
+  }
+
+  .playerStats > span {
+    justify-items: end;
+  }
+
   .ratingBreakdown {
     padding: .55rem .75rem .62rem;
   }
@@ -1234,6 +1334,7 @@
 
   .winnerBadge {
     display: flex;
+    grid-column: auto;
     min-width: 6.8rem;
     justify-content: flex-end;
   }
