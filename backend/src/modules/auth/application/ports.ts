@@ -124,6 +124,25 @@ export type OAuthProvider = {
   }>
 }
 
+export type OAuthProviderFailureReason =
+  | 'http_status'
+  | 'invalid_response'
+  | 'network'
+  | 'provider_error'
+
+export type OAuthProviderStage = 'token_exchange' | 'user_info'
+
+export class OAuthProviderFailure extends Error {
+  constructor(
+    readonly stage: OAuthProviderStage,
+    readonly reason: OAuthProviderFailureReason,
+    readonly status?: number,
+  ) {
+    super(`OAuth provider ${stage} failed: ${reason}${status === undefined ? '' : ` (${status})`}`)
+    this.name = 'OAuthProviderFailure'
+  }
+}
+
 export type OAuthProviderRegistry = {
   require(provider: OAuthProviderId): OAuthProvider
 }
