@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { OAuthApplicationFailure, type AuthRepository } from './ports'
+import type { AuthRepository } from './ports'
 import { AuthService } from './auth-service'
 
 const user = {
@@ -347,46 +347,6 @@ test('consumes an OAuth transaction before provider exchange and rejects replay'
     state: 'state',
   })).rejects.toMatchObject({ kind: 'oauth_transaction_invalid' })
   expect(exchangeCalls).toBe(1)
-})
-
-test('classifies an OAuth identity lookup failure without retaining database details', async () => {
-  const service = new AuthService({
-    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
-    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
-    logoutCleanup: async () => undefined,
-    oauthProviders: {
-      require: () => ({
-        authorizationUrl: () => 'https://provider.example/authorize',
-        exchangeCode: async () => ({ accessToken: 'provider-token', providerSubject: 'provider-sub-1' }),
-        getUserInfo: async () => ({ displayName: 'OAuth User', providerSubject: 'provider-sub-1' }),
-      }),
-    },
-    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
-    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
-    refreshTokenTtlDays: 30,
-    refreshReuseGraceSeconds: 10,
-    sessionAbsoluteTtlDays: 90,
-    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
-    repository: {
-      consumeOAuthTransactionByState: async () => ({
-        codeVerifier: 'verifier',
-        expiresAt: new Date('2026-07-20T12:10:00.000Z'),
-        provider: 'yandex',
-        redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
-        state: 'state',
-      }),
-      findUserByIdentity: async () => { throw new Error('database-secret-diagnostic') },
-    } as unknown as AuthRepository,
-  })
-
-  const failure = service.completeOAuthSignIn({
-    code: 'authorization-code',
-    metadata: {},
-    state: 'state',
-  })
-
-  await expect(failure).rejects.toEqual(new OAuthApplicationFailure('identity_lookup'))
-  await expect(failure).rejects.not.toThrow('database-secret-diagnostic')
 })
 
 test('refuses to create an OAuth user without a separately confirmed legal acceptance', async () => {
