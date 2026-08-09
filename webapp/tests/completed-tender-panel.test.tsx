@@ -184,7 +184,15 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('Фильтр итогового аудита по игроку')
   expect(html).toContain('value="player-a" selected=""')
   expect(html).toContain('Моя финальная модель')
-  expect(html).toContain('Другие игроки')
+  expect(html).toContain('Итоговый рейтинг')
+  expect(html).toContain('Рейтинг: 21')
+  expect(html).not.toContain('Rating')
+  expect(html).toMatch(/<details[^>]*data-audit-section="ranking"/)
+  expect(html).not.toMatch(/<details[^>]*data-audit-section="ranking"[^>]*open/)
+  expect(html).toContain('Место и вклад каждого участника')
+  expect(html).toContain('>Вы<')
+  expect(html).toMatch(/<details[^>]*aria-label="За что начислен рейтинг игроку Альфа"/)
+  expect(html).not.toMatch(/<details[^>]*aria-label="За что начислен рейтинг игроку Альфа"[^>]*open/)
   expect(html).toContain('Полный аудит по раундам')
   expect(html).not.toMatch(/<details[^>]*data-audit-section[^>]*open/)
   expect(html).toContain('Раунд 1')
@@ -199,4 +207,54 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).not.toContain('contract-1')
   expect(html).not.toContain('Резерв')
   expect(html).not.toMatch(/<details[^>]*data-audit-round[^>]*open/)
+})
+
+test('keeps four-player ties and long names readable in the server ranking order', () => {
+  const players = [
+    ...view.players,
+    { accessSlot: 3, budget: 2, contractPowerRestriction: 0, displayName: 'Очень длинное имя исследовательской корпорации', playerId: 'player-c', rating: 12 },
+    { accessSlot: 4, budget: 1, contractPowerRestriction: 0, displayName: 'Гамма', playerId: 'player-d', rating: 12 },
+  ]
+  const tiedView = {
+    ...view,
+    audit: {
+      ...view.audit,
+      finalScientificModelsByPlayer: {
+        ...view.audit.finalScientificModelsByPlayer,
+        'player-c': { signals: {}, submitted: false },
+        'player-d': { signals: {}, submitted: false },
+      },
+      placementByPlayer: { 'player-a': 1, 'player-b': 4, 'player-c': 2, 'player-d': 2 },
+      ratingBreakdownByPlayer: {
+        ...view.audit.ratingBreakdownByPlayer,
+        'player-c': { completeModelBonus: 0, contractPoints: 4, correctPropertyPoints: 4, correctSignalPoints: 2, otherPoints: 0, thesisPoints: 2, total: 12 },
+        'player-d': { completeModelBonus: 0, contractPoints: 4, correctPropertyPoints: 4, correctSignalPoints: 2, otherPoints: 0, thesisPoints: 2, total: 12 },
+      },
+    },
+    players,
+  } satisfies TenderView
+
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <CompletedTenderPanel
+        currentUserId="player-c"
+        view={{ ...tiedView, audit: tiedView.audit }}
+      />
+    </I18nProvider>,
+  )
+
+  expect(html).toContain('Очень длинное имя исследовательской корпорации')
+  expect(html.match(/>02</g)).toHaveLength(2)
+  expect(html).toContain('data-current-player="true"')
+
+  const threePlayerHtml = renderToStaticMarkup(
+    <I18nProvider>
+      <CompletedTenderPanel
+        currentUserId="player-c"
+        view={{ ...tiedView, audit: tiedView.audit, players: tiedView.players.slice(0, 3) }}
+      />
+    </I18nProvider>,
+  )
+  expect(threePlayerHtml).toContain('Очень длинное имя исследовательской корпорации')
+  expect(threePlayerHtml).not.toContain('Гамма')
 })
