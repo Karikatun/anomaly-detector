@@ -206,14 +206,114 @@ This is a single-context repository. Read root `CONTEXT.md` and relevant `docs/a
 
 ## UI And Design
 
-- Follow the existing design system, component primitives, and styling conventions.
-- Preserve the existing visual language unless explicitly asked for a redesign.
-- Prefer parent padding plus container gap over ad hoc margins. Keep spacing on the shared scale.
-- Treat shared visual components as closed units: surface, padding, radius, internal spacing, typography, and control sizing belong to the component.
-- Compose shared components from the outside through wrappers, not visual overrides.
-- If a consumer needs different treatment, prefer existing semantic props, then a small reusable semantic prop, then a local feature wrapper.
-- Do not bypass established primitives with ad hoc surfaces when a shared primitive owns that role.
-- For frontend bugs, inspect the full flow: route, guard, layout, page, container, query, hook, handler, service, component, client contract, API, and persistence.
+### Product Direction
+
+- Anomaly Detector is a dark corporate sci-fi multiplayer game UI.
+- The interface should feel serious, technological, restrained, tactical,
+  dense but readable, and game-like without looking arcade.
+- Avoid a generic SaaS dashboard look, excessive gradients, glassmorphism or
+  neon glow everywhere, excessive rounded cards, giant typography, and
+  decoration without function.
+
+### Existing Product
+
+- This is an existing product. Do not redesign it from scratch or break working
+  user flows to make a local screen cleaner.
+- Follow `docs/DESIGN_SYSTEM.md`, existing component primitives, tokens, and
+  styling conventions. Reuse existing components before introducing a new
+  pattern; add one only when current patterns cannot express the required
+  behavior or state.
+- Prefer parent padding plus container gap over ad hoc margins. Keep spacing on
+  the shared scale.
+- Treat shared visual components as closed units. Prefer existing semantic
+  props, then a small reusable semantic prop, then a local feature wrapper.
+  Do not bypass an established primitive with an ad hoc equivalent.
+- For frontend bugs, inspect the full flow from route and page through state,
+  client contract, API, and persistence before fixing a leaf component.
+
+### UI Foundation Rules
+
+- Before foundation, styling-system, or cross-screen consistency work, read
+  `docs/UI_FOUNDATION_AUDIT.md`. Treat `docs/DESIGN_SYSTEM.md` as the normative
+  contract and current code as the runtime source of truth until migration is
+  complete.
+- Do not add a raw color, font size, weight, line height, spacing, radius,
+  shadow, z-index, duration, easing, or breakpoint when an existing semantic
+  token or documented scale expresses the same role.
+- Use the documented foundation scales: spacing `4/8/10/12/16/20/24/32px`,
+  radius `6/8/10/16px/full`, typography through the existing `Typography`
+  variants, motion `120/160/220ms`, and main breakpoints
+  `640/768/1024/1280px`.
+- A new global token requires one semantic role repeated in at least three
+  places. Keep signal, slot, contract, audit, and player accents scoped to their
+  feature.
+- Normalize by meaning, not by mechanically replacing similar literals. Do not
+  merge focus, local selection, saved draft, server-accepted action, disabled,
+  and error states.
+- Extend an existing primitive with a small semantic variant before creating a
+  parallel Button, Card, Badge, Dialog, selected-state, or loading pattern.
+- After a foundation migration wave, update the audit baseline counts and align
+  `docs/UI_FOUNDATION_AUDIT.md` and `docs/DESIGN_SYSTEM.md` with the rendered
+  implementation.
+
+### Visual Hierarchy
+
+Each gameplay stage must clearly prioritize, in this order:
+
+1. current round and stage;
+2. remaining time;
+3. the player's key resource;
+4. the primary action;
+5. available game actions;
+6. current selection and submission status.
+
+Secondary information must be visually quieter. Focus, local selection, saved
+draft, server-accepted action, disabled state, and error must remain visually
+distinct; color must not be their only signal.
+
+### Motion And Layout Stability
+
+- Application UI must remain spatially stable. Ordinary scrolling must not
+  trigger animations.
+- Do not use `whileInView`, scroll reveal, IntersectionObserver entrance
+  animations, `transition: all`, decorative stagger animations, or animation
+  of `width`, `height`, `top`, or `left` by default.
+- Prefer `transform` and `opacity`. Motion must result from user action, state
+  change, navigation, opening or closing an overlay, or success/error feedback.
+- Typical durations: `120–180ms` for microinteractions, `160–220ms` for
+  controls, and `200–280ms` for modals and panels. Respect
+  `prefers-reduced-motion`.
+- Do not introduce layout shift. Async content must reserve its expected space,
+  and sticky elements must not jump, resize unexpectedly, or cover the final
+  interactive content.
+
+### Responsive
+
+- Support at minimum `1440×900`, `1024×768`, and `390×844`.
+- Mobile is a distinct composition, not a scaled-down desktop layout. Preserve
+  the primary action, phase, timer, resource, and status before secondary data.
+- Prevent horizontal overflow, cramped controls, unsafe text wrapping, sticky
+  overlap, and touch targets that are too small for the action's frequency or
+  consequence.
+
+### UI Workflow
+
+Before completing every substantial UI task:
+
+1. inspect the existing screen;
+2. inspect adjacent screens and shared patterns;
+3. inspect existing components and tokens;
+4. implement the smallest coherent change;
+5. run the application;
+6. visually inspect the rendered result in a browser;
+7. inspect desktop;
+8. inspect mobile;
+9. test relevant interactions and states;
+10. fix observed visual problems before finishing.
+
+Do not stop when code merely compiles. A UI task is complete only after the
+rendered result has been visually reviewed at the relevant desktop and mobile
+sizes.
 
 ## Safety And Workspace Hygiene
 
