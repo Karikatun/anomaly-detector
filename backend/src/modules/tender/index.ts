@@ -1577,6 +1577,18 @@ export function createTenderModule({
       })
     },
 
+    async readTenderPlacement(query: TenderViewQuery): Promise<number | undefined> {
+      const parsedQuery = tenderViewQuerySchema.safeParse(query)
+      if (!parsedQuery.success) {
+        throw new TenderFailure('invalid_tender_view_query', 'Tender view query is invalid')
+      }
+      const { tenderId, playerId } = parsedQuery.data
+      const tender = await readTender(tenderId)
+      const player = readPlayer(tender, playerId)
+      if (tender.phase !== 'complete') return undefined
+      return placementByPlayer(tender)[player.id]
+    },
+
     async readTenderView(query: TenderViewQuery): Promise<TenderView> {
       const parsedQuery = tenderViewQuerySchema.safeParse(query)
       if (!parsedQuery.success) {

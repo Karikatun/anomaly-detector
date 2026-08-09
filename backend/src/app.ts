@@ -47,6 +47,7 @@ export function createApp({
     authenticatedMutationBudget: auth.authenticatedMutationBudget,
     db: prisma,
     requireAuth: auth.requireAuth,
+    tender,
   })
   const profile = createProfileModule({
     db: prisma,

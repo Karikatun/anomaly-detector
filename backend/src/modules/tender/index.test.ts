@@ -356,6 +356,8 @@ test('permanently forfeits players, skips their actions, and ends with the last 
     phase: 'complete',
     winnerPlayerIds: ['player-c'],
   })
+  await expect(tender.readTenderPlacement({ tenderId, playerId: 'player-a' })).resolves.toBe(3)
+  await expect(tender.readTenderPlacement({ tenderId, playerId: 'player-c' })).resolves.toBe(1)
   expect(JSON.stringify(completedView.audit)).not.toContain('finalScientificModelDraft')
   expect(JSON.stringify(completedView.audit)).not.toContain('privateWorkingModel')
 })

@@ -54,12 +54,12 @@
 .tableHeader,
 .row {
   display: grid;
-  grid-template-columns: 1.15fr .85fr .9fr .8fr;
+  grid-template-columns: minmax(11rem, 1fr) minmax(18rem, 2fr) minmax(8rem, .75fr) minmax(9rem, .7fr);
   align-items: center;
 }
 
 .tableHeader {
-  min-height: 4.5rem;
+  min-height: 3.6rem;
   padding: 0 clamp(1.25rem, 3vw, 2.25rem);
   border-bottom: 1px solid rgba(50, 94, 132, .55);
   color: #8fa6bb;
@@ -67,8 +67,9 @@
 }
 
 .row {
-  min-height: 5.5rem;
-  padding: 0 clamp(1.25rem, 3vw, 2.25rem);
+  min-height: 7.25rem;
+  gap: 1rem;
+  padding: .85rem clamp(1.25rem, 3vw, 2.25rem);
   border-bottom: 1px solid rgba(42, 80, 112, .48);
 }
 
@@ -81,15 +82,37 @@
   min-width: 0;
 }
 
-.date,
-.players {
-  color: #b9cad9;
-  font-size: clamp(.95rem, 1.3vw, 1.1rem);
+.dateCell,
+.playersCell {
+  display: grid;
+  align-content: center;
+  gap: .45rem;
+}
+
+.dateCopy {
+  display: grid;
+  gap: .05rem;
+}
+
+.date {
+  color: #dceaf5;
+  font-size: clamp(.9rem, 1.2vw, 1.02rem);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.time {
+  color: #7891a6;
   font-variant-numeric: tabular-nums;
 }
 
-.players {
-  color: #e3edf5;
+.matchMeta,
+.playersHeading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .35rem;
 }
 
 .status {
@@ -97,7 +120,7 @@
   align-items: center;
   gap: .55rem;
   color: #6dbce9;
-  font-size: clamp(.82rem, 1.2vw, 1rem);
+  font-size: .72rem;
 }
 
 .status[data-complete] {
@@ -110,12 +133,6 @@
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 0 10px currentColor;
-}
-
-.statusCell {
-  display: grid;
-  justify-items: start;
-  gap: .38rem;
 }
 
 .rulesetBadge {
@@ -132,6 +149,76 @@
   white-space: nowrap;
 }
 
+.playersHeading {
+  color: #7891a6;
+}
+
+.playersHeading svg {
+  width: 1rem;
+  height: 1rem;
+  color: #55b8ea;
+}
+
+.playerList {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .3rem;
+}
+
+.playerList li {
+  display: flex;
+  min-width: 0;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: .35rem;
+  padding: .32rem .45rem;
+  border: 1px solid rgba(61, 113, 150, .28);
+  border-radius: var(--radius-compact);
+  background: rgba(5, 24, 40, .62);
+}
+
+.playerList li > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  color: #c9d9e6;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.youBadge {
+  flex: none;
+  padding: .08rem .28rem;
+  border: 1px solid rgba(54, 184, 255, .46);
+  border-radius: .25rem;
+  color: #62c9f4;
+  background: rgba(12, 79, 111, .24);
+  font-size: .58rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.placeCell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: .5rem;
+  color: #f1bd59;
+}
+
+.placeCell > svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+}
+
+.placeCell strong {
+  color: #eef7fc;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .actionCell {
   display: flex;
   justify-content: flex-end;
@@ -145,6 +232,11 @@
   color: #5caeff !important;
   background: rgba(1, 12, 25, .78) !important;
   box-shadow: inset 0 0 18px rgba(31, 119, 208, .08);
+}
+
+.detailsButton svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .detailsButton:hover:not(:disabled),
@@ -229,9 +321,14 @@
 
   .row {
     min-height: auto;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    padding: 1rem;
+    grid-template-areas:
+      "date place"
+      "players players"
+      "action action";
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: .85rem;
+    padding: .85rem;
     border: 1px solid rgba(49, 93, 131, .62);
     border-radius: 8px;
     background: rgba(2, 7, 12, .82);
@@ -252,7 +349,37 @@
     text-transform: uppercase;
   }
 
+  .dateCell {
+    grid-area: date;
+  }
+
+  .playersCell {
+    grid-area: players;
+  }
+
+  .placeCell {
+    display: grid;
+    min-width: 6.5rem;
+    grid-area: place;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-self: end;
+  }
+
+  .placeCell::before {
+    grid-column: 1 / -1;
+  }
+
+  .playersHeading {
+    display: none;
+  }
+
+  .playerList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .actionCell {
+    grid-area: action;
     grid-column: 1 / -1;
   }
 
