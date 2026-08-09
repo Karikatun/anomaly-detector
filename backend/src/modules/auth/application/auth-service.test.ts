@@ -386,6 +386,54 @@ test('refuses to create an OAuth user without a separately confirmed legal accep
   })).rejects.toMatchObject({ kind: 'oauth_registration_consent_required' })
 })
 
+test('limits a provider display name before creating an OAuth user', async () => {
+  let createdDisplayName: string | null | undefined
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    oauthProviders: {
+      require: () => ({
+        authorizationUrl: () => 'https://provider.example/authorize',
+        exchangeCode: async () => ({ accessToken: 'provider-token', providerSubject: 'new-provider-user' }),
+        getUserInfo: async () => ({ displayName: 'Очень длинное имя пользователя', providerSubject: 'new-provider-user' }),
+      }),
+    },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: createdDisplayName ?? null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: {
+      consumeOAuthTransactionByState: async () => ({
+        codeVerifier: 'verifier',
+        expiresAt: new Date('2026-07-20T12:10:00.000Z'),
+        legalAcceptance: {
+          acceptedAt: new Date('2026-07-20T12:00:00.000Z'),
+          privacyConsentVersion: '1.0',
+          termsVersion: '1.0',
+        },
+        provider: 'yandex',
+        redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
+        state: 'state',
+      }),
+      findUserByIdentity: async () => null,
+      createOAuthUserWithSession: async (
+        input: Parameters<AuthRepository['createOAuthUserWithSession']>[0],
+      ) => {
+        createdDisplayName = input.user.displayName
+        return { session: { id: 'session-1' }, user }
+      },
+    } as unknown as AuthRepository,
+  })
+
+  await service.completeOAuthSignIn({ code: 'authorization-code', metadata: {}, state: 'state' })
+
+  expect(createdDisplayName).toBe('Очень длинное имя по')
+  expect(createdDisplayName?.length).toBe(20)
+})
+
 test('deleteAccount removes identity links only after Tender history is anonymised', async () => {
   const operations: string[] = []
   const repository = {

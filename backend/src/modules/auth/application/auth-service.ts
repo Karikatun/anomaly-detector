@@ -1,4 +1,4 @@
-import type { LoginRequest, RegisterPayload } from '@anomaly-detector/contracts'
+import { displayNameMaxLength, type LoginRequest, type RegisterPayload } from '@anomaly-detector/contracts'
 
 import { AuthFailure } from '../domain/errors'
 import type { OAuthProviderId } from '../domain/oauth'
@@ -174,7 +174,7 @@ export class AuthService {
       const created = await this.dependencies.repository.createOAuthUserWithSession({
         user: {
           login: oauthLogin(transaction.provider),
-          displayName: userInfo.displayName ?? null,
+          displayName: normalizeProviderDisplayName(userInfo.displayName),
           legalAcceptance: transaction.legalAcceptance,
         },
         identity: {
@@ -426,6 +426,12 @@ export class AuthService {
   private sessionAbsoluteNotBefore(now: Date) {
     return new Date(now.getTime() - this.dependencies.sessionAbsoluteTtlDays * 24 * 60 * 60 * 1000)
   }
+}
+
+function normalizeProviderDisplayName(displayName: string | null | undefined): string | null {
+  const normalized = displayName?.trim()
+  if (!normalized) return null
+  return normalized.slice(0, displayNameMaxLength).trimEnd()
 }
 
 async function createPkcePair() {

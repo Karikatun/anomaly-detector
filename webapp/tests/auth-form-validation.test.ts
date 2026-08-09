@@ -16,13 +16,13 @@ const registration = {
 test('registration uses the shared display-name boundaries', () => {
   expect(parseCredentialsForm('register', { ...registration, displayName: 'Я' }).success).toBe(false)
   expect(parseCredentialsForm('register', { ...registration, displayName: 'Ян' }).success).toBe(true)
-  expect(parseCredentialsForm('register', { ...registration, displayName: 'Я'.repeat(80) }).success).toBe(true)
-  expect(parseCredentialsForm('register', { ...registration, displayName: 'Я'.repeat(81) }).success).toBe(false)
+  expect(parseCredentialsForm('register', { ...registration, displayName: 'Я'.repeat(20) }).success).toBe(true)
+  expect(parseCredentialsForm('register', { ...registration, displayName: 'Я'.repeat(21) }).success).toBe(false)
 })
 
 test('profile editing uses the shared display-name boundaries', () => {
   expect(parseProfileForm({ displayName: 'Я' }).success).toBe(false)
   expect(parseProfileForm({ displayName: 'Ян' }).success).toBe(true)
-  expect(parseProfileForm({ displayName: 'Я'.repeat(80) }).success).toBe(true)
-  expect(parseProfileForm({ displayName: 'Я'.repeat(81) }).success).toBe(false)
+  expect(parseProfileForm({ displayName: 'Я'.repeat(20) }).success).toBe(true)
+  expect(parseProfileForm({ displayName: 'Я'.repeat(21) }).success).toBe(false)
 })

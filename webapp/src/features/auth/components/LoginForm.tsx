@@ -2,6 +2,7 @@ import { ViewIcon, ViewOffIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useForm } from '@tanstack/react-form'
 import {
+  displayNameMaxLength,
   loginSchema,
   loginRequestSchema,
   personalDataConsentVersion,
@@ -198,6 +199,7 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                       id="auth-display-name"
                       type="text"
                       autoComplete="name"
+                      maxLength={displayNameMaxLength}
                       value={field.state.value}
                       className={styles.input}
                       placeholder={t('auth.displayName.placeholder')}

@@ -33,7 +33,11 @@ test('shows the primary sign-in paths immediately and exposes accurate auth head
 
   await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Регистрация', exact: true })).toBeVisible()
-  await expect(page.getByLabel('Имя')).toBeVisible()
+  const displayName = page.getByLabel('Имя')
+  await expect(displayName).toBeVisible()
+  await expect(displayName).toHaveAttribute('maxlength', '20')
+  await displayName.fill('Я'.repeat(21))
+  await expect(displayName).toHaveValue('Я'.repeat(20))
   await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
 })
 
@@ -326,7 +330,7 @@ test('keeps profile input and exposes server errors until a successful retry', a
   const save = page.getByRole('button', { name: 'Сохранить' })
   await name.fill('Я')
   await expect(save).toBeDisabled()
-  await expect(page.getByRole('alert')).toContainText('от 2 до 80')
+  await expect(page.getByRole('alert')).toContainText('от 2 до 20')
 
   let shouldFail = true
   await page.route('**/api/auth/profile', async (route) => {

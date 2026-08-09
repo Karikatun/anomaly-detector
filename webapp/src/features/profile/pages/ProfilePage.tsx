@@ -10,6 +10,8 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMemo, useState } from 'react'
 
+import { displayNameMaxLength, displayNameMinLength } from '@anomaly-detector/contracts'
+
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -200,7 +202,11 @@ function DisplayNameEditor({
     defaultValues: { displayName: currentName },
     onSubmit: async ({ value }) => {
       const displayName = value.displayName.trim()
-      if (displayName.length < 2 || displayName.length > 80 || displayName === currentName) return
+      if (
+        displayName.length < displayNameMinLength
+        || displayName.length > displayNameMaxLength
+        || displayName === currentName
+      ) return
 
       setServerError(null)
       try {
@@ -254,7 +260,8 @@ function DisplayNameEditor({
       <form.Field name="displayName">
         {(field) => {
           const trimmedName = field.state.value.trim()
-          const isValid = trimmedName.length >= 2 && trimmedName.length <= 80
+          const isValid = trimmedName.length >= displayNameMinLength
+            && trimmedName.length <= displayNameMaxLength
           return (
             <>
               <div className={styles.nameControls}>
@@ -262,6 +269,7 @@ function DisplayNameEditor({
                   autoFocus
                   id="profile-display-name"
                   type="text"
+                  maxLength={displayNameMaxLength}
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(event) => {
