@@ -74,6 +74,7 @@ const accessSlots = [
 ] as const
 
 type AccessSlotPanelProps = {
+  budget: number
   children?: ReactNode
   confirmedSlot?: number
   currentUserId?: string
@@ -88,6 +89,7 @@ const slotStyle = (accent: string) => ({
 } as CSSProperties)
 
 export function AccessSlotPanel({
+  budget,
   children,
   confirmedSlot,
   currentUserId,
@@ -161,6 +163,25 @@ export function AccessSlotPanel({
         </div>
       )}
 
+      <div className={styles.decisionBar}>
+        <span className={styles.budgetStatus}>
+          <span className={styles.budgetIcon} aria-hidden="true">
+            <HugeiconsIcon icon={Coins01Icon} strokeWidth={1.8} />
+          </span>
+          <span className={styles.budgetCopy}>
+            <Typography as="span" variant="caption" tone="muted">
+              {t('tender.access.availableBudget')}
+            </Typography>
+            <Typography as="strong" variant="h4" className={styles.budgetValue}>
+              {budget}
+            </Typography>
+          </span>
+        </span>
+        <Typography variant="bodySm" tone="muted" className={styles.choiceHint}>
+          {t('tender.access.choiceHint')}
+        </Typography>
+      </div>
+
       <div
         className={styles.slotGrid}
         role="group"
@@ -185,12 +206,17 @@ export function AccessSlotPanel({
               onClick={() => setSelected(slot)}
               style={slotStyle(accent)}
             >
-              {isSelected && (
-                <span className={styles.selectedBadge}>
-                  <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} aria-hidden="true" />
-                  <Typography as="span" variant="caption">{t('tender.access.selected')}</Typography>
-                </span>
-              )}
+              <span className={styles.slotHeader}>
+                <Typography as="span" variant="caption" className={styles.orderLabel}>
+                  {t('tender.access.order', { order: slot })}
+                </Typography>
+                {isSelected && (
+                  <span className={styles.selectedBadge}>
+                    <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} aria-hidden="true" />
+                    <Typography as="span" variant="caption">{t('tender.access.selected')}</Typography>
+                  </span>
+                )}
+              </span>
 
               <Typography as="span" variant="h1" className={styles.slotNumber}>
                 {String(slot).padStart(2, '0')}
@@ -199,45 +225,33 @@ export function AccessSlotPanel({
                 {label}
               </Typography>
 
-              <Typography as="span" variant="caption" className="sr-only">{terms}</Typography>
-              {effects.length > 0 && (
-                <span className={styles.effects} data-multiple={effects.length > 1 || undefined}>
-                  {effects.map((effect) => (
-                    <span key={effect.valueKey} className={styles.effect}>
-                      <HugeiconsIcon icon={effect.icon} strokeWidth={1.7} aria-hidden="true" />
-                      <Typography as="strong" variant="bodySmMedium">
-                        {t(effect.valueKey)}
-                      </Typography>
-                    </span>
-                  ))}
-                </span>
-              )}
-              {effects.length === 0 && (
-                <span className={styles.effects}>
-                  <Typography as="span" variant="bodySmMedium" className={styles.neutralEffect}>
-                    —
-                  </Typography>
-                </span>
-              )}
+              <span className={styles.termsBlock}>
+                <Typography as="span" variant="caption" className={styles.termsLabel}>
+                  {terms}
+                </Typography>
+                {effects.length > 0 && (
+                  <span className={styles.effects} data-multiple={effects.length > 1 || undefined}>
+                    {effects.map((effect) => (
+                      <span key={effect.valueKey} className={styles.effect}>
+                        <HugeiconsIcon icon={effect.icon} strokeWidth={1.7} aria-hidden="true" />
+                        <Typography as="strong" variant="bodySmMedium">
+                          {t(effect.valueKey)}
+                        </Typography>
+                      </span>
+                    ))}
+                  </span>
+                )}
+                {effects.length === 0 && (
+                  <span className={styles.effects}>
+                    <Typography as="span" variant="bodySmMedium" className={styles.neutralEffect}>
+                      —
+                    </Typography>
+                  </span>
+                )}
+              </span>
             </button>
           )
         })}
-      </div>
-
-      <div className={styles.rule}>
-        <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-        <div className="grid gap-0.5">
-          <Typography variant="bodySmMedium">{t('tender.access.ruleTitle')}</Typography>
-          <Typography variant="bodySm" tone="muted">{t('tender.access.ruleCompact')}</Typography>
-          <Typography variant="bodySm" className={styles.priorityNames}>
-            {tiePriorityPlayers.map((player) => player.displayName ?? player.playerId).join(' → ')}
-          </Typography>
-          <Typography as="span" variant="caption" className="sr-only">
-            {t('tender.access.tiePriority', {
-              players: tiePriorityPlayers.map((player) => player.displayName ?? player.playerId).join(' → '),
-            })}
-          </Typography>
-        </div>
       </div>
 
       {error && (
@@ -271,29 +285,60 @@ export function AccessSlotPanel({
         </div>
       ) : (
         <div className={styles.footer} data-tutorial-action-container="">
-          <Button
-            type="button"
-            size="lg"
-            aria-label={t('tender.access.confirm')}
-            className={styles.confirmButton}
-            data-tutorial-confirm-ready={selected !== null || undefined}
-            disabled={disabled || selected === null}
-            onClick={() => void (async () => {
-              if (selected === null) return
-              const succeeded = await runTenderAction(() => onConfirm(selected))
-              if (succeeded) setSelected(null)
-            })()}
-          >
-            {selectedSlotInfo
-              ? t('tender.access.confirmSlot', { slot: selectedSlotInfo.slot })
-              : t('tender.access.confirm')}
-          </Button>
-          <div className={styles.lockWarning}>
-            <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.8} aria-hidden="true" />
-            <Typography variant="bodySm" tone="muted">{t('tender.access.lockWarning')}</Typography>
+          <div className={styles.selectionSummary} data-empty={!selectedSlotInfo || undefined}>
+            <Typography as="strong" variant="bodySmMedium">
+              {selectedSlotInfo
+                ? t('tender.access.selectionSummary', {
+                  name: t(selectedSlotInfo.labelKey),
+                  slot: String(selectedSlotInfo.slot).padStart(2, '0'),
+                })
+                : t('tender.access.selectionEmpty')}
+            </Typography>
+            <Typography variant="caption" tone="muted">
+              {selectedSlotInfo ? t(selectedSlotInfo.termsKey) : t('tender.access.selectionPrompt')}
+            </Typography>
+          </div>
+          <div className={styles.confirmationAction}>
+            <Button
+              type="button"
+              size="lg"
+              aria-label={t('tender.access.confirm')}
+              className={styles.confirmButton}
+              data-tutorial-confirm-ready={selected !== null || undefined}
+              disabled={disabled || selected === null}
+              onClick={() => void (async () => {
+                if (selected === null) return
+                const succeeded = await runTenderAction(() => onConfirm(selected))
+                if (succeeded) setSelected(null)
+              })()}
+            >
+              {selectedSlotInfo
+                ? t('tender.access.confirmSlot', { slot: String(selectedSlotInfo.slot).padStart(2, '0') })
+                : t('tender.access.confirm')}
+            </Button>
+            <div className={styles.lockWarning}>
+              <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.8} aria-hidden="true" />
+              <Typography variant="bodySm" tone="muted">{t('tender.access.lockWarning')}</Typography>
+            </div>
           </div>
         </div>
       )}
+
+      <div className={styles.rule}>
+        <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
+        <div className="grid gap-0.5">
+          <Typography variant="bodySmMedium">{t('tender.access.ruleTitle')}</Typography>
+          <Typography variant="bodySm" tone="muted">{t('tender.access.ruleCompact')}</Typography>
+          <Typography variant="bodySm" className={styles.priorityNames}>
+            {tiePriorityPlayers.map((player) => player.displayName ?? player.playerId).join(' → ')}
+          </Typography>
+          <Typography as="span" variant="caption" className="sr-only">
+            {t('tender.access.tiePriority', {
+              players: tiePriorityPlayers.map((player) => player.displayName ?? player.playerId).join(' → '),
+            })}
+          </Typography>
+        </div>
+      </div>
     </section>
   )
 }

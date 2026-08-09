@@ -167,6 +167,7 @@ export function PhasePanel({
     case 'access-slot-selection':
       return (
         <AccessSlotPanel
+          budget={myPlayer?.budget ?? 0}
           disabled={disabled || myPlayer?.requestedAccessSlot !== undefined}
           confirmedSlot={myPlayer?.requestedAccessSlot}
           currentUserId={auth.user?.id}
