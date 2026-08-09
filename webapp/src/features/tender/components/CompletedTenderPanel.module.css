@@ -218,7 +218,7 @@
   border-radius: 50%;
   color: rgba(173, 208, 229, .72);
   background: rgba(5, 29, 48, .72);
-  transition: color .16s ease, transform .16s ease;
+  transition: color var(--motion-standard) var(--ease-standard), transform var(--motion-standard) var(--ease-standard);
 }
 
 .roundToggle svg {

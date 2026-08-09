@@ -1,8 +1,8 @@
 .progress {
   min-width: 0;
-  padding: .65rem .6rem;
-  border: 1px solid rgba(65, 127, 169, .28);
-  border-radius: .72rem;
+  padding: var(--space-3);
+  border: 1px solid var(--border-game);
+  border-radius: var(--radius-panel);
   background: rgba(1, 13, 27, .88);
 }
 
@@ -16,7 +16,7 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: .5rem;
+  gap: var(--space-2);
 }
 
 .compactTitle {
@@ -65,7 +65,7 @@
 
 .stageList {
   display: grid;
-  gap: .4rem;
+  gap: var(--space-1);
 }
 
 .stageList li {
@@ -73,10 +73,10 @@
   min-height: 2.75rem;
   grid-template-columns: 1.8rem minmax(0, 1fr);
   align-items: center;
-  gap: .55rem;
-  padding: .45rem .55rem;
-  border: 1px solid rgba(65, 127, 169, .24);
-  border-radius: .52rem;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border-game-subtle);
+  border-radius: var(--radius-control);
   color: rgba(198, 216, 228, .58);
   background: rgba(2, 16, 29, .78);
 }
@@ -116,7 +116,7 @@
   grid-template-columns: auto minmax(6rem, 1fr);
   align-items: center;
   justify-items: start;
-  gap: .6rem;
+  gap: var(--space-3);
   color: rgba(189, 207, 220, .42);
 }
 

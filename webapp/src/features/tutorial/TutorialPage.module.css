@@ -75,8 +75,8 @@
   :global([data-testid='floater']),
   :global([data-testid='overlay']),
   :global(body:has([data-tutorial-step]) [data-slot='dialog-content']) {
-    animation-duration: 220ms !important;
-    animation-timing-function: cubic-bezier(.22, 1, .36, 1) !important;
+    animation-duration: var(--motion-panel) !important;
+    animation-timing-function: var(--ease-emphasized) !important;
   }
 
   :global([data-testid='floater']) {

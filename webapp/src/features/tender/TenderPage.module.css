@@ -7,7 +7,7 @@
 
 .header {
   flex: none;
-  z-index: 60;
+  z-index: var(--layer-system);
 }
 
 .content {

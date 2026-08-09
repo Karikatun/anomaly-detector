@@ -1,7 +1,7 @@
 # Anomaly Detector: аудит UI foundation
 
-Статус: baseline-инвентаризация от 9 августа 2026 года. Код ещё не
-нормализован.
+Статус: baseline-инвентаризация и первая безопасная волна нормализации от
+9 августа 2026 года. Миграция foundation продолжается поэтапно.
 
 Документ фиксирует фактическое состояние визуального foundation и целевое
 направление постепенной нормализации. Это не новая дизайн-система и не
@@ -43,6 +43,29 @@ patterns.
 Эти числа — индикатор фрагментации, а не самостоятельная метрика качества.
 Цель миграции — убрать случайные дубли, не уничтожив контекстные игровые
 акценты и проверенные responsive-композиции.
+
+## Реализованный foundation baseline
+
+Первая волна ввела небольшой набор уже естественно существовавших ролей в
+`webapp/src/index.css` и применила их к общим primitives и наиболее часто
+повторяющимся Auth, Rooms, Profile, Rules и Tender surfaces.
+
+| Role | Runtime tokens |
+|---|---|
+| Spacing | `--space-1` … `--space-8` = 4/8/10/12/16/20/24/32px |
+| Radius | `--radius-compact/control/panel/elevated/full` = 6/8/10/16px/full |
+| Dark surfaces | `--surface-canvas/game/game-muted/control` |
+| Borders | `--border-game-subtle/game/game-strong` |
+| Shadows | `--shadow-inset-subtle/surface/sticky/overlay` |
+| Focus | `--focus-ring-color/shadow/inset` |
+| Motion | `--motion-fast/standard/panel` = 120/160/220ms; `--ease-standard/emphasized` |
+| Layers | `--layer-background/content/sticky/overlay/system/tutorial` |
+
+Контроль после первой волны: токены foundation используются в 21 source-файле;
+45 spacing-, 51 radius-, 25 motion- и 14 focus-token references. В `webapp/src`
+не осталось `transition: all` или `transition-all`. Это не означает завершение
+миграции: scoped gameplay colors и уникальные композиции намеренно сохранены,
+а оставшиеся literals нормализуются только вместе с затрагиваемым экраном.
 
 ## Инвентаризация foundation
 
@@ -183,15 +206,23 @@ breakpoint допустим только для устранения подтв�
 ## Порядок реализации foundation
 
 - [ ] F-01. Нормализовать semantic colors поверхностей, текста и borders.
+  Первая волна: общие dark surfaces и три border-роли введены и применены к
+  самым повторяемым поверхностям.
 - [ ] F-02. Уточнить `Button`, `Badge` и `Dialog` variants и сократить
-  feature-level `!important`.
+  feature-level `!important`. Первая волна: foundation общих primitives
+  нормализован; новые semantic variants пока не понадобились.
 - [ ] F-03. Перевести содержательную typography на существующие variants.
-- [ ] F-04. Нормализовать spacing и radius в dense game surfaces.
+- [ ] F-04. Нормализовать spacing и radius в dense game surfaces. Первая волна:
+  Auth, Rooms, Profile, Rules, Access Slot и общие phase surfaces используют
+  общую шкалу.
 - [ ] F-05. Унифицировать focus, selected, saved, accepted и status anatomy.
+  Первая волна: focus ring отделён от hover и feature-selected accents.
 - [ ] F-06. Свести gameplay dialogs к одному workspace placement.
-- [ ] F-07. Ограничить motion properties и закрепить reduced-motion behavior.
-- [ ] F-08. Свести основные breakpoints и именовать z-index layers.
-- [ ] F-09. Повторить инвентаризацию и обновить baseline counts.
+- [x] F-07. Ограничить motion properties и закрепить reduced-motion behavior.
+- [ ] F-08. Свести основные breakpoints и именовать z-index layers. Первая
+  волна: основные runtime layers именованы; breakpoint migration не начата.
+- [x] F-09. Зафиксировать контрольные показатели первой волны и runtime map
+  токенов. Повторять после следующей foundation-волны.
 
 ## Definition of Done
 
