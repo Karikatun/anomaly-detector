@@ -1,8 +1,9 @@
 import type { RoomView } from '@anomaly-detector/contracts'
 
-import type { RoomMemberIdentityReader, RoomRecord, RoomRepository } from './ports'
+import type { MatchPlacementReader, RoomMemberIdentityReader, RoomRecord, RoomRepository } from './ports'
 
 type TenderRoomServiceDependencies = {
+  matchPlacementReader?: MatchPlacementReader
   memberIdentityReader?: RoomMemberIdentityReader
   repository: RoomRepository
 }
@@ -30,7 +31,19 @@ export class TenderRoomService {
 
   async listMatches(actorId: string): Promise<RoomView[]> {
     const rooms = await this.dependencies.repository.listStartedForMember?.(actorId) ?? []
-    return Promise.all(rooms.map((room) => this.toRoomView(room)))
+    return Promise.all(rooms.map(async (room) => {
+      const view = await this.toRoomView(room)
+      if (
+        room.tenderPhase !== 'complete'
+        || !room.tenderId
+        || !this.dependencies.matchPlacementReader
+      ) return view
+      const tenderPlacement = await this.dependencies.matchPlacementReader.readPlacement({
+        playerId: actorId,
+        tenderId: room.tenderId,
+      })
+      return tenderPlacement === undefined ? view : { ...view, tenderPlacement }
+    }))
   }
 
   async getCurrentMatch(actorId: string): Promise<RoomView | null> {

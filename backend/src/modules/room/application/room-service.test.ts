@@ -37,6 +37,12 @@ test('creates a waiting private room with its host in the first seat', async () 
 
 test('lists started matches for the requesting player', async () => {
   const service = new TenderRoomService({
+    matchPlacementReader: {
+      readPlacement: async ({ playerId, tenderId }) => {
+        expect({ playerId, tenderId }).toEqual({ playerId: 'user-1', tenderId: 'tender-1' })
+        return 2
+      },
+    },
     repository: {
       create: async () => { throw new Error('not used') },
       listStartedForMember: async (userId) => [{
@@ -69,6 +75,7 @@ test('lists started matches for the requesting player', async () => {
     status: 'started',
     tenderId: 'tender-1',
     tenderPhase: 'complete',
+    tenderPlacement: 2,
     tenderRuleset: 'tender-v2',
   }])
 })

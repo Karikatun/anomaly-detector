@@ -43,6 +43,7 @@ export const roomViewSchema = z.object({
   ]).optional(),
   tenderForfeited: z.boolean().optional(),
   tenderPhase: z.string().optional(),
+  tenderPlacement: z.number().int().min(1).max(4).optional(),
   tenderRuleset: z.enum(['tender-v1', 'tender-v2']).optional(),
 }).strict()
 

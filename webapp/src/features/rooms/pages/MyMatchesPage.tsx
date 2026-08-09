@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft01Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft01Icon, ArrowRight01Icon, Award02Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMemo } from 'react'
+
+import type { RoomView } from '@anomaly-detector/contracts'
 
 import { ExpeditionBackground } from '@/components/ExpeditionBackground'
 import expeditionStyles from '@/components/ExpeditionShell.module.css'
@@ -14,6 +16,7 @@ import { useI18n } from '@/platform/i18n'
 
 import { RoomsApi } from '../api'
 import { roomQueryKeys } from '../queries'
+import { formatUuidV7Date } from './match-history'
 import styles from './MyMatchesPage.module.css'
 
 export function MyMatchesPage() {
@@ -58,102 +61,160 @@ function MyMatchesContent() {
         </header>
 
         {matches.isPending ? (
-          <div className={styles.feedback} role="status">
-            <Spinner />
-            <Typography>{t('matches.loading')}</Typography>
-          </div>
+          <MatchHistoryFeedback state="loading" />
         ) : matches.isError ? (
-          <div className={styles.feedback} data-error>
-            <Typography role="alert">{t('matches.error')}</Typography>
-            <Button type="button" className={styles.retryButton} onClick={() => void matches.refetch()}>
-              {t('matches.retry')}
-            </Button>
-          </div>
+          <MatchHistoryFeedback state="error" onAction={() => void matches.refetch()} />
         ) : matches.data.length === 0 ? (
-          <div className={styles.empty}>
-            <Typography as="span" variant="h3" className={styles.emptyMark} aria-hidden="true">○</Typography>
-            <Typography className={styles.emptyTitle}>{t('matches.empty.title')}</Typography>
-            <Typography className={styles.emptyHint}>{t('matches.empty.description')}</Typography>
-            <Button type="button" className={styles.primaryButton} onClick={() => void navigate({ to: '/' })}>
-              {t('matches.empty.action')}
-            </Button>
-          </div>
+          <MatchHistoryFeedback state="empty" onAction={() => void navigate({ to: '/' })} />
         ) : (
-          <div className={styles.history}>
-            <div className={styles.tableHeader} aria-hidden="true">
-              <Typography as="span" variant="control">{t('matches.column.date')}</Typography>
-              <Typography as="span" variant="control">{t('matches.column.players')}</Typography>
-              <Typography as="span" variant="control">{t('matches.column.status')}</Typography>
-              <Typography as="span" variant="control">{t('matches.column.details')}</Typography>
-            </div>
-
-            <div className={styles.rows}>
-              {matches.data.map((match) => {
-                const isComplete = match.tenderPhase === 'complete'
-                const status = match.tenderForfeited
-                  ? t('matches.status.forfeited')
-                  : match.tenderCompletionReason !== undefined
-                    ? t('matches.status.earlyComplete')
-                  : isComplete
-                    ? t('matches.status.complete')
-                    : t('matches.status.active')
-                return (
-                  <article className={styles.row} key={match.roomId}>
-                    <div className={styles.cell} data-label={t('matches.column.date')}>
-                      <Typography className={styles.date}>{formatUuidV7Date(match.tenderId)}</Typography>
-                    </div>
-                    <div className={styles.cell} data-label={t('matches.column.players')}>
-                      <Typography className={styles.players}>{match.members.length}</Typography>
-                    </div>
-                    <div className={`${styles.cell} ${styles.statusCell}`} data-label={t('matches.column.status')}>
-                      <Typography className={styles.status} data-complete={isComplete || undefined}>
-                        <span className={styles.statusDot} aria-hidden="true" />
-                        {status}
-                      </Typography>
-                      {match.tenderRuleset && (
-                        <Typography as="span" variant="caption" className={styles.rulesetBadge}>
-                          {t('rules.ruleset', { version: match.tenderRuleset === 'tender-v2' ? '2' : '1' })}
-                        </Typography>
-                      )}
-                    </div>
-                    <div className={styles.actionCell}>
-                      {match.tenderId && (!match.tenderForfeited || isComplete) ? (
-                        <Button
-                          type="button"
-                          className={styles.detailsButton}
-                          onClick={() => void navigate({
-                            to: '/tenders/$tenderId',
-                            params: { tenderId: match.tenderId! },
-                            search: { from: 'matches' },
-                          })}
-                        >
-                          {t('matches.details')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-          </div>
+          <MatchHistoryList
+            currentUserId={auth.user?.id}
+            matches={matches.data}
+            onOpen={(tenderId) => void navigate({
+              to: '/tenders/$tenderId',
+              params: { tenderId },
+              search: { from: 'matches' },
+            })}
+          />
         )}
       </section>
     </main>
   )
 }
 
-function formatUuidV7Date(tenderId: string | null | undefined): string {
-  if (!tenderId || tenderId[14] !== '7') return '—'
+export function MatchHistoryFeedback({
+  state,
+  onAction,
+}: {
+  state: 'loading' | 'error' | 'empty'
+  onAction?: () => void
+}) {
+  const { t } = useI18n()
 
-  const timestamp = Number.parseInt(tenderId.replaceAll('-', '').slice(0, 12), 16)
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return '—'
+  if (state === 'loading') {
+    return (
+      <div className={styles.feedback} role="status">
+        <Spinner />
+        <Typography>{t('matches.loading')}</Typography>
+      </div>
+    )
+  }
 
-  return matchDateFormatter.format(date)
+  if (state === 'error') {
+    return (
+      <div className={styles.feedback} data-error>
+        <Typography role="alert">{t('matches.error')}</Typography>
+        <Button type="button" className={styles.retryButton} onClick={onAction}>
+          {t('matches.retry')}
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className={styles.empty}>
+      <Typography as="span" variant="h3" className={styles.emptyMark} aria-hidden="true">○</Typography>
+      <Typography className={styles.emptyTitle}>{t('matches.empty.title')}</Typography>
+      <Typography className={styles.emptyHint}>{t('matches.empty.description')}</Typography>
+      <Button type="button" className={styles.primaryButton} onClick={onAction}>
+        {t('matches.empty.action')}
+      </Button>
+    </div>
+  )
 }
 
-const matchDateFormatter = new Intl.DateTimeFormat('ru-RU', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-})
+export function MatchHistoryList({
+  currentUserId,
+  matches,
+  onOpen,
+}: {
+  currentUserId?: string
+  matches: RoomView[]
+  onOpen: (tenderId: string) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div className={styles.history} role="table" aria-label={t('matches.title')}>
+      <div className={styles.tableHeader} role="row">
+        <Typography as="span" variant="control" role="columnheader">{t('matches.column.date')}</Typography>
+        <Typography as="span" variant="control" role="columnheader">{t('matches.column.players')}</Typography>
+        <Typography as="span" variant="control" role="columnheader">{t('matches.column.place')}</Typography>
+        <Typography as="span" variant="control" role="columnheader">{t('matches.column.details')}</Typography>
+      </div>
+
+      <div className={styles.rows} role="rowgroup">
+        {matches.map((match) => {
+          const isComplete = match.tenderPhase === 'complete'
+          const status = match.tenderForfeited
+            ? t('matches.status.forfeited')
+            : match.tenderCompletionReason !== undefined
+              ? t('matches.status.earlyComplete')
+              : isComplete
+                ? t('matches.status.complete')
+                : t('matches.status.active')
+          const date = formatUuidV7Date(match.tenderId)
+          return (
+            <article className={styles.row} role="row" key={match.roomId}>
+              <div className={`${styles.cell} ${styles.dateCell}`} role="cell" data-label={t('matches.column.date')}>
+                <span className={styles.dateCopy}>
+                  <Typography as="strong" variant="bodySmMedium" className={styles.date}>{date.date}</Typography>
+                  <Typography as="span" variant="caption" className={styles.time}>{date.time}</Typography>
+                </span>
+                <span className={styles.matchMeta}>
+                  <Typography as="span" variant="caption" className={styles.status} data-complete={isComplete || undefined}>
+                    <span className={styles.statusDot} aria-hidden="true" />
+                    {status}
+                  </Typography>
+                  {match.tenderRuleset && (
+                    <Typography as="span" variant="caption" className={styles.rulesetBadge}>
+                      {t('rules.ruleset', { version: match.tenderRuleset === 'tender-v2' ? '2' : '1' })}
+                    </Typography>
+                  )}
+                </span>
+              </div>
+
+              <div className={`${styles.cell} ${styles.playersCell}`} role="cell" data-label={t('matches.column.players')}>
+                <span className={styles.playersHeading}>
+                  <HugeiconsIcon icon={UserGroupIcon} strokeWidth={1.7} aria-hidden="true" />
+                  <Typography as="span" variant="caption">
+                    {t('matches.players.count', { count: match.members.length })}
+                  </Typography>
+                </span>
+                <ul className={styles.playerList}>
+                  {match.members.map((member) => (
+                    <li key={member.userId} title={member.displayName}>
+                      <Typography as="span" variant="bodySm">{member.displayName}</Typography>
+                      {member.userId === currentUserId && (
+                        <Typography as="span" variant="caption" className={styles.youBadge}>{t('matches.player.you')}</Typography>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className={`${styles.cell} ${styles.placeCell}`} role="cell" data-label={t('matches.column.place')}>
+                <HugeiconsIcon icon={Award02Icon} strokeWidth={1.7} aria-hidden="true" />
+                {match.tenderPlacement ? (
+                  <Typography as="strong" variant="h4">{t('matches.place.value', { place: match.tenderPlacement })}</Typography>
+                ) : (
+                  <Typography as="span" variant="caption" tone="muted">{t('matches.place.pending')}</Typography>
+                )}
+              </div>
+
+              <div className={styles.actionCell} role="cell">
+                {match.tenderId && (!match.tenderForfeited || isComplete) ? (
+                  <Button type="button" className={styles.detailsButton} onClick={() => onOpen(match.tenderId!)}>
+                    {t('matches.details')}
+                    <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={1.7} aria-hidden="true" />
+                  </Button>
+                ) : (
+                  <Typography variant="caption" tone="muted">{t('matches.details.unavailable')}</Typography>
+                )}
+              </div>
+            </article>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

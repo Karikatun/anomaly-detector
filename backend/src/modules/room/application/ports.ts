@@ -10,6 +10,10 @@ export type RoomMemberIdentityReader = {
   readDisplayNames(userIds: string[]): Promise<Map<string, string>>
 }
 
+export type MatchPlacementReader = {
+  readPlacement(input: { playerId: string; tenderId: string }): Promise<number | undefined>
+}
+
 export type RoomRepository = {
   create(input: { capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
   cancelStart?: (input: { actorId: string; roomId: string }) => Promise<RoomRecord>
