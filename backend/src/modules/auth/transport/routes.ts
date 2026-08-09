@@ -26,7 +26,11 @@ import type { AppEnv } from '../../../env'
 import { AppError, validationErrorHook } from '../../../http/errors'
 import { clientAddress } from '../../../http/security'
 import type { AuthService } from '../application/auth-service'
-import { OAuthProviderFailure, type DeviceTokens } from '../application/ports'
+import {
+  OAuthApplicationFailure,
+  OAuthProviderFailure,
+  type DeviceTokens,
+} from '../application/ports'
 import { AuthFailure } from '../domain/errors'
 import { userDtoFromPrincipal } from '../domain/user'
 import { executeAuth } from './errors'
@@ -45,7 +49,9 @@ export const oauthCallbackDiagnostic = (error: unknown) => error instanceof OAut
       stage: error.stage,
       ...(error.status === undefined ? {} : { status: error.status }),
     }
-  : {
+  : error instanceof OAuthApplicationFailure
+    ? { reason: 'unexpected', stage: error.stage }
+    : {
       reason: error instanceof AuthFailure ? 'auth_failure' : 'unexpected',
       stage: 'application',
     }

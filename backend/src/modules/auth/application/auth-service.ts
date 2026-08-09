@@ -17,6 +17,7 @@ import type {
   ProjectUser,
   RefreshTokens,
 } from './ports'
+import { OAuthApplicationFailure } from './ports'
 
 type AuthServiceDependencies = {
   accountDeletionCleanup?: AccountDeletionCleanup
@@ -124,10 +125,11 @@ export class AuthService {
       throw new AuthFailure('oauth_not_configured', 'OAuth sign-in is not configured')
     }
 
-    const transaction = await this.dependencies.repository.consumeOAuthTransactionByState({
-      now: this.dependencies.clock.now(),
-      state: input.state,
-    })
+    const transaction = await oauthApplicationStep('transaction_consume', () =>
+      this.dependencies.repository.consumeOAuthTransactionByState({
+        now: this.dependencies.clock.now(),
+        state: input.state,
+      }))
     if (!transaction) {
       throw new AuthFailure('oauth_transaction_invalid', 'OAuth transaction is invalid or expired')
     }
@@ -143,10 +145,11 @@ export class AuthService {
     const providerSubject = userInfo.providerSubject || tokenResult.providerSubject
 
     // Store the user identity
-    let existingUser = await this.dependencies.repository.findUserByIdentity({
-      provider: transaction.provider,
-      subject: providerSubject,
-    })
+    const existingUser = await oauthApplicationStep('identity_lookup', () =>
+      this.dependencies.repository.findUserByIdentity({
+        provider: transaction.provider,
+        subject: providerSubject,
+      }))
 
     const now = this.dependencies.clock.now()
     const refreshToken = this.dependencies.refreshTokens.create()
@@ -156,45 +159,49 @@ export class AuthService {
 
     if (existingUser) {
       user = existingUser
-      const createdSession = await this.dependencies.repository.createSession({
-        userId: existingUser.id,
-        refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
-        refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
-        expiresAt: this.refreshExpiresAt(now),
-        metadata: input.metadata,
-      })
+      const createdSession = await oauthApplicationStep('session_create', () =>
+        this.dependencies.repository.createSession({
+          userId: existingUser.id,
+          refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+          refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
+          expiresAt: this.refreshExpiresAt(now),
+          metadata: input.metadata,
+        }))
       session = createdSession
     } else {
-      if (!transaction.legalAcceptance) {
+      const legalAcceptance = transaction.legalAcceptance
+      if (!legalAcceptance) {
         throw new AuthFailure(
           'oauth_registration_consent_required',
           'Personal data consent is required to create an account',
         )
       }
-      const created = await this.dependencies.repository.createOAuthUserWithSession({
-        user: {
-          login: oauthLogin(transaction.provider),
-          displayName: userInfo.displayName ?? null,
-          legalAcceptance: transaction.legalAcceptance,
-        },
-        identity: {
-          provider: transaction.provider,
-          subject: providerSubject,
-        },
-        session: {
-          refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
-          refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
-          expiresAt: this.refreshExpiresAt(now),
-          metadata: input.metadata,
-        },
-      })
+      const created = await oauthApplicationStep('user_registration', () =>
+        this.dependencies.repository.createOAuthUserWithSession({
+          user: {
+            login: oauthLogin(transaction.provider),
+            displayName: userInfo.displayName ?? null,
+            legalAcceptance,
+          },
+          identity: {
+            provider: transaction.provider,
+            subject: providerSubject,
+          },
+          session: {
+            refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+            refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
+            expiresAt: this.refreshExpiresAt(now),
+            metadata: input.metadata,
+          },
+        }))
       user = created.user
       session = created.session
     }
 
     const webappOrigin = decodeWebappOrigin(input.state) ?? ''
 
-    const response = await this.sessionResponse(user, session.id, refreshToken)
+    const response = await oauthApplicationStep('session_response', () =>
+      this.sessionResponse(user, session.id, refreshToken))
     return { ...response, webappOrigin }
   }
 
@@ -425,6 +432,18 @@ export class AuthService {
 
   private sessionAbsoluteNotBefore(now: Date) {
     return new Date(now.getTime() - this.dependencies.sessionAbsoluteTtlDays * 24 * 60 * 60 * 1000)
+  }
+}
+
+async function oauthApplicationStep<Result>(
+  stage: ConstructorParameters<typeof OAuthApplicationFailure>[0],
+  operation: () => Promise<Result>,
+) {
+  try {
+    return await operation()
+  } catch (error) {
+    if (error instanceof AuthFailure || error instanceof OAuthApplicationFailure) throw error
+    throw new OAuthApplicationFailure(stage)
   }
 }
 

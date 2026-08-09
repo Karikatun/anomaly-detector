@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import { createApp } from '../../../app'
 import type { DbClient } from '../../../db'
 import type { AppEnv } from '../../../env'
-import { OAuthProviderFailure } from '../application/ports'
+import { OAuthApplicationFailure, OAuthProviderFailure } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
 import { oauthCallbackDiagnostic, oauthCallbackErrorCode } from './routes'
 
@@ -79,6 +79,10 @@ describe('auth routes', () => {
     expect(oauthCallbackDiagnostic(new Error('provider-secret-diagnostic'))).toEqual({
       reason: 'unexpected',
       stage: 'application',
+    })
+    expect(oauthCallbackDiagnostic(new OAuthApplicationFailure('session_create'))).toEqual({
+      reason: 'unexpected',
+      stage: 'session_create',
     })
   })
 

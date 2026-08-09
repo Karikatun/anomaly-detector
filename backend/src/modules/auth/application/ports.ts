@@ -143,6 +143,20 @@ export class OAuthProviderFailure extends Error {
   }
 }
 
+export type OAuthApplicationStage =
+  | 'identity_lookup'
+  | 'session_create'
+  | 'session_response'
+  | 'transaction_consume'
+  | 'user_registration'
+
+export class OAuthApplicationFailure extends Error {
+  constructor(readonly stage: OAuthApplicationStage) {
+    super(`OAuth application step failed: ${stage}`)
+    this.name = 'OAuthApplicationFailure'
+  }
+}
+
 export type OAuthProviderRegistry = {
   require(provider: OAuthProviderId): OAuthProvider
 }
