@@ -40,6 +40,13 @@ modules/<context>/
 
 Transport must not import Prisma. Application and domain must not import Hono, Prisma, environment configuration, or provider SDKs. Infrastructure implements context-specific ports; repositories expose product operations rather than generic CRUD. Cross-context collaboration goes through public `index.ts` APIs or explicit application ports such as auth's `ProjectUser` and `LogoutCleanup`, never through another context's internals.
 
+Tender owns the meaning of its persisted state and audit events. Profile receives
+completed-match summaries through its `CompletedTenderSummaryReader`; Room
+receives participant-specific phase, ruleset, completion, and forfeit state
+through its `TenderLifecycleReader`. The implementations are composed from the
+Tender persistence boundary in `src/app.ts`. Profile and Room must not query or
+decode Tender JSON state or audit payloads directly.
+
 Routes stay thin and translate HTTP into application calls and application failures into the stable API error shape. Do not put business rules into Hono handlers, UI clients, or child components.
 
 ## Runtime Shape And Real-Time

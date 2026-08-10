@@ -1,5 +1,4 @@
 import type { DbClient } from '../../../db'
-import type { Prisma } from '../../../generated/prisma/client'
 import { randomBytes } from 'node:crypto'
 import type { RoomRepository } from '../application/ports'
 import { RoomFailure } from '../domain/errors'
@@ -40,7 +39,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
     async listStartedForMember(userId) {
       const rooms = await db.tenderRoom.findMany({
         where: { members: { some: { userId } }, status: 'started' },
-        include: { members: { orderBy: { seat: 'asc' } }, tender: { select: { phase: true, state: true } } },
+        include: { members: { orderBy: { seat: 'asc' } } },
         orderBy: { updatedAt: 'desc' },
       })
       return rooms.map((room) => ({
@@ -52,52 +51,35 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         status: 'started' as const,
         startsAt: null,
         tenderId: room.tenderId,
-        tenderCompletionReason: readTenderCompletionReason(room.tender?.state),
-        tenderForfeited: readTenderForfeited(room.tender?.state, userId),
-        tenderPhase: room.tender?.phase,
-        tenderRuleset: readTenderRuleset(room.tender?.state),
       }))
     },
     async readCurrentForMember(userId) {
-      return db.$transaction(async (tx) => {
-        const current = await tx.currentMatch.findUnique({
-          where: { userId },
-          include: {
-            room: {
-              include: {
-                members: { orderBy: { seat: 'asc' } },
-                tender: { select: { phase: true, state: true } },
-              },
-            },
+      const current = await db.currentMatch.findUnique({
+        where: { userId },
+        include: {
+          room: {
+            include: { members: { orderBy: { seat: 'asc' } } },
           },
-        })
-        if (!current) return null
-        if (
-          current.room.tender?.phase === 'complete'
-          || readTenderForfeited(current.room.tender?.state, userId)
-        ) {
-          await tx.currentMatch.delete({ where: { userId } })
-          return null
-        }
-        return {
-          capacity: current.room.capacity as 2 | 3 | 4,
-          hostId: current.room.hostId,
-          id: current.room.id,
-          joinCode: current.room.joinCode,
-          members: current.room.members.map((member) => ({
-            ready: member.ready,
-            seat: member.seat,
-            userId: member.userId,
-          })),
-          status: current.room.status as 'waiting' | 'starting' | 'started',
-          startsAt: current.room.startsAt?.toISOString() ?? null,
-          tenderId: current.room.tenderId,
-          tenderCompletionReason: readTenderCompletionReason(current.room.tender?.state),
-          tenderForfeited: readTenderForfeited(current.room.tender?.state, userId),
-          tenderPhase: current.room.tender?.phase,
-          tenderRuleset: readTenderRuleset(current.room.tender?.state),
-        }
-      }, { isolationLevel: 'Serializable' })
+        },
+      })
+      if (!current) return null
+      return {
+        capacity: current.room.capacity as 2 | 3 | 4,
+        hostId: current.room.hostId,
+        id: current.room.id,
+        joinCode: current.room.joinCode,
+        members: current.room.members.map((member) => ({
+          ready: member.ready,
+          seat: member.seat,
+          userId: member.userId,
+        })),
+        status: current.room.status as 'waiting' | 'starting' | 'started',
+        startsAt: current.room.startsAt?.toISOString() ?? null,
+        tenderId: current.room.tenderId,
+      }
+    },
+    async releaseCurrentForMember({ roomId, userId }) {
+      await db.currentMatch.deleteMany({ where: { roomId, userId } })
     },
     async readForMember(input) {
       const room = await db.tenderRoom.findFirst({
@@ -105,10 +87,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           id: input.roomId,
           members: { some: { userId: input.actorId } },
         },
-        include: {
-          members: { orderBy: { seat: 'asc' } },
-          tender: { select: { phase: true, state: true } },
-        },
+        include: { members: { orderBy: { seat: 'asc' } } },
       })
       if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
       return {
@@ -124,17 +103,12 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         status: room.status as 'waiting' | 'starting' | 'started',
         startsAt: room.startsAt?.toISOString() ?? null,
         tenderId: room.tenderId,
-        tenderCompletionReason: readTenderCompletionReason(room.tender?.state),
-        tenderForfeited: readTenderForfeited(room.tender?.state, input.actorId),
-        tenderPhase: room.tender?.phase,
-        tenderRuleset: readTenderRuleset(room.tender?.state),
       }
     },
     async create(input) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           return await db.$transaction(async (tx) => {
-            await releaseCompletedCurrentMatch(tx, input.hostId)
             if (await tx.currentMatch.findUnique({ where: { userId: input.hostId } })) {
               throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
             }
@@ -180,7 +154,6 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
     async join(input) {
       try {
         return await db.$transaction(async (tx) => {
-          await releaseCompletedCurrentMatch(tx, input.actorId)
           const currentMatch = await tx.currentMatch.findUnique({
             where: { userId: input.actorId },
             select: { roomId: true },
@@ -385,16 +358,6 @@ function generateRoomJoinCode() {
   return Array.from(randomBytes(10), (byte) => JOIN_CODE_ALPHABET[byte & 31]).join('')
 }
 
-async function releaseCompletedCurrentMatch(tx: Prisma.TransactionClient, userId: string) {
-  const current = await tx.currentMatch.findUnique({
-    where: { userId },
-    include: { room: { include: { tender: { select: { phase: true } } } } },
-  })
-  if (current?.room.tender?.phase === 'complete') {
-    await tx.currentMatch.delete({ where: { userId } })
-  }
-}
-
 function isCurrentMatchUniqueConstraintError(error: unknown) {
   return typeof error === 'object'
     && error !== null
@@ -449,44 +412,4 @@ function isTransactionWriteConflict(value: unknown) {
 
 function waitForTransactionRetry(attempt: number) {
   return new Promise((resolve) => setTimeout(resolve, 10 * (2 ** attempt)))
-}
-
-function readTenderCompletionReason(state: Prisma.JsonValue | undefined) {
-  if (
-    typeof state === 'object'
-    && state !== null
-    && !Array.isArray(state)
-    && (
-      state.completionReason === 'all_players_left'
-      || state.completionReason === 'last_active_player'
-      || state.completionReason === 'all_players_forfeited'
-    )
-  ) {
-    return state.completionReason
-  }
-  return undefined
-}
-
-function readTenderRuleset(state: Prisma.JsonValue | undefined) {
-  if (
-    typeof state === 'object'
-    && state !== null
-    && !Array.isArray(state)
-    && (state.ruleset === 'tender-v1' || state.ruleset === 'tender-v2')
-  ) {
-    return state.ruleset
-  }
-  return state === undefined ? undefined : 'tender-v1'
-}
-
-function readTenderForfeited(state: Prisma.JsonValue | undefined, userId: string) {
-  if (
-    typeof state !== 'object'
-    || state === null
-    || Array.isArray(state)
-    || typeof state.forfeitedAtByPlayer !== 'object'
-    || state.forfeitedAtByPlayer === null
-    || Array.isArray(state.forfeitedAtByPlayer)
-  ) return false
-  return typeof state.forfeitedAtByPlayer[userId] === 'string'
 }

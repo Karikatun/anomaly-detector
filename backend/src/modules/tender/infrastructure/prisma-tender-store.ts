@@ -444,6 +444,20 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
         .map((tender) => tender.id)
     },
 
+    async listCompletedForPlayer(playerId) {
+      const tenders = await db.tender.findMany({
+        where: {
+          phase: 'complete',
+          state: {
+            path: ['players'],
+            array_contains: [{ id: playerId }],
+          },
+        },
+        include: { commands: true },
+      })
+      return tenders.map(toStoredTender)
+    },
+
     async readAuditEvents(tenderId): Promise<StoredTenderAuditEvent[]> {
       const events = await db.tenderAuditEvent.findMany({
         where: { tenderId },

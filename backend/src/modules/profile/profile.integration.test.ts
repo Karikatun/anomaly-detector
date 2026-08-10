@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createApp } from '../../app'
 import { createPrisma } from '../../db'
 import type { AppEnv } from '../../env'
+import { createPrismaTenderStore, createTenderModule } from '../tender'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl ? describe : describe.skip
@@ -62,88 +63,79 @@ maybeDescribe('profile statistics API integration', () => {
     const guest = await prisma.user.create({
       data: { login: 'profile-guest', passwordHash: 'hash' },
     })
-    const tender = await prisma.tender.create({
-      data: {
-        auditEvents: {
-          create: [
-            {
-              actorId: user.id,
-              kind: 'scientific_model_scored',
-              payload: { correctProperties: 9, playerId: user.id },
-              sequence: 1,
-            },
-            {
-              actorId: user.id,
-              kind: 'contract_bid_assessed',
-              payload: { awarded: true, playerId: user.id },
-              sequence: 2,
-            },
-          ],
-        },
+    const store = createPrismaTenderStore(prisma)
+    const tenderModule = createTenderModule({
+      seedGenerator: () => 'profile-statistics-seed',
+      store,
+    })
+    const players = [
+      { id: user.id, tiePriority: 1 },
+      { id: guest.id, tiePriority: 2 },
+    ]
+    const completed = await tenderModule.createTender({ players })
+    const completedState = await store.read(completed.tenderId)
+    if (!completedState) throw new Error('Expected persisted completed Tender fixture')
+    await store.commit({
+      auditEvents: [],
+      expectedVersion: completedState.version,
+      nextTender: {
+        ...completedState,
+        budgetByPlayer: { [guest.id]: 4, [user.id]: 3 },
+        certifiedSignalsByPlayer: { [user.id]: ['aster'] },
+        dueAt: null,
         phase: 'complete',
-        state: {
-          budgetByPlayer: { [guest.id]: 4, [user.id]: 3 },
-          certifiedSignalsByPlayer: { [user.id]: ['Aster'] },
-          players: [{ id: user.id }, { id: guest.id }],
-          publicTheses: [],
-          ratingByPlayer: { [user.id]: 11 },
-          ruleset: 'tender-v2',
-          winnerPlayerIds: [user.id],
-        },
-        version: 1,
+        ratingByPlayer: { [user.id]: 11 },
+        version: completedState.version + 1,
+        winnerPlayerIds: [user.id],
       },
+      tenderId: completed.tenderId,
     })
-    await prisma.tenderRoom.create({
-      data: {
-        capacity: 2,
-        hostId: user.id,
-        members: {
-          create: [
-            { seat: 1, userId: user.id },
-            { seat: 2, userId: guest.id },
-          ],
+    await prisma.tenderAuditEvent.createMany({
+      data: [
+        {
+          actorId: user.id,
+          kind: 'scientific_model_scored',
+          payload: { correctProperties: 9, playerId: user.id },
+          sequence: 1,
+          tenderId: completed.tenderId,
         },
-        status: 'started',
-        tenderId: tender.id,
-      },
+        {
+          actorId: user.id,
+          kind: 'contract_bid_assessed',
+          payload: { awarded: true, playerId: user.id },
+          sequence: 2,
+          tenderId: completed.tenderId,
+        },
+      ],
     })
-    const earlyTender = await prisma.tender.create({
-      data: {
-        auditEvents: {
-          create: [{
-            actorId: user.id,
-            kind: 'contract_bid_assessed',
-            payload: { awarded: false, playerId: user.id },
-            sequence: 1,
-          }],
-        },
+
+    const early = await tenderModule.createTender({ players })
+    const earlyState = await store.read(early.tenderId)
+    if (!earlyState) throw new Error('Expected persisted early-completion Tender fixture')
+    await store.commit({
+      auditEvents: [],
+      expectedVersion: earlyState.version,
+      nextTender: {
+        ...earlyState,
+        budgetByPlayer: { [guest.id]: 100, [user.id]: 0 },
+        certifiedSignalsByPlayer: { [guest.id]: ['aster', 'boreal'] },
+        completionReason: 'last_active_player',
+        dueAt: null,
+        forfeitedAtByPlayer: { [guest.id]: '2026-07-29T10:00:00.000Z' },
         phase: 'complete',
-        state: {
-          budgetByPlayer: { [guest.id]: 100, [user.id]: 0 },
-          certifiedSignalsByPlayer: { [guest.id]: ['Aster', 'Boreal'] },
-          completionReason: 'last_active_player',
-          forfeitedAtByPlayer: { [guest.id]: '2026-07-29T10:00:00.000Z' },
-          players: [{ id: user.id }, { id: guest.id }],
-          publicTheses: [],
-          ratingByPlayer: { [guest.id]: 100, [user.id]: 0 },
-          ruleset: 'tender-v2',
-          winnerPlayerIds: [user.id],
-        },
-        version: 1,
+        ratingByPlayer: { [guest.id]: 100, [user.id]: 0 },
+        version: earlyState.version + 1,
+        winnerPlayerIds: [user.id],
       },
+      tenderId: early.tenderId,
     })
-    await prisma.tenderRoom.create({
+    await prisma.tenderAuditEvent.create({
       data: {
-        capacity: 2,
-        hostId: user.id,
-        members: {
-          create: [
-            { seat: 1, userId: user.id },
-            { seat: 2, userId: guest.id },
-          ],
-        },
-        status: 'started',
-        tenderId: earlyTender.id,
+        actorId: user.id,
+        kind: 'contract_bid_assessed',
+        payload: { awarded: false, playerId: user.id },
+        sequence: 1,
+        tenderId: early.tenderId,
       },
     })
 

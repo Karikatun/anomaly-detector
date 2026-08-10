@@ -3,22 +3,22 @@ import type { ProfileStatistics } from '@anomaly-detector/contracts'
 import type {
   CompletedMatchPlayer,
   CompletedProfileMatch,
-  ProfileStatisticsRepository,
+  CompletedTenderSummaryReader,
 } from './ports'
 
 const modelPropertiesPerMatch = 12
 
 export class ProfileStatisticsService {
   private readonly dependencies: {
-    repository: ProfileStatisticsRepository
+    completedTenderSummaryReader: CompletedTenderSummaryReader
   }
 
-  constructor(dependencies: { repository: ProfileStatisticsRepository }) {
+  constructor(dependencies: { completedTenderSummaryReader: CompletedTenderSummaryReader }) {
     this.dependencies = dependencies
   }
 
   async read(userId: string): Promise<ProfileStatistics> {
-    const matches = await this.dependencies.repository.listCompletedMatches(userId)
+    const matches = await this.dependencies.completedTenderSummaryReader.listCompletedMatches(userId)
     if (matches.length === 0) {
       return {
         averagePlacement: null,

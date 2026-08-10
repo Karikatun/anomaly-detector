@@ -27,6 +27,19 @@ The API's realtime hub synchronises the versions of actively subscribed Tenders 
 
 The initial in-memory implementation establishes this public interface for TDD. Milestone 1 replaces its storage with PostgreSQL and an audit log without changing the interface shape.
 
+Cross-context reads do not expand this command/view facade. Tender separately
+implements consumer-shaped read ports composed in the application root:
+
+- Profile's `CompletedTenderSummaryReader` receives completed participant and
+  performance summaries;
+- Room's `TenderLifecycleReader` receives phase, ruleset, completion reason, and
+  participant forfeit state.
+
+These readers decode Tender persistence through `TenderStore`. Profile and Room
+do not read Tender JSON state or raw audit payloads, and an incompatible stored
+match fails visibly at the Tender boundary instead of disappearing from derived
+statistics.
+
 ## Internal Persistence Seam
 
 `TenderStore` is an internal seam owned by the Tender Module, not a cross-context interface. It has two adapters: the in-memory adapter used by focused TDD and the PostgreSQL adapter used by the application runtime. The Tender Module remains the owner of rules, visibility projection, command validation, and timer consequences; a store never decides game outcomes.

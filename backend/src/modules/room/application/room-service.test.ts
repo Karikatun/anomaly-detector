@@ -52,13 +52,21 @@ test('lists started matches for the requesting player', async () => {
         members: [{ ready: true, seat: 1, userId }, { ready: true, seat: 2, userId: 'user-2' }],
         status: 'started',
         tenderId: 'tender-1',
-        tenderPhase: 'complete',
-        tenderRuleset: 'tender-v2',
       }],
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
       setReady: async () => { throw new Error('not used') },
       start: async () => { throw new Error('not used') },
+    },
+    tenderLifecycleReader: {
+      readLifecycle: async ({ playerId, tenderId }) => {
+        expect({ playerId, tenderId }).toEqual({ playerId: 'user-1', tenderId: 'tender-1' })
+        return {
+          forfeited: false,
+          phase: 'complete',
+          ruleset: 'tender-v2',
+        }
+      },
     },
   })
 
@@ -78,6 +86,38 @@ test('lists started matches for the requesting player', async () => {
     tenderPlacement: 2,
     tenderRuleset: 'tender-v2',
   }])
+})
+
+test('releases a forfeited current match using the Tender lifecycle port', async () => {
+  const released: Array<{ roomId: string; userId: string }> = []
+  const service = new TenderRoomService({
+    repository: {
+      create: async () => { throw new Error('not used') },
+      join: async () => { throw new Error('not used') },
+      leave: async () => { throw new Error('not used') },
+      readCurrentForMember: async () => ({
+        capacity: 2,
+        hostId: 'user-1',
+        id: 'room-1',
+        members: [{ ready: true, seat: 1, userId: 'user-1' }],
+        status: 'started',
+        tenderId: 'tender-1',
+      }),
+      releaseCurrentForMember: async (input) => { released.push(input) },
+      setReady: async () => { throw new Error('not used') },
+      start: async () => { throw new Error('not used') },
+    },
+    tenderLifecycleReader: {
+      readLifecycle: async () => ({
+        forfeited: true,
+        phase: 'access-slot-selection',
+        ruleset: 'tender-v2',
+      }),
+    },
+  })
+
+  await expect(service.getCurrentMatch('user-1')).resolves.toBeNull()
+  expect(released).toEqual([{ roomId: 'room-1', userId: 'user-1' }])
 })
 
 test('joins a waiting room through its public join code', async () => {

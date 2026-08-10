@@ -13,6 +13,10 @@ import type {
 } from '@anomaly-detector/contracts'
 import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@anomaly-detector/contracts'
 import { createParticipantAuditRounds } from './application/audit-view'
+import {
+  createCompletedTenderSummaryReader,
+  createTenderLifecycleReader,
+} from './application/tender-readers'
 import type {
   PendingTenderAuditEvent,
   StoredTender,
@@ -2088,6 +2092,17 @@ export function createTenderModule({
 
 export function createPersistentTenderModule(db: DbClient) {
   return createTenderModule({ store: createPrismaTenderStore(db) })
+}
+
+export function createPersistentCompletedTenderSummaryReader(db: DbClient) {
+  const reader = createCompletedTenderSummaryReader(createPrismaTenderStore(db))
+  return {
+    listCompletedMatches: (playerId: string) => reader.listCompletedForPlayer(playerId),
+  }
+}
+
+export function createPersistentTenderLifecycleReader(db: DbClient) {
+  return createTenderLifecycleReader(createPrismaTenderStore(db))
 }
 
 export type TenderModule = ReturnType<typeof createTenderModule>

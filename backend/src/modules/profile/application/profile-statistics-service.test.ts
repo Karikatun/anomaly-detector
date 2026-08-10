@@ -4,7 +4,7 @@ import { ProfileStatisticsService } from './profile-statistics-service'
 
 test('aggregates completed match results with shared places and full shared wins', async () => {
   const service = new ProfileStatisticsService({
-    repository: {
+    completedTenderSummaryReader: {
       listCompletedMatches: async () => [
         {
           excludeFromPerformanceAverages: false,
@@ -77,7 +77,7 @@ test('aggregates completed match results with shared places and full shared wins
 
 test('keeps early completion out of rating and model averages when it is the only match', async () => {
   const service = new ProfileStatisticsService({
-    repository: {
+    completedTenderSummaryReader: {
       listCompletedMatches: async () => [{
         excludeFromPerformanceAverages: true,
         players: [
