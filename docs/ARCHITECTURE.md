@@ -47,6 +47,15 @@ through its `TenderLifecycleReader`. The implementations are composed from the
 Tender persistence boundary in `src/app.ts`. Profile and Room must not query or
 decode Tender JSON state or audit payloads directly.
 
+Tender's public `index.ts` is a composition boundary: it selects the in-memory
+or Prisma adapter and exports transport/realtime entry points, but owns no game
+rules. Command and timeout orchestration lives in the application service and
+depends only on `TenderStore` plus callback/clock/seed ports. Stable policy
+blocks live in `domain/` (access-slot resolution, Contract eligibility, phase
+timing, scoring and winner resolution), while participant/audit/read-model
+projection lives in application projection modules. Policy tests import neither
+Prisma, Hono nor realtime code.
+
 Routes stay thin and translate HTTP into application calls and application failures into the stable API error shape. Do not put business rules into Hono handlers, UI clients, or child components.
 
 ## Runtime Shape And Real-Time
