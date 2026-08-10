@@ -1,10 +1,27 @@
 import { expect, test } from 'bun:test'
 
 import {
+  findNewNumericMessageKeys,
   findInvalidTranslationParams,
   findUnknownTranslationKeys,
   findUntranslatedCyrillic,
+  numericTranslationKeyBaseline,
 } from '../scripts/i18n-source-audit.mjs'
+
+test('allows the frozen numeric-key baseline and rejects new numeric message keys', () => {
+  expect(numericTranslationKeyBaseline.size).toBe(350)
+  expect(findNewNumericMessageKeys({
+    allowedKeys: numericTranslationKeyBaseline,
+    messageCatalog: {
+      'tender.tenderPage.copy.035': 'Существующий текст',
+      'tender.tenderPage.connection.reconnecting': 'Семантический новый ключ',
+    },
+  })).toEqual([])
+  expect(findNewNumericMessageKeys({
+    allowedKeys: numericTranslationKeyBaseline,
+    messageCatalog: { 'tender.tenderPage.copy.036': 'Новый числовой ключ' },
+  })).toEqual(['tender.tenderPage.copy.036'])
+})
 
 test('finds Cyrillic player copy in source without flagging comments or message resources', () => {
   const findings = findUntranslatedCyrillic({

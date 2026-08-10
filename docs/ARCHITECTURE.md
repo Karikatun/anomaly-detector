@@ -159,6 +159,12 @@ The completed-match component renders a pure audit presentation model for
 ranking, winners and rating entries. These seams are tested without mounting
 the full page; realtime and multiplayer recovery remain protected by E2E.
 
+New i18n messages use semantic keys that name feature, state and role (for
+example, `tender.completed.summary.title`). Existing `*.copy.NNN` keys form a
+frozen allowlist in the i18n source audit and are renamed only when their owning
+screen is changed. The audit rejects any new numeric catalog key, so the legacy
+baseline can decrease but cannot grow.
+
 Tender is the reference implementation for this contract: the server owns
 hidden state, deadlines, ruleset selection, validation, scoring, and phase
 advancement; the client owns only authorized presentation and reversible input.

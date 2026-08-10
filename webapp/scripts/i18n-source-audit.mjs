@@ -9,6 +9,33 @@ const CYRILLIC = /[А-Яа-яЁё]/u
 const PLAYER_COPY = /[A-Za-zА-Яа-яЁё]/u
 const SOURCE_FILE = /\.(?:ts|tsx)$/u
 const PLAYER_COPY_ATTRIBUTES = new Set(['alt', 'aria-label', 'placeholder', 'title'])
+const NUMERIC_KEY_PATTERN = /\.copy\.\d+$/u
+const numericKeyBaselineRanges = {
+  'tender.accessSlotPanel': [1],
+  'tender.completedTenderPanel': [...range(1, 119), 124],
+  'tender.contractsPanel': range(1, 31),
+  'tender.finalScientificModelPanel': range(1, 35),
+  'tender.laboratoryPanel': range(1, 17),
+  'tender.modelAnalysisPanel': range(1, 5),
+  'tender.phase-ui': range(1, 14),
+  'tender.powerAllocationPanel': [1],
+  'tender.reconnaissancePanel': range(1, 17),
+  'tender.reconnectOverlay': range(1, 5),
+  'tender.tender-command-feedback': range(1, 5),
+  'tender.tenderOverview': range(1, 41),
+  'tender.tenderPage': range(1, 35),
+  'tender.tenderPhaseProgress': range(1, 6),
+  'tender.tenderResearchDialog': range(1, 4),
+  'tender.tenderTimer': [1],
+  'tender.working-model-draft': [1],
+  'tender.workingModelPanel': range(1, 6),
+  'tender.workingModelWorkspace': range(1, 5),
+}
+export const numericTranslationKeyBaseline = new Set(
+  Object.entries(numericKeyBaselineRanges).flatMap(([namespace, numbers]) =>
+    numbers.map((number) => `${namespace}.copy.${String(number).padStart(3, '0')}`),
+  ),
+)
 const APPROVED_TECHNICAL_LITERALS = new Map([
   ['src/features/legal/LegalDocumentPage.tsx', new Set([
     '**Версия согласия:**',
@@ -16,6 +43,16 @@ const APPROVED_TECHNICAL_LITERALS = new Map([
     '**Версия соглашения:**',
   ])],
 ])
+
+function range(start, end) {
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index)
+}
+
+export function findNewNumericMessageKeys({ allowedKeys, messageCatalog }) {
+  return Object.keys(messageCatalog)
+    .filter((key) => NUMERIC_KEY_PATTERN.test(key) && !allowedKeys.has(key))
+    .sort()
+}
 
 function isMessageResource(filePath) {
   const normalized = filePath.replaceAll('\\', '/')
@@ -172,6 +209,13 @@ async function run() {
   const files = await sourceFiles(resolve(root, 'src'))
   const findings = []
   const knownKeys = new Set(Object.keys(messages))
+
+  for (const key of findNewNumericMessageKeys({
+    allowedKeys: numericTranslationKeyBaseline,
+    messageCatalog: messages,
+  })) {
+    findings.push(`src/platform/i18n/messages: new numeric translation key: ${JSON.stringify(key)}`)
+  }
 
   for (const filePath of files) {
     const displayPath = relative(root, filePath)
