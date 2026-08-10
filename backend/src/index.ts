@@ -53,7 +53,7 @@ async function shutdown(signal: string) {
   shuttingDown = true
 
   console.log(`Backend received ${signal}; shutting down`)
-  stopRealtimeSyncLoop()
+  await stopRealtimeSyncLoop()
   await stopServerGracefully(server, runtime.env.SHUTDOWN_GRACE_SECONDS * 1000)
   await runtime.close()
 }

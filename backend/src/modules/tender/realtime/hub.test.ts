@@ -123,6 +123,48 @@ describe('realtime hub', () => {
     })
   })
 
+  test('waits for an active synchronisation before the sync loop stops', async () => {
+    const baseTender = createTenderModule()
+    const { tenderId } = await baseTender.createTender({ players })
+    let blockSynchronisation = false
+    let releaseSynchronisation = () => {}
+    const synchronisationReleased = new Promise<void>((resolve) => {
+      releaseSynchronisation = resolve
+    })
+    let markSynchronisationStarted = () => {}
+    const synchronisationStarted = new Promise<void>((resolve) => {
+      markSynchronisationStarted = resolve
+    })
+    const tender = {
+      ...baseTender,
+      async readTenderView(input: Parameters<typeof baseTender.readTenderView>[0]) {
+        if (blockSynchronisation) {
+          markSynchronisationStarted()
+          await synchronisationReleased
+        }
+        return baseTender.readTenderView(input)
+      },
+    }
+    const hub = createRealtimeHub({ tender })
+    const { socket } = collectSocket()
+    await hub.subscribe({ playerId: 'player-a', socket, tenderId })
+    blockSynchronisation = true
+
+    const stopSyncLoop = hub.startSyncLoop(1)
+    await synchronisationStarted
+    let stopped = false
+    const stopping = stopSyncLoop().then(() => {
+      stopped = true
+    })
+    await Promise.resolve()
+
+    expect(stopped).toBe(false)
+    releaseSynchronisation()
+    await stopping
+    expect(stopped).toBe(true)
+    await expect(stopSyncLoop()).resolves.toBeUndefined()
+  })
+
   test('stops notifying an unsubscribed socket', async () => {
     const tender = createTenderModule()
     const { tenderId } = await tender.createTender({ players })
