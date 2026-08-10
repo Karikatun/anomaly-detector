@@ -348,23 +348,38 @@ WAF validation yet. Track that migration in
 edge/application protection in
 [#19](https://github.com/Karikatun/anomaly-detector/issues/19).
 
-After a release has passed container-internal and public health checks, retain
-exactly two application backend images on the VM:
+After a release has passed container-internal and public health checks, finish
+the release with an explicit cleanup step. First resolve and record the active
+and immediate-rollback Compose, image, release-directory, volume, and backup
+references. Retain exactly two application backend images on the VM:
 
 - the image used by the active Compose configuration;
 - the immediately preceding image referenced by the retained rollback Compose
   configuration.
 
-Remove older `anomaly-detector-backend:<commit>` images, dangling images, and
-unused Docker build cache. Keep the active PostgreSQL and Caddy images,
-PostgreSQL volumes, the current and rollback Compose files, the corresponding
-release directories, and the latest pre-migration database dump. Resolve and
-inspect the two retained image references before deleting explicitly listed
-older tags; do not use a broad `docker system prune --volumes`.
+Remove only explicitly listed inactive resources:
+
+- `anomaly-detector-backend:<commit>` images older than the active and
+  immediate-rollback images;
+- release directories older than the current and immediate-rollback release;
+- dangling images and unused Docker build cache;
+- unused non-data Docker volumes only after `docker volume inspect` confirms
+  their purpose and `docker ps -a --filter volume=<volume>` confirms that no
+  container references them.
+
+Keep the active PostgreSQL and Caddy images, the PostgreSQL data volume, every
+volume referenced by the active or rollback Compose configuration, the current
+and rollback Compose files, the corresponding release directories, and the
+latest pre-migration database dump. Never delete an unknown or data-bearing
+volume merely because Docker reports it as unused. Delete disposable volumes
+only by exact name; do not use `docker volume prune` or a broad
+`docker system prune --volumes`.
 
 After cleanup, require all of the following:
 
 - both retained backend image references pass `docker image inspect`;
+- every retained active/rollback volume passes `docker volume inspect`, and the
+  PostgreSQL volume identity is unchanged;
 - API, worker, and PostgreSQL containers remain healthy;
 - public `GET https://api.anomaly-detector.ru/health/ready` returns
   `{"status":"ok"}`;
