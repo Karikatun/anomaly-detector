@@ -17,12 +17,14 @@ export function createRoomModule(input: {
   tender: Pick<TenderModule, 'readTenderPlacement'>
   tenderLifecycleReader: TenderLifecycleReader
 }) {
+  const clock = { now: () => new Date() }
   const service = new TenderRoomService({
+    clock,
     matchPlacementReader: {
       readPlacement: (query) => input.tender.readTenderPlacement(query),
     },
     memberIdentityReader: createPrismaRoomMemberIdentityReader(input.db),
-    repository: createPrismaRoomRepository(input.db),
+    repository: createPrismaRoomRepository(input.db, clock),
     tenderLifecycleReader: input.tenderLifecycleReader,
   })
   return {

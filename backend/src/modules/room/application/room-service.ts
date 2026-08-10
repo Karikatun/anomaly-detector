@@ -1,6 +1,7 @@
 import type { RoomView } from '@anomaly-detector/contracts'
 
 import type {
+  Clock,
   MatchPlacementReader,
   RoomMemberIdentityReader,
   RoomRecord,
@@ -9,10 +10,11 @@ import type {
 } from './ports'
 
 type TenderRoomServiceDependencies = {
-  matchPlacementReader?: MatchPlacementReader
-  memberIdentityReader?: RoomMemberIdentityReader
+  clock: Clock
+  matchPlacementReader: MatchPlacementReader
+  memberIdentityReader: RoomMemberIdentityReader
   repository: RoomRepository
-  tenderLifecycleReader?: TenderLifecycleReader
+  tenderLifecycleReader: TenderLifecycleReader
 }
 
 export class TenderRoomService {
@@ -26,27 +28,22 @@ export class TenderRoomService {
 
   async joinRoomByCode(input: { actorId: string; code: string }): Promise<RoomView> {
     await this.releaseCompletedCurrentMatch(input.actorId)
-    const joinByCode = this.dependencies.repository.joinByCode
-    if (!joinByCode) throw new Error('Room code joining is unavailable')
-    const room = await joinByCode(input)
+    const room = await this.dependencies.repository.joinByCode(input)
     return this.toRoomView(room, input.actorId)
   }
 
   async getRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
-    const readForMember = this.dependencies.repository.readForMember
-    if (!readForMember) throw new Error('Room reading is unavailable')
-    return this.toRoomView(await readForMember(input), input.actorId)
+    return this.toRoomView(await this.dependencies.repository.readForMember(input), input.actorId)
   }
 
   async listMatches(actorId: string): Promise<RoomView[]> {
-    const rooms = await this.dependencies.repository.listStartedForMember?.(actorId) ?? []
+    const rooms = await this.dependencies.repository.listStartedForMember(actorId)
     return Promise.all(rooms.map(async (room) => {
       const lifecycle = await this.readTenderLifecycle(room, actorId)
       const view = await this.toRoomView(room, actorId, lifecycle)
       if (
         lifecycle?.phase !== 'complete'
         || !room.tenderId
-        || !this.dependencies.matchPlacementReader
       ) return view
       const tenderPlacement = await this.dependencies.matchPlacementReader.readPlacement({
         playerId: actorId,
@@ -57,11 +54,11 @@ export class TenderRoomService {
   }
 
   async getCurrentMatch(actorId: string): Promise<RoomView | null> {
-    const room = await this.dependencies.repository.readCurrentForMember?.(actorId) ?? null
+    const room = await this.dependencies.repository.readCurrentForMember(actorId)
     if (!room) return null
     const lifecycle = await this.readTenderLifecycle(room, actorId)
     if (lifecycle && (lifecycle.phase === 'complete' || lifecycle.forfeited)) {
-      await this.dependencies.repository.releaseCurrentForMember?.({ roomId: room.id, userId: actorId })
+      await this.dependencies.repository.releaseCurrentForMember({ roomId: room.id, userId: actorId })
       return null
     }
     return this.toRoomView(room, actorId, lifecycle)
@@ -80,21 +77,19 @@ export class TenderRoomService {
   }
 
   async cancelRoomStart(input: { actorId: string; roomId: string }): Promise<RoomView> {
-    const cancelStart = this.dependencies.repository.cancelStart
-    if (!cancelStart) throw new Error('Room start cancellation is unavailable')
-    return this.toRoomView(await cancelStart(input), input.actorId)
+    return this.toRoomView(await this.dependencies.repository.cancelStart(input), input.actorId)
   }
 
   private async releaseCompletedCurrentMatch(actorId: string) {
-    const room = await this.dependencies.repository.readCurrentForMember?.(actorId)
+    const room = await this.dependencies.repository.readCurrentForMember(actorId)
     if (!room) return
     const lifecycle = await this.readTenderLifecycle(room, actorId)
     if (!lifecycle || (lifecycle.phase !== 'complete' && !lifecycle.forfeited)) return
-    await this.dependencies.repository.releaseCurrentForMember?.({ roomId: room.id, userId: actorId })
+    await this.dependencies.repository.releaseCurrentForMember({ roomId: room.id, userId: actorId })
   }
 
   private async readTenderLifecycle(room: RoomRecord, actorId: string) {
-    if (!room.tenderId || !this.dependencies.tenderLifecycleReader) return undefined
+    if (!room.tenderId) return undefined
     return this.dependencies.tenderLifecycleReader.readLifecycle({
       playerId: actorId,
       tenderId: room.tenderId,
@@ -108,9 +103,7 @@ export class TenderRoomService {
   ): Promise<RoomView> {
     const lifecycle = providedLifecycle ?? await this.readTenderLifecycle(room, actorId)
     const userIds = room.members.map((member) => member.userId)
-    const displayNames = this.dependencies.memberIdentityReader
-      ? await this.dependencies.memberIdentityReader.readDisplayNames(userIds)
-      : new Map<string, string>()
+    const displayNames = await this.dependencies.memberIdentityReader.readDisplayNames(userIds)
     return {
       capacity: room.capacity,
       hostId: room.hostId,
@@ -120,7 +113,7 @@ export class TenderRoomService {
         displayName: displayNames.get(member.userId) ?? 'Исследователь',
       })),
       roomId: room.id,
-      serverTime: new Date().toISOString(),
+      serverTime: this.dependencies.clock.now().toISOString(),
       status: room.status,
       ...(room.startsAt === null || room.startsAt === undefined ? {} : { startsAt: room.startsAt }),
       ...(room.tenderId === null ? {} : { tenderId: room.tenderId }),

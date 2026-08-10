@@ -38,16 +38,20 @@ export type TenderLifecycleReader = {
   }>
 }
 
+export type Clock = {
+  now(): Date
+}
+
 export type RoomRepository = {
   create(input: { capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
-  cancelStart?: (input: { actorId: string; roomId: string }) => Promise<RoomRecord>
-  readCurrentForMember?: (userId: string) => Promise<RoomRecord | null>
-  listStartedForMember?: (userId: string) => Promise<RoomRecord[]>
-  readForMember?: (input: { actorId: string; roomId: string }) => Promise<RoomRecord>
+  cancelStart(input: { actorId: string; roomId: string }): Promise<RoomRecord>
+  readCurrentForMember(userId: string): Promise<RoomRecord | null>
+  listStartedForMember(userId: string): Promise<RoomRecord[]>
+  readForMember(input: { actorId: string; roomId: string }): Promise<RoomRecord>
   join(input: { actorId: string; roomId: string }): Promise<RoomRecord>
-  joinByCode?: (input: { actorId: string; code: string }) => Promise<RoomRecord>
+  joinByCode(input: { actorId: string; code: string }): Promise<RoomRecord>
   leave(input: { actorId: string; roomId: string }): Promise<void>
-  releaseCurrentForMember?: (input: { roomId: string; userId: string }) => Promise<void>
+  releaseCurrentForMember(input: { roomId: string; userId: string }): Promise<void>
   setReady(input: { actorId: string; ready: boolean; roomId: string }): Promise<RoomRecord>
   start(input: { actorId: string; roomId: string }): Promise<RoomRecord>
 }
