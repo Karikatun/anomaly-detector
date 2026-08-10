@@ -99,6 +99,7 @@ export type TenderStore = {
   commit(change: TenderCommit): Promise<TenderCommitResult>
   create(tender: Omit<StoredTender, 'id'>): Promise<StoredTender>
   findDue(input: AdvanceDueTendersInput): Promise<string[]>
+  listCompletedForPlayer(playerId: string): Promise<StoredTender[]>
   readAuditEvents(tenderId: string): Promise<StoredTenderAuditEvent[]>
   read(tenderId: string): Promise<StoredTender | null>
 }

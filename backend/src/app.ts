@@ -12,6 +12,8 @@ import { createAdminModule } from './modules/admin'
 import { createProfileModule } from './modules/profile'
 import { createRoomModule } from './modules/room'
 import {
+  createPersistentCompletedTenderSummaryReader,
+  createPersistentTenderLifecycleReader,
   createPersistentTenderModule,
   createPrismaRealtimeTicketIssuer,
   createRealtimeTicketRoutes,
@@ -48,8 +50,10 @@ export function createApp({
     db: prisma,
     requireAuth: auth.requireAuth,
     tender,
+    tenderLifecycleReader: createPersistentTenderLifecycleReader(prisma),
   })
   const profile = createProfileModule({
+    completedTenderSummaryReader: createPersistentCompletedTenderSummaryReader(prisma),
     db: prisma,
     requireAuth: auth.requireAuth,
   })

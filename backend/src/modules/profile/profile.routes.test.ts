@@ -6,43 +6,7 @@ import type { AuthHttpEnv } from '../auth'
 import { createProfileModule } from './index'
 
 test('returns authenticated player statistics from compatible completed matches', async () => {
-  const db = {
-    tenderRoom: {
-      findMany: async () => [
-        {
-          tender: {
-            auditEvents: [
-              { kind: 'scientific_model_scored', payload: { correctProperties: 6, playerId: 'player-a' } },
-              { kind: 'contract_bid_assessed', payload: { awarded: true, playerId: 'player-a' } },
-              { kind: 'contract_bid_assessed', payload: { awarded: false, playerId: 'player-a' } },
-            ],
-            state: {
-              budgetByPlayer: { 'player-a': 2, 'player-b': 3 },
-              players: [{ id: 'player-a' }, { id: 'player-b' }],
-              publicTheses: [
-                { correct: true, playerId: 'player-a' },
-                { correct: false, playerId: 'player-b' },
-              ],
-              ratingByPlayer: { 'player-a': 9, 'player-b': 7 },
-              winnerPlayerIds: ['player-a'],
-            },
-          },
-        },
-        {
-          tender: {
-            auditEvents: [],
-            state: {
-              budgetByPlayer: { 'player-a': 2 },
-              players: [{ id: 'player-a' }, { id: 'player-b' }],
-              publicTheses: [],
-              ratingByPlayer: { 'player-a': 9 },
-              winnerPlayerIds: ['player-a'],
-            },
-          },
-        },
-      ],
-    },
-  } as unknown as DbClient
+  const db = {} as DbClient
   const requireAuth = createMiddleware<AuthHttpEnv>(async (c, next) => {
     c.set('user', {
       authenticatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -55,7 +19,25 @@ test('returns authenticated player statistics from compatible completed matches'
     })
     await next()
   })
-  const profile = createProfileModule({ db, requireAuth })
+  const profile = createProfileModule({
+    completedTenderSummaryReader: {
+      listCompletedMatches: async () => [{
+        excludeFromPerformanceAverages: false,
+        players: [
+          { budget: 2, correctTheses: 1, playerId: 'player-a', rating: 9 },
+          { budget: 3, correctTheses: 0, playerId: 'player-b', rating: 7 },
+        ],
+        playerResult: {
+          correctModelProperties: 6,
+          submittedContracts: 2,
+          successfulContracts: 1,
+        },
+        winnerPlayerIds: ['player-a'],
+      }],
+    },
+    db,
+    requireAuth,
+  })
 
   const response = await profile.routes.request('/statistics', {
     headers: { Authorization: 'Bearer valid-token' },
@@ -98,7 +80,11 @@ test('reads and idempotently records the authenticated player tutorial completio
     })
     await next()
   })
-  const profile = createProfileModule({ db, requireAuth })
+  const profile = createProfileModule({
+    completedTenderSummaryReader: { listCompletedMatches: async () => [] },
+    db,
+    requireAuth,
+  })
 
   const initial = await profile.routes.request('/tutorial')
   expect(initial.status).toBe(200)

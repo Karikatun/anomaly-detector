@@ -96,6 +96,14 @@ export function createInMemoryTenderStore(): TenderStore {
         .map((tender) => tender.id)
     },
 
+    async listCompletedForPlayer(playerId) {
+      return [...tenders.values()]
+        .filter((tender) =>
+          tender.phase === 'complete'
+          && tender.players.some((player) => player.id === playerId))
+        .map(cloneTender)
+    },
+
     async readAuditEvents(tenderId) {
       return structuredClone(auditEvents.get(tenderId) ?? [])
     },

@@ -17,7 +17,7 @@ export type CompletedProfileMatch = {
   winnerPlayerIds: string[]
 }
 
-export type ProfileStatisticsRepository = {
+export type CompletedTenderSummaryReader = {
   listCompletedMatches(userId: string): Promise<CompletedProfileMatch[]>
 }
 

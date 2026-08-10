@@ -1,6 +1,21 @@
-import type { RoomMember, RoomView } from '@anomaly-detector/contracts'
+import type {
+  RoomMember,
+  RoomView,
+  TenderPhase,
+  TenderRuleset,
+} from '@anomaly-detector/contracts'
 
-export type RoomRecord = Omit<RoomView, 'joinCode' | 'members' | 'roomId' | 'serverTime'> & {
+export type RoomRecord = Omit<
+  RoomView,
+  | 'joinCode'
+  | 'members'
+  | 'roomId'
+  | 'serverTime'
+  | 'tenderCompletionReason'
+  | 'tenderForfeited'
+  | 'tenderPhase'
+  | 'tenderRuleset'
+> & {
   id: string
   joinCode?: string | null
   members: Array<Omit<RoomMember, 'displayName'>>
@@ -14,6 +29,15 @@ export type MatchPlacementReader = {
   readPlacement(input: { playerId: string; tenderId: string }): Promise<number | undefined>
 }
 
+export type TenderLifecycleReader = {
+  readLifecycle(input: { playerId: string; tenderId: string }): Promise<{
+    completionReason?: 'all_players_forfeited' | 'all_players_left' | 'last_active_player'
+    forfeited: boolean
+    phase: TenderPhase
+    ruleset: TenderRuleset
+  }>
+}
+
 export type RoomRepository = {
   create(input: { capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
   cancelStart?: (input: { actorId: string; roomId: string }) => Promise<RoomRecord>
@@ -23,6 +47,7 @@ export type RoomRepository = {
   join(input: { actorId: string; roomId: string }): Promise<RoomRecord>
   joinByCode?: (input: { actorId: string; code: string }) => Promise<RoomRecord>
   leave(input: { actorId: string; roomId: string }): Promise<void>
+  releaseCurrentForMember?: (input: { roomId: string; userId: string }) => Promise<void>
   setReady(input: { actorId: string; ready: boolean; roomId: string }): Promise<RoomRecord>
   start(input: { actorId: string; roomId: string }): Promise<RoomRecord>
 }
