@@ -12,13 +12,39 @@ const user = {
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
 }
 
+const unconfiguredRepositoryMethod = (name: keyof AuthRepository) => async (): Promise<never> => {
+  throw new Error(`AuthRepository.${name} is not configured for this scenario`)
+}
+
+const defaultAuthRepository: AuthRepository = {
+  findUserByLogin: unconfiguredRepositoryMethod('findUserByLogin'),
+  updatePasswordHash: unconfiguredRepositoryMethod('updatePasswordHash'),
+  createPasswordUserWithSession: unconfiguredRepositoryMethod('createPasswordUserWithSession'),
+  createSession: unconfiguredRepositoryMethod('createSession'),
+  findActiveRefreshSession: unconfiguredRepositoryMethod('findActiveRefreshSession'),
+  rotateRefreshSession: unconfiguredRepositoryMethod('rotateRefreshSession'),
+  revokeSessionById: unconfiguredRepositoryMethod('revokeSessionById'),
+  findActiveAccessSession: unconfiguredRepositoryMethod('findActiveAccessSession'),
+  revokeSession: unconfiguredRepositoryMethod('revokeSession'),
+  updateUser: unconfiguredRepositoryMethod('updateUser'),
+  eraseUserIdentity: unconfiguredRepositoryMethod('eraseUserIdentity'),
+  createOAuthTransaction: unconfiguredRepositoryMethod('createOAuthTransaction'),
+  consumeOAuthTransactionByState: unconfiguredRepositoryMethod('consumeOAuthTransactionByState'),
+  findUserByIdentity: unconfiguredRepositoryMethod('findUserByIdentity'),
+  createOAuthUserWithSession: unconfiguredRepositoryMethod('createOAuthUserWithSession'),
+}
+
+const createAuthRepository = (
+  overrides: Partial<AuthRepository>,
+): AuthRepository => ({ ...defaultAuthRepository, ...overrides })
+
 test('login opportunistically replaces a verified password hash that no longer meets policy', async () => {
   const passwordHashUpdates: Array<{
     userId: string
     currentPasswordHash: string
     nextPasswordHash: string
   }> = []
-  const repository = {
+  const repository = createAuthRepository({
     findUserByLogin: async () => user,
     updatePasswordHash: async (input: {
       userId: string
@@ -28,7 +54,7 @@ test('login opportunistically replaces a verified password hash that no longer m
       passwordHashUpdates.push(input)
     },
     createSession: async () => ({ id: 'session-created' }),
-  } as unknown as AuthRepository
+  })
   const service = new AuthService({
     accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-created' }) },
     clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
@@ -69,7 +95,7 @@ test('login opportunistically replaces a verified password hash that no longer m
 test('refresh keeps the logical session id stable while rotating its credential', async () => {
   const signedSessionIds: string[] = []
   const refreshCutoffs: Date[] = []
-  const repository = {
+  const repository = createAuthRepository({
     findUserByLogin: async () => null,
     updatePasswordHash: async () => undefined,
     createPasswordUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
@@ -94,7 +120,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
     consumeOAuthTransactionByState: async () => null,
     findUserByIdentity: async () => null,
     createOAuthUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
-  } satisfies AuthRepository
+  })
 
   const service = new AuthService({
     accessTokens: {
@@ -138,7 +164,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
 
 test('refresh revokes the logical session when a previous credential is reused after grace', async () => {
   const revokedSessionIds: string[] = []
-  const repository = {
+  const repository = createAuthRepository({
     findActiveRefreshSession: async () => ({
       id: 'session-compromised',
       userId: user.id,
@@ -150,7 +176,7 @@ test('refresh revokes the logical session when a previous credential is reused a
       revokedSessionIds.push(sessionId)
       return true
     },
-  } as unknown as AuthRepository
+  })
   const service = new AuthService({
     accessTokens: {
       sign: async () => 'access-token',
@@ -185,7 +211,7 @@ test('refresh revokes the logical session when a previous credential is reused a
 test('refresh returns the winning successor when another request wins the rotation race', async () => {
   let findCalls = 0
   let rotateCalls = 0
-  const repository = {
+  const repository = createAuthRepository({
     findActiveRefreshSession: async () => {
       findCalls += 1
       return {
@@ -202,7 +228,7 @@ test('refresh returns the winning successor when another request wins the rotati
       rotateCalls += 1
       return false
     },
-  } as unknown as AuthRepository
+  })
   const service = new AuthService({
     accessTokens: {
       sign: async () => 'access-token',
@@ -250,9 +276,9 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
     refreshReuseGraceSeconds: 10,
     sessionAbsoluteTtlDays: 90,
     refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
-    repository: {
+    repository: createAuthRepository({
       createOAuthTransaction: async (transaction: Record<string, unknown>) => { transactions.push(transaction) },
-    } as unknown as AuthRepository,
+    }),
     oauthProviders: {
       require: () => ({
         authorizationUrl: ({ state, codeChallenge }: { state: string; codeChallenge: string }) => `https://provider.example/authorize?state=${state}&code_challenge=${codeChallenge}`,
@@ -263,18 +289,7 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
   }
   const service = new AuthService(dependencies)
 
-  const result = await (service as unknown as {
-    startOAuthSignIn(input: {
-      provider: 'yandex'
-      redirectUri: string
-      registration?: {
-        privacyConsent: true
-        privacyConsentVersion: string
-        termsVersion: string
-      }
-      webappOrigin: string
-    }): Promise<{ authorizationUrl: string }>
-  }).startOAuthSignIn({
+  const result = await service.startOAuthSignIn({
     provider: 'yandex',
     redirectUri: 'https://app.example.ru/api/auth/oauth/yandex/callback',
     registration: {
@@ -319,7 +334,7 @@ test('consumes an OAuth transaction before provider exchange and rejects replay'
     refreshReuseGraceSeconds: 10,
     sessionAbsoluteTtlDays: 90,
     refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
-    repository: {
+    repository: createAuthRepository({
       consumeOAuthTransactionByState: async () => {
         if (!transactionAvailable) return null
         transactionAvailable = false
@@ -333,7 +348,7 @@ test('consumes an OAuth transaction before provider exchange and rejects replay'
       },
       findUserByIdentity: async () => user,
       createSession: async () => ({ id: 'session-1' }),
-    } as unknown as AuthRepository,
+    }),
   })
 
   await expect(service.completeOAuthSignIn({
@@ -367,7 +382,7 @@ test('refuses to create an OAuth user without a separately confirmed legal accep
     refreshReuseGraceSeconds: 10,
     sessionAbsoluteTtlDays: 90,
     refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
-    repository: {
+    repository: createAuthRepository({
       consumeOAuthTransactionByState: async () => ({
         codeVerifier: 'verifier',
         expiresAt: new Date('2026-07-20T12:10:00.000Z'),
@@ -376,7 +391,7 @@ test('refuses to create an OAuth user without a separately confirmed legal accep
         state: 'state',
       }),
       findUserByIdentity: async () => null,
-    } as unknown as AuthRepository,
+    }),
   })
 
   await expect(service.completeOAuthSignIn({
@@ -405,7 +420,7 @@ test('limits a provider display name before creating an OAuth user', async () =>
     refreshReuseGraceSeconds: 10,
     sessionAbsoluteTtlDays: 90,
     refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
-    repository: {
+    repository: createAuthRepository({
       consumeOAuthTransactionByState: async () => ({
         codeVerifier: 'verifier',
         expiresAt: new Date('2026-07-20T12:10:00.000Z'),
@@ -425,7 +440,7 @@ test('limits a provider display name before creating an OAuth user', async () =>
         createdDisplayName = input.user.displayName
         return { session: { id: 'session-1' }, user }
       },
-    } as unknown as AuthRepository,
+    }),
   })
 
   await service.completeOAuthSignIn({ code: 'authorization-code', metadata: {}, state: 'state' })
@@ -436,11 +451,11 @@ test('limits a provider display name before creating an OAuth user', async () =>
 
 test('deleteAccount removes identity links only after Tender history is anonymised', async () => {
   const operations: string[] = []
-  const repository = {
+  const repository = createAuthRepository({
     eraseUserIdentity: async (input: { userId: string; now: Date }) => {
       operations.push(`erase:${input.userId}`)
     },
-  } as unknown as AuthRepository
+  })
   const service = new AuthService({
     accountDeletionCleanup: async ({ userId }) => { operations.push(`history:${userId}`) },
     accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
