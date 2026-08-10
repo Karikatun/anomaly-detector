@@ -845,7 +845,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestFullAudit.getByRole('combobox', { name: 'Фильтр итогового аудита по игроку' })
       .locator('option:checked')).toHaveText('Гость E2E')
     await expect(guestFullAudit.getByRole('option', { name: 'Все игроки' })).toHaveCount(1)
-    await expect(page.getByText('Итоговый рейтинг', { exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Итоговый рейтинг', exact: true })).toBeVisible()
     await expect(page.getByText('За что начислен рейтинг', { exact: true }).first()).toBeVisible()
     await expect(page.getByLabel('За что начислен рейтинг игроку Хост E2E')).toContainText(
       /Начислений рейтинга нет|Верные тезисы|Выполненные контракты|Верные свойства модели|Полностью раскрытые сигналы|Бонус полной модели/,
