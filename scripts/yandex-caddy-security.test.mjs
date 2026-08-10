@@ -26,6 +26,11 @@ test('Yandex VM Caddy config permits only the production API realtime origins', 
   )
 })
 
+test('Yandex VM Caddy config proxies the API through the Compose network', () => {
+  expect(caddyfile).toContain('reverse_proxy api:3000')
+  expect(caddyfile).not.toContain('reverse_proxy 127.0.0.1:3000')
+})
+
 test('Yandex VM Caddy config caches only fingerprinted player assets as immutable', () => {
   expect(caddyfile).toContain('@playerAssets path /assets/*')
   expect(caddyfile).toContain(
