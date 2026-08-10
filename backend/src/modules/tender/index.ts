@@ -6,7 +6,6 @@ import type {
   PowerAllocation,
   RatingBreakdown,
   ScientificModel,
-  TenderAuditEvent,
   TenderCommand,
   TenderPlayer,
   TenderView,
@@ -14,7 +13,12 @@ import type {
 } from '@anomaly-detector/contracts'
 import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@anomaly-detector/contracts'
 import { createParticipantAuditRounds } from './application/audit-view'
-import type { StoredTender, TenderStore } from './application/tender-store'
+import type {
+  PendingTenderAuditEvent,
+  StoredTender,
+  StoredTenderAuditEvent,
+  TenderStore,
+} from './application/tender-store'
 import type { DbClient } from '../../db'
 import { resolveAccessSlots, rotateTiePriority } from './domain/access-slots'
 import { createAnomalyConfiguration, resolvePublicResult, signalIds, type SignalId } from './domain/anomaly-configuration'
@@ -40,7 +44,7 @@ const finalContractId = 'final-contract'
 
 const createRatingBreakdownByPlayer = (
   tender: StoredTender,
-  events: TenderAuditEvent[],
+  events: StoredTenderAuditEvent[],
 ): Record<string, RatingBreakdown> => {
   const breakdownByPlayer = Object.fromEntries(tender.players.map((player) => [
     player.id,
@@ -56,7 +60,8 @@ const createRatingBreakdownByPlayer = (
   ])) as Record<string, RatingBreakdown>
 
   for (const event of events) {
-    const playerId = typeof event.payload.playerId === 'string' ? event.payload.playerId : undefined
+    const playerIdValue = (event.payload as Record<string, unknown>).playerId
+    const playerId = typeof playerIdValue === 'string' ? playerIdValue : undefined
     if (!playerId) continue
     const breakdown = breakdownByPlayer[playerId]
     if (!breakdown) continue
@@ -524,7 +529,7 @@ export function createTenderModule({
 
   const automaticOperationalSkipEvents = (before: StoredTender, after: StoredTender) =>
     after.players.flatMap((player) => {
-      const events: Array<{ kind: string; payload: Record<string, unknown> }> = []
+      const events: PendingTenderAuditEvent[] = []
       if (!before.reconnaissanceCompletedByPlayer[player.id] && after.reconnaissanceCompletedByPlayer[player.id]) {
         events.push({
           kind: 'operational_action_auto_skipped',
@@ -802,10 +807,12 @@ export function createTenderModule({
             ? [{
                 kind: 'tender_completed_early',
                 payload: {
-                  completionReason: nextTender.completionReason,
+                  completionReason: remainingPlayers.length === 1
+                    ? 'last_active_player' as const
+                    : 'all_players_forfeited' as const,
                   winnerPlayerIds: nextTender.winnerPlayerIds,
                 },
-              }]
+              } satisfies PendingTenderAuditEvent]
             : [])],
           command,
           commandFingerprint,
@@ -886,7 +893,7 @@ export function createTenderModule({
             ...(isReadyToResolve ? [{
               kind: 'access_slots_resolved',
               payload: { accessSlots, budgetByPlayer, sampleCompensationByPlayer },
-            }] : []),
+            } satisfies PendingTenderAuditEvent] : []),
           ],
           command,
           commandFingerprint,
@@ -1955,17 +1962,21 @@ export function createTenderModule({
             publicFinalContract,
           }
           const advancedTender = advanceAfterContracts(nextTender)
+          const auditEvent: PendingTenderAuditEvent = reservedContract
+            ? {
+                kind: 'contract_reservation_timeout_released',
+                payload: {
+                  contractId: reservedContract.contractId,
+                  phase: 'contracts',
+                  playerId: expectedPlayer.id,
+                },
+              }
+            : {
+                kind: 'operational_action_timeout_resolved',
+                payload: { phase: tender.phase, playerId: expectedPlayer.id },
+              }
           const completed = await commitTimeout({
-            auditEvents: [{
-              kind: reservedContract
-                ? 'contract_reservation_timeout_released'
-                : 'operational_action_timeout_resolved',
-              payload: {
-                ...(reservedContract ? { contractId: reservedContract.contractId } : {}),
-                phase: tender.phase,
-                playerId: expectedPlayer.id,
-              },
-            }],
+            auditEvents: [auditEvent],
             nextTender: { ...advancedTender, dueAt: deadlineForPhase(advancedTender.phase, dueNow) },
             tender,
           })

@@ -29,6 +29,10 @@ import type {
   TenderStore,
 } from '../application/tender-store'
 import {
+  decodeTenderAuditEvent,
+  encodeTenderAuditEventPayload,
+} from '../application/tender-audit-event'
+import {
   anonymizeParticipantInJsonString,
   anonymizeParticipantInValue,
 } from '../domain/participant-anonymization'
@@ -411,7 +415,7 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
                 actorId: event.actorId,
                 commandId: event.commandId,
                 kind: event.kind,
-                payload: event.payload as Prisma.InputJsonValue,
+                payload: encodeTenderAuditEventPayload(event) as Prisma.InputJsonValue,
               })),
             })
           }
@@ -446,13 +450,7 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
         orderBy: { sequence: 'asc' },
         select: { actorId: true, commandId: true, kind: true, payload: true, sequence: true },
       })
-      return events.map((event) => ({
-        ...(event.actorId ? { actorId: event.actorId } : {}),
-        ...(event.commandId ? { commandId: event.commandId } : {}),
-        kind: event.kind,
-        payload: event.payload as Record<string, unknown>,
-        sequence: event.sequence,
-      }))
+      return events.map(decodeTenderAuditEvent)
     },
   }
 }

@@ -10,13 +10,15 @@ import type {
   ScientificModel,
   ScientificModelDraft,
   TenderCommand,
-  TenderAuditEvent,
   TenderPhase,
   TenderPlayer,
   TenderRuleset,
   WorkingModel,
 } from '@anomaly-detector/contracts'
 import type { AnomalyConfiguration, SignalId } from '../domain/anomaly-configuration'
+import type { PendingTenderAuditEvent, StoredTenderAuditEvent } from './tender-audit-event'
+
+export type { PendingTenderAuditEvent, StoredTenderAuditEvent } from './tender-audit-event'
 
 export type PrivateMeasurement = { receiverSignal: SignalId; sourceSignal: SignalId; polarityRelation: 'same' | 'different' }
 
@@ -24,15 +26,6 @@ export type StoredTenderCommand = {
   fingerprint: string
   receipt: CommandReceipt
 }
-
-export type PendingTenderAuditEvent = {
-  actorId?: string
-  commandId?: string
-  kind: string
-  payload: Record<string, unknown>
-}
-
-export type StoredTenderAuditEvent = TenderAuditEvent
 
 export type StoredTender = {
   accessSlots: Record<string, number>

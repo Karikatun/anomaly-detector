@@ -1,11 +1,11 @@
 import type {
   PowerAllocation,
-  TenderAuditEvent,
   TenderAuditRound,
 } from '@anomaly-detector/contracts'
 import { rotateTiePriority } from '../domain/access-slots'
 import { createRoundContracts } from '../domain/contracts'
-import type { StoredTender } from './tender-store'
+import type { TenderAuditEventKind } from './tender-audit-event'
+import type { StoredTender, StoredTenderAuditEvent } from './tender-store'
 
 const timeoutAllocation: PowerAllocation = {
   contracts: 0,
@@ -34,10 +34,12 @@ const integerValue = (value: unknown) => Number.isInteger(value) ? value as numb
 const stringArray = (value: unknown) => Array.isArray(value)
   ? value.filter((entry): entry is string => typeof entry === 'string')
   : []
+const payloadValue = (payload: object, key: string): unknown =>
+  (payload as Record<string, unknown>)[key]
 
 export function createParticipantAuditRounds(
   tender: StoredTender,
-  events: TenderAuditEvent[],
+  events: StoredTenderAuditEvent[],
 ): TenderAuditRound[] {
   const rounds = Array.from({ length: tender.round }, (_, index) => emptyRound(tender, index + 1))
   const roundAt = (round: number) => rounds[Math.min(Math.max(round, 1), rounds.length) - 1]!
@@ -82,6 +84,7 @@ export function createParticipantAuditRounds(
   const requestedSlotsByRound = new Map<number, Map<string, number>>()
 
   for (const event of events) {
+    if (!affectsParticipantRounds(event.kind)) continue
     const startsNextRound = event.kind === 'access_slot_requested'
       || event.kind === 'access_slot_timeout_resolved'
     if (startsNextRound && accessResolved) {
@@ -89,7 +92,7 @@ export function createParticipantAuditRounds(
       accessResolved = false
     }
     const round = roundAt(currentRound)
-    const playerId = stringValue(event.payload.playerId) ?? event.actorId
+    const playerId = stringValue(payloadValue(event.payload, 'playerId')) ?? event.actorId
 
     if (event.kind === 'access_slot_requested' && playerId) {
       const requestedSlot = integerValue(event.payload.slot)
@@ -103,7 +106,7 @@ export function createParticipantAuditRounds(
 
     if (event.kind === 'access_slots_resolved' || event.kind === 'access_slot_timeout_resolved') {
       const accessSlots = event.payload.accessSlots
-      const timedOut = new Set(stringArray(event.payload.timedOutPlayerIds))
+      const timedOut = new Set(stringArray(payloadValue(event.payload, 'timedOutPlayerIds')))
       if (typeof accessSlots === 'object' && accessSlots !== null) {
         for (const [candidateId, assigned] of Object.entries(accessSlots)) {
           const assignedSlot = integerValue(assigned)
@@ -308,4 +311,44 @@ export function createParticipantAuditRounds(
   }
 
   return rounds
+}
+
+function affectsParticipantRounds(kind: TenderAuditEventKind) {
+  switch (kind) {
+    case 'access_slot_requested':
+    case 'access_slots_resolved':
+    case 'access_slot_timeout_resolved':
+    case 'contract_bid_assessed':
+    case 'contract_reservation_timeout_released':
+    case 'contract_skipped_no_eligible_contract':
+    case 'laboratory_test_completed':
+    case 'operational_action_auto_skipped':
+    case 'operational_action_timeout_resolved':
+    case 'power_allocated':
+    case 'power_allocation_timeout_resolved':
+    case 'private_thesis_checked':
+    case 'reconnaissance_completed':
+    case 'scientific_model_scored':
+      return true
+    case 'contract_reserved':
+    case 'final_scientific_model_timeout_resolved':
+    case 'model_analysis_finished_early':
+    case 'model_analysis_timeout_resolved':
+    case 'player_forfeited_tender':
+    case 'player_left_tender':
+    case 'player_resumed_tender':
+    case 'scientific_model_draft_updated':
+    case 'tender_abandoned':
+    case 'tender_completed_early':
+    case 'thesis_checked':
+    case 'thesis_skipped_corporate_review':
+    case 'working_model_updated':
+      return false
+    default:
+      return assertNever(kind)
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled Tender audit event kind: ${String(value)}`)
 }
