@@ -2,7 +2,7 @@
 
 Use Docker Compose for local PostgreSQL on Windows, macOS, and Linux. Do not ask users to install PostgreSQL natively during first-run setup unless they explicitly choose to manage their own database.
 
-This template currently uses the official `postgres:18-alpine` image. The major version is pinned to PostgreSQL 18 instead of `postgres:latest` so patch updates are easy while unexpected major upgrades do not break local volumes. PostgreSQL 18 is also a schema requirement for this template because Prisma models use database-generated UUIDv7 defaults through the native `uuidv7()` function.
+This repository uses the official `postgres:18-alpine` image. The major version is pinned to PostgreSQL 18 instead of `postgres:latest` so patch updates are easy while unexpected major upgrades do not break local volumes. PostgreSQL 18 is also a schema requirement because Prisma models use database-generated UUIDv7 defaults through the native `uuidv7()` function.
 
 Use explicit `postgresql://user:password@host:port/db?schema=public` URLs for Prisma commands, even on native local installs. Peer-auth style URLs without a user can make Prisma schema-engine commands fail with a generic error instead of a useful connection diagnostic.
 
@@ -25,7 +25,7 @@ Run commands from the repository root.
 
 Agents should check `docker compose version` and `docker info` before database or E2E setup. If either command fails, do this:
 
-1. Tell the user that Docker is the local app this template uses to run PostgreSQL. Do not ask them to install native PostgreSQL.
+1. Tell the user that this repository uses Docker to run local PostgreSQL. Do not ask them to install native PostgreSQL.
 2. Ask them to install/start the right Docker option for their OS:
    - Windows: Docker Desktop with the WSL 2 backend enabled.
    - macOS: Docker Desktop, or another Docker Engine that includes Compose v2.
@@ -128,7 +128,7 @@ password: superpassword
 TEST_DATABASE_URL: postgresql://superuser:superpassword@localhost:54330/anomaly_detector_test?schema=public
 ```
 
-Automated test runners normally set a repository-derived `POSTGRES_TEST_PORT` and derive `TEST_DATABASE_URL` from it so multiple template checkouts can run in parallel. Set `POSTGRES_TEST_PORT` only when a fixed test database port is required.
+Automated test runners normally set a repository-derived `POSTGRES_TEST_PORT` and derive `TEST_DATABASE_URL` from it so multiple checkouts can run in parallel. Set `POSTGRES_TEST_PORT` only when a fixed test database port is required.
 
 The test database name must end with `_test`. Backend integration, Docker smoke, and Playwright E2E refuse non-test database names by default so they do not write to development data.
 
@@ -146,7 +146,7 @@ Delete local PostgreSQL data only when you intentionally want a clean database:
 docker compose down -v
 ```
 
-PostgreSQL major upgrades are not automatic data migrations. If this template bumps from one PostgreSQL major version to another, either export/import the data manually or delete the local development volumes with `docker compose down -v` when the data is disposable.
+PostgreSQL major upgrades are not automatic data migrations. If the repository moves from one PostgreSQL major version to another, either export/import the data manually or delete the local development volumes with `docker compose down -v` only when the data is confirmed disposable.
 
 ## Current Upstream Documentation
 

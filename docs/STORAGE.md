@@ -1,165 +1,139 @@
 # Storage And Media
 
-Use this document when a product needs uploads, images, media, generated files, or downloadable assets.
+Use this document when Anomaly Detector needs uploads, images, generated files,
+exports, or downloadable assets. The current production provider is Yandex
+Object Storage with Yandex Cloud CDN for public delivery. Do not write durable
+objects to application container filesystems: containers and release directories
+can be replaced during deployment and recovery.
 
-The supported DigitalOcean-first storage path is:
+## Intake Before A File Feature
 
-- DigitalOcean Spaces Standard Storage for persistent objects.
-- Spaces CDN for public images, media, and downloads.
-- Backend-issued presigned URLs for direct browser/client uploads and private downloads.
-- App Platform only for API/runtime code and short-lived temporary files.
+Record these product decisions before implementation:
 
-Do not store user uploads or durable generated assets on the App Platform container filesystem. App Platform containers can be replaced during deployments and scaling, and their local filesystem is not durable.
+- what users or operators upload or generate;
+- whether each object is public, private, participant-only, operator-only, or
+  shared with a named audience;
+- which roles may create, view, replace, download, and delete it;
+- maximum size, allowed MIME types, and required content inspection;
+- image variants, dimensions, compression, cropping, or moderation;
+- retention after account, Tender, or owning-record deletion;
+- whether original filenames may be shown or stored;
+- whether the feature is required for the current release.
 
-## Intake Before Building File Features
+Put ownership, retention, and privacy rules in the owning product brief/contract.
+Do not infer them from bucket visibility or URL shape.
 
-Ask product-level questions before implementation:
+## Yandex Object Storage Defaults
 
-- What will users upload: avatars, photos, documents, videos, exports, or something else?
-- Are files public, private, shared with selected users, or mixed?
-- Which roles can upload, view, replace, and delete files?
-- What are the maximum file size and allowed file types?
-- Do images need thumbnails, responsive sizes, format conversion, compression, cropping, or moderation?
-- How long should files live after the owning record is deleted?
-- Should filenames be user-visible, or should the app generate opaque object keys?
-- Are uploads required in the first version, or can media be deferred?
+- Use separate buckets or strict prefixes per environment and purpose.
+- Use generated opaque object keys without names, logins, emails, Tender secrets,
+  or other personal/sensitive data.
+- Keep private objects private and issue short-lived presigned GET URLs only
+  after backend authorization.
+- Give public immutable variants versioned keys and long cache headers; serve
+  them through the configured CDN origin.
+- Configure browser-upload CORS for exact deployed origins and only required
+  methods/headers.
+- Restrict service-account permissions to the required buckets and operations.
 
-Record the answer in the relevant README section when storage affects the active product surface.
+Yandex Object Storage is S3-compatible and uses
+`https://storage.yandexcloud.net`. Use `ru-central1` as the signing region unless
+current provider documentation requires a different value.
 
-## DigitalOcean Spaces Defaults
+## Backend Storage Boundary
 
-Use Spaces Standard Storage for app media. Do not use Spaces Cold Storage for public app images or active downloads because Cold Storage does not support CDN integration or custom CDN endpoints.
+The backend storage layer lives in `backend/src/storage` and owns:
 
-Recommended production setup:
+- safe object-key generation;
+- presigned PUT and GET URLs;
+- public CDN URL construction;
+- deletion and provider error translation.
 
-- One Space per environment when practical, for example `<project>-prod` and `<project>-staging`.
-- Enable Spaces CDN for public media buckets.
-- Use a custom CDN subdomain such as `images.example.com` when the app has a production domain.
-- Store public immutable assets under generated keys and set long cache headers.
-- Store private files under separate prefixes or buckets and serve them with short-lived presigned GET URLs.
-- Do not put personally identifiable or sensitive information in bucket names, object keys, metadata, or tags.
+Product modules own who may perform those operations and store ownership,
+retention, audit, and lifecycle metadata in PostgreSQL when required.
 
-Spaces is S3-compatible. The backend uses AWS S3 SDK clients against the DigitalOcean endpoint, for example `https://nyc3.digitaloceanspaces.com`.
-
-## Backend Storage Service
-
-The backend storage layer lives in `backend/src/storage`. It is intentionally a service layer, not a product-specific upload feature.
-
-Use it to:
-
-- generate safe object keys;
-- issue presigned PUT URLs for direct uploads;
-- issue short-lived presigned GET URLs for private downloads;
-- build public CDN URLs for public objects;
-- delete objects when the owning product record is deleted.
-
-Required env when storage is active:
+The implementation retains `SPACES_*` environment key names from its original
+S3-compatible adapter. Until a separately migrated provider-neutral contract is
+implemented, use those keys with Yandex values:
 
 ```bash
-SPACES_REGION=nyc3
-SPACES_BUCKET=<project-prod>
-SPACES_ENDPOINT=https://nyc3.digitaloceanspaces.com
-SPACES_CDN_BASE_URL=https://images.example.com
-SPACES_ACCESS_KEY_ID=<spaces-access-key>
-SPACES_SECRET_ACCESS_KEY=<spaces-secret-key>
+SPACES_REGION=ru-central1
+SPACES_BUCKET=<anomaly-detector-production-bucket>
+SPACES_ENDPOINT=https://storage.yandexcloud.net
+SPACES_CDN_BASE_URL=https://<public-media-domain>
+SPACES_ACCESS_KEY_ID=<service-account-static-key-id>
+SPACES_SECRET_ACCESS_KEY=<service-account-static-secret>
 SPACES_UPLOAD_MAX_BYTES=10485760
 SPACES_UPLOAD_URL_TTL_SECONDS=900
 SPACES_DOWNLOAD_URL_TTL_SECONDS=300
 SPACES_PUBLIC_CACHE_CONTROL="public, max-age=31536000, immutable"
 ```
 
-Leave these variables blank for projects that do not need uploads yet. If any required Spaces variable is set, all required Spaces variables must be set.
+Keep values in the protected runtime secret store, never Git, static builds,
+screenshots, or release evidence. If one required adapter key is present, env
+validation must reject an incomplete set.
 
-## Upload Flow
+## Direct Upload Flow
 
-Default direct-upload flow:
+1. An authenticated client requests an upload intent with file metadata.
+2. The owning backend use case checks actor, owner, audience, size, MIME type,
+   quota, and target purpose.
+3. The storage adapter returns a short-lived presigned PUT URL, required headers,
+   opaque key, and signed content length when applicable.
+4. The client uploads directly to Object Storage.
+5. The client confirms the opaque key through the application API.
+6. The backend verifies the object when strict stored size, MIME type, image
+   dimensions, malware scanning, or moderation is required, then records product
+   metadata in PostgreSQL.
 
-1. Authenticated client asks the backend for an upload URL with intended file metadata.
-2. Backend validates role, size, content type, owner record, and target key.
-3. Backend returns a presigned PUT URL, browser-settable upload headers, and a `contentLength` value when the upload size is part of the signature.
-4. Client uploads directly to Spaces.
-5. Client calls the app API to confirm the uploaded object key.
-6. Backend stores object metadata in PostgreSQL if the product needs ownership, deletion, audit, or private access rules.
-
-Browser upload example:
-
-```ts
-if (file.size !== upload.contentLength) {
-  throw new Error('File size mismatch')
-}
-
-await fetch(upload.uploadUrl, {
-  method: upload.method,
-  headers: upload.headers,
-  body: file,
-})
-```
-
-The presigned PUT URL validates the requested upload intent before signing. If the product must strictly enforce actual stored file size, content type, or image dimensions, verify the uploaded object before confirming it in the app database. When the backend returns a `contentLength` value, the uploaded body must match that exact byte size even if the browser or HTTP client sets the request header automatically.
-
-For public media, the object should be uploaded with `public-read`, immutable object keys, and long cache headers. For private files, keep objects private and return short-lived presigned GET URLs only after permission checks.
-
-If product records store public media URLs instead of only object keys, shared API contracts must reject non-HTTPS schemes such as `javascript:`, `data:`, and `ftp:`. Prefer storing app-owned object keys and deriving public CDN URLs on the backend.
-
-When browser clients upload directly to Spaces, configure Spaces CORS for the deployed origins and allowed upload headers such as `Content-Type`, `Cache-Control`, and `x-amz-acl`. If the Spaces CDN is enabled and CORS changed after files were cached, purge the CDN cache.
+The uploaded body must match a signed `contentLength`. Never trust a client path,
+filename, MIME declaration, or confirmation call as proof of safe stored content.
+Prefer storing object keys and deriving CDN/presigned URLs on the backend instead
+of persisting provider URLs in product records.
 
 ## Images And Optimization
 
-DigitalOcean Spaces and Spaces CDN store and deliver images, but they do not provide first-party dynamic image resizing, compression, cropping, or format transformation.
+Store the original according to its privacy contract. Generate app-owned
+thumbnail/responsive variants in the backend, worker, Cloud Function, or another
+bounded job only when a real feature needs them. Store variants under stable
+versioned keys such as `images/<owner-type>/<opaque-id>/<variant>.webp` and make
+only explicitly public variants CDN-readable.
 
-Default image strategy:
-
-- Store the original upload in Spaces.
-- When optimized images are required, generate app-owned variants in the backend, a worker, or a dedicated App Platform service.
-- Store variants in Spaces with stable keys such as `images/<entity>/<id>/<variant>.webp`.
-- Serve public variants through Spaces CDN.
-- Keep original private if users should not download the raw upload.
-
-Use a library such as `sharp` only when implementing image processing for a product feature. Do not add image-processing dependencies or an image proxy just because uploads exist.
-
-If the product needs dynamic transformations by URL, consider a dedicated App Platform component running an image proxy such as `imgproxy`, backed by Spaces. This is self-hosted on DigitalOcean, not a first-party DigitalOcean image transformation service. Use third-party services such as Cloudinary or ImageKit only when the user explicitly chooses that tradeoff.
+For simple fixed-size variants, evaluate Yandex Cloud Marketplace Image Resizer.
+For dynamic transformation, evaluate a bounded Thumbor/imgproxy-style service or
+an app-owned processor. Adding `sharp`, an image proxy, or a third-party media
+service requires explicit product, cost, security, and operational justification.
 
 ## CDN And Caching
 
-Use Spaces CDN for public media and downloads. It reduces latency and load on the origin Space.
+- Cache only public, audience-independent immutable objects in shared CDN caches.
+- Use long cache headers with versioned keys; changing content creates a new key.
+- Do not treat a hard-to-guess public URL as authorization.
+- Do not rely on shared caching for private presigned URLs.
+- Purge only for an urgent correction when immutable replacement cannot solve it.
 
-Operational rules:
+## Deletion And Recovery
 
-- Prefer immutable object keys for public assets so replacing content creates a new URL.
-- Use long cache headers for immutable assets.
-- Purge the CDN only for urgent corrections or when mutable URLs cannot be avoided.
-- Do not rely on CDN caching for presigned private URLs. DigitalOcean documents that presigned URL requests are forwarded to the Spaces origin and do not benefit from cache hits.
-- Spaces Cold Storage does not support CDN integration or custom CDN endpoints.
+Define whether deletion is immediate, asynchronous, retained for recovery, or
+legally delayed. Account and product-record deletion must not silently orphan
+objects forever. Cleanup jobs must be idempotent, auditable, scoped to exact keys,
+and safe against deleting an object whose ownership changed or was recreated.
 
-## Security And Privacy
+Backups and database rollback do not automatically restore or roll back object
+storage. A release or recovery plan involving object metadata must state how
+database state and objects remain consistent.
 
-- Never commit Spaces access keys or secrets.
-- Use limited-access Spaces keys for the app bucket when possible.
-- Keep private files private; do not use obscurity-only public URLs for sensitive data.
-- Validate MIME type, size, owner, and permissions before issuing upload or download URLs.
-- Generate object keys server-side. Do not trust client-provided paths.
-- Do not include emails, names, customer IDs, or other sensitive data in object keys.
-- Delete or orphan-clean objects when the owning product record is deleted, according to the product retention policy.
+## Alternative Provider
 
-## Yandex Cloud Alternative
-
-Use Yandex Object Storage only when the user explicitly chooses Yandex Cloud. Follow [YANDEX_CLOUD.md](YANDEX_CLOUD.md) for the full provider runbook.
-
-Yandex Object Storage is S3-compatible and uses `https://storage.yandexcloud.net` as the standard endpoint. Public media should be served through Yandex Cloud CDN when production latency, cache controls, or custom domains matter. Private files should stay private and be exposed through short-lived presigned URLs after backend permission checks.
-
-For image optimization on Yandex Cloud, first consider Yandex Cloud Marketplace Image Resizer for simple fixed-size variants. For dynamic transformations, use a dedicated Thumbor/imgproxy-style service or app-owned image worker and put Cloud CDN in front of public variants.
+DigitalOcean Spaces remains an explicitly requested alternative and uses the same
+S3-compatible boundary. Its deployment details live in
+[DIGITALOCEAN.md](DIGITALOCEAN.md); do not mix provider endpoints, regions, CDN
+behavior, or credentials in one environment.
 
 ## Current Upstream Documentation
 
-- DigitalOcean Spaces: https://docs.digitalocean.com/products/spaces/
-- Spaces features: https://docs.digitalocean.com/products/spaces/details/features/
-- Spaces S3 compatibility: https://docs.digitalocean.com/products/spaces/reference/s3-compatibility/
-- Use AWS S3 SDKs with Spaces: https://docs.digitalocean.com/products/spaces/how-to/use-aws-sdks/
-- Enable Spaces CDN: https://docs.digitalocean.com/products/spaces/how-to/enable-cdn/
-- Manage Spaces CDN cache: https://docs.digitalocean.com/products/spaces/how-to/manage-cdn-cache/
-- Configure CORS on Spaces: https://docs.digitalocean.com/products/spaces/how-to/configure-cors/
-- Spaces performance best practices: https://docs.digitalocean.com/products/spaces/concepts/best-practices/
-- App Platform limits: https://docs.digitalocean.com/products/app-platform/details/limits/
-- Yandex Object Storage: https://yandex.cloud/en/docs/storage/
-- Yandex Cloud CDN: https://yandex.cloud/en/docs/cdn/concepts/
-- Yandex Cloud Marketplace Image Resizer: https://yandex.cloud/en/marketplace/products/yc/image-resizer
+- [Yandex Object Storage](https://yandex.cloud/en/docs/storage/)
+- [Yandex Object Storage S3 API](https://yandex.cloud/en/docs/storage/s3/)
+- [Yandex Cloud CDN](https://yandex.cloud/en/docs/cdn/)
+- [Yandex Cloud Marketplace Image Resizer](https://yandex.cloud/en/marketplace/products/yc/image-resizer)
+- [DigitalOcean Spaces](https://docs.digitalocean.com/products/spaces/)
