@@ -125,7 +125,7 @@ export class AuthApi {
       if (!this.isSessionEpochCurrent(this.sessionEpoch)) return null
 
       const payload = cookieLogoutRequestSchema.parse({})
-      await this.http.raw('/api/auth/logout', {
+      await this.http.requestNoContent('/api/auth/logout', {
         method: 'POST',
         body: payload,
       })
@@ -139,7 +139,7 @@ export class AuthApi {
     return this.authCoordinator(async () => {
       if (!this.isSessionEpochCurrent(this.sessionEpoch)) return null
 
-      await this.performAuthenticatedRequest('/api/auth/account', z.any(), {
+      await this.performAuthenticatedNoContentRequest('/api/auth/account', {
         method: 'DELETE',
       })
       const sessionEvent = publishBrowserSessionState('cleared')
@@ -170,7 +170,7 @@ export class AuthApi {
 
   async updateProfile(input: UpdateProfileRequest): Promise<void> {
     const payload = updateProfileSchema.parse(input)
-    await this.requestAuthenticated('/api/auth/profile', z.any(), {
+    await this.performAuthenticatedNoContentRequest('/api/auth/profile', {
       method: 'PATCH',
       body: payload,
     })
@@ -185,22 +185,34 @@ export class AuthApi {
     schema: TSchema,
     options: HttpRequestOptions = {},
   ): Promise<z.infer<TSchema>> {
-    return this.performAuthenticatedRequest(path, schema, options)
+    return this.performAuthenticated(
+      (headers) => this.http.request(path, schema, { ...options, headers }),
+      options.headers,
+    )
   }
 
-  private async performAuthenticatedRequest<TSchema extends z.ZodType>(
+  private performAuthenticatedNoContentRequest(
     path: string,
-    schema: TSchema,
     options: HttpRequestOptions,
+  ): Promise<void> {
+    return this.performAuthenticated(
+      (headers) => this.http.requestNoContent(path, { ...options, headers }),
+      options.headers,
+    )
+  }
+
+  private async performAuthenticated<TResult>(
+    request: (headers: Headers) => Promise<TResult>,
+    baseHeaders?: HeadersInit,
     accessTokenOverride?: string,
-  ): Promise<z.infer<TSchema>> {
+  ): Promise<TResult> {
     const requestEpoch = this.sessionEpoch
     const accessToken = accessTokenOverride ?? this.options.getAccessToken()
-    const headers = new Headers(options.headers)
+    const headers = new Headers(baseHeaders)
     if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
 
     try {
-      const response = await this.http.request(path, schema, { ...options, headers })
+      const response = await request(headers)
       if (!this.isSessionEpochCurrent(requestEpoch)) {
         throw new BrowserSessionEpochChangedError('Browser auth session changed')
       }
@@ -227,7 +239,7 @@ export class AuthApi {
       }
 
       this.options.setAccessToken(refreshed.accessToken)
-      return this.performAuthenticatedRequest(path, schema, options, refreshed.accessToken)
+      return this.performAuthenticated(request, baseHeaders, refreshed.accessToken)
     }
   }
 

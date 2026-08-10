@@ -1,14 +1,45 @@
 import { afterEach, expect, test } from 'bun:test'
+import { z } from 'zod'
 
 import { AuthApi } from '../src/features/auth/api'
 import { bootstrapAuthSession } from '../src/features/auth/bootstrap'
 import { publishBrowserSessionState } from '../src/features/auth/session-coordinator'
-import { ApiRequestError } from '../src/platform/api'
+import { ApiRequestError, HttpClient } from '../src/platform/api'
 
 const originalFetch = globalThis.fetch
 
 afterEach(() => {
   globalThis.fetch = originalFetch
+})
+
+test('HttpClient keeps JSON and no-content response contracts distinct', async () => {
+  const client = new HttpClient('https://api.example.test')
+  globalThis.fetch = async (_input, init) => (
+    init?.method === 'DELETE'
+      ? new Response(null, { status: 204 })
+      : json({ value: 'ok' }, 200)
+  )
+
+  await expect(client.request('/resource', z.object({ value: z.string() })))
+    .resolves.toEqual({ value: 'ok' })
+  await expect(client.requestNoContent('/resource', { method: 'DELETE' }))
+    .resolves.toBeUndefined()
+})
+
+test('HttpClient rejects a no-content response for a JSON contract', async () => {
+  const client = new HttpClient('https://api.example.test')
+  globalThis.fetch = async () => new Response(null, { status: 204 })
+
+  await expect(client.request('/resource', z.object({ value: z.string() })))
+    .rejects.toMatchObject({ code: 'INVALID_RESPONSE', status: 204 })
+})
+
+test('HttpClient rejects a JSON response for a no-content contract', async () => {
+  const client = new HttpClient('https://api.example.test')
+  globalThis.fetch = async () => json({ value: 'unexpected' }, 200)
+
+  await expect(client.requestNoContent('/resource'))
+    .rejects.toMatchObject({ code: 'INVALID_RESPONSE', status: 200 })
 })
 
 test('AuthApi refreshes and retries authenticated requests with the new access token', async () => {
@@ -447,6 +478,43 @@ test('AuthApi deletes the account before clearing the browser session', async ()
   }])
   expect(accessToken).toBeNull()
   expect(transition && client.isSessionEpochCurrent(transition.sessionEpoch)).toBe(true)
+})
+
+test('AuthApi refreshes and retries an authenticated no-content request', async () => {
+  const expiredAccessToken = accessTokenFor('user_1', 'expired')
+  const freshAccessToken = accessTokenFor('user_1', 'fresh')
+  let accessToken: string | null = expiredAccessToken
+  const authorizations: Array<string | null> = []
+
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname
+    const authorization = new Headers(init?.headers).get('Authorization')
+    if (path === '/api/auth/refresh') {
+      return json({ accessToken: freshAccessToken }, 200)
+    }
+    if (path === '/api/auth/profile') {
+      authorizations.push(authorization)
+      if (authorization === `Bearer ${freshAccessToken}`) {
+        return new Response(null, { status: 204 })
+      }
+      return json({ error: { code: 'UNAUTHORIZED', message: 'Expired access token' } }, 401)
+    }
+    return json({ error: { code: 'NOT_FOUND', message: 'Unexpected request' } }, 404)
+  }
+
+  const client = new AuthApi({
+    getAccessToken: () => accessToken,
+    setAccessToken: (nextAccessToken) => {
+      accessToken = nextAccessToken
+    },
+  })
+
+  await expect(client.updateProfile({ displayName: 'New name' })).resolves.toBeUndefined()
+  expect(authorizations).toEqual([
+    `Bearer ${expiredAccessToken}`,
+    `Bearer ${freshAccessToken}`,
+  ])
+  expect(accessToken).toBe(freshAccessToken)
 })
 
 test('bootstrapAuthSession clears local state only for an unauthorized refresh', async () => {
