@@ -16,6 +16,7 @@ import type {
   WorkingModel,
 } from '@anomaly-detector/contracts'
 import type { AnomalyConfiguration, SignalId } from '../domain/anomaly-configuration'
+import type { ContractDeckVersion } from '../domain/contracts'
 import type { PendingTenderAuditEvent, StoredTenderAuditEvent } from './tender-audit-event'
 
 export type { PendingTenderAuditEvent, StoredTenderAuditEvent } from './tender-audit-event'
@@ -35,6 +36,7 @@ export type StoredTender = {
   corporateTrustByPlayer: Record<string, number>
   corporateReviewActive: boolean
   corporateReviewByPlayer: Record<string, boolean>
+  contractDeckVersion?: ContractDeckVersion
   contractCompletedByPlayer: Record<string, boolean>
   contractPowerRestrictionsByPlayer: Record<string, number>
   completionReason?: 'all_players_left' | 'last_active_player' | 'all_players_forfeited'

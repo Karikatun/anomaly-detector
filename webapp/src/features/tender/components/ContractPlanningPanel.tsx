@@ -13,6 +13,7 @@ import {
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { signalLabelKeys } from '../catalog'
+import { ContractRequirements } from './ContractRequirements'
 import { SignalGlyph } from './SignalGlyph'
 import { contractKindAccents, signalAccent } from './signal-visuals'
 import styles from './ContractPlanningPanel.module.css'
@@ -23,17 +24,20 @@ export function ContractPlanningPanel({
   contentTestId,
   onOpenChange,
   open,
+  playerId,
   triggerTestId,
   view,
 }: {
   contentTestId?: string
   onOpenChange: (open: boolean) => void
   open: boolean
+  playerId?: string
   triggerTestId?: string
   view: TenderView
 }) {
   const { t } = useI18n()
   const contracts = [...view.publicContracts, ...(view.publicFinalContract ? [view.publicFinalContract] : [])]
+  const corporateTrust = view.players.find((player) => player.playerId === playerId)?.corporateTrust ?? 0
 
   const renderList = () => (
     <div className={styles.list}>
@@ -74,24 +78,14 @@ export function ContractPlanningPanel({
             </header>
 
             <div className={phaseStyles.contractFacts}>
-              <span className={phaseStyles.contractFact}>
-                <Typography as="span" variant="caption">
-                  {t('tender.contractPlanning.result')}
-                </Typography>
-                <Typography as="span" variant="caption">
-                  {t(`tender.result.${contract.requiredPublicResult}`)}
-                </Typography>
-              </span>
-              {contract.requiredSecondaryPublicResult && (kind === 'complex' || kind === 'final') && (
-                <span className={phaseStyles.contractFact}>
-                  <Typography as="span" variant="caption">
-                    {t('tender.contractPlanning.additionalResult')}
-                  </Typography>
-                  <Typography as="span" variant="caption">
-                    {t(`tender.result.${contract.requiredSecondaryPublicResult}`)}
-                  </Typography>
-                </span>
-              )}
+              <ContractRequirements
+                contract={contract}
+                corporateTrust={corporateTrust}
+                journal={view.publicScientificJournal ?? []}
+                playerId={playerId}
+                round={view.round}
+                usedEvidenceTestIds={view.privateUsedContractEvidenceTestIds ?? []}
+              />
               <span className={phaseStyles.contractFact}>
                 <Typography as="span" variant="caption">
                   {t('tender.contractPlanning.status')}
@@ -109,7 +103,7 @@ export function ContractPlanningPanel({
               </span>
             </div>
 
-            {!planning?.eligible && (
+            {!planning?.eligible && planning === undefined && (
               <Typography variant="bodySm" className={phaseStyles.noSuitableEvidence}>
                 {t('tender.contractPlanning.notEligible')}
               </Typography>

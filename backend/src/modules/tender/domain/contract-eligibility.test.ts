@@ -46,3 +46,37 @@ test('explains when the only suitable evidence was already consumed', () => {
     missingConditions: ['evidence_used'],
   })
 })
+
+test('accepts either Final Contract result when it comes from one continuous test', () => {
+  const state = {
+    ...createState(),
+    corporateTrustByPlayer: { player: 2 },
+    publicScientificJournal: [{
+      playerId: 'player',
+      protocol: 'continuous' as const,
+      publicResult: 'attenuation' as const,
+      receiverSignal: 'boreal' as const,
+      sourceSignal: 'aster' as const,
+      testId: 'continuous-alternative',
+    }],
+    round: 5,
+  }
+  const finalContract = {
+    ...contract,
+    contractId: 'final-contract',
+    kind: 'final' as const,
+    requiredSecondaryPublicResult: 'attenuation' as const,
+  }
+
+  expect(createContractPlanning(state, 'player', finalContract)).toMatchObject({
+    eligible: true,
+    missingConditions: [],
+    suitableEvidenceSelections: [['continuous-alternative']],
+  })
+  expect(isContractEvidenceSelectionEligible(
+    state,
+    'player',
+    finalContract,
+    ['continuous-alternative'],
+  )).toBe(true)
+})
