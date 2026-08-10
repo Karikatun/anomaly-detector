@@ -62,6 +62,14 @@ public index. `bun run architecture:check` builds the production import graph
 (excluding tests and generated clients), rejects cycles and Tender self-imports,
 and prevents Profile/Room from reading Tender Prisma models directly.
 
+Room's application service accepts a complete `RoomRepository` contract plus
+required identity, placement, Tender lifecycle and clock ports. Production
+capabilities are never optional to simplify a test double: the in-memory test
+adapter and Prisma adapter pass the same repository contract suite. Prisma Room
+queries share one members include and one `toRoomRecord` projection, so adding a
+field or changing serialization has a single infrastructure owner. The injected
+clock owns both `serverTime` and scheduled-start calculations.
+
 Routes stay thin and translate HTTP into application calls and application failures into the stable API error shape. Do not put business rules into Hono handlers, UI clients, or child components.
 
 ## Runtime Shape And Real-Time

@@ -1,11 +1,36 @@
 import type { DbClient } from '../../../db'
 import { randomBytes } from 'node:crypto'
-import type { RoomRepository } from '../application/ports'
+import type { Prisma } from '../../../generated/prisma/client'
+import type { Clock, RoomRecord, RoomRepository } from '../application/ports'
 import { RoomFailure } from '../domain/errors'
 
 const JOIN_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+const roomMembersInclude = { members: { orderBy: { seat: 'asc' as const } } }
 
-export function createPrismaRoomRepository(db: DbClient): RoomRepository {
+type RoomWithMembers = Prisma.TenderRoomGetPayload<{ include: typeof roomMembersInclude }>
+
+export function toRoomRecord(
+  room: RoomWithMembers,
+  overrides: Partial<Pick<RoomRecord, 'members' | 'startsAt' | 'status'>> = {},
+): RoomRecord {
+  return {
+    capacity: room.capacity as 2 | 3 | 4,
+    hostId: room.hostId,
+    id: room.id,
+    joinCode: room.joinCode,
+    members: room.members.map((member) => ({
+      ready: member.ready,
+      seat: member.seat,
+      userId: member.userId,
+    })),
+    status: room.status as RoomRecord['status'],
+    startsAt: room.startsAt?.toISOString() ?? null,
+    tenderId: room.tenderId,
+    ...overrides,
+  }
+}
+
+export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: () => new Date() }): RoomRepository {
   const repository: RoomRepository = {
     async cancelStart(input) {
       return db.$transaction(async (tx) => {
@@ -14,7 +39,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
             hostId: input.actorId,
             id: input.roomId,
           },
-          include: { members: { orderBy: { seat: 'asc' } } },
+          include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.status !== 'starting') throw new RoomFailure('room_not_joinable', 'Room is not starting')
@@ -22,61 +47,30 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         const waitingRoom = await tx.tenderRoom.update({
           where: { id: room.id },
           data: { status: 'waiting', startsAt: null },
-          include: { members: { orderBy: { seat: 'asc' } } },
+          include: roomMembersInclude,
         })
-        return {
-          capacity: waitingRoom.capacity as 2 | 3 | 4,
-          hostId: waitingRoom.hostId,
-          id: waitingRoom.id,
-          joinCode: waitingRoom.joinCode,
-          members: waitingRoom.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
-          status: 'waiting' as const,
-          startsAt: null,
-          tenderId: waitingRoom.tenderId,
-        }
+        return toRoomRecord(waitingRoom)
       }, { isolationLevel: 'Serializable' })
     },
     async listStartedForMember(userId) {
       const rooms = await db.tenderRoom.findMany({
         where: { members: { some: { userId } }, status: 'started' },
-        include: { members: { orderBy: { seat: 'asc' } } },
+        include: roomMembersInclude,
         orderBy: { updatedAt: 'desc' },
       })
-      return rooms.map((room) => ({
-        capacity: room.capacity as 2 | 3 | 4,
-        hostId: room.hostId,
-        id: room.id,
-        joinCode: room.joinCode,
-        members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
-        status: 'started' as const,
-        startsAt: null,
-        tenderId: room.tenderId,
-      }))
+      return rooms.map((room) => toRoomRecord(room))
     },
     async readCurrentForMember(userId) {
       const current = await db.currentMatch.findUnique({
         where: { userId },
         include: {
           room: {
-            include: { members: { orderBy: { seat: 'asc' } } },
+            include: roomMembersInclude,
           },
         },
       })
       if (!current) return null
-      return {
-        capacity: current.room.capacity as 2 | 3 | 4,
-        hostId: current.room.hostId,
-        id: current.room.id,
-        joinCode: current.room.joinCode,
-        members: current.room.members.map((member) => ({
-          ready: member.ready,
-          seat: member.seat,
-          userId: member.userId,
-        })),
-        status: current.room.status as 'waiting' | 'starting' | 'started',
-        startsAt: current.room.startsAt?.toISOString() ?? null,
-        tenderId: current.room.tenderId,
-      }
+      return toRoomRecord(current.room)
     },
     async releaseCurrentForMember({ roomId, userId }) {
       await db.currentMatch.deleteMany({ where: { roomId, userId } })
@@ -87,23 +81,10 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           id: input.roomId,
           members: { some: { userId: input.actorId } },
         },
-        include: { members: { orderBy: { seat: 'asc' } } },
+        include: roomMembersInclude,
       })
       if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
-      return {
-        capacity: room.capacity as 2 | 3 | 4,
-        hostId: room.hostId,
-        id: room.id,
-        joinCode: room.joinCode,
-        members: room.members.map((member) => ({
-          ready: member.ready,
-          seat: member.seat,
-          userId: member.userId,
-        })),
-        status: room.status as 'waiting' | 'starting' | 'started',
-        startsAt: room.startsAt?.toISOString() ?? null,
-        tenderId: room.tenderId,
-      }
+      return toRoomRecord(room)
     },
     async create(input) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -122,23 +103,12 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
                   create: { seat: 1, userId: input.hostId },
                 },
               },
-              include: {
-                members: { orderBy: { seat: 'asc' } },
-              },
+              include: roomMembersInclude,
             })
             await tx.currentMatch.create({
               data: { roomId: room.id, userId: input.hostId },
             })
-            return {
-              capacity: room.capacity as 2 | 3 | 4,
-              hostId: room.hostId,
-              id: room.id,
-              joinCode: room.joinCode,
-              members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
-              status: 'waiting' as const,
-              startsAt: null,
-              tenderId: room.tenderId,
-            }
+            return toRoomRecord(room)
           }, { isolationLevel: 'Serializable' })
         } catch (error) {
           if ((isRetryableTransactionError(error) || isJoinCodeUniqueConstraintError(error)) && attempt < 2) continue
@@ -163,7 +133,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           }
           const room = await tx.tenderRoom.findUnique({
             where: { id: input.roomId },
-            include: { members: { orderBy: { seat: 'asc' } } },
+            include: roomMembersInclude,
           })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.members.some((member) => member.userId === input.actorId)) {
@@ -173,16 +143,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
             })
           }
           // Already joined — return current room state (idempotent poll)
-          return {
-            capacity: room.capacity as 2 | 3 | 4,
-            hostId: room.hostId,
-            id: room.id,
-            joinCode: room.joinCode,
-            members: room.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
-            status: room.status as 'waiting' | 'starting' | 'started',
-            startsAt: room.startsAt?.toISOString() ?? null,
-            tenderId: room.tenderId,
-          }
+          return toRoomRecord(room)
         }
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
         if (room.members.length >= room.capacity) throw new RoomFailure('room_full', 'Room is already full')
@@ -202,21 +163,14 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
         await tx.currentMatch.create({
           data: { roomId: room.id, userId: input.actorId },
         })
-        return {
-          capacity: room.capacity as 2 | 3 | 4,
-          hostId: room.hostId,
-          id: room.id,
-          joinCode: room.joinCode,
+        return toRoomRecord(room, {
           members: [
             ...room.members.map((member) => ({ ...member, ready: false })),
             { ready: false, seat, userId: input.actorId },
           ]
             .sort((left, right) => left.seat - right.seat)
             .map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
-          status: 'waiting' as const,
-          startsAt: null,
-          tenderId: room.tenderId,
-        }
+        })
         }, { isolationLevel: 'Serializable' })
       } catch (error) {
         if (isCurrentMatchUniqueConstraintError(error)) {
@@ -242,7 +196,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
             id: input.roomId,
             members: { some: { userId: input.actorId } },
           },
-          include: { members: { orderBy: { seat: 'asc' } } },
+          include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
@@ -281,7 +235,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
                 id: input.roomId,
                 members: { some: { userId: input.actorId } },
               },
-              include: { members: { orderBy: { seat: 'asc' } } },
+              include: roomMembersInclude,
             })
             if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
             if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
@@ -290,20 +244,13 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
               where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
               data: { ready: input.ready },
             })
-            return {
-              capacity: room.capacity as 2 | 3 | 4,
-              hostId: room.hostId,
-              id: room.id,
-              joinCode: room.joinCode,
+            return toRoomRecord(room, {
               members: room.members.map((member) => ({
                 ready: member.userId === updatedMember.userId ? updatedMember.ready : member.ready,
                 seat: member.seat,
                 userId: member.userId,
               })),
-              status: 'waiting' as const,
-              startsAt: null,
-              tenderId: room.tenderId,
-            }
+            })
           }, { isolationLevel: 'Serializable' })
         } catch (error) {
           if (isRetryableTransactionError(error) && attempt < 2) {
@@ -323,7 +270,7 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
             hostId: input.actorId,
             id: input.roomId,
           },
-          include: { members: { orderBy: { seat: 'asc' } } },
+          include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room has already started')
@@ -332,22 +279,13 @@ export function createPrismaRoomRepository(db: DbClient): RoomRepository {
           throw new RoomFailure('room_not_ready', 'Every player must be ready before starting')
         }
 
-        const startsAt = new Date(Date.now() + 5_000)
+        const startsAt = new Date(clock.now().getTime() + 5_000)
         const startingRoom = await tx.tenderRoom.update({
           where: { id: room.id },
           data: { status: 'starting', startsAt },
-          include: { members: { orderBy: { seat: 'asc' } } },
+          include: roomMembersInclude,
         })
-        return {
-          capacity: startingRoom.capacity as 2 | 3 | 4,
-          hostId: startingRoom.hostId,
-          id: startingRoom.id,
-          joinCode: startingRoom.joinCode,
-          members: startingRoom.members.map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
-          status: 'starting' as const,
-          startsAt: startsAt.toISOString(),
-          tenderId: startingRoom.tenderId,
-        }
+        return toRoomRecord(startingRoom)
       }, { isolationLevel: 'Serializable' })
     },
   }

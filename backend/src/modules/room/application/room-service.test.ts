@@ -1,14 +1,45 @@
 import { expect, test } from 'bun:test'
 
 import { TenderRoomService } from './room-service'
+import type { RoomRepository } from './ports'
 import { RoomFailure } from '../domain/errors'
+
+const fixedNow = new Date('2026-07-24T12:00:00.000Z')
+const unused = async () => { throw new Error('not used') }
+const unusedRepositoryOperations: RoomRepository = {
+  cancelStart: unused,
+  create: unused,
+  join: unused,
+  joinByCode: unused,
+  leave: unused,
+  listStartedForMember: async () => [],
+  readCurrentForMember: async () => null,
+  readForMember: unused,
+  releaseCurrentForMember: async () => {},
+  setReady: unused,
+  start: unused,
+}
+const serviceDefaults = {
+  clock: { now: () => fixedNow },
+  matchPlacementReader: { readPlacement: async () => undefined },
+  memberIdentityReader: { readDisplayNames: async () => new Map<string, string>() },
+  tenderLifecycleReader: {
+    readLifecycle: async () => ({
+      forfeited: false,
+      phase: 'access-slot-selection' as const,
+      ruleset: 'tender-v2' as const,
+    }),
+  },
+}
 
 test('creates a waiting private room with its host in the first seat', async () => {
   const service = new TenderRoomService({
+    ...serviceDefaults,
     memberIdentityReader: {
       readDisplayNames: async () => new Map([['user-1', 'Хост']]),
     },
     repository: {
+      ...unusedRepositoryOperations,
       create: async (input) => ({
         capacity: input.capacity,
         hostId: input.hostId,
@@ -37,6 +68,7 @@ test('creates a waiting private room with its host in the first seat', async () 
 
 test('lists started matches for the requesting player', async () => {
   const service = new TenderRoomService({
+    ...serviceDefaults,
     matchPlacementReader: {
       readPlacement: async ({ playerId, tenderId }) => {
         expect({ playerId, tenderId }).toEqual({ playerId: 'user-1', tenderId: 'tender-1' })
@@ -44,6 +76,7 @@ test('lists started matches for the requesting player', async () => {
       },
     },
     repository: {
+      ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
       listStartedForMember: async (userId) => [{
         capacity: 2,
@@ -91,7 +124,9 @@ test('lists started matches for the requesting player', async () => {
 test('releases a forfeited current match using the Tender lifecycle port', async () => {
   const released: Array<{ roomId: string; userId: string }> = []
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
@@ -123,7 +158,9 @@ test('releases a forfeited current match using the Tender lifecycle port', async
 test('joins a waiting room through its public join code', async () => {
   const joinedByCode: Array<{ actorId: string; code: string }> = []
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
       join: async () => { throw new Error('UUID join must not be used') },
       joinByCode: async (input) => {
@@ -159,7 +196,9 @@ test('joins a waiting room through its public join code', async () => {
 
 test('reads room state for an existing member without joining again', async () => {
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
       readForMember: async () => ({
         capacity: 2,
@@ -188,7 +227,9 @@ test('reads room state for an existing member without joining again', async () =
 test('lets a player leave a waiting room', async () => {
   const left: Array<{ actorId: string; roomId: string }> = []
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
       join: async () => { throw new Error('not used') },
       leave: async (input) => { left.push(input) },
@@ -203,7 +244,9 @@ test('lets a player leave a waiting room', async () => {
 
 test('schedules a full room start and exposes its server start time', async () => {
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
@@ -237,7 +280,9 @@ test('schedules a full room start and exposes its server start time', async () =
 
 test('lets the host cancel a scheduled room start', async () => {
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
       cancelStart: async () => ({
         capacity: 2,
@@ -271,7 +316,9 @@ test('lets the host cancel a scheduled room start', async () => {
 
 test('allows creating a room with the minimum capacity of two', async () => {
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async (input) => ({
         capacity: input.capacity,
         hostId: input.hostId,
@@ -295,7 +342,9 @@ test('allows creating a room with the minimum capacity of two', async () => {
 
 test('allows creating a room with the maximum capacity of four', async () => {
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async (input) => ({
         capacity: input.capacity,
         hostId: input.hostId,
@@ -319,7 +368,9 @@ test('allows creating a room with the maximum capacity of four', async () => {
 
 test('propagates a repository error when a non-host tries to start a room', async () => {
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
@@ -335,7 +386,9 @@ test('propagates a repository error when a non-host tries to start a room', asyn
 
 test('propagates a repository error when starting a room that is not full', async () => {
   const service = new TenderRoomService({
+    ...serviceDefaults,
     repository: {
+      ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
       join: async () => { throw new Error('not used') },
       leave: async () => { throw new Error('not used') },
