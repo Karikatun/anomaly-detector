@@ -10,9 +10,9 @@ import {
 } from './service'
 
 const config: StorageConfig = {
-  region: 'nyc3',
+  region: 'ru-central1',
   bucket: 'demo-bucket',
-  endpoint: 'https://nyc3.digitaloceanspaces.com',
+  endpoint: 'https://storage.yandexcloud.net',
   cdnBaseUrl: 'https://images.example.com/assets',
   accessKeyId: 'access-key',
   secretAccessKey: 'secret-key',
@@ -50,7 +50,7 @@ describe('StorageService', () => {
     )
   })
 
-  test('creates presigned public upload URLs without contacting Spaces', async () => {
+  test('creates presigned public upload URLs without contacting Yandex Object Storage', async () => {
     const service = new StorageService({ ...config, cdnBaseUrl: undefined })
     const upload = await service.createUploadUrl({
       key: 'uploads/avatar.png',
@@ -67,8 +67,8 @@ describe('StorageService', () => {
       'Cache-Control': 'public, max-age=31536000, immutable',
     })
     expect(upload.contentLength).toBe(128)
-    expect(upload.publicUrl).toBe('https://demo-bucket.nyc3.digitaloceanspaces.com/uploads/avatar.png')
-    expect(uploadUrl.hostname).toBe('demo-bucket.nyc3.digitaloceanspaces.com')
+    expect(upload.publicUrl).toBe('https://storage.yandexcloud.net/demo-bucket/uploads/avatar.png')
+    expect(uploadUrl.hostname).toBe('demo-bucket.storage.yandexcloud.net')
     expect(uploadUrl.pathname).toBe('/uploads/avatar.png')
     expect(uploadUrl.searchParams.get('X-Amz-Algorithm')).toBe('AWS4-HMAC-SHA256')
     expect(uploadUrl.searchParams.get('X-Amz-SignedHeaders')).toContain('content-length')
@@ -95,7 +95,7 @@ describe('StorageService', () => {
 })
 
 describe('storageConfigFromEnv', () => {
-  test('returns null until Spaces is configured', () => {
+  test('returns null until Yandex Object Storage is configured', () => {
     expect(
       storageConfigFromEnv({
         PORT: 3000,
@@ -114,10 +114,10 @@ describe('storageConfigFromEnv', () => {
         SHUTDOWN_GRACE_SECONDS: 20,
         TRUST_PROXY: false,
         COOKIE_SECURE: false,
-        SPACES_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
-        SPACES_UPLOAD_URL_TTL_SECONDS: 900,
-        SPACES_DOWNLOAD_URL_TTL_SECONDS: 300,
-        SPACES_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
+        YANDEX_STORAGE_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
+        YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS: 900,
+        YANDEX_STORAGE_DOWNLOAD_URL_TTL_SECONDS: 300,
+        YANDEX_STORAGE_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
       }),
     ).toBeNull()
   })

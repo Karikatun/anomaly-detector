@@ -71,7 +71,7 @@ Use `yc config set folder-id <folder_ID>` when the active folder must be changed
 
 ## Backend Image
 
-Use `backend/Dockerfile` from the monorepo root as the Docker build path, the same as the DigitalOcean path.
+Use `backend/Dockerfile` from the monorepo root as the Docker build path.
 
 Create and configure Container Registry:
 
@@ -561,7 +561,7 @@ Recommended production setup:
 - Keep private files private and serve them through short-lived presigned URLs after backend permission checks.
 - Do not put emails, names, customer IDs, or sensitive data in bucket names, object keys, metadata, or tags.
 
-The backend storage service is S3-compatible but retains some DigitalOcean-oriented configuration names from its original implementation. Before enabling production storage, make the Yandex signing region and provider endpoint explicit, set the Yandex CDN/public base URL, and validate presigned PUT/GET behavior against Object Storage.
+The backend storage service is S3-compatible and configured through `YANDEX_STORAGE_*`. Before enabling production storage, set the Yandex signing region and provider endpoint explicitly, configure the CDN/public base URL when needed, and validate presigned PUT/GET behavior against Object Storage.
 
 ## Image Optimization
 

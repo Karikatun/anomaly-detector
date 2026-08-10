@@ -36,9 +36,6 @@
     "valibot": "1.4.2",
     "yaml": "^2.9.0"
   },
-  "devDependencies": {
-    "tldts": "^7.4.9"
-  },
   "scripts": {
     "prepare": "bun scripts/install-git-hooks.mjs",
     "hooks:install": "bun scripts/install-git-hooks.mjs",
@@ -57,14 +54,13 @@
     "security:secrets": "bun scripts/secret-check.mjs --tracked",
     "security:secrets:staged": "bun scripts/secret-check.mjs --staged",
     "architecture:check": "bun scripts/architecture-check.mjs",
-    "deploy:do:specs": "bun scripts/prepare-do-specs.mjs",
     "typecheck": "bun run --filter '*' --sequential typecheck",
     "typecheck:adminapp": "bun run --cwd adminapp typecheck",
     "typecheck:webapp": "bun run --cwd webapp typecheck",
     "typecheck:website": "bun run --cwd website typecheck",
     "typecheck:backend": "bun run --cwd backend typecheck",
     "test": "bun run test:deploy && bun run test:tooling && bun run test:contracts && bun run test:adminapp && bun run test:backend && bun run test:webapp",
-    "test:deploy": "bun test scripts/do-cron.test.mjs scripts/prepare-do-specs.test.mjs scripts/repo-env.test.mjs scripts/architecture-check.test.mjs scripts/supply-chain-pinning.test.mjs scripts/yandex-caddy-security.test.mjs",
+    "test:deploy": "bun test scripts/repo-env.test.mjs scripts/architecture-check.test.mjs scripts/supply-chain-pinning.test.mjs scripts/yandex-caddy-security.test.mjs",
     "test:tooling": "bun test scripts/secret-check.test.mjs scripts/validate-commit-message.test.mjs scripts/install-git-hooks.test.mjs scripts/quality-gates.test.mjs scripts/eslint-monorepo-config.test.mjs",
     "test:contracts": "bun run --cwd packages/contracts test",
     "test:adminapp": "bun run --cwd adminapp test",

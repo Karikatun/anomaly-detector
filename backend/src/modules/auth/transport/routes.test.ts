@@ -23,12 +23,12 @@ const env: AppEnv = {
   AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
   SHUTDOWN_GRACE_SECONDS: 20,
   TRUST_PROXY: true,
-  TRUSTED_PROXY_CLIENT_IP_HEADER: 'do-connecting-ip',
+  TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-forwarded-for',
   COOKIE_SECURE: true,
-  SPACES_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
-  SPACES_UPLOAD_URL_TTL_SECONDS: 900,
-  SPACES_DOWNLOAD_URL_TTL_SECONDS: 300,
-  SPACES_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
+  YANDEX_STORAGE_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
+  YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS: 900,
+  YANDEX_STORAGE_DOWNLOAD_URL_TTL_SECONDS: 300,
+  YANDEX_STORAGE_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
 }
 
 describe('auth routes', () => {
@@ -57,11 +57,11 @@ describe('auth routes', () => {
       method: 'OPTIONS',
       headers: {
         Origin: 'https://web.example.com',
-        'Access-Control-Request-Headers': 'content-type,do-connecting-ip',
+        'Access-Control-Request-Headers': 'content-type,x-untrusted-client-ip',
         'Access-Control-Request-Method': 'POST',
       },
     })
-    expect(productionResponse.headers.get('access-control-allow-headers')).not.toContain('do-connecting-ip')
+    expect(productionResponse.headers.get('access-control-allow-headers')).not.toContain('x-untrusted-client-ip')
   })
 
   test('uses a stable callback code when OAuth registration needs legal consent', () => {
@@ -92,7 +92,6 @@ describe('auth routes', () => {
       headers: {
         'Content-Type': 'application/json',
         'X-Forwarded-For': '10.10.0.8',
-        'Do-Connecting-Ip': '203.0.113.10',
       },
       body: JSON.stringify({ login: 'invalid', password: 'short' }),
     })
@@ -103,14 +102,13 @@ describe('auth routes', () => {
     expect(limited.headers.get('retry-after')).toBeTruthy()
   })
 
-  test('uses the configured trusted proxy header instead of a shared ingress address', async () => {
+  test('uses the first trusted proxy address instead of the shared ingress address', async () => {
     const app = createApp({ env: { ...env, AUTH_RATE_LIMIT_MAX: 1 }, prisma: {} as DbClient })
     const request = (clientIp: string) => app.request('/api/auth/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Forwarded-For': '10.10.0.8',
-        'Do-Connecting-Ip': clientIp,
+        'X-Forwarded-For': `${clientIp}, 10.10.0.8`,
       },
       body: JSON.stringify({ login: 'invalid', password: 'short' }),
     })

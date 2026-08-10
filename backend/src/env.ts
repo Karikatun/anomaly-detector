@@ -70,16 +70,16 @@ const envSchema = z.object({
   YANDEX_OAUTH_CLIENT_ID: optionalStringSchema,
   YANDEX_OAUTH_CLIENT_SECRET: optionalStringSchema,
   OAUTH_CALLBACK_BASE_URL: optionalUrlSchema,
-  SPACES_REGION: optionalStringSchema,
-  SPACES_BUCKET: optionalStringSchema,
-  SPACES_ENDPOINT: optionalUrlSchema,
-  SPACES_CDN_BASE_URL: optionalUrlSchema,
-  SPACES_ACCESS_KEY_ID: optionalStringSchema,
-  SPACES_SECRET_ACCESS_KEY: optionalStringSchema,
-  SPACES_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
-  SPACES_UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 60 * 60).default(15 * 60),
-  SPACES_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 60 * 60).default(5 * 60),
-  SPACES_PUBLIC_CACHE_CONTROL: stringWithDefault('public, max-age=31536000, immutable'),
+  YANDEX_STORAGE_REGION: optionalStringSchema,
+  YANDEX_STORAGE_BUCKET: optionalStringSchema,
+  YANDEX_STORAGE_ENDPOINT: optionalUrlSchema,
+  YANDEX_STORAGE_CDN_BASE_URL: optionalUrlSchema,
+  YANDEX_STORAGE_ACCESS_KEY_ID: optionalStringSchema,
+  YANDEX_STORAGE_SECRET_ACCESS_KEY: optionalStringSchema,
+  YANDEX_STORAGE_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
+  YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 60 * 60).default(15 * 60),
+  YANDEX_STORAGE_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 60 * 60).default(5 * 60),
+  YANDEX_STORAGE_PUBLIC_CACHE_CONTROL: stringWithDefault('public, max-age=31536000, immutable'),
 }).superRefine((env, ctx) => {
   validateJwtSecret(env, ctx)
   validateProductionRuntime(env, ctx)
@@ -226,14 +226,15 @@ function validateCorsOrigins(env: z.infer<typeof envSchema>, ctx: z.RefinementCt
 
 function validateStorageEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
   const requiredStorageKeys = [
-    'SPACES_REGION',
-    'SPACES_BUCKET',
-    'SPACES_ENDPOINT',
-    'SPACES_ACCESS_KEY_ID',
-    'SPACES_SECRET_ACCESS_KEY',
+    'YANDEX_STORAGE_REGION',
+    'YANDEX_STORAGE_BUCKET',
+    'YANDEX_STORAGE_ENDPOINT',
+    'YANDEX_STORAGE_ACCESS_KEY_ID',
+    'YANDEX_STORAGE_SECRET_ACCESS_KEY',
   ] as const
   const storageConfigured =
-    requiredStorageKeys.some((key) => env[key] !== undefined) || env.SPACES_CDN_BASE_URL !== undefined
+    requiredStorageKeys.some((key) => env[key] !== undefined) ||
+    env.YANDEX_STORAGE_CDN_BASE_URL !== undefined
 
   if (!storageConfigured) return
 
@@ -242,7 +243,7 @@ function validateStorageEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx
       ctx.addIssue({
         code: 'custom',
         path: [key],
-        message: `${key} is required when DigitalOcean Spaces storage is configured`,
+        message: `${key} is required when Yandex Object Storage is configured`,
       })
     }
   }

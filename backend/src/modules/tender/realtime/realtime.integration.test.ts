@@ -34,10 +34,10 @@ maybeDescribe('realtime websocket integration', () => {
     SHUTDOWN_GRACE_SECONDS: 20,
     TRUST_PROXY: false,
     COOKIE_SECURE: false,
-    SPACES_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
-    SPACES_UPLOAD_URL_TTL_SECONDS: 900,
-    SPACES_DOWNLOAD_URL_TTL_SECONDS: 300,
-    SPACES_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
+    YANDEX_STORAGE_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
+    YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS: 900,
+    YANDEX_STORAGE_DOWNLOAD_URL_TTL_SECONDS: 300,
+    YANDEX_STORAGE_PUBLIC_CACHE_CONTROL: 'public, max-age=31536000, immutable',
   }
   const prisma = createPrisma(databaseUrl!)
   const ticketStore = createPrismaRealtimeTicketStore(prisma, {

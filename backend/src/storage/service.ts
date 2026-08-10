@@ -65,8 +65,7 @@ export class StorageService {
       s3 ??
       new S3Client({
         endpoint: config.endpoint,
-        // DigitalOcean Spaces selects the Space region from the endpoint; AWS SDK signing uses us-east-1.
-        region: 'us-east-1',
+        region: config.region,
         forcePathStyle: false,
         credentials: {
           accessKeyId: config.accessKeyId,
@@ -145,10 +144,9 @@ export class StorageService {
 
   publicUrlForKey(key: string) {
     assertSafeObjectKey(key)
-    const baseUrl =
-      this.config.cdnBaseUrl ?? `https://${this.config.bucket}.${this.config.region}.digitaloceanspaces.com`
+    if (this.config.cdnBaseUrl) return joinUrlPath(this.config.cdnBaseUrl, key)
 
-    return joinUrlPath(baseUrl, key)
+    return joinUrlPath(this.config.endpoint, this.config.bucket, key)
   }
 }
 
@@ -159,26 +157,26 @@ export function createStorageServiceFromEnv(env: AppEnv) {
 
 export function storageConfigFromEnv(env: AppEnv): StorageConfig | null {
   if (
-    !env.SPACES_REGION ||
-    !env.SPACES_BUCKET ||
-    !env.SPACES_ENDPOINT ||
-    !env.SPACES_ACCESS_KEY_ID ||
-    !env.SPACES_SECRET_ACCESS_KEY
+    !env.YANDEX_STORAGE_REGION ||
+    !env.YANDEX_STORAGE_BUCKET ||
+    !env.YANDEX_STORAGE_ENDPOINT ||
+    !env.YANDEX_STORAGE_ACCESS_KEY_ID ||
+    !env.YANDEX_STORAGE_SECRET_ACCESS_KEY
   ) {
     return null
   }
 
   return {
-    region: env.SPACES_REGION,
-    bucket: env.SPACES_BUCKET,
-    endpoint: env.SPACES_ENDPOINT,
-    cdnBaseUrl: env.SPACES_CDN_BASE_URL,
-    accessKeyId: env.SPACES_ACCESS_KEY_ID,
-    secretAccessKey: env.SPACES_SECRET_ACCESS_KEY,
-    uploadMaxBytes: env.SPACES_UPLOAD_MAX_BYTES,
-    uploadUrlTtlSeconds: env.SPACES_UPLOAD_URL_TTL_SECONDS,
-    downloadUrlTtlSeconds: env.SPACES_DOWNLOAD_URL_TTL_SECONDS,
-    publicCacheControl: env.SPACES_PUBLIC_CACHE_CONTROL,
+    region: env.YANDEX_STORAGE_REGION,
+    bucket: env.YANDEX_STORAGE_BUCKET,
+    endpoint: env.YANDEX_STORAGE_ENDPOINT,
+    cdnBaseUrl: env.YANDEX_STORAGE_CDN_BASE_URL,
+    accessKeyId: env.YANDEX_STORAGE_ACCESS_KEY_ID,
+    secretAccessKey: env.YANDEX_STORAGE_SECRET_ACCESS_KEY,
+    uploadMaxBytes: env.YANDEX_STORAGE_UPLOAD_MAX_BYTES,
+    uploadUrlTtlSeconds: env.YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS,
+    downloadUrlTtlSeconds: env.YANDEX_STORAGE_DOWNLOAD_URL_TTL_SECONDS,
+    publicCacheControl: env.YANDEX_STORAGE_PUBLIC_CACHE_CONTROL,
   }
 }
 
@@ -277,10 +275,10 @@ function sanitizeFilename(filename: string) {
   return (sanitized || 'file').slice(0, 120)
 }
 
-function joinUrlPath(baseUrl: string, key: string) {
+function joinUrlPath(baseUrl: string, ...paths: string[]) {
   const url = new URL(baseUrl)
   const basePath = url.pathname.replace(/\/+$/, '')
-  const encodedKey = key.split('/').map(encodeURIComponent).join('/')
+  const encodedKey = paths.flatMap((path) => path.split('/')).map(encodeURIComponent).join('/')
   url.pathname = `${basePath}/${encodedKey}`
   url.search = ''
   url.hash = ''
