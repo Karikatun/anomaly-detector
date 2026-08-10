@@ -1,6 +1,6 @@
 # Product Modules Architecture
 
-This repository defines a golden path for web and backend products: shared contracts, a modular-monolith backend, one player CSR browser app (`webapp`), one isolated read-only operator CSR app (`adminapp`), one Astro SSG/SSR site (`website`), and little custom infrastructure. The runnable mobile app lives on the `mobile` branch and extends this architecture only when mobile is active.
+Anomaly Detector uses shared contracts, a modular-monolith backend, one player CSR browser app (`webapp`), one isolated read-only operator CSR app (`adminapp`), and one Astro static public site (`website`). The runnable mobile app lives on the `mobile` branch and extends the same product contracts when mobile work is active.
 
 The approach is **progressive DDD-lite**. Product contexts get explicit ownership and dependency direction without forcing every context to have every layer. Add a `domain` directory only when the feature has real policies, calculations, or state transitions. Do not add empty layers, generic/base repositories, CQRS, event sourcing, or extra services as architecture decoration.
 
@@ -76,13 +76,13 @@ Routes stay thin and translate HTTP into application calls and application failu
 
 The default runtime shape is a modular monolith: one backend codebase, one database, shared contracts, and clear feature boundaries inside the repository. The backend can expose separate API, worker, and cron entrypoints while still sharing Prisma schema, env validation, services, and contracts. Do not add queues, brokers, or extra infrastructure until the product has a concrete need that the monolith cannot meet clearly.
 
-On the default DigitalOcean production path, run the backend/API as one `apps-s-1vcpu-1gb` App Platform container so the starting infrastructure stays inside the low-cost budget when paired with the smallest production Managed PostgreSQL cluster. Add App Platform worker or scheduled-job components from the same `backend/Dockerfile` only when the product has a concrete background or periodic task. `webapp` and fully prerendered `website` output remain App Platform Static Site components and do not have runtime container sizes. A `website` route with SSR/on-demand rendering or server islands needs a runtime service.
+The current production baseline is a Yandex Cloud VM running separate API and worker containers from the same immutable backend image, plus PostgreSQL and Caddy. The target managed topology and migration conditions are documented in [YANDEX_CLOUD.md](YANDEX_CLOUD.md). Keep API, worker, and cron as entrypoints of the same backend workspace; add infrastructure only for a concrete runtime need.
 
-For real-time features such as chat, presence, collaboration, live notifications, or activity feeds, start with the same backend service. A single instance can keep an in-memory registry of its own WebSocket connections. Once the backend runs multiple instances, in-memory fanout is no longer enough: one user may be connected to instance A while another is connected to instance B. At that point, add a managed Redis-compatible Pub/Sub broker between backend instances so each instance can publish domain events and subscribe to events it must deliver to its local sockets.
+Tender phase delivery starts in the same backend service. A single instance can keep an in-memory registry of its own WebSocket connections. Once the backend runs multiple instances, in-memory fanout is no longer enough: participants in one Tender may connect to different instances. At that point, add managed Redis-compatible Pub/Sub so each instance can publish compact domain-event identifiers and deliver them to its local sockets.
 
-On the default DigitalOcean path, use DigitalOcean Managed Valkey for this broker. On the optional Yandex Cloud path, use Yandex Managed Service for Valkey. Add this infrastructure only when horizontal scaling and cross-instance WebSocket/SSE delivery are actually required; it is not part of the baseline local setup.
+Use Yandex Managed Service for Valkey only when horizontal scaling and cross-instance WebSocket delivery are actually required; it is not part of the current single-VM baseline or local setup.
 
-Valkey Pub/Sub is only a fanout mechanism. Keep durable chat messages, notifications, collaboration state, and audit-relevant events in PostgreSQL; publish compact event identifiers after commits; and make clients recover by reconnecting and refetching from the API after missed realtime messages.
+Valkey Pub/Sub is only a fanout mechanism. Keep durable Tender state and audit-relevant events in PostgreSQL, publish compact event identifiers only after commits, and make clients recover by reconnecting and refetching the authorized API view after missed realtime messages.
 
 ## Auth
 
@@ -98,7 +98,7 @@ Refresh-token rotation updates the credential atomically inside one logical sess
 
 ## Frontend
 
-There are two browser surfaces, split by whether the pages need SEO. `website` (Astro, SSG by default, SSR/hybrid only when needed) owns public, search-indexable, and link-previewed pages: landing, marketing, content, and the public catalog of a storefront or marketplace. `webapp` (React CSR) owns screens that live behind sign-in and need no SEO: buyer account, seller/admin panels, checkout/account workflows, dashboards, settings, and authenticated tools. A marketplace normally uses both surfaces, sharing `@anomaly-detector/contracts`. The decision rule the installing agent should apply is in the root [README.md](../README.md) under "Choosing `webapp` vs `website`".
+The browser surfaces have explicit product roles. `website` is the public, indexable Astro site and currently contains the static Anomaly Detector landing page. `webapp` is the interactive player application and owns authentication, profile, rooms, Tender, tutorial, history, rules, and legal routes. `adminapp` is a separately built read-only operator surface protected at the edge and again by backend allowlisting; it must never be published as part of the player or public website.
 
 The webapp follows these client rules:
 
@@ -175,17 +175,15 @@ Auth in `src/features/auth` is the client golden path: its API adapter owns auth
 
 Do not create a new form, query, auth, or API abstraction until the existing pattern stops solving the current problem.
 
-`website` is a separate Astro workspace for public SSG/SSR pages. Pages prerender to static HTML by default. Marketplace freshness should climb this ladder: SSG plus rebuild/redeploy for durable listing/category/content changes; cached on-demand/SSR routes with CDN headers such as `stale-while-revalidate` when freshness matters more than a full redeploy cycle; Astro server islands for non-SEO-critical dynamic or personalized fragments; uncached or personalized SSR only for request-specific pages such as live search, personalized public views, or inventory/price pages where stale HTML is unacceptable. On-demand/SSR routes and server islands both require an Astro adapter and a runtime-capable deployment; they do not work from a pure Static Site host or object-storage static website. Server islands on cached pages or rolling deploys require a stable secret `ASTRO_KEY` shared by build and runtime environments; never commit it, expose it as `PUBLIC_*`, or bake it into static output. Shared CDN caching is only for anonymous, public-equivalent HTML; auth-dependent or personalized responses must use `private`/`no-store` or a deliberate `Vary: Cookie`/`Authorization` strategy, and `ASTRO_KEY` is not a cache privacy boundary.
+`website` prerenders to static HTML by default. Keep the landing and other anonymous public content static until a real request-specific requirement justifies an Astro runtime adapter. SEO-critical content must be present in initial HTML, including title, description, canonical URL, social preview metadata, and the actual public product copy. The public site does not own player authentication or duplicate interactive game flows from `webapp`.
 
-SEO-critical content must be present in the initial HTML: titles, descriptions, canonical URLs, social preview tags, product/category names, indexable descriptions, and public prices when snippets need them. Client islands and server islands may enhance the page, but they must not be the only source of SEO-critical content. `website` does not own the full auth flow and should not duplicate the CSR client from `webapp`; auth in `website` is limited to public-site needs such as a logged-in header state or lightweight actions. If the website starts reading API data or shared DTOs, connect `@anomaly-detector/contracts` and validate producer/consumer sides the same way as `webapp`.
-
-Astro remains the default website stack because it is content-first, static-first, low-JS by default, and gives agents a clear SEO surface. Choose Next.js only when a project intentionally wants a Vercel-optimized ISR/cache platform. Treat TanStack Start as an optional future React full-stack path for teams that want one React app with selective SSR, not as the baseline for non-programmer vibe-coding projects.
+If a future website route needs authenticated or personalized data, define its privacy and caching contract before implementation. Shared CDN caching is only for anonymous, public-equivalent HTML; personalized responses use `private` or `no-store` unless a reviewed `Vary` strategy proves otherwise.
 
 ## Testing
 
 Backend unit/integration tests verify contracts and auth behavior at the owning layer. Webapp E2E uses Playwright and starts a real backend + Vite through `webServer`. Mobile E2E lives on the `mobile` branch.
 
-Client E2E in this template is a happy-path smoke layer, not the place for large validation matrices. Keep negative payloads, password/JWT/session rules, and error-shape checks in backend tests. Add fast client-level tests for form validation and API state edge cases when those surfaces grow.
+Client E2E protects valuable cross-layer player journeys and representative recovery states; it is not the place for exhaustive validation matrices. Keep negative payloads, password/JWT/session rules, concurrency, and stable error-shape checks in contract, unit, or backend integration tests.
 
 Run `bun run architecture:check` as part of every validation ladder. The dependency-free checker reports forbidden static imports as `path:line`, has fixture tests for each rule family, and runs in CI. File length is deliberately not an architecture rule; ownership and dependency direction are.
 
@@ -197,7 +195,7 @@ Do not hand-write Prisma migration SQL. Change `backend/prisma/schema.prisma`, t
 bun run --cwd backend prisma:migrate
 ```
 
-The template uses database-generated UUIDv7 primary keys (`@default(dbgenerated("uuidv7()")) @db.Uuid`) instead of ORM-generated `cuid()`/`uuid()`. That keeps ID generation consistent for Prisma Client, direct SQL, imports, and any future background workers or non-Prisma writers, but it also means the schema requires PostgreSQL 18+.
+The repository uses database-generated UUIDv7 primary keys (`@default(dbgenerated("uuidv7()")) @db.Uuid`) instead of ORM-generated `cuid()`/`uuid()`. That keeps ID generation consistent for Prisma Client, direct SQL, imports, and background workers, but it also means the schema requires PostgreSQL 18+.
 
 Treat UUIDv7 as a repository-level rule, not a one-off model detail. New primary keys should use database-generated UUIDv7, and foreign keys that reference those IDs should use `@db.Uuid` so the type stays native all the way through PostgreSQL and Prisma.
 
@@ -215,9 +213,9 @@ Keep `docker-compose.yml`, `backend/.env.example`, `.env.example`, and [LOCAL_DA
 
 ## Storage
 
-Persistent files and media belong in DigitalOcean Spaces, not in the App Platform container filesystem. The backend owns storage access through `src/storage`, including safe object keys, presigned uploads/downloads, public CDN URL construction, and object deletion. Product features that use uploads should store ownership and retention metadata in PostgreSQL when permissions, deletion, audit, or private access matter.
+Persistent files and media belong in Yandex Object Storage, not in an application container filesystem. The backend owns storage access through `src/storage`, including safe object keys, presigned uploads/downloads, public CDN URL construction, and object deletion. Product features that use uploads store ownership and retention metadata in PostgreSQL when permissions, deletion, audit, or private access matter. Detailed provider and security decisions live in [STORAGE.md](STORAGE.md) and [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 
-For image optimization, generate app-owned variants in the backend, a worker, or a dedicated App Platform service, then store those variants in Spaces and serve public variants through Spaces CDN. DigitalOcean Spaces and Spaces CDN do not provide first-party dynamic image resizing or format transformation.
+For image optimization, generate app-owned variants in the backend, a worker, or a dedicated bounded job, then store those variants in Object Storage and serve public variants through the configured CDN.
 
 ## Current Upstream Documentation
 
@@ -244,8 +242,7 @@ requires introducing every pattern or abstraction:
 - [Prisma docs](https://www.prisma.io/docs)
 - [PostgreSQL docs](https://www.postgresql.org/docs/)
 - [PostgreSQL Docker Official Image](https://hub.docker.com/_/postgres)
-- [DigitalOcean Spaces docs](https://docs.digitalocean.com/products/spaces/)
-- [DigitalOcean Valkey docs](https://docs.digitalocean.com/products/databases/valkey/)
+- [Yandex Object Storage docs](https://yandex.cloud/en/docs/storage/)
 - [Yandex Managed Service for Valkey docs](https://yandex.cloud/en/docs/managed-redis/)
 - [Zod docs](https://zod.dev/)
 - [jose documentation](https://github.com/panva/jose)

@@ -5,17 +5,15 @@ import { defineConfig } from 'astro/config';
 //
 // Default rendering is static (SSG): every page prerenders to HTML and the
 // build emits a plain static site in `website/dist`, deployable to a Static
-// Site host or object storage + CDN. This is the right default for landing,
-// content pages, and durable public marketplace catalog pages.
+// Site host or object storage + CDN. This is the right default for the public
+// Anomaly Detector landing page and other anonymous durable content.
 //
-// SSR/hybrid is not the marketplace default. Use rebuild/redeploy for durable
-// content changes first. Cached on-demand/SSR routes and server islands for
-// non-SEO-critical dynamic fragments both require an adapter and
-// runtime-capable deployment, even when the main page stays prerendered.
+// Use rebuild/redeploy for durable content changes. On-demand/SSR routes and
+// server islands require a concrete request-specific product need, an adapter,
+// and runtime-capable deployment even when the main page stays prerendered.
 //
 // SSR upgrade path (do this only when a route needs request-specific server
-// rendering, e.g. live search, personalized public views, or inventory/price
-// where stale HTML is unacceptable):
+// rendering, such as an explicitly approved personalized public view):
 //   1. Install a Node adapter that matches THIS Astro version:
 //        bun add @astrojs/node --cwd website
 //      (verify the resolved version's `astro` peer range covers the installed

@@ -161,7 +161,7 @@ Keep secrets in Lockbox and materialise them only at instance startup into a roo
 mode `0600` runtime env file outside the repository. Never put secret values in instance
 metadata, committed Compose files, build arguments, logs, or shell history.
 
-Before provisioning, validate the template without printing a resolved secret-bearing
+Before provisioning, validate the Compose definition without printing a resolved secret-bearing
 configuration:
 
 ```bash
@@ -561,7 +561,7 @@ Recommended production setup:
 - Keep private files private and serve them through short-lived presigned URLs after backend permission checks.
 - Do not put emails, names, customer IDs, or sensitive data in bucket names, object keys, metadata, or tags.
 
-The backend storage service in this template is S3-compatible but currently named around the DigitalOcean default. If Yandex Cloud is selected for production storage, configure a provider-specific storage pass before launch: make the S3 signing region/provider endpoint explicit, set a Yandex CDN/public base URL, and validate presigned PUT/GET behavior against Object Storage.
+The backend storage service is S3-compatible but retains some DigitalOcean-oriented configuration names from its original implementation. Before enabling production storage, make the Yandex signing region and provider endpoint explicit, set the Yandex CDN/public base URL, and validate presigned PUT/GET behavior against Object Storage.
 
 ## Image Optimization
 

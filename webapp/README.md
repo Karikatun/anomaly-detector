@@ -55,7 +55,7 @@ built bundle stops using the old URL.
 
 ## Deployment
 
-Production deployment for the browser app uses DigitalOcean App Platform Static Sites from the full Git monorepo branch with `bun install --frozen-lockfile && bun run build:webapp`, `webapp/dist`, and `index.html` as the SPA catch-all by default. Generate the concrete spec with `bun run deploy:do:specs webapp`; App Platform builds from Git, not from local `dist`. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md). If the user explicitly chooses Yandex Cloud, deploy the built `webapp/dist` output through Yandex Object Storage static website hosting plus Cloud CDN by following [../docs/YANDEX_CLOUD.md](../docs/YANDEX_CLOUD.md).
+Production deployment builds `webapp/dist` with the concrete public API origins and publishes it through the Yandex Cloud static-site path with `index.html` as the SPA fallback. Start with the shared [release entrypoint](../docs/DEPLOYMENT.md) and follow [the Yandex Cloud runbook](../docs/YANDEX_CLOUD.md). The legacy DigitalOcean generator is documented separately in [DIGITALOCEAN.md](../docs/DIGITALOCEAN.md) and is used only for an explicitly requested alternative deployment.
 
 ## Practice
 
@@ -69,7 +69,7 @@ Use shadcn/ui for web interface primitives. Treat `src/components/ui` as the sha
 
 All web typography must go through `src/components/ui/typography.tsx`. Use `Typography` for page copy, headings `h1` through `h6`, labels, controls, captions, emphasis, shortcuts, code/kbd text, and screen-reader-only text. Do not add raw heading/paragraph/emphasis elements or Tailwind text-size/font/leading/tracking utilities in pages or UI components; the local ESLint typography policy enforces this.
 
-The current shadcn configuration is `radix-maia` with the `hugeicons` icon library and CSS variables, as recorded in `components.json`. This template intentionally includes the full official shadcn component registry from `bunx shadcn@latest add --all -c webapp` so future projects can start from a complete local UI foundation. Do not add community registries, blocks, or custom UI generator output unless the product asks for them.
+The current shadcn configuration is `radix-maia` with the `hugeicons` icon library and CSS variables, as recorded in `components.json`. The repository retains the full official shadcn component registry as its local UI foundation. Do not add community registries, blocks, or custom UI generator output unless the product needs them.
 
 When adding or refreshing shadcn components:
 
@@ -78,7 +78,7 @@ bun run --cwd webapp ui:info
 bun run --cwd webapp ui:add -- <component>
 ```
 
-Use the local `shadcn` devDependency pinned in `webapp/package.json` and `bun.lock`; do not use `shadcn@latest` for routine refreshes because it can produce registry output that no longer matches this template. If generated files need compatibility fixes for current package versions, keep the edits small and leave app-specific composition outside `src/components/ui`.
+Use the local `shadcn` devDependency pinned in `webapp/package.json` and `bun.lock`; do not use `shadcn@latest` for routine refreshes because it can produce registry output that no longer matches this repository. If generated files need compatibility fixes for current package versions, keep the edits small and leave app-specific composition outside `src/components/ui`.
 
 ## E2E
 

@@ -15,6 +15,7 @@
 - For player web application work, read `webapp/AGENTS.md`. For substantial UI, UX, responsive, animation, design-system, or rendered-flow work in any client, use `$anomaly-ui`.
 - For mobile application or Maestro work, read `mobile/AGENTS.md`.
 - For testing strategy and commands, use `docs/TESTING.md`. For deployment or infrastructure, read the relevant runbook in `docs/`, especially `DEPLOYMENT.md`, `STORAGE.md`, `LOCAL_DATABASE.md`, or `YANDEX_CLOUD.md`.
+- For vulnerability handling and security-sensitive changes, read `SECURITY.md`. For CI protection and release approval, use `docs/CI.md` and `docs/RELEASE_CHECKLIST.md`.
 - Tasks and PRDs live in GitHub Issues. Use the workflow in `docs/agents/issue-tracker.md` and labels in `docs/agents/triage-labels.md`. Maintain domain docs according to `docs/agents/domain.md`.
 - Use the repository package manager, scripts, test runner, formatter, linter, build tools, generators, existing utilities, and installed dependencies. Do not add dependencies without explicit approval unless the user requested that dependency by name.
 - In Codex shell sessions, do not assume JavaScript tooling is on `PATH`; when needed use `PATH="/opt/homebrew/bin:$HOME/.bun/bin:$PATH"`.
@@ -29,9 +30,10 @@
 ## Git And Remote Safety
 
 - Inspect `git remote -v` before branch, commit, push, PR, or deployment workflows. Work on `master` unless the user explicitly requests otherwise; do not create or switch branches without request.
-- Treat this checkout as a new-project template by default. If `origin` points to the template and the user is not contributing to it, remove that remote. Add or publish to the user's repository only when they provide a destination or explicitly ask.
-- Never bypass versioned hooks with `--no-verify` without explicit authorization. Do not push, open PRs, or deploy from the template remote.
-- Do not stage, commit, amend, rebase, reset, stash, push, delete files, or create worktrees unless explicitly asked. Preserve hooks and the repository's enforced commit format.
+- This is the established Anomaly Detector product repository. Do not remove or replace `origin` during documentation or repository cleanup; stop if it does not point to the expected product repository.
+- Never bypass versioned hooks with `--no-verify` without explicit authorization.
+- After a task changes project files and its mandatory checks pass, stage only that task's coherent diff and create one Conventional Commit. Do not commit unrelated user changes or a result whose primary signal or mandatory gate still fails.
+- Do not amend, rebase, reset, stash, push, open a PR, deploy, delete files, or create worktrees unless explicitly asked. Preserve hooks and the repository's enforced commit format.
 
 ## Task Mode And Acceptance
 
@@ -92,4 +94,4 @@
 - Lead with what changed and why; include the root cause and affected layers when useful.
 - Report `Primary signal status` and exact `Secondary signal status`; identify incomplete checks, risks, migrations, rollout notes, or documentation drift.
 - For Direct or Review tasks, keep the report compact. A task is not complete if the visible symptom is hidden while the coupled mechanic remains inconsistent.
-- After changing project files, finish with `Commit title: <title>` using the repository's Conventional Commit style. Do not create the commit unless explicitly asked.
+- After a completed task that changed project files, report `Commit: <short-sha> <title>` for the task-scoped Conventional Commit. For read-only work or a task without file changes, state that no commit was required.

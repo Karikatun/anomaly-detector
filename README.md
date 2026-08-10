@@ -12,7 +12,10 @@
 
 - [правила и описание игры](docs/GAME_DESIGN_BRIEF.md);
 - [план и текущий статус реализации](docs/MVP_IMPLEMENTATION_PLAN.md);
-- [дорожная карта после MVP](docs/POST_MVP_ROADMAP.md).
+- [дорожная карта после MVP](docs/POST_MVP_ROADMAP.md);
+- [архитектура](docs/ARCHITECTURE.md) и [стратегия тестирования](docs/TESTING.md);
+- [политика безопасности](SECURITY.md), [CI и защита веток](docs/CI.md);
+- [release checklist](docs/RELEASE_CHECKLIST.md) и [deployment entrypoint](docs/DEPLOYMENT.md).
 
 ## Запуск
 
