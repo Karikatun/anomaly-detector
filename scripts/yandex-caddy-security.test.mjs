@@ -26,6 +26,16 @@ test('Yandex VM Caddy config permits only the production API realtime origins', 
   )
 })
 
+test('Yandex VM Caddy config caches only fingerprinted player assets as immutable', () => {
+  expect(caddyfile).toContain('@playerAssets path /assets/*')
+  expect(caddyfile).toContain(
+    'header @playerAssets Cache-Control "public, max-age=31536000, immutable"',
+  )
+  expect(caddyfile).toContain(
+    'header /index.html Cache-Control "public, max-age=0, must-revalidate"',
+  )
+})
+
 test('Yandex VM Caddy config protects the separate operator application before serving files', () => {
   expect(caddyfile).toContain('ops.anomaly-detector.ru {')
   expect(caddyfile).toContain('basic_auth {')
