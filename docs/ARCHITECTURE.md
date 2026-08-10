@@ -152,6 +152,13 @@ ready -> submitting -> accepted
 - A mode change does not save, clear, or submit a consequential selection unless
   the product explicitly defines and communicates that behavior.
 
+The Tender page follows the humble-object boundary: React owns composition,
+refs and visual overlay state, while command exclusivity, resume eligibility,
+turn-focus decisions and stale-error visibility live in a pure page controller.
+The completed-match component renders a pure audit presentation model for
+ranking, winners and rating entries. These seams are tested without mounting
+the full page; realtime and multiplayer recovery remain protected by E2E.
+
 Tender is the reference implementation for this contract: the server owns
 hidden state, deadlines, ruleset selection, validation, scoring, and phase
 advancement; the client owns only authorized presentation and reversible input.

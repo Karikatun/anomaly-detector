@@ -25,6 +25,7 @@ import {
   signalIds,
   signalLabelKeys,
 } from '../catalog'
+import { presentCompletedTender } from '../completed-tender-presenter'
 import { SignalGlyph } from './SignalGlyph'
 import { signalAccent } from './signal-visuals'
 import styles from './CompletedTenderPanel.module.css'
@@ -105,16 +106,8 @@ function AuditGroup({
 
 export function CompletedTenderPanel({ currentUserId, view }: Props) {
   const { t } = useI18n()
-  const winnerIds = new Set(view.winnerPlayerIds ?? [])
-  const winnerNames = view.players
-    .filter((player) => winnerIds.has(player.playerId))
-    .map((player) => player.displayName ?? player.playerId.slice(0, 8))
-  const rankedPlayers = view.players.slice().sort((left, right) =>
-    (view.audit.placementByPlayer[left.playerId] ?? 99)
-    - (view.audit.placementByPlayer[right.playerId] ?? 99),
-  )
-  const currentPlayer = rankedPlayers.find((player) => player.playerId === currentUserId)
-  const otherPlayers = rankedPlayers.filter((player) => player.playerId !== currentPlayer?.playerId)
+  const presentation = presentCompletedTender(view, currentUserId)
+  const { currentPlayer, otherPlayers, rankedPlayers, winnerIds, winnerNames } = presentation
   const [selectedPlayerId, setSelectedPlayerId] = useState(currentPlayer?.playerId ?? 'all')
   const [desktopAudit, setDesktopAudit] = useState(false)
 
@@ -130,23 +123,9 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
   }, [currentPlayer?.playerId])
   const playerName = (playerId: string) =>
     view.players.find((player) => player.playerId === playerId)?.displayName ?? playerId
-  const completionReasonLabel = {
-    standard: translate('tender.completedTenderPanel.copy.019'),
-    all_players_left: translate('tender.completedTenderPanel.copy.020'),
-    last_active_player: translate('tender.completedTenderPanel.copy.021'),
-    all_players_forfeited: translate('tender.completedTenderPanel.copy.022'),
-  }[view.audit.completionReason]
-  const ratingEntries = (playerId: string) => {
-    const breakdown = view.audit.ratingBreakdownByPlayer[playerId]
-    return breakdown
-      ? Object.entries(ratingLabels)
-          .map(([key, label]) => ({
-            label,
-            points: breakdown[key as keyof typeof ratingLabels],
-          }))
-          .filter(({ points }) => points !== 0)
-      : []
-  }
+  const completionReasonLabel = translate(presentation.completionReasonKey)
+  const ratingEntries = (playerId: string) => presentation.ratingEntries(playerId)
+    .map(({ key, points }) => ({ label: ratingLabels[key], points }))
   const renderPlayerModels = (players: typeof rankedPlayers) => (
     <div className={styles.auditPlayerList}>
       {players.map((player) => {
