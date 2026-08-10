@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createPrisma } from '../../db'
 import { createTenderModule } from './index'
+import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 import { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -138,10 +139,13 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     })).toEqual([
       {
         payload: {
-          accessSlots: { 'player-a': 1, 'player-b': 3 },
-          budgetByPlayer: { 'player-a': 0, 'player-b': 2 },
-          sampleCompensationByPlayer: {},
-          timedOutPlayerIds: ['player-b'],
+          data: {
+            accessSlots: { 'player-a': 1, 'player-b': 3 },
+            budgetByPlayer: { 'player-a': 0, 'player-b': 2 },
+            sampleCompensationByPlayer: {},
+            timedOutPlayerIds: ['player-b'],
+          },
+          formatVersion: 1,
         },
       },
     ])
@@ -222,7 +226,10 @@ maybeDescribe('Tender PostgreSQL integration', () => {
         actorId: 'player-a',
         commandId: 'command-a-1',
         kind: 'access_slot_requested',
-        payload: { playerId: 'player-a', slot: 1 },
+        payload: {
+          data: { playerId: 'player-a', slot: 1 },
+          formatVersion: 1,
+        },
         sequence: 1,
       },
     ])
@@ -250,6 +257,90 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       playerId: 'player-a',
       tenderId,
     })).rejects.toMatchObject({ name: 'ZodError' })
+  })
+
+  test('decodes known legacy audit events through the Prisma store boundary', async () => {
+    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await module.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    await prisma.tenderAuditEvent.create({
+      data: {
+        kind: 'access_slots_resolved',
+        payload: { accessSlots: { 'player-a': 1, 'player-b': 2 } },
+        sequence: 1,
+        tenderId,
+      },
+    })
+
+    await expect(createPrismaTenderStore(prisma).readAuditEvents(tenderId)).resolves.toEqual([{
+      formatVersion: 0,
+      kind: 'access_slots_resolved',
+      payload: { accessSlots: { 'player-a': 1, 'player-b': 2 } },
+      sequence: 1,
+    }])
+  })
+
+  test('fails closed for an unsupported persisted audit event version', async () => {
+    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await module.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    await prisma.tenderAuditEvent.create({
+      data: {
+        kind: 'access_slot_requested',
+        payload: {
+          data: { playerId: 'player-a', slot: 1 },
+          formatVersion: 2,
+        },
+        sequence: 1,
+        tenderId,
+      },
+    })
+
+    await expect(createPrismaTenderStore(prisma).readAuditEvents(tenderId))
+      .rejects.toThrow('Unsupported Tender audit event format version 2')
+  })
+
+  test('keeps in-memory and Prisma audit store contracts equivalent', async () => {
+    const inMemoryStore = createInMemoryTenderStore()
+    const prismaStore = createPrismaTenderStore(prisma)
+    const options = {
+      now: () => new Date('2026-07-20T12:00:00.000Z'),
+      seedGenerator: () => 'audit-contract-seed',
+    }
+    const inMemoryModule = createTenderModule({ ...options, store: inMemoryStore })
+    const prismaModule = createTenderModule({ ...options, store: prismaStore })
+    const players = [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ]
+    const inMemoryTender = await inMemoryModule.createTender({ players })
+    const prismaTender = await prismaModule.createTender({ players })
+
+    await inMemoryModule.execute({
+      actorId: 'player-a',
+      commandId: 'access-slot-a',
+      slot: 1,
+      tenderId: inMemoryTender.tenderId,
+      type: 'request-access-slot',
+    })
+    await prismaModule.execute({
+      actorId: 'player-a',
+      commandId: 'access-slot-a',
+      slot: 1,
+      tenderId: prismaTender.tenderId,
+      type: 'request-access-slot',
+    })
+
+    expect(await prismaStore.readAuditEvents(prismaTender.tenderId))
+      .toEqual(await inMemoryStore.readAuditEvents(inMemoryTender.tenderId))
   })
 
   test('persists an anonymised participant name without changing other players', async () => {
@@ -285,8 +376,11 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     expect(auditEvents).toContainEqual({
       actorId: expect.stringMatching(/^deleted-participant-/),
       payload: {
-        playerId: expect.stringMatching(/^deleted-participant-/),
-        slot: 1,
+        data: {
+          playerId: expect.stringMatching(/^deleted-participant-/),
+          slot: 1,
+        },
+        formatVersion: 1,
       },
     })
     const persistedCommands = await prisma.tenderCommand.findMany({
@@ -547,9 +641,12 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     ).toEqual([
       {
         payload: {
-          accessSlots: { 'player-a': 1, 'player-b': 3, 'player-c': 2, 'player-d': 6 },
-          budgetByPlayer: { 'player-a': 0, 'player-b': 2, 'player-c': 1, 'player-d': 3 },
-          sampleCompensationByPlayer: { 'player-d': 'aster' },
+          data: {
+            accessSlots: { 'player-a': 1, 'player-b': 3, 'player-c': 2, 'player-d': 6 },
+            budgetByPlayer: { 'player-a': 0, 'player-b': 2, 'player-c': 1, 'player-d': 3 },
+            sampleCompensationByPlayer: { 'player-d': 'aster' },
+          },
+          formatVersion: 1,
         },
         sequence: 5,
       },

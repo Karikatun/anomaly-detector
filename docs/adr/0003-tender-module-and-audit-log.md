@@ -43,3 +43,32 @@ type TenderStore = {
 `commit` is the only write operation after creation. In one database transaction it checks the expected Tender version, records the command fingerprint and receipt, writes the next current state, and appends audit events. It returns either a committed result, a prior command receipt with its fingerprint, or a version conflict. This keeps retry, idempotency, optimistic concurrency, and audit ordering inside the adapter instead of leaking them to HTTP, WebSocket, worker, or game-rule callers.
 
 PostgreSQL stores one current-state Tender row with indexed `dueAt` and version, command records unique by Tender and `commandId`, and audit events ordered by an increasing sequence per Tender. Current state is a structured JSONB write model for the evolving rules; the audit log remains append-only and is not used to reconstruct normal reads.
+
+## Audit Event Contract And Compatibility
+
+The Tender application owns the discriminated union of audit event kinds and
+payloads. Raw audit events are not public API contracts: producers compile
+against the application-owned union, and both in-memory and PostgreSQL adapters
+validate the event before accepting a commit.
+
+New persisted payloads use this JSON envelope:
+
+```json
+{
+  "formatVersion": 1,
+  "data": {}
+}
+```
+
+The adapter validates the envelope, event kind, and matching payload when it
+reads an event. An unsupported version or an invalid current payload fails
+closed with a diagnostic error instead of silently omitting audit information.
+Rows written before the envelope was introduced remain readable through one
+explicit legacy decoder. They are marked as format version `0` in the internal
+stored-event model, so compatibility logic stays at the persistence boundary
+rather than spreading fallback parsing through projectors.
+
+Adding or changing an event requires updating the application union, its
+projector classification, producer tests, and the in-memory/PostgreSQL store
+contract tests. Existing versions remain immutable; a future incompatible
+format gets a new version and a deliberate decoder or upcaster.

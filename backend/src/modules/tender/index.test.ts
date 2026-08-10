@@ -1,12 +1,15 @@
 import { expect, test } from 'bun:test'
-import type { TenderAuditEvent } from '@anomaly-detector/contracts'
 
 import { createTenderModule } from './index'
 import { createParticipantAuditRounds } from './application/audit-view'
+import { decodeTenderAuditEvent } from './application/tender-audit-event'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
+const legacyAuditEvents = (events: Parameters<typeof decodeTenderAuditEvent>[0][]) =>
+  events.map(decodeTenderAuditEvent)
+
 test('keeps consecutive all-timeout rounds separate in the participant audit', () => {
-  const events = [
+  const events = legacyAuditEvents([
     {
       actorId: 'player-a',
       kind: 'access_slot_requested',
@@ -28,7 +31,7 @@ test('keeps consecutive all-timeout rounds separate in the participant audit', (
       payload: { accessSlots: { 'player-a': 3 }, timedOutPlayerIds: ['player-a'] },
       sequence: 4,
     },
-  ] satisfies TenderAuditEvent[]
+  ])
 
   const rounds = createParticipantAuditRounds({
     players: [{ id: 'player-a', tiePriority: 1 }],
@@ -52,13 +55,13 @@ test('projects automatic operational skips with player-facing reasons into the a
     privateThesesByPlayer: {},
     publicScientificJournal: [],
     round: 1,
-  } as never, [
+  } as never, legacyAuditEvents([
     {
       kind: 'operational_action_auto_skipped',
       payload: { phase: 'laboratory', playerId: 'player-a', reason: 'all_pairs_researched' },
       sequence: 1,
     },
-  ])
+  ]))
 
   expect(rounds[0]?.laboratory).toEqual([{
     mode: 'impulse',
@@ -89,7 +92,7 @@ test('projects round priority and complete Contract evidence into the participan
     publicFinalContract: {},
     publicScientificJournal: [journalEntry],
     round: 2,
-  } as never, [
+  } as never, legacyAuditEvents([
     {
       kind: 'access_slots_resolved',
       payload: { accessSlots: { 'player-a': 1, 'player-b': 2 } },
@@ -133,7 +136,7 @@ test('projects round priority and complete Contract evidence into the participan
       payload: { accessSlots: { 'player-a': 2, 'player-b': 1 } },
       sequence: 5,
     },
-  ])
+  ]))
 
   expect(rounds[0]).toMatchObject({
     contracts: [{

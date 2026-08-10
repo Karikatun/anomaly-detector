@@ -356,14 +356,6 @@ export const anomalyConfigurationSchema = z.object({
   }).strict()),
 }).strict()
 
-export const tenderAuditEventSchema = z.object({
-  actorId: playerIdSchema.optional(),
-  commandId: commandIdSchema.optional(),
-  kind: z.string().min(1),
-  payload: z.record(z.string(), z.unknown()),
-  sequence: z.number().int().min(1),
-}).strict()
-
 export const ratingBreakdownSchema = z.object({
   completeModelBonus: z.number().int().min(0),
   contractPoints: z.number().int().min(0),
@@ -570,7 +562,6 @@ export type PublicLaboratoryResult = z.infer<typeof publicLaboratoryResultSchema
 export type ScientificJournalEntry = z.infer<typeof scientificJournalEntrySchema>
 export type PublicThesis = z.infer<typeof publicThesisSchema>
 export type PrivateThesis = z.infer<typeof privateThesisSchema>
-export type TenderAuditEvent = z.infer<typeof tenderAuditEventSchema>
 export type TenderAuditRound = z.infer<typeof tenderAuditRoundSchema>
 export type RatingBreakdown = z.infer<typeof ratingBreakdownSchema>
 export type TenderAuditView = z.infer<typeof tenderAuditViewSchema>

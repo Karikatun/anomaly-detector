@@ -5,6 +5,10 @@ import type {
   StoredTender,
   StoredTenderAuditEvent,
 } from '../application/tender-store'
+import {
+  decodeTenderAuditEvent,
+  encodeTenderAuditEventPayload,
+} from '../application/tender-audit-event'
 import { anonymizeParticipantInValue } from '../domain/participant-anonymization'
 
 const cloneTender = (tender: StoredTender) => structuredClone(tender)
@@ -73,8 +77,9 @@ export function createInMemoryTenderStore(): TenderStore {
       const currentEvents = auditEvents.get(change.tenderId) ?? []
       auditEvents.set(change.tenderId, [
         ...currentEvents,
-        ...change.auditEvents.map((event, index) => ({
+        ...change.auditEvents.map((event, index) => decodeTenderAuditEvent({
           ...event,
+          payload: encodeTenderAuditEventPayload(event),
           sequence: currentEvents.length + index + 1,
         })),
       ])
