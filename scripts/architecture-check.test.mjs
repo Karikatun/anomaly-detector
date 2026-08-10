@@ -35,6 +35,7 @@ describe('backend layers', () => {
     expect(violations.map((item) => item.rule)).toEqual([
       'backend-domain-dependencies',
       'backend-infrastructure-dependencies',
+      'source-dependency-cycle',
       'backend-transport-dependencies',
     ])
   })
@@ -78,6 +79,52 @@ describe('public module and feature indexes', () => {
     expect(check([
       file('webapp/src/routes.tsx', "const page = import('./features/rooms/public/my-matches')"),
     ])).toEqual([])
+  })
+
+  test('keeps backend module indexes as composition boundaries', () => {
+    expect(check([
+      file('backend/src/modules/tender/index.ts', "import { createService } from './application/service'"),
+    ])).toEqual([])
+
+    expect(check([
+      file('backend/src/modules/tender/index.ts', "import { resolveWinner } from './domain/final-results'"),
+    ])[0]?.rule).toBe('backend-module-index-policy')
+  })
+
+  test('rejects production module internals importing their own public index', () => {
+    const violation = check([
+      file('backend/src/modules/tender/realtime/hub.ts', "import type { TenderModule } from '../index'"),
+    ])[0]
+
+    expect(violation?.rule).toBe('backend-module-self-import')
+  })
+
+  test('requires Profile and Room to read Tender through ports', () => {
+    expect(check([
+      file('backend/src/modules/profile/infrastructure/repository.ts', 'const matches = await db.profile.findMany()'),
+    ])).toEqual([])
+    expect(check([
+      file('backend/src/modules/profile/infrastructure/repository.ts', 'const matches = await db.tender.findMany()'),
+    ])[0]?.rule).toBe('backend-cross-context-persistence')
+  })
+})
+
+describe('production dependency graph', () => {
+  test('accepts an acyclic graph', () => {
+    expect(check([
+      file('backend/src/modules/tender/index.ts', "export { route } from './transport/routes'"),
+      file('backend/src/modules/tender/transport/routes.ts', "import type { Port } from '../application/port'"),
+      file('backend/src/modules/tender/application/port.ts', 'export type Port = {}'),
+    ])).toEqual([])
+  })
+
+  test('rejects a new production source cycle', () => {
+    const violations = check([
+      file('backend/src/modules/tender/index.ts', "export { route } from './transport/routes'"),
+      file('backend/src/modules/tender/transport/routes.ts', "import type { Tender } from '../index'"),
+    ])
+
+    expect(violations.some((item) => item.rule === 'source-dependency-cycle')).toBe(true)
   })
 })
 

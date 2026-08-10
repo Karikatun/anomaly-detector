@@ -41,6 +41,8 @@ export function checkArchitectureSources(files) {
     const normalizedPath = normalizePath(file.path)
     const imports = staticImports(file.source)
 
+    checkCrossContextPersistence(normalizedPath, file.source, violations)
+
     for (const imported of imports) {
       const report = (rule, message) => {
         violations.push({
@@ -52,15 +54,44 @@ export function checkArchitectureSources(files) {
       }
 
       checkBackendLayers(normalizedPath, imported.specifier, report)
+      checkBackendModuleIndex(normalizedPath, imported.specifier, report)
       checkBackendModuleBoundary(normalizedPath, imported.specifier, report)
       checkClientBoundary(normalizedPath, imported.specifier, report)
       checkContracts(normalizedPath, imported.specifier, report)
     }
   }
 
+  violations.push(...findSourceCycleViolations(files))
+
   return violations.sort((left, right) =>
     left.path.localeCompare(right.path) || left.line - right.line || left.rule.localeCompare(right.rule),
   )
+}
+
+function checkBackendModuleIndex(filePath, specifier, report) {
+  const moduleName = filePath.match(/^backend\/src\/modules\/([^/]+)\/index\.[cm]?[jt]s$/)?.[1]
+  if (moduleName !== 'tender') return
+  const target = resolveRepositoryImport(filePath, specifier)
+  if (target?.startsWith(`backend/src/modules/${moduleName}/domain/`)) {
+    report(
+      'backend-module-index-policy',
+      `module ${moduleName} index is a facade/composition boundary and must not import domain policy (${specifier}).`,
+    )
+  }
+}
+
+function checkCrossContextPersistence(filePath, source, violations) {
+  if (isTestSource(filePath)) return
+  const sourceModule = filePath.match(/^backend\/src\/modules\/([^/]+)\//)?.[1]
+  if (sourceModule !== 'profile' && sourceModule !== 'room') return
+  const match = /\b(?:db|prisma|tx)\.(?:tender|tenderAuditEvent)\b/.exec(source)
+  if (!match) return
+  violations.push({
+    path: filePath,
+    line: source.slice(0, match.index).split('\n').length,
+    rule: 'backend-cross-context-persistence',
+    message: `module ${sourceModule} must read Tender through an application port, not its Prisma models.`,
+  })
 }
 
 async function main() {
@@ -144,7 +175,20 @@ function checkBackendModuleBoundary(filePath, specifier, report) {
   const sourceModule = filePath.match(/^backend\/src\/modules\/([^/]+)\//)?.[1]
   const target = resolveRepositoryImport(filePath, specifier)
   const match = target?.match(/^backend\/src\/modules\/([^/]+)(?:\/(.*))?$/)
-  if (!match || match[1] === sourceModule) return
+  if (!match) return
+
+  const importsOwnIndex = match[1] === sourceModule
+    && (!match[2] || match[2] === 'index' || match[2] === 'index.ts')
+    && !/\/index\.[cm]?[jt]s$/.test(filePath)
+    && !isTestSource(filePath)
+  if (importsOwnIndex) {
+    report(
+      'backend-module-self-import',
+      `module ${sourceModule} internals must use application/domain ports instead of their public index (${specifier}).`,
+    )
+  }
+
+  if (match[1] === sourceModule) return
 
   if (match[2] && match[2] !== 'index' && match[2] !== 'index.ts') {
     const boundaryMessage = sourceModule
@@ -155,6 +199,73 @@ function checkBackendModuleBoundary(filePath, specifier, report) {
       `${boundaryMessage} through its public index (${specifier}).`,
     )
   }
+}
+
+function findSourceCycleViolations(files) {
+  const productionFiles = files
+    .map((file) => ({ ...file, path: normalizePath(file.path) }))
+    .filter((file) =>
+      sourceExtension.test(file.path)
+      && !isTestSource(file.path)
+      && !file.path.includes('/generated/'),
+    )
+  const paths = new Set(productionFiles.map((file) => file.path))
+  const graph = new Map(productionFiles.map((file) => [
+    file.path,
+    staticImports(file.source).flatMap((imported) => {
+      const target = resolveSourceFile(file.path, imported.specifier, paths)
+      return target ? [{ line: imported.line, target }] : []
+    }),
+  ]))
+  const state = new Map()
+  const stack = []
+  const reported = new Set()
+  const violations = []
+
+  const visit = (node) => {
+    state.set(node, 'visiting')
+    stack.push(node)
+    for (const edge of graph.get(node) ?? []) {
+      if (!state.has(edge.target)) {
+        visit(edge.target)
+        continue
+      }
+      if (state.get(edge.target) !== 'visiting') continue
+      const cycleStart = stack.indexOf(edge.target)
+      const cycle = [...stack.slice(cycleStart), edge.target]
+      const key = [...new Set(cycle)].sort().join('|')
+      if (reported.has(key)) continue
+      reported.add(key)
+      violations.push({
+        path: node,
+        line: edge.line,
+        rule: 'source-dependency-cycle',
+        message: `production source dependency cycle: ${cycle.join(' -> ')}.`,
+      })
+    }
+    stack.pop()
+    state.set(node, 'visited')
+  }
+
+  for (const file of productionFiles) {
+    if (!state.has(file.path)) visit(file.path)
+  }
+  return violations
+}
+
+function resolveSourceFile(importer, specifier, paths) {
+  const target = resolveRepositoryImport(importer, specifier)
+  if (!target) return null
+  const candidates = [
+    target,
+    ...['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts'].map((extension) => `${target}${extension}`),
+    ...['index.ts', 'index.tsx', 'index.js', 'index.jsx'].map((indexFile) => `${target}/${indexFile}`),
+  ]
+  return candidates.find((candidate) => paths.has(candidate)) ?? null
+}
+
+function isTestSource(filePath) {
+  return /(?:^|\/)[^/]+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(filePath)
 }
 
 function checkClientBoundary(filePath, specifier, report) {

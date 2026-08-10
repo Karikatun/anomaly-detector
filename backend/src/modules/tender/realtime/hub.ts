@@ -1,6 +1,6 @@
 import type { RealtimeServerMessage } from '@anomaly-detector/contracts'
 
-import type { createTenderModule } from '../index'
+import type { TenderModule } from '../application/tender-module'
 
 export type RealtimeSocket = {
   send(message: string): void
@@ -9,8 +9,6 @@ export type RealtimeSocket = {
 export type RealtimeSubscription = {
   close(): Promise<void>
 }
-
-type TenderModule = ReturnType<typeof createTenderModule>
 
 type Subscription = {
   playerId: string

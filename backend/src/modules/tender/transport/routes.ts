@@ -12,7 +12,7 @@ import { z } from 'zod'
 import { AppError, validationErrorHook } from '../../../http/errors'
 import type { RequestBudget } from '../../../security/request-budget'
 import type { AuthHttpEnv } from '../../auth'
-import type { createTenderModule } from '../index'
+import type { TenderModule } from '../application/tender-module'
 import { executeTender, executeTenderRead } from './errors'
 
 const tenderParamsSchema = z.object({ tenderId: tenderResourceIdSchema })
@@ -45,8 +45,6 @@ const executeTenderCommandRoute = createRoute({
     429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Tender command rate limited' },
   },
 })
-
-type TenderModule = ReturnType<typeof createTenderModule>
 
 export function createTenderRoutes(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>

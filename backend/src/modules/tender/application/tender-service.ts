@@ -15,6 +15,7 @@ import {
   createFinalScientificModelAuditByPlayer,
   createRatingBreakdownByPlayer,
 } from './final-audit'
+import type { TenderModule } from './tender-module'
 import type {
   PendingTenderAuditEvent,
   StoredTender,
@@ -71,7 +72,7 @@ export function createTenderService({
   seedGenerator,
   store,
   onTenderChanged,
-}: CreateTenderServiceOptions) {
+}: CreateTenderServiceOptions): TenderModule {
   const readTender = async (tenderId: string) => {
     const tender = await store.read(tenderId)
     if (!tender) throw new TenderFailure('tender_not_found', `Unknown Tender ${tenderId}`)

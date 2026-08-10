@@ -56,6 +56,12 @@ timing, scoring and winner resolution), while participant/audit/read-model
 projection lives in application projection modules. Policy tests import neither
 Prisma, Hono nor realtime code.
 
+Production source dependencies must remain acyclic. Transport and realtime
+depend on the application-owned `TenderModule` port, never on their context's
+public index. `bun run architecture:check` builds the production import graph
+(excluding tests and generated clients), rejects cycles and Tender self-imports,
+and prevents Profile/Room from reading Tender Prisma models directly.
+
 Routes stay thin and translate HTTP into application calls and application failures into the stable API error shape. Do not put business rules into Hono handlers, UI clients, or child components.
 
 ## Runtime Shape And Real-Time
