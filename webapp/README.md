@@ -55,7 +55,7 @@ built bundle stops using the old URL.
 
 ## Deployment
 
-Production deployment builds `webapp/dist` with the concrete public API origins and publishes it through the Yandex Cloud static-site path with `index.html` as the SPA fallback. Start with the shared [release entrypoint](../docs/DEPLOYMENT.md) and follow [the Yandex Cloud runbook](../docs/YANDEX_CLOUD.md). The legacy DigitalOcean generator is documented separately in [DIGITALOCEAN.md](../docs/DIGITALOCEAN.md) and is used only for an explicitly requested alternative deployment.
+Production deployment builds `webapp/dist` with the concrete public API origins and publishes it through the Yandex Cloud static-site path with `index.html` as the SPA fallback. Start with the shared [release entrypoint](../docs/DEPLOYMENT.md) and follow [the Yandex Cloud runbook](../docs/YANDEX_CLOUD.md).
 
 ## Practice
 

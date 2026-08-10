@@ -3,8 +3,6 @@
 Use this document only after the user has explicitly requested deployment or a
 cloud-resource change. The current production provider is Yandex Cloud; the
 provider-specific procedure is in [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
-[DIGITALOCEAN.md](DIGITALOCEAN.md) is a maintained alternative runbook and is not
-the default production path.
 
 ## Release Scope
 
@@ -87,8 +85,7 @@ because Docker reports it as unused.
 
 ## Provider Runbooks
 
-- Current production: [Yandex Cloud](YANDEX_CLOUD.md)
-- Explicit alternative: [DigitalOcean](DIGITALOCEAN.md)
+- Production: [Yandex Cloud](YANDEX_CLOUD.md)
 - Persistent objects and media: [Storage](STORAGE.md)
 - Local and recovery database procedures: [Local PostgreSQL](LOCAL_DATABASE.md)
 - CI protection: [CI](CI.md)

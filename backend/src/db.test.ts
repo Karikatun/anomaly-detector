@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import { normalizePgConnectionString } from './db'
 
 describe('normalizePgConnectionString', () => {
-  test('adds libpq compatibility for DigitalOcean sslmode=require URLs', () => {
+  test('adds libpq compatibility for managed PostgreSQL sslmode=require URLs', () => {
     const result = normalizePgConnectionString(
       'postgresql://user:pass@db.example.com:25060/defaultdb?sslmode=require',
     )

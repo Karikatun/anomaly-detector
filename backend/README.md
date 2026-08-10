@@ -61,11 +61,11 @@ Keep an explicit username and password in Prisma connection URLs even on local n
 
 When enabling Yandex ID or VK ID, set both provider credentials and `OAUTH_CALLBACK_BASE_URL` to the public API origin, for example `https://api.example.com`. The server derives the provider callback as `/api/auth/oauth/<provider>/callback`; it never accepts a callback URL from the browser. The post-login `webappOrigin` must exactly match an origin in `CORS_ORIGINS`.
 
-Auth writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind a trusted proxy, set `TRUST_PROXY=true` together with the provider's authoritative `TRUSTED_PROXY_CLIENT_IP_HEADER`; use `TRUSTED_PROXY_CLIENT_IP_POSITION=last` only when the provider appends the client to a comma-separated chain. DigitalOcean App Platform uses `do-connecting-ip`; the documented Yandex Application Load Balancer path uses the first `X-Forwarded-For` value. Before horizontally scaling, keep shared PostgreSQL auth buckets and add an edge/WAF layer for request-rate protection.
+Auth writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind the documented Yandex Application Load Balancer path, set `TRUST_PROXY=true`, use `x-forwarded-for` as `TRUSTED_PROXY_CLIENT_IP_HEADER`, and select the first value. Before horizontally scaling, keep shared PostgreSQL auth buckets and add an edge/WAF layer for request-rate protection.
 
 `REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `maintenance:cleanup` daily to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`; the same task removes expired abuse buckets, unfinished OAuth transactions, one-time realtime tickets, and waiting rooms older than 24 hours. `auth:sessions:cleanup` remains a backwards-compatible alias for the same maintenance task.
 
-DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete Spaces group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
+Yandex Object Storage env is optional. Leave `YANDEX_STORAGE_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
 
 ## Runtime Entrypoints
 
@@ -81,7 +81,7 @@ Primary keys use database-generated UUIDv7 values in PostgreSQL (`@default(dbgen
 
 ## Deployment
 
-Production deployment uses the Yandex Cloud path. Start with the shared [release entrypoint](../docs/DEPLOYMENT.md) and follow [the Yandex Cloud runbook](../docs/YANDEX_CLOUD.md). The legacy DigitalOcean generator remains supported only for an explicitly requested alternative deployment and is documented separately in [DIGITALOCEAN.md](../docs/DIGITALOCEAN.md).
+Production deployment uses Yandex Cloud. Start with the shared [release entrypoint](../docs/DEPLOYMENT.md) and follow [the Yandex Cloud runbook](../docs/YANDEX_CLOUD.md).
 
 ## Auth API
 
@@ -104,9 +104,9 @@ Passwords are hashed through `Bun.password` with Argon2id. Access tokens are sho
 
 ## Architecture
 
-`src/index.ts` only starts the API server. `src/runtime.ts` loads env and creates the Prisma client for API, worker, and cron entrypoints. `src/app.ts` is the composition root. Product contexts live under `src/modules/<context>` and expose only `index.ts` across context boundaries. Auth is the golden path: `transport` owns Hono/HTTP, `application` owns use cases and ports, optional `domain` code stays pure, and `infrastructure` owns Prisma and token/password adapters. Route factories capture dependencies in closures; request context contains only the authenticated principal. Run `bun run architecture:check` to enforce these dependency rules. `src/db.ts` normalizes DigitalOcean Managed PostgreSQL URLs that use `sslmode=require` so the Prisma PostgreSQL adapter uses libpq-compatible TLS handling.
+`src/index.ts` only starts the API server. `src/runtime.ts` loads env and creates the Prisma client for API, worker, and cron entrypoints. `src/app.ts` is the composition root. Product contexts live under `src/modules/<context>` and expose only `index.ts` across context boundaries. Auth is the golden path: `transport` owns Hono/HTTP, `application` owns use cases and ports, optional `domain` code stays pure, and `infrastructure` owns Prisma and token/password adapters. Route factories capture dependencies in closures; request context contains only the authenticated principal. Run `bun run architecture:check` to enforce these dependency rules. `src/db.ts` normalizes managed PostgreSQL URLs that use `sslmode=require` so the Prisma PostgreSQL adapter uses libpq-compatible TLS handling.
 
-The storage service lives in `src/storage` and wraps DigitalOcean Spaces through S3-compatible SDK calls. Product-specific upload routes should validate ownership and permissions, then delegate object key generation, presigned upload/download URLs, public CDN URL construction, and deletion to that service.
+The storage service lives in `src/storage` and wraps Yandex Object Storage through S3-compatible SDK calls. Product-specific upload routes should validate ownership and permissions, then delegate object key generation, presigned upload/download URLs, public CDN URL construction, and deletion to that service.
 
 Prisma migration SQL is not written by hand. Change `prisma/schema.prisma`, then run `bun run prisma:migrate`.
 
@@ -124,5 +124,5 @@ For backend framework, ORM, auth, validation, and runtime questions, consult the
 - [jose documentation](https://github.com/panva/jose)
 - [Docker Compose docs](https://docs.docker.com/compose/)
 - [PostgreSQL Docker Official Image](https://hub.docker.com/_/postgres)
-- [DigitalOcean Spaces docs](https://docs.digitalocean.com/products/spaces/)
-- [DigitalOcean Spaces CDN docs](https://docs.digitalocean.com/products/spaces/how-to/enable-cdn/)
+- [Yandex Object Storage docs](https://yandex.cloud/en/docs/storage/)
+- [Yandex Object Storage S3 API](https://yandex.cloud/en/docs/storage/s3/)

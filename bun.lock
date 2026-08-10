@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "the-game",
-      "devDependencies": {
-        "tldts": "^7.4.9",
-      },
     },
     "adminapp": {
       "name": "@anomaly-detector/adminapp",

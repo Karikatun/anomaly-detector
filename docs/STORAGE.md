@@ -52,21 +52,19 @@ The backend storage layer lives in `backend/src/storage` and owns:
 Product modules own who may perform those operations and store ownership,
 retention, audit, and lifecycle metadata in PostgreSQL when required.
 
-The implementation retains `SPACES_*` environment key names from its original
-S3-compatible adapter. Until a separately migrated provider-neutral contract is
-implemented, use those keys with Yandex values:
+Configure the S3-compatible adapter with Yandex-specific environment keys:
 
 ```bash
-SPACES_REGION=ru-central1
-SPACES_BUCKET=<anomaly-detector-production-bucket>
-SPACES_ENDPOINT=https://storage.yandexcloud.net
-SPACES_CDN_BASE_URL=https://<public-media-domain>
-SPACES_ACCESS_KEY_ID=<service-account-static-key-id>
-SPACES_SECRET_ACCESS_KEY=<service-account-static-secret>
-SPACES_UPLOAD_MAX_BYTES=10485760
-SPACES_UPLOAD_URL_TTL_SECONDS=900
-SPACES_DOWNLOAD_URL_TTL_SECONDS=300
-SPACES_PUBLIC_CACHE_CONTROL="public, max-age=31536000, immutable"
+YANDEX_STORAGE_REGION=ru-central1
+YANDEX_STORAGE_BUCKET=<anomaly-detector-production-bucket>
+YANDEX_STORAGE_ENDPOINT=https://storage.yandexcloud.net
+YANDEX_STORAGE_CDN_BASE_URL=https://<public-media-domain>
+YANDEX_STORAGE_ACCESS_KEY_ID=<service-account-static-key-id>
+YANDEX_STORAGE_SECRET_ACCESS_KEY=<service-account-static-secret>
+YANDEX_STORAGE_UPLOAD_MAX_BYTES=10485760
+YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS=900
+YANDEX_STORAGE_DOWNLOAD_URL_TTL_SECONDS=300
+YANDEX_STORAGE_PUBLIC_CACHE_CONTROL="public, max-age=31536000, immutable"
 ```
 
 Keep values in the protected runtime secret store, never Git, static builds,
@@ -123,17 +121,9 @@ Backups and database rollback do not automatically restore or roll back object
 storage. A release or recovery plan involving object metadata must state how
 database state and objects remain consistent.
 
-## Alternative Provider
-
-DigitalOcean Spaces remains an explicitly requested alternative and uses the same
-S3-compatible boundary. Its deployment details live in
-[DIGITALOCEAN.md](DIGITALOCEAN.md); do not mix provider endpoints, regions, CDN
-behavior, or credentials in one environment.
-
 ## Current Upstream Documentation
 
 - [Yandex Object Storage](https://yandex.cloud/en/docs/storage/)
 - [Yandex Object Storage S3 API](https://yandex.cloud/en/docs/storage/s3/)
 - [Yandex Cloud CDN](https://yandex.cloud/en/docs/cdn/)
 - [Yandex Cloud Marketplace Image Resizer](https://yandex.cloud/en/marketplace/products/yc/image-resizer)
-- [DigitalOcean Spaces](https://docs.digitalocean.com/products/spaces/)
