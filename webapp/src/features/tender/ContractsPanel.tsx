@@ -22,6 +22,7 @@ import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import { signalLabelKeys } from './catalog'
 import styles from './components/PhasePanel.module.css'
+import { ContractRequirements } from './components/ContractRequirements'
 import { SignalGlyph } from './components/SignalGlyph'
 import { contractKindAccents, signalAccent } from './components/signal-visuals'
 
@@ -72,6 +73,7 @@ export function ContractsPanel({
   const hasSubmittedContract = contracts.some((contract) =>
     contract.reservedByPlayerId === playerId && contract.bidOutcome !== undefined,
   )
+  const corporateTrust = players.find((player) => player.playerId === playerId)?.corporateTrust ?? 0
 
   const handleConfirmContract = async (contractId: string, bid: ContractBid, alreadyReserved: boolean) => {
     try {
@@ -186,9 +188,11 @@ export function ContractsPanel({
                 ? 'accepted'
                 : contract.bidOutcome === 'failed'
                   ? 'error'
-                  : reservedByOther || reservedBySelf || (isFinal && !canResolve)
+                  : reservedByOther || reservedBySelf
                     ? 'locked'
-                    : 'available'
+                    : (planning?.eligible ?? contract.eligibleForPlayer)
+                      ? 'ready'
+                      : 'waiting'
 
               return (
                 <article
@@ -218,16 +222,14 @@ export function ContractsPanel({
                   </header>
 
                   <div className={styles.contractFacts}>
-                    <span className={styles.contractFact}>
-                      <Typography as="span" variant="caption">{translate('tender.contractsPanel.copy.007')}</Typography>
-                      <Typography as="span" variant="caption">{t(`tender.result.${contract.requiredPublicResult}`)}</Typography>
-                    </span>
-                    {contract.requiredSecondaryPublicResult && (kind === 'complex' || isFinal) && (
-                      <span className={styles.contractFact}>
-                        <Typography as="span" variant="caption">{translate('tender.contractsPanel.copy.008')}</Typography>
-                        <Typography as="span" variant="caption">{t(`tender.result.${contract.requiredSecondaryPublicResult}`)}</Typography>
-                      </span>
-                    )}
+                    <ContractRequirements
+                      contract={contract}
+                      corporateTrust={corporateTrust}
+                      journal={journal}
+                      playerId={playerId}
+                      round={round}
+                      usedEvidenceTestIds={privateUsedContractEvidenceTestIds}
+                    />
                     <span className={styles.contractFact}>
                       <Typography as="span" variant="caption">{translate('tender.contractsPanel.copy.009')}</Typography>
                       <Typography
@@ -244,7 +246,9 @@ export function ContractsPanel({
                             ? translate('tender.contractsPanel.copy.012', { value1: reservedByName ?? t('tender.player.fallback') })
                             : reservedBySelf
                               ? translate('tender.contractsPanel.copy.013')
-                              : isFinal && !canResolve ? translate('tender.contractsPanel.copy.014') : translate('tender.contractsPanel.copy.015')}
+                              : (planning?.eligible ?? contract.eligibleForPlayer)
+                                ? t('tender.contractPlanning.ready')
+                                : t('tender.contractPlanning.needsPreparation')}
                       </Typography>
                     </span>
                   </div>
@@ -366,6 +370,7 @@ export function ContractsPanel({
                   {!hasSuitableResearch
                     && !reservedByOther
                     && contract.bidOutcome === undefined
+                    && planning === undefined
                     && (!isFinal || canResolve) && (
                     <Typography variant="bodySm" className={styles.noSuitableEvidence}>
                       

@@ -189,7 +189,12 @@ export function createTenderService({
       phase: 'final-scientific-model',
     }
     const round = tender.round + 1
-    const publicContracts = createRoundContracts(round, tender.players.length, tender.anomalyConfiguration.seed)
+    const publicContracts = createRoundContracts(
+      round,
+      tender.players.length,
+      tender.anomalyConfiguration.seed,
+      tender.contractDeckVersion ?? 'legacy-v1',
+    )
     return {
       ...tenderAfterGrant,
       accessSlots: {},
@@ -452,6 +457,7 @@ export function createTenderService({
         corporateTrustByPlayer: Object.fromEntries(parsedInput.data.players.map((player) => [player.id, 0])),
         corporateReviewActive: false,
         corporateReviewByPlayer: {},
+        contractDeckVersion: 'varied-v2',
         certifiedSignalsByPlayer: {},
         contractCompletedByPlayer: {},
         contractPowerRestrictionsByPlayer: {},

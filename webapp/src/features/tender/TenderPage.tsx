@@ -849,6 +849,7 @@ function TenderContent() {
                 <ContractPlanningPanel
                   open={contextModal === 'contracts' && !referenceHelpUrgentlyLocked}
                   onOpenChange={(open) => setOverlayOpen('contracts', open)}
+                  playerId={auth.user?.id}
                   view={tenderView}
                 />
               )}

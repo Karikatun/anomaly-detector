@@ -20,10 +20,14 @@ const renderPanel = (
     certifications = [],
     journal = [],
     privateUsedContractEvidenceTestIds = [],
+    round = 1,
+    corporateTrust = 0,
   }: {
     certifications?: ('aster' | 'boreal')[]
     journal?: ScientificJournalEntry[]
     privateUsedContractEvidenceTestIds?: string[]
+    round?: number
+    corporateTrust?: number
   } = {},
 ) => renderToStaticMarkup(
   <I18nProvider>
@@ -33,9 +37,9 @@ const renderPanel = (
       journal={journal}
       maxPower={1}
       playerId="player-a"
-      players={[{ budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0 }]}
+      players={[{ budget: 2, contractPowerRestriction: 0, corporateTrust, playerId: 'player-a', rating: 0 }]}
       privateUsedContractEvidenceTestIds={privateUsedContractEvidenceTestIds}
-      round={1}
+      round={round}
       onBid={async () => undefined}
       onReserve={async () => undefined}
       onSkip={async () => undefined}
@@ -198,4 +202,40 @@ test('removes every Contract control after the player confirms one Contract', ()
   expect(html).toContain('Контракт выполнен')
   expect(html).not.toContain('aria-label="Подходящее исследование"')
   expect(html).not.toContain('aria-label="Подтвердить контракт')
+})
+
+test('explains the two Final Contract evidence paths and the missing impulse result', () => {
+  const html = renderPanel({
+    ...baseContract,
+    contractId: 'final-contract',
+    eligibleForPlayer: false,
+    kind: 'final',
+    planning: {
+      eligible: false,
+      missingConditions: ['evidence'],
+      requiredPower: 1,
+      suitableEvidenceSelections: [],
+      suitableEvidenceTestIds: [],
+      suitableResearchCertificationSignals: [],
+    },
+    ratingReward: 8,
+    requiredSecondaryPublicResult: 'attenuation',
+  }, {
+    corporateTrust: 2,
+    journal: [{
+      playerId: 'player-a',
+      protocol: 'impulse',
+      publicResult: 'attenuation',
+      receiverSignal: 'boreal',
+      sourceSignal: 'aster',
+      testId: 'final-secondary-impulse',
+    }],
+    round: 5,
+  })
+
+  expect(html).toContain('Один непрерывный опыт')
+  expect(html).toContain('Два импульсных опыта')
+  expect(html).toContain('Выполненные обычные контракты')
+  expect(html).toContain('2/2')
+  expect(html).toContain('Не хватает импульсного опыта: Отражение')
 })

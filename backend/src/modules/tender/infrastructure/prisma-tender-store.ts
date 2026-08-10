@@ -46,6 +46,7 @@ type PersistedTenderState = Pick<
   | 'corporateTrustByPlayer'
   | 'corporateReviewActive'
   | 'corporateReviewByPlayer'
+  | 'contractDeckVersion'
   | 'contractCompletedByPlayer'
   | 'contractPowerRestrictionsByPlayer'
   | 'completionReason'
@@ -96,6 +97,7 @@ const persistedTenderStateSchema = z.object({
   corporateTrustByPlayer: z.record(playerIdSchema, z.number().int().min(0)).optional(),
   corporateReviewActive: z.boolean().optional(),
   corporateReviewByPlayer: playerBooleanRecordSchema.optional(),
+  contractDeckVersion: z.enum(['legacy-v1', 'varied-v2']).optional(),
   certifiedSignalsByPlayer: z.record(playerIdSchema, z.array(signalIdSchema)).optional(),
   contractCompletedByPlayer: playerBooleanRecordSchema.optional(),
   contractPowerRestrictionsByPlayer: z.record(playerIdSchema, z.number().int().min(0).max(1)).optional(),
@@ -139,6 +141,7 @@ const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
   corporateTrustByPlayer: tender.corporateTrustByPlayer,
   corporateReviewActive: tender.corporateReviewActive,
   corporateReviewByPlayer: tender.corporateReviewByPlayer,
+  contractDeckVersion: tender.contractDeckVersion,
   certifiedSignalsByPlayer: tender.certifiedSignalsByPlayer,
   contractCompletedByPlayer: tender.contractCompletedByPlayer,
   contractPowerRestrictionsByPlayer: tender.contractPowerRestrictionsByPlayer,
@@ -200,6 +203,7 @@ const toStoredTender = (record: {
     corporateTrustByPlayer: state.corporateTrustByPlayer ?? Object.fromEntries(state.players.map((player) => [player.id, 0])),
     corporateReviewActive: state.corporateReviewActive ?? false,
     corporateReviewByPlayer: state.corporateReviewByPlayer ?? {},
+    contractDeckVersion: state.contractDeckVersion ?? 'legacy-v1',
     certifiedSignalsByPlayer: state.certifiedSignalsByPlayer ?? {},
     contractCompletedByPlayer: state.contractCompletedByPlayer ?? {},
     contractPowerRestrictionsByPlayer: state.contractPowerRestrictionsByPlayer ?? {},

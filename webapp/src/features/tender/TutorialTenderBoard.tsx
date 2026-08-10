@@ -343,6 +343,7 @@ export function TutorialTenderBoard({
                   contentTestId="tutorial-contracts-dialog"
                   open={contractsOpen}
                   onOpenChange={openContracts}
+                  playerId={view.players[0]?.playerId}
                   triggerTestId="tutorial-contracts-trigger"
                   view={view}
                 />
