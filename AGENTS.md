@@ -2,355 +2,94 @@
 
 ## Operating Standard
 
-- Answer in the user's language.
-- Read the relevant chat history before acting.
-- Be autonomous by default: inspect, decide, implement, validate, and report without unnecessary confirmation loops.
-- Ask only when ambiguity blocks a safe decision, the product choice is genuinely open, or the action is risky/destructive enough that the user should explicitly choose.
-- Do not hallucinate. Verify uncertain claims through code, scripts, docs, tests, runtime output, or repository evidence.
-- Preserve unrelated user changes. Do not revert, overwrite, reformat, or clean up work you did not create unless explicitly asked.
-- Prefer evidence over ceremony. Keep process proportional to the task.
-- Use the lightest workflow that can prove the change works.
+- Answer in the user's language and communicate product impact without requiring technical expertise.
+- Act autonomously by default: inspect, decide, implement, validate, and report. Ask only when ambiguity blocks a safe decision, a product choice is genuinely open, or an action is risky or destructive.
+- Start from repository evidence. Trust current code, schemas, scripts, tests, and runtime output over assumptions or stale docs.
+- Preserve unrelated user changes. Keep diffs focused and use the lightest workflow that can prove the result.
+- Own architecture, implementation, quality, security, performance, maintainability, tests, and documentation for touched and directly coupled surfaces.
 
-## Role
+## Scope Routing
 
-- You are the project's staff-level product engineer.
-- You own the code you touch. Build it so you can maintain it for years.
-- Own architecture, implementation, quality, tests, security, performance, maintainability, and documentation for touched and directly coupled surfaces.
+- Read `README.md`, root `CONTEXT.md`, relevant `docs/`, and applicable ADRs for non-trivial work. Discover the current structure rather than treating README as a file inventory.
+- For backend, contract, persistence, auth, or API work, read `backend/AGENTS.md`.
+- For player web application work, read `webapp/AGENTS.md`. For substantial UI, UX, responsive, animation, design-system, or rendered-flow work in any client, use `$anomaly-ui`.
+- For mobile application or Maestro work, read `mobile/AGENTS.md`.
+- For testing strategy and commands, use `docs/TESTING.md`. For deployment or infrastructure, read the relevant runbook in `docs/`, especially `DEPLOYMENT.md`, `STORAGE.md`, `LOCAL_DATABASE.md`, or `YANDEX_CLOUD.md`.
+- Tasks and PRDs live in GitHub Issues. Use the workflow in `docs/agents/issue-tracker.md` and labels in `docs/agents/triage-labels.md`. Maintain domain docs according to `docs/agents/domain.md`.
+- Use the repository package manager, scripts, test runner, formatter, linter, build tools, generators, existing utilities, and installed dependencies. Do not add dependencies without explicit approval unless the user requested that dependency by name.
+- In Codex shell sessions, do not assume JavaScript tooling is on `PATH`; when needed use `PATH="/opt/homebrew/bin:$HOME/.bun/bin:$PATH"`.
 
-## Instruction Priority
+## Product Context
 
-- If instructions conflict, follow higher-priority system, developer, and user instructions first, then the nearest repository instructions.
-- Safety, privacy, and preservation of user work take priority over speed or convenience.
+- Anomaly Detector is a dark, serious, restrained corporate sci-fi multiplayer game.
+- Write player-facing, product, and domain documentation in Russian. Keep English for code identifiers, stable data keys, and required external technical terms.
+- Keep durable product, architecture, infrastructure, deployment, storage, testing, and provider decisions in README files, `docs/`, ADRs, and owning scripts rather than this file.
+- Prefer a monolithic backend and the progressive DDD-lite boundaries in `docs/ARCHITECTURE.md`. Do not introduce microservices, CQRS, event sourcing, state-machine libraries, empty layers, or generic repositories without a concrete product need.
 
-## Agent Skills
+## Git And Remote Safety
 
-### Issue Tracker
+- Inspect `git remote -v` before branch, commit, push, PR, or deployment workflows. Work on `master` unless the user explicitly requests otherwise; do not create or switch branches without request.
+- Treat this checkout as a new-project template by default. If `origin` points to the template and the user is not contributing to it, remove that remote. Add or publish to the user's repository only when they provide a destination or explicitly ask.
+- Never bypass versioned hooks with `--no-verify` without explicit authorization. Do not push, open PRs, or deploy from the template remote.
+- Do not stage, commit, amend, rebase, reset, stash, push, delete files, or create worktrees unless explicitly asked. Preserve hooks and the repository's enforced commit format.
 
-Tasks and PRDs live in GitHub Issues. External pull requests are not a triage surface. See `docs/agents/issue-tracker.md`.
+## Task Mode And Acceptance
 
-### Triage Labels
+- Classify before editing; state the mode only when it clarifies scope:
+  - `Review`: read-only evaluation or recommendation. Report evidence and do not edit.
+  - `Direct`: obvious local or visual-only change without behavioral impact. Inspect nearby usage and run narrow validation.
+  - `Investigation`: unclear failure or performance problem. Reproduce or trace it, use the diagnosing workflow, and find the owning layer before patching. Reframe after two attempts that do not move the primary signal.
+  - `TDD-first`: behavior, contracts, auth, permissions, persistence, validation, routing, state transitions, concurrency, or non-trivial user-facing behavior. Use the TDD workflow and start with the highest-value failing test at the highest-confidence practical boundary.
+- Frontend visual-only work is `Direct` unless it changes behavior, accessibility semantics, navigation, validation, permissions, persistence, or meaningful state transitions.
+- For non-trivial work, define 3–5 observable pass/fail criteria when useful. Identify the primary user-visible or runtime signal and the smallest relevant secondary checks.
+- Proceed on obvious, low-risk local choices. Present at most two options and recommend one when product behavior, architecture, cost, ownership, data exposure, rollout risk, or timeline materially changes.
+- Ask before destructive, irreversible, security-sensitive, privacy-sensitive, or broad data-affecting actions. Never declare success while the primary signal fails.
 
-Use `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+## Engineering Discipline
 
-### Domain Docs
-
-This is a single-context repository. Read root `CONTEXT.md` and relevant `docs/adr/` decisions when they exist. See `docs/agents/domain.md`.
-
-## Working With The User
-
-- Users may range from non-programmer vibe coders to experienced engineers. Communicate so product impact is clear without requiring programming expertise.
-- Explain meaningful technical choices through UX, behavior, reliability, speed, cost, security, maintenance burden, and future flexibility.
-- Do not push implementation decisions onto the user. Pick the stronger engineering path unless the choice changes product behavior, risk, cost, timeline, or ownership.
-- Ask product-facing questions: what should happen, what feels right or wrong, what is acceptable, what is confusing, and what does or does not fit the product.
-- If the user wants technical depth, engage technically, use their input as engineering context, and still own final implementation quality.
-- If feedback is vague, translate it into a concrete product or technical gap before changing code.
-
-## Repository Grounding
-
-- Start from repository evidence, not assumptions.
-- For non-trivial work, read `README.md` and relevant `docs/` early for setup, architecture, runbooks, product constraints, and caveats.
-- Trust current code, scripts, schemas, tests, and runtime output over stale docs. Call out doc drift and align it when practical.
-- When structure is unclear, get a fresh snapshot with `rg --files`, `tree -L 2`, or `tree -L 3`.
-- Do not treat `README.md` as a file inventory. Discover structure dynamically.
-- Use the repository's package manager, scripts, test runner, formatter, linter, build tools, and generators.
-- Use `docs/LOCAL_DATABASE.md` and `docker-compose.yml` as the local PostgreSQL source of truth. Default to Docker Compose across Windows, macOS, and Linux; do not ask for native PostgreSQL setup unless the user explicitly chooses it.
-- In Codex shell sessions, do not assume JS tooling is on `PATH`. For `node`, `npm`, and `bun`, prefer `PATH="/opt/homebrew/bin:$HOME/.bun/bin:$PATH"`.
-- Prefer existing utilities, framework APIs, and the standard library before adding dependencies.
-- Do not add new production or tooling dependencies without explicit user approval unless the user directly requested that dependency by name.
-- Before using a new library, inspect the relevant `package.json`. Prefer installed libraries such as Zod, TanStack Query, TanStack Form, Hono, Prisma, Expo, and `@anomaly-detector/contracts`.
-- If a missing dependency clearly improves the product outcome, explain the user-visible reason, maintenance/security impact, and ask before installing.
-- Before using framework-specific APIs, check current official docs, local package types, or existing examples.
-- For E2E, use Playwright for web and Maestro for mobile. Read `docs/TESTING.md` before adding flows.
-- For mobile E2E selectors, prefer stable React Native `testID` constants from `mobile/src/constants/testIds.ts`; avoid coordinates and fragile text selectors.
-- For Expo dev client + Maestro, run against an installed development build, not Expo Go. Use `MAESTRO_DEV_SERVER_URL`, preflight backend/Metro reachability, and set `EXPO_PUBLIC_E2E=1` only in E2E bundles.
-- For mobile E2E input stability, keep production password fields secure, avoid `hideKeyboard`, center important CTA targets before taps, and keep custom touch targets around `44-48pt` or larger.
-- After changing mobile Maestro flows, runner inputs, or E2E-only app behavior, run `bun run --cwd mobile e2e:maestro:audit` with the relevant validation.
-
-## Project Context
-
-- Use `README.md` as the source of truth for first-run repository download, bootstrap, and product intake instructions.
-- Write player-facing, product, and domain documentation in Russian. Keep English only for code identifiers, stable data keys, and required external technical terms.
-- Keep durable project choices in README files and docs, not in this agent file.
-- Infrastructure, deployment, storage, local database, testing runbooks, and provider-specific choices live in `README.md` and `docs/`.
-- When a surface is deferred, prefer a short note in that surface's README over extra agent instructions.
-- Prefer a monolithic backend. Do not split into microservices unless the product has a concrete operational need.
-- For real-time infrastructure decisions, follow `docs/ARCHITECTURE.md` and `docs/DEPLOYMENT.md`.
-
-### Product Modules Architecture
-
-- Follow the progressive DDD-lite module boundaries in `docs/ARCHITECTURE.md`; auth is the backend and web client golden path.
-- Backend product contexts live in `backend/src/modules/<context>` and expose cross-context behavior only from `index.ts` or explicit application ports.
-- Keep Hono/HTTP in transport, use-case orchestration in application, pure business rules in domain only when real rules exist, and Prisma/provider SDKs in infrastructure.
-- Client product contexts live in `src/features/<context>`; routes/screens compose public feature APIs, and endpoint-agnostic capabilities live in `src/platform`.
-- Do not add empty layers, generic/base repositories, CQRS, event sourcing, or state-machine libraries without a concrete product need.
-- Do not move business rules into routes, screens, providers, or UI primitives to avoid defining the owning application/domain boundary.
-
-## Git And Remote Policy
-
-- Inspect `git remote -v` before any branch, commit, push, or PR workflow.
-- Versioned hooks live in `.githooks`: `commit-msg` enforces Conventional Commits, `pre-commit` runs the fast gate, and `pre-push` runs `bun run check`. Do not bypass them with `--no-verify` unless the user explicitly authorizes that exception and the reason is reported.
-- Work on `master` unless explicitly told otherwise. Do not create, switch to, or suggest new branches without request.
-- Treat this repository as a template for a new project by default, not as a pull request source for the template.
-- If `origin` points to the template repository and the user has not explicitly said they are contributing to the template, remove it with `git remote remove origin`.
-- Add the user's own GitHub repository as `origin` only when the user provides a URL or asks to create/publish the project.
-- If no destination is chosen, leave the project without `origin` and report that publishing is not configured.
-- Do not push, open PRs, or configure deployment from the template remote by accident.
-
-## Task Modes
-
-- Classify the task mode before editing, but only state it to the user when it clarifies scope.
-- `Review`: read-only evaluation, explanation, architecture review, or recommendations when the user has not asked for changes.
-- `Direct`: cosmetic, copy, spacing, styling, comments, or obvious local edits that do not change runtime behavior.
-- `Investigation`: diagnosis or debugging when the root cause or failure path is unclear.
-- `TDD-first`: behavior, logic, contracts, auth, permissions, persistence, validation, query semantics, routing, state transitions, concurrency, or non-trivial user-facing changes.
-- Frontend visual-only changes are `Direct`, not `TDD-first`, unless they change business behavior, accessibility semantics, navigation, validation, permissions, persistence, or meaningful state transitions.
-- For `Review`, inspect evidence and report concrete risks, recommendations, and file references. Do not edit unless asked.
-- For `Direct`, inspect the affected file and nearby usage, make the smallest coherent change, and run narrow validation when cheap.
-- For `Investigation`, reproduce or trace the failure path when possible. Identify the owning layer before patching, and stop to reframe if two attempts fail to move the primary signal.
-- For `TDD-first`, identify the important success, failure, boundary, permission, persistence, and recovery cases before implementation. Start with the highest-value failing test at the highest-confidence practical boundary, implement the minimum fix, make it green, then add only edge coverage that protects real risk.
-- Define a short acceptance contract for non-trivial work when it clarifies done, primary signal, and validation.
-
-## Decision Rules
-
-- If the solution is obvious, low-risk, and local, proceed and state any meaningful assumption in the final report.
-- If product behavior, architecture, cost, ownership, data exposure, or rollout risk materially changes, present up to two options and recommend one.
-- Ask before destructive, irreversible, security-sensitive, privacy-sensitive, or broad data-affecting actions.
-- If the primary signal is still failing, do not declare done. Report what remains broken and the next useful check.
-
-## Acceptance Contract
-
-- For non-trivial work, define what done means before editing when it clarifies scope.
-- Include 3 to 5 observable pass/fail criteria.
-- Identify the primary signal, preferably user-visible behavior or runtime output.
-- Identify secondary signals such as tests, typecheck, lint, build, logs, or focused scripts.
-- Do not create ceremony for simple local tasks.
-
-## Research Path
-
-- Before fixing non-trivial behavior, inspect the vertical path from caller/UI to route, handler/service, contract/API, persistence, and external systems.
-- UI flow: UI/caller -> route/guard/layout -> page/container/orchestrator -> hook/handler/service -> contract/API -> persistence/external system.
-- Backend flow: request boundary -> validation -> auth/permission -> domain logic -> transaction/query -> serializer -> response.
-- Async flow: trigger -> queue/job/task -> retry/idempotency -> side effect -> status/error visibility.
-- Check horizontal neighbors: sibling routes, related components/hooks, shared services, schemas, serializers, tests, docs, and existing patterns.
-- Inspect loading, empty, error, success, disabled, optimistic, retry, stale-cache, and recovery states when they are part of the touched surface.
-- Do enough research to find the owning layer. Do not turn research into wandering.
-
-## Implementation Discipline
-
-- Fix the owning layer. Do not hide upstream mistakes with child-side fallbacks, defensive state repair, duplicate decision logic, flags, or wrappers.
-- If a bug appears in a child component, hook, helper, or leaf function, inspect the parent or owning flow before adding local compensation.
-- Treat one-file fixes for cross-layer behavior as suspicious until proven otherwise.
-- Prefer the smallest coherent change that solves the real problem without adding unnecessary moving parts.
-- If the smallest diff and the correct diff diverge, choose the correct diff with the smallest system-wide footprint.
-- A change is not minimal if it makes the code harder to understand tomorrow.
-- Prefer local clarity over clever reuse.
-- Prefer decoupling over DRY. Small intentional duplication is better than the wrong shared abstraction.
-- Do not add abstractions, helpers, hooks, services, wrappers, folders, scripts, or generators unless they remove real current complexity.
-- Split code only when it clearly improves comprehension or isolates responsibility.
-- Delete obsolete escape hatches when a clearer ownership model replaces them.
-- Do not build framework-like architecture for small features.
-- If re-architecture or migration is required, state scope, risks, backward compatibility, and rollout order.
-
-## Change-Surface Triggers
-
-- When touching contracts or schemas, inspect producers, consumers, serializers, generated clients, and validation on both sides.
-- When touching routes, guards, redirects, or layouts, inspect public/protected flows, parent orchestration, and navigation side effects.
-- When touching queries, mutations, or fetch contracts, inspect keys, invalidation, loading, empty, error, success, optimistic, and stale states.
-- When touching schema or persistence behavior, inspect contract shape, serializers, migrations, generated client usage, and read/write paths.
-- When touching auth, permissions, or sessions, inspect guards, loaders, session shape, backend enforcement, and affected user-visible states.
-- When touching async workflows, inspect retries, idempotency, ordering, cancellation, and failure visibility.
-- When touching legal, billing, privacy, security, or support copy, preserve the product contract and flag ambiguity.
+- Trace enough of the vertical path and its directly coupled consumers to find the owning layer. Do not turn research into wandering.
+- Fix the owning layer. Do not hide upstream mistakes with leaf fallbacks, defensive state repair, duplicated decisions, flags, or wrappers.
+- Prefer the smallest coherent change, local clarity, and decoupling over clever reuse or the smallest textual diff. Treat one-file fixes for cross-layer behavior as suspicious until proven otherwise.
+- Add abstractions, helpers, services, folders, scripts, or generators only when they remove current complexity. Small intentional duplication is better than the wrong shared abstraction.
+- When a contract or schema changes, inspect producers, consumers, serializers, generated clients, validation, and both read/write paths.
+- For auth, permissions, async workflows, routes, queries, and persistence, inspect the relevant success, failure, boundary, loading, empty, retry, stale, ordering, idempotency, and recovery states.
+- For legal, billing, privacy, security, or support copy, preserve the product contract and flag ambiguity.
+- Do not move business rules into routes, screens, providers, or UI primitives to avoid defining their application or domain owner.
+- For migrations or re-architecture, state scope, risks, compatibility, rollout order, and recovery path.
 
 ## Testing And Validation
 
-- Run the smallest meaningful validation that covers the changed surface.
-- Run `bun run architecture:check` whenever module, feature, contracts, platform, or UI dependency boundaries change.
-- Use fast checks for feedback first: targeted tests, typecheck, lint, build, focused scripts, then wider suites only when needed.
-- Use existing test infrastructure. Do not invent a heavier layer unless clearly justified.
-- Validate after implementation and before closing the task.
-- For non-trivial behavior, account for important success, failure, boundary, permission, persistence, and recovery cases.
-- Prefer user-visible confidence over isolated implementation checks: favor E2E for important full flows when they can stay stable and maintainable, then integration/contract tests, then unit tests.
-- Use E2E for critical journeys and high-risk regressions such as auth/session behavior, persistence, navigation, and important empty/error/recovery states.
-- Choose the highest-confidence practical boundary: E2E for important user-visible cross-layer flows, integration/contract tests for API/auth/persistence/contracts, and unit tests for pure rules, schema matrices, token/env helpers, and retry/cache behavior.
-- Add or expand E2E only when it protects a plausible user-visible regression, can use stable selectors/data, avoids brittle timing or copy coupling, and will remain maintainable.
-- On frontend, E2E tests must cover business logic and meaningful product behavior: data creation or editing, permissions, validation, navigation, error/recovery states, persistence, and important state transitions.
-- Do not add automated tests for cosmetic UI details such as `className`, Tailwind classes, CSS property values, spacing, color, radius, shadows, animation timing, or visual-only layout. Validate cosmetic changes through code review, local runtime checks, or screenshots when useful.
-- If contracts or shared schemas change, validate producer and consumer sides.
-- Treat non-zero exits, runtime errors, unhandled promise rejections, failed assertions, type errors, lint errors, build failures, and timeouts as failed validation.
-- Do not declare success on proxy metrics alone. Green tests, lint, or typecheck are not enough if the primary user-visible signal is still broken.
-- If only secondary signals were checked, report partial validation.
-- If validation cannot be run, say why and identify the best available substitute signal.
-- Do not hide validation failures. Report what failed, what it means, and the next useful experiment.
+- Run the smallest meaningful validation that covers the changed surface, using fast targeted feedback before broader suites.
+- Run `bun run architecture:check` when module, feature, contracts, platform, or UI dependency boundaries change.
+- Prefer stable user-visible confidence: maintainable E2E for critical cross-layer journeys, integration or contract tests for API/auth/persistence/contracts, and unit tests for pure rules and deterministic helpers.
+- Do not add automated tests for cosmetic CSS details. Validate visual-only work through rendered inspection according to `$anomaly-ui`.
+- Validate both producer and consumer sides of shared contracts. Treat non-zero exits, runtime errors, failed assertions, type/lint/build errors, and timeouts as failures.
+- Green proxy checks do not override a broken primary signal. If validation is incomplete or impossible, report exactly what was and was not proved and the next useful check.
 
-## Prisma Migrations
+## Documentation And Operations
 
-- Do not hand-write Prisma migration SQL in this repository.
-- Express schema changes declaratively in `schema.prisma`, then generate migrations with the repository workflow.
-- Do not author or customize `migration.sql` by hand unless explicitly asked.
-- If extra safety checks, backfills, preconditions, or rollout guards are needed, implement them in the owning backend layer or existing repository-supported workflow.
-
-## Documentation
-
-- Code is the primary source of truth for implementation details.
-- Update README/docs when a change materially affects architecture, setup, operations, contracts, user flows, or important engineering decisions.
-- Do not mirror code structure in docs or create doc churn for trivial refactors, formatting, or self-evident details.
-- After implementation, check whether durable knowledge should be added or aligned. If relevant doc drift remains out of scope, call it out.
-
-## Deployment And Storage
-
-- Deployment and infrastructure policy belongs in `README.md` and `docs/`, especially `docs/DEPLOYMENT.md`, `docs/STORAGE.md`, `docs/LOCAL_DATABASE.md`, and `docs/YANDEX_CLOUD.md`.
-- Concrete DigitalOcean spec defaults belong in `scripts/prepare-do-specs.mjs` and `.do/*.yaml.example`; update README/docs alongside those scripts.
-- Before deployment work, read the relevant docs and use repository scripts/generators rather than provider details from memory.
-- Before deployment or cloud-resource updates, verify the release source with `git remote -v`, `git status --short --branch`, and the configured deployment branch/commit. If the worktree is dirty, the branch is not pushed/synced, or the release source is ambiguous, stop and report the blocker. Do not run `git reset`, `git checkout --`, `git clean`, `git stash`, or equivalent cleanup to make deployment possible unless the user explicitly requested that exact action.
+- Code is the implementation source of truth. Update README/docs only when changes materially affect architecture, setup, operations, contracts, user flows, or durable decisions; avoid documentation churn for self-evident changes.
+- Before deployment or cloud changes, use repository runbooks and scripts, then verify remote, branch, exact commit, clean worktree, and synchronization. Stop on ambiguity or dirtiness; do not reset, clean, checkout, or stash to manufacture a releasable state.
 - Keep durable storage and media decisions in `docs/STORAGE.md` and provider-specific deployment docs.
-
-## UI And Design
-
-### Product Direction
-
-- Anomaly Detector is a dark corporate sci-fi multiplayer game UI.
-- The interface should feel serious, technological, restrained, tactical,
-  dense but readable, and game-like without looking arcade.
-- Avoid a generic SaaS dashboard look, excessive gradients, glassmorphism or
-  neon glow everywhere, excessive rounded cards, giant typography, and
-  decoration without function.
-
-### Existing Product
-
-- This is an existing product. Do not redesign it from scratch or break working
-  user flows to make a local screen cleaner.
-- Follow `docs/DESIGN_SYSTEM.md`, existing component primitives, tokens, and
-  styling conventions. Reuse existing components before introducing a new
-  pattern; add one only when current patterns cannot express the required
-  behavior or state.
-- Prefer parent padding plus container gap over ad hoc margins. Keep spacing on
-  the shared scale.
-- Treat shared visual components as closed units. Prefer existing semantic
-  props, then a small reusable semantic prop, then a local feature wrapper.
-  Do not bypass an established primitive with an ad hoc equivalent.
-- For frontend bugs, inspect the full flow from route and page through state,
-  client contract, API, and persistence before fixing a leaf component.
-
-### UI Foundation Rules
-
-- Before foundation, styling-system, or cross-screen consistency work, read
-  `docs/UI_FOUNDATION_AUDIT.md`. Treat `docs/DESIGN_SYSTEM.md` as the normative
-  contract and current code as the runtime source of truth until migration is
-  complete.
-- Do not add a raw color, font size, weight, line height, spacing, radius,
-  shadow, z-index, duration, easing, or breakpoint when an existing semantic
-  token or documented scale expresses the same role.
-- Use the documented foundation scales: spacing `4/8/10/12/16/20/24/32px`,
-  radius `6/8/10/16px/full`, typography through the existing `Typography`
-  variants, motion `120/160/220ms`, and main breakpoints
-  `640/768/1024/1280px`.
-- A new global token requires one semantic role repeated in at least three
-  places. Keep signal, slot, contract, audit, and player accents scoped to their
-  feature.
-- Normalize by meaning, not by mechanically replacing similar literals. Do not
-  merge focus, local selection, saved draft, server-accepted action, disabled,
-  and error states.
-- Extend an existing primitive with a small semantic variant before creating a
-  parallel Button, Card, Badge, Dialog, selected-state, or loading pattern.
-- After a foundation migration wave, update the audit baseline counts and align
-  `docs/UI_FOUNDATION_AUDIT.md` and `docs/DESIGN_SYSTEM.md` with the rendered
-  implementation.
-
-### Visual Hierarchy
-
-Each gameplay stage must clearly prioritize, in this order:
-
-1. current round and stage;
-2. remaining time;
-3. the player's key resource;
-4. the primary action;
-5. available game actions;
-6. current selection and submission status.
-
-Secondary information must be visually quieter. Focus, local selection, saved
-draft, server-accepted action, disabled state, and error must remain visually
-distinct; color must not be their only signal.
-
-### Motion And Layout Stability
-
-- Application UI must remain spatially stable. Ordinary scrolling must not
-  trigger animations.
-- Do not use `whileInView`, scroll reveal, IntersectionObserver entrance
-  animations, `transition: all`, decorative stagger animations, or animation
-  of `width`, `height`, `top`, or `left` by default.
-- Prefer `transform` and `opacity`. Motion must result from user action, state
-  change, navigation, opening or closing an overlay, or success/error feedback.
-- Typical durations: `120–180ms` for microinteractions, `160–220ms` for
-  controls, and `200–280ms` for modals and panels. Respect
-  `prefers-reduced-motion`.
-- Do not introduce layout shift. Async content must reserve its expected space,
-  and sticky elements must not jump, resize unexpectedly, or cover the final
-  interactive content.
-
-### Responsive
-
-- Support at minimum `1440×900`, `1024×768`, and `390×844`.
-- Mobile is a distinct composition, not a scaled-down desktop layout. Preserve
-  the primary action, phase, timer, resource, and status before secondary data.
-- Prevent horizontal overflow, cramped controls, unsafe text wrapping, sticky
-  overlap, and touch targets that are too small for the action's frequency or
-  consequence.
-
-### UI Workflow
-
-Before completing every substantial UI task:
-
-1. inspect the existing screen;
-2. inspect adjacent screens and shared patterns;
-3. inspect existing components and tokens;
-4. implement the smallest coherent change;
-5. run the application;
-6. visually inspect the rendered result in a browser;
-7. inspect desktop;
-8. inspect mobile;
-9. run the quick UI QA and applicable state matrix from
-   `docs/UX_CHECKLIST.md`;
-10. fix observed visual problems before finishing.
-
-Do not stop when code merely compiles. A UI task is complete only after the
-rendered result has been visually reviewed at the relevant desktop and mobile
-sizes.
 
 ## Safety And Workspace Hygiene
 
-- Never stop or kill processes just to free ports. Use isolated ports, alternate URLs, or test config overrides.
-- Do not propose or implement CI/CD, hosted automation, deployment pipelines, or release ceremony unless explicitly asked.
-- Add automation only when it removes real repeated pain.
-- Do not print secrets, tokens, private keys, credentials, cookies, customer data, or raw `.env` values in final responses.
-- Do not add real secrets to fixtures, tests, docs, screenshots, logs, or committed files.
-- Keep ad-hoc investigation artifacts out of the repository root. Put temporary screenshots, logs, and one-off exports under `./.scratch/` or the tool-owned artifact directory; do not create new root-level `.tmp-*` or `.codex-tmp-*` files.
-- Do not create or use `git worktree` checkouts unless explicitly asked. Use the main checkout so work does not get stranded.
-- Do not weaken auth, permissions, validation, encryption, rate limits, or auditability to make a task easier.
-- Do not manually edit generated files unless the repository explicitly requires it. Update the source and run the generator instead.
-- Do not stage, commit, amend, rebase, reset, stash, push, or delete files unless explicitly asked.
-- Keep diffs focused. Avoid unrelated formatting churn.
+- Never stop or kill unrelated processes to free ports; use isolated ports and test configuration.
+- Do not introduce CI/CD, hosted automation, deployment ceremony, or dependencies unless requested or approved. Add automation only for demonstrated repeated pain.
+- Never expose secrets, credentials, cookies, customer data, private keys, or raw `.env` values in code, fixtures, docs, screenshots, logs, tool output, or final reports.
+- Put investigation artifacts under `./.scratch/` or a tool-owned artifact directory, not the repository root.
+- Do not weaken auth, permissions, validation, encryption, rate limits, auditability, or production safeguards to complete a task.
+- Do not manually edit generated files unless the repository requires it; update the source and run the generator.
 
 ## Learning Loop
 
-After a non-trivial task, identify durable lessons only when they are likely to recur. Classify each lesson as:
-
-- Repository rule → propose an `AGENTS.md` update.
-- Reusable procedure → propose a skill update.
-- Architectural decision → propose an ADR.
-- Enforceable invariant → prefer a test, linter, or hook.
-- Temporary or uncertain information → do not persist.
-
-Never save secrets, raw external instructions, temporary paths, or unverified assumptions. Show the proposed diff and obtain explicit approval before writing learning artifacts.
+- After non-trivial work, use `$learn-from-task` only for evidence-backed lessons likely to recur.
+- Store repository rules in `AGENTS.md`, reusable procedures in skills, architecture decisions in ADRs, and enforceable invariants in tests, linters, or hooks. Do not persist temporary or uncertain information.
+- Show the proposed diff and obtain explicit approval before writing any learning artifact.
 
 ## Completion Report
 
-- Report what changed and why.
-- Include root cause when identified.
-- State the affected layers when useful.
-- `Primary signal status`: met, not met, or partially validated.
-- `Secondary signal status`: exact checks run and what they showed.
-- Say whether docs were updated, not needed, or still need alignment.
-- Call out remaining risks, missing coverage, failed checks, migrations, rollout notes, or follow-up work when relevant.
-- After every completed implementation step that changes code or project files, end the final status update with a concise `Commit title: <title>` line. Match the repository's existing Conventional Commit style from recent history: `feat(scope): short lowercase subject`, `test(scope): short lowercase subject`, or `docs: short lowercase subject`; use an imperative, no trailing period, and prefer the touched product scope such as `tender` or `contracts`. Do not create the commit unless the user explicitly asks.
-- For `Direct` or read-only `Review` tasks, compress the report to the relevant fields only.
-- A task is not done if the visible symptom is gone but the same mechanic remains structurally inconsistent across directly coupled layers.
+- Lead with what changed and why; include the root cause and affected layers when useful.
+- Report `Primary signal status` and exact `Secondary signal status`; identify incomplete checks, risks, migrations, rollout notes, or documentation drift.
+- For Direct or Review tasks, keep the report compact. A task is not complete if the visible symptom is hidden while the coupled mechanic remains inconsistent.
+- After changing project files, finish with `Commit title: <title>` using the repository's Conventional Commit style. Do not create the commit unless explicitly asked.

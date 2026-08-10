@@ -1,0 +1,4 @@
+interface:
+  display_name: "Anomaly UI"
+  short_description: "Build and validate Anomaly Detector interfaces"
+  default_prompt: "Use $anomaly-ui to implement and visually validate this Anomaly Detector UI change."
