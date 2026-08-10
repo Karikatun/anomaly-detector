@@ -182,6 +182,13 @@ export function ContractsPanel({
                 '--contract-accent': contractKindAccents[kind],
                 ...(target ? { '--signal-accent': signalAccent(target) } : {}),
               } as CSSProperties
+              const contractStatusState = contract.bidOutcome === 'awarded'
+                ? 'accepted'
+                : contract.bidOutcome === 'failed'
+                  ? 'error'
+                  : reservedByOther || reservedBySelf || (isFinal && !canResolve)
+                    ? 'locked'
+                    : 'available'
 
               return (
                 <article
@@ -223,7 +230,12 @@ export function ContractsPanel({
                     )}
                     <span className={styles.contractFact}>
                       <Typography as="span" variant="caption">{translate('tender.contractsPanel.copy.009')}</Typography>
-                      <Typography as="span" variant="caption">
+                      <Typography
+                        as="span"
+                        variant="caption"
+                        className={styles.contractStatus}
+                        data-state={contractStatusState}
+                      >
                         {contract.bidOutcome === 'awarded'
                           ? translate('tender.contractsPanel.copy.010')
                           : contract.bidOutcome === 'failed'

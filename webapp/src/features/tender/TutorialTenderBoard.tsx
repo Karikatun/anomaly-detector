@@ -43,6 +43,7 @@ const phaseLabelKeys: Record<TenderView['phase'], TranslationKey> = {
 const sequentialPhases = new Set<TenderView['phase']>(['reconnaissance', 'laboratory', 'contracts'])
 
 export function TutorialTenderBoard({
+  actionPanelPinned,
   commandError,
   highlight,
   interpretationRequired,
@@ -61,6 +62,7 @@ export function TutorialTenderBoard({
   onSaveWorkingModel,
   view,
 }: {
+  actionPanelPinned: boolean
   commandError: string | null
   highlight: 'contracts' | 'header' | 'help' | 'interpretation' | 'none' | 'primary' | 'research' | 'sidebar' | 'working-model'
   interpretationRequired: boolean
@@ -136,6 +138,7 @@ export function TutorialTenderBoard({
     <section
       className={`${styles.page} ${tutorialStyles.board} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}
       aria-label={t('tutorial.title')}
+      data-tutorial-action-pinned={actionPanelPinned || undefined}
       data-tutorial-board
       data-tutorial-highlight={highlight}
       data-tutorial-phase={view.phase}
@@ -159,8 +162,8 @@ export function TutorialTenderBoard({
             {myPlayer?.accessSlot && (
               <Badge variant="outline">{t('tender.header.slot', { slot: myPlayer.accessSlot })}</Badge>
             )}
-            {view.phase === 'access-slot-selection' && (
-              <Badge variant="outline">{t('tender.header.budget', { budget: myPlayer?.budget ?? 0 })}</Badge>
+            {view.phase !== 'complete' && (
+              <Badge variant="warning">{t('tender.header.budget', { budget: myPlayer?.budget ?? 0 })}</Badge>
             )}
             {isSequentialPhase && (
               <Badge variant={isMyTurn ? 'default' : 'outline'}>
@@ -189,7 +192,7 @@ export function TutorialTenderBoard({
         )}
         actions={(
           <>
-          <Badge variant="outline" className={`${styles.connectionBadge} text-emerald-400`}>
+          <Badge variant="success" className={styles.connectionBadge}>
             {t('tender.realtime.live')}
           </Badge>
           <Dialog open={helpMenuOpen} onOpenChange={openHelp}>

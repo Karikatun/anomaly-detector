@@ -16,15 +16,16 @@
 @media (max-width: 47.999rem) {
   .directInterpretation { display: none; }
   .board { padding-bottom: calc(100dvh + 1rem) !important; }
-  .board > header { position: relative; top: auto; }
   .board [data-tutorial-primary] { margin-top: 1rem; }
   .board[data-tutorial-phase='final-scientific-model'] footer:has([data-tutorial-final-submit]) {
     z-index: 101;
   }
-  .board:not([data-tutorial-phase='final-scientific-model']) [data-tutorial-action-container]:has([data-tutorial-confirm-ready='true']) {
+  .board[data-tutorial-action-pinned]:not([data-tutorial-phase='final-scientific-model']) [data-tutorial-action-container] {
     position: fixed;
-    z-index: 101;
     inset: auto .75rem .75rem;
+  }
+  .board:not([data-tutorial-phase='final-scientific-model']) [data-tutorial-action-container]:has([data-tutorial-confirm-ready='true']) {
+    z-index: 101;
   }
   [data-tutorial-highlight='working-model'] [data-tutorial-working-model-trigger] {
     margin-top: 3rem;

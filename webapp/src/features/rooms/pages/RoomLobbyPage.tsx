@@ -121,7 +121,12 @@ function RoomLobbyContent() {
   )
 
   if (roomQuery.isPending) {
-    return <main className={styles.loading}><Spinner /></main>
+    return (
+      <main className={styles.loading} role="status">
+        <Spinner />
+        <Typography variant="bodySm" tone="muted">{t('lobby.loading')}</Typography>
+      </main>
+    )
   }
 
   if (!currentRoom) {

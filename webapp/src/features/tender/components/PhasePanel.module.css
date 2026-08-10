@@ -1088,6 +1088,36 @@
   color: rgba(194, 214, 227, .46);
 }
 
+.contractStatus {
+  width: fit-content;
+  padding: .16rem .4rem;
+  border: 1px solid var(--border-game);
+  border-radius: var(--radius-full);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  line-height: 1.15;
+}
+
+.contractStatus[data-state='ready'],
+.contractStatus[data-state='accepted'] {
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.contractStatus[data-state='waiting'],
+.contractStatus[data-state='locked'] {
+  border-color: color-mix(in srgb, var(--warning) 42%, transparent);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
+}
+
+.contractStatus[data-state='error'] {
+  border-color: color-mix(in srgb, var(--destructive) 45%, transparent);
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+
 .contractResearch {
   display: grid;
   gap: .4rem;

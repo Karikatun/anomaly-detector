@@ -1,17 +1,17 @@
 .header { display: grid; min-height: 3rem; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 1rem; padding-bottom: 1.75rem; border-bottom: 1px solid rgba(82, 133, 179, .3); }
 .title, .sectionTitle, .statusTitle { color: #edf6ff; font-weight: 500; letter-spacing: -.045em; }
 .title { display: flex; grid-column: 2; align-items: center; font-size: clamp(1.6rem, 2.2vw, 2.45rem); line-height: 1; }
-.roomCode { display: inline-flex; grid-column: 1; align-self: center; justify-self: start; align-items: center; gap: .55rem; padding: .55rem .75rem; border: 1px solid rgba(47, 150, 230, .56); border-radius: 7px; color: #acbed1; background: rgba(0, 17, 34, .58); font-size: .72rem; line-height: 1; letter-spacing: .08em; cursor: pointer; }
+.roomCode { display: inline-flex; grid-column: 1; align-self: center; justify-self: start; align-items: center; gap: .55rem; padding: .55rem .75rem; border: 1px solid rgba(47, 150, 230, .56); border-radius: var(--radius-control); color: #acbed1; background: rgba(0, 17, 34, .58); font-size: .72rem; line-height: 1; letter-spacing: .08em; cursor: pointer; }
 .roomCode:hover { border-color: #31a4f2; background: rgba(8, 47, 80, .75); }
 .roomCode strong { color: #e7f3ff; font-size: .86rem; letter-spacing: .11em; }
 .copyIcon { width: 1rem; height: 1rem; border: 1.5px solid #72bcf0; border-radius: 2px; box-shadow: 3px -3px 0 -1px rgba(0, 15, 30, 1), 3px -3px 0 0 #72bcf0; }
 .copySuccessIcon { width: 1rem; height: 1rem; flex: 0 0 auto; color: #55e69b; filter: drop-shadow(0 0 4px rgba(85, 230, 155, .45)); }
-.exitButton { grid-column: 3; justify-self: end; border: 1px solid rgba(98, 139, 174, .7) !important; border-radius: 6px !important; color: #c6d9eb !important; background: rgba(3, 17, 30, .72) !important; }
+.exitButton { grid-column: 3; justify-self: end; border: 1px solid rgba(98, 139, 174, .7) !important; border-radius: var(--radius-control) !important; color: #c6d9eb !important; background: rgba(3, 17, 30, .72) !important; }
 .exitButton:hover:not(:disabled) { background: rgba(17, 47, 75, .85) !important; }
 .headerSpacer { grid-column: 3; justify-self: end; min-width: 4.4rem; }
 .layout { display: grid; grid-template-columns: minmax(19rem, .78fr) minmax(31rem, 1.22fr); gap: clamp(1rem, 2vw, 1.9rem); padding-top: clamp(1.4rem, 2.4vw, 2.4rem); }
 .leftColumn, .rightColumn { display: grid; min-width: 0; gap: 1rem; align-content: start; }
-.playersPanel, .settingsPanel, .startPanel { border: 1px solid rgba(38, 102, 162, .62); border-radius: 9px; background: linear-gradient(135deg, rgba(2, 17, 33, .94), rgba(2, 10, 20, .83)); }
+.playersPanel, .settingsPanel, .startPanel { border: 1px solid rgba(38, 102, 162, .62); border-radius: var(--radius-panel); background: linear-gradient(135deg, rgba(2, 17, 33, .94), rgba(2, 10, 20, .83)); }
 .playersPanel, .settingsPanel { padding: clamp(1rem, 1.8vw, 1.45rem); }
 .sectionTitle { padding-bottom: .85rem; border-bottom: 1px solid rgba(80, 130, 174, .25); font-size: .95rem; text-transform: uppercase; }
 .playerList { display: grid; }
@@ -26,7 +26,7 @@
 .playerReadiness[data-ready] { color: #71dca3; }
 .playerState { width: .42rem; height: .42rem; border-radius: 50%; background: #70859a; box-shadow: 0 0 7px rgba(112, 133, 154, .35); }
 .playerReadiness[data-ready] .playerState { background: #4be29b; box-shadow: 0 0 9px rgba(75, 226, 155, .75); }
-.readyButton { min-height: 2rem !important; margin-left: auto; padding: .42rem .68rem !important; border: 1px solid rgba(75, 226, 155, .62) !important; border-radius: 5px !important; color: #77e7aa !important; background: rgba(4, 37, 29, .78) !important; font-size: .7rem !important; }
+.readyButton { min-height: 2rem !important; margin-left: auto; padding: .42rem .68rem !important; border: 1px solid rgba(75, 226, 155, .62) !important; border-radius: var(--radius-compact) !important; color: #77e7aa !important; background: rgba(4, 37, 29, .78) !important; font-size: .7rem !important; }
 .readyButton:hover:not(:disabled) { background: rgba(8, 62, 45, .9) !important; }
 .settingsList { display: grid; gap: .8rem; padding-top: .2rem; }
 .settingsList > div { display: flex; justify-content: space-between; gap: 1rem; color: #8ea5bc; font-size: .83rem; }
@@ -40,10 +40,10 @@
 .statusTitle { color: #72e49e; font-size: clamp(.98rem, 1.4vw, 1.18rem); letter-spacing: -.02em; }
 .startPanel[data-state='waiting'] .statusTitle { color: #b7d7ed; }
 .statusHint { color: #91a8bd; font-size: .84rem; line-height: 1.35; }
-.startButton { min-width: 10.5rem; border: 1px solid #4ce397 !important; border-radius: 6px !important; color: #62eaa6 !important; background: rgba(3, 27, 23, .9) !important; box-shadow: inset 0 0 18px rgba(25, 161, 103, .12); }
+.startButton { min-width: 10.5rem; border: 1px solid #4ce397 !important; border-radius: var(--radius-control) !important; color: #62eaa6 !important; background: rgba(3, 27, 23, .9) !important; box-shadow: inset 0 0 18px rgba(25, 161, 103, .12); }
 .startButton:hover:not(:disabled) { background: rgba(8, 57, 43, .96) !important; }
-.startButton:disabled { border-color: rgba(70, 126, 105, .5) !important; color: rgba(112, 171, 144, .55) !important; background: rgba(5, 21, 20, .72) !important; }
-.cancelStartButton { min-width: 10.5rem; border: 1px solid rgba(235, 132, 132, .8) !important; border-radius: 6px !important; color: #ffadad !important; background: rgba(49, 10, 15, .72) !important; }
+.startButton:disabled { border-color: rgba(70, 126, 105, .56) !important; color: rgba(170, 207, 189, .72) !important; background: rgba(5, 21, 20, .72) !important; }
+.cancelStartButton { min-width: 10.5rem; border: 1px solid rgba(235, 132, 132, .8) !important; border-radius: var(--radius-control) !important; color: #ffadad !important; background: rgba(49, 10, 15, .72) !important; }
 .cancelStartButton:hover:not(:disabled) { background: rgba(85, 16, 23, .86) !important; }
 .error { grid-column: 2 / -1; color: #ff98a0; font-size: .78rem; }
 .loading, .errorScreen { display: grid; min-height: 100svh; place-items: center; gap: 1rem; padding: 2rem; background: #010408; text-align: center; }
