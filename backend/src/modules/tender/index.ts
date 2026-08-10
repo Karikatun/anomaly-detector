@@ -45,7 +45,7 @@ export function createPersistentTenderLifecycleReader(db: DbClient) {
   return createTenderLifecycleReader(createPrismaTenderStore(db))
 }
 
-export type TenderModule = ReturnType<typeof createTenderModule>
+export type { TenderModule } from './application/tender-module'
 
 export { createTenderRoutes } from './transport/routes'
 export { createRealtimeTicketRoutes } from './realtime/ticket-routes'
