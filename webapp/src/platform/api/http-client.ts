@@ -35,9 +35,17 @@ export class HttpClient {
     options: HttpRequestOptions = {},
   ): Promise<z.infer<TSchema>> {
     const response = await this.raw(path, options)
-    // 204 No Content — return undefined without parsing
-    if (response.status === 204) return undefined as z.infer<TSchema>
+    if (response.status === 204) {
+      throw new ApiRequestError(response.status, 'INVALID_RESPONSE', 'Expected a JSON response')
+    }
     return schema.parse(await response.json())
+  }
+
+  async requestNoContent(path: string, options: HttpRequestOptions = {}): Promise<void> {
+    const response = await this.raw(path, options)
+    if (response.status !== 204) {
+      throw new ApiRequestError(response.status, 'INVALID_RESPONSE', 'Expected a no-content response')
+    }
   }
 
   async raw(path: string, options: HttpRequestOptions = {}): Promise<Response> {
