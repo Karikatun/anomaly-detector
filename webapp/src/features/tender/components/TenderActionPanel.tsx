@@ -62,7 +62,7 @@ export function PhaseNotice({
     <div
       className={styles.notice}
       role="status"
-      style={{ '--notice-accent': kind === 'waiting' ? '#f4a51c' : '#28bff2' } as CSSProperties}
+      style={{ '--notice-accent': kind === 'waiting' ? 'var(--warning)' : 'var(--primary)' } as CSSProperties}
     >
       <HugeiconsIcon
         icon={kind === 'waiting' ? UserGroupIcon : InformationCircleIcon}

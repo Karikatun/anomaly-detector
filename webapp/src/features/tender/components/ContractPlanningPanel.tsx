@@ -96,7 +96,12 @@ export function ContractPlanningPanel({
                 <Typography as="span" variant="caption">
                   {t('tender.contractPlanning.status')}
                 </Typography>
-                <Typography as="span" variant="caption">
+                <Typography
+                  as="span"
+                  variant="caption"
+                  className={phaseStyles.contractStatus}
+                  data-state={planning?.eligible ? 'ready' : 'waiting'}
+                >
                   {planning?.eligible
                     ? t('tender.contractPlanning.ready')
                     : t('tender.contractPlanning.needsPreparation')}

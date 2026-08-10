@@ -12,7 +12,7 @@
   z-index: 1;
   width: min(42rem, 100%);
 }
-.stateLoading { display: flex; min-height: 6rem; align-items: center; justify-content: center; }
+.stateLoading { display: flex; min-height: 6rem; align-items: center; justify-content: center; gap: var(--space-3); }
 .stateContent, .completeContent { display: grid; gap: 1rem; }
 .completeActions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .saveError { display: grid; gap: .75rem; padding: .9rem; border: 1px solid rgba(248, 113, 113, .5); border-radius: .6rem; }
@@ -91,15 +91,8 @@
     height: auto !important;
   }
 
-  :global(body:has([data-tutorial-confirm-ready='true']) [data-testid='floater']) {
-    inset: auto .75rem 6.75rem !important;
-  }
-
-  :global(body:has(
-    [data-tutorial-step='round-1-power'],
-    [data-tutorial-step='round-2-power']
-  ):has([data-tutorial-confirm-ready='true']) [data-testid='floater']) {
-    inset: auto .75rem 8.75rem !important;
+  :global(body:has([data-tutorial-action-pinned]) [data-testid='floater']) {
+    inset: auto .75rem calc(var(--tutorial-mobile-action-height, 5rem) + 1.5rem) !important;
   }
 
   :global(body:has([data-tutorial-confirm-ready='true'])) .confirmAction {

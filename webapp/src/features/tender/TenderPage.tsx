@@ -528,8 +528,11 @@ function TenderContent() {
 
   if (error && !tenderView) {
     return (
-      <section className="mx-auto grid min-h-dvh w-full max-w-6xl content-center gap-6 px-5 py-16">
-        <Typography variant="h4" tone="destructive">{t(realtimeErrorKeys[error])}</Typography>
+      <section className="mx-auto grid min-h-dvh w-full max-w-6xl justify-items-center content-center gap-6 px-5 py-16 text-center">
+        <Typography variant="h4" tone="destructive" role="alert">{t(realtimeErrorKeys[error])}</Typography>
+        <Button type="button" variant="outline" onClick={retry}>
+          {t('tender.reconnectOverlay.copy.005')}
+        </Button>
       </section>
     )
   }
@@ -613,8 +616,8 @@ function TenderContent() {
         meta={(
           <>
           {mySlot && <Badge variant="outline">{translate('tender.header.slot', { slot: mySlot })}</Badge>}
-          {isAccessSlotSelection && (
-            <Badge variant="outline">{translate('tender.header.budget', { budget: myPlayer?.budget ?? 0 })}</Badge>
+          {!isComplete && (
+            <Badge variant="warning">{translate('tender.header.budget', { budget: myPlayer?.budget ?? 0 })}</Badge>
           )}
           {isSequentialPhase && (
             <Badge variant={isMyTurn ? 'default' : 'outline'}>
@@ -642,9 +645,9 @@ function TenderContent() {
         actions={(
           <>
           {connected ? (
-            <Badge variant="outline" className={`${styles.connectionBadge} text-emerald-400`}>{t('tender.realtime.live')}</Badge>
+            <Badge variant="success" className={styles.connectionBadge}>{t('tender.realtime.live')}</Badge>
           ) : (
-            <Badge variant="outline" className={`${styles.connectionBadge} text-amber-400`}>{t('tender.realtime.reconnecting')}</Badge>
+            <Badge variant="warning" className={styles.connectionBadge}>{t('tender.realtime.reconnecting')}</Badge>
           )}
           <Dialog
             open={helpMenuOpen && !referenceHelpLocked}

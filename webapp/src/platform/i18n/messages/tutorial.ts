@@ -14,6 +14,7 @@ export const tutorialMessages = {
   'tutorial.blocked.description': 'Обучение недоступно во время настоящего матча.',
   'tutorial.blocked.return': 'Вернуться в матч',
   'tutorial.loadError': 'Не удалось проверить доступность обучения. Повторите попытку.',
+  'tutorial.loading': 'Загружаем обучение…',
   'tutorial.retry': 'Повторить',
   'tutorial.prologue.title': 'Добро пожаловать на исследовательскую станцию',
   'tutorial.prologue.description': 'Рядом со станцией обнаружили неизвестную аномалию. Корпорация объявила Тендер: учёным предстоит выяснить, как она устроена.',

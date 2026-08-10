@@ -111,10 +111,17 @@ async function completeInitialInterfaceTour(page: Parameters<typeof registerBrow
   await expect(page.getByRole('button', { name: 'Контракты этого раунда · 2' })).toBeVisible()
   await expectTutorialFrameFullyVisible(page, '[data-tutorial-contracts]')
   if (isMobile) await expectTargetClearOfCoach(page, '[data-testid="tutorial-contracts-trigger"]')
+  const stepThreeScrollY = isMobile ? await page.evaluate(() => window.scrollY) : 0
   await continueInformationStep(page, isMobile ? tasks.contractsMobile : tasks.contracts)
   if (isMobile) {
-    await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-intro]')
+    await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-slot="1"]')
+    await expect.poll(async () => stepThreeScrollY - await page.evaluate(() => window.scrollY), {
+      message: 'step 4 must scroll upward from Contracts to the access-slot choices',
+    }).toBeGreaterThan(100)
+  } else {
+    await expectTutorialFrameFullyVisible(page, '[data-tutorial-access-options]')
   }
+  await expectSpotlightMatchesTarget(page, '[data-tutorial-access-options]')
   await continueInformationStep(page, tasks.accessIntro)
   await expect(page.locator('[data-tutorial-access-slot][data-selected]')).toHaveCount(0)
   await expect(page.getByText('Слот: 5', { exact: true })).toHaveCount(0)
@@ -158,6 +165,48 @@ async function expectTargetClearOfCoach(
   }, {
     message: 'tutorial coach must not cover the highlighted target',
   }).toBe(true)
+}
+
+async function expectActionContainerClearOfCoach(
+  page: Parameters<typeof registerBrowserUser>[0],
+) {
+  if ((page.viewportSize()?.width ?? 0) > 600) return
+  await expect.poll(async () => {
+    const [actionBox, coachBox] = await Promise.all([
+      page.locator('[data-tutorial-action-container]').boundingBox(),
+      page.getByTestId('floater').locator('[data-joyride-step]').boundingBox(),
+    ])
+    if (!actionBox || !coachBox) return false
+    return coachBox.y + coachBox.height + 8 <= actionBox.y
+  }, {
+    message: 'tutorial coach must not cover the phase action container',
+  }).toBe(true)
+}
+
+async function expectMobileHeaderControlAvailable(
+  page: Parameters<typeof registerBrowserUser>[0],
+  selector: string,
+) {
+  const header = page.locator('[aria-label="УЧЕБНЫЙ ТЕНДЕР"] > header')
+  const control = page.locator(selector)
+  await expect.poll(async () => {
+    const [headerBox, controlBox] = await Promise.all([header.boundingBox(), control.boundingBox()])
+    const viewport = page.viewportSize()
+    if (!headerBox || !controlBox || !viewport) return false
+    return headerBox.y >= -8
+      && headerBox.y + headerBox.height <= viewport.height
+      && controlBox.y >= 0
+      && controlBox.y + controlBox.height <= viewport.height
+  }, {
+    message: 'the mobile tutorial header and its highlighted control must be fully visible',
+  }).toBe(true)
+  await expectSpotlightMatchesTarget(page, selector)
+  const receivesPointer = await control.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    return hit === element || element.contains(hit)
+  })
+  expect(receivesPointer, 'the highlighted mobile header control must receive pointer input').toBe(true)
 }
 
 function currentTask(page: Parameters<typeof registerBrowserUser>[0], task: string) {
@@ -435,6 +484,21 @@ async function expectSpotlightMatchesTarget(
   }).toBeLessThanOrEqual(1)
 }
 
+async function expectMobileTargetTopAligned(
+  page: Parameters<typeof registerBrowserUser>[0],
+  selector: string,
+) {
+  await expect.poll(async () => page.evaluate((targetSelector) => {
+    const target = document.querySelector<HTMLElement>(targetSelector)
+    const header = document.querySelector<HTMLElement>('[data-tutorial-board] > header')
+    if (!target || !header) return Number.POSITIVE_INFINITY
+    const safeTop = Math.max(12, header.getBoundingClientRect().bottom + 20)
+    return Math.abs(target.getBoundingClientRect().top - safeTop)
+  }, selector), {
+    message: `tutorial must align the top of ${selector} below the mobile header`,
+  }).toBeLessThanOrEqual(2)
+}
+
 async function captureVisibleSpotlightMismatchDuringStepChange(
   page: Parameters<typeof registerBrowserUser>[0],
   step: string,
@@ -616,6 +680,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await chooseAccessSlot(page, 5)
   await expectCoachWithinViewport(page)
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await expect(page.getByText(/^Бюджет: \d+ M$/)).toBeVisible()
   await page.getByRole('button', { name: 'Увеличить мощность: Разведка' }).click()
   await page.getByRole('button', { name: 'Увеличить мощность: Разведка' }).click()
   await page.getByRole('button', { name: 'Увеличить мощность: Анализ модели' }).click()
@@ -630,6 +695,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await page.getByRole('button', { name: 'Увеличить мощность: Лаборатория' }).click()
   await page.getByRole('button', { name: 'Подтвердить распределение' }).click()
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await expect(page.getByText(/^Бюджет: \d+ M$/)).toBeVisible()
   await expect(currentTask(page, tasks.roundOneRecon)).toBeVisible()
   await expectCoachWithinViewport(page)
 
@@ -765,11 +831,13 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await completeInitialInterfaceTour(page)
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-slot="5"]')
   await chooseAccessSlot(page, 5)
+  await expectMobileTargetTopAligned(page, '[data-tutorial-primary]')
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expectTargetInMobileInteractiveArea(
     page,
     '[data-tutorial-power-category="reconnaissance"]',
   )
+  await expectSpotlightMatchesTarget(page, '[data-tutorial-power-options]')
   await allocatePower(page, {
     'Разведка': 1,
     'Лаборатория': 2,
@@ -786,6 +854,7 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     page,
     '[data-tutorial-lab-sample="aster"]',
   )
+  await expectSpotlightMatchesTarget(page, '[data-tutorial-lab-pair]')
   const spotlightTransition = await captureVisibleSpotlightMismatchDuringStepChange(
     page,
     'research-results',
@@ -837,6 +906,7 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     repeatedHelpMenuRequests,
     'the Help target scroll must not restart while the first smooth movement is active',
   ).toEqual([])
+  await expectMobileHeaderControlAvailable(page, '[data-tutorial-help]')
 
   await page.getByRole('button', { name: 'Справка', exact: true }).click()
   const interpretationDialogFrameTransition = await captureVisibleSpotlightMismatchDuringStepChange(
@@ -884,6 +954,9 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await saveHypothesis(page, 'Aster', 'Инерционное')
 
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-thesis]')
+  await expectSpotlightMatchesTarget(page, '[data-tutorial-thesis]')
+  await expectTargetClearOfCoach(page, '[data-tutorial-thesis]')
+  await expectActionContainerClearOfCoach(page)
   await expect(currentTask(page, tasks.roundOneThesis)).toBeVisible()
   await submitThesis(page, 'aster', 'inertial')
   await expectTargetInMobileInteractiveArea(page, '[data-testid="tutorial-research-trigger"]')
@@ -906,6 +979,8 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     page,
     '[data-tutorial-power-category="reconnaissance"]',
   )
+  await expectSpotlightMatchesTarget(page, '[data-tutorial-power-options]')
+  await expectMobileTargetTopAligned(page, '[data-tutorial-power-options]')
   await allocatePower(page, {
     'Разведка': 1,
     'Лаборатория': 1,
@@ -913,11 +988,16 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     'Контракты': 1,
   })
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-recon-anchor]')
+  await expectSpotlightMatchesTarget(page, '[data-tutorial-recon-options]')
+  await expectActionContainerClearOfCoach(page)
   await runReconnaissance(page)
   await expectTargetInMobileInteractiveArea(
     page,
     '[data-tutorial-lab-sample="boreal"]',
   )
+  await expectSpotlightMatchesTarget(page, '[data-tutorial-lab-options]')
+  await expectTargetClearOfCoach(page, '[data-tutorial-lab-sample="boreal"]')
+  await expectActionContainerClearOfCoach(page)
   await runLaboratoryTest(page, 'Boreal', 'Cinder')
 
   await expectTargetInMobileInteractiveArea(
@@ -946,6 +1026,8 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     page,
     '[data-tutorial-thesis] select[aria-label="Сигнал для тезиса"]',
   )
+  await expectSpotlightMatchesTarget(page, '[data-tutorial-thesis]')
+  await expectTargetClearOfCoach(page, '[data-tutorial-thesis]')
   await expect(currentTask(page, tasks.roundTwoThesis)).toBeVisible()
   await submitThesis(page, 'boreal', 'electromagnetic')
 

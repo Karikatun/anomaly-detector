@@ -18,6 +18,7 @@ export const roomsMessages = {
   'rooms.join.error.required': 'Введите код комнаты',
   'rooms.join.error.invalid': 'Комната не найдена или к ней уже нельзя присоединиться',
   'lobby.title': 'Лобби',
+  'lobby.loading': 'Загружаем комнату…',
   'lobby.room.id': 'ID:',
   'lobby.copyId': 'Скопировать ID комнаты',
   'lobby.copied': 'ID скопирован',

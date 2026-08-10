@@ -44,6 +44,7 @@ import {
   loadTutorialSession,
   saveTutorialSession,
 } from './session'
+import { resolveTutorialPresentation } from './tutorial-layout'
 import styles from './TutorialPage.module.css'
 
 const taskKeys: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, TranslationKey> = {
@@ -94,7 +95,8 @@ const mobileTaskKeys: Partial<Record<Exclude<TutorialStep, 'complete' | 'prologu
 
 const orderedSteps = Object.keys(taskKeys) as Array<Exclude<TutorialStep, 'complete' | 'prologue'>>
 const spotlightRevealDelayMs = 140
-const layoutSettleDelayMs = 280
+const positionRetryDelayMs = 120
+const maximumPositionRetries = 8
 const informationalSteps = new Set<TutorialStep>([
   'interaction-guide',
   'round-1-header',
@@ -107,6 +109,19 @@ const informationalSteps = new Set<TutorialStep>([
   'round-1-model-intro',
   'round-2-contracts-intro',
   'final-model-intro',
+])
+const mobileActionPinnedSteps = new Set<TutorialStep>([
+  'round-1-access-intro',
+  'round-1-access',
+  'round-1-power',
+  'round-1-recon',
+  'round-1-lab-pair',
+  'round-1-thesis',
+  'round-2-access',
+  'round-2-power',
+  'round-2-recon',
+  'round-2-lab',
+  'round-2-thesis',
 ])
 
 export function TutorialPage() {
@@ -206,7 +221,10 @@ function TutorialContent() {
   if (currentMatch.isPending) {
     return (
       <TutorialStateCard>
-        <CardContent className={styles.stateLoading}><Spinner /></CardContent>
+        <CardContent className={styles.stateLoading} role="status">
+          <Spinner />
+          <Typography variant="bodySm" tone="muted">{t('tutorial.loading')}</Typography>
+        </CardContent>
       </TutorialStateCard>
     )
   }
@@ -332,7 +350,10 @@ function TutorialContent() {
     'round-1-header': { anchor: '[data-tutorial-highlight="header"] > header' },
     'round-1-sidebar': { anchor: '[data-tutorial-sidebar]' },
     'round-1-contracts': { anchor: '[data-tutorial-contracts]' },
-    'round-1-access-intro': { anchor: '[data-tutorial-access-intro]' },
+    'round-1-access-intro': {
+      anchor: '[data-tutorial-access-slot="1"]',
+      spotlight: '[data-tutorial-access-options]',
+    },
     'round-1-access': {
       anchor: '[data-tutorial-access-slot="5"]',
     },
@@ -419,12 +440,12 @@ function TutorialContent() {
     || state.step === 'round-1-thesis-result-open'
     || state.step === 'round-2-contracts-review-open'
     || state.step === 'interpretation-open'
-  const powerAllocationStep = state.step === 'round-1-power' || state.step === 'round-2-power'
-  const mobileFreeInteractionStep = powerAllocationStep
-    || state.step === 'round-1-lab-pair'
-    || state.step === 'round-2-lab'
-    || state.step === 'round-1-thesis'
-    || state.step === 'round-2-thesis'
+  const presentation = resolveTutorialPresentation({
+    anchor: targetConfig.anchor,
+    compactHeader,
+    spotlight: targetConfig.spotlight,
+    step: state.step,
+  })
   const coachAtTop = (compactHeader && state.step === 'round-1-contracts')
     || readingDialogOpen
     || state.step === 'round-1-working-model'
@@ -468,14 +489,12 @@ function TutorialContent() {
       />
     ),
     data: { tutorialStep: state.step },
-    hideOverlay: compactHeader && mobileFreeInteractionStep,
+    hideOverlay: presentation.hideOverlay,
     placement: 'auto',
     scrollOffset: 20,
-    scrollTarget: targetConfig.anchor,
+    scrollTarget: presentation.positionTarget,
     skipScroll: true,
-    spotlightTarget: compactHeader
-      ? targetConfig.anchor
-      : targetConfig.spotlight ?? targetConfig.anchor,
+    spotlightTarget: presentation.spotlightTarget,
     target: targetConfig.anchor,
   }
 
@@ -483,10 +502,11 @@ function TutorialContent() {
     <>
       {!readingDialogOpen && (
         <TutorialViewportAnchor
-          anchorSelector={targetConfig.anchor}
+          alignTargetStart={presentation.alignTargetStart}
+          anchorSelector={presentation.positionTarget}
           coachAtTop={coachAtTop}
           compactHeader={compactHeader}
-          spotlightSelector={compactHeader ? undefined : targetConfig.spotlight}
+          spotlightSelector={targetConfig.spotlight}
         />
       )}
       {!exitOpen && <Joyride
@@ -530,6 +550,7 @@ function TutorialContent() {
       />}
       <Typography aria-live="polite" variant="srOnly">{t(currentTaskKey)}</Typography>
       <TutorialTenderBoard
+        actionPanelPinned={compactHeader && mobileActionPinnedSteps.has(state.step)}
         commandError={commandError}
         highlight={exitOpen ? 'none' : highlight}
         interpretationRequired={state.step === 'help-menu'
@@ -573,24 +594,30 @@ function TutorialContent() {
 }
 
 function TutorialViewportAnchor({
+  alignTargetStart,
   anchorSelector,
   coachAtTop,
   compactHeader,
   spotlightSelector,
 }: {
+  alignTargetStart: boolean
   anchorSelector: string
   coachAtTop: boolean
   compactHeader: boolean
   spotlightSelector?: string
 }) {
   useLayoutEffect(() => {
+    let actionObserver: ResizeObserver | undefined
     let coachObserver: ResizeObserver | undefined
     let layoutSettleTimer: number | undefined
     let revealSpotlightTimer: number | undefined
     let scrollEndHandler: (() => void) | undefined
     let scrollHandler: (() => void) | undefined
     let autoScrollPending = false
+    let autoScrollObserved = false
+    let lastRequestScrollY: number | undefined
     let lastRequestedScrollTop: number | undefined
+    let positionRetryCount = 0
     const revealSpotlight = () => {
       delete document.documentElement.dataset.tutorialAutoscrolling
     }
@@ -610,10 +637,20 @@ function TutorialViewportAnchor({
         }
         const coach = document.querySelector<HTMLElement>('[data-testid="floater"]')
         const header = document.querySelector<HTMLElement>('[data-tutorial-board] > header')
+        const actionContainer = document.querySelector<HTMLElement>('[data-tutorial-action-container]')
         const coachRect = coach?.getBoundingClientRect()
         const headerRect = header?.getBoundingClientRect()
+        const anchorIsHeader = anchor === header
+        if (compactHeader && actionContainer) {
+          document.documentElement.style.setProperty(
+            '--tutorial-mobile-action-height',
+            `${actionContainer.getBoundingClientRect().height}px`,
+          )
+        }
         const safeTop = compactHeader
-          ? coachAtTop
+          ? anchorIsHeader
+            ? 0
+            : coachAtTop
             ? (coachRect?.bottom ?? 276) + 12
             : Math.max(12, (headerRect?.bottom ?? 100) + 20)
           : 88
@@ -624,9 +661,11 @@ function TutorialViewportAnchor({
         const spotlight = spotlightSelector
           ? document.querySelector<HTMLElement>(spotlightSelector)
           : null
-        const preferredTarget = spotlight && spotlight.getBoundingClientRect().height <= safeHeight
-          ? spotlight
-          : anchor
+        const preferredTarget = alignTargetStart
+          ? spotlight ?? anchor
+          : spotlight && spotlight.getBoundingClientRect().height <= safeHeight
+            ? spotlight
+            : anchor
         const rect = preferredTarget.getBoundingClientRect()
 
         if (compactHeader && coachAtTop && coachRect) {
@@ -635,11 +674,13 @@ function TutorialViewportAnchor({
             `${coachRect.bottom}px`,
           )
         }
-        if (rect.height > safeHeight) {
+        if (!alignTargetStart && rect.height > safeHeight) {
           scheduleSpotlightReveal()
           return
         }
-        const shouldPositionTarget = rect.top < safeTop || rect.bottom > safeBottom
+        const shouldPositionTarget = alignTargetStart
+          ? Math.abs(rect.top - safeTop) > 1
+          : rect.top < safeTop || rect.bottom > safeBottom
         if (shouldPositionTarget) {
           const contentScrollLimit = Math.max(
             0,
@@ -652,26 +693,37 @@ function TutorialViewportAnchor({
           )
           const repeatsLastTarget = lastRequestedScrollTop !== undefined
             && Math.abs(lastRequestedScrollTop - targetScrollTop) < 1
-          const autoScrollInProgress = 'tutorialAutoscrolling' in document.documentElement.dataset
+          const madeProgress = lastRequestScrollY !== undefined
+            && Math.abs(window.scrollY - targetScrollTop) + 1
+              < Math.abs(lastRequestScrollY - targetScrollTop)
           if (repeatsLastTarget
-            && (autoScrollInProgress || Math.abs(window.scrollY - targetScrollTop) < 1)) return
+            && ((autoScrollObserved && madeProgress)
+              || Math.abs(window.scrollY - targetScrollTop) < 1)) return
           lastRequestedScrollTop = targetScrollTop
+          lastRequestScrollY = window.scrollY
           if (compactHeader) {
             document.documentElement.dataset.tutorialAutoscrolling = ''
             scheduleSpotlightReveal()
           }
           autoScrollPending = true
+          autoScrollObserved = false
           window.scrollTo({
-            behavior: 'instant',
+            behavior: 'auto',
             top: targetScrollTop,
           })
+          if (compactHeader && positionRetryCount < maximumPositionRetries) {
+            if (layoutSettleTimer !== undefined) window.clearTimeout(layoutSettleTimer)
+            layoutSettleTimer = window.setTimeout(() => {
+              positionRetryCount += 1
+              positionTarget()
+            }, positionRetryDelayMs)
+          }
         } else if ('tutorialAutoscrolling' in document.documentElement.dataset) {
+          positionRetryCount = 0
           scheduleSpotlightReveal()
         }
       }
 
-      positionTarget()
-      layoutSettleTimer = window.setTimeout(positionTarget, layoutSettleDelayMs)
       scrollEndHandler = () => {
         if (!autoScrollPending) return
         autoScrollPending = false
@@ -681,6 +733,7 @@ function TutorialViewportAnchor({
       window.addEventListener('scrollend', scrollEndHandler)
       scrollHandler = () => {
         if ('tutorialAutoscrolling' in document.documentElement.dataset) {
+          autoScrollObserved = true
           scheduleSpotlightReveal()
         }
       }
@@ -690,6 +743,16 @@ function TutorialViewportAnchor({
         coachObserver = new ResizeObserver(positionTarget)
         coachObserver.observe(coach)
       }
+      const actionContainer = document.querySelector<HTMLElement>('[data-tutorial-action-container]')
+      if (actionContainer) {
+        actionObserver = new ResizeObserver(positionTarget)
+        actionObserver.observe(actionContainer)
+      }
+      positionTarget()
+      if (compactHeader) {
+        if (layoutSettleTimer !== undefined) window.clearTimeout(layoutSettleTimer)
+        layoutSettleTimer = window.setTimeout(positionTarget, positionRetryDelayMs)
+      }
     })
 
     return () => {
@@ -698,11 +761,13 @@ function TutorialViewportAnchor({
       if (revealSpotlightTimer !== undefined) window.clearTimeout(revealSpotlightTimer)
       if (scrollEndHandler) window.removeEventListener('scrollend', scrollEndHandler)
       if (scrollHandler) window.removeEventListener('scroll', scrollHandler)
+      actionObserver?.disconnect()
       coachObserver?.disconnect()
       revealSpotlight()
       document.documentElement.style.removeProperty('--tutorial-mobile-coach-bottom')
+      document.documentElement.style.removeProperty('--tutorial-mobile-action-height')
     }
-  }, [anchorSelector, coachAtTop, compactHeader, spotlightSelector])
+  }, [alignTargetStart, anchorSelector, coachAtTop, compactHeader, spotlightSelector])
 
   return null
 }
