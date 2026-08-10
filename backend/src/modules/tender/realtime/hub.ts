@@ -97,16 +97,23 @@ export function createRealtimeHub({ onTenderChanged, tender }: RealtimeHubOption
       onTenderChanged?.(tenderId)
     },
     syncActiveTenders,
-    startSyncLoop(intervalMs: number = 1_000): () => void {
-      let syncing = false
-      const timer = setInterval(() => {
-        if (syncing) return
-        syncing = true
-        void syncActiveTenders()
+    startSyncLoop(intervalMs: number = 1_000): () => Promise<void> {
+      let currentRun: Promise<void> | undefined
+      let stopped = false
+      const tick = () => {
+        if (stopped || currentRun) return
+        currentRun = syncActiveTenders()
           .catch((error) => console.error('Realtime Tender sync failed:', error))
-          .finally(() => { syncing = false })
-      }, intervalMs)
-      return () => clearInterval(timer)
+          .finally(() => { currentRun = undefined })
+      }
+      const timer = setInterval(tick, intervalMs)
+      return async () => {
+        if (!stopped) {
+          stopped = true
+          clearInterval(timer)
+        }
+        await currentRun
+      }
     },
   }
 }
