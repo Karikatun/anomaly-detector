@@ -62,6 +62,13 @@ import {
 import {
   getTenderCommandErrorKey,
 } from './tender-command-feedback'
+import {
+  createExclusiveActionGate,
+  sequentialTurnKey,
+  shouldFocusSequentialTurn,
+  shouldResumeTender,
+  visibleCommandError,
+} from './tender-page-controller'
 import styles from './TenderPage.module.css'
 import type { WorkingModelSaveStatus } from './working-model-draft'
 import { tenderRulesetPolicy } from './ruleset-policy'
@@ -370,7 +377,7 @@ function TenderContent() {
   const [contextModal, setContextModal] = useState<'research' | 'working-model' | 'contracts' | null>(null)
   const [overlayPhase, setOverlayPhase] = useState<string | null>(null)
   const [workingModelSaveError, setWorkingModelSaveError] = useState<string | null>(null)
-  const commandInFlightRef = useRef<{ promise: Promise<void>; token: symbol } | null>(null)
+  const commandGateRef = useRef(createExclusiveActionGate())
   const headerRef = useRef<HTMLElement>(null)
   const primaryContentRef = useRef<HTMLDivElement>(null)
   const latestTenderViewRef = useRef(tenderView)
@@ -411,12 +418,13 @@ function TenderContent() {
   }, [queryClient, tenderView?.phase, tenderId])
 
   useEffect(() => {
-    if (
-      !connected
-      || !tenderView?.hasLeft
-      || leavingTenderIdRef.current === tenderId
-      || resumingTenderIdRef.current === tenderId
-    ) return
+    if (!shouldResumeTender({
+      connected,
+      hasLeft: tenderView?.hasLeft ?? false,
+      leavingTenderId: leavingTenderIdRef.current,
+      resumingTenderId: resumingTenderIdRef.current,
+      tenderId,
+    })) return
     resumingTenderIdRef.current = tenderId
     setResuming(true)
     void execute({ type: 'resume-tender' })
@@ -433,18 +441,17 @@ function TenderContent() {
 
   useEffect(() => {
     const activePlayerId = tenderView?.activePlayerId
-    const turnKey = tenderView && sequentialPhases.has(tenderView.phase)
-      ? `${tenderView.phase}:${activePlayerId ?? ''}`
+    const turnKey = tenderView
+      ? sequentialTurnKey(tenderView.phase, activePlayerId, sequentialPhases)
       : undefined
     const previousTurnKey = previousSequentialTurnRef.current
     previousSequentialTurnRef.current = turnKey
-    if (
-      !tenderView
-      || previousTurnKey === undefined
-      || previousTurnKey === turnKey
-      || activePlayerId !== auth.user?.id
-      || !sequentialPhases.has(tenderView.phase)
-    ) return
+    if (!tenderView || !shouldFocusSequentialTurn({
+      activePlayerId,
+      currentTurnKey: turnKey,
+      currentUserId: auth.user?.id,
+      previousTurnKey,
+    })) return
     requestAnimationFrame(() => {
       setRulesOpen(false)
       setLaboratoryHelpOpen(false)
@@ -455,12 +462,9 @@ function TenderContent() {
 
   const handleCommand = useCallback(
     (command: TenderCommandInput) => {
-      if (commandInFlightRef.current) return commandInFlightRef.current.promise
-      const startingView = latestTenderViewRef.current
-      const token = Symbol('tender-command')
-      const promise = (async () => {
+      return commandGateRef.current.run(async () => {
+        const startingView = latestTenderViewRef.current
         setCommandError(null)
-        setSubmitting(true)
         try {
           await execute(command)
         } catch (err) {
@@ -480,15 +484,11 @@ function TenderContent() {
             version: latestTenderViewRef.current?.version ?? startingView?.version ?? 0,
           })
           throw err
-        } finally {
-          if (commandInFlightRef.current?.token === token) {
-            commandInFlightRef.current = null
-            setSubmitting(false)
-          }
         }
-      })()
-      commandInFlightRef.current = { promise, token }
-      return promise
+      }, {
+        onFinish: () => setSubmitting(false),
+        onStart: () => setSubmitting(true),
+      })
     },
     [auth.user?.id, execute, retry, t],
   )
@@ -551,9 +551,7 @@ function TenderContent() {
   }
 
   const phase = phaseLabels[tenderView.phase] ?? tenderView.phase
-  const visibleCommandError = commandError?.version === tenderView.version
-    ? commandError.message
-    : null
+  const currentCommandError = visibleCommandError(commandError, tenderView.version)
   const myPlayer = tenderView.players.find((p) => p.playerId === auth.user?.id)
   const mySlot = myPlayer?.accessSlot
   const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
@@ -806,7 +804,7 @@ function TenderContent() {
               view={tenderView}
               disabled={submitting || !connected}
               pending={submitting}
-              error={visibleCommandError}
+              error={currentCommandError}
               onCommand={handleCommand}
               onSaveWorkingModel={saveWorkingModel}
               activePlayerId={tenderView.activePlayerId}
