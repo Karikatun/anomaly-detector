@@ -42,6 +42,20 @@ the pre-commit hook checks the exact future commit without printing a detected
 secret. GitHub Actions repeats secret hygiene and runs the dependency audit
 independently of bypassable local hooks.
 
+The remote static-security job also runs full-history Gitleaks, repository-owned
+Semgrep rules, and Trivy configuration checks. After Docker smoke builds the
+exact backend image, Trivy scans its OS and application packages for high and
+critical vulnerabilities. Scanner containers are versioned and digest-pinned in
+`.security/tools.json`; Gitleaks exceptions identify only reviewed historical
+test-fixture fingerprints.
+
+`bun run security:zap` performs authenticated active attacks against a temporary
+backend and isolated `_test` PostgreSQL database. It removes the account-delete
+operation from its generated scan document, destroys its test data afterward,
+and redacts the temporary access token from reports. Never point this command or
+the scheduled Dynamic Security workflow at production or shared development
+data.
+
 ## Mandatory Threat Review
 
 A task requires an explicit threat review when it changes authentication,

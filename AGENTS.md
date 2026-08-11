@@ -15,7 +15,7 @@
 - For player web application work, read `webapp/AGENTS.md`. For substantial UI, UX, responsive, animation, design-system, or rendered-flow work in any client, use `$anomaly-ui`.
 - For mobile application or Maestro work, read `mobile/AGENTS.md`.
 - For testing strategy and commands, use `docs/TESTING.md`. For deployment or infrastructure, read the relevant runbook in `docs/`, especially `DEPLOYMENT.md`, `STORAGE.md`, `LOCAL_DATABASE.md`, or `YANDEX_CLOUD.md`.
-- For vulnerability handling and security-sensitive changes, read `SECURITY.md`. For CI protection and release approval, use `docs/CI.md` and `docs/RELEASE_CHECKLIST.md`.
+- For vulnerability handling and security-sensitive changes, read `SECURITY.md` and use `$anomaly-security-review`. For CI protection and release approval, use `docs/CI.md` and `docs/RELEASE_CHECKLIST.md`.
 - Tasks and PRDs live in GitHub Issues. Use the workflow in `docs/agents/issue-tracker.md` and labels in `docs/agents/triage-labels.md`. Maintain domain docs according to `docs/agents/domain.md`.
 - Use the repository package manager, scripts, test runner, formatter, linter, build tools, generators, existing utilities, and installed dependencies. Do not add dependencies without explicit approval unless the user requested that dependency by name.
 - In Codex shell sessions, do not assume JavaScript tooling is on `PATH`; when needed use `PATH="/opt/homebrew/bin:$HOME/.bun/bin:$PATH"`.

@@ -6,6 +6,14 @@ production secrets.
 
 ## Current Mandatory Jobs
 
+### `security-static`
+
+The job runs independently of the build and test jobs:
+
+- Gitleaks against the complete Git history with redacted output;
+- the repository-owned high-confidence Semgrep rules;
+- Trivy misconfiguration checks for Docker and repository infrastructure.
+
 ### `checks`
 
 The job installs dependencies from `bun.lock` and runs:
@@ -13,7 +21,8 @@ The job installs dependencies from `bun.lock` and runs:
 - dependency audit and tracked-secret hygiene;
 - typecheck, production builds, architecture boundaries, and client lint;
 - deployment/tooling, contracts, webapp, adminapp, and backend tests;
-- backend Docker smoke against isolated test infrastructure.
+- backend Docker smoke against isolated test infrastructure;
+- Trivy vulnerability scanning of the exact image produced by Docker smoke.
 
 ### `e2e`
 
@@ -21,15 +30,25 @@ The job installs the Chromium revision owned by the locked `webapp` Playwright
 workspace and runs `bun run e2e:webapp` through the real browser/backend/test
 database stack.
 
-Both jobs are required because local hooks can be bypassed and because `checks`
-does not replace the user-visible cross-layer signal protected by `e2e`.
+All three jobs are required because local hooks can be bypassed, static and
+supply-chain scans do not replace behavioral tests, and `checks` does not
+replace the user-visible cross-layer signal protected by `e2e`.
+
+## Scheduled Active Security
+
+[`security-dynamic.yml`](../.github/workflows/security-dynamic.yml) runs weekly
+and on manual dispatch. It creates an isolated `_test` PostgreSQL database and
+temporary authenticated account, performs an active ZAP API scan, destroys the
+test database, redacts the temporary token, and retains the sanitized report for
+seven days. It is intentionally not a pull-request trigger because active DAST
+builds a separate backend image and sends mutating attack payloads.
 
 ## Branch Protection
 
 Configure a GitHub ruleset for every active release branch:
 
 1. require a pull request when the team's delivery process uses PR review;
-2. require the current `checks` and `e2e` status checks before merge;
+2. require the current `security-static`, `checks`, and `e2e` status checks before merge;
 3. require the branch to be up to date when a stale base can invalidate results;
 4. reject merge while a required check is pending, skipped, cancelled, timed
    out, or failed;
@@ -48,7 +67,14 @@ authorization.
 bun run check:commit
 bun run check:push
 bun run check
+bun run security:gitleaks
+bun run security:semgrep
+bun run security:trivy:config
 ```
+
+After building a backend image, scan that exact local tag with
+`bun run security:trivy:image <image>`. Run `bun run security:zap` separately;
+it is destructive only to the isolated `_test` database it creates.
 
 - pre-commit scans the staged index for secrets and runs `check:commit`;
 - commit-msg enforces the repository's Conventional Commit format;

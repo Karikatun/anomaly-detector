@@ -5,6 +5,10 @@ import { resolve } from 'node:path'
 const root = resolve(import.meta.dirname, '..')
 const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
 const workflow = readFileSync(resolve(root, '.github/workflows/ci.yml'), 'utf8')
+const dynamicSecurityWorkflow = readFileSync(
+  resolve(root, '.github/workflows/security-dynamic.yml'),
+  'utf8',
+)
 
 test('defines fast commit and complete push quality gates', () => {
   expect(packageJson.workspaces).toContain('adminapp')
@@ -22,8 +26,20 @@ test('defines fast commit and complete push quality gates', () => {
 
 test('runs secret hygiene and tooling contracts in remote CI', () => {
   expect(workflow).toContain('run: bun run security:secrets')
+  expect(workflow).toContain('run: bun run security:gitleaks')
+  expect(workflow).toContain('run: bun run security:semgrep')
+  expect(workflow).toContain('bun run security:trivy:image anomaly-detector-backend:smoke')
   expect(workflow).toContain('run: bun run test:tooling')
   expect(workflow).toContain('run: bun run test:adminapp')
+})
+
+test('runs active ZAP only on an isolated scheduled or manual workflow', () => {
+  expect(dynamicSecurityWorkflow).toContain('workflow_dispatch:')
+  expect(dynamicSecurityWorkflow).toContain('schedule:')
+  expect(dynamicSecurityWorkflow).toContain('run: bun run security:zap')
+  expect(dynamicSecurityWorkflow).toContain('POSTGRES_TEST_PORT:')
+  expect(dynamicSecurityWorkflow).not.toContain('pull_request:')
+  expect(dynamicSecurityWorkflow).not.toContain('push:')
 })
 
 test('keeps every required versioned hook installed', () => {

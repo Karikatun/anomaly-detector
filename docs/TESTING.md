@@ -6,6 +6,8 @@
 - `bun run check:push` и `bun run check` — полный gate: все тесты, production build, backend Docker smoke и Playwright E2E.
 - `pre-commit` отдельно сканирует staged Git index, поэтому проверяет именно содержимое будущего commit, а не игнорируемый локальный `backend/.env`.
 - GitHub Actions повторяет secret hygiene и tooling contracts независимо от локальных hooks, которые можно обойти через `--no-verify`.
+- `security-static` независимо запускает Gitleaks по Git-истории, Semgrep по versioned high-confidence правилам и Trivy по конфигурации; после Docker smoke Trivy проверяет собранный backend image.
+- `security-dynamic.yml` запускает активный ZAP API scan только вручную или по расписанию, на временном backend и отдельной `_test` базе.
 
 Для полной проверки нужны Bun, Docker и установленный Chromium для версии Playwright из `webapp`.
 
@@ -92,6 +94,10 @@ bun run test:backend:integration
 bun run test:webapp
 bun run --cwd backend prisma:validate
 bun run smoke:backend:docker
+bun run security:gitleaks
+bun run security:semgrep
+bun run security:trivy:config
+bun run security:trivy:image anomaly-detector-backend:smoke
 ```
 
 Contract tests live in `packages/contracts/src/*.test.ts` and protect shared request/response/error schemas used by backend and webapp. Webapp unit tests live in `webapp/tests` and cover API refresh/retry behavior that would be too expensive and brittle to fully exercise in E2E. The `mobile` branch extends this same contract/testing model for Expo.
@@ -100,9 +106,15 @@ Backend tests live next to backend code and verify auth behavior through service
 
 The integration and Docker smoke runners refuse database names that do not end with `_test` unless an override is set intentionally. This protects `anomaly_detector` development data from test writes.
 
-The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created.
+The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created. The image remains under `anomaly-detector-backend:smoke` long enough for the following Trivy image scan.
 
-`.github/workflows/ci.yml` runs typecheck, deployment/script tests, contract tests, webapp client tests, backend tests, and the webapp Playwright smoke flow on pushes to `main` and `master` plus pull requests.
+`bun run security:zap` is an active security test, not a normal local smoke. It
+creates and later destroys only its isolated `_test` database, filters the
+account-delete operation from the generated OpenAPI document, and writes
+token-redacted reports under `.scratch/security/zap/`. Never change its target
+to a shared or production environment.
+
+`.github/workflows/ci.yml` runs static security, typecheck, deployment/script tests, contract tests, webapp client tests, backend tests, image vulnerability scanning, and the webapp Playwright smoke flow on pushes to `main` and `master` plus pull requests.
 
 ## Локальные игроки для ручной проверки
 

@@ -1,0 +1,4 @@
+# High-confidence active findings fail the scheduled scan. Other findings remain visible as warnings.
+6	FAIL	(Path Traversal)
+40018	FAIL	(SQL Injection)
+90020	FAIL	(Remote OS Command Injection)
