@@ -1,0 +1,5 @@
+# Fixed test-only JWT placeholders. Ignore only these exact historical fingerprints.
+82c4a90e038f99f6b52b37e5139fb6e40a307014:backend/src/env.test.ts:generic-api-key:90
+82c4a90e038f99f6b52b37e5139fb6e40a307014:scripts/prepare-do-specs.test.mjs:generic-api-key:285
+608bb925a2076c3fba2f493934c191d648e01f28:backend/src/auth/middleware.test.ts:generic-api-key:14
+4046a39a8ba83c9f86119b0fe353a172f4134dce:backend/src/auth/routes.test.ts:generic-api-key:10

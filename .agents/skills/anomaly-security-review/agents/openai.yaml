@@ -1,0 +1,4 @@
+interface:
+  display_name: "Anomaly Security Review"
+  short_description: "Threat review for Anomaly Detector changes"
+  default_prompt: "Use $anomaly-security-review to review this Anomaly Detector change for concrete security threats and evidence gaps."

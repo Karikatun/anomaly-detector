@@ -62,4 +62,9 @@ bun run hooks:install
 - `pre-commit` проверяет staged-файлы на секреты и запускает быстрый `bun run check:commit` без integration, Docker и E2E;
 - `pre-push` запускает полный `bun run check`, включая PostgreSQL integration, build, backend Docker smoke и Playwright E2E.
 
+GitHub Actions дополнительно запускает Gitleaks по Git-истории, Semgrep,
+Trivy для конфигурации и собранного backend image. Активный OWASP ZAP scan
+работает отдельно по расписанию или вручную только на изолированной `_test`
+базе; подробности и локальные команды находятся в [docs/CI.md](docs/CI.md).
+
 Локальные hooks можно обойти через `--no-verify`, поэтому обязательной удалённой гарантией остаётся GitHub Actions CI. Штатный игнорируемый `backend/.env` не сканируется; tracked или staged `.env`, credential-файлы и известные token/private-key patterns блокируются без вывода найденного значения.

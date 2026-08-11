@@ -1,0 +1,47 @@
+rules:
+  - id: anomaly-no-prisma-unsafe-raw-query
+    message: Use Prisma tagged templates or parameterized queries instead of an unsafe raw query.
+    severity: ERROR
+    languages: [typescript, javascript]
+    pattern-either:
+      - pattern: $DB.$queryRawUnsafe(...)
+      - pattern: $DB.$executeRawUnsafe(...)
+
+  - id: anomaly-no-runtime-code-evaluation
+    message: Runtime code evaluation creates an injection boundary and is forbidden.
+    severity: ERROR
+    languages: [typescript, javascript]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+
+  - id: anomaly-no-shell-exec
+    message: Avoid shell-string execution; use spawn or execFile with a fixed executable and argument array.
+    severity: ERROR
+    languages: [typescript, javascript]
+    patterns:
+      - pattern-inside: |
+          import { ..., exec, ... } from 'node:child_process'
+          ...
+      - pattern: exec(...)
+
+  - id: anomaly-no-weak-cryptographic-hash
+    message: MD5 and SHA-1 are forbidden for security-sensitive hashing.
+    severity: ERROR
+    languages: [typescript, javascript]
+    pattern-either:
+      - pattern: createHash('md5')
+      - pattern: createHash('sha1')
+
+  - id: anomaly-no-wildcard-credentialed-cors
+    message: Credentialed CORS must use the exact configured origin allowlist.
+    severity: ERROR
+    languages: [typescript, javascript]
+    pattern: |
+      cors({
+        ...,
+        origin: '*',
+        ...,
+        credentials: true,
+        ...
+      })
