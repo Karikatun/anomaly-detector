@@ -136,6 +136,7 @@ async function smokeAuthApi() {
       displayName: 'Docker Smoke',
       privacyConsent: true,
       privacyConsentVersion: personalDataConsentVersion,
+      termsAccepted: true,
       termsVersion,
     }),
   })
