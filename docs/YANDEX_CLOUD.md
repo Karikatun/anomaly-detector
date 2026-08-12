@@ -486,7 +486,7 @@ VITE_OAUTH_API_URL=https://api.anomaly-detector.ru \
 VITE_PUBLIC_LEGAL_OPERATOR_NAME='<public operator name>' \
 VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT='<public operator name in dative case>' \
 VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS='<public address for legal requests>' \
-bun run build:webapp
+bun run --cwd webapp build:release
 VITE_API_URL=https://api.anomaly-detector.ru bun run build:adminapp
 PUBLIC_WEBSITE_URL=https://anomaly-detector.ru bun run build:website
 ```
