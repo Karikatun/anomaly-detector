@@ -483,6 +483,9 @@ Build locally or in CI:
 ```bash
 VITE_API_URL=https://api.anomaly-detector.ru \
 VITE_OAUTH_API_URL=https://api.anomaly-detector.ru \
+VITE_PUBLIC_LEGAL_OPERATOR_NAME='<public operator name>' \
+VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT='<public operator name in dative case>' \
+VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS='<public address for legal requests>' \
 bun run build:webapp
 VITE_API_URL=https://api.anomaly-detector.ru bun run build:adminapp
 PUBLIC_WEBSITE_URL=https://anomaly-detector.ru bun run build:website
@@ -490,8 +493,12 @@ PUBLIC_WEBSITE_URL=https://anomaly-detector.ru bun run build:website
 
 The webapp and adminapp API values are embedded at build time and must point to the
 Application Load Balancer custom host. `VITE_API_URL` owns ordinary requests;
-`VITE_OAUTH_API_URL` owns the browser-visible OAuth start request. Rebuild after
-either origin changes, then verify that the generated main JavaScript bundle
+`VITE_OAUTH_API_URL` owns the browser-visible OAuth start request.
+`VITE_PUBLIC_LEGAL_OPERATOR_NAME`, `VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT`, and
+`VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS` are required for a webapp production build;
+they render into the public legal pages, so they are not secrets. Store the actual
+values only in the deployment environment, not in Git. Rebuild after either origin
+or legal value changes, then verify that the generated main JavaScript bundle
 contains the production API origin for both paths and does not contain
 `http://localhost:3000`.
 
