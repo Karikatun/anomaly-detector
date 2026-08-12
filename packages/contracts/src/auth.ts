@@ -35,6 +35,7 @@ export const termsVersion = '1.0' as const
 const registrationLegalAcceptanceSchema = z.object({
   privacyConsent: z.literal(true),
   privacyConsentVersion: z.literal(personalDataConsentVersion),
+  termsAccepted: z.literal(true),
   termsVersion: z.literal(termsVersion),
 })
 

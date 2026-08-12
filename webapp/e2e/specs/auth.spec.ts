@@ -48,9 +48,18 @@ test('explains how to register when a Yandex ID has no game account', async ({ p
   await expect(dialog).toBeVisible()
   await expect(dialog.getByRole('heading', { name: 'Создание аккаунта через Яндекс' })).toBeVisible()
   await expect(dialog.getByText(
-    'Аккаунт ещё не зарегистрирован. Для продолжения подтвердите согласие на обработку персональных данных.',
+    'Аккаунт ещё не зарегистрирован. Для продолжения подтвердите обязательные условия создания аккаунта.',
   )).toBeVisible()
-  await expect(dialog.getByRole('button', { name: 'Согласен и продолжить' })).toBeVisible()
+  const privacyConsent = dialog.getByRole('checkbox', { name: 'Я даю согласие на обработку персональных данных' })
+  const termsAcceptance = dialog.getByRole('checkbox', { name: 'Я принимаю Пользовательское соглашение' })
+  const continueButton = dialog.getByRole('button', { name: 'Согласен и продолжить' })
+  await expect(privacyConsent).toBeVisible()
+  await expect(termsAcceptance).toBeVisible()
+  await expect(continueButton).toBeDisabled()
+  await privacyConsent.check()
+  await expect(continueButton).toBeDisabled()
+  await termsAcceptance.check()
+  await expect(continueButton).toBeEnabled()
   await expect(page).toHaveURL('/')
 })
 
@@ -63,6 +72,7 @@ test('submits registration as a native form when Enter is pressed from any field
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
   await page.getByLabel('Имя').fill('Нативная форма')
   await page.getByRole('checkbox', { name: 'Я даю согласие на обработку персональных данных' }).check()
+  await page.getByRole('checkbox', { name: 'Я принимаю Пользовательское соглашение' }).check()
 
   await expect(page.locator('form')).toHaveCount(1)
   await page.getByLabel('Имя').press('Enter')
@@ -70,7 +80,7 @@ test('submits registration as a native form when Enter is pressed from any field
   await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
 })
 
-test('requires separate personal-data consent and links both registration documents', async ({ page }) => {
+test('requires separate personal-data consent and terms acceptance with links to both documents', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
   await page.getByLabel('Имя').fill('Ян')
@@ -79,18 +89,20 @@ test('requires separate personal-data consent and links both registration docume
 
   const submit = page.getByRole('button', { name: 'Регистрация', exact: true })
   const privacyConsent = page.getByRole('checkbox', { name: 'Я даю согласие на обработку персональных данных' })
+  const termsAcceptance = page.getByRole('checkbox', { name: 'Я принимаю Пользовательское соглашение' })
 
   await expect(page.getByRole('checkbox', { name: 'Мне исполнилось 16 лет' })).toHaveCount(0)
   await expect(page.getByText('Игра имеет возрастную маркировку 16+.')).toBeVisible()
   await expect(page.getByRole('link', { name: 'обработку персональных данных' }))
     .toHaveAttribute('href', '/personal-data-consent')
-  await expect(page.locator('p')
-    .filter({ hasText: 'Нажимая «Регистрация», вы принимаете' })
+  await expect(termsAcceptance).toBeVisible()
+  await expect(page.getByText('Я принимаю')
     .getByRole('link', { name: 'Пользовательское соглашение' }))
     .toHaveAttribute('href', '/terms')
-  await expect(page.getByText('Нажимая «Регистрация», вы принимаете')).toBeVisible()
   await expect(submit).toBeDisabled()
   await privacyConsent.check()
+  await expect(submit).toBeDisabled()
+  await termsAcceptance.check()
   await expect(submit).toBeEnabled()
 })
 

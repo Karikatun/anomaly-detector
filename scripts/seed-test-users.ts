@@ -35,6 +35,7 @@ async function registerOrVerify(
     password,
     privacyConsent: true,
     privacyConsentVersion: '1.0',
+    termsAccepted: true,
     termsVersion: '1.0',
   })
   if (registration.ok) {

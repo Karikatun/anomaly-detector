@@ -42,6 +42,7 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
       password: '',
       privacyConsent: false as boolean,
       privacyConsentVersion: personalDataConsentVersion,
+      termsAccepted: false as boolean,
       termsVersion,
     } satisfies CredentialsFormValues,
     onSubmit: async ({ value }) => {
@@ -81,8 +82,8 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
         void form.handleSubmit()
       }}
     >
-      <form.Subscribe selector={(state) => state.values.privacyConsent}>
-        {(privacyConsent) => (
+      <form.Subscribe selector={(state) => [state.values.privacyConsent, state.values.termsAccepted] as const}>
+        {([privacyConsent, termsAccepted]) => (
           <OAuthButton
             provider="yandex"
             label={t('oauth.yandex')}
@@ -95,15 +96,16 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                 aria-hidden="true"
               />
             )}
-            registration={mode === 'register' && privacyConsent ? {
+            registration={mode === 'register' && privacyConsent && termsAccepted ? {
               privacyConsent: true,
               privacyConsentVersion: personalDataConsentVersion,
+              termsAccepted: true,
               termsVersion,
             } : undefined}
             requireRegistrationConsent={mode === 'register'}
             onConsentRequired={() => {
               setConsentReminder(true)
-              document.getElementById('auth-privacy-consent')?.focus()
+              document.getElementById(privacyConsent ? 'auth-terms-acceptance' : 'auth-privacy-consent')?.focus()
             }}
           />
         )}
@@ -247,18 +249,31 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                   </div>
                 )}
               </form.Field>
+              <form.Field name="termsAccepted">
+                {(field) => (
+                  <div className={styles.consent}>
+                    <Checkbox
+                      id="auth-terms-acceptance"
+                      checked={field.state.value}
+                      onCheckedChange={(checked) => {
+                        field.handleChange(checked === true)
+                        setConsentReminder(false)
+                      }}
+                    />
+                    <Label htmlFor="auth-terms-acceptance">
+                      {t('auth.terms.acceptPrefix')}{' '}
+                      <Link className={styles.inlineLegalLink} to="/terms" target="_blank">
+                        {t('auth.terms.link')}
+                      </Link>
+                    </Label>
+                  </div>
+                )}
+              </form.Field>
               {consentReminder && (
                 <Typography role="alert" variant="bodyXs" tone="destructive">
                   {t('auth.consent.oauthReminder')}
                 </Typography>
               )}
-              <Typography variant="bodyXs" className={styles.termsNotice}>
-                {t('auth.terms.prefix')}{' '}
-                <Link className={styles.inlineLegalLink} to="/terms" target="_blank">
-                  {t('auth.terms.link')}
-                </Link>
-                .
-              </Typography>
             </div>
           </>
         )}

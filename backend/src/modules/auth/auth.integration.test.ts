@@ -72,6 +72,7 @@ maybeDescribe('auth API integration', () => {
         displayName: 'User',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -176,6 +177,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -202,6 +204,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -257,6 +260,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -308,6 +312,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -337,6 +342,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -367,6 +373,7 @@ maybeDescribe('auth API integration', () => {
           password: 'password123',
           privacyConsent: true,
           privacyConsentVersion: '1.0',
+          termsAccepted: true,
           termsVersion: '1.0',
         }),
       })
@@ -469,6 +476,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -587,6 +595,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -621,6 +630,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -663,6 +673,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -909,6 +920,7 @@ maybeDescribe('auth API integration', () => {
           password: 'password123',
           privacyConsent: true,
           privacyConsentVersion: '1.0',
+          termsAccepted: true,
           termsVersion: '1.0',
         }),
       })
@@ -1074,6 +1086,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1118,6 +1131,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1171,6 +1185,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1193,6 +1208,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1214,6 +1230,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1236,6 +1253,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1277,6 +1295,7 @@ maybeDescribe('auth API integration', () => {
           password: 'password123',
           privacyConsent: true,
           privacyConsentVersion: '1.0',
+          termsAccepted: true,
           termsVersion: '1.0',
         }),
       })
@@ -1384,6 +1403,7 @@ maybeDescribe('auth API integration', () => {
           password: 'password123',
           privacyConsent: true,
           privacyConsentVersion: '1.0',
+          termsAccepted: true,
           termsVersion: '1.0',
         }),
       })
@@ -1456,6 +1476,7 @@ maybeDescribe('auth API integration', () => {
           password: 'password123',
           privacyConsent: true,
           privacyConsentVersion: '1.0',
+          termsAccepted: true,
           termsVersion: '1.0',
         }),
       })
@@ -1559,6 +1580,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1571,6 +1593,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1625,6 +1648,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1659,6 +1683,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1735,6 +1760,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1792,6 +1818,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1860,6 +1887,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -1896,6 +1924,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -2057,6 +2086,7 @@ maybeDescribe('auth API integration', () => {
       password: 'password123',
       privacyConsent: true,
       privacyConsentVersion: '1.0',
+      termsAccepted: true,
       termsVersion: '1.0',
     }
 
@@ -2154,6 +2184,7 @@ maybeDescribe('auth API integration', () => {
           password: 'password123',
           privacyConsent: true,
           privacyConsentVersion: '1.0',
+          termsAccepted: true,
           termsVersion: '1.0',
         }),
       })
@@ -2231,6 +2262,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -2277,6 +2309,7 @@ maybeDescribe('auth API integration', () => {
         password,
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -2331,6 +2364,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -2372,6 +2406,7 @@ maybeDescribe('auth API integration', () => {
       password: 'password123',
       privacyConsent: true,
       privacyConsentVersion: '1.0',
+      termsAccepted: true,
       termsVersion: '1.0',
     }
 
@@ -2411,6 +2446,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -2472,6 +2508,7 @@ maybeDescribe('auth API integration', () => {
           password: 'password123',
           privacyConsent: true,
           privacyConsentVersion: '1.0',
+          termsAccepted: true,
           termsVersion: '1.0',
         }),
       })
@@ -2489,6 +2526,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })
@@ -2506,6 +2544,7 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     })

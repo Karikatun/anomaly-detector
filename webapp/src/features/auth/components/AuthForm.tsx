@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { personalDataConsentVersion, termsVersion } from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Typography } from '@/components/ui/typography'
+import { Label } from '@/components/ui/label'
 import { useI18n } from '@/platform/i18n'
 import { useAuth } from '../use-auth'
 import styles from './AuthForm.module.css'
@@ -34,6 +36,8 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
     }
   }, [])
   const [oauthBusy, setOauthBusy] = useState(false)
+  const [oauthPrivacyConsent, setOauthPrivacyConsent] = useState(false)
+  const [oauthTermsAccepted, setOauthTermsAccepted] = useState(false)
 
   return (
     <section className={styles.screen} aria-labelledby="auth-screen-title">
@@ -97,26 +101,44 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
               {t('auth.oauthConsent.description')}
             </DialogDescription>
           </DialogHeader>
-          <Typography variant="bodySm">
-            {t('auth.consent.prefix')}{' '}
-            <Link className={styles.inlineLegalLink} to="/personal-data-consent" target="_blank">
-              {t('auth.consent.link')}
-            </Link>
-            {' '}{t('auth.oauthConsent.andTerms')}{' '}
-            <Link className={styles.inlineLegalLink} to="/terms" target="_blank">
-              {t('auth.terms.link')}
-            </Link>
-            .
-          </Typography>
+          <div className={styles.consents}>
+            <div className={styles.consent}>
+              <Checkbox
+                id="oauth-privacy-consent"
+                checked={oauthPrivacyConsent}
+                onCheckedChange={(checked) => setOauthPrivacyConsent(checked === true)}
+              />
+              <Label htmlFor="oauth-privacy-consent">
+                {t('auth.consent.prefix')}{' '}
+                <Link className={styles.inlineLegalLink} to="/personal-data-consent" target="_blank">
+                  {t('auth.consent.link')}
+                </Link>
+              </Label>
+            </div>
+            <div className={styles.consent}>
+              <Checkbox
+                id="oauth-terms-acceptance"
+                checked={oauthTermsAccepted}
+                onCheckedChange={(checked) => setOauthTermsAccepted(checked === true)}
+              />
+              <Label htmlFor="oauth-terms-acceptance">
+                {t('auth.terms.acceptPrefix')}{' '}
+                <Link className={styles.inlineLegalLink} to="/terms" target="_blank">
+                  {t('auth.terms.link')}
+                </Link>
+              </Label>
+            </div>
+          </div>
           <DialogFooter>
             <Button
               type="button"
-              disabled={oauthBusy}
+              disabled={oauthBusy || !oauthPrivacyConsent || !oauthTermsAccepted}
               onClick={() => {
                 setOauthBusy(true)
                 void auth.startOAuth('yandex', {
                   privacyConsent: true,
                   privacyConsentVersion: personalDataConsentVersion,
+                  termsAccepted: true,
                   termsVersion,
                 }).catch(() => setOauthBusy(false))
               }}

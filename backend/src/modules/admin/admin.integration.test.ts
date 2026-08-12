@@ -104,6 +104,7 @@ async function register(app: ReturnType<typeof createApp>, login: string) {
       password: 'password123',
       privacyConsent: true,
       privacyConsentVersion: '1.0',
+      termsAccepted: true,
       termsVersion: '1.0',
     }),
   })

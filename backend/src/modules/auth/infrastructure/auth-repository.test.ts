@@ -41,6 +41,7 @@ test('creates a password user and initial session inside one database transactio
       displayName: undefined,
       privacyConsent: true,
       privacyConsentVersion: '1.0',
+      termsAccepted: true,
       termsVersion: '1.0',
     },
     session: {
