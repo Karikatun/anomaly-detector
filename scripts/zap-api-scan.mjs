@@ -107,6 +107,7 @@ async function createScanSession() {
       password: 'zap-scan-password-123',
       privacyConsent: true,
       privacyConsentVersion: personalDataConsentVersion,
+      termsAccepted: true,
       termsVersion,
     }),
   })
