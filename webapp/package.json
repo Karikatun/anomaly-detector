@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:release": "LEGAL_DOCUMENTS_CONFIGURED=true bun run build",
     "i18n:audit": "bun scripts/i18n-source-audit.mjs",
     "typecheck": "tsc -b",
     "test": "bun run i18n:audit && bun test tests",

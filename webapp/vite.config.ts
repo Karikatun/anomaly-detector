@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
   const environment = loadEnv(mode, __dirname, '')
-  if (command === 'build') {
+  if (command === 'build' && environment.LEGAL_DOCUMENTS_CONFIGURED === 'true') {
     for (const name of ['VITE_PUBLIC_LEGAL_OPERATOR_NAME', 'VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT', 'VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS']) {
       if (!environment[name]?.trim()) throw new Error(`${name} must be set for a public webapp build`)
     }
