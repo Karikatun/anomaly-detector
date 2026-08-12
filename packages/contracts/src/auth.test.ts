@@ -36,6 +36,7 @@ describe('auth contracts', () => {
         displayName: ' Jane ',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     ).toEqual({
@@ -44,6 +45,7 @@ describe('auth contracts', () => {
       displayName: 'Jane',
       privacyConsent: true,
       privacyConsentVersion: '1.0',
+      termsAccepted: true,
       termsVersion: '1.0',
     })
 
@@ -54,6 +56,7 @@ describe('auth contracts', () => {
         displayName: '',
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       }),
     ).toEqual({
@@ -62,6 +65,7 @@ describe('auth contracts', () => {
       displayName: undefined,
       privacyConsent: true,
       privacyConsentVersion: '1.0',
+      termsAccepted: true,
       termsVersion: '1.0',
     })
 
@@ -120,6 +124,19 @@ describe('auth contracts', () => {
         password: 'password123',
         privacyConsent: false,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
+        termsVersion: '1.0',
+      }),
+    ).toThrow()
+
+    // Rejects registration without a separate terms acceptance
+    expect(() =>
+      registerRequestSchema.parse({
+        login: 'user',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsAccepted: false,
         termsVersion: '1.0',
       }),
     ).toThrow()
@@ -139,6 +156,7 @@ describe('auth contracts', () => {
     const legalAcceptance = {
       privacyConsent: true as const,
       privacyConsentVersion: '1.0' as const,
+      termsAccepted: true as const,
       termsVersion: '1.0' as const,
     }
 
@@ -260,6 +278,7 @@ describe('auth contracts', () => {
       registration: {
         privacyConsent: true,
         privacyConsentVersion: '1.0',
+        termsAccepted: true,
         termsVersion: '1.0',
       },
       webappOrigin: 'http://localhost:5173',
@@ -268,6 +287,7 @@ describe('auth contracts', () => {
     expect(start.registration).toEqual({
       privacyConsent: true,
       privacyConsentVersion: '1.0',
+      termsAccepted: true,
       termsVersion: '1.0',
     })
 
@@ -277,6 +297,7 @@ describe('auth contracts', () => {
       registration: {
         privacyConsent: true,
         privacyConsentVersion: 'outdated',
+        termsAccepted: true,
         termsVersion: '1.0',
       },
     })).toThrow()

@@ -79,6 +79,7 @@ export class AuthService {
     registration?: {
       privacyConsent: true
       privacyConsentVersion: string
+      termsAccepted: true
       termsVersion: string
     }
     webappOrigin: string
@@ -168,7 +169,7 @@ export class AuthService {
       if (!transaction.legalAcceptance) {
         throw new AuthFailure(
           'oauth_registration_consent_required',
-          'Personal data consent is required to create an account',
+          'Legal acceptance is required to create an account',
         )
       }
       const created = await this.dependencies.repository.createOAuthUserWithSession({

@@ -295,6 +295,7 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
     registration: {
       privacyConsent: true,
       privacyConsentVersion: '1.0',
+      termsAccepted: true,
       termsVersion: '1.0',
     },
     webappOrigin: 'https://app.example.ru',

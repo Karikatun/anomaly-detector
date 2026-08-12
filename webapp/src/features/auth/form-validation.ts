@@ -10,6 +10,7 @@ export type CredentialsFormValues = {
   password: string
   privacyConsent: boolean
   privacyConsentVersion: '1.0'
+  termsAccepted: boolean
   termsVersion: '1.0'
 }
 

@@ -85,6 +85,27 @@ describe('auth routes', () => {
     expect(response.status).toBe(413)
   })
 
+  test('rejects registration when terms acceptance is not affirmative', async () => {
+    const app = createApp({ env, prisma: {} as DbClient })
+    const response = await app.request('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://web.example.com',
+      },
+      body: JSON.stringify({
+        login: 'legal-user',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsAccepted: false,
+        termsVersion: '1.0',
+      }),
+    })
+
+    expect(response.status).toBe(400)
+  })
+
   test('rate limits repeated auth writes from one client before service work', async () => {
     const app = createApp({ env: { ...env, AUTH_RATE_LIMIT_MAX: 1 }, prisma: {} as DbClient })
     const request = () => app.request('/api/auth/register', {
