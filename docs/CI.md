@@ -45,7 +45,8 @@ builds a separate backend image and sends mutating attack payloads.
 
 ## Branch Protection
 
-Configure a GitHub ruleset for every active release branch:
+Use `dev` as the default branch for external contributions. Configure a GitHub
+ruleset for every active release branch, including `master`:
 
 1. require a pull request when the team's delivery process uses PR review;
 2. require the current `security-static`, `checks`, and `e2e` status checks before merge;
@@ -54,6 +55,13 @@ Configure a GitHub ruleset for every active release branch:
    out, or failed;
 5. limit bypass to named emergency maintainers and audit every use;
 6. protect branch deletion and force pushes.
+
+The repository-owned `Enforce master PR access` workflow closes a pull request
+to `master` when its author does not have GitHub `write`, `maintain`, or `admin`
+permission. It does not check out or execute pull-request code. This is a
+routing control: GitHub itself still allows a public-repository user to create
+such a PR. Contributors should target `dev`; maintainers decide which `dev`
+changes are promoted to `master`.
 
 A workflow file does not enforce merge policy by itself. The ruleset in GitHub
 must name the actual current job checks. After renaming, adding, splitting, or

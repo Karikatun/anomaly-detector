@@ -1,0 +1,38 @@
+name: Enforce master PR access
+
+on:
+  pull_request_target:
+    branches:
+      - master
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
+
+# This workflow never checks out or executes pull-request code. It only reads
+# the author's repository permission and, where necessary, closes the PR.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  route-unapproved-pull-request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close PRs from users without merge access
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          permission="$(gh api "repos/${REPOSITORY}/collaborators/${PR_AUTHOR}/permission" --jq '.permission' 2>/dev/null || true)"
+          case "$permission" in
+            admin|maintain|write)
+              exit 0
+              ;;
+          esac
+
+          gh pr close "$PR_NUMBER" --repo "$REPOSITORY" --comment "Thanks for the contribution. Please open this pull request against the dev branch; master is reserved for repository maintainers."
