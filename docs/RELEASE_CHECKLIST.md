@@ -24,6 +24,9 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 ## Source And Quality
 
 - [ ] `origin`, release branch, upstream, and full commit SHA are recorded.
+- [ ] Applicable audit contours from [AUDIT_GUIDE.md](AUDIT_GUIDE.md) are
+      recorded; every required, blocked, and not-applicable check has evidence
+      or a reason and residual risk.
 - [ ] Worktree is clean; the release commit is pushed and not ahead, behind, or
       diverged from its expected upstream.
 - [ ] `bun run check` passed on the exact release commit.
@@ -34,6 +37,9 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 - [ ] Backend image uses the full release SHA or immutable digest; static builds
       have recorded SHA-256 checksums and contain no localhost/test origins,
       secrets, or private data.
+- [ ] Trivy scanned that exact backend image with the repository-owned pinned
+      runner; the deployed API and worker image ID/digest will be compared with
+      the scanned artifact after the switch.
 
 ## Data And Rollback
 
@@ -66,6 +72,9 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
       and still enforces backend UUID allowlisting after edge authentication.
 - [ ] Recent API, worker, PostgreSQL, Caddy, and system logs contain no new fatal,
       unhandled, migration, auth, or repeated reconnect errors.
+- [ ] If SSH, VM image, host OS, firewall, network, or Security Groups changed,
+      the applicable external ssh-audit, perimeter review, and Lynis host audit
+      have current evidence or an explicit blocked/risk decision.
 - [ ] Monitoring shows API/worker health, disk and PostgreSQL-volume free space,
       memory, restarts, and configured alerts; current values are recorded.
 - [ ] Active and rollback artifacts remain recoverable after exact-name cleanup.

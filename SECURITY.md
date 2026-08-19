@@ -49,6 +49,13 @@ critical vulnerabilities. Scanner containers are versioned and digest-pinned in
 `.security/tools.json`; Gitleaks exceptions identify only reviewed historical
 test-fixture fingerprints.
 
+Use [`docs/AUDIT_GUIDE.md`](docs/AUDIT_GUIDE.md) to select security and adjacent
+product, architecture, UX, release, and operational checks by lifecycle stage.
+Agents must record their selection and coverage gaps through
+[`docs/agents/audit-checklist.md`](docs/agents/audit-checklist.md); a scanner
+result without the owning behavioral or runtime evidence is not a completed
+audit.
+
 `bun run security:zap` performs authenticated active attacks against a temporary
 backend and isolated `_test` PostgreSQL database. It removes the account-delete
 operation from its generated scan document, destroys its test data afterward,
