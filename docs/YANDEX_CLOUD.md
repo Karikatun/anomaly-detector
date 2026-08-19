@@ -1,8 +1,9 @@
 # Yandex Cloud Production
 
 Anomaly Detector uses this runbook for its Russian public test and production
-environment. The application is publicly reachable, but the first test launch has no
-marketing campaign: links are distributed directly to known testers.
+environment. The first release validates the Public MVP Journey; begin with a
+controlled cohort before expanding acquisition, even though the public landing is
+indexable.
 
 ## Service Map
 
@@ -23,13 +24,29 @@ marketing campaign: links are distributed directly to known testers.
 - Real-time Pub/Sub: Yandex Managed Service for Valkey only when horizontally scaled WebSocket features need cross-instance fanout.
 - CLI: Yandex Cloud CLI, `yc`.
 
-## Confirmed Public Hosts
+## Public Hosts
+
+Current pre-migration routing:
 
 - Webapp: `https://anomaly-detector.ru`.
 - API and WebSocket: `https://api.anomaly-detector.ru`.
 - Redirect only: `https://www.anomaly-detector.ru` to `https://anomaly-detector.ru`.
 - Support: `support@anomaly-detector.ru`; do not publish legal/support pages until
   inbound and outbound delivery has been verified.
+
+Approved Production MVP routing from ADR 0014:
+
+- Public website: `https://anomaly-detector.ru`.
+- Player webapp: `https://app.anomaly-detector.ru`.
+- API and WebSocket: `https://api.anomaly-detector.ru`.
+- Operator app: `https://ops.anomaly-detector.ru`.
+- Redirect only: `https://www.anomaly-detector.ru` to the public website.
+
+Do not treat the target map as already deployed. Move it in one release with
+address-specific redirects for old player routes and coordinated DNS/TLS, CDN,
+CORS, OAuth callback/post-login origin, cookies, CSP, legal links, monitoring
+and rollback. Verify authentication and the old deep links before switching
+DNS.
 
 The DNS zone is currently hosted by REG.RU. Before cutover, lower the affected records'
 TTL, preserve mail records, and replace only the web/API address records with the
@@ -144,7 +161,7 @@ TRUSTED_PROXY_CLIENT_IP_POSITION=first
 COOKIE_SECURE=true
 ```
 
-Leave `ADMIN_USER_IDS` empty to disable the read-only operator overview. When enabled, use immutable user UUIDs from the intended operators' profiles. Build and serve `adminapp` only from the separately protected `ops.anomaly-detector.ru` host; never include it in the player `webapp` output. Backend authorization and identical `404` responses remain mandatory behind the edge check.
+Leave `ADMIN_USER_IDS` empty to disable the operator surface. When enabled, use immutable user UUIDs from the intended operators' profiles. The current implementation is read-only; the approved MVP adds only the audited commands listed in ADR 0011. Build and serve `adminapp` only from the separately protected `ops.anomaly-detector.ru` host; never include it in the player `webapp` output. Backend authorization and identical `404` responses remain mandatory behind the edge check.
 
 Yandex Application Load Balancer places the source client address first in
 `X-Forwarded-For`. Validate this in the production-like smoke test before relying on IP
@@ -185,8 +202,11 @@ client heartbeat/reconnect window. The load balancer must never target worker po
 Attach Smart Web Security and Advanced Rate Limiter to the API virtual host before DNS
 is switched. Enable access logs with redaction and alerts for elevated `4xx`, `5xx`, and
 backend latency. Use `https://api.anomaly-detector.ru` as both `VITE_API_URL`
-and `VITE_OAUTH_API_URL`, and the exact `https://anomaly-detector.ru` origin in
-`CORS_ORIGINS`.
+and `VITE_OAUTH_API_URL`. Before ADR 0014 migration, the webapp origin is
+`https://anomaly-detector.ru`; after the coordinated migration it is
+`https://app.anomaly-detector.ru`, while the public root remains in CORS only
+for the explicitly implemented consent-scoped analytics endpoint. Never enable
+credentialed wildcard CORS.
 
 ### Edge abuse-protection profile
 
@@ -254,6 +274,25 @@ personal address. The mailbox is hosted by REG.RU and its MX records are configu
    support and personal-data requests.
 6. Confirm the contractual personal-data processing terms and data location of the
    active REG.RU mail service before public launch.
+
+## Transactional Mailbox
+
+The approved recovery flow uses a separate
+`no-reply@anomaly-detector.ru` mailbox at REG.RU with
+`Reply-To: support@anomaly-detector.ru`. It is not implemented by the current
+runtime yet. Before enabling it:
+
+1. configure the exact SMTP host, TLS mode and credentials through production
+   secrets and version every new env key in code, examples and this runbook;
+2. verify SPF, DKIM and DMARC plus actual receipt at every Approved Mail Service;
+3. drain a PostgreSQL transactional outbox through the existing worker with
+   bounded retries, idempotent message identity and terminal failure state;
+4. expose only aggregate SMTP acceptance/failure and outbox age to adminapp;
+   do not log addresses, templates containing secrets, codes or reset URLs;
+5. keep verification, recovery and security notices separate from support,
+   marketing and gameplay messages;
+6. document secret rotation, provider outage, circuit breaker, backlog recovery
+   and rollback before production enablement.
 
 ## Managed PostgreSQL
 
@@ -530,6 +569,12 @@ contains the production API origin for both paths and does not contain
 canonical origin of the website; without it, the generated pages intentionally
 omit canonical and `og:url` metadata. Add `PUBLIC_WEBAPP_URL` only when the
 public website intentionally links to the authenticated webapp.
+
+For the ADR 0014 target, `PUBLIC_WEBSITE_URL` remains
+`https://anomaly-detector.ru` and the future implemented `PUBLIC_WEBAPP_URL`
+must be exactly `https://app.anomaly-detector.ru`. Do not set the latter until
+the website validates and consumes it; a deployment variable alone does not
+create the CTA or redirect contract.
 
 Before uploading, create a Yandex Object Storage static access key for a service account and configure the AWS CLI with it. Yandex's Object Storage docs recommend `aws configure` with the static key and `ru-central1` as the region.
 

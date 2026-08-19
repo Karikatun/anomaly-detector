@@ -31,6 +31,22 @@ settings.
   or secret-bearing provider payloads.
 - Browser auth uses exact allowed origins and server-side origin enforcement;
   wildcard credentialed CORS is forbidden.
+- Account Email is neither an identity key nor an account-linking signal.
+  Matching provider and password emails never merges accounts, and support or
+  operator access cannot assign email or bypass a recovery factor.
+- Email attachment, replacement, password reset and Recovery Code consumption
+  are atomic, replay-safe and rate-limited. One-time secrets are stored only as
+  cryptographic derivatives and never appear in URLs after consumption, logs,
+  analytics, admin projections or outbound-message telemetry.
+- Successful password recovery revokes every active session and outstanding
+  recovery credential. A stolen login and password alone cannot immediately
+  replace an already active Recovery Email.
+- Operator mutation capability is deny-by-default and limited to versioned,
+  idempotent, audited mail-policy and Feedback Report commands. The admin client
+  is not a generic CRUD or account-recovery console.
+- Feedback intake excludes raw logs, full URLs, object identifiers, private
+  Tender state and automatic Account Email reuse. External issue publication is
+  manual and strips user data.
 - Production images and actions are pinned immutably. A release requires an
   exact commit, green mandatory CI, backup/recovery evidence, health checks, and
   a verified rollback path.
