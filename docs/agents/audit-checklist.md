@@ -30,6 +30,8 @@
 | Module/platform dependency | `bun run architecture:check` |
 | UI behavior | user-visible test; relevant UX states and rendered inspection |
 | Visual-only UI | desktop/mobile rendered review; accessibility semantics if touched |
+| Form field/input purpose | matching `type`/`inputmode`/`autocomplete`, separate validation evidence, mobile input check |
+| Image/icon semantics | contextual `alt` decision, no duplicate accessible name, accessibility tree or screen-reader check |
 | Public website | production build, initial HTML/SEO/assets/links, responsive rendering |
 | Secrets/dependencies/source | repository security commands and relevant CI job |
 | Docker/IaC/image | Trivy config + exact built image, pinned tool/image evidence |
