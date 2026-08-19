@@ -348,6 +348,30 @@ WAF validation yet. Track that migration in
 edge/application protection in
 [#19](https://github.com/Karikatun/anomaly-detector/issues/19).
 
+### Host Security Audits
+
+The lifecycle, cadence, and interpretation rules for Lynis, ssh-audit, Trivy,
+perimeter, application, and recovery checks live in
+[AUDIT_GUIDE.md](AUDIT_GUIDE.md). For the current single-VM baseline:
+
+- run the primary ssh-audit externally against the actual public endpoint and
+  review Yandex Security Groups separately; a localhost result does not prove
+  the public boundary;
+- run Lynis after substantial host/OS changes and on the documented periodic
+  cadence, but triage findings individually instead of treating Hardening Index
+  as a pass/fail security score;
+- scan the exact immutable backend release image through the repository Trivy
+  runner and compare the deployed API/worker image ID or digest with that
+  artifact;
+- never run ssh-audit `--dheat`, ZAP, load attacks, automatic hardening, package
+  installation, or firewall/SSH/sysctl remediation against production without
+  explicit approval and a recovery plan.
+
+Production audit starts read-only. Record tool version, target, time, sanitized
+result, coverage gaps, remediation owner, and rollback implications without
+copying host details, credentials, keys, tokens, cookies, or private data into
+ordinary logs or issues.
+
 After a release has passed container-internal and public health checks, finish
 the release with an explicit cleanup step. First resolve and record the active
 and immediate-rollback Compose, image, release-directory, volume, and backup

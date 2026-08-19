@@ -16,6 +16,7 @@
 - For mobile application or Maestro work, read `mobile/AGENTS.md`.
 - For testing strategy and commands, use `docs/TESTING.md`. For deployment or infrastructure, read the relevant runbook in `docs/`, especially `DEPLOYMENT.md`, `STORAGE.md`, `LOCAL_DATABASE.md`, or `YANDEX_CLOUD.md`.
 - For vulnerability handling and security-sensitive changes, read `SECURITY.md` and use `$anomaly-security-review`. For CI protection and release approval, use `docs/CI.md` and `docs/RELEASE_CHECKLIST.md`.
+- For every non-trivial task, select the applicable product, architecture, quality, security, UX, performance, release, and operational checks from `docs/AUDIT_GUIDE.md`, then complete `docs/agents/audit-checklist.md`. Mark skipped checks `N/A` or `BLOCKED` with the reason and residual risk; never silently omit an applicable audit.
 - Tasks and PRDs live in GitHub Issues. Use the workflow in `docs/agents/issue-tracker.md` and labels in `docs/agents/triage-labels.md`. Maintain domain docs according to `docs/agents/domain.md`.
 - Use the repository package manager, scripts, test runner, formatter, linter, build tools, generators, existing utilities, and installed dependencies. Do not add dependencies without explicit approval unless the user requested that dependency by name.
 - In Codex shell sessions, do not assume JavaScript tooling is on `PATH`; when needed use `PATH="/opt/homebrew/bin:$HOME/.bun/bin:$PATH"`.
