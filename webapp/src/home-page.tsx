@@ -8,7 +8,7 @@ import {
   UserCircleIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { ExpeditionBackground } from '@/components/ExpeditionBackground'
 import expeditionStyles from '@/components/ExpeditionShell.module.css'
@@ -17,6 +17,8 @@ import { Typography } from '@/components/ui/typography'
 import {
   AuthForm,
   AuthSessionGate,
+  capturePostAuthContinuation,
+  consumePostAuthContinuation,
   useAuth,
   useLogoutAction,
 } from '@/features/auth'
@@ -56,6 +58,10 @@ function AuthenticatedHome({
   displayName: string
 }) {
   const navigate = useNavigate()
+  const [continuationPath] = useState(() => {
+    capturePostAuthContinuation(sessionStorage, new URL(window.location.href))
+    return consumePostAuthContinuation(sessionStorage)
+  })
   const auth = useAuth()
   const { t } = useI18n()
   const logoutAction = useLogoutAction()
@@ -65,6 +71,14 @@ function AuthenticatedHome({
   const profileApi = useMemo(() => new ProfileApi(auth.transport), [auth.transport])
   const currentMatch = useCurrentMatchQuery(roomsApi)
   const tutorialProgress = useTutorialProgressQuery(profileApi)
+
+  useEffect(() => {
+    if (continuationPath === '/tutorial') {
+      void navigate({ to: continuationPath, replace: true })
+    }
+  }, [continuationPath, navigate])
+
+  if (continuationPath) return null
 
   const returnToCurrentMatch = () => {
     const match = currentMatch.data

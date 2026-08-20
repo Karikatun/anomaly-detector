@@ -17,13 +17,19 @@ import { Typography } from '@/components/ui/typography'
 import { Label } from '@/components/ui/label'
 import { useI18n } from '@/platform/i18n'
 import { useAuth } from '../use-auth'
+import { capturePostAuthContinuation } from '../post-auth-continuation'
 import styles from './AuthForm.module.css'
 import { LoginForm } from './LoginForm'
 
 export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode }) {
   const { t } = useI18n()
   const auth = useAuth()
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<'login' | 'register'>(() => {
+    if (typeof window === 'undefined') return 'login'
+    return capturePostAuthContinuation(sessionStorage, new URL(window.location.href)) === 'tutorial'
+      ? 'register'
+      : 'login'
+  })
   const [oauthConsentOpen, setOauthConsentOpen] = useState(() => {
     if (typeof window === 'undefined') return false
     return new URL(window.location.href).searchParams.get('auth_error') === 'oauth_registration_consent_required'
