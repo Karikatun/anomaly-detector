@@ -36,6 +36,7 @@ import {
   advanceTutorial,
   createTutorialState,
   tutorialView,
+  type TutorialAdvanceResult,
   type TutorialAction,
   type TutorialStep,
 } from './scenario'
@@ -142,6 +143,7 @@ function TutorialContent() {
     () => state.step === 'complete' ? 'error' : 'idle',
   )
   const [commandError, setCommandError] = useState<string | null>(null)
+  const [thesisFeedback, setThesisFeedback] = useState<NonNullable<TutorialAdvanceResult['thesisFeedback']> | null>(null)
   const [exitOpen, setExitOpen] = useState(false)
   const [createRoomOpen, setCreateRoomOpen] = useState(false)
   const [compactHeader, setCompactHeader] = useState(
@@ -180,6 +182,9 @@ function TutorialContent() {
 
   const applyAction = async (action: TutorialAction) => {
     const result = advanceTutorial(state, action)
+    setThesisFeedback(action.type === 'submit-thesis' && result.thesisFeedback && !result.progressed
+      ? result.thesisFeedback
+      : null)
     const stateChanged = result.state !== state
     if (stateChanged) {
       setState(result.state)
@@ -219,6 +224,7 @@ function TutorialContent() {
     const fresh = createTutorialState(playerId)
     saveTutorialSession(sessionStorage, fresh)
     setCommandError(null)
+    setThesisFeedback(null)
     setCompletionSaveStatus('idle')
     setState(fresh)
   }
@@ -311,6 +317,7 @@ function TutorialContent() {
           {completionSaved ? (
             <>
               <Typography>{t('tutorial.complete.description')}</Typography>
+              <Typography tone="muted">{t('tutorial.complete.contracts')}</Typography>
               <Typography tone="muted">{t('tutorial.complete.realMatch')}</Typography>
             </>
           ) : !completionFailed ? (
@@ -500,6 +507,7 @@ function TutorialContent() {
           : undefined}
         onExit={() => setExitOpen(true)}
         task={t(currentTaskKey)}
+        thesisFeedback={thesisFeedback}
       />
     ),
     data: { tutorialStep: state.step },
@@ -564,7 +572,7 @@ function TutorialContent() {
       />}
       <Typography aria-live="polite" variant="srOnly">{t(currentTaskKey)}</Typography>
       <TutorialTenderBoard
-        actionPanelPinned={compactGuidance && mobileActionPinnedSteps.has(state.step)}
+        actionPanelPinned={mobileActionPinnedSteps.has(state.step)}
         commandError={commandError}
         highlight={exitOpen ? 'none' : highlight}
         interpretationRequired={state.step === 'help-menu'
@@ -791,20 +799,34 @@ function CoachContent({
   onExit,
   onContinue,
   task,
+  thesisFeedback,
   progress,
 }: {
   hint?: string
   onExit: () => void
   onContinue?: () => void
   task: string
+  thesisFeedback: NonNullable<TutorialAdvanceResult['thesisFeedback']> | null
   progress: string
 }) {
   const { t } = useI18n()
+  const thesisFeedbackKey: TranslationKey | null = !thesisFeedback
+    ? null
+    : !thesisFeedback.fieldTypeCorrect && !thesisFeedback.polarityCorrect
+      ? 'tutorial.coach.thesisBothIncorrect'
+      : thesisFeedback.fieldTypeCorrect
+        ? 'tutorial.coach.thesisPolarityIncorrect'
+        : 'tutorial.coach.thesisFieldIncorrect'
   return (
     <div className={styles.coach}>
       <Typography variant="caption" tone="muted">{progress}</Typography>
       <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{t('tutorial.coach.task')}</Typography>
       <Typography variant="bodySm">{task}</Typography>
+      {thesisFeedbackKey && (
+        <Typography role="alert" variant="bodySm" className={styles.thesisFeedback}>
+          {t(thesisFeedbackKey)}
+        </Typography>
+      )}
       {hint && <Typography variant="bodySm" className={styles.hint}>{hint}</Typography>}
       {onContinue && <Button type="button" size="sm" onClick={onContinue}>{t('tutorial.coach.continue')}</Button>}
       <Typography as="strong" variant="bodySmMedium" className={styles.confirmAction}>

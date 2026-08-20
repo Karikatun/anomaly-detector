@@ -29,6 +29,7 @@
 .coach { display: grid; max-width: 24rem; gap: .55rem; text-align: left; }
 .coach button { width: fit-content; margin-top: .25rem; }
 .hint { padding: .65rem; border-left: 2px solid #38bdf8; background: rgba(56, 189, 248, .08); }
+.thesisFeedback { padding: .65rem; border-left: 2px solid #f87171; color: #fecaca; background: rgba(248, 113, 113, .09); }
 .confirmAction { display: none; color: #7dd3fc; }
 
 :global([data-testid='floater']) {
