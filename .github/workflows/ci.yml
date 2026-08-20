@@ -54,7 +54,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Dependency security audit
-        run: bun audit --audit-level=low
+        run: bun run security:dependencies
 
       - name: Secret hygiene
         run: bun run security:secrets

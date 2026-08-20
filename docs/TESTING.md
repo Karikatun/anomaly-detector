@@ -3,7 +3,8 @@
 ## Repository quality gates
 
 - `bun run check:commit` — быстрый локальный gate: tracked secret hygiene, lint, Prisma validation, typecheck, architecture, script/contracts/backend unit/webapp tests.
-- `bun run check:push` и `bun run check` — полный gate: все тесты, production build, backend Docker smoke и Playwright E2E.
+- `bun run check:push` — dependency audit и полный `check`: все тесты, production build, backend Docker smoke и Playwright E2E.
+- `bun run check` — полный локальный поведенческий gate без сетевого dependency audit.
 - `pre-commit` отдельно сканирует staged Git index, поэтому проверяет именно содержимое будущего commit, а не игнорируемый локальный `backend/.env`.
 - GitHub Actions повторяет secret hygiene и tooling contracts независимо от локальных hooks, которые можно обойти через `--no-verify`.
 - `security-static` независимо запускает Gitleaks по Git-истории, Semgrep по versioned high-confidence правилам и Trivy по конфигурации; после Docker smoke Trivy проверяет собранный backend image.
