@@ -187,7 +187,7 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('Итоговый рейтинг')
   expect(html).toContain('Вы победили')
   expect(html).toContain('1 место · 21 очко')
-  expect(html).toContain('Альфа · Слот 1')
+  expect(html).not.toContain('Альфа · Слот 1')
   expect(html).not.toContain('Исследование завершено')
   expect(html).not.toContain('Рейтинг: 21')
   expect(html).not.toContain('Rating')

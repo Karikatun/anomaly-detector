@@ -287,7 +287,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
               })}
             </Typography>
             <Typography as="span" variant="bodySm" className={styles.ownResultPlayer}>
-              {currentPlayer.displayName ?? currentPlayer.playerId.slice(0, 8)} · {translate('tender.completed.slot', { slot: currentPlayer.accessSlot ?? '—' })}
+              {currentPlayer.displayName ?? currentPlayer.playerId.slice(0, 8)}
             </Typography>
           </span>
           <ul className={styles.mobileBreakdown} aria-label={translate('tender.completedTenderPanel.copy.035')}>
