@@ -45,6 +45,41 @@
   z-index: 101 !important;
 }
 
+@media (min-width: 601px) {
+  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+    left: calc((100vw - 26rem) / 2) !important;
+    width: min(54rem, calc(100vw - 27rem));
+  }
+}
+
+@media (min-width: 601px) and (max-width: 68rem) {
+  .coachCard {
+    width: 100%;
+  }
+
+  :global([data-testid='floater']) {
+    width: 20rem !important;
+  }
+
+  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+    left: calc((100vw - 22rem) / 2) !important;
+    width: min(54rem, calc(100vw - 23rem));
+  }
+}
+
+@media (min-width: 68.001rem) and (max-width: 90rem) {
+  :global(body:has([data-tutorial-step='final-model']) [data-tutorial-final-submit]) {
+    width: calc(100% - 2rem);
+    justify-self: start;
+  }
+}
+
 @media (max-width: 600px) {
   .completeActions { display: grid; }
   .completeActions button { width: 100%; }
