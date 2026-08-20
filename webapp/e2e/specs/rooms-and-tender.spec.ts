@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -91,6 +91,18 @@ const headings = {
 
 async function expectPhase(page: Page, heading: string) {
   await expect(page.getByRole('heading', { name: heading })).toBeVisible()
+}
+
+async function expectFullyInViewport(locator: Locator) {
+  await expect.poll(() => locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return rect.top >= 0
+      && rect.left >= 0
+      && rect.bottom <= window.innerHeight
+      && rect.right <= window.innerWidth
+      && element.scrollWidth <= element.clientWidth
+      && element.scrollHeight <= element.clientHeight
+  })).toBe(true)
 }
 
 async function readRoomJoinCode(page: Page) {
@@ -769,6 +781,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('Слот 1', { exact: true })).toBeVisible()
     await page.setViewportSize({ width: 1024, height: 768 })
     await auditCheckpoint(page, '03-power-compact-1024x768')
+    await auditCheckpoint(guestPage, '03b-power-mobile-390x844')
     await page.setViewportSize({ width: 1440, height: 900 })
     await allocatePower(page, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
     await allocatePower(guestPage, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
@@ -920,6 +933,11 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(
       guestPage.getByRole('button', { name: 'Отправить финальную модель' }).locator('xpath=ancestor::footer'),
     ).toHaveCSS('position', 'sticky')
+    await expectFullyInViewport(page.locator('[data-tutorial-final-submit]'))
+    await page.setViewportSize({ width: 1024, height: 768 })
+    await expectFullyInViewport(page.locator('[data-tutorial-final-submit]'))
+    await auditCheckpoint(page, '10-final-model-compact-1024x768')
+    await page.setViewportSize({ width: 1440, height: 900 })
     await auditCheckpoint(page, '10-final-model-desktop-1440x900')
     await auditCheckpoint(guestPage, '11-final-model-mobile-390x844')
     const finalDraftSaved = page.waitForResponse((response) => {
