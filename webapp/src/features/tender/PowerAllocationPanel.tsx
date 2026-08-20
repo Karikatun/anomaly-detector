@@ -93,6 +93,13 @@ const actionPower = (allocation: PowerAllocation | PowerAllocationDraft) =>
 
 const totalPower = 4
 
+const standalonePowerEffect = (message: string) => {
+  const description = message
+    .replace(/^1 мощность:\s*/u, '')
+    .replace(/^2 мощности:\s*/u, '')
+  return description.replace(/^./u, (character) => character.toLocaleUpperCase('ru-RU'))
+}
+
 function PowerCells({ count, filled }: { count: number; filled: number }) {
   return Array.from({ length: count }, (_, index) => (
     <span key={index} data-filled={index < filled || undefined} aria-hidden="true" />
@@ -290,7 +297,7 @@ export function PowerAllocationPanel({
                   <Typography as="strong" variant="bodySmMedium" className={styles.effectLevel}>1</Typography>
                   <Typography as="span" variant="bodySm">
                     <Typography as="span" variant="caption" className="sr-only">1: </Typography>
-                    {t(oneEffectKey).replace(/^1 мощность:\s*/u, '')}
+                    {standalonePowerEffect(t(oneEffectKey))}
                   </Typography>
                 </li>
                 {twoEffectKey && (
@@ -298,7 +305,7 @@ export function PowerAllocationPanel({
                     <Typography as="strong" variant="bodySmMedium" className={styles.effectLevel}>2</Typography>
                     <Typography as="span" variant="bodySm">
                       <Typography as="span" variant="caption" className="sr-only">2: </Typography>
-                      {t(twoEffectKey).replace(/^2 мощности:\s*/u, '')}
+                      {standalonePowerEffect(t(twoEffectKey))}
                     </Typography>
                   </li>
                 )}
