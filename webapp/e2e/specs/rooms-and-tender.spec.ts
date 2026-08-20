@@ -552,6 +552,74 @@ test('lets a player collapse and return, then permanently forfeit the match', as
   }
 })
 
+test('keeps a four-player completed leaderboard compact after an early finish', async ({ browser, page }) => {
+  test.setTimeout(90_000)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await registerBrowserUser(page, 'Хост 4P E2E', 'four-player-host')
+  const webOrigin = new URL(page.url()).origin
+  const guestSpecs = [
+    ['Исследователь с очень длинным корпоративным именем', 'four-player-guest-one'],
+    ['Гость 4P Бета', 'four-player-guest-two'],
+    ['Гость 4P Гамма', 'four-player-guest-three'],
+  ] as const
+  const guestContexts = await Promise.all(guestSpecs.map(() => browser.newContext({ baseURL: webOrigin })))
+  const guestPages = await Promise.all(guestContexts.map((context) => context.newPage()))
+
+  try {
+    for (let index = 0; index < guestPages.length; index += 1) {
+      await registerBrowserUser(guestPages[index]!, guestSpecs[index]![0], guestSpecs[index]![1], webOrigin)
+    }
+
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await page.getByLabel('Количество игроков').selectOption('4')
+    await page.getByRole('button', { name: 'Создать команду' }).click()
+    const roomJoinCode = await readRoomJoinCode(page)
+
+    for (const guestPage of guestPages) {
+      await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
+      await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
+      await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    }
+    for (let index = 0; index < guestPages.length; index += 1) {
+      const guestPage = guestPages[index]!
+      await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+      await expect(page.getByText(`Готовы: ${index + 1}/4`)).toBeVisible()
+    }
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(page.getByText('Экипаж готов.')).toBeVisible()
+    const startButton = page.getByRole('button', { name: 'Начать игру' })
+    await expect(startButton).toBeEnabled()
+    await startButton.click()
+    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+
+    for (const guestPage of guestPages) {
+      await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+      await guestPage.getByRole('button', { name: 'Выйти из матча' }).click()
+      await guestPage.getByRole('dialog', { name: 'Что сделать с матчем?' })
+        .getByRole('button', { name: 'Выйти', exact: true }).click()
+      await expect(guestPage).toHaveURL('/')
+    }
+
+    await expect(page.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
+    await expect(page.getByText('Вы победили', { exact: true })).toBeVisible()
+    const ranking = page.locator('details[data-audit-section="ranking"]')
+    await expect(ranking.locator('ol > li')).toHaveCount(4)
+    await expect(ranking.getByText('Исследователь с очен', { exact: true })).toBeVisible()
+    await auditCheckpoint(page, '14-completed-audit-four-player-desktop-1440x900')
+
+    await page.setViewportSize({ width: 360, height: 800 })
+    const rankingSummary = ranking.locator(':scope > summary')
+    await expect(rankingSummary).toContainText('4 участника')
+    await rankingSummary.press('Enter')
+    await expect(ranking.locator('ol > li')).toHaveCount(4)
+    await auditCheckpoint(page, '15-completed-audit-four-player-mobile-360x800')
+    await page.setViewportSize({ width: 320, height: 720 })
+    await auditCheckpoint(page, '16-completed-audit-four-player-mobile-320x720')
+  } finally {
+    await Promise.all(guestContexts.map((context) => context.close()))
+  }
+})
+
 test('opens the Rules Reference inside an active Tender without leaving it', async ({ browser, page }) => {
   await registerBrowserUser(page, 'Хост правил E2E', 'rules-tender-host')
   const webOrigin = new URL(page.url()).origin
@@ -968,36 +1036,53 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await completeAndSubmitFinalModel(guestPage)
     await expect(page.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
-    await expect(guestPage.getByText('Ваш итог', { exact: true })).toBeVisible()
+    await expect(page.locator('header[aria-label="Результаты завершённого тендера"]')).toBeVisible()
+    await expect(guestPage.locator('header[aria-label="Результаты завершённого тендера"]')).toBeVisible()
+    await expect(guestPage.getByRole('heading', { name: /\d+ место · \d+ очк/ })).toBeVisible()
+    await expect(guestPage.getByText(/Гость E2E · Слот \d/)).toBeVisible()
+    await expect(guestPage.getByText('Исследование завершено', { exact: true })).toHaveCount(0)
     await expect(guestPage.locator('details[data-audit-section="own-model"] > summary')).toBeVisible()
     await expect(guestPage.locator('details[data-audit-section="other-players"] > summary')).toBeVisible()
+    await expect(guestPage.locator('details[data-audit-section="own-model"] > summary')).toContainText(/\d+\/12 верно/)
+    await expect(guestPage.locator('details[data-audit-section="full-audit"] > summary')).toContainText('5 раундов')
     const guestFullAudit = guestPage.locator('details[data-audit-section="full-audit"]')
     await expect(guestFullAudit).not.toHaveAttribute('open', '')
-    await guestPage.locator('details[data-audit-section="full-audit"] > summary').click()
+    const fullAuditSummary = guestPage.locator('details[data-audit-section="full-audit"] > summary')
+    await fullAuditSummary.focus()
+    await expect(fullAuditSummary).toBeFocused()
+    await fullAuditSummary.press('Enter')
     await expect(guestFullAudit.getByRole('combobox', { name: 'Фильтр итогового аудита по игроку' })
       .locator('option:checked')).toHaveText('Гость E2E')
     await expect(guestFullAudit.getByRole('option', { name: 'Все игроки' })).toHaveCount(1)
+    await fullAuditSummary.press('Enter')
+    await expect(guestFullAudit).not.toHaveAttribute('open', '')
     await expect(page.getByRole('heading', { name: 'Итоговый рейтинг', exact: true })).toBeVisible()
-    await expect(page.getByText('За что начислен рейтинг', { exact: true }).first()).toBeVisible()
-    await expect(page.getByLabel('За что начислен рейтинг игроку Хост E2E')).toContainText(
-      /Начислений рейтинга нет|Верные тезисы|Выполненные контракты|Верные свойства модели|Полностью раскрытые сигналы|Бонус полной модели/,
+    await expect(page.getByText('Подробнее', { exact: true }).first()).toBeVisible()
+    await expect(page.getByLabel('Из чего сложились очки игрока Хост E2E')).toContainText(
+      /Начислений очков нет|Верные тезисы|Выполненные контракты|Верные свойства модели|Полностью раскрытые сигналы|Бонус полной модели/,
     )
     await expect(page.getByRole('heading', { name: 'Конфигурация аномалии' })).toBeVisible()
     await expect(page.getByText('Раскрытые свойства шести сигналов', { exact: true })).toBeVisible()
     await expect(page.getByText('Финальная модель не отправлена')).toHaveCount(0)
     await expect(page.getByText('Аудит по раундам', { exact: true })).toBeVisible()
+    await page.setViewportSize({ width: 768, height: 1024 })
+    await auditCheckpoint(page, '12a-completed-audit-tablet-768x1024')
+    await page.setViewportSize({ width: 1440, height: 900 })
     await auditCheckpoint(page, '12-completed-audit-desktop-1440x900')
+    await guestPage.setViewportSize({ width: 360, height: 800 })
+    await auditCheckpoint(guestPage, '13a-completed-audit-mobile-360x800')
+    await guestPage.setViewportSize({ width: 390, height: 844 })
     await auditCheckpoint(guestPage, '13-completed-audit-mobile-390x844')
     const secondRoundAudit = page.locator('details[data-audit-round="2"]')
     await secondRoundAudit.locator('summary').click()
     await expect(secondRoundAudit.getByText('Широкое исследование', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Правила' }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Справочник правил' })).toBeVisible()
     await expect(page.getByText('Таймер матча продолжает идти')).toHaveCount(0)
     await page.getByRole('button', { name: 'Закрыть правила' }).click()
     await page.getByRole('button', { name: 'Трактовка анализов' }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Трактовка лабораторных анализов' })).toBeVisible()
     await expect(page.getByText('Таймер матча продолжает идти')).toHaveCount(0)
     await page.getByRole('button', { name: 'Закрыть трактовку анализов' }).click()
 

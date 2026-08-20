@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { presentCompletedTender } from '../src/features/tender/completed-tender-presenter'
+import { presentCompletedTender, tenderPointUnit } from '../src/features/tender/completed-tender-presenter'
 
 const player = (playerId: string, displayName: string, rating: number) => ({
   budget: 2,
@@ -33,9 +33,40 @@ test('sorts shared placements, identifies the current player and formats non-zer
 
   expect(presentation.rankedPlayers.map(({ playerId }) => playerId)).toEqual(['beta', 'alpha'])
   expect(presentation.currentPlayer?.playerId).toBe('alpha')
+  expect(presentation.currentPlayerIsWinner).toBeFalse()
+  expect(presentation.currentPlacement).toBe(2)
+  expect(presentation.currentRating).toBe(3)
   expect(presentation.winnerNames).toEqual(['Бета'])
   expect(presentation.ratingEntries('alpha')).toEqual([
     { key: 'contractPoints', points: 4 },
     { key: 'otherPoints', points: -1 },
+  ])
+})
+
+test('identifies when the current player won without duplicating the winner summary', () => {
+  const presentation = presentCompletedTender({
+    audit: {
+      completionReason: 'standard',
+      placementByPlayer: { alpha: 1, beta: 2 },
+      ratingBreakdownByPlayer: {},
+    },
+    players: [player('alpha', 'Альфа', 106), player('beta', 'Бета', 0)],
+    winnerPlayerIds: ['alpha'],
+  }, 'alpha')
+
+  expect(presentation.currentPlayerIsWinner).toBeTrue()
+  expect(presentation.currentPlacement).toBe(1)
+  expect(presentation.currentRating).toBe(106)
+})
+
+test('selects Russian plural units for zero, large and edge-case point totals', () => {
+  expect([0, 1, 2, 5, 21, 102, 111].map(tenderPointUnit)).toEqual([
+    'many',
+    'one',
+    'few',
+    'many',
+    'one',
+    'few',
+    'many',
   ])
 })
