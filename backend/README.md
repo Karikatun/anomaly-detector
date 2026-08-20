@@ -98,6 +98,15 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 - `GET /health/live`
 - `GET /health/ready`
 
+The approved but not yet implemented Public MVP extensions are specified in
+ADRs 0005–0016 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). They add
+Account Email/Yandex synchronisation, Recovery Email and Recovery Code,
+password reset, Approved Mail Service publication, transactional outbox,
+consent-scoped funnel analytics and Feedback Report intake. Do not add env keys
+or advertise endpoints in this README until their implementation and contracts
+exist; when they do, document every new key here, in `.env.example`, the Yandex
+runbook and production setup without exposing values.
+
 Личная игровая статистика доступна авторизованному пользователю через `GET /api/profile/statistics`. Сервер рассчитывает её по завершённым совместимым партиям и журналу принятых игровых действий; формулы закреплены в [../docs/GAME_DESIGN_BRIEF.md](../docs/GAME_DESIGN_BRIEF.md).
 
 Passwords are hashed through `Bun.password` with Argon2id. Access tokens are short-lived JWTs through `jose`. Initial refresh tokens are random; rotated successors are opaque, domain-separated HMAC values derived with the server secret so concurrent uses of the same credential receive the same successor. Only current and immediately previous SHA-256 hashes are stored in the database. Refresh atomically rotates the credential inside the same logical session, so another browser tab's still-valid access token is not revoked. Reuse of the previous credential after the short race-tolerance window revokes that session as potentially compromised.

@@ -1,6 +1,6 @@
 # Product Modules Architecture
 
-Anomaly Detector uses shared contracts, a modular-monolith backend, one player CSR browser app (`webapp`), one isolated read-only operator CSR app (`adminapp`), and one Astro static public site (`website`). The runnable mobile app lives on the `mobile` branch and extends the same product contracts when mobile work is active.
+Anomaly Detector uses shared contracts, a modular-monolith backend, one player CSR browser app (`webapp`), one isolated operator CSR app (`adminapp`), and one Astro static public site (`website`). The operator app is read-only by default and exposes only explicitly listed audited commands for mail policy and Feedback Report workflow. The runnable mobile app lives on the `mobile` branch and extends the same product contracts when mobile work is active.
 
 The approach is **progressive DDD-lite**. Product contexts get explicit ownership and dependency direction without forcing every context to have every layer. Add a `domain` directory only when the feature has real policies, calculations, or state transitions. Do not add empty layers, generic/base repositories, CQRS, event sourcing, or extra services as architecture decoration.
 
@@ -72,11 +72,32 @@ clock owns both `serverTime` and scheduled-start calculations.
 
 Routes stay thin and translate HTTP into application calls and application failures into the stable API error shape. Do not put business rules into Hono handlers, UI clients, or child components.
 
+For the approved Public MVP Journey, ownership is split by policy rather than by
+screen:
+
+- `auth` owns Account Email uniqueness, Yandex ID email synchronisation,
+  Recovery Email state, password reset, Recovery Code, sessions and recovery
+  anti-abuse policy;
+- a transactional-mail context owns Approved Mail Service versions,
+  provider-specific canonicalisation, operator publication commands, outbox and
+  the REG.RU delivery adapter; auth requests messages through a narrow port and
+  never imports the SMTP provider;
+- an analytics context owns consent-scoped journey events, retention and
+  aggregate projections; it never consumes security telemetry as product data;
+- a feedback context owns Feedback Report intake, retention and operator
+  workflow; it never publishes directly to GitHub or reuses Account Email;
+- the admin context authorises the operator and composes safe projections, but
+  does not become a generic CRUD owner for auth, mail, analytics or feedback.
+
+These are target boundaries for the unimplemented MVP slices. New modules are
+created only when their vertical slice is implemented; the ADRs do not justify
+empty folders or placeholder services.
+
 ## Runtime Shape And Real-Time
 
 The default runtime shape is a modular monolith: one backend codebase, one database, shared contracts, and clear feature boundaries inside the repository. The backend can expose separate API, worker, and cron entrypoints while still sharing Prisma schema, env validation, services, and contracts. Do not add queues, brokers, or extra infrastructure until the product has a concrete need that the monolith cannot meet clearly.
 
-The current production baseline is a Yandex Cloud VM running separate API and worker containers from the same immutable backend image, plus PostgreSQL and Caddy. The target managed topology and migration conditions are documented in [YANDEX_CLOUD.md](YANDEX_CLOUD.md). Keep API, worker, and cron as entrypoints of the same backend workspace; add infrastructure only for a concrete runtime need.
+The current production baseline is a Yandex Cloud VM running separate API and worker containers from the same immutable backend image, plus PostgreSQL and Caddy. The target managed topology and migration conditions are documented in [YANDEX_CLOUD.md](YANDEX_CLOUD.md). Keep API, worker, and cron as entrypoints of the same backend workspace; add infrastructure only for a concrete runtime need. Transactional email uses a PostgreSQL outbox drained by the existing worker runtime rather than a new service. Named cron cleanup removes expired recovery credentials, consent-scoped analytics events, feedback content and terminal outbox records according to their owning retention policies.
 
 Tender phase delivery starts in the same backend service. A single instance can keep an in-memory registry of its own WebSocket connections. Once the backend runs multiple instances, in-memory fanout is no longer enough: participants in one Tender may connect to different instances. At that point, add managed Redis-compatible Pub/Sub so each instance can publish compact domain-event identifiers and deliver them to its local sockets.
 
@@ -96,9 +117,16 @@ Auth v1 is custom JWT-based auth:
 
 Refresh-token rotation updates the credential atomically inside one logical session, preserving already-issued access tokens for other tabs. The immediately previous refresh credential is accepted only during a short race-tolerance window; replay after that window revokes the session as potentially compromised. `/api/auth/me` checks both the JWT and the active database session, including its absolute lifetime.
 
+The approved recovery extension keeps email separate from identity. Yandex ID's
+provider subject is immutable and matching email never merges accounts. New
+password-account email, replacement and reset are separate atomic operations
+with hashed one-time credentials, distributed attempt budgets, explicit expiry
+and session revocation. Support and operator routes have no capability to set an
+Account Email or bypass a recovery factor.
+
 ## Frontend
 
-The browser surfaces have explicit product roles. `website` is the public, indexable Astro site and currently contains the static Anomaly Detector landing page. `webapp` is the interactive player application and owns authentication, profile, rooms, Tender, tutorial, history, rules, and legal routes. `adminapp` is a separately built read-only operator surface protected at the edge and again by backend allowlisting; it must never be published as part of the player or public website.
+The browser surfaces have explicit product roles. `website` is the public, indexable Astro site on `anomaly-detector.ru`. `webapp` is the interactive player application on `app.anomaly-detector.ru` and owns authentication, profile, rooms, Tender, tutorial, history, rules, feedback and legal routes. `adminapp` is a separately built operator surface on `ops.anomaly-detector.ru`, protected at the edge and again by backend allowlisting; it must never be published as part of the player or public website. The current deployment still serves webapp from the root host until the coordinated migration in ADR 0014 is released.
 
 The webapp follows these client rules:
 
@@ -176,6 +204,13 @@ Auth in `src/features/auth` is the client golden path: its API adapter owns auth
 Do not create a new form, query, auth, or API abstraction until the existing pattern stops solving the current problem.
 
 `website` prerenders to static HTML by default. Keep the landing and other anonymous public content static until a real request-specific requirement justifies an Astro runtime adapter. SEO-critical content must be present in initial HTML, including title, description, canonical URL, social preview metadata, and the actual public product copy. The public site does not own player authentication or duplicate interactive game flows from `webapp`.
+
+The website sends the visitor to the app with a bounded tutorial continuation
+intent. It may count unrelated aggregate views without client identity. A
+30-day first-party journey identifier and cross-surface funnel events require a
+separate affirmative analytics choice; refusal is a fully supported path. The
+password-reset page loads neither this analytics client nor third-party
+resources.
 
 If a future website route needs authenticated or personalized data, define its privacy and caching contract before implementation. Shared CDN caching is only for anonymous, public-equivalent HTML; personalized responses use `private` or `no-store` unless a reviewed `Vary` strategy proves otherwise.
 

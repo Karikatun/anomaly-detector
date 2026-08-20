@@ -592,6 +592,10 @@ function TenderContent() {
     setContextModal(open && (kind === 'research' || kind === 'working-model' || kind === 'contracts') ? kind : null)
     if (open) setOverlayPhase(tenderView.phase)
   }
+  const openReferenceFromHelp = (kind: 'rules' | 'interpretation') => {
+    setHelpMenuOpen(false)
+    window.setTimeout(() => setOverlayOpen(kind, true), 0)
+  }
   const handleWorkingModelSaveStatus = (status: WorkingModelSaveStatus) => {
     setWorkingModelSaveError(status.state === 'error' ? status.message : null)
   }
@@ -599,10 +603,21 @@ function TenderContent() {
   return (
     <section className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}>
       <TenderHeaderFrame
-        ariaLabel={t('tender.phase.status')}
+        ariaLabel={isComplete ? translate('tender.results.headerAria') : t('tender.phase.status')}
+        completed={isComplete}
         headerRef={headerRef}
         info={(
-          <>
+          isComplete ? <>
+            <Typography as="h2" variant="bodySmMedium">
+              {translate('tender.results.title')}
+            </Typography>
+            <Typography as="span" variant="caption" tone="muted">
+              {translate('tender.results.headerMeta', {
+                value1: tenderView.round,
+                value2: mySlot ?? '—',
+              })}
+            </Typography>
+          </> : <>
           <Typography variant="shortcut" tone="muted" className="uppercase">
             
             {translate('tender.header.round', { round: tenderView.round })}
@@ -613,7 +628,7 @@ function TenderContent() {
         timer={<TenderTimer remainingSeconds={tenderView.dueAt ? remainingSeconds : null} />}
         meta={(
           <>
-          {mySlot && <Badge variant="outline">{translate('tender.header.slot', { slot: mySlot })}</Badge>}
+          {!isComplete && mySlot && <Badge variant="outline">{translate('tender.header.slot', { slot: mySlot })}</Badge>}
           {!isComplete && (
             <Badge variant="warning">{translate('tender.header.budget', { budget: myPlayer?.budget ?? 0 })}</Badge>
           )}
@@ -642,12 +657,12 @@ function TenderContent() {
         )}
         actions={(
           <>
-          {connected ? (
+          {!isComplete && connected ? (
             <Badge variant="success" className={styles.connectionBadge}>{t('tender.realtime.live')}</Badge>
-          ) : (
+          ) : !connected && (
             <Badge variant="warning" className={styles.connectionBadge}>{t('tender.realtime.reconnecting')}</Badge>
           )}
-          <Dialog
+          {!isComplete && <Dialog
             open={helpMenuOpen && !referenceHelpLocked}
             onOpenChange={(open) => setHelpMenuOpen(open && !referenceHelpLocked)}
           >
@@ -673,8 +688,7 @@ function TenderContent() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setHelpMenuOpen(false)
-                    setOverlayOpen('rules', true)
+                    openReferenceFromHelp('rules')
                   }}
                 >
                   
@@ -684,8 +698,7 @@ function TenderContent() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setHelpMenuOpen(false)
-                    setOverlayOpen('interpretation', true)
+                    openReferenceFromHelp('interpretation')
                   }}
                 >
                   
@@ -693,7 +706,7 @@ function TenderContent() {
                 </Button>
               </div>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
           <RulesReferenceDialog
             belowTenderHeader
             disabled={referenceHelpLocked}
@@ -701,8 +714,9 @@ function TenderContent() {
             open={rulesOpen && overlayPhase === tenderView.phase && !referenceHelpLocked}
             showTimerWarning={!isComplete}
             ruleset={tenderView.ruleset}
-            triggerClassName={styles.rulesAction}
+            triggerClassName={isComplete ? styles.completedReferenceAction : styles.rulesAction}
             triggerIcon="book"
+            triggerIconOnly={isComplete}
           />
           <LaboratoryInterpretationDialog
             belowTenderHeader
@@ -711,7 +725,8 @@ function TenderContent() {
             open={laboratoryHelpOpen && overlayPhase === tenderView.phase && !referenceHelpLocked}
             ruleset={tenderView.ruleset}
             showTimerWarning={!isComplete}
-            triggerClassName={styles.laboratoryAction}
+            triggerClassName={isComplete ? styles.completedReferenceAction : styles.laboratoryAction}
+            triggerIconOnly={isComplete}
           />
           <Button
             type="button"

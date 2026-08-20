@@ -15,22 +15,27 @@ test('defines fast commit and complete push quality gates', () => {
   expect(packageJson.scripts.prepare).toBe('bun scripts/install-git-hooks.mjs')
   expect(packageJson.scripts['security:secrets']).toContain('--tracked')
   expect(packageJson.scripts['security:secrets:staged']).toContain('--staged')
+  expect(packageJson.scripts['security:dependencies']).toBe('bun audit --audit-level=low')
   expect(packageJson.scripts['check:commit']).toContain('test:backend:unit')
+  expect(packageJson.scripts['check:commit']).toContain('test:website')
   expect(packageJson.scripts['check:commit']).not.toContain('e2e:webapp')
-  expect(packageJson.scripts['check:push']).toBe('bun run check')
+  expect(packageJson.scripts['check:push']).toBe('bun run security:dependencies && bun run check')
   expect(packageJson.scripts.check).toContain('smoke:backend:docker')
   expect(packageJson.scripts.check).toContain('e2e:webapp')
   expect(packageJson.scripts.lint).toContain('adminapp')
   expect(packageJson.scripts.test).toContain('test:adminapp')
+  expect(packageJson.scripts.test).toContain('test:website')
 })
 
 test('runs secret hygiene and tooling contracts in remote CI', () => {
+  expect(workflow).toContain('run: bun run security:dependencies')
   expect(workflow).toContain('run: bun run security:secrets')
   expect(workflow).toContain('run: bun run security:gitleaks')
   expect(workflow).toContain('run: bun run security:semgrep')
   expect(workflow).toContain('bun run security:trivy:image anomaly-detector-backend:smoke')
   expect(workflow).toContain('run: bun run test:tooling')
   expect(workflow).toContain('run: bun run test:adminapp')
+  expect(workflow).toContain('run: bun run test:website')
 })
 
 test('runs active ZAP only on an isolated scheduled or manual workflow', () => {

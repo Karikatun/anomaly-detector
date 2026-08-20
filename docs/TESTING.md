@@ -3,7 +3,8 @@
 ## Repository quality gates
 
 - `bun run check:commit` — быстрый локальный gate: tracked secret hygiene, lint, Prisma validation, typecheck, architecture, script/contracts/backend unit/webapp tests.
-- `bun run check:push` и `bun run check` — полный gate: все тесты, production build, backend Docker smoke и Playwright E2E.
+- `bun run check:push` — dependency audit и полный `check`: все тесты, production build, backend Docker smoke и Playwright E2E.
+- `bun run check` — полный локальный поведенческий gate без сетевого dependency audit.
 - `pre-commit` отдельно сканирует staged Git index, поэтому проверяет именно содержимое будущего commit, а не игнорируемый локальный `backend/.env`.
 - GitHub Actions повторяет secret hygiene и tooling contracts независимо от локальных hooks, которые можно обойти через `--no-verify`.
 - `security-static` независимо запускает Gitleaks по Git-истории, Semgrep по versioned high-confidence правилам и Trivy по конфигурации; после Docker smoke Trivy проверяет собранный backend image.
@@ -21,6 +22,34 @@ The goal of this project's tests is to show future agents where behavior should 
 - Mobile Maestro: lives on the `mobile` branch with the runnable Expo app.
 
 Client E2E should cover valuable user journeys, including non-happy-path states that protect real product behavior, when they can stay stable. Important edge cases must be covered at some automated level; choosing integration, contract, or unit coverage instead of E2E is not permission to skip them. Negative validation matrices, combinatorial edge cases, concurrency, and pure rules belong in unit/integration tests.
+
+### Public MVP Journey coverage
+
+When the approved MVP slices are implemented, use one representative browser
+journey for landing CTA → registration → tutorial completion → Recovery Email
+offer and a separate reset-password journey. Keep the exhaustive security
+matrix at contract/backend integration level:
+
+- Account Email canonicalisation, uniqueness, Yandex sync without merge, and
+  deleted-account reuse;
+- code/token expiry, attempt budgets, atomic consume, resend invalidation,
+  replacement requiring both factors, cooling-off cancellation and concurrent
+  requests;
+- Recovery Code issuance, hashing, one-time use and global session/recovery
+  revocation;
+- generic reset responses across missing, password, no-email, Yandex-only and
+  rate-limited accounts;
+- Approved Mail Service version conflicts, idempotent operator commands,
+  last-known-good import, outbox retry/restart and blocked-provider behavior;
+- analytics consent/refusal/revocation and retention without cross-use of
+  security data;
+- Feedback Report authorization, safe projection, rate limits, workflow
+  concurrency and scheduled deletion.
+
+Website acceptance separately inspects generated initial HTML, metadata,
+structured data, robots/sitemap, links, assets and responsive rendering. A
+successful website build does not prove the cross-domain continuation or that
+private app routes are excluded from indexing.
 
 ## Choosing Test Level
 

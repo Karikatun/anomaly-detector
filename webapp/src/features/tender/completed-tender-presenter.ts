@@ -21,6 +21,19 @@ const ratingKeys = [
   'thesisPoints',
 ] as const
 
+export function tenderPointUnit(points: number) {
+  const absolute = Math.abs(points)
+  const lastTwoDigits = absolute % 100
+  const lastDigit = absolute % 10
+  return lastTwoDigits >= 11 && lastTwoDigits <= 14
+    ? 'many'
+    : lastDigit === 1
+      ? 'one'
+      : lastDigit >= 2 && lastDigit <= 4
+        ? 'few'
+        : 'many'
+}
+
 export function presentCompletedTender(view: CompletedTenderSource, currentUserId?: string) {
   const winnerIds = new Set(view.winnerPlayerIds ?? [])
   const rankedPlayers = view.players.slice().sort((left, right) =>
@@ -31,6 +44,11 @@ export function presentCompletedTender(view: CompletedTenderSource, currentUserI
   return {
     completionReasonKey: completionReasonKeys[view.audit.completionReason],
     currentPlayer,
+    currentPlayerIsWinner: currentPlayer ? winnerIds.has(currentPlayer.playerId) : false,
+    currentPlacement: currentPlayer
+      ? view.audit.placementByPlayer[currentPlayer.playerId]
+      : undefined,
+    currentRating: currentPlayer?.rating,
     otherPlayers: rankedPlayers.filter((player) => player.playerId !== currentPlayer?.playerId),
     rankedPlayers,
     ratingEntries(playerId: string) {
