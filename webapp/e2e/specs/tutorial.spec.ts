@@ -1,3 +1,5 @@
+import AxeBuilder from '@axe-core/playwright'
+import type { Locator, Page } from '@playwright/test'
 import { expect, registerBrowserUser, test } from '../helpers/test'
 
 const tasks = {
@@ -25,6 +27,141 @@ const tasks = {
   finalModel: 'Подтверждённые свойства Aster и Boreal уже перенесены в Финальную модель. В обучении остальные Сигналы можно оставить пустыми. Нажмите «Отправить финальную модель».',
   helpDesktop: 'Теперь разберёмся, что означает «Отражение». Откройте «Трактовку анализов» в верхней части экрана.',
 } as const
+
+function captureRuntimeErrors(page: Page) {
+  const errors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(`console: ${message.text()}`)
+  })
+  page.on('pageerror', (error) => errors.push(`page: ${error.message}`))
+  return errors
+}
+
+async function expectNoAxeViolations(page: Page) {
+  const activeFloater = page.locator('[data-testid="floater"]')
+  if (await activeFloater.count() > 0) {
+    await expect.poll(() => activeFloater.evaluate((element) => Number(getComputedStyle(element).opacity))).toBe(1)
+  }
+  await page.evaluate(() => new Promise<void>((resolveFrame) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+  }))
+  const stacking = await page.evaluate(() => {
+    const floater = document.querySelector<HTMLElement>('[data-testid="floater"]')
+    const overlay = document.querySelector<HTMLElement>('[data-testid="overlay"]')
+    if (!floater || !overlay) return null
+    const rect = floater.getBoundingClientRect()
+    return {
+      floaterZIndex: getComputedStyle(floater).zIndex,
+      overlayZIndex: getComputedStyle(overlay).zIndex,
+      elementsAtCoachCenter: document.elementsFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      ).slice(0, 5).map((element) => ({
+        className: String(element.className),
+        tagName: element.tagName,
+        testId: element.getAttribute('data-testid'),
+      })),
+    }
+  })
+  if (stacking) {
+    expect(Number(stacking.floaterZIndex)).toBeGreaterThan(Number(stacking.overlayZIndex))
+    expect(stacking.elementsAtCoachCenter.some((element) => element.testId === 'floater')).toBe(true)
+  }
+
+  const auditOnlyLayers = page.locator('[data-agentation-root]')
+  const previousStyles = await auditOnlyLayers.evaluateAll((elements) => elements.map((element) => (
+    element.getAttribute('style')
+  )))
+  // Agentation is an audit tool, not product UI. Keep the actual Joyride overlay in the scan after
+  // proving that the coach is above it in the browser stacking order.
+  await auditOnlyLayers.evaluateAll((elements) => {
+    for (const element of elements) {
+      if (element instanceof HTMLElement) element.style.setProperty('display', 'none', 'important')
+    }
+  })
+  await page.evaluate(() => new Promise<void>((resolveFrame) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+  }))
+  let result
+  try {
+    result = await new AxeBuilder({ page })
+      .exclude('[data-agentation-root]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+  } finally {
+    await auditOnlyLayers.evaluateAll((elements, styles) => {
+      elements.forEach((element, index) => {
+        const style = styles[index]
+        if (style === null) element.removeAttribute('style')
+        else element.setAttribute('style', style)
+      })
+    }, previousStyles)
+  }
+  const violations = result.violations.map((violation) => ({
+    id: violation.id,
+    impact: violation.impact,
+    nodes: violation.nodes.map((node) => ({
+      target: node.target,
+      summary: node.failureSummary,
+    })),
+  }))
+  expect(violations, `stacking context: ${JSON.stringify(stacking)}`).toEqual([])
+}
+
+async function focusByTab(page: Page, target: Locator, maximumTabs = 12) {
+  for (let attempt = 0; attempt < maximumTabs; attempt += 1) {
+    if (await target.evaluate((element) => element === document.activeElement)) return
+    await page.keyboard.press('Tab')
+  }
+  await expect(target).toBeFocused()
+}
+
+async function expectVisibleFocus(target: Locator) {
+  await expect(target).toBeFocused()
+  await expect.poll(() => target.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return (style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0)
+      || style.boxShadow !== 'none'
+  })).toBe(true)
+}
+
+async function expectTouchTargetsMeetMinimum(page: Page) {
+  const undersizedTargets = await page
+    .locator('button, select, input, summary, a[href]')
+    .evaluateAll((elements) => elements.flatMap((element) => {
+      const rect = element.getBoundingClientRect()
+      const style = getComputedStyle(element)
+      const before = getComputedStyle(element, '::before')
+      const pseudoExpansion = before.content !== 'none'
+        ? {
+            horizontal: Math.max(0, -Number.parseFloat(before.left))
+              + Math.max(0, -Number.parseFloat(before.right)),
+            vertical: Math.max(0, -Number.parseFloat(before.top))
+              + Math.max(0, -Number.parseFloat(before.bottom)),
+          }
+        : { horizontal: 0, vertical: 0 }
+      const targetWidth = rect.width + pseudoExpansion.horizontal
+      const targetHeight = rect.height + pseudoExpansion.vertical
+      const outsideViewport = rect.right <= 0
+        || rect.bottom <= 0
+        || rect.left >= window.innerWidth
+        || rect.top >= window.innerHeight
+      if (element.closest('[data-agentation-root]')
+        || outsideViewport
+        || style.visibility === 'hidden'
+        || style.display === 'none'
+        || rect.width === 0
+        || rect.height === 0
+        || (element instanceof HTMLButtonElement && element.disabled)
+        || (targetWidth >= 24 && targetHeight >= 24)) return []
+      return [{
+        name: element.getAttribute('aria-label') ?? element.textContent?.trim() ?? element.tagName,
+        width: Math.round(targetWidth),
+        height: Math.round(targetHeight),
+      }]
+    }))
+  expect(undersizedTargets).toEqual([])
+}
 
 async function startTutorial(page: Parameters<typeof registerBrowserUser>[0]) {
   await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
@@ -814,11 +951,79 @@ test('keeps the interpretation close action available at 1024x768', async ({ pag
   await expectControlClearOfCoach(page, closeInterpretation)
 })
 
+test('keeps the prologue and guided steps accessible from the keyboard', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await registerBrowserUser(page, 'Ученик Keyboard', 'tutorial-keyboard')
+  const runtimeErrors = captureRuntimeErrors(page)
+
+  await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
+  const prologue = page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
+  await expect(prologue).toBeVisible()
+  await expect.poll(() => prologue.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true)
+  await expectNoAxeViolations(page)
+
+  await page.keyboard.press('Escape')
+  await expect(prologue).toBeVisible()
+  const start = prologue.getByRole('button', { name: 'Начать обучение' })
+  await focusByTab(page, start, 3)
+  await expectVisibleFocus(start)
+  await page.keyboard.press('Enter')
+
+  await expect(currentTask(page, tasks.interactionGuide)).toBeVisible()
+  const continueAction = page.getByTestId('floater').getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' })
+  await focusByTab(page, continueAction)
+  await expectVisibleFocus(continueAction)
+  await page.keyboard.press('Enter')
+  await expect(currentTask(page, tasks.header)).toBeVisible()
+  await expectNoAxeViolations(page)
+  expect(runtimeErrors).toEqual([])
+})
+
+test('reflows at a 200% desktop zoom equivalent and honors reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await registerBrowserUser(page, 'Ученик Zoom', 'tutorial-zoom')
+  await startTutorial(page)
+
+  await page.setViewportSize({ width: 720, height: 450 })
+  await expect(currentTask(page, tasks.headerMobile)).toBeVisible()
+  await expectCoachWithinViewport(page)
+  await expectSpotlightClearOfCoach(page)
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  const longAnimations = await page.evaluate(() => document.getAnimations().flatMap((animation) => {
+    const duration = Number(animation.effect?.getTiming().duration ?? 0)
+    return duration > 20 ? [duration] : []
+  }))
+  expect(longAnimations).toEqual([])
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await expect(currentTask(page, tasks.header)).toBeVisible()
+  await expectSpotlightClearOfCoach(page)
+})
+
+test('preserves the mobile step through dynamic viewport and orientation changes', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await registerBrowserUser(page, 'Ученик Mobile Resize', 'tutorial-mobile-resize')
+  await startTutorial(page)
+
+  await page.setViewportSize({ width: 844, height: 390 })
+  await expect(currentTask(page, tasks.header)).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 700 })
+  await expect(currentTask(page, tasks.headerMobile)).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(currentTask(page, tasks.headerMobile)).toBeVisible()
+  await expectCoachWithinViewport(page)
+  await expectSpotlightClearOfCoach(page)
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await expectTouchTargetsMeetMinimum(page)
+})
+
 test('completes the two-round tutorial, restores its tab-local step, and records only completion', async ({ page }) => {
   test.setTimeout(120_000)
   page.setDefaultTimeout(15_000)
   await page.setViewportSize({ width: 1440, height: 900 })
   await registerBrowserUser(page, 'Ученик E2E', 'tutorial-happy')
+  const runtimeErrors = captureRuntimeErrors(page)
 
   await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
   await page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
@@ -888,11 +1093,21 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect(page.getByRole('button', { name: 'Правила', exact: true })).toBeVisible()
   await expect(currentTask(page, tasks.helpDesktop)).toBeVisible()
   await expectTutorialFrameFullyVisible(page, '[data-tutorial-interpretation-direct]')
-  await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
+  const interpretationTrigger = page.getByRole('button', { name: 'Трактовка анализов', exact: true })
+  await page.getByRole('button', { name: 'Правила', exact: true }).focus()
+  await page.keyboard.press('Tab')
+  await expectVisibleFocus(interpretationTrigger)
+  await page.keyboard.press('Enter')
   const interpretationDialog = page.getByRole('dialog', { name: 'Трактовка лабораторных анализов' })
   await expect(interpretationDialog).toContainText('Цикл типов поля')
   await expectReadingDialogAvailable(page, interpretationDialog)
   await expectCoachWithinViewport(page)
+  await expect.poll(() => interpretationDialog.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true)
+  await page.keyboard.press('Escape')
+  await expect(interpretationDialog).toBeHidden()
+  await expect(interpretationTrigger).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(interpretationDialog).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть трактовку анализов' }).click()
 
   await expectCoachWithinViewport(page)
@@ -987,13 +1202,15 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect(
     page.getByText('Сыграно матчей').locator('..').getByText('0', { exact: true }),
   ).toBeVisible()
+  expect(runtimeErrors).toEqual([])
 })
 
 test('completes the full tutorial on mobile with each action clear of the coach', async ({ page }) => {
   test.setTimeout(120_000)
   page.setDefaultTimeout(15_000)
-  await page.setViewportSize({ width: 390, height: 840 })
+  await page.setViewportSize({ width: 390, height: 844 })
   await registerBrowserUser(page, 'Мобильный ученик E2E', 'tutorial-mobile-interpretation')
+  const runtimeErrors = captureRuntimeErrors(page)
 
   await startTutorial(page)
   await expectCoachWithinViewport(page)
@@ -1229,9 +1446,14 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeHidden()
   await expect(page.getByRole('alert')).toContainText('отметку об обучении пока не удалось сохранить')
   expect(completionAttempts).toBe(1)
+  expect(runtimeErrors).toEqual([
+    'console: Failed to load resource: the server responded with a status of 503 (Service Unavailable)',
+  ])
+  runtimeErrors.length = 0
   await page.unroute('**/api/profile/tutorial/completion')
   await page.getByRole('button', { name: 'Сохранить отметку' }).click()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+  expect(runtimeErrors).toEqual([])
 })
 
 test('exits the tutorial through its confirmation dialog and clears the saved step', async ({ page }) => {
