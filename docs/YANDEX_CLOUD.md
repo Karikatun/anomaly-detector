@@ -551,7 +551,9 @@ VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT='<public operator name in dative case>' \
 VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS='<public address for legal requests>' \
 bun run --cwd webapp build:release
 VITE_API_URL=https://api.anomaly-detector.ru bun run build:adminapp
-PUBLIC_WEBSITE_URL=https://anomaly-detector.ru bun run build:website
+PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
+PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
+bun run build:website
 ```
 
 The webapp and adminapp API values are embedded at build time and must point to the
@@ -565,16 +567,15 @@ or legal value changes, then verify that the generated main JavaScript bundle
 contains the production API origin for both paths and does not contain
 `http://localhost:3000`.
 
-`PUBLIC_WEBSITE_URL` is also embedded at build time and must be the public
+`PUBLIC_WEBSITE_URL` is embedded at build time and must be the public
 canonical origin of the website; without it, the generated pages intentionally
-omit canonical and `og:url` metadata. Add `PUBLIC_WEBAPP_URL` only when the
-public website intentionally links to the authenticated webapp.
+omit canonical and `og:url` metadata. `PUBLIC_WEBAPP_URL` is the exact player
+app origin used by the landing CTA and legal links; it must be set for a
+production website build.
 
 For the ADR 0014 target, `PUBLIC_WEBSITE_URL` remains
 `https://anomaly-detector.ru` and the future implemented `PUBLIC_WEBAPP_URL`
-must be exactly `https://app.anomaly-detector.ru`. Do not set the latter until
-the website validates and consumes it; a deployment variable alone does not
-create the CTA or redirect contract.
+must be exactly `https://app.anomaly-detector.ru`.
 
 Before uploading, create a Yandex Object Storage static access key for a service account and configure the AWS CLI with it. Yandex's Object Storage docs recommend `aws configure` with the static key and `ru-central1` as the region.
 

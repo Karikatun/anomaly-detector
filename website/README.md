@@ -17,7 +17,8 @@ surface independently.
 - Astro and TypeScript;
 - static generation by default;
 - build output in `website/dist`;
-- `PUBLIC_WEBSITE_URL` as the canonical production origin.
+- `PUBLIC_WEBSITE_URL` as the canonical production origin;
+- `PUBLIC_WEBAPP_URL` as the player-app origin used by CTA and legal links.
 
 Every current page must remain fully usable in generated HTML. Title,
 description, canonical URL, Open Graph metadata, and public product copy must not
@@ -58,6 +59,7 @@ From the repository root:
 ```bash
 bun run dev:website
 bun run typecheck:website
+bun run test:website
 bun run build:website
 ```
 
@@ -66,6 +68,7 @@ From this workspace:
 ```bash
 bun run dev
 bun run typecheck
+bun run test
 bun run build
 bun run preview
 ```
@@ -78,7 +81,9 @@ The current production path builds the static site with its concrete canonical
 origin and publishes `website/dist` through the Yandex Cloud static-site path:
 
 ```bash
-PUBLIC_WEBSITE_URL=https://anomaly-detector.ru bun run build:website
+PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
+PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
+bun run build:website
 ```
 
 Follow [the release entrypoint](../docs/DEPLOYMENT.md), the

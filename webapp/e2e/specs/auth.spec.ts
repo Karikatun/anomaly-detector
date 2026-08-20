@@ -41,6 +41,25 @@ test('shows the primary sign-in paths immediately and exposes accurate auth head
   await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
 })
 
+test('continues a landing registration into tutorial and ignores unknown destinations', async ({ page }) => {
+  await page.goto('/?continue=admin')
+  await expect(page.getByRole('tab', { name: 'Вход', exact: true })).toHaveAttribute('aria-selected', 'true')
+
+  await page.goto('/?continue=tutorial')
+  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
+
+  const login = `landing-tutorial-${Date.now()}`
+  await page.getByLabel('Логин').fill(login)
+  await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
+  await page.getByLabel('Имя').fill('Исследователь лендинга')
+  await page.getByRole('checkbox', { name: 'Я даю согласие на обработку персональных данных' }).check()
+  await page.getByRole('checkbox', { name: 'Я принимаю Пользовательское соглашение' }).check()
+  await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
+
+  await expect(page).toHaveURL('/tutorial')
+  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toBeVisible()
+})
+
 test('explains how to register when a Yandex ID has no game account', async ({ page }) => {
   await page.goto('/?auth_error=oauth_registration_consent_required')
 
