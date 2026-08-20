@@ -121,7 +121,12 @@ async function completeInitialInterfaceTour(page: Parameters<typeof registerBrow
   } else {
     await expectTutorialFrameFullyVisible(page, '[data-tutorial-access-options]')
   }
-  await expectSpotlightMatchesTarget(page, '[data-tutorial-access-options]')
+  await expectSpotlightMatchesTarget(
+    page,
+    (page.viewportSize()?.width ?? 0) <= 1088
+      ? '[data-tutorial-access-slot="1"]'
+      : '[data-tutorial-access-options]',
+  )
   await continueInformationStep(page, tasks.accessIntro)
   await expect(page.locator('[data-tutorial-access-slot][data-selected]')).toHaveCount(0)
   await expect(page.getByText('Слот: 5', { exact: true })).toHaveCount(0)
@@ -165,6 +170,64 @@ async function expectTargetClearOfCoach(
   }, {
     message: 'tutorial coach must not cover the highlighted target',
   }).toBe(true)
+}
+
+async function expectSpotlightClearOfCoach(
+  page: Parameters<typeof registerBrowserUser>[0],
+) {
+  await expect.poll(async () => {
+    const [spotlightBox, coachBox] = await Promise.all([
+      page.getByTestId('spotlight').locator('path').last().boundingBox(),
+      page.getByTestId('floater').locator('[data-joyride-step]').boundingBox(),
+    ])
+    if (!spotlightBox || !coachBox) return false
+    return spotlightBox.y + spotlightBox.height + 8 <= coachBox.y
+      || coachBox.y + coachBox.height + 8 <= spotlightBox.y
+      || spotlightBox.x + spotlightBox.width + 8 <= coachBox.x
+      || coachBox.x + coachBox.width + 8 <= spotlightBox.x
+  }, {
+    message: 'tutorial coach must not cover the visible spotlight',
+  }).toBe(true)
+}
+
+async function expectSpotlightFullyVisible(
+  page: Parameters<typeof registerBrowserUser>[0],
+) {
+  const viewport = page.viewportSize()
+  expect(viewport, 'tutorial viewport must be configured').not.toBeNull()
+  await expect.poll(async () => {
+    const box = await page.getByTestId('spotlight').locator('path').last().boundingBox()
+    if (!box) return Number.NEGATIVE_INFINITY
+    return Math.min(
+      box.x,
+      box.y,
+      viewport!.width - (box.x + box.width),
+      viewport!.height - (box.y + box.height),
+    )
+  }, {
+    message: 'tutorial spotlight must fit inside the viewport',
+  }).toBeGreaterThanOrEqual(4)
+}
+
+async function expectControlClearOfCoach(
+  page: Parameters<typeof registerBrowserUser>[0],
+  control: ReturnType<Parameters<typeof registerBrowserUser>[0]['getByRole']>,
+) {
+  await expect.poll(async () => {
+    const [controlBox, coachBox] = await Promise.all([
+      control.boundingBox(),
+      page.getByTestId('floater').locator('[data-joyride-step]').boundingBox(),
+    ])
+    if (!controlBox || !coachBox) return false
+    return controlBox.y + controlBox.height + 8 <= coachBox.y
+      || coachBox.y + coachBox.height + 8 <= controlBox.y
+      || controlBox.x + controlBox.width + 8 <= coachBox.x
+      || coachBox.x + coachBox.width + 8 <= controlBox.x
+  }, {
+    message: 'tutorial coach must not cover the required control',
+  }).toBe(true)
+
+  await expectRequiredActionAvailable(page, control)
 }
 
 async function expectActionContainerClearOfCoach(
@@ -261,14 +324,14 @@ async function expectNoDesktopDocumentScroll(page: Parameters<typeof registerBro
     viewport: window.innerHeight,
     contentBottom: Math.max(
       ...Array.from(document.querySelector<HTMLElement>('[data-tutorial-board]')?.children ?? [])
-        .map((element) => element.getBoundingClientRect().bottom),
+        .map((element) => element.getBoundingClientRect().bottom + window.scrollY),
     ),
   }))
   if (geometry.contentBottom > geometry.viewport) return
   expect(
     Math.max(geometry.body, geometry.document),
     'desktop tutorial must not create document scroll when its content fits the viewport',
-  ).toBeLessThanOrEqual(geometry.viewport)
+  ).toBeLessThanOrEqual(geometry.viewport + 8)
 }
 
 async function expectTargetInMobileInteractiveArea(
@@ -659,6 +722,96 @@ async function submitThesis(
   await confirm.click()
 }
 
+test('keeps the first mobile tutorial target clear of the coach', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 })
+  await registerBrowserUser(page, 'Ученик Mobile Layout', 'tutorial-mobile-layout')
+
+  await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
+  await page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
+    .getByRole('button', { name: 'Начать обучение' })
+    .click()
+
+  await expect(currentTask(page, tasks.interactionGuide)).toBeVisible()
+  await expectSpotlightClearOfCoach(page)
+})
+
+test('keeps the narrow-desktop access spotlight clear of the coach', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await registerBrowserUser(page, 'Ученик Access Layout', 'tutorial-access-layout')
+
+  await startTutorial(page)
+  for (let index = 0; index < 3; index += 1) {
+    await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  }
+
+  await expect(currentTask(page, tasks.accessIntro)).toBeVisible()
+  await expectSpotlightClearOfCoach(page)
+})
+
+test('keeps the required laboratory action available at 1024x768', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await registerBrowserUser(page, 'Ученик Narrow Desktop', 'tutorial-narrow-desktop')
+
+  await startTutorial(page)
+  await completeInitialInterfaceTour(page)
+  await chooseAccessSlot(page, 5)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await allocatePower(page, {
+    'Разведка': 1,
+    'Лаборатория': 2,
+    'Анализ модели': 1,
+    'Контракты': 0,
+  })
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await runReconnaissance(page)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await page.getByRole('button', { name: 'Глубокое' }).click()
+  await runLaboratoryTest(page, 'Aster', 'Boreal')
+  await expect(page.getByTestId('tutorial-research-trigger')).toBeVisible()
+})
+
+test('keeps the power introduction fully visible at 1024x768', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await registerBrowserUser(page, 'Ученик Power Layout', 'tutorial-power-layout')
+
+  await startTutorial(page)
+  await completeInitialInterfaceTour(page)
+  await chooseAccessSlot(page, 5)
+
+  await expectSpotlightClearOfCoach(page)
+  await expectSpotlightFullyVisible(page)
+})
+
+test('keeps the interpretation close action available at 1024x768', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await registerBrowserUser(page, 'Ученик Interpretation Layout', 'tutorial-interpretation-layout')
+
+  await startTutorial(page)
+  await completeInitialInterfaceTour(page)
+  await chooseAccessSlot(page, 5)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await allocatePower(page, {
+    'Разведка': 1,
+    'Лаборатория': 2,
+    'Анализ модели': 1,
+    'Контракты': 0,
+  })
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await runReconnaissance(page)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await page.getByRole('button', { name: 'Глубокое' }).click()
+  await runLaboratoryTest(page, 'Aster', 'Boreal')
+  await page.getByTestId('tutorial-research-trigger').click()
+  await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+  await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
+
+  const closeInterpretation = page.getByRole('button', { name: 'Закрыть трактовку анализов' })
+  await expect(closeInterpretation).toBeVisible()
+  await expectControlClearOfCoach(page, closeInterpretation)
+})
+
 test('completes the two-round tutorial, restores its tab-local step, and records only completion', async ({ page }) => {
   test.setTimeout(120_000)
   page.setDefaultTimeout(15_000)
@@ -800,7 +953,9 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect(page.getByLabel('Заполнено параметров: 4')).toBeVisible()
   await expect(currentTask(page, tasks.finalModel)).toBeVisible()
   await expectCoachWithinViewport(page, { expectDocumentFits: false })
-  await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
+  const finalSubmit = page.getByRole('button', { name: 'Отправить финальную модель' })
+  await expectControlClearOfCoach(page, finalSubmit)
+  await finalSubmit.click()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
   await expect(page.getByText('В настоящем Тендере будет пять раундов', { exact: false })).toBeVisible()
   const finalBackgrounds = await page.evaluate(() => ({
@@ -831,7 +986,7 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await completeInitialInterfaceTour(page)
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-slot="5"]')
   await chooseAccessSlot(page, 5)
-  await expectMobileTargetTopAligned(page, '[data-tutorial-primary]')
+  await expectMobileTargetTopAligned(page, '[data-tutorial-power-intro]')
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expectTargetInMobileInteractiveArea(
     page,

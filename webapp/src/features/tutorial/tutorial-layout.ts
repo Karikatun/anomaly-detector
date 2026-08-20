@@ -2,11 +2,13 @@ import type { TutorialStep } from './scenario'
 
 export function resolveTutorialPresentation({
   anchor,
+  compactGuidance,
   compactHeader,
   spotlight,
   step,
 }: {
   anchor: string
+  compactGuidance?: boolean
   compactHeader: boolean
   spotlight?: string
   step: TutorialStep
@@ -18,6 +20,8 @@ export function resolveTutorialPresentation({
     positionTarget: compactHeader && step === 'help-menu'
       ? '[data-tutorial-board] > header'
       : anchor,
-    spotlightTarget: spotlight ?? anchor,
+    spotlightTarget: (compactGuidance ?? compactHeader) && step === 'round-1-access-intro'
+      ? anchor
+      : spotlight ?? anchor,
   }
 }

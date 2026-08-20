@@ -147,10 +147,21 @@ function TutorialContent() {
   const [compactHeader, setCompactHeader] = useState(
     () => window.matchMedia('(max-width: 47.999rem)').matches,
   )
+  const [compactGuidance, setCompactGuidance] = useState(
+    () => window.matchMedia('(max-width: 68rem)').matches,
+  )
 
   useLayoutEffect(() => {
     const media = window.matchMedia('(max-width: 47.999rem)')
     const syncViewport = () => setCompactHeader(media.matches)
+    syncViewport()
+    media.addEventListener('change', syncViewport)
+    return () => media.removeEventListener('change', syncViewport)
+  }, [])
+
+  useLayoutEffect(() => {
+    const media = window.matchMedia('(max-width: 68rem)')
+    const syncViewport = () => setCompactGuidance(media.matches)
     syncViewport()
     media.addEventListener('change', syncViewport)
     return () => media.removeEventListener('change', syncViewport)
@@ -346,7 +357,7 @@ function TutorialContent() {
     anchor: string
     spotlight?: string
   }> = {
-    'interaction-guide': { anchor: '[data-tutorial-primary]' },
+    'interaction-guide': { anchor: '[data-tutorial-access-intro]' },
     'round-1-header': { anchor: '[data-tutorial-highlight="header"] > header' },
     'round-1-sidebar': { anchor: '[data-tutorial-sidebar]' },
     'round-1-contracts': { anchor: '[data-tutorial-contracts]' },
@@ -357,7 +368,9 @@ function TutorialContent() {
     'round-1-access': {
       anchor: '[data-tutorial-access-slot="5"]',
     },
-    'round-1-power-intro': { anchor: '[data-tutorial-primary]' },
+    'round-1-power-intro': {
+      anchor: compactGuidance ? '[data-tutorial-power-intro]' : '[data-tutorial-primary]',
+    },
     'round-1-power': {
       anchor: '[data-tutorial-power-category="reconnaissance"]',
       spotlight: '[data-tutorial-power-options]',
@@ -442,6 +455,7 @@ function TutorialContent() {
     || state.step === 'interpretation-open'
   const presentation = resolveTutorialPresentation({
     anchor: targetConfig.anchor,
+    compactGuidance,
     compactHeader,
     spotlight: targetConfig.spotlight,
     step: state.step,
@@ -504,8 +518,8 @@ function TutorialContent() {
         <TutorialViewportAnchor
           alignTargetStart={presentation.alignTargetStart}
           anchorSelector={presentation.positionTarget}
-          coachAtTop={coachAtTop}
-          compactHeader={compactHeader}
+          coachAtTop={compactHeader && coachAtTop}
+          compactLayout={compactHeader}
           spotlightSelector={targetConfig.spotlight}
         />
       )}
@@ -550,7 +564,7 @@ function TutorialContent() {
       />}
       <Typography aria-live="polite" variant="srOnly">{t(currentTaskKey)}</Typography>
       <TutorialTenderBoard
-        actionPanelPinned={compactHeader && mobileActionPinnedSteps.has(state.step)}
+        actionPanelPinned={compactGuidance && mobileActionPinnedSteps.has(state.step)}
         commandError={commandError}
         highlight={exitOpen ? 'none' : highlight}
         interpretationRequired={state.step === 'help-menu'
@@ -597,13 +611,13 @@ function TutorialViewportAnchor({
   alignTargetStart,
   anchorSelector,
   coachAtTop,
-  compactHeader,
+  compactLayout,
   spotlightSelector,
 }: {
   alignTargetStart: boolean
   anchorSelector: string
   coachAtTop: boolean
-  compactHeader: boolean
+  compactLayout: boolean
   spotlightSelector?: string
 }) {
   useLayoutEffect(() => {
@@ -625,7 +639,7 @@ function TutorialViewportAnchor({
       if (revealSpotlightTimer !== undefined) window.clearTimeout(revealSpotlightTimer)
       revealSpotlightTimer = window.setTimeout(revealSpotlight, delay)
     }
-    if (compactHeader) {
+    if (compactLayout) {
       document.documentElement.dataset.tutorialAutoscrolling = ''
     }
     const frame = window.requestAnimationFrame(() => {
@@ -641,20 +655,20 @@ function TutorialViewportAnchor({
         const coachRect = coach?.getBoundingClientRect()
         const headerRect = header?.getBoundingClientRect()
         const anchorIsHeader = anchor === header
-        if (compactHeader && actionContainer) {
+        if (compactLayout && actionContainer) {
           document.documentElement.style.setProperty(
             '--tutorial-mobile-action-height',
             `${actionContainer.getBoundingClientRect().height}px`,
           )
         }
-        const safeTop = compactHeader
+        const safeTop = compactLayout
           ? anchorIsHeader
             ? 0
             : coachAtTop
             ? (coachRect?.bottom ?? 276) + 12
             : Math.max(12, (headerRect?.bottom ?? 100) + 20)
           : 88
-        const safeBottom = compactHeader && !coachAtTop
+        const safeBottom = compactLayout && !coachAtTop
           ? (coachRect?.top ?? window.innerHeight - 276) - 12
           : window.innerHeight - 12
         const safeHeight = safeBottom - safeTop
@@ -668,7 +682,7 @@ function TutorialViewportAnchor({
             : anchor
         const rect = preferredTarget.getBoundingClientRect()
 
-        if (compactHeader && coachAtTop && coachRect) {
+        if (compactLayout && coachAtTop && coachRect) {
           document.documentElement.style.setProperty(
             '--tutorial-mobile-coach-bottom',
             `${coachRect.bottom}px`,
@@ -701,7 +715,7 @@ function TutorialViewportAnchor({
               || Math.abs(window.scrollY - targetScrollTop) < 1)) return
           lastRequestedScrollTop = targetScrollTop
           lastRequestScrollY = window.scrollY
-          if (compactHeader) {
+          if (compactLayout) {
             document.documentElement.dataset.tutorialAutoscrolling = ''
             scheduleSpotlightReveal()
           }
@@ -711,7 +725,7 @@ function TutorialViewportAnchor({
             behavior: 'auto',
             top: targetScrollTop,
           })
-          if (compactHeader && positionRetryCount < maximumPositionRetries) {
+          if (compactLayout && positionRetryCount < maximumPositionRetries) {
             if (layoutSettleTimer !== undefined) window.clearTimeout(layoutSettleTimer)
             layoutSettleTimer = window.setTimeout(() => {
               positionRetryCount += 1
@@ -749,7 +763,7 @@ function TutorialViewportAnchor({
         actionObserver.observe(actionContainer)
       }
       positionTarget()
-      if (compactHeader) {
+      if (compactLayout) {
         if (layoutSettleTimer !== undefined) window.clearTimeout(layoutSettleTimer)
         layoutSettleTimer = window.setTimeout(positionTarget, positionRetryDelayMs)
       }
@@ -767,7 +781,7 @@ function TutorialViewportAnchor({
       document.documentElement.style.removeProperty('--tutorial-mobile-coach-bottom')
       document.documentElement.style.removeProperty('--tutorial-mobile-action-height')
     }
-  }, [alignTargetStart, anchorSelector, coachAtTop, compactHeader, spotlightSelector])
+  }, [alignTargetStart, anchorSelector, coachAtTop, compactLayout, spotlightSelector])
 
   return null
 }
