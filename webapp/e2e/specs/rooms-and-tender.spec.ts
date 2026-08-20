@@ -1,5 +1,83 @@
 import type { Page } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { expect, registerBrowserUser, test } from '../helpers/test'
+
+const uxAuditDirectory = process.env.UX_AUDIT_DIR
+
+type AxeFinding = {
+  id: string
+  impact: string | null
+  targets: string[][]
+  helpUrl: string
+}
+
+async function auditCheckpoint(page: Page, name: string) {
+  if (!uxAuditDirectory) return
+
+  const outputDirectory = resolve(uxAuditDirectory)
+  await mkdir(outputDirectory, { recursive: true })
+  await expect(page.locator('[role="dialog"]')).toHaveCount(0)
+  await page.evaluate(() => new Promise<void>((resolveFrame) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+  }))
+  const agentation = page.locator('[data-agentation-root]')
+  await agentation.evaluateAll((elements) => {
+    for (const element of elements) {
+      if (element instanceof HTMLElement) element.hidden = true
+    }
+  })
+  await page.screenshot({ path: resolve(outputDirectory, `${name}.viewport.png`) })
+  await page.screenshot({ path: resolve(outputDirectory, `${name}.full.png`), fullPage: true })
+
+  const axe = await new AxeBuilder({ page })
+    .exclude('[data-agentation-root]')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze()
+  const findings: AxeFinding[] = axe.violations.map((violation) => ({
+    id: violation.id,
+    impact: violation.impact,
+    targets: violation.nodes.map((node) => node.target),
+    helpUrl: violation.helpUrl,
+  }))
+  await writeFile(
+    resolve(outputDirectory, `${name}.axe.json`),
+    `${JSON.stringify(findings, null, 2)}\n`,
+  )
+  const smallTargets = await page.locator('button, select, input, summary, a[href]').evaluateAll((elements) => elements
+    .filter((element) => {
+      const rect = element.getBoundingClientRect()
+      const style = getComputedStyle(element)
+      return !element.closest('[data-agentation-root]')
+        && !(element instanceof HTMLButtonElement && element.disabled)
+        && style.visibility !== 'hidden'
+        && style.display !== 'none'
+        && rect.width > 0
+        && rect.height > 0
+        && rect.right > 0
+        && rect.bottom > 0
+        && rect.left < innerWidth
+        && rect.top < innerHeight
+        && (rect.width < 24 || rect.height < 24)
+    })
+    .map((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        name: element.getAttribute('aria-label') || element.textContent?.trim().replace(/\s+/g, ' ') || element.tagName,
+        selector: element.tagName.toLowerCase(),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+    }))
+  await writeFile(
+    resolve(outputDirectory, `${name}.touch.json`),
+    `${JSON.stringify(smallTargets, null, 2)}\n`,
+  )
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  if (process.env.UX_AUDIT_ASSERT_AXE === '1') expect(findings).toEqual([])
+}
 
 const headings = {
   access: '1. Выбор слота доступа',
@@ -150,9 +228,11 @@ async function verifyWorkingModelModal(page: Page) {
     await laboratoryClose.click()
     await expect(laboratoryDialog).toBeHidden()
 
-    await page.getByRole('button', { name: /Рабочая модель/ }).click()
+    const workingModelTrigger = page.getByRole('button', { name: /Рабочая модель/ })
+    await workingModelTrigger.click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
+    expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true)
 
     await expect(sharedTimer).toBeVisible()
     await expect(dialog.locator('[role="timer"]')).toHaveCount(0)
@@ -175,6 +255,7 @@ async function verifyWorkingModelModal(page: Page) {
 
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
+    await expect(workingModelTrigger).toBeFocused()
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
 
     await page.setViewportSize({ width: 1280, height: 720 })
@@ -555,10 +636,28 @@ test('two players complete every Tender stage and receive each realtime phase tr
 
   const guestContext = await browser.newContext({
     baseURL: webOrigin,
+    reducedMotion: 'reduce',
     viewport: { width: 390, height: 844 },
   })
   const guestPage = await guestContext.newPage()
   guestPage.setDefaultTimeout(15_000)
+  const runtimeIssues: string[] = []
+  const collectRuntimeIssues = (source: string) => {
+    const currentPage = source === 'host' ? page : guestPage
+    currentPage.on('pageerror', (error) => runtimeIssues.push(`${source}: pageerror: ${error.message}`))
+    currentPage.on('console', (message) => {
+      if (message.type() !== 'error') return
+      const resourceUrl = message.location().url
+      const expectedInjectedFailure = resourceUrl.endsWith('/api/auth/refresh')
+        || /\/api\/tenders\/[0-9a-f-]+\/commands$/.test(resourceUrl)
+      if (!expectedInjectedFailure) runtimeIssues.push(`${source}: console: ${message.text()}`)
+    })
+    currentPage.on('requestfailed', (request) => {
+      runtimeIssues.push(`${source}: requestfailed: ${request.method()} ${new URL(request.url()).pathname}`)
+    })
+  }
+  collectRuntimeIssues('host')
+  collectRuntimeIssues('guest')
   const guestRealtimeViews: Array<Record<string, unknown>> = []
   guestPage.on('websocket', (socket) => {
     socket.on('framereceived', ({ payload }) => {
@@ -633,6 +732,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByRole('button', {
       name: 'Слот доступа 6: Удалённый. Порядок действия: 6. Компенсация: 1 бюджет и 1 образец сигнала',
     })).toBeVisible()
+    await auditCheckpoint(page, '01-access-slot-desktop-1440x900')
+    await auditCheckpoint(guestPage, '02-access-slot-mobile-390x844')
 
     let rejectFirstCommand = true
     await page.route('**/api/tenders/*/commands', async (route) => {
@@ -666,6 +767,9 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('2: непрерывный опыт с публичным результатом и приватным измерением полярности.')).toBeVisible()
     await expect(page.getByText('1: зарезервируйте и подайте одну заявку по контракту.')).toBeVisible()
     await expect(page.getByText('Слот 1', { exact: true })).toBeVisible()
+    await page.setViewportSize({ width: 1024, height: 768 })
+    await auditCheckpoint(page, '03-power-compact-1024x768')
+    await page.setViewportSize({ width: 1440, height: 900 })
     await allocatePower(page, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
     await allocatePower(guestPage, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
 
@@ -678,6 +782,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('Изучено', { exact: true })).toHaveCount(2)
     await expect(page.getByRole('button', { name: 'Правила' })).toBeEnabled()
     await expect(page.getByRole('button', { name: 'Трактовка анализов' })).toBeEnabled()
+    await auditCheckpoint(page, '04-reconnaissance-desktop-1440x900')
     await expectPhase(guestPage, headings.reconnaissance)
     await expect(guestPage.getByRole('button', { name: /^Контракты этого раунда · \d+$/ })).toBeVisible()
     await runReconnaissance(guestPage)
@@ -730,6 +835,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
         await expect(page.getByText('Шаг 1 из 2 · выберите тип исследования')).toBeVisible()
         await expect(page.getByRole('button', { name: 'Сначала выберите тип исследования' })).toBeDisabled()
         await expect(page.getByLabel('Образец: Aster')).toBeDisabled()
+        await auditCheckpoint(page, '05-laboratory-desktop-1440x900')
+        await auditCheckpoint(guestPage, '06-laboratory-mobile-390x844')
       }
       await runLaboratory(page, 'deep', round - 1)
       await expect(page.getByText('История', { exact: true })).toBeVisible()
@@ -759,6 +866,10 @@ test('two players complete every Tender stage and receive each realtime phase tr
         await expect(page.getByText(`Всего: ${previousThesisCount} · раунд: 0/1`)).toBeVisible()
       }
       if (round === 2) await verifyWorkingModelModal(guestPage)
+      if (round === 2) {
+        await auditCheckpoint(page, '07-model-analysis-desktop-1440x900')
+        await auditCheckpoint(guestPage, '08-model-analysis-mobile-390x844')
+      }
       await submitThesis(page)
       if (round === 2) {
         await expect(guestPage.getByText('Завершили 1 из 2 исследователей').first()).toBeVisible()
@@ -771,6 +882,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await submitThesis(guestPage)
       if (round >= 3) {
         await expectPhase(page, headings.contracts)
+        if (round === 3) await auditCheckpoint(page, '09-contracts-desktop-1440x900')
         await completeContract(page)
         if (await guestPage.getByRole('heading', { name: headings.contracts }).isVisible()) {
           await completeContract(guestPage)
@@ -808,6 +920,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(
       guestPage.getByRole('button', { name: 'Отправить финальную модель' }).locator('xpath=ancestor::footer'),
     ).toHaveCSS('position', 'sticky')
+    await auditCheckpoint(page, '10-final-model-desktop-1440x900')
+    await auditCheckpoint(guestPage, '11-final-model-mobile-390x844')
     const finalDraftSaved = page.waitForResponse((response) => {
       if (response.request().method() !== 'POST' || !response.url().endsWith('/commands')) return false
       const command = response.request().postDataJSON() as { type?: string } | null
@@ -854,6 +968,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('Раскрытые свойства шести сигналов', { exact: true })).toBeVisible()
     await expect(page.getByText('Финальная модель не отправлена')).toHaveCount(0)
     await expect(page.getByText('Аудит по раундам', { exact: true })).toBeVisible()
+    await auditCheckpoint(page, '12-completed-audit-desktop-1440x900')
+    await auditCheckpoint(guestPage, '13-completed-audit-mobile-390x844')
     const secondRoundAudit = page.locator('details[data-audit-round="2"]')
     await secondRoundAudit.locator('summary').click()
     await expect(secondRoundAudit.getByText('Широкое исследование', { exact: true })).toBeVisible()
@@ -874,6 +990,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
       page.getByText('Сыграно матчей').locator('..').getByText('1', { exact: true }),
     ).toBeVisible()
     await expect(page.getByText('Завершите первый матч, чтобы появилась статистика.')).toHaveCount(0)
+    expect(runtimeIssues).toEqual([])
   } finally {
     await guestContext.close()
   }
