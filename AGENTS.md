@@ -13,6 +13,7 @@
 - Read `README.md`, root `CONTEXT.md`, relevant `docs/`, and applicable ADRs for non-trivial work. Discover the current structure rather than treating README as a file inventory.
 - For backend, contract, persistence, auth, or API work, read `backend/AGENTS.md`.
 - For player web application work, read `webapp/AGENTS.md`. For substantial UI, UX, responsive, animation, design-system, or rendered-flow work in any client, use `$anomaly-ui`.
+- While `docs/agents/ux-agent-pilot.md` has status `PILOT`, every substantial player webapp UI/UX task must classify itself as `UX pilot: RUN`, `N/A`, or `BLOCKED` and follow that document when eligible. Do not install gstack or production analytics as part of this pilot.
 - For mobile application or Maestro work, read `mobile/AGENTS.md`.
 - For testing strategy and commands, use `docs/TESTING.md`. For deployment or infrastructure, read the relevant runbook in `docs/`, especially `DEPLOYMENT.md`, `STORAGE.md`, `LOCAL_DATABASE.md`, or `YANDEX_CLOUD.md`.
 - For vulnerability handling and security-sensitive changes, read `SECURITY.md` and use `$anomaly-security-review`. For CI protection and release approval, use `docs/CI.md` and `docs/RELEASE_CHECKLIST.md`.
