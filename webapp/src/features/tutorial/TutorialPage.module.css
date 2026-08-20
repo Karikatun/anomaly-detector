@@ -46,7 +46,7 @@
   z-index: 101 !important;
 }
 
-@media (min-width: 601px) {
+@media (min-width: 48rem) {
   :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
   :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
   :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
@@ -56,7 +56,7 @@
   }
 }
 
-@media (min-width: 601px) and (max-width: 68rem) {
+@media (min-width: 48rem) and (max-width: 68rem) {
   .coachCard {
     width: 100%;
   }
@@ -81,7 +81,7 @@
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 47.999rem) {
   .completeActions { display: grid; }
   .completeActions button { width: 100%; }
   .coachCard {
