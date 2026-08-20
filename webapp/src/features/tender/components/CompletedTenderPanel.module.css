@@ -1,8 +1,8 @@
 .panel {
   display: grid;
   min-width: 0;
-  gap: .8rem;
-  padding: .75rem;
+  gap: var(--space-3);
+  padding: var(--space-3);
   border: 1px solid rgba(65, 127, 169, .34);
   border-radius: .78rem;
   background:
@@ -11,34 +11,49 @@
     rgba(1, 13, 27, .92);
 }
 
-.mobileOwnResult {
+.ownResult {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: .65rem;
-  padding: .75rem;
+  gap: var(--space-3);
+  padding: var(--space-4);
   border: 1px solid rgba(47, 205, 163, .34);
-  border-radius: .65rem;
+  border-radius: var(--radius-panel);
   background:
     radial-gradient(circle at 0 0, rgba(47, 205, 163, .1), transparent 48%),
     rgba(3, 18, 31, .78);
 }
 
-.mobileOwnResult > span:first-child {
-  display: grid;
-  gap: .08rem;
+.ownResult[data-winner] {
+  border-color: rgba(244, 165, 28, .46);
+  background:
+    radial-gradient(circle at 0 0, rgba(244, 165, 28, .12), transparent 52%),
+    rgba(3, 18, 31, .78);
 }
 
-.ownRating {
-  color: #2fcda3;
-  font-size: 1.25rem;
+.ownResultSummary {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.ownResultLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ownResultLabel svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: #f4b43f;
+}
+
+.ownResult h3 {
+  color: #f2f8fc;
 }
 
 .ownResultPlayer {
-  display: grid;
-  align-content: center;
-  justify-items: end;
-  text-align: right;
+  color: rgba(202, 220, 231, .82);
 }
 
 .mobileBreakdown {
@@ -46,7 +61,7 @@
   min-width: 0;
   grid-column: 1 / -1;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .3rem;
+  gap: var(--space-1);
 }
 
 .mobileBreakdown li {
@@ -55,15 +70,14 @@
   justify-content: space-between;
   gap: .35rem;
   padding: .38rem .45rem;
-  border: 1px solid rgba(70, 128, 164, .24);
-  border-radius: .4rem;
+  border-radius: var(--radius-compact);
   background: rgba(1, 12, 23, .46);
 }
 
 .mobileBreakdown li > :first-child {
   min-width: 0;
   overflow: hidden;
-  color: rgba(202, 220, 231, .68);
+  color: rgba(211, 226, 235, .78);
   font-size: .58rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -81,7 +95,15 @@
 }
 
 .mobileBreakdown .mobileNoAwards > span {
-  color: rgba(202, 220, 231, .68);
+  color: rgba(211, 226, 235, .78);
+}
+
+.mobileSectionLabel {
+  padding: var(--space-2) var(--space-1) 0;
+  color: rgba(211, 226, 235, .72);
+  font-size: .66rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
 }
 
 .auditDisclosure {
@@ -93,6 +115,10 @@
 
 .auditDisclosure[open] {
   border-color: rgba(54, 184, 255, .5);
+}
+
+.auditDisclosure[open] > .disclosureBody {
+  animation: disclosure-enter var(--motion-normal) var(--ease-standard);
 }
 
 .auditDisclosure > summary {
@@ -123,6 +149,24 @@
   border-top: 1px solid rgba(70, 128, 164, .22);
 }
 
+@keyframes disclosure-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-.2rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auditDisclosure[open] > .disclosureBody {
+    animation: none;
+  }
+}
+
 .playerFilter {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(11rem, 18rem);
@@ -147,7 +191,6 @@
   display: grid;
   gap: .4rem;
   padding: .6rem;
-  border: 1px solid rgba(70, 128, 164, .28);
   border-radius: .5rem;
   background: rgba(3, 18, 31, .74);
 }
@@ -612,6 +655,28 @@
   gap: .2rem;
 }
 
+.signalAuditHeading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.signalAuditHeading > span {
+  flex: none;
+  color: rgba(225, 238, 246, .72);
+  font-variant-numeric: tabular-nums;
+}
+
+.signalAuditEntry[data-signal-score='0'] {
+  background: rgba(73, 19, 29, .18);
+}
+
+.signalAuditEntry[data-signal-score='1'] {
+  background: rgba(91, 58, 12, .16);
+}
+
 .correctness {
   display: flex;
   flex-wrap: wrap;
@@ -626,7 +691,7 @@
   background: rgba(111, 24, 35, .22);
 }
 
-.correctness > span[data-correct] {
+.correctness > span[data-correct='true'] {
   border-color: rgba(47, 205, 163, .42);
   color: #7fe5c8;
   background: rgba(12, 92, 74, .22);
@@ -665,8 +730,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: .65rem;
-  padding: .7rem;
-  border: 1px solid rgba(54, 184, 255, .35);
+  padding: var(--space-3);
   border-radius: .65rem;
   background:
     linear-gradient(100deg, rgba(15, 111, 158, .18), transparent 62%),
@@ -757,7 +821,6 @@
   min-width: 0;
   gap: .55rem;
   padding: .65rem;
-  border: 1px solid rgba(65, 127, 169, .27);
   border-radius: .65rem;
   background: rgba(2, 15, 28, .7);
 }
@@ -865,33 +928,8 @@
 }
 
 @media (max-width: 30rem) {
-  .mobileOwnResult {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .mobileOwnResult > span:first-child {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: baseline;
-    column-gap: .75rem;
-  }
-
-  .mobileOwnResult .eyebrow {
-    grid-column: 1 / -1;
-  }
-
-  .mobileOwnResult h3,
-  .ownRating {
-    white-space: nowrap;
-  }
-
-  .ownRating {
-    justify-self: end;
-    font-size: 1.1rem;
-  }
-
-  .ownResultPlayer {
-    justify-items: start;
-    text-align: left;
+  .ownResult h3 {
+    font-size: 1.08rem;
   }
 
   .signalGlyph {
@@ -1089,7 +1127,7 @@
   display: none;
 }
 
-.breakdownSummary > svg {
+.breakdownAction svg {
   width: 1rem;
   height: 1rem;
   flex: none;
@@ -1097,15 +1135,25 @@
   transition: transform var(--motion-normal) var(--ease-standard);
 }
 
-.ratingBreakdown[open] .breakdownSummary > svg {
+.ratingBreakdown[open] .breakdownAction svg {
   transform: rotate(180deg);
 }
 
-.breakdownTitle {
-  color: rgba(190, 210, 223, .56);
+.breakdownPreview {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(211, 226, 235, .76);
   font-size: .54rem;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breakdownAction {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--primary);
 }
 
 .breakdownList {
@@ -1140,8 +1188,22 @@
 }
 
 @media (min-width: 48rem) {
-  .mobileOwnResult {
+  .mobileSectionLabel {
     display: none;
+  }
+
+  .ownResult {
+    grid-template-columns: minmax(16rem, .8fr) minmax(0, 1.7fr);
+    align-items: center;
+    padding: var(--space-5);
+  }
+
+  .ownResult h3 {
+    font-size: 1.5rem;
+  }
+
+  .mobileBreakdown {
+    grid-column: auto;
   }
 
   .auditDisclosure {
@@ -1283,7 +1345,7 @@
   .playerIdentity > span,
   .playerStats strong,
   .winnerBadge span,
-  .breakdownTitle,
+  .breakdownPreview,
   .breakdownList li > span:first-child,
   .breakdownPoints,
   .noRatingAwards {
