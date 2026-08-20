@@ -139,3 +139,21 @@
     display: block;
   }
 }
+
+@media (max-width: 47.999rem) and (max-height: 32rem) {
+  :global(body:has([data-tutorial-step='interaction-guide']) [data-testid='floater']) {
+    inset: .75rem .75rem auto !important;
+  }
+
+  .coachCard {
+    padding-block: .5rem !important;
+  }
+
+  .coach {
+    gap: .25rem;
+  }
+
+  .coach button {
+    margin-top: 0;
+  }
+}

@@ -871,6 +871,7 @@ test('keeps the first mobile tutorial target clear of the coach', async ({ page 
     .click()
 
   await expect(currentTask(page, tasks.interactionGuide)).toBeVisible()
+  await expectTargetClearOfCoach(page, '[data-tutorial-access-intro]')
   await expectSpotlightClearOfCoach(page)
 })
 
@@ -983,11 +984,18 @@ test('reflows at a 200% desktop zoom equivalent and honors reduced motion', asyn
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.setViewportSize({ width: 1440, height: 900 })
   await registerBrowserUser(page, 'Ученик Zoom', 'tutorial-zoom')
-  await startTutorial(page)
+  await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
+  await page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
+    .getByRole('button', { name: 'Начать обучение' })
+    .click()
+  await expect(currentTask(page, tasks.interactionGuide)).toBeVisible()
 
   await page.setViewportSize({ width: 720, height: 450 })
+  await expectTargetClearOfCoach(page, '[data-tutorial-access-intro]')
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expect(currentTask(page, tasks.headerMobile)).toBeVisible()
   await expectCoachWithinViewport(page)
+  await expectTargetClearOfCoach(page, '[data-tutorial-highlight="header"] > header')
   await expectSpotlightClearOfCoach(page)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   const longAnimations = await page.evaluate(() => document.getAnimations().flatMap((animation) => {

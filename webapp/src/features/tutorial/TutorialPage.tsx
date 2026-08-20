@@ -152,6 +152,9 @@ function TutorialContent() {
   const [compactGuidance, setCompactGuidance] = useState(
     () => window.matchMedia('(max-width: 68rem)').matches,
   )
+  const [shortViewport, setShortViewport] = useState(
+    () => window.matchMedia('(max-height: 32rem)').matches,
+  )
 
   useLayoutEffect(() => {
     const media = window.matchMedia('(max-width: 47.999rem)')
@@ -164,6 +167,14 @@ function TutorialContent() {
   useLayoutEffect(() => {
     const media = window.matchMedia('(max-width: 68rem)')
     const syncViewport = () => setCompactGuidance(media.matches)
+    syncViewport()
+    media.addEventListener('change', syncViewport)
+    return () => media.removeEventListener('change', syncViewport)
+  }, [])
+
+  useLayoutEffect(() => {
+    const media = window.matchMedia('(max-height: 32rem)')
+    const syncViewport = () => setShortViewport(media.matches)
     syncViewport()
     media.addEventListener('change', syncViewport)
     return () => media.removeEventListener('change', syncViewport)
@@ -467,7 +478,10 @@ function TutorialContent() {
     spotlight: targetConfig.spotlight,
     step: state.step,
   })
-  const coachAtTop = (compactHeader && state.step === 'round-1-contracts')
+  const coachAtTop = (compactHeader && (
+    (shortViewport && state.step === 'interaction-guide')
+    || state.step === 'round-1-contracts'
+  ))
     || readingDialogOpen
     || state.step === 'round-1-working-model'
     || state.step === 'round-2-working-model'
