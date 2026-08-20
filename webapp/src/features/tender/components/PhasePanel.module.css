@@ -856,6 +856,7 @@
 
 .laboratoryModeSwitch button {
   position: relative;
+  overflow: hidden;
   display: grid;
   justify-items: start;
   align-content: start;
