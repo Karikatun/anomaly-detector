@@ -54,7 +54,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Dependency security audit
-        run: bun audit --audit-level=low
+        run: bun run security:dependencies
 
       - name: Secret hygiene
         run: bun run security:secrets
@@ -82,6 +82,9 @@ jobs:
 
       - name: Webapp client tests
         run: bun run test:webapp
+
+      - name: Public website tests
+        run: bun run test:website
 
       - name: Admin client tests
         run: bun run test:adminapp

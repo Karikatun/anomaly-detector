@@ -1,5 +1,5 @@
 import { translate } from '../../platform/i18n'
-import { Alert01Icon, InformationCircleIcon } from '@hugeicons/core-free-icons'
+import { Alert01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
 import { useEffect, useState } from 'react'
@@ -171,12 +171,6 @@ export function FinalScientificModelPanel({
                 total: progress.total,
               })}
             </Typography>
-          )}
-          {submitted && (
-            <div className={styles.info} role="status">
-              <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={1.7} aria-hidden="true" />
-              <Typography variant="bodySm">{t('tender.finalDraft.submitted')}</Typography>
-            </div>
           )}
           {!untimed && !submitted && remainingSeconds <= 30 && (
             <div className={styles.warning} role="alert">

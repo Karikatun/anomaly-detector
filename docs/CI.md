@@ -75,6 +75,7 @@ authorization.
 bun run check:commit
 bun run check:push
 bun run check
+bun run security:dependencies
 bun run security:gitleaks
 bun run security:semgrep
 bun run security:trivy:config
@@ -86,8 +87,8 @@ it is destructive only to the isolated `_test` database it creates.
 
 - pre-commit scans the staged index for secrets and runs `check:commit`;
 - commit-msg enforces the repository's Conventional Commit format;
-- pre-push runs the full `check`, including integration, build, Docker smoke,
-  and browser E2E.
+- pre-push runs the dependency audit and the full `check`, including
+  integration, build, Docker smoke, and browser E2E.
 
 Use local checks for fast feedback, but treat green required remote checks on
 the exact release commit as the publication boundary.

@@ -82,7 +82,8 @@ test('submitted Final Scientific Model is locked and server-confirmed', () => {
     </I18nProvider>,
   )
 
-  expect(html).toContain('Финальная модель отправлена · 12/12')
+  expect(html.match(/Финальная модель отправлена · 12\/12/g)).toHaveLength(1)
+  expect(html).not.toContain('role="status"')
   expect(html).toContain('aria-label="Заполнено параметров: 12 из 12"')
   expect(html.match(/data-selected=""/g)).toHaveLength(12)
   expect(html).toContain('disabled=""')

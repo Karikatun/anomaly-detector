@@ -215,7 +215,7 @@
     border-radius: var(--radius-control);
   }
   .menuCard:nth-child(3), .menuCard:nth-child(4) { height: 70px; min-height: 70px; }
-  .copy { display: flex; min-width: 0; flex: 1; gap: .65rem; }
+  .copy { display: flex; min-width: 0; flex: 1; gap: var(--space-1); }
   .cardTitle { font-size: 1.15rem; letter-spacing: -.035em; }
   .cardDescription { max-width: 100%; font-size: .83rem; line-height: 1.4; }
   .iconWrap { width: 3.6rem; flex: 0 0 3.6rem; }

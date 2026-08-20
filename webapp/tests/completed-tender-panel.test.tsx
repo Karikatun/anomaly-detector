@@ -165,13 +165,13 @@ test('shows what contributed to every player rating in the final audit', () => {
     </I18nProvider>,
   )
 
-  expect(html).toContain('За что начислен рейтинг')
+  expect(html).toContain('Подробнее')
   expect(html).toContain('Верные тезисы')
   expect(html).toContain('Выполненные контракты')
   expect(html).toContain('Верные свойства модели')
   expect(html).toContain('Полностью раскрытые сигналы')
   expect(html).toContain('Бонус полной модели')
-  expect(html).toContain('Начислений рейтинга нет')
+  expect(html).toContain('Начислений очков нет')
   expect(html).toContain('Приоритет при коллизии')
   expect(html).toContain('1. Альфа')
   expect(html).toContain('2. Бета')
@@ -185,15 +185,26 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('value="player-a" selected=""')
   expect(html).toContain('Моя финальная модель')
   expect(html).toContain('Итоговый рейтинг')
-  expect(html).toContain('Рейтинг: 21')
+  expect(html).toContain('Вы победили')
+  expect(html).toContain('1 место · 21 очко')
+  expect(html).not.toContain('Альфа · Слот 1')
+  expect(html).not.toContain('Исследование завершено')
+  expect(html).not.toContain('Рейтинг: 21')
   expect(html).not.toContain('Rating')
   expect(html).toMatch(/<details[^>]*data-audit-section="ranking"/)
   expect(html).not.toMatch(/<details[^>]*data-audit-section="ranking"[^>]*open/)
   expect(html).toContain('Место и вклад каждого участника')
   expect(html).toContain('>Вы<')
-  expect(html).toMatch(/<details[^>]*aria-label="За что начислен рейтинг игроку Альфа"/)
-  expect(html).not.toMatch(/<details[^>]*aria-label="За что начислен рейтинг игроку Альфа"[^>]*open/)
+  expect(html).toMatch(/<details[^>]*aria-label="Из чего сложились очки игрока Альфа"/)
+  expect(html).not.toMatch(/<details[^>]*aria-label="Из чего сложились очки игрока Альфа"[^>]*open/)
   expect(html).toContain('Полный аудит по раундам')
+  expect(html).toContain('Результаты')
+  expect(html).toContain('Разбор игры')
+  expect(html).toContain('1/12 верно')
+  expect(html).toContain('Aster · 1/2')
+  expect(html).toContain('✓ Инерционное · Верно')
+  expect(html).toContain('× Отрицательная · Неверно')
+  expect(html).toContain('1 раунд ›')
   expect(html).not.toMatch(/<details[^>]*data-audit-section[^>]*open/)
   expect(html).toContain('Раунд 1')
   expect(html).toContain('Распределение Мощности')
@@ -207,6 +218,30 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).not.toContain('contract-1')
   expect(html).not.toContain('Резерв')
   expect(html).not.toMatch(/<details[^>]*data-audit-round[^>]*open/)
+  expect(html).not.toMatch(/<section[^>]*class="[^"]*panel[^"]*"[^>]*>[\s\S]*Версия правил: 2\s*<\/section>$/)
+})
+
+test('separates another winner from the current player result', () => {
+  const losingView = {
+    ...view,
+    audit: {
+      ...view.audit,
+      placementByPlayer: { 'player-a': 2, 'player-b': 1 },
+    },
+    winnerPlayerIds: ['player-b'],
+  } satisfies TenderView
+
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <CompletedTenderPanel currentUserId="player-a" view={{ ...losingView, audit: losingView.audit }} />
+    </I18nProvider>,
+  )
+
+  expect(html).toContain('Победитель')
+  expect(html).toContain('Бета')
+  expect(html).toContain('Ваш результат')
+  expect(html).toContain('2 место · 21 очко')
+  expect(html).not.toContain('Вы победили')
 })
 
 test('keeps four-player ties and long names readable in the server ranking order', () => {
@@ -246,6 +281,8 @@ test('keeps four-player ties and long names readable in the server ranking order
   expect(html).toContain('Очень длинное имя исследовательской корпорации')
   expect(html.match(/>02</g)).toHaveLength(2)
   expect(html).toContain('data-current-player="true"')
+  expect(html).toContain('4 участника ›')
+  expect(html).toContain('3 игрока ›')
 
   const threePlayerHtml = renderToStaticMarkup(
     <I18nProvider>

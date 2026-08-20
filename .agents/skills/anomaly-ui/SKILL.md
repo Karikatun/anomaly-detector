@@ -11,9 +11,10 @@ Preserve the existing product while making the smallest coherent improvement. Tr
 
 1. Read root `AGENTS.md` and the affected module's `AGENTS.md`.
 2. Read `docs/DESIGN_SYSTEM.md` and the applicable states in `docs/UX_CHECKLIST.md`.
-3. For foundation, styling-system, or cross-screen consistency work, also read `docs/UI_FOUNDATION_AUDIT.md`.
-4. Inspect the current rendered screen, adjacent screens, shared primitives, tokens, and directly coupled behavior before editing.
-5. Preserve working flows and product semantics. Trace behavioral UI bugs through route/layout, orchestration, state or handler, contract/API, and persistence to the owning layer.
+3. While `docs/agents/ux-agent-pilot.md` has status `PILOT`, classify substantial player webapp UI/UX work as `UX pilot: RUN`, `N/A`, or `BLOCKED`; follow the pilot for eligible tasks and record its metrics.
+4. For foundation, styling-system, or cross-screen consistency work, also read `docs/UI_FOUNDATION_AUDIT.md`.
+5. Inspect the current rendered screen, adjacent screens, shared primitives, tokens, and directly coupled behavior before editing.
+6. Preserve working flows and product semantics. Trace behavioral UI bugs through route/layout, orchestration, state or handler, contract/API, and persistence to the owning layer.
 
 ## Preserve Product Direction
 

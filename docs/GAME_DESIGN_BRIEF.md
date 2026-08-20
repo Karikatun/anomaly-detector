@@ -10,7 +10,9 @@ Player-facing wording: [RULES_REFERENCE.md](RULES_REFERENCE.md).
 
 The game borrows only the genre-level premise of deduction from incomplete experimental evidence. It has an original setting, terminology, directed experiments, tender structure, action flow, visual expression, and rules. Do not copy any text, art, terminology, components, scoring tables, formulas, turn structure, or app behaviour from *Alchemists*.
 
-MVP target: a standard match with 2-4 real players, about 45 minutes for four players. The first release is a mobile-first responsive web app in portrait orientation, with a full desktop layout.
+MVP target: a standard match with 2-4 real players, about 45 minutes for four players. The first release is a mobile-first responsive web app in portrait orientation, with a full desktop layout. Its public product path starts with a static Russian landing page, continues through registration into the solo tutorial, and offers optional account protection after tutorial completion.
+
+The primary MVP Initiator is a Russian-speaking fan of board games, science fiction, and logical deduction who first learns alone and then brings one to three acquaintances into a standard Tender. The landing promise is «Разгадайте аномалию раньше соперников», supported by the literal facts «Бесплатно · без скачивания · 2–4 игрока» and real product screens rather than invented social proof.
 
 ## Core Fantasy
 
@@ -177,10 +179,15 @@ Accounts have match history. On account deletion, remove the profile and identit
 The initial audience is Russian citizens. The product operator is a Russian citizen acting as an individual. The application therefore must be designed as an operator of personal data, not as a private family-use tool.
 
 - Primary sign-in: Yandex ID; password registration and sign-in use a unique login.
+- An Account Email is unique across active accounts. Yandex ID supplies and refreshes its `default_email` when the provider permission is available; the immutable provider subject remains the identity, and matching email never merges accounts.
+- A password-account owner may voluntarily confirm an Account Email as Recovery Email after the tutorial. It is not a login, marketing contact, or gameplay-notification channel. A Yandex ID account recovers through Yandex.
+- First Recovery Email activation uses the current password, a code sent to the new address, and a 24-hour cooling-off window. Replacing an active address also requires proof from the old address or a user-held Recovery Code.
+- Password reset uses a generic login-based request, a short-lived one-time link or Recovery Code, and revokes every session and recovery credential after success. Support and administrators cannot assign a new email or reset these factors manually.
+- New password-account addresses must belong to the currently published Approved Mail Service registry. Yandex ID addresses remain provider attributes even when they are not locally approved for recovery delivery.
+- The authenticated app offers a product-owned Feedback Report form for errors and suggestions. Account linkage and a reply contact are separate optional choices; Account Email is never reused as a support contact automatically.
 - VK ID and Telegram OAuth are outside the MVP until a separate product and legal review permits them.
-- Password recovery links are out of the MVP.
 - Store Russian users' personal data, identity links, and match history in Russia. The production target is Yandex Cloud through `yc`.
-- Publish an accessible personal-data processing policy before collecting user data. Before launch, obtain legal review for the Roskomnadzor notification obligation, authentication providers, consent flows, and retention policy.
+- Publish an accessible personal-data processing policy before collecting user data. Before launch, obtain legal review for the Roskomnadzor notification obligation, authentication providers, recovery and transactional-mail flows, separate analytics consent, feedback intake, recipients, and retention policy.
 - Product age marking for the MVP: `16+`.
 
 This is a product requirement, not legal advice. Revalidate all legal and provider requirements immediately before launch.
@@ -199,15 +206,15 @@ This is a product requirement, not legal advice. Revalidate all legal and provid
 
 - The backend is authoritative for the hidden configuration, seeds, timers, validation, results, scores, contracts, and audit. Browser clients receive only public and player-authorised private information.
 - Real-time state must support reconnecting players and a deterministic replay log.
-- Use the existing `webapp` and `backend/API` surfaces. The public `website` and native mobile app remain deferred.
-- Deployment is not part of the current implementation scope. When it begins, use Yandex Cloud through the `yc` CLI and follow `docs/YANDEX_CLOUD.md`.
+- Use the existing `website`, `webapp`, `adminapp`, and modular-monolith backend surfaces. `website` owns the public static content on the root domain; `webapp` owns registration, tutorial, account, and gameplay on `app.`; `adminapp` owns protected operational projections and only explicitly listed audited commands.
+- Deploy the Production MVP in Yandex Cloud through the repository runbooks. The public website, player app, API, and operator surface have distinct hosts and indexing/cache boundaries.
 
 ## Explicitly Deferred
 
 - More than two active victory categories.
 - Public matchmaking, global ratings, seasons, anti-fraud ranking systems, and spectating.
 - Chat and shared replay links.
-- Native applications, PWA/offline support, and public marketing site work.
+- Native applications, PWA/offline support, and content marketing beyond the MVP landing page.
 - Payments and monetisation.
 - Bots for standard matches, random events, self-tests, permanent upgrades, and variable slot compensation.
 - International legal and identity-provider support beyond the Russian launch scope.
@@ -222,3 +229,6 @@ Before expanding the MVP, prototype and playtest the core loop with the followin
 4. Are contract challenges rare, intentional, and understandable?
 5. Does a four-player standard game complete within 40-50 minutes?
 6. Can every final result be explained unambiguously by the audit and replay?
+7. Can a new visitor understand the product and complete the tutorial from the public landing CTA without losing intent during registration?
+8. Can a password-account owner protect and recover access without allowing a stolen login and password, email collision, replay, or operator action to take over the account?
+9. Can an authenticated player submit a useful Feedback Report without exposing private game state or creating an external public issue?

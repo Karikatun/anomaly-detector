@@ -10,6 +10,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "typecheck": "astro check",
+    "test": "bun test tests",
     "preview": "astro preview",
     "astro": "astro"
   },
