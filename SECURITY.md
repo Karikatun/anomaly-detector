@@ -55,10 +55,11 @@ settings.
 
 `bun run security:secrets` scans tracked repository content. The staged scan in
 the pre-commit hook checks the exact future commit without printing a detected
-secret. GitHub Actions repeats secret hygiene and runs the dependency audit
-independently of bypassable local hooks.
+secret. The pre-push hook additionally runs the dependency audit and
+full-history Gitleaks before the full behavioral gate. GitHub Actions repeats
+these controls independently of bypassable local hooks.
 
-The remote static-security job also runs full-history Gitleaks, repository-owned
+The remote static-security job runs full-history Gitleaks, repository-owned
 Semgrep rules, and Trivy configuration checks. After Docker smoke builds the
 exact backend image, Trivy scans its OS and application packages for high and
 critical vulnerabilities. Scanner containers are versioned and digest-pinned in

@@ -81,7 +81,7 @@
     "drill:postgres:backup-restore": "bun scripts/postgres-backup-restore-drill.mjs",
     "e2e:webapp": "bun run --cwd webapp e2e",
     "check:commit": "bun run security:secrets && bun run lint && bun run prisma:validate && bun run typecheck && bun run architecture:check && bun run test:deploy && bun run test:tooling && bun run test:contracts && bun run test:adminapp && bun run test:backend:unit && bun run test:webapp && bun run test:website",
-    "check:push": "bun run security:dependencies && bun run check",
+    "check:push": "bun run security:dependencies && bun run security:gitleaks && bun run check",
     "check": "bun run security:secrets && bun run lint && bun run prisma:validate && bun run typecheck && bun run architecture:check && bun run test && bun run build && bun run smoke:backend:docker && bun run e2e:webapp"
   }
 }
