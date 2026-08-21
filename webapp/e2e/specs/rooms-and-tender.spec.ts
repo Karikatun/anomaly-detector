@@ -271,6 +271,9 @@ async function verifyWorkingModelModal(page: Page) {
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
 
     await page.setViewportSize({ width: 1280, height: 720 })
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
     await page.route('**/api/tenders/*/commands', async (route) => {
       const command = route.request().postDataJSON() as { type?: string } | null
       if (command?.type === 'update-working-model') {
