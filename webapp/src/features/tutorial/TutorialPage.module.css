@@ -27,7 +27,15 @@
   overscroll-behavior: contain;
 }
 .coach { display: grid; max-width: 24rem; gap: .55rem; text-align: left; }
-.coach button { width: fit-content; margin-top: .25rem; }
+.coach button { width: fit-content; }
+.coachActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .5rem;
+  margin-top: .25rem;
+}
 .hint { padding: .65rem; border-left: 2px solid #38bdf8; background: rgba(56, 189, 248, .08); }
 .thesisFeedback { padding: .65rem; border-left: 2px solid #f87171; color: #fecaca; background: rgba(248, 113, 113, .09); }
 .confirmAction { display: none; color: #7dd3fc; }
@@ -138,6 +146,10 @@
   :global(body:has([data-tutorial-step='final-model'])) .confirmAction {
     display: block;
   }
+
+  .coachActions button {
+    padding-inline: .5rem;
+  }
 }
 
 @media (max-width: 47.999rem) and (max-height: 32rem) {
@@ -153,7 +165,7 @@
     gap: .25rem;
   }
 
-  .coach button {
+  .coachActions {
     margin-top: 0;
   }
 }
