@@ -6,6 +6,7 @@ export const tutorialMessages = {
   'tutorial.player.you': 'Исследователь',
   'tutorial.player.opponent': 'Учебный соперник',
   'tutorial.exit': 'Выйти из обучения',
+  'tutorial.exit.short': 'Выйти',
   'tutorial.exit.title': 'Выйти из обучения?',
   'tutorial.exit.description': 'Текущий прогресс будет удалён. При следующем запуске обучение начнётся заново.',
   'tutorial.exit.cancel': 'Продолжить обучение',

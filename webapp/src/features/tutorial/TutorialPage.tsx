@@ -842,11 +842,21 @@ function CoachContent({
         </Typography>
       )}
       {hint && <Typography variant="bodySm" className={styles.hint}>{hint}</Typography>}
-      {onContinue && <Button type="button" size="sm" onClick={onContinue}>{t('tutorial.coach.continue')}</Button>}
       <Typography as="strong" variant="bodySmMedium" className={styles.confirmAction}>
         {t('tutorial.coach.confirmAction')}
       </Typography>
-      <Button type="button" variant="ghost" size="sm" onClick={onExit}>{t('tutorial.exit')}</Button>
+      <div className={styles.coachActions}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={t('tutorial.exit')}
+          onClick={onExit}
+        >
+          {t('tutorial.exit.short')}
+        </Button>
+        {onContinue && <Button type="button" size="sm" onClick={onContinue}>{t('tutorial.coach.continue')}</Button>}
+      </div>
     </div>
   )
 }
