@@ -18,6 +18,7 @@ maybeDescribe('auth API integration', () => {
     JWT_SECRET: '12345678901234567890123456789012',
     ADMIN_USER_IDS: [],
     CORS_ORIGINS: ['http://localhost:5173'],
+    WEBAPP_ORIGIN: 'http://localhost:5173',
     ACCESS_TOKEN_TTL_SECONDS: 60,
     REFRESH_TOKEN_TTL_DAYS: 30,
     REFRESH_REUSE_GRACE_SECONDS: 10,
@@ -1872,6 +1873,7 @@ maybeDescribe('auth API integration', () => {
       env: {
         ...env,
         CORS_ORIGINS: ['https://web.example.com'],
+        WEBAPP_ORIGIN: 'https://web.example.com',
         COOKIE_SECURE: true,
       },
       prisma,
@@ -1909,6 +1911,7 @@ maybeDescribe('auth API integration', () => {
       env: {
         ...env,
         CORS_ORIGINS: ['https://web.example.com'],
+        WEBAPP_ORIGIN: 'https://web.example.com',
         COOKIE_SECURE: true,
       },
       prisma,

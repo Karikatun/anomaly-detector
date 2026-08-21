@@ -45,7 +45,21 @@ test('continues a landing registration into tutorial and ignores unknown destina
   await page.goto('/?continue=admin')
   await expect(page.getByRole('tab', { name: 'Вход', exact: true })).toHaveAttribute('aria-selected', 'true')
 
-  await page.goto('/?continue=tutorial')
+  const websiteUrl = process.env.E2E_WEBSITE_URL
+  const webappUrl = process.env.E2E_WEB_URL
+  if (!websiteUrl || !webappUrl) {
+    throw new Error('The public website and player webapp origins are required for E2E')
+  }
+  expect(new URL(websiteUrl).origin).not.toBe(new URL(webappUrl).origin)
+
+  await page.goto(websiteUrl)
+  const tutorialLink = page.getByRole('link', { name: 'Пройти обучение' }).first()
+  await expect(tutorialLink).toHaveAttribute(
+    'href',
+    new URL('/?continue=tutorial', webappUrl).toString(),
+  )
+  await tutorialLink.click()
+  await expect(page).toHaveURL(new URL('/?continue=tutorial', webappUrl).toString())
   await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
 
   const login = `landing-tutorial-${Date.now()}`

@@ -19,7 +19,9 @@ test('defines fast commit and complete push quality gates', () => {
   expect(packageJson.scripts['check:commit']).toContain('test:backend:unit')
   expect(packageJson.scripts['check:commit']).toContain('test:website')
   expect(packageJson.scripts['check:commit']).not.toContain('e2e:webapp')
-  expect(packageJson.scripts['check:push']).toBe('bun run security:dependencies && bun run check')
+  expect(packageJson.scripts['check:push']).toBe(
+    'bun run security:dependencies && bun run security:gitleaks && bun run check',
+  )
   expect(packageJson.scripts.check).toContain('smoke:backend:docker')
   expect(packageJson.scripts.check).toContain('e2e:webapp')
   expect(packageJson.scripts.lint).toContain('adminapp')
