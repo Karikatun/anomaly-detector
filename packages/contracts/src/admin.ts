@@ -40,3 +40,83 @@ export const adminOverviewSchema = z.object({
 
 export type AdminOverviewQuery = z.infer<typeof adminOverviewQuerySchema>
 export type AdminOverview = z.infer<typeof adminOverviewSchema>
+
+const mailRegistryCandidateSchema = z.object({
+  evidence: z.literal('service_description_mentions_mail'),
+  id: z.string().uuid(),
+  registryEntryId: z.string().min(1).max(64),
+  serviceDomain: z.string().min(1).max(253),
+}).strict()
+
+const mailRegistryAttemptSchema = z.object({
+  checksum: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  failureCode: z.string().min(1).max(64).nullable(),
+  finishedAt: z.string().datetime(),
+  id: z.string().uuid(),
+  outcome: z.enum(['succeeded', 'failed', 'rejected']),
+  sourceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  sourceUrl: z.string().url().nullable(),
+}).strict()
+
+const mailPolicyCanonicalizationSchema = z.object({
+  ignoreDots: z.boolean(),
+  localPartCaseInsensitive: z.boolean(),
+  stripPlusTag: z.boolean(),
+}).strict()
+
+const mailPolicyEntrySchema = z.object({
+  canonicalization: mailPolicyCanonicalizationSchema,
+  emailDomain: z.string().min(1).max(253),
+  reason: z.string().min(1).max(500).nullable(),
+  sourceCandidateId: z.string().uuid(),
+  state: z.enum(['approved', 'deprecated', 'blocked']),
+}).strict()
+
+export const mailPolicyViewSchema = z.object({
+  currentVersion: z.number().int().nonnegative(),
+  generatedAt: z.string().datetime(),
+  latestAttempt: mailRegistryAttemptSchema.nullable(),
+  lastSuccessfulImport: z.object({
+    candidates: z.array(mailRegistryCandidateSchema).max(5_000),
+    diff: z.object({
+      added: z.array(z.string().min(1).max(253)).max(5_000),
+      removed: z.array(z.string().min(1).max(253)).max(5_000),
+      unchangedCount: z.number().int().nonnegative().max(5_000),
+    }).strict(),
+    importId: z.string().uuid(),
+  }).strict().nullable(),
+  publishedPolicy: z.object({
+    entries: z.array(mailPolicyEntrySchema).max(100),
+    publishedAt: z.string().datetime(),
+    version: z.number().int().positive(),
+  }).strict().nullable(),
+}).strict()
+
+const mailPolicyCommandBaseSchema = z.object({
+  commandId: z.string().uuid(),
+  expectedVersion: z.number().int().nonnegative(),
+})
+
+export const mailPolicyImportCommandSchema = mailPolicyCommandBaseSchema.strict()
+
+export const mailPolicyPublishCommandSchema = mailPolicyCommandBaseSchema.extend({
+  additions: z.array(z.object({
+    canonicalization: mailPolicyCanonicalizationSchema,
+    emailDomain: z.string().trim().min(1).max(253),
+    sourceCandidateId: z.string().uuid(),
+  }).strict()).min(1).max(20),
+}).strict()
+
+export const mailPolicyStatusCommandSchema = mailPolicyCommandBaseSchema.extend({
+  emailDomain: z.string().trim().min(1).max(253),
+  reason: z.string().trim().min(3).max(500),
+  state: z.enum(['deprecated', 'blocked']),
+}).strict()
+
+export type MailPolicyView = z.infer<typeof mailPolicyViewSchema>
+export type MailPolicyEntry = z.infer<typeof mailPolicyEntrySchema>
+export type MailPolicyCanonicalization = z.infer<typeof mailPolicyCanonicalizationSchema>
+export type MailRegistryCandidate = z.infer<typeof mailRegistryCandidateSchema>
+export type MailPolicyImportCommand = z.infer<typeof mailPolicyImportCommandSchema>
+export type MailPolicyPublishCommand = z.infer<typeof mailPolicyPublishCommandSchema>
+export type MailPolicyStatusCommand = z.infer<typeof mailPolicyStatusCommandSchema>

@@ -1,13 +1,14 @@
 import type { DbClient } from '../../db'
 import type { AuthenticatedPrincipal } from '../auth'
 import { emitSecurityEvent, type SecurityEventLogger } from '../../security/events'
-import type { AdminOverviewReader } from './application/ports'
+import type { AdminMailPolicyOperator, AdminOverviewReader } from './application/ports'
 import { createPrismaAdminOverviewReader } from './infrastructure/prisma-admin-overview-reader'
 import { createAdminRoutes } from './transport/routes'
 
 type CreateAdminModuleInput = {
   adminUserIds: ReadonlySet<string>
   authenticate: (accessToken: string | undefined) => Promise<AuthenticatedPrincipal>
+  mailPolicy: AdminMailPolicyOperator
   securityEvents?: SecurityEventLogger
 } & (
   | { db: DbClient; overviewReader?: never }
@@ -21,6 +22,7 @@ export function createAdminModule(input: CreateAdminModuleInput) {
     routes: createAdminRoutes({
       adminUserIds: input.adminUserIds,
       authenticate: input.authenticate,
+      mailPolicy: input.mailPolicy,
       onAccessDenied: input.securityEvents
         ? (context, kind) => emitSecurityEvent(context, input.securityEvents!, {
             code: 'NOT_FOUND',

@@ -89,9 +89,10 @@ screen:
 - the admin context authorises the operator and composes safe projections, but
   does not become a generic CRUD owner for auth, mail, analytics or feedback.
 
-These are target boundaries for the unimplemented MVP slices. New modules are
-created only when their vertical slice is implemented; the ADRs do not justify
-empty folders or placeholder services.
+These are target boundaries for the MVP slices. The Approved Mail Service policy
+is implemented in the `mail` module; the other contexts are created only when
+their vertical slice is implemented. The ADRs do not justify empty folders or
+placeholder services.
 
 ## Runtime Shape And Real-Time
 

@@ -4,8 +4,16 @@ import {
   cookieAuthResponseSchema,
   cookieRefreshResponseSchema,
   loginRequestSchema,
+  mailPolicyImportCommandSchema,
+  mailPolicyPublishCommandSchema,
+  mailPolicyStatusCommandSchema,
+  mailPolicyViewSchema,
   type AdminOverview,
   type LoginRequest,
+  type MailPolicyImportCommand,
+  type MailPolicyPublishCommand,
+  type MailPolicyStatusCommand,
+  type MailPolicyView,
   type UserDto,
 } from '@anomaly-detector/contracts'
 
@@ -67,11 +75,45 @@ export class AdminApi {
   }
 
   async getOverview(page = 1): Promise<AdminOverview> {
+    const query = new URLSearchParams({ page: String(page), pageSize: '20' })
+    const response = await this.request(`/api/operations/overview?${query}`, {
+      headers: this.authenticatedHeaders(),
+    })
+    return adminOverviewSchema.parse(await response.json())
+  }
+
+  async getMailPolicy(): Promise<MailPolicyView> {
+    const response = await this.request('/api/operations/mail-policy', {
+      headers: this.authenticatedHeaders(),
+    })
+    return mailPolicyViewSchema.parse(await response.json())
+  }
+
+  async importMailPolicy(input: MailPolicyImportCommand): Promise<MailPolicyView> {
+    return this.mailPolicyCommand('/api/operations/mail-policy/import', mailPolicyImportCommandSchema.parse(input))
+  }
+
+  async publishMailPolicy(input: MailPolicyPublishCommand): Promise<MailPolicyView> {
+    return this.mailPolicyCommand('/api/operations/mail-policy/publish', mailPolicyPublishCommandSchema.parse(input))
+  }
+
+  async changeMailPolicyStatus(input: MailPolicyStatusCommand): Promise<MailPolicyView> {
+    return this.mailPolicyCommand('/api/operations/mail-policy/status', mailPolicyStatusCommandSchema.parse(input))
+  }
+
+  private async mailPolicyCommand(path: string, body: unknown) {
+    const response = await this.request(path, {
+      body,
+      headers: this.authenticatedHeaders(),
+      method: 'POST',
+    })
+    return mailPolicyViewSchema.parse(await response.json())
+  }
+
+  private authenticatedHeaders() {
     const headers = new Headers()
     if (this.accessToken) headers.set('Authorization', `Bearer ${this.accessToken}`)
-    const query = new URLSearchParams({ page: String(page), pageSize: '20' })
-    const response = await this.request(`/api/operations/overview?${query}`, { headers })
-    return adminOverviewSchema.parse(await response.json())
+    return headers
   }
 
   private async request(

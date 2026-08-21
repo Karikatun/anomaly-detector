@@ -55,7 +55,9 @@ Keep an explicit username and password in Prisma connection URLs even on local n
 
 `JWT_SECRET` must be at least 32 characters locally. Production accepts the 64-or-more-character hexadecimal output of `openssl rand -hex 32`; do not use the `.env.example` placeholder, repeated characters, or human phrases.
 
-`ADMIN_USER_IDS` is an optional comma-separated allowlist of immutable user UUIDs for the separate read-only operator application. Empty means that nobody has access. The backend returns the same `404 NOT_FOUND` to anonymous and ordinary authenticated users and does not publish the route in OpenAPI. Obtain an operator UUID from that user's profile and configure it only in backend runtime env; changing a login or display name does not change access. The separate Caddy-host is an additional edge boundary, not a replacement for this backend check.
+`ADMIN_USER_IDS` is an optional comma-separated allowlist of immutable user UUIDs for the separate operator application. Empty means that nobody has access. The backend returns the same `404 NOT_FOUND` to anonymous and ordinary authenticated users and does not publish operator routes in OpenAPI. Obtain an operator UUID from that user's profile and configure it only in backend runtime env; changing a login or display name does not change access. The separate Caddy-host is an additional edge boundary, not a replacement for this backend check.
+
+The operator overview remains read-only. Approved Mail Service policy has the only currently implemented mutation surface: `GET /api/operations/mail-policy` reads its safe projection, while `/import`, `/publish`, and `/status` accept narrow audited commands. Import never publishes automatically. Every command requires a recent authenticated session, an allowlisted operator UUID, an optimistic version precondition, and an idempotent `commandId`; source or suspicious-removal failure retains the last-known-good policy.
 
 `COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production also requires `WEBAPP_ORIGIN`: one origin-only HTTPS URL for the player application, included in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
 
@@ -98,11 +100,11 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 - `GET /health/live`
 - `GET /health/ready`
 
-The approved but not yet implemented Public MVP extensions are specified in
+The remaining approved but not yet implemented Public MVP extensions are specified in
 ADRs 0005–0016 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). They add
 Account Email/Yandex synchronisation, Recovery Email and Recovery Code,
-password reset, Approved Mail Service publication, transactional outbox,
-consent-scoped funnel analytics and Feedback Report intake. Do not add env keys
+password reset, transactional outbox, consent-scoped funnel analytics and
+Feedback Report intake. Do not add env keys
 or advertise endpoints in this README until their implementation and contracts
 exist; when they do, document every new key here, in `.env.example`, the Yandex
 runbook and production setup without exposing values.
