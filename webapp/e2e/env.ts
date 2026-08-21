@@ -11,6 +11,8 @@ export const preferredBackendPort =
   50000 + (Number.parseInt(repositoryHash.slice(6, 12), 16) % 5000)
 export const preferredWebPort =
   55000 + (Number.parseInt(repositoryHash.slice(0, 6), 16) % 5000)
+export const preferredWebsitePort =
+  60000 + (Number.parseInt(repositoryHash.slice(6, 12), 16) % 4000)
 export const composeProjectName =
   process.env.COMPOSE_PROJECT_NAME ?? `anomaly-detector-${repositoryHash}`
 export const defaultPostgresTestPort =
@@ -19,6 +21,8 @@ export const defaultBackendPort =
   process.env.E2E_BACKEND_PORT ?? String(preferredBackendPort)
 export const defaultWebPort =
   process.env.E2E_WEB_PORT ?? String(preferredWebPort)
+export const defaultWebsitePort =
+  process.env.E2E_WEBSITE_PORT ?? String(preferredWebsitePort)
 export const defaultDatabaseUrl = `postgresql://superuser:superpassword@localhost:${defaultPostgresTestPort}/anomaly_detector_test?schema=public`
 export const defaultE2eJwtSecret = 'web-e2e-secret-at-least-thirty-two-characters'
 

@@ -12,7 +12,8 @@ const env: AppEnv = {
   DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
   JWT_SECRET: 'test-route-secret-at-least-thirty-two-chars-123',
   ADMIN_USER_IDS: [],
-  CORS_ORIGINS: ['https://web.example.com'],
+  CORS_ORIGINS: ['https://ops.example.com', 'https://web.example.com'],
+  WEBAPP_ORIGIN: 'https://web.example.com',
   ACCESS_TOKEN_TTL_SECONDS: 60,
   REFRESH_TOKEN_TTL_DAYS: 30,
   REFRESH_REUSE_GRACE_SECONDS: 10,
@@ -219,6 +220,14 @@ describe('auth routes', () => {
     expect(untrustedOrigin.status).toBe(403)
     expect((await untrustedOrigin.json()).error.code).toBe('FORBIDDEN')
 
+    const nonPlayerCorsOrigin = await app.request('/api/auth/oauth/yandex/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webappOrigin: 'https://ops.example.com' }),
+    })
+    expect(nonPlayerCorsOrigin.status).toBe(403)
+    expect((await nonPlayerCorsOrigin.json()).error.code).toBe('FORBIDDEN')
+
     const callerProvidedCallback = await app.request('/api/auth/oauth/yandex/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -226,5 +235,17 @@ describe('auth routes', () => {
     })
     expect(callerProvidedCallback.status).toBe(400)
     expect((await callerProvidedCallback.json()).error.code).toBe('VALIDATION_ERROR')
+  })
+
+  test('returns OAuth provider errors to the configured player origin', async () => {
+    const app = createApp({ env, prisma: {} as DbClient })
+    const response = await app.request(
+      '/api/auth/oauth/yandex/callback?error=access_denied&error_description=cancelled&state=state-123',
+    )
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(
+      'https://web.example.com/?auth_error=cancelled',
+    )
   })
 })

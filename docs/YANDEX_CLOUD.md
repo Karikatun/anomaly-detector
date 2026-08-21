@@ -48,6 +48,10 @@ CORS, OAuth callback/post-login origin, cookies, CSP, legal links, monitoring
 and rollback. Verify authentication and the old deep links before switching
 DNS.
 
+The versioned Caddy and runtime examples are prepared for this target map, but
+production remains on the pre-migration map until the owner completes the
+coordinated cutover and verification. Do not reload only one prepared component.
+
 The DNS zone is currently hosted by REG.RU. Before cutover, lower the affected records'
 TTL, preserve mail records, and replace only the web/API address records with the
 Application Load Balancer/CDN targets. Do not delegate the whole zone merely to set up
@@ -145,7 +149,8 @@ WORKER_HEALTH_PORT=3001
 DATABASE_URL=postgresql://...
 JWT_SECRET=<64-or-more-hex-characters>
 ADMIN_USER_IDS=<comma-separated-operator-user-uuids>
-CORS_ORIGINS=https://anomaly-detector.ru,https://ops.anomaly-detector.ru
+CORS_ORIGINS=https://app.anomaly-detector.ru,https://ops.anomaly-detector.ru
+WEBAPP_ORIGIN=https://app.anomaly-detector.ru
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 REFRESH_REUSE_GRACE_SECONDS=10
@@ -160,6 +165,24 @@ TRUSTED_PROXY_CLIENT_IP_HEADER=x-forwarded-for
 TRUSTED_PROXY_CLIENT_IP_POSITION=first
 COOKIE_SECURE=true
 ```
+
+This is the split-domain target configuration. Until the coordinated cutover,
+the active production `WEBAPP_ORIGIN` and player entry in `CORS_ORIGINS` remain
+the current root origin. `WEBAPP_ORIGIN` is mandatory in production, must be an
+origin-only HTTPS URL, and must also appear in `CORS_ORIGINS`.
+
+When Yandex ID is enabled, keep the provider callback on the API host while the
+post-login destination comes from `WEBAPP_ORIGIN`:
+
+```bash
+YANDEX_OAUTH_CLIENT_ID=<Lockbox-backed-client-id>
+YANDEX_OAUTH_CLIENT_SECRET=<Lockbox-backed-client-secret>
+OAUTH_CALLBACK_BASE_URL=https://api.anomaly-detector.ru
+```
+
+Register
+`https://api.anomaly-detector.ru/api/auth/oauth/yandex/callback` at Yandex. The
+domain split does not move this provider callback to either browser host.
 
 Leave `ADMIN_USER_IDS` empty to disable the operator surface. When enabled, use immutable user UUIDs from the intended operators' profiles. The current implementation is read-only; the approved MVP adds only the audited commands listed in ADR 0011. Build and serve `adminapp` only from the separately protected `ops.anomaly-detector.ru` host; never include it in the player `webapp` output. Backend authorization and identical `404` responses remain mandatory behind the edge check.
 
@@ -204,9 +227,9 @@ is switched. Enable access logs with redaction and alerts for elevated `4xx`, `5
 backend latency. Use `https://api.anomaly-detector.ru` as both `VITE_API_URL`
 and `VITE_OAUTH_API_URL`. Before ADR 0014 migration, the webapp origin is
 `https://anomaly-detector.ru`; after the coordinated migration it is
-`https://app.anomaly-detector.ru`, while the public root remains in CORS only
-for the explicitly implemented consent-scoped analytics endpoint. Never enable
-credentialed wildcard CORS.
+`https://app.anomaly-detector.ru`. The public root is excluded from credentialed
+CORS until a separate consent-scoped analytics endpoint is implemented and
+reviewed. Never enable credentialed wildcard CORS.
 
 ### Edge abuse-protection profile
 
@@ -333,7 +356,7 @@ yc serverless container revision deploy \
   --memory 256MB \
   --execution-timeout 60s \
   --service-account-id <cleanup_runtime_service_account_ID> \
-  --environment DATABASE_URL='<production_database_url>',JWT_SECRET='<production_jwt_secret>',CORS_ORIGINS=https://anomaly-detector.ru,COOKIE_SECURE=true,SESSION_ABSOLUTE_TTL_DAYS=90,SESSION_RETENTION_DAYS=7
+  --environment DATABASE_URL='<production_database_url>',JWT_SECRET='<production_jwt_secret>',CORS_ORIGINS=https://app.anomaly-detector.ru,WEBAPP_ORIGIN=https://app.anomaly-detector.ru,COOKIE_SECURE=true,SESSION_ABSOLUTE_TTL_DAYS=90,SESSION_RETENTION_DAYS=7
 ```
 
 Configure the cleanup revision with the same production `DATABASE_URL`, `JWT_SECRET`, session TTL, retention, network, and Lockbox policy as the API revision. Prefer Lockbox or the console instead of putting real secrets into shell history. Do not make the cleanup container public.
@@ -451,9 +474,10 @@ After cleanup, require all of the following:
 
 Use
 [`deploy/yandex/Caddyfile.example`](../deploy/yandex/Caddyfile.example) as the
-source configuration: set `ANOMALY_WEBAPP_ROOT` and `ANOMALY_ADMIN_ROOT` to the
-absolute directories that contain the deployed `webapp/dist` and
-`adminapp/dist` contents. Set `ANOMALY_ADMIN_USER` and the Caddy-generated
+source configuration: set `ANOMALY_WEBSITE_ROOT`, `ANOMALY_WEBAPP_ROOT`, and
+`ANOMALY_ADMIN_ROOT` to separate absolute directories that contain the deployed
+`website/dist`, `webapp/dist`, and `adminapp/dist` contents. Set
+`ANOMALY_ADMIN_USER` and the Caddy-generated
 `ANOMALY_ADMIN_PASSWORD_HASH` only in the Caddy process environment. Generate
 the hash interactively with `caddy hash-password` so the plaintext is not added
 to shell history. When Caddy receives this environment through Docker Compose,
@@ -462,9 +486,38 @@ with its original single `$` characters. Do not escape them as `$$`: a later
 container recreation can otherwise change the value and reject the correct
 Basic Auth password. Validate with `caddy validate`, then reload Caddy. The file
 owns the browser CSP, HSTS, clickjacking protection, content-type protection,
-referrer policy, permissions policy, SPA fallbacks, operator Basic Auth, API
-proxy, and `www` redirect. Keep these controls in the serving layer; HTML
-`<meta>` tags are not an equivalent replacement.
+referrer policy, permissions policy, the player-only SPA fallback, operator
+Basic Auth, API proxy, and `www` redirect. The public root has no SPA fallback:
+unknown paths return `404`. Only the fixed legacy player route families in the
+file redirect to `https://app.anomaly-detector.ru` with their path and query;
+the player host carries an `X-Robots-Tag` noindex policy. Keep these controls in
+the serving layer; HTML `<meta>` tags are not an equivalent replacement.
+
+### Split-domain cutover and rollback
+
+Treat the domain split as one release boundary. Before switching traffic:
+
+1. retain the active Caddy file, backend env key names, static directories and
+   checksums as the immediate rollback set;
+2. stage the exact-release `website/dist`, `webapp/dist`, and `adminapp/dist` in
+   separate immutable directories and verify that public artifacts contain no
+   localhost/test origins, secrets, operator output, or private player data;
+3. make TLS and DNS for `app.anomaly-detector.ru` ready without changing the
+   public root, then validate the prepared Caddy file against the staged paths;
+4. during the controlled cutover, make the player host reachable, update the
+   backend to `WEBAPP_ORIGIN=https://app.anomaly-detector.ru` and transitional
+   exact CORS origins, switch the public root to `website`, then remove the old
+   root from CORS so the steady state is only player plus operator origins;
+5. verify fixed legacy redirects, unknown-root `404`, player SPA reload,
+   `www`, crawler policy, password auth, cookie refresh/logout, WebSocket
+   reconnect, and both OAuth success/error returns before declaring success.
+
+Rollback is coordinated in the reverse direction: restore the retained Caddy
+file and root player artifact together with the previous `WEBAPP_ORIGIN` and
+`CORS_ORIGINS`, reload API/Caddy, then prove root login, refresh, logout, OAuth
+return, deep-link reload, API readiness, and unchanged PostgreSQL volume
+identity. The split adds no migration; do not touch PostgreSQL or delete the
+staged release while the rollback decision is open.
 
 Backend security events are emitted as single-line JSON with
 `"channel":"security"`, a generated request ID, route, method, stable reason,
@@ -573,9 +626,10 @@ omit canonical and `og:url` metadata. `PUBLIC_WEBAPP_URL` is the exact player
 app origin used by the landing CTA and legal links; it must be set for a
 production website build.
 
-For the ADR 0014 target, `PUBLIC_WEBSITE_URL` remains
-`https://anomaly-detector.ru` and the future implemented `PUBLIC_WEBAPP_URL`
-must be exactly `https://app.anomaly-detector.ru`.
+For the prepared ADR 0014 target, `PUBLIC_WEBSITE_URL` remains
+`https://anomaly-detector.ru` and `PUBLIC_WEBAPP_URL` is exactly
+`https://app.anomaly-detector.ru`. These build values do not prove that the
+target routing is already deployed.
 
 Before uploading, create a Yandex Object Storage static access key for a service account and configure the AWS CLI with it. Yandex's Object Storage docs recommend `aws configure` with the static key and `ru-central1` as the region.
 
@@ -664,13 +718,21 @@ After deployment:
 - verify API `/health/live` and `/health/ready` through `https://api.<site-domain>` on the Application Load Balancer;
 - verify worker `/health/live` and `/health/ready` from the private instance-group health-check path and confirm the worker port is unreachable from the public internet;
 - verify browser auth only from allowed `CORS_ORIGINS`;
+- verify `WEBAPP_ORIGIN` is the exact player origin, the public root is absent
+  from CORS, and browser-supplied OAuth return origins other than the player
+  origin are rejected;
 - verify all cookie-backed auth writes reject missing or untrusted browser `Origin` headers;
 - verify the webapp and API use same-site custom domains and that a reload restores the cookie-backed session in a browser with third-party cookies blocked;
 - verify through the Application Load Balancer that register returns `Set-Cookie`, refresh receives that cookie, `/me` receives the bearer `Authorization` header, logout clears the cookie, and the next refresh returns 401;
 - verify Managed PostgreSQL connectivity and that Prisma migrations applied exactly once;
 - verify the private maintenance cleanup timer is active and its most recent scheduled invocation completed with task exit code `0`;
 - verify `webapp` route refreshes load the SPA fallback instead of a broken 404 page;
-- verify `website` static assets load from the production domain;
+- verify `website` static assets load from the public root, an unknown public
+  path returns `404`, fixed legacy player routes redirect to the player host,
+  and `www` redirects to the public root;
+- verify the player host returns `X-Robots-Tag: noindex, nofollow, noarchive`
+  while public canonical, robots, and sitemap values contain no player or
+  operator surfaces;
 - verify public media loads through the Cloud CDN domain when storage is active;
 - verify private file links expire and require backend authorization when private storage is active.
 

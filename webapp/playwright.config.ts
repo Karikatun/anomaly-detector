@@ -7,6 +7,7 @@ import { applyE2ePortEnv, resolveE2ePorts } from './e2e/ports'
 const frontendRoot = fileURLToPath(new URL('.', import.meta.url))
 const repositoryRoot = resolve(frontendRoot, '..')
 const backendRoot = resolve(repositoryRoot, 'backend')
+const websiteRoot = resolve(repositoryRoot, 'website')
 
 const portPlan = await resolveE2ePorts()
 applyE2ePortEnv(portPlan)
@@ -15,6 +16,8 @@ const backendPort = portPlan.backendPort
 const frontendPort = portPlan.webPort
 const backendUrl = portPlan.backendUrl
 const frontendUrl = portPlan.webUrl
+const websitePort = portPlan.websitePort
+const websiteUrl = portPlan.websiteUrl
 const databaseUrl = portPlan.databaseUrl
 
 function normalizeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -27,6 +30,7 @@ const backendEnv = normalizeEnv(e2eBackendEnv({
   PORT: String(backendPort),
   DATABASE_URL: databaseUrl,
   CORS_ORIGINS: [frontendUrl, 'http://localhost:5173'].join(','),
+  WEBAPP_ORIGIN: frontendUrl,
 }))
 
 export default defineConfig({
@@ -74,6 +78,21 @@ export default defineConfig({
         VITE_API_URL: backendUrl,
       }),
       url: frontendUrl,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+    {
+      name: 'website',
+      command: `bun run dev --ignore-lock --host 127.0.0.1 --port ${websitePort}`,
+      cwd: websiteRoot,
+      env: normalizeEnv({
+        ...process.env,
+        // Playwright owns this process; disable Astro's agent-only background daemon.
+        ASTRO_DEV_BACKGROUND: '0',
+        PUBLIC_WEBSITE_URL: websiteUrl,
+        PUBLIC_WEBAPP_URL: frontendUrl,
+      }),
+      url: websiteUrl,
       reuseExistingServer: false,
       timeout: 120_000,
     },

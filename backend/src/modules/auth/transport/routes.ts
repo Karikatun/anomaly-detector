@@ -458,7 +458,7 @@ export function createAuthRoutes({
   routes.openapi(oauthStartRoute, async (c) => {
     const { provider } = c.req.valid('param')
     const { registration, webappOrigin: bodyWebappOrigin } = c.req.valid('json')
-    const webappOrigin = trustedOAuthWebappOrigin(bodyWebappOrigin ?? webappUrl, env)
+    const webappOrigin = trustedOAuthWebappOrigin(bodyWebappOrigin ?? webappUrl, webappUrl)
     if (!oauthCallbackBaseUrl) {
       throw new AppError(500, 'INTERNAL_ERROR', 'OAuth callback URL is not configured')
     }
@@ -493,7 +493,7 @@ export function createAuthRoutes({
       // Set session cookie and redirect to webapp
       // Note: must set cookie on the response manually because c.redirect()
       // discards headers set by setCookie() from hono/cookie
-      const redirectUrl = new URL(trustedOAuthWebappOrigin(result.webappOrigin, env))
+      const redirectUrl = new URL(trustedOAuthWebappOrigin(result.webappOrigin, webappUrl))
       redirectUrl.pathname = '/'
       const cookieMaxAge = env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60
       const cookieSameSite = env.COOKIE_SECURE ? 'None' : 'Lax'
@@ -599,14 +599,14 @@ function withoutRefreshToken<T extends { refreshToken: string }>(response: T): O
   return cookieResponse
 }
 
-function trustedOAuthWebappOrigin(candidate: string, env: AppEnv) {
+function trustedOAuthWebappOrigin(candidate: string, webappUrl: string) {
   let url: URL
   try {
     url = new URL(candidate)
   } catch {
     throw new AppError(403, 'FORBIDDEN', 'OAuth redirect origin is not trusted')
   }
-  if (url.origin !== candidate || !env.CORS_ORIGINS.includes(url.origin)) {
+  if (url.origin !== candidate || url.origin !== webappUrl) {
     throw new AppError(403, 'FORBIDDEN', 'OAuth redirect origin is not trusted')
   }
   return url.origin
