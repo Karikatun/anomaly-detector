@@ -89,6 +89,9 @@ production JWT в `backend/src/env.test.ts`. Исходник и история 
 заменён на явно низкоэнтропийный, а уже опубликованный historical finding
 разрешён только одним immutable fingerprint в `.gitleaksignore`. Path-, rule- и
 regex-allowlist не добавлялись, поэтому новые findings остаются видимыми.
+Full-history Gitleaks добавлен в `check:push` перед поведенческим gate,
+а точный порядок закреплён в `scripts/quality-gates.test.mjs`, чтобы новый
+committed fixture не доходил до remote CI без той же локальной проверки.
 
 ## Rejected hypotheses and residual risk
 
@@ -118,10 +121,10 @@ regex-allowlist не добавлялись, поэтому новые findings 
 - Public HTML/crawlers: PASS — production website build tests проверяют CTA,
   canonical, robots и sitemap без app host.
 - Full gate: PASS — единый `bun run check:push`, включая dependency audit,
-  lint, typecheck, architecture, все tests/builds, Docker DB-backed smoke и
-  35/35 Playwright E2E.
+  full-history Gitleaks, lint, typecheck, architecture, все tests/builds,
+  Docker DB-backed smoke и 35/35 Playwright E2E.
 - Static/security: PASS — Gitleaks после review одного exact historical
-  test-fixture fingerprint проверил 407 commits и не нашёл утечек;
+  test-fixture fingerprint проверил полную историю текущей ветки и не нашёл утечек;
   Semgrep 0 findings, Trivy config 0 misconfigurations.
 - Active DAST: NOT RUN — ZAP не доказывает изменённую OAuth-origin границу;
   применены negative integration tests. Production DAST запрещён.
