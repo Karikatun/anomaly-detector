@@ -83,6 +83,13 @@ browser-supplied return origin раньше зависели от `CORS_ORIGINS[
 
 Новых подтверждённых security-уязвимостей в итоговом diff не найдено.
 
+GitHub `security-static` обнаружил новый high-entropy fixture формата
+production JWT в `backend/src/env.test.ts`. Исходник и история подтвердили,
+что это статический тестовый placeholder, а не credential. Текущий fixture
+заменён на явно низкоэнтропийный, а уже опубликованный historical finding
+разрешён только одним immutable fingerprint в `.gitleaksignore`. Path-, rule- и
+regex-allowlist не добавлялись, поэтому новые findings остаются видимыми.
+
 ## Rejected hypotheses and residual risk
 
 - Open redirect: отвергнут фиксированным destination host и path matcher.
@@ -96,8 +103,9 @@ browser-supplied return origin раньше зависели от `CORS_ORIGINS[
 - Public CSP допускает inline script для статического JSON-LD. Сейчас website не
   принимает request/user content; при появлении SSR, server islands или
   пользовательских данных CSP необходимо пересмотреть.
-- Exact release image scan и GitHub CI для финального commit не выполнялись:
-  push/release не были разрешены. Trivy config чист, Docker smoke image прошёл.
+- Exact release image scan и production release не выполнялись. PR принимается
+  только после зелёных `security-static`, `checks` и `e2e` на одном exact SHA;
+  production image/digest остаётся release gate задачи #31.
 
 ## Validation
 
@@ -112,8 +120,9 @@ browser-supplied return origin раньше зависели от `CORS_ORIGINS[
 - Full gate: PASS — единый `bun run check:push`, включая dependency audit,
   lint, typecheck, architecture, все tests/builds, Docker DB-backed smoke и
   35/35 Playwright E2E.
-- Static/security: PASS — Gitleaks без утечек, Semgrep 0 findings, Trivy config
-  0 misconfigurations.
+- Static/security: PASS — Gitleaks после review одного exact historical
+  test-fixture fingerprint проверил 407 commits и не нашёл утечек;
+  Semgrep 0 findings, Trivy config 0 misconfigurations.
 - Active DAST: NOT RUN — ZAP не доказывает изменённую OAuth-origin границу;
   применены negative integration tests. Production DAST запрещён.
 
@@ -134,5 +143,7 @@ browser-supplied return origin раньше зависели от `CORS_ORIGINS[
   BLOCKED до release SHA.
 - Performance: N/A — hot path, bundle composition и query cost не менялись.
 - Legal/support copy: N/A — текст и реквизиты не менялись.
-- Release/production/network: BLOCKED — нет push, exact-SHA CI, DNS/TLS или
-  production mutation; остаточный риск и следующий шаг — issue #31.
+- PR/CI: REQUIRED — merge gate требует green `security-static`, `checks` и `e2e`
+  на одном exact SHA без bypass.
+- Production/network: BLOCKED — DNS/TLS и production mutation не входят в PR;
+  остаточный риск и следующий шаг — issue #31.
