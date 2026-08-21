@@ -19,6 +19,7 @@ maybeDescribe('profile statistics API integration', () => {
     AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
     COOKIE_SECURE: false,
     CORS_ORIGINS: ['http://localhost:5173'],
+    WEBAPP_ORIGIN: 'http://localhost:5173',
     DATABASE_URL: databaseUrl,
     JWT_SECRET: '12345678901234567890123456789012',
     ADMIN_USER_IDS: [],

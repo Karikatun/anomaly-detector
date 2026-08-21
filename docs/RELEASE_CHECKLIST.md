@@ -63,11 +63,21 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
       neither container is crash-looping.
 - [ ] Public API readiness returns the documented status through HTTPS; worker
       health and service ports remain private.
-- [ ] Webapp and website return expected checksums; SPA route refresh, canonical
-      redirect, and public assets work.
+- [ ] Webapp and website return expected checksums; the public root serves the
+      website and returns `404` for unknown paths, while player route refreshes
+      use only the player-host SPA fallback.
+- [ ] `www` redirects to the public root; every fixed legacy player route keeps
+      its path/query while moving to the player host; no arbitrary redirect
+      target is accepted.
+- [ ] Public canonical/robots/sitemap values contain no player/operator routes;
+      the player host returns the release `X-Robots-Tag` noindex policy.
 - [ ] CORS accepts only expected production origins; authentication cookies,
       refresh, logout, WebSocket ticketing, and reconnect work from the public
       player origin.
+- [ ] `WEBAPP_ORIGIN` equals the player origin and is present in CORS; the public
+      website is absent from credentialed CORS, OAuth rejects every other
+      browser return origin, and provider success/error callbacks return to the
+      player host while the registered callback remains on the API host.
 - [ ] Adminapp is absent from public buckets, returns `401` without edge auth,
       and still enforces backend UUID allowlisting after edge authentication.
 - [ ] Recent API, worker, PostgreSQL, Caddy, and system logs contain no new fatal,

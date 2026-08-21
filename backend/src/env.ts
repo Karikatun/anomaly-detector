@@ -54,6 +54,7 @@ const envSchema = z.object({
         .map((origin) => origin.trim())
         .filter(Boolean),
     ),
+  WEBAPP_ORIGIN: stringWithDefault('http://localhost:5173').pipe(z.string().url()),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().nonnegative().max(60).default(10),
@@ -84,6 +85,7 @@ const envSchema = z.object({
   validateJwtSecret(env, ctx)
   validateProductionRuntime(env, ctx)
   validateCorsOrigins(env, ctx)
+  validateWebappOrigin(env, ctx)
   validateSessionTtls(env, ctx)
   validateTrustedProxy(env, ctx)
   validateOAuth(env, ctx)
@@ -221,6 +223,47 @@ function validateCorsOrigins(env: z.infer<typeof envSchema>, ctx: z.RefinementCt
         message: `CORS_ORIGINS must use HTTPS when COOKIE_SECURE=true: ${origin}`,
       })
     }
+  }
+}
+
+function validateWebappOrigin(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  const origin = env.WEBAPP_ORIGIN
+  const url = new URL(origin)
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must use http or https',
+    })
+  }
+  if (url.origin !== origin) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must contain an origin only, not a path',
+    })
+  }
+  if (!env.CORS_ORIGINS.includes(origin)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must also be listed in CORS_ORIGINS',
+    })
+  }
+  if (env.NODE_ENV === 'production' && url.protocol !== 'https:') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must use HTTPS in production',
+    })
+  }
+  if (env.COOKIE_SECURE && url.protocol !== 'https:'
+    && url.hostname !== 'localhost' && !isPrivateLanIp(url.hostname)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must use HTTPS when COOKIE_SECURE=true',
+    })
   }
 }
 
