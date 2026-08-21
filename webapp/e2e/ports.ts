@@ -3,6 +3,7 @@ import {
   preferredBackendPort,
   preferredPostgresTestPort,
   preferredWebPort,
+  preferredWebsitePort,
 } from './env'
 import { portFromUrl } from './url'
 
@@ -13,6 +14,8 @@ export type PortPlan = {
   postgresTestPort: number
   webPort: number
   webUrl: string
+  websitePort: number
+  websiteUrl: string
 }
 
 export async function resolveE2ePorts(): Promise<PortPlan> {
@@ -28,6 +31,10 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
   const explicitWebUrlPort = parsePortValue(
     portFromUrl(process.env.E2E_WEB_URL),
     process.env.E2E_WEB_URL ?? 'E2E_WEB_URL',
+  )
+  const explicitWebsiteUrlPort = parsePortValue(
+    portFromUrl(process.env.E2E_WEBSITE_URL),
+    process.env.E2E_WEBSITE_URL ?? 'E2E_WEBSITE_URL',
   )
   const postgresTestPort = explicitPostgresPort
     ? reservePort(explicitPostgresPort, reservedPorts)
@@ -50,8 +57,16 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
         preferredPort: preferredWebPort,
         reservedPorts,
       })
+  const websitePort = explicitWebsiteUrlPort
+    ? reservePort(explicitWebsiteUrlPort, reservedPorts)
+    : await resolvePort({
+        envName: 'E2E_WEBSITE_PORT',
+        preferredPort: preferredWebsitePort,
+        reservedPorts,
+      })
   const backendUrl = process.env.E2E_BACKEND_URL ?? `http://127.0.0.1:${backendPort}`
   const webUrl = process.env.E2E_WEB_URL ?? `http://127.0.0.1:${webPort}`
+  const websiteUrl = process.env.E2E_WEBSITE_URL ?? `http://127.0.0.1:${websitePort}`
   const databaseUrl =
     explicitDatabaseUrl
     ?? `postgresql://superuser:superpassword@localhost:${postgresTestPort}/anomaly_detector_test?schema=public`
@@ -63,6 +78,8 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
     postgresTestPort,
     webPort,
     webUrl,
+    websitePort,
+    websiteUrl,
   }
 }
 
@@ -72,6 +89,8 @@ export function applyE2ePortEnv(plan: PortPlan) {
   process.env.E2E_WEB_PORT ??= String(plan.webPort)
   process.env.E2E_BACKEND_URL ??= plan.backendUrl
   process.env.E2E_WEB_URL ??= plan.webUrl
+  process.env.E2E_WEBSITE_PORT ??= String(plan.websitePort)
+  process.env.E2E_WEBSITE_URL ??= plan.websiteUrl
   process.env.TEST_DATABASE_URL = plan.databaseUrl
   process.env.DATABASE_URL = plan.databaseUrl
 }

@@ -103,7 +103,7 @@ export function createAuthModule({
       authenticatedMutationBudget,
       requireAuth,
       service,
-      webappUrl: env.CORS_ORIGINS[0],
+      webappUrl: env.WEBAPP_ORIGIN,
     }),
   }
 }

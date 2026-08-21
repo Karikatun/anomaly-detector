@@ -18,6 +18,7 @@ describe('loadEnv', () => {
     expect(env.COOKIE_SECURE).toBe(false)
     expect(env.ADMIN_USER_IDS).toEqual([])
     expect(env.CORS_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:8081'])
+    expect(env.WEBAPP_ORIGIN).toBe('http://localhost:5173')
     expect(env.YANDEX_STORAGE_REGION).toBeUndefined()
     expect(env.YANDEX_STORAGE_UPLOAD_MAX_BYTES).toBe(10 * 1024 * 1024)
     expect(env.YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS).toBe(900)
@@ -129,6 +130,7 @@ describe('loadEnv', () => {
       JWT_SECRET: '0123456789abcdef'.repeat(4),
       COOKIE_SECURE: 'true',
       CORS_ORIGINS: 'https://web.example.com',
+      WEBAPP_ORIGIN: 'https://web.example.com',
     }
 
     expect(() => loadEnv(productionBase)).not.toThrow()
@@ -137,6 +139,37 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...productionBase, COOKIE_SECURE: 'false' })).toThrow('COOKIE_SECURE')
     expect(() => loadEnv({ ...productionBase, CORS_ORIGINS: 'http://web.example.com' }))
       .toThrow('CORS_ORIGINS')
+  })
+
+  test('requires one explicit trusted player origin in production-like runtimes', () => {
+    const productionBase = {
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
+      JWT_SECRET: '0123456789abcdef'.repeat(4),
+      COOKIE_SECURE: 'true',
+      CORS_ORIGINS: 'https://ops.example.com,https://app.example.com',
+    }
+
+    expect(() => loadEnv(productionBase)).toThrow('WEBAPP_ORIGIN')
+
+    const env = loadEnv({
+      ...productionBase,
+      WEBAPP_ORIGIN: 'https://app.example.com',
+    })
+    expect(env.WEBAPP_ORIGIN).toBe('https://app.example.com')
+
+    expect(() => loadEnv({
+      ...productionBase,
+      WEBAPP_ORIGIN: 'https://app.example.com/tutorial',
+    })).toThrow('WEBAPP_ORIGIN')
+    expect(() => loadEnv({
+      ...productionBase,
+      WEBAPP_ORIGIN: 'https://public.example.com',
+    })).toThrow('WEBAPP_ORIGIN')
+    expect(() => loadEnv({
+      ...productionBase,
+      WEBAPP_ORIGIN: 'http://app.example.com',
+    })).toThrow('WEBAPP_ORIGIN')
   })
 
   test('rejects unsafe production CORS origins', () => {

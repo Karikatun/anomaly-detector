@@ -184,6 +184,7 @@ try {
     '-e', `DATABASE_URL=${databaseUrlForContainer}`,
     '-e', `JWT_SECRET=${'0123456789abcdef'.repeat(4)}`,
     '-e', 'CORS_ORIGINS=https://web.example.com',
+    '-e', 'WEBAPP_ORIGIN=https://web.example.com',
     '-e', 'COOKIE_SECURE=true',
     imageName,
   ])
