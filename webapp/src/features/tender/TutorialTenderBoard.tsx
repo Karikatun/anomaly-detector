@@ -342,6 +342,14 @@ export function TutorialTenderBoard({
                 <ContractPlanningPanel
                   contentTestId="tutorial-contracts-dialog"
                   open={contractsOpen}
+                  onCloseAutoFocus={(event) => {
+                    event.preventDefault()
+                    window.requestAnimationFrame(() => {
+                      document.querySelector<HTMLButtonElement>(
+                        '[data-tutorial-power-category="reconnaissance"] button:not(:disabled)',
+                      )?.focus({ preventScroll: true })
+                    })
+                  }}
                   onOpenChange={openContracts}
                   playerId={view.players[0]?.playerId}
                   triggerTestId="tutorial-contracts-trigger"

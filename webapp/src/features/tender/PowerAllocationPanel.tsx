@@ -217,7 +217,11 @@ export function PowerAllocationPanel({
         </div>
       </div>
 
-      <div className={styles.powerLedger} data-complete={reserve === 0 || undefined}>
+      <div
+        className={styles.powerLedger}
+        data-complete={reserve === 0 || undefined}
+        data-tutorial-power-intro=""
+      >
         <span className={styles.powerAvailable}>
           <span className={styles.powerIcon} aria-hidden="true">
             <HugeiconsIcon icon={FlashIcon} strokeWidth={1.8} />
