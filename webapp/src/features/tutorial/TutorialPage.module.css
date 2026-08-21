@@ -27,8 +27,17 @@
   overscroll-behavior: contain;
 }
 .coach { display: grid; max-width: 24rem; gap: .55rem; text-align: left; }
-.coach button { width: fit-content; margin-top: .25rem; }
+.coach button { width: fit-content; }
+.coachActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-top: .25rem;
+}
 .hint { padding: .65rem; border-left: 2px solid #38bdf8; background: rgba(56, 189, 248, .08); }
+.thesisFeedback { padding: .65rem; border-left: 2px solid #f87171; color: #fecaca; background: rgba(248, 113, 113, .09); }
 .confirmAction { display: none; color: #7dd3fc; }
 
 :global([data-testid='floater']) {
@@ -45,7 +54,42 @@
   z-index: 101 !important;
 }
 
-@media (max-width: 600px) {
+@media (min-width: 48rem) {
+  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+    left: calc((100vw - 26rem) / 2) !important;
+    width: min(54rem, calc(100vw - 27rem));
+  }
+}
+
+@media (min-width: 48rem) and (max-width: 68rem) {
+  .coachCard {
+    width: 100%;
+  }
+
+  :global([data-testid='floater']) {
+    width: 20rem !important;
+  }
+
+  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+    left: calc((100vw - 22rem) / 2) !important;
+    width: min(54rem, calc(100vw - 23rem));
+  }
+}
+
+@media (min-width: 68.001rem) and (max-width: 90rem) {
+  :global(body:has([data-tutorial-step='final-model']) [data-tutorial-final-submit]) {
+    width: calc(100% - 2rem);
+    justify-self: start;
+  }
+}
+
+@media (max-width: 47.999rem) {
   .completeActions { display: grid; }
   .completeActions button { width: 100%; }
   .coachCard {
@@ -101,5 +145,27 @@
 
   :global(body:has([data-tutorial-step='final-model'])) .confirmAction {
     display: block;
+  }
+
+  .coachActions button {
+    padding-inline: .5rem;
+  }
+}
+
+@media (max-width: 47.999rem) and (max-height: 32rem) {
+  :global(body:has([data-tutorial-step='interaction-guide']) [data-testid='floater']) {
+    inset: .75rem .75rem auto !important;
+  }
+
+  .coachCard {
+    padding-block: .5rem !important;
+  }
+
+  .coach {
+    gap: .25rem;
+  }
+
+  .coachActions {
+    margin-top: 0;
   }
 }
