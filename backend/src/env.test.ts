@@ -145,7 +145,7 @@ describe('loadEnv', () => {
     const productionBase = {
       NODE_ENV: 'production',
       DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
-      JWT_SECRET: '0123456789abcdef'.repeat(4),
+      JWT_SECRET: '01'.repeat(32),
       COOKIE_SECURE: 'true',
       CORS_ORIGINS: 'https://ops.example.com,https://app.example.com',
     }
