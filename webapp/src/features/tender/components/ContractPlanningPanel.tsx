@@ -1,5 +1,5 @@
 import type { TenderView } from '@anomaly-detector/contracts'
-import type { CSSProperties } from 'react'
+import type { ComponentProps, CSSProperties } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +22,7 @@ import phaseStyles from './PhasePanel.module.css'
 
 export function ContractPlanningPanel({
   contentTestId,
+  onCloseAutoFocus,
   onOpenChange,
   open,
   playerId,
@@ -29,6 +30,7 @@ export function ContractPlanningPanel({
   view,
 }: {
   contentTestId?: string
+  onCloseAutoFocus?: ComponentProps<typeof DialogContent>['onCloseAutoFocus']
   onOpenChange: (open: boolean) => void
   open: boolean
   playerId?: string
@@ -126,6 +128,7 @@ export function ContractPlanningPanel({
           className={dialogStyles.dialog}
           closeLabel={t('tender.contractPlanning.close')}
           data-testid={contentTestId}
+          onCloseAutoFocus={onCloseAutoFocus}
         >
           <DialogHeader className={dialogStyles.header}>
             <DialogTitle>{t('tender.contractPlanning.title', { count: contracts.length })}</DialogTitle>

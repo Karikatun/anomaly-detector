@@ -1367,7 +1367,16 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   const mobileContractsDialog = page.getByRole('dialog', { name: 'Контракты этого раунда · 2' })
   await expectReadingDialogAvailable(page, mobileContractsDialog)
   await expect(mobileContractsDialog.getByText('Готов к подаче', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Закрыть контракты' }).click()
+  const scrollBeforeRoundTwoPower = await page.evaluate(() => window.scrollY)
+  const roundTwoPowerScrollRequests = await captureScrollRequests(
+    page,
+    () => page.getByRole('button', { name: 'Закрыть контракты' }).click(),
+  )
+  expect(
+    roundTwoPowerScrollRequests.some((request) => request.top < scrollBeforeRoundTwoPower - 8),
+    'step 26 must request an upward scroll to the round-two power allocation area',
+  ).toBe(true)
+  await expect(page.getByRole('button', { name: 'Увеличить мощность: Разведка' })).toBeFocused()
 
   await expectTargetInMobileInteractiveArea(
     page,
