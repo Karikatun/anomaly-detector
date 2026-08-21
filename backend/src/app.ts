@@ -9,6 +9,7 @@ import { createApiBodyLimit, createAuthSecurity } from './http/security'
 import { createPrismaRequestBudget } from './security/request-budget'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 import { createAdminModule } from './modules/admin'
+import { createMailModule, type MailServiceCandidateSource } from './modules/mail'
 import { createProfileModule } from './modules/profile'
 import { createRoomModule } from './modules/room'
 import {
@@ -30,11 +31,13 @@ type CreateAppOptions = {
   env: AppEnv
   prisma: DbClient
   securityEvents?: SecurityEventLogger
+  mailPolicySource?: MailServiceCandidateSource
   tender?: TenderModule
 }
 
 export function createApp({
   env,
+  mailPolicySource,
   prisma,
   securityEvents = consoleSecurityEventLogger,
   tender: providedTender,
@@ -57,10 +60,12 @@ export function createApp({
     db: prisma,
     requireAuth: auth.requireAuth,
   })
+  const mail = createMailModule({ db: prisma, source: mailPolicySource })
   const admin = createAdminModule({
     adminUserIds: new Set(env.ADMIN_USER_IDS),
     authenticate: auth.authenticateAccessToken,
     db: prisma,
+    mailPolicy: mail.operatorPolicy,
     securityEvents,
   })
   const app = new OpenAPIHono<AuthHttpEnv>({

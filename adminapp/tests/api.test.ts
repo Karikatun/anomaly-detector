@@ -87,3 +87,58 @@ test('invokes the default browser fetch with its global receiver', async () => {
     globalThis.fetch = originalFetch
   }
 })
+
+test('uses the authenticated narrow mail-policy endpoints without generic mutations', async () => {
+  const requests: Array<{ body: unknown; method: string; url: string }> = []
+  const view = {
+    currentVersion: 0,
+    generatedAt: '2026-08-22T12:00:00.000Z',
+    latestAttempt: null,
+    lastSuccessfulImport: null,
+    publishedPolicy: null,
+  }
+  const api = new AdminApi('', async (input, init) => {
+    const url = String(input)
+    if (url.endsWith('/api/auth/refresh')) return Response.json({ accessToken: 'operator-token' })
+    requests.push({
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      method: init?.method ?? 'GET',
+      url,
+    })
+    return Response.json(view)
+  })
+  const commandId = '019f8099-7e26-7760-ad08-66d1d66b2750'
+
+  await api.restoreSession()
+  await api.getMailPolicy()
+  await api.importMailPolicy({ commandId, expectedVersion: 0 })
+  await api.publishMailPolicy({
+    additions: [{
+      canonicalization: {
+        ignoreDots: false,
+        localPartCaseInsensitive: false,
+        stripPlusTag: false,
+      },
+      emailDomain: 'yandex.ru',
+      sourceCandidateId: '019f8099-7e26-7760-ad08-66d1d66b2751',
+    }],
+    commandId,
+    expectedVersion: 0,
+  })
+  await api.changeMailPolicyStatus({
+    commandId,
+    emailDomain: 'yandex.ru',
+    expectedVersion: 1,
+    reason: 'Security-инцидент',
+    state: 'blocked',
+  })
+
+  expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
+    { method: 'GET', url: '/api/operations/mail-policy' },
+    { method: 'POST', url: '/api/operations/mail-policy/import' },
+    { method: 'POST', url: '/api/operations/mail-policy/publish' },
+    { method: 'POST', url: '/api/operations/mail-policy/status' },
+  ])
+  expect(requests[1].body).toEqual({ commandId, expectedVersion: 0 })
+  expect(requests.some(({ url }) => /create|update|delete/.test(url))).toBe(false)
+})

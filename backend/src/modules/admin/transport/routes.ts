@@ -1,14 +1,23 @@
-import { adminOverviewQuerySchema, adminOverviewSchema } from '@anomaly-detector/contracts'
+import {
+  adminOverviewQuerySchema,
+  adminOverviewSchema,
+  mailPolicyImportCommandSchema,
+  mailPolicyPublishCommandSchema,
+  mailPolicyStatusCommandSchema,
+  mailPolicyViewSchema,
+} from '@anomaly-detector/contracts'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import type { Context } from 'hono'
 
 import { errorResponse } from '../../../http/errors'
 import type { AuthenticatedPrincipal, AuthHttpEnv } from '../../auth'
-import type { AdminOverviewReader } from '../application/ports'
+import { executeMailPolicy } from '../../mail'
+import type { AdminMailPolicyOperator, AdminOverviewReader } from '../application/ports'
 
 type CreateAdminRoutesInput = {
   adminUserIds: ReadonlySet<string>
   authenticate: (accessToken: string | undefined) => Promise<AuthenticatedPrincipal>
+  mailPolicy: AdminMailPolicyOperator
   onAccessDenied?: (context: Context<AuthHttpEnv>, kind: 'authentication' | 'authorization') => void
   overviewReader: AdminOverviewReader
 }
@@ -31,6 +40,8 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
     }
 
     c.set('user', principal)
+    c.header('Cache-Control', 'no-store')
+    c.header('X-Robots-Tag', 'noindex, nofollow, noarchive')
     await next()
   })
 
@@ -38,12 +49,37 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
   routes.get('/overview', async (c) => {
     const query = adminOverviewQuerySchema.parse(c.req.query())
     const overview = adminOverviewSchema.parse(await input.overviewReader.read(query))
-    c.header('Cache-Control', 'no-store')
-    c.header('X-Robots-Tag', 'noindex, nofollow, noarchive')
     return c.json(overview)
   })
 
+  routes.get('/mail-policy', async (c) => {
+    return c.json(mailPolicyViewSchema.parse(await input.mailPolicy.read()))
+  })
+
+  routes.post('/mail-policy/import', async (c) => {
+    const command = mailPolicyImportCommandSchema.parse(await c.req.json())
+    const result = await executeMailPolicy(() => input.mailPolicy.importCandidates(command, operator(c)))
+    return c.json(mailPolicyViewSchema.parse(result))
+  })
+
+  routes.post('/mail-policy/publish', async (c) => {
+    const command = mailPolicyPublishCommandSchema.parse(await c.req.json())
+    const result = await executeMailPolicy(() => input.mailPolicy.publish(command, operator(c)))
+    return c.json(mailPolicyViewSchema.parse(result))
+  })
+
+  routes.post('/mail-policy/status', async (c) => {
+    const command = mailPolicyStatusCommandSchema.parse(await c.req.json())
+    const result = await executeMailPolicy(() => input.mailPolicy.changeStatus(command, operator(c)))
+    return c.json(mailPolicyViewSchema.parse(result))
+  })
+
   return routes
+}
+
+function operator(c: Context<AuthHttpEnv>) {
+  const principal = c.get('user')
+  return { authenticatedAt: principal.authenticatedAt, id: principal.id }
 }
 
 function bearerToken(authorization: string | undefined) {

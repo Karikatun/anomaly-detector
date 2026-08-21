@@ -4,6 +4,7 @@ type OverviewScreenProps = {
   data: AdminOverview
   isRefreshing: boolean
   onLogout: () => void
+  onOpenMailPolicy: () => void
   onPageChange: (page: number) => void
   onRefresh: () => void
 }
@@ -14,7 +15,7 @@ const roomLabels: Record<keyof AdminOverview['roomsByStatus'], string> = {
   completed: 'Завершены',
 }
 
-export function OverviewScreen({ data, isRefreshing, onLogout, onPageChange, onRefresh }: OverviewScreenProps) {
+export function OverviewScreen({ data, isRefreshing, onLogout, onOpenMailPolicy, onPageChange, onRefresh }: OverviewScreenProps) {
   const totals = [
     ['Пользователи', data.totals.users],
     ['Активные сессии', data.totals.activeSessions],
@@ -32,6 +33,7 @@ export function OverviewScreen({ data, isRefreshing, onLogout, onPageChange, onR
             <p className="updated-at">Сформирован {formatDate(data.generatedAt)}</p>
           </div>
           <div className="header-actions">
+            <button type="button" className="button button-secondary" onClick={onOpenMailPolicy}>Политика почты</button>
             <button type="button" className="button" disabled={isRefreshing} onClick={onRefresh}>
               {isRefreshing ? 'Обновляем…' : 'Обновить'}
             </button>

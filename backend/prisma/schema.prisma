@@ -8,25 +8,25 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  login        String        @unique
-  passwordHash String        @map("password_hash")
-  displayName  String?       @map("display_name")
-  locale       String        @default("ru") @map("locale")
-  privacyConsentVersion String? @map("privacy_consent_version")
-  privacyConsentAt DateTime? @map("privacy_consent_at")
-  termsVersion String? @map("terms_version")
-  termsAcceptedAt DateTime? @map("terms_accepted_at")
-  anonymizedAt DateTime?     @map("anonymized_at")
-  tutorialCompletedAt DateTime? @map("tutorial_completed_at")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  sessions     AuthSession[]
-  realtimeTickets RealtimeTicket[]
-  identities   AuthIdentity[]
-  hostedRooms  TenderRoom[]       @relation("TenderRoomHost")
-  roomMemberships TenderRoomMember[]
-  currentMatch CurrentMatch?
+  id                    String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  login                 String             @unique
+  passwordHash          String             @map("password_hash")
+  displayName           String?            @map("display_name")
+  locale                String             @default("ru") @map("locale")
+  privacyConsentVersion String?            @map("privacy_consent_version")
+  privacyConsentAt      DateTime?          @map("privacy_consent_at")
+  termsVersion          String?            @map("terms_version")
+  termsAcceptedAt       DateTime?          @map("terms_accepted_at")
+  anonymizedAt          DateTime?          @map("anonymized_at")
+  tutorialCompletedAt   DateTime?          @map("tutorial_completed_at")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+  sessions              AuthSession[]
+  realtimeTickets       RealtimeTicket[]
+  identities            AuthIdentity[]
+  hostedRooms           TenderRoom[]       @relation("TenderRoomHost")
+  roomMemberships       TenderRoomMember[]
+  currentMatch          CurrentMatch?
 
   @@map("users")
 }
@@ -45,35 +45,35 @@ model AuthIdentity {
 }
 
 model OAuthTransaction {
-  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  stateHash    String   @unique @map("state_hash")
-  codeVerifier String   @map("code_verifier")
-  provider     String
-  redirectUri  String   @map("redirect_uri")
-  privacyConsentVersion String? @map("privacy_consent_version")
-  termsVersion String? @map("terms_version")
-  legalAcceptedAt DateTime? @map("legal_accepted_at")
-  expiresAt    DateTime @map("expires_at")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id                    String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  stateHash             String    @unique @map("state_hash")
+  codeVerifier          String    @map("code_verifier")
+  provider              String
+  redirectUri           String    @map("redirect_uri")
+  privacyConsentVersion String?   @map("privacy_consent_version")
+  termsVersion          String?   @map("terms_version")
+  legalAcceptedAt       DateTime? @map("legal_accepted_at")
+  expiresAt             DateTime  @map("expires_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
 
   @@index([expiresAt], map: "oauth_transactions_expires_at_idx")
   @@map("oauth_transactions")
 }
 
 model AuthSession {
-  id                       String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId                   String    @map("user_id") @db.Uuid
-  refreshTokenHash         String    @unique(map: "auth_sessions_refresh_token_hash_key") @map("refresh_token_hash")
-  refreshTokenFamilyHash   String?   @unique(map: "auth_sessions_refresh_token_family_hash_key") @map("refresh_token_family_hash")
-  previousRefreshTokenHash String?   @unique(map: "auth_sessions_previous_refresh_token_hash_key") @map("previous_refresh_token_hash")
-  refreshRotatedAt         DateTime? @map("refresh_rotated_at")
-  expiresAt                DateTime  @map("expires_at")
-  revokedAt                DateTime? @map("revoked_at")
-  userAgent                String?   @map("user_agent")
-  ipAddress                String?   @map("ip_address")
-  createdAt                DateTime  @default(now()) @map("created_at")
-  updatedAt                DateTime  @updatedAt @map("updated_at")
-  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "auth_sessions_user_id_fkey")
+  id                       String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                   String           @map("user_id") @db.Uuid
+  refreshTokenHash         String           @unique(map: "auth_sessions_refresh_token_hash_key") @map("refresh_token_hash")
+  refreshTokenFamilyHash   String?          @unique(map: "auth_sessions_refresh_token_family_hash_key") @map("refresh_token_family_hash")
+  previousRefreshTokenHash String?          @unique(map: "auth_sessions_previous_refresh_token_hash_key") @map("previous_refresh_token_hash")
+  refreshRotatedAt         DateTime?        @map("refresh_rotated_at")
+  expiresAt                DateTime         @map("expires_at")
+  revokedAt                DateTime?        @map("revoked_at")
+  userAgent                String?          @map("user_agent")
+  ipAddress                String?          @map("ip_address")
+  createdAt                DateTime         @default(now()) @map("created_at")
+  updatedAt                DateTime         @updatedAt @map("updated_at")
+  user                     User             @relation(fields: [userId], references: [id], onDelete: Cascade, map: "auth_sessions_user_id_fkey")
   realtimeTickets          RealtimeTicket[]
 
   @@index([userId], map: "auth_sessions_user_id_idx")
@@ -82,13 +82,13 @@ model AuthSession {
 }
 
 model AuthAbuseBucket {
-  scope           String   @db.VarChar(32)
-  keyHash         String   @map("key_hash") @db.Char(64)
+  scope           String    @db.VarChar(32)
+  keyHash         String    @map("key_hash") @db.Char(64)
   count           Int
-  windowStartedAt DateTime @map("window_started_at")
+  windowStartedAt DateTime  @map("window_started_at")
   blockedUntil    DateTime? @map("blocked_until")
-  expiresAt       DateTime @map("expires_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  expiresAt       DateTime  @map("expires_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@id([scope, keyHash])
   @@index([expiresAt], map: "auth_abuse_buckets_expires_at_idx")
@@ -130,18 +130,18 @@ model Tender {
 }
 
 model TenderRoom {
-  id        String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  joinCode  String?            @unique(map: "tender_rooms_join_code_key") @map("join_code") @db.VarChar(10)
-  hostId    String             @map("host_id") @db.Uuid
-  capacity  Int
-  status    String
-  startsAt  DateTime?          @map("starts_at")
-  tenderId  String?            @unique @map("tender_id") @db.Uuid
-  createdAt DateTime           @default(now()) @map("created_at")
-  updatedAt DateTime           @updatedAt @map("updated_at")
-  host      User               @relation("TenderRoomHost", fields: [hostId], references: [id], onDelete: Restrict, map: "tender_rooms_host_id_fkey")
-  tender    Tender?            @relation(fields: [tenderId], references: [id], onDelete: Restrict, map: "tender_rooms_tender_id_fkey")
-  members   TenderRoomMember[]
+  id             String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  joinCode       String?            @unique(map: "tender_rooms_join_code_key") @map("join_code") @db.VarChar(10)
+  hostId         String             @map("host_id") @db.Uuid
+  capacity       Int
+  status         String
+  startsAt       DateTime?          @map("starts_at")
+  tenderId       String?            @unique @map("tender_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  host           User               @relation("TenderRoomHost", fields: [hostId], references: [id], onDelete: Restrict, map: "tender_rooms_host_id_fkey")
+  tender         Tender?            @relation(fields: [tenderId], references: [id], onDelete: Restrict, map: "tender_rooms_tender_id_fkey")
+  members        TenderRoomMember[]
   currentMatches CurrentMatch[]
 
   @@index([status], map: "tender_rooms_status_idx")
@@ -201,4 +201,88 @@ model TenderAuditEvent {
   @@unique([tenderId, sequence], map: "tender_audit_events_tender_id_sequence_key")
   @@index([tenderId, kind], map: "tender_audit_events_tender_id_kind_idx")
   @@map("tender_audit_events")
+}
+
+model MailRegistryImport {
+  id             String                  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  actorId        String                  @map("actor_id") @db.Uuid
+  sourceDate     String?                 @map("source_date") @db.VarChar(10)
+  sourceUrl      String?                 @map("source_url")
+  checksum       String?                 @db.Char(64)
+  outcome        String                  @db.VarChar(16)
+  failureCode    String?                 @map("failure_code") @db.VarChar(64)
+  addedDomains   Json                    @map("added_domains")
+  removedDomains Json                    @map("removed_domains")
+  unchangedCount Int                     @map("unchanged_count")
+  finishedAt     DateTime                @default(now()) @map("finished_at")
+  candidates     MailRegistryCandidate[]
+
+  @@index([outcome, finishedAt], map: "mail_registry_imports_outcome_finished_at_idx")
+  @@map("mail_registry_imports")
+}
+
+model MailRegistryCandidate {
+  id              String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  importId        String             @map("import_id") @db.Uuid
+  registryEntryId String             @map("registry_entry_id") @db.VarChar(64)
+  serviceDomain   String             @map("service_domain") @db.VarChar(253)
+  evidence        String             @db.VarChar(64)
+  sourceImport    MailRegistryImport @relation(fields: [importId], references: [id], onDelete: Cascade, map: "mail_registry_candidates_import_id_fkey")
+  policyEntries   MailPolicyEntry[]
+
+  @@unique([importId, registryEntryId, serviceDomain], map: "mail_registry_candidates_import_entry_domain_key")
+  @@index([importId, serviceDomain], map: "mail_registry_candidates_import_domain_idx")
+  @@map("mail_registry_candidates")
+}
+
+model MailPolicyVersion {
+  id          String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  version     Int               @unique
+  publishedBy String            @map("published_by") @db.Uuid
+  publishedAt DateTime          @default(now()) @map("published_at")
+  entries     MailPolicyEntry[]
+
+  @@map("mail_policy_versions")
+}
+
+model MailPolicyEntry {
+  id                       String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  versionId                String                @map("version_id") @db.Uuid
+  sourceCandidateId        String                @map("source_candidate_id") @db.Uuid
+  emailDomain              String                @map("email_domain") @db.VarChar(253)
+  state                    String                @db.VarChar(16)
+  localPartCaseInsensitive Boolean               @map("local_part_case_insensitive")
+  stripPlusTag             Boolean               @map("strip_plus_tag")
+  ignoreDots               Boolean               @map("ignore_dots")
+  reason                   String?               @db.VarChar(500)
+  policyVersion            MailPolicyVersion     @relation(fields: [versionId], references: [id], onDelete: Cascade, map: "mail_policy_entries_version_id_fkey")
+  sourceCandidate          MailRegistryCandidate @relation(fields: [sourceCandidateId], references: [id], onDelete: Restrict, map: "mail_policy_entries_source_candidate_id_fkey")
+
+  @@unique([versionId, emailDomain], map: "mail_policy_entries_version_domain_key")
+  @@index([versionId, state], map: "mail_policy_entries_version_state_idx")
+  @@map("mail_policy_entries")
+}
+
+model MailPolicyCommand {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  commandId   String   @unique @map("command_id") @db.Uuid
+  actorId     String   @map("actor_id") @db.Uuid
+  kind        String   @db.VarChar(32)
+  fingerprint String   @db.Char(64)
+  receipt     Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("mail_policy_commands")
+}
+
+model MailPolicyAuditEvent {
+  id         String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  commandId  String   @unique @map("command_id") @db.Uuid
+  kind       String   @db.VarChar(64)
+  payload    Json
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  @@index([occurredAt], map: "mail_policy_audit_events_occurred_at_idx")
+  @@map("mail_policy_audit_events")
 }

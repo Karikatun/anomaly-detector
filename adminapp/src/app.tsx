@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
-import type { AdminOverview } from '@anomaly-detector/contracts'
+import type { AdminOverview, MailPolicyView } from '@anomaly-detector/contracts'
 
 import { AdminApi, AdminApiError } from './api'
 import { getApiBaseUrl } from './api-base-url'
+import { MailPolicyScreen } from './mail-policy-screen'
 import { OverviewScreen } from './overview-screen'
 
 type AppState =
@@ -11,17 +12,20 @@ type AppState =
   | { kind: 'anonymous'; error?: string }
   | { kind: 'concealed' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; data: AdminOverview }
+  | { kind: 'ready'; data: AdminOverview; mailPolicy: MailPolicyView }
+
+type ReadyView = 'mail-policy' | 'overview'
 
 export default function App() {
   const api = useMemo(() => new AdminApi(getApiBaseUrl()), [])
   const [state, setState] = useState<AppState>({ kind: 'bootstrapping' })
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [view, setView] = useState<ReadyView>('overview')
 
-  const loadOverview = useCallback(async (page = 1) => {
+  const loadWorkspace = useCallback(async () => {
     try {
-      const data = await api.getOverview(page)
-      setState({ kind: 'ready', data })
+      const [data, mailPolicy] = await Promise.all([api.getOverview(), api.getMailPolicy()])
+      setState({ kind: 'ready', data, mailPolicy })
     } catch (error) {
       if (error instanceof AdminApiError && error.status === 404) {
         setState({ kind: 'concealed' })
@@ -31,7 +35,7 @@ export default function App() {
         setState({ kind: 'anonymous' })
         return
       }
-      setState({ kind: 'error', message: 'Не удалось загрузить системный обзор' })
+      setState({ kind: 'error', message: 'Не удалось загрузить операторский контур' })
     }
   }, [api])
 
@@ -39,7 +43,7 @@ export default function App() {
     let active = true
     void api.restoreSession()
       .then(() => {
-        if (active) return loadOverview()
+        if (active) return loadWorkspace()
       })
       .catch((error) => {
         if (!active) return
@@ -50,11 +54,12 @@ export default function App() {
         setState({ kind: 'error', message: 'Не удалось проверить сессию' })
       })
     return () => { active = false }
-  }, [api, loadOverview])
+  }, [api, loadWorkspace])
 
   const logout = async () => {
     try {
       await api.logout()
+      setView('overview')
       setState({ kind: 'anonymous' })
     } catch {
       setState({ kind: 'error', message: 'Не удалось завершить сессию' })
@@ -62,29 +67,65 @@ export default function App() {
   }
 
   if (state.kind === 'bootstrapping') return <StateScreen title="Проверяем сессию…" />
-  if (state.kind === 'anonymous') return <LoginScreen api={api} initialError={state.error} onAuthenticated={loadOverview} />
+  if (state.kind === 'anonymous') return <LoginScreen api={api} initialError={state.error} onAuthenticated={loadWorkspace} />
   if (state.kind === 'concealed') {
     return <ConcealedScreen onSwitchUser={() => void logout()} />
   }
   if (state.kind === 'error') {
-    return <StateScreen title={state.message} actionLabel="Повторить" onAction={loadOverview} />
+    return <StateScreen title={state.message} actionLabel="Повторить" onAction={loadWorkspace} />
   }
 
+  const loadOverviewPage = async (page: number) => {
+    try {
+      const data = await api.getOverview(page)
+      setState((current) => current.kind === 'ready' ? { ...current, data } : current)
+    } catch {
+      setState({ kind: 'error', message: 'Не удалось загрузить системный обзор' })
+    }
+  }
   const refresh = async () => {
     setIsRefreshing(true)
-    await loadOverview(state.data.users.page)
+    await loadOverviewPage(state.data.users.page)
     setIsRefreshing(false)
   }
   const changePage = async (page: number) => {
     setIsRefreshing(true)
-    await loadOverview(page)
+    await loadOverviewPage(page)
     setIsRefreshing(false)
+  }
+  const reloadMailPolicy = async () => {
+    const mailPolicy = await api.getMailPolicy()
+    setState((current) => current.kind === 'ready' ? { ...current, mailPolicy } : current)
+  }
+  const executeMailCommand = async (operation: () => Promise<MailPolicyView>) => {
+    try {
+      const mailPolicy = await operation()
+      setState((current) => current.kind === 'ready' ? { ...current, mailPolicy } : current)
+    } catch (error) {
+      await reloadMailPolicy().catch(() => undefined)
+      throw error
+    }
+  }
+
+  if (view === 'mail-policy') {
+    return (
+      <MailPolicyScreen
+        data={state.mailPolicy}
+        onBack={() => setView('overview')}
+        onChangeStatus={(command) => executeMailCommand(() => api.changeMailPolicyStatus(command))}
+        onImport={(command) => executeMailCommand(() => api.importMailPolicy(command))}
+        onLogout={() => void logout()}
+        onPublish={(command) => executeMailCommand(() => api.publishMailPolicy(command))}
+        onReload={reloadMailPolicy}
+      />
+    )
   }
   return (
     <OverviewScreen
       data={state.data}
       isRefreshing={isRefreshing}
       onLogout={() => void logout()}
+      onOpenMailPolicy={() => setView('mail-policy')}
       onPageChange={(page) => void changePage(page)}
       onRefresh={() => void refresh()}
     />

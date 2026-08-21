@@ -21,6 +21,21 @@ const overview = {
   users: { page: 1, pageSize: 20, totalItems: 3, totalPages: 1, items: [] },
 }
 
+const mailPolicyView = {
+  currentVersion: 0,
+  generatedAt: '2026-08-03T12:00:00.000Z',
+  latestAttempt: null,
+  lastSuccessfulImport: null,
+  publishedPolicy: null,
+}
+
+const mailPolicy = {
+  changeStatus: async () => mailPolicyView,
+  importCandidates: async () => mailPolicyView,
+  publish: async () => mailPolicyView,
+  read: async () => mailPolicyView,
+}
+
 test('conceals the admin route from anonymous and ordinary users', async () => {
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
@@ -29,18 +44,21 @@ test('conceals the admin route from anonymous and ordinary users', async () => {
       if (token === 'player-token') return { ...admin, id: '019f8099-7e26-7760-ad08-66d1d66b2720' }
       throw new Error('invalid token')
     },
+    mailPolicy,
     overviewReader: { read: async () => overview },
   })
 
-  for (const authorization of [undefined, 'Bearer player-token']) {
-    const response = await module.routes.request('/overview', {
-      headers: authorization ? { Authorization: authorization } : undefined,
-    })
+  for (const path of ['/overview', '/mail-policy']) {
+    for (const authorization of [undefined, 'Bearer player-token']) {
+      const response = await module.routes.request(path, {
+        headers: authorization ? { Authorization: authorization } : undefined,
+      })
 
-    expect(response.status).toBe(404)
-    expect(await response.json()).toEqual({
-      error: { code: 'NOT_FOUND', message: 'Route not found' },
-    })
+      expect(response.status).toBe(404)
+      expect(await response.json()).toEqual({
+        error: { code: 'NOT_FOUND', message: 'Route not found' },
+      })
+    }
   }
 })
 
@@ -48,6 +66,7 @@ test('returns a no-store overview to an allowlisted administrator', async () => 
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
     authenticate: async () => admin,
+    mailPolicy,
     overviewReader: { read: async () => overview },
   })
 
@@ -69,6 +88,7 @@ test('returns the requested page from the complete user list', async () => {
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
     authenticate: async () => admin,
+    mailPolicy,
     overviewReader: {
       read: async (query) => {
         receivedQuery = query
@@ -90,6 +110,7 @@ test('does not conceal an overview read failure as an access denial', async () =
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
     authenticate: async () => admin,
+    mailPolicy,
     overviewReader: { read: async () => { throw new Error('database unavailable') } },
   })
   module.routes.onError((_error, c) => c.json({ error: 'internal' }, 500))
@@ -99,4 +120,43 @@ test('does not conceal an overview read failure as an access denial', async () =
   })
 
   expect(response.status).toBe(500)
+})
+
+test('passes a bounded import command and authenticated operator to the mail policy owner', async () => {
+  let received: unknown
+  const module = createAdminModule({
+    adminUserIds: new Set([admin.id]),
+    authenticate: async () => admin,
+    mailPolicy: {
+      ...mailPolicy,
+      importCandidates: async (command, operator) => {
+        received = { command, operator }
+        return mailPolicyView
+      },
+    },
+    overviewReader: { read: async () => overview },
+  })
+
+  const response = await module.routes.request('/mail-policy/import', {
+    body: JSON.stringify({
+      commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
+      expectedVersion: 0,
+    }),
+    headers: {
+      Authorization: 'Bearer admin-token',
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  })
+
+  expect(response.status).toBe(200)
+  expect(response.headers.get('cache-control')).toBe('no-store')
+  expect(received).toEqual({
+    command: {
+      commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
+      expectedVersion: 0,
+    },
+    operator: { authenticatedAt: admin.authenticatedAt, id: admin.id },
+  })
+  expect(await response.json()).toEqual(mailPolicyView)
 })
