@@ -220,6 +220,71 @@
   gap: .45rem;
 }
 
+.recoveryCodeControl {
+  display: flex;
+  min-width: min(100%, 18rem);
+  align-items: center;
+  justify-content: flex-end;
+  gap: .65rem;
+}
+
+.recoveryCodeStatus {
+  max-width: 15rem;
+  color: #94adbf;
+  font-size: .78rem;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.recoveryCodeSheet {
+  width: min(calc(100% - 2rem), 35rem);
+  max-width: 35rem;
+}
+
+.recoveryCodeList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .55rem .85rem;
+  padding: 1rem 1rem 1rem 3rem;
+  border: 1px solid rgba(73, 133, 172, .4);
+  border-radius: var(--radius-panel);
+  color: #839daf;
+  background: rgba(1, 12, 22, .76);
+}
+
+.recoveryCodeList code {
+  color: #ecf5fb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .83rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .025em;
+  white-space: nowrap;
+}
+
+.recoveryCodeExportActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+}
+
+.recoveryCodeSavedConfirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: .7rem;
+  padding: .8rem;
+  border: 1px solid rgba(94, 147, 185, .32);
+  border-radius: var(--radius-control);
+  color: #bdcdda;
+  background: rgba(8, 30, 47, .55);
+  font-size: .82rem;
+  line-height: 1.45;
+}
+
+.recoveryCodeSavedConfirmation :global([data-slot='checkbox']) {
+  flex: none;
+  margin-top: .1rem;
+}
+
 .replacementSection {
   grid-template-columns: 1fr;
   align-items: stretch;
@@ -730,6 +795,31 @@
     width: 100%;
   }
 
+  .recoveryCodeControl {
+    display: grid;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .recoveryCodeControl button,
+  .recoveryCodeExportActions button {
+    width: 100%;
+  }
+
+  .recoveryCodeStatus {
+    max-width: none;
+    text-align: left;
+  }
+
+  .recoveryCodeList {
+    grid-template-columns: 1fr;
+  }
+
+  .recoveryCodeExportActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .replacementFactors {
     grid-template-columns: 1fr;
   }
@@ -843,5 +933,41 @@
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
     animation: none;
+  }
+}
+
+@media print {
+  :global(body:has(.recoveryCodeSheet)) * {
+    visibility: hidden;
+  }
+
+  .recoveryCodeSheet,
+  .recoveryCodeSheet * {
+    visibility: visible;
+  }
+
+  .recoveryCodeSheet {
+    position: fixed;
+    inset: 1cm;
+    width: auto;
+    max-width: none;
+    color: #000;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .recoveryCodeList {
+    color: #333;
+    background: #fff;
+  }
+
+  .recoveryCodeList code {
+    color: #000;
+  }
+
+  .recoveryCodeExportActions,
+  .recoveryCodeSavedConfirmation,
+  .recoveryCodeSheet :global([data-slot='dialog-footer']) {
+    display: none;
   }
 }

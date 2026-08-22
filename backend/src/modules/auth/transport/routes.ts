@@ -5,6 +5,7 @@ import {
   cancelRecoveryEmailRequestSchema,
   confirmRecoveryEmailReplacementRequestSchema,
   confirmRecoveryEmailRequestSchema,
+  confirmRecoveryCodeReissueRequestSchema,
   cookieAuthResponseSchema,
   cookieLogoutRequestSchema,
   cookieRefreshRequestSchema,
@@ -17,10 +18,20 @@ import {
   oauthStartResponseSchema,
   registerRequestSchema,
   recoveryEmailReplacementCommandResponseSchema,
+  recoveryCodeEmailReplacementConfirmRequestSchema,
+  recoveryCodeEmailReplacementConfirmResponseSchema,
+  recoveryCodeEmailReplacementStartRequestSchema,
+  recoveryCodeEmailReplacementStartResponseSchema,
+  recoveryCodePasswordRequestSchema,
+  recoveryCodeSetResponseSchema,
+  recoveryCodeUseResponseSchema,
   resendRecoveryEmailReplacementRequestSchema,
   resendRecoveryEmailRequestSchema,
   startRecoveryEmailReplacementRequestSchema,
   startRecoveryEmailRequestSchema,
+  startRecoveryCodeReissueRequestSchema,
+  startRecoveryCodeReissueResponseSchema,
+  issueRecoveryCodesRequestSchema,
   tokenAuthResponseSchema,
   tokenLogoutRequestSchema,
   tokenRefreshRequestSchema,
@@ -93,6 +104,26 @@ const recoveryEmailReplacementResponseContent = {
   'application/json': {
     schema: recoveryEmailReplacementCommandResponseSchema,
   },
+}
+
+const recoveryCodeSetResponseContent = {
+  'application/json': { schema: recoveryCodeSetResponseSchema },
+}
+
+const recoveryCodeReissueStartResponseContent = {
+  'application/json': { schema: startRecoveryCodeReissueResponseSchema },
+}
+
+const recoveryCodeUseResponseContent = {
+  'application/json': { schema: recoveryCodeUseResponseSchema },
+}
+
+const recoveryCodeEmailReplacementStartResponseContent = {
+  'application/json': { schema: recoveryCodeEmailReplacementStartResponseSchema },
+}
+
+const recoveryCodeEmailReplacementConfirmResponseContent = {
+  'application/json': { schema: recoveryCodeEmailReplacementConfirmResponseSchema },
 }
 
 const errorResponseContent = {
@@ -462,6 +493,115 @@ const cancelRecoveryEmailReplacementRoute = createRoute({
   },
 })
 
+const issueRecoveryCodesRoute = createRoute({
+  method: 'post',
+  path: '/account-protection/recovery-codes/issue',
+  request: {
+    body: { content: { 'application/json': { schema: issueRecoveryCodesRequestSchema } } },
+  },
+  responses: {
+    200: {
+      content: recoveryCodeSetResponseContent,
+      description: 'Issued eight user-held Recovery Codes once',
+    },
+    401: { content: errorResponseContent, description: 'Authentication required' },
+    409: { content: errorResponseContent, description: 'Recovery Codes are unavailable' },
+    429: { content: errorResponseContent, description: 'Authentication mutation limited' },
+  },
+})
+
+const startRecoveryCodeReissueRoute = createRoute({
+  method: 'post',
+  path: '/account-protection/recovery-codes/reissue/start',
+  request: {
+    body: {
+      content: { 'application/json': { schema: startRecoveryCodeReissueRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      content: recoveryCodeReissueStartResponseContent,
+      description: 'Sent a confirmation code before Recovery Code reissue',
+    },
+    400: { content: errorResponseContent, description: 'Recovery Email is unavailable' },
+    401: { content: errorResponseContent, description: 'Authentication or password invalid' },
+    409: { content: errorResponseContent, description: 'Recovery Codes are unavailable' },
+    429: { content: errorResponseContent, description: 'Recovery Email request limited' },
+  },
+})
+
+const confirmRecoveryCodeReissueRoute = createRoute({
+  method: 'post',
+  path: '/account-protection/recovery-codes/reissue/confirm',
+  request: {
+    body: {
+      content: { 'application/json': { schema: confirmRecoveryCodeReissueRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      content: recoveryCodeSetResponseContent,
+      description: 'Replaced the prior Recovery Code set atomically',
+    },
+    400: { content: errorResponseContent, description: 'Confirmation code is invalid' },
+    401: { content: errorResponseContent, description: 'Authentication required' },
+    409: { content: errorResponseContent, description: 'Recovery Codes are unavailable' },
+    429: { content: errorResponseContent, description: 'Authentication mutation limited' },
+  },
+})
+
+const recoverPasswordWithRecoveryCodeRoute = createRoute({
+  method: 'post',
+  path: '/recovery-code/password',
+  request: {
+    body: { content: { 'application/json': { schema: recoveryCodePasswordRequestSchema } } },
+  },
+  responses: {
+    ...authWriteErrorResponses,
+    200: {
+      content: recoveryCodeUseResponseContent,
+      description: 'Returned a non-enumerating Recovery Code password result',
+    },
+    400: { content: errorResponseContent, description: 'Invalid payload' },
+  },
+})
+
+const startRecoveryEmailWithRecoveryCodeRoute = createRoute({
+  method: 'post',
+  path: '/recovery-code/recovery-email/start',
+  request: {
+    body: {
+      content: { 'application/json': { schema: recoveryCodeEmailReplacementStartRequestSchema } },
+    },
+  },
+  responses: {
+    ...authWriteErrorResponses,
+    200: {
+      content: recoveryCodeEmailReplacementStartResponseContent,
+      description: 'Returned a non-enumerating Recovery Email replacement result',
+    },
+    400: { content: errorResponseContent, description: 'Invalid payload' },
+  },
+})
+
+const confirmRecoveryEmailWithRecoveryCodeRoute = createRoute({
+  method: 'post',
+  path: '/recovery-code/recovery-email/confirm',
+  request: {
+    body: {
+      content: { 'application/json': { schema: recoveryCodeEmailReplacementConfirmRequestSchema } },
+    },
+  },
+  responses: {
+    ...authWriteErrorResponses,
+    200: {
+      content: recoveryCodeEmailReplacementConfirmResponseContent,
+      description: 'Returned a non-enumerating Recovery Email confirmation result',
+    },
+    400: { content: errorResponseContent, description: 'Invalid payload' },
+  },
+})
+
 const cookieLogoutRoute = createRoute({
   method: 'post',
   path: '/logout',
@@ -633,6 +773,38 @@ export function createAuthRoutes({
     return c.json(result, 200)
   })
 
+  routes.openapi(recoverPasswordWithRecoveryCodeRoute, async (c) => {
+    const request = c.req.valid('json')
+    const metadata = requestMetadata(c, env)
+    return c.json(await executeAuth(() => service.recoverPasswordWithRecoveryCode({
+      ipAddress: metadata.ipAddress,
+      login: request.login,
+      newPassword: request.newPassword,
+      recoveryCode: request.recoveryCode,
+    })), 200)
+  })
+
+  routes.openapi(startRecoveryEmailWithRecoveryCodeRoute, async (c) => {
+    const request = c.req.valid('json')
+    const metadata = requestMetadata(c, env)
+    return c.json(await executeAuth(() => service.startRecoveryEmailWithRecoveryCode({
+      email: request.email,
+      ipAddress: metadata.ipAddress,
+      login: request.login,
+      recoveryCode: request.recoveryCode,
+    })), 200)
+  })
+
+  routes.openapi(confirmRecoveryEmailWithRecoveryCodeRoute, async (c) => {
+    const request = c.req.valid('json')
+    const metadata = requestMetadata(c, env)
+    return c.json(await executeAuth(() => service.confirmRecoveryEmailWithRecoveryCode({
+      code: request.code,
+      ipAddress: metadata.ipAddress,
+      login: request.login,
+    })), 200)
+  })
+
   routes.openapi(cookieRefreshRoute, async (c) => {
     const cookieRefreshToken = getRefreshCookie(c)
     assertTrustedCookieOrigin(c, env)
@@ -759,6 +931,44 @@ export function createAuthRoutes({
   protectedRoutes.openapi(cancelRecoveryEmailReplacementRoute, async (c) => {
     const user = c.var.user
     return c.json(await executeAuth(() => service.cancelRecoveryEmailReplacement({
+      sessionId: user.sessionId,
+      userId: user.id,
+    })), 200)
+  })
+  protectedRoutes.use('/account-protection/recovery-codes/issue', requireAuth)
+  protectedRoutes.use('/account-protection/recovery-codes/issue', authenticatedMutationBudget)
+  protectedRoutes.openapi(issueRecoveryCodesRoute, async (c) => {
+    const user = c.var.user
+    return c.json(await executeAuth(() => service.issueRecoveryCodes({
+      sessionId: user.sessionId,
+      userId: user.id,
+    })), 200)
+  })
+  protectedRoutes.use('/account-protection/recovery-codes/reissue/start', requireAuth)
+  protectedRoutes.use(
+    '/account-protection/recovery-codes/reissue/start',
+    authenticatedMutationBudget,
+  )
+  protectedRoutes.openapi(startRecoveryCodeReissueRoute, async (c) => {
+    const user = c.var.user
+    const request = c.req.valid('json')
+    const metadata = requestMetadata(c, env)
+    return c.json(await executeAuth(() => service.startRecoveryCodeReissue({
+      ipAddress: metadata.ipAddress,
+      password: request.password,
+      sessionId: user.sessionId,
+      userId: user.id,
+    })), 200)
+  })
+  protectedRoutes.use('/account-protection/recovery-codes/reissue/confirm', requireAuth)
+  protectedRoutes.use(
+    '/account-protection/recovery-codes/reissue/confirm',
+    authenticatedMutationBudget,
+  )
+  protectedRoutes.openapi(confirmRecoveryCodeReissueRoute, async (c) => {
+    const user = c.var.user
+    return c.json(await executeAuth(() => service.confirmRecoveryCodeReissue({
+      code: c.req.valid('json').code,
       sessionId: user.sessionId,
       userId: user.id,
     })), 200)

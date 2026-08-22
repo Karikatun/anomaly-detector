@@ -76,6 +76,7 @@ export default defineConfig({
       env: normalizeEnv({
         ...process.env,
         VITE_API_URL: backendUrl,
+        VITE_AGENTATION_ENABLED: process.env.UX_AUDIT_DIR ? 'true' : 'false',
       }),
       url: frontendUrl,
       reuseExistingServer: false,

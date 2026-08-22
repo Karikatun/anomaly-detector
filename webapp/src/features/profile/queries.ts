@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   ConfirmRecoveryEmailReplacementRequest,
   ConfirmRecoveryEmailRequest,
+  ConfirmRecoveryCodeReissueRequest,
   ResendRecoveryEmailReplacementRequest,
   StartRecoveryEmailReplacementRequest,
   StartRecoveryEmailRequest,
+  StartRecoveryCodeReissueRequest,
 } from '@anomaly-detector/contracts'
 
 import { sessionQueryKeys } from '@/platform/query'
@@ -122,6 +124,43 @@ export function useCancelRecoveryEmailReplacementMutation(api: ProfileApi) {
       queryKey: profileQueryKeys.accountProtection(),
     }),
     onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useIssueRecoveryCodesMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    gcTime: 0,
+    mutationFn: () => api.issueRecoveryCodes(),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
+  })
+}
+
+export function useStartRecoveryCodeReissueMutation(api: ProfileApi) {
+  return useMutation({
+    mutationFn: (input: StartRecoveryCodeReissueRequest) => api.startRecoveryCodeReissue(input),
+  })
+}
+
+export function useConfirmRecoveryCodeReissueMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    gcTime: 0,
+    mutationFn: (input: ConfirmRecoveryCodeReissueRequest) =>
+      api.confirmRecoveryCodeReissue(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
   })
 }
 

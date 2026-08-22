@@ -1,5 +1,8 @@
 import { e2ePassword, expect, registerBrowserUser, test } from '../helpers/test'
 
+// Authentication journeys handle passwords and one-time credentials; keep them out of CI artifacts.
+test.use({ screenshot: 'off', trace: 'off', video: 'off' })
+
 test('shows the primary sign-in paths immediately and exposes accurate auth headings', async ({ page }) => {
   await page.goto('/')
 
@@ -540,6 +543,7 @@ test('replaces Recovery Email only after both masked factors and supports safe a
   })
   let state: ProtectionState = {
     maskedAccountEmail: 'O***@mail.ru',
+    recoveryCodes: 'not_issued',
     state: 'password_active',
   }
   let replacementRound = 0
@@ -580,11 +584,13 @@ test('replaces Recovery Email only after both masked factors and supports safe a
       } else if (pathname.endsWith('/confirm')) {
         state = {
           maskedAccountEmail: 'N***@mail.ru',
+          recoveryCodes: 'not_issued',
           state: 'password_active',
         }
       } else if (pathname.endsWith('/cancel')) {
         state = {
           maskedAccountEmail: 'N***@mail.ru',
+          recoveryCodes: 'not_issued',
           state: 'password_active',
         }
       }
@@ -673,4 +679,184 @@ test('replaces Recovery Email only after both masked factors and supports safe a
     { email: 'third@mail.ru', password: e2ePassword },
     {},
   ])
+})
+
+test.describe('privacy-sensitive Recovery Code journeys', () => {
+  test('shows eight codes once, offers a file, and requires save acknowledgement or warning', async ({
+    page,
+  }) => {
+    await registerBrowserUser(page, 'Резервные коды E2E', 'recovery-codes')
+    const recoveryCodes = [
+      '0000-1111-2222-3333-4444-5555-6666-7777',
+      '1111-2222-3333-4444-5555-6666-7777-8888',
+      '2222-3333-4444-5555-6666-7777-8888-9999',
+      '3333-4444-5555-6666-7777-8888-9999-AAAA',
+      '4444-5555-6666-7777-8888-9999-AAAA-BBBB',
+      '5555-6666-7777-8888-9999-AAAA-BBBB-CCCC',
+      '6666-7777-8888-9999-AAAA-BBBB-CCCC-DDDD',
+      '7777-8888-9999-AAAA-BBBB-CCCC-DDDD-EEEE',
+    ]
+    let protectionState = {
+      maskedAccountEmail: 'p***@mail.ru',
+      recoveryCodes: 'not_issued',
+      state: 'password_active',
+    }
+    await page.route('**/api/auth/account-protection', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ accountProtection: protectionState }),
+      })
+    })
+    await page.route('**/api/auth/account-protection/recovery-codes/issue', async (route) => {
+      expect(route.request().postDataJSON()).toEqual({})
+      protectionState = {
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'available',
+        state: 'password_active',
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ accountProtection: protectionState, recoveryCodes }),
+      })
+    })
+
+    await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+    await page.getByRole('button', { name: 'Получить резервные коды' }).click()
+    const issueDialog = page.getByRole('dialog', { name: 'Получить резервные коды' })
+    await expect(issueDialog).toContainText('восемь одноразовых кодов')
+    await issueDialog.getByRole('button', { name: 'Показать 8 кодов' }).click()
+
+    const sheet = page.getByRole('dialog', { name: 'Сохраните резервные коды' })
+    await expect(sheet.getByRole('list', { name: 'Восемь одноразовых резервных кодов' }))
+      .toHaveText(/0000-1111-2222-3333/)
+    await expect(sheet.locator('li')).toHaveCount(8)
+    await expect(sheet.getByRole('button', { name: 'Скопировать' })).toBeVisible()
+    await expect(sheet.getByRole('button', { name: 'Распечатать' })).toBeVisible()
+    await expect(sheet.getByRole('button', { name: 'Я сохранил — закрыть' })).toBeDisabled()
+
+    const downloadPromise = page.waitForEvent('download')
+    await sheet.getByRole('button', { name: 'Скачать .txt' }).click()
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toBe('anomaly-detector-recovery-codes.txt')
+
+    await sheet.getByRole('button', { name: 'Пропустить сохранение' }).click()
+    await expect(sheet).toContainText('этот набор исчезнет с экрана навсегда')
+    await sheet.getByRole('button', { name: 'Вернуться к кодам' }).click()
+    await sheet.getByRole('checkbox', { name: /Я сохранил коды/ }).check()
+    await sheet.getByRole('button', { name: 'Я сохранил — закрыть' }).click()
+
+    await expect(sheet).toBeHidden()
+    await expect(page.locator('body')).not.toContainText(recoveryCodes[0])
+    await expect(page.getByRole('button', { name: 'Перевыпустить коды' })).toBeVisible()
+    await page.getByRole('button', { name: 'Назад' }).click()
+    await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
+  })
+
+  test('uses one saved code for password reset or unavailable-email replacement', async ({ page }) => {
+    const requestBodies: unknown[] = []
+    const fillControlledField = async (label: string, value: string) => {
+      const field = page.getByLabel(label)
+      await field.fill(value)
+      await page.evaluate(() => new Promise<void>((resolveFrame) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+      }))
+      await expect(field).toHaveValue(value)
+    }
+    const submitReadyForm = async (input: {
+      buttonName: string
+      formId: string
+      requestPath: string
+    }) => {
+      const form = page.locator(`#${input.formId}`)
+      await expect.poll(() => form.evaluate((element) => (
+        element instanceof HTMLFormElement && element.checkValidity()
+      ))).toBe(true)
+      await page.evaluate(() => new Promise<void>((resolveFrame) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+      }))
+      const request = page.waitForRequest((candidate) => (
+        new URL(candidate.url()).pathname === input.requestPath
+      ))
+      await form.getByRole('button', { name: input.buttonName }).click()
+      await request
+    }
+    await page.route('**/api/auth/recovery-code/**', async (route) => {
+      const path = new URL(route.request().url()).pathname
+      requestBodies.push(route.request().postDataJSON())
+      const body = path.endsWith('/password')
+        ? { outcome: 'completed' }
+        : path.endsWith('/start')
+          ? {
+              codeExpiresAt: '2030-08-22T15:15:00.000Z',
+              maskedAccountEmail: 'n***@mail.ru',
+              outcome: 'pending',
+            }
+          : {
+              activatesAt: '2030-08-23T15:15:00.000Z',
+              maskedAccountEmail: 'n***@mail.ru',
+              outcome: 'completed',
+            }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+    })
+
+    const bootstrapRefresh = page.waitForResponse((response) => (
+      new URL(response.url()).pathname === '/api/auth/refresh'
+    ))
+    await page.goto('/')
+    await bootstrapRefresh
+    await page.getByRole('link', { name: 'Восстановить доступ резервным кодом' }).click()
+    await expect(page).toHaveURL('/recover/code')
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByRole('heading', { name: 'Восстановление по резервному коду' }))
+      .toBeVisible()
+
+    const recoveryCode = 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111'
+    await fillControlledField('Логин', 'recovery-owner')
+    await fillControlledField('Резервный код', recoveryCode)
+    await fillControlledField('Новый пароль', 'new-password-123')
+    await submitReadyForm({
+      buttonName: 'Задать новый пароль',
+      formId: 'recovery-code-password-panel',
+      requestPath: '/api/auth/recovery-code/password',
+    })
+    await expect(page.getByRole('status')).toContainText('Пароль изменён')
+    await expect(page.getByLabel('Резервный код')).toHaveValue('')
+    await expect(page.getByLabel('Новый пароль')).toHaveValue('')
+
+    await page.getByRole('tab', { name: 'Почту' }).click()
+    await fillControlledField('Резервный код', recoveryCode)
+    await fillControlledField('Новая почта восстановления', 'new@mail.ru')
+    await submitReadyForm({
+      buttonName: 'Отправить код на новую почту',
+      formId: 'recovery-code-email-panel',
+      requestPath: '/api/auth/recovery-code/recovery-email/start',
+    })
+    await expect(page.getByText(/Код отправлен на n\*\*\*@mail\.ru/)).toBeVisible()
+    await expect(page.locator('body')).not.toContainText(recoveryCode)
+    await fillControlledField('Код из письма', '123456')
+    await submitReadyForm({
+      buttonName: 'Подтвердить новую почту',
+      formId: 'recovery-code-email-panel',
+      requestPath: '/api/auth/recovery-code/recovery-email/confirm',
+    })
+    await expect(page.getByRole('status')).toContainText('Почта n***@mail.ru подтверждена')
+    await expect(page.getByRole('status')).toContainText('периода защиты')
+    await expect(page.locator('body')).not.toContainText('123456')
+
+    expect(requestBodies).toEqual([
+      {
+        login: 'recovery-owner',
+        newPassword: 'new-password-123',
+        recoveryCode,
+      },
+      {
+        email: 'new@mail.ru',
+        login: 'recovery-owner',
+        recoveryCode,
+      },
+      { code: '123456', login: 'recovery-owner' },
+    ])
+  })
 })

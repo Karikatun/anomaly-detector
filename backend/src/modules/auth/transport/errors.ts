@@ -28,6 +28,9 @@ export function toAuthAppError(error: unknown) {
   if (error.kind === 'recovery_email_conflict' || error.kind === 'recovery_email_pending') {
     return new AppError(409, 'CONFLICT', error.message, undefined, error.kind)
   }
+  if (error.kind === 'recovery_codes_unavailable') {
+    return new AppError(409, 'CONFLICT', error.message, undefined, error.kind)
+  }
   if (error.kind === 'recovery_email_unavailable') {
     return new AppError(400, 'BAD_REQUEST', error.message, undefined, error.kind)
   }

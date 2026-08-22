@@ -33,6 +33,10 @@ model User {
   recoveryEmailBinding      RecoveryEmailBinding?
   recoveryEmailChallenge    RecoveryEmailChallenge?
   recoveryEmailReplacement  RecoveryEmailReplacement?
+  recoveryCodeSet           RecoveryCodeSet?
+  recoveryCodes             RecoveryCode[]
+  recoveryCodeReissue       RecoveryCodeReissueChallenge?
+  recoveryCodeReplacement   RecoveryCodeEmailReplacement?
 
   @@map("users")
 }
@@ -106,6 +110,72 @@ model RecoveryEmailReplacement {
   @@map("recovery_email_replacements")
 }
 
+model RecoveryCodeSet {
+  id         String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId     String    @unique(map: "recovery_code_sets_user_id_key") @map("user_id") @db.Uuid
+  generation Int       @default(1)
+  issuedAt   DateTime  @map("issued_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "recovery_code_sets_user_id_fkey")
+
+  @@map("recovery_code_sets")
+}
+
+model RecoveryCode {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  codeHash  String   @map("code_hash") @db.Char(64)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "recovery_codes_user_id_fkey")
+
+  @@unique([userId, codeHash], map: "recovery_codes_user_id_code_hash_key")
+  @@index([userId], map: "recovery_codes_user_id_idx")
+  @@map("recovery_codes")
+}
+
+model RecoveryCodeReissueChallenge {
+  id                    String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                String      @unique(map: "recovery_code_reissues_user_id_key") @map("user_id") @db.Uuid
+  requestingSessionId   String      @unique(map: "recovery_code_reissues_session_id_key") @map("requesting_session_id") @db.Uuid
+  codeHash              String      @map("code_hash") @db.Char(64)
+  messageId             String      @unique(map: "recovery_code_reissues_message_id_key") @map("message_id") @db.Uuid
+  attemptCount          Int         @default(0) @map("attempt_count")
+  recoveryCanonicalKey String      @map("recovery_canonical_key") @db.VarChar(254)
+  requestedAt           DateTime    @map("requested_at")
+  expiresAt             DateTime    @map("expires_at")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade, map: "recovery_code_reissues_user_id_fkey")
+  requestingSession     AuthSession @relation(fields: [requestingSessionId], references: [id], onDelete: Cascade, map: "recovery_code_reissues_session_id_fkey")
+
+  @@index([expiresAt], map: "recovery_code_reissues_expires_at_idx")
+  @@map("recovery_code_reissues")
+}
+
+model RecoveryCodeEmailReplacement {
+  id                   String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId               String   @unique(map: "recovery_code_email_replacements_user_id_key") @map("user_id") @db.Uuid
+  oldProviderValue     String   @map("old_provider_value") @db.VarChar(254)
+  oldCanonicalKey      String   @map("old_canonical_key") @db.VarChar(254)
+  newProviderValue     String   @map("new_provider_value") @db.VarChar(254)
+  newCanonicalKey      String   @map("new_canonical_key") @db.VarChar(254)
+  newCodeHash          String   @map("new_code_hash") @db.Char(64)
+  newMessageId         String   @unique(map: "recovery_code_email_replacements_message_id_key") @map("new_message_id") @db.Uuid
+  newAttemptCount      Int      @default(0) @map("new_attempt_count")
+  newPolicyVersion     Int      @map("new_policy_version")
+  requestedAt          DateTime @map("requested_at")
+  newExpiresAt         DateTime @map("new_expires_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "recovery_code_email_replacements_user_id_fkey")
+
+  @@index([newCanonicalKey], map: "recovery_code_email_replacements_new_canonical_key_idx")
+  @@index([newExpiresAt], map: "recovery_code_email_replacements_new_expires_at_idx")
+  @@map("recovery_code_email_replacements")
+}
+
 model AuthIdentity {
   id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
@@ -151,6 +221,7 @@ model AuthSession {
   user                     User             @relation(fields: [userId], references: [id], onDelete: Cascade, map: "auth_sessions_user_id_fkey")
   realtimeTickets          RealtimeTicket[]
   recoveryEmailReplacement RecoveryEmailReplacement?
+  recoveryCodeReissue      RecoveryCodeReissueChallenge?
 
   @@index([userId], map: "auth_sessions_user_id_idx")
   @@index([expiresAt], map: "auth_sessions_expires_at_idx")

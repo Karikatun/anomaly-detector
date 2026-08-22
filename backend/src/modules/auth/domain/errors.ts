@@ -10,6 +10,7 @@ export type AuthFailureKind =
   | 'oauth_transaction_invalid'
   | 'recent_authentication_required'
   | 'recovery_code_invalid'
+  | 'recovery_codes_unavailable'
   | 'recovery_cancellation_forbidden'
   | 'recovery_email_conflict'
   | 'recovery_email_limited'

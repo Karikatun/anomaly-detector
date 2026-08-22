@@ -24,6 +24,7 @@ import {
   useStartRecoveryEmailReplacementMutation,
 } from '../queries'
 import styles from './ProfilePage.module.css'
+import { RecoveryCodeControl } from './RecoveryCodeControl'
 
 type ActiveProtection = Extract<AccountProtection, { state: 'password_active' }>
 type ReplacingProtection = Extract<AccountProtection, { state: 'password_replacing' }>
@@ -188,6 +189,7 @@ export function RecoveryEmailReplacementControl({
             </Typography>
           </div>
           <div className={styles.protectionActions}>
+            <RecoveryCodeControl api={api} state={state} />
             <Button
               ref={startButtonRef}
               type="button"

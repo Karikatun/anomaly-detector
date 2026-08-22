@@ -151,6 +151,15 @@
 .passwordToggle:hover { color: #d7e9f8; background: rgba(68, 132, 182, .16); }
 .passwordToggle:focus-visible { outline: none; box-shadow: var(--focus-ring-shadow); }
 .passwordToggle svg { width: 1.2rem; height: 1.2rem; }
+.recoveryLink {
+  width: fit-content;
+  margin-top: -.45rem;
+  color: #8fbfe7;
+  font-size: .82rem;
+  text-underline-offset: .22rem;
+}
+.recoveryLink:hover { color: #d2e9fb; text-decoration: underline; }
+.recoveryLink:focus-visible { border-radius: 3px; outline: none; box-shadow: var(--focus-ring-shadow); }
 .consents { display: grid; gap: .8rem; padding-block: .15rem; }
 .ageNotice { color: #98abc0; text-align: center; }
 .consent { display: flex; align-items: center; gap: .75rem; color: #c4d2e0; }

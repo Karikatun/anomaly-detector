@@ -198,7 +198,7 @@ export class AuthService {
       login: input.login,
       now,
     })
-    const user = await this.dependencies.repository.findUserByLogin(input.login)
+    let user = await this.dependencies.repository.findUserByLogin(input.login)
     const passwordMatches = await this.dependencies.passwords.verify(
       input.password,
       user?.passwordHash,
@@ -216,11 +216,15 @@ export class AuthService {
 
     if (this.dependencies.passwords.needsRehash(user.passwordHash)) {
       const nextPasswordHash = await this.dependencies.passwords.hash(input.password)
-      await this.dependencies.repository.updatePasswordHash({
+      const updated = await this.dependencies.repository.updatePasswordHash({
         userId: user.id,
         currentPasswordHash: user.passwordHash,
         nextPasswordHash,
       })
+      if (!updated) {
+        throw new AuthFailure('invalid_credentials', 'Invalid login or password')
+      }
+      user = { ...user, passwordHash: nextPasswordHash }
     }
 
     await this.dependencies.abuseProtection?.recordLoginSuccess({ login: input.login })
@@ -460,6 +464,7 @@ export class AuthService {
     return {
       accountProtection: {
         maskedAccountEmail: maskAccountEmail(binding.providerValue),
+        recoveryCodes: recoveryCodeState(record.recoveryCodeSet),
         state: 'password_active',
       },
     }
@@ -719,6 +724,154 @@ export class AuthService {
     return this.getAccountProtection(input.userId, input.sessionId)
   }
 
+  async issueRecoveryCodes(input: {
+    sessionId: string
+    userId: string
+  }) {
+    const recoveryCodes = createRecoveryCodeSet()
+    const result = await this.dependencies.repository.issueRecoveryCodes({
+      codes: recoveryCodes,
+      now: this.dependencies.clock.now(),
+      userId: input.userId,
+    })
+    if (result !== 'issued') {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    return {
+      ...(await this.getAccountProtection(input.userId, input.sessionId)),
+      recoveryCodes,
+    }
+  }
+
+  async startRecoveryCodeReissue(input: {
+    ipAddress?: string
+    password: string
+    sessionId: string
+    userId: string
+  }) {
+    const user = await this.dependencies.repository.findUserById(input.userId)
+    if (!user?.passwordHash) {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    if (!await this.dependencies.passwords.verify(input.password, user.passwordHash)) {
+      throw new AuthFailure('recovery_password_invalid', 'Current password is invalid')
+    }
+    const now = this.dependencies.clock.now()
+    const challenge = await this.dependencies.repository.startRecoveryCodeReissue({
+      expectedPasswordHash: user.passwordHash,
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      now,
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    if (!challenge) {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    return {
+      challenge: {
+        codeExpiresAt: challenge.expiresAt.toISOString(),
+        maskedAccountEmail: maskAccountEmail(challenge.providerValue),
+      },
+    }
+  }
+
+  async confirmRecoveryCodeReissue(input: {
+    code: string
+    sessionId: string
+    userId: string
+  }) {
+    const recoveryCodes = createRecoveryCodeSet()
+    const result = await this.dependencies.repository.confirmRecoveryCodeReissue({
+      code: input.code,
+      codes: recoveryCodes,
+      now: this.dependencies.clock.now(),
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    if (result === 'invalid') {
+      throw new AuthFailure('recovery_code_invalid', 'Confirmation code is invalid or expired')
+    }
+    if (result !== 'issued') {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    return {
+      ...(await this.getAccountProtection(input.userId, input.sessionId)),
+      recoveryCodes,
+    }
+  }
+
+  async recoverPasswordWithRecoveryCode(input: {
+    ipAddress?: string
+    login: string
+    newPassword: string
+    recoveryCode: string
+  }) {
+    const now = this.dependencies.clock.now()
+    const budgetAvailable = await this.dependencies.repository.reserveRecoveryCodeUseBudget({
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+    })
+    if (!budgetAvailable) return { outcome: 'accepted' as const }
+    const newPasswordHash = await this.dependencies.passwords.hash(input.newPassword)
+    const completed = await this.dependencies.repository.recoverPasswordWithRecoveryCode({
+      login: input.login,
+      newPasswordHash,
+      now,
+      recoveryCode: input.recoveryCode,
+    })
+    return { outcome: completed ? 'completed' as const : 'accepted' as const }
+  }
+
+  async startRecoveryEmailWithRecoveryCode(input: {
+    email: string
+    ipAddress?: string
+    login: string
+    recoveryCode: string
+  }) {
+    const candidate = await this.dependencies.accountEmailCanonicalizer
+      ?.canonicalizeForRecovery?.(input.email)
+    if (!candidate) return { outcome: 'accepted' as const }
+    const now = this.dependencies.clock.now()
+    const result = await this.dependencies.repository.startRecoveryEmailWithRecoveryCode({
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      login: input.login,
+      newCanonicalKey: candidate.canonicalKey,
+      newProviderValue: candidate.providerValue,
+      now,
+      recoveryCode: input.recoveryCode,
+    })
+    if (!result) return { outcome: 'accepted' as const }
+    return {
+      codeExpiresAt: result.expiresAt.toISOString(),
+      maskedAccountEmail: maskAccountEmail(result.providerValue),
+      outcome: 'pending' as const,
+    }
+  }
+
+  async confirmRecoveryEmailWithRecoveryCode(input: {
+    code: string
+    ipAddress?: string
+    login: string
+  }) {
+    const now = this.dependencies.clock.now()
+    const result = await this.dependencies.repository.confirmRecoveryEmailWithRecoveryCode({
+      activatesAt: new Date(now.getTime() + RECOVERY_EMAIL_COOLING_OFF_MS),
+      code: input.code,
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+    })
+    if (!result) return { outcome: 'accepted' as const }
+    return {
+      activatesAt: result.activatesAt.toISOString(),
+      maskedAccountEmail: maskAccountEmail(result.providerValue),
+      outcome: 'completed' as const,
+    }
+  }
+
   async logout(refreshToken: string | undefined) {
     if (!refreshToken) return false
 
@@ -761,6 +914,7 @@ export class AuthService {
     const now = this.dependencies.clock.now()
     const refreshToken = this.dependencies.refreshTokens.create()
     const session = await this.dependencies.repository.createSession({
+      expectedPasswordHash: user.passwordHash!,
       userId: user.id,
       refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
       refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
@@ -883,4 +1037,25 @@ function maskAccountEmail(value: string) {
   const localPart = value.slice(0, separator)
   const domain = value.slice(separator + 1)
   return `${Array.from(localPart)[0] ?? '*'}***@${domain}`
+}
+
+function recoveryCodeState(
+  set: { activeCodeCount: number; consumedAt: Date | null } | null | undefined,
+) {
+  if (!set) return 'not_issued' as const
+  return set.consumedAt === null && set.activeCodeCount > 0
+    ? 'available' as const
+    : 'consumed' as const
+}
+
+function createRecoveryCodeSet() {
+  const codes = new Set<string>()
+  while (codes.size < 8) {
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    const compact = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase()
+    codes.add(compact.match(/.{4}/g)!.join('-'))
+  }
+  return [...codes]
 }

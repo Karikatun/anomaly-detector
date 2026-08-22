@@ -1,16 +1,22 @@
 import {
   accountProtectionResponseSchema,
+  recoveryCodeSetResponseSchema,
+  startRecoveryCodeReissueResponseSchema,
   profileStatisticsSchema,
   recoveryEmailReplacementCommandResponseSchema,
   tutorialProgressSchema,
   type ProfileStatistics,
   type AccountProtectionResponse,
+  type ConfirmRecoveryCodeReissueRequest,
   type ConfirmRecoveryEmailReplacementRequest,
   type ConfirmRecoveryEmailRequest,
   type RecoveryEmailReplacementCommandResponse,
+  type RecoveryCodeSetResponse,
   type ResendRecoveryEmailReplacementRequest,
   type StartRecoveryEmailReplacementRequest,
   type StartRecoveryEmailRequest,
+  type StartRecoveryCodeReissueRequest,
+  type StartRecoveryCodeReissueResponse,
   type TutorialProgress,
 } from '@anomaly-detector/contracts'
 
@@ -101,6 +107,34 @@ export class ProfileApi {
       '/api/auth/account-protection/recovery-email/replacement/cancel',
       accountProtectionResponseSchema,
       { body: {}, method: 'POST' },
+    )
+  }
+
+  issueRecoveryCodes(): Promise<RecoveryCodeSetResponse> {
+    return this.transport.request(
+      '/api/auth/account-protection/recovery-codes/issue',
+      recoveryCodeSetResponseSchema,
+      { body: {}, method: 'POST' },
+    )
+  }
+
+  startRecoveryCodeReissue(
+    input: StartRecoveryCodeReissueRequest,
+  ): Promise<StartRecoveryCodeReissueResponse> {
+    return this.transport.request(
+      '/api/auth/account-protection/recovery-codes/reissue/start',
+      startRecoveryCodeReissueResponseSchema,
+      { body: input, method: 'POST' },
+    )
+  }
+
+  confirmRecoveryCodeReissue(
+    input: ConfirmRecoveryCodeReissueRequest,
+  ): Promise<RecoveryCodeSetResponse> {
+    return this.transport.request(
+      '/api/auth/account-protection/recovery-codes/reissue/confirm',
+      recoveryCodeSetResponseSchema,
+      { body: input, method: 'POST' },
     )
   }
 

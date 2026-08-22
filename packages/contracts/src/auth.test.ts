@@ -19,6 +19,17 @@ import {
   oauthStartResponseSchema,
   registerRequestSchema,
   recoveryEmailReplacementCommandResponseSchema,
+  recoveryCodeEmailReplacementConfirmRequestSchema,
+  recoveryCodeEmailReplacementConfirmResponseSchema,
+  recoveryCodeEmailReplacementStartRequestSchema,
+  recoveryCodeEmailReplacementStartResponseSchema,
+  recoveryCodePasswordRequestSchema,
+  recoveryCodeSetResponseSchema,
+  recoveryCodeUseResponseSchema,
+  confirmRecoveryCodeReissueRequestSchema,
+  issueRecoveryCodesRequestSchema,
+  startRecoveryCodeReissueRequestSchema,
+  startRecoveryCodeReissueResponseSchema,
   resendRecoveryEmailReplacementRequestSchema,
   resendRecoveryEmailRequestSchema,
   startRecoveryEmailReplacementRequestSchema,
@@ -88,6 +99,7 @@ describe('auth contracts', () => {
     expect(accountProtectionResponseSchema.safeParse({
       accountProtection: {
         maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'not_issued',
         state: 'password_active',
       },
     }).success).toBe(true)
@@ -103,6 +115,7 @@ describe('auth contracts', () => {
       accountProtection: {
         canonicalKey: 'player@mail.ru',
         maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'not_issued',
         state: 'password_active',
       },
     }).success).toBe(false)
@@ -199,6 +212,7 @@ describe('auth contracts', () => {
     expect(recoveryEmailReplacementCommandResponseSchema.parse({
       accountProtection: {
         maskedAccountEmail: 'n***@mail.ru',
+        recoveryCodes: 'consumed',
         state: 'password_active',
       },
       replacement: {
@@ -218,6 +232,107 @@ describe('auth contracts', () => {
       code: '123456',
       factor: 'new',
       rawEmail: 'new@mail.ru',
+    }).success).toBe(false)
+  })
+
+  test('keeps Recovery Codes bounded, one-time, and absent from normal protection reads', () => {
+    const codes = Array.from(
+      { length: 8 },
+      (_, index) => `${index.toString(16).toUpperCase().padStart(4, '0')}-AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-1234`,
+    )
+    const issued = recoveryCodeSetResponseSchema.parse({
+      accountProtection: {
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'available',
+        state: 'password_active',
+      },
+      recoveryCodes: codes,
+    })
+    expect(issued.recoveryCodes).toHaveLength(8)
+    expect(issueRecoveryCodesRequestSchema.parse(undefined)).toEqual({})
+    expect(recoveryCodeSetResponseSchema.safeParse({
+      accountProtection: {
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'available',
+        state: 'password_active',
+      },
+      recoveryCodes: codes.slice(0, 7),
+    }).success).toBe(false)
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: codes,
+        state: 'password_active',
+      },
+    }).success).toBe(false)
+  })
+
+  test('validates Recovery Code reissue and non-enumerating owner recovery commands', () => {
+    expect(startRecoveryCodeReissueRequestSchema.parse({ password: 'password123' }))
+      .toEqual({ password: 'password123' })
+    expect(confirmRecoveryCodeReissueRequestSchema.parse({ code: '012345' }))
+      .toEqual({ code: '012345' })
+    expect(startRecoveryCodeReissueResponseSchema.parse({
+      challenge: {
+        codeExpiresAt: '2026-08-22T12:15:00.000Z',
+        maskedAccountEmail: 'p***@mail.ru',
+      },
+    }).challenge.maskedAccountEmail).toBe('p***@mail.ru')
+
+    const unformattedCode = 'AAAA BBBB CCCC DDDD EEEE FFFF 0000 1111'
+    expect(recoveryCodePasswordRequestSchema.parse({
+      login: ' Owner ',
+      newPassword: 'new-password123',
+      recoveryCode: unformattedCode,
+    })).toEqual({
+      login: 'owner',
+      newPassword: 'new-password123',
+      recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+    })
+    expect(recoveryCodeUseResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+    expect(recoveryCodeUseResponseSchema.parse({ outcome: 'completed' }))
+      .toEqual({ outcome: 'completed' })
+
+    expect(recoveryCodeEmailReplacementStartRequestSchema.parse({
+      email: ' New@mail.ru ',
+      login: ' Owner ',
+      recoveryCode: unformattedCode,
+    })).toEqual({
+      email: 'New@mail.ru',
+      login: 'owner',
+      recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+    })
+    expect(recoveryCodeEmailReplacementStartResponseSchema.parse({
+      codeExpiresAt: '2026-08-22T12:15:00.000Z',
+      maskedAccountEmail: 'n***@mail.ru',
+      outcome: 'pending',
+    }).outcome).toBe('pending')
+    expect(recoveryCodeEmailReplacementStartResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+
+    expect(recoveryCodeEmailReplacementConfirmRequestSchema.parse({
+      code: '012345',
+      login: ' Owner ',
+    })).toEqual({ code: '012345', login: 'owner' })
+    expect(recoveryCodeEmailReplacementConfirmResponseSchema.parse({
+      activatesAt: '2026-08-23T12:00:00.000Z',
+      maskedAccountEmail: 'n***@mail.ru',
+      outcome: 'completed',
+    }).outcome).toBe('completed')
+    expect(recoveryCodeEmailReplacementConfirmResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+
+    expect(recoveryCodePasswordRequestSchema.safeParse({
+      login: 'owner',
+      newPassword: 'new-password123',
+      recoveryCode: 'AAAA-BBBB',
+    }).success).toBe(false)
+    expect(recoveryCodeEmailReplacementStartRequestSchema.safeParse({
+      email: 'new@mail.ru',
+      login: 'owner',
+      recoveryCode: unformattedCode,
+      ownerId: 'secret',
     }).success).toBe(false)
   })
 
