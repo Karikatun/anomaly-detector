@@ -96,6 +96,16 @@ test('explains how to register when a Yandex ID has no game account', async ({ p
   await expect(page).toHaveURL('/')
 })
 
+test('shows a generic Yandex callback failure without exposing its internal cause', async ({ page }) => {
+  await page.goto('/?auth_error=oauth_failed')
+
+  await expect(page.getByRole('alert')).toHaveText(
+    'Не удалось завершить вход через Яндекс. Попробуйте снова или войдите другим способом.',
+  )
+  await expect(page).toHaveURL('/')
+  await expect(page.locator('body')).not.toContainText('oauth_failed')
+})
+
 test('submits registration as a native form when Enter is pressed from any field', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
@@ -398,4 +408,31 @@ test('keeps profile input and exposes server errors until a successful retry', a
   shouldFail = false
   await save.click()
   await expect(page.getByRole('heading', { name: 'Новое имя E2E' })).toBeVisible()
+})
+
+test('shows masked Yandex protection and a non-disclosing email conflict state', async ({ page }) => {
+  await registerBrowserUser(page, 'Защита E2E', 'yandex-protection')
+  let state: 'managed' | 'conflict' = 'managed'
+  await page.route('**/api/auth/account-protection', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accountProtection: state === 'managed'
+          ? { state: 'yandex_managed', maskedAccountEmail: 'P***@yandex.ru' }
+          : { state: 'yandex_conflict' },
+      }),
+    })
+  })
+
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await expect(page.getByRole('heading', { name: 'Защита аккаунта' })).toBeVisible()
+  await expect(page.getByText('P***@yandex.ru')).toBeVisible()
+  await expect(page.getByText('Управляется Яндекс ID')).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('Player@yandex.ru')
+
+  state = 'conflict'
+  await page.reload()
+  await expect(page.getByText('Не удалось синхронизировать актуальный адрес.')).toBeVisible()
+  await expect(page.getByText('Вход через Яндекс ID продолжает работать.')).toBeVisible()
 })

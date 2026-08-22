@@ -93,6 +93,26 @@ export const meResponseSchema = z.object({
   user: userSchema,
 })
 
+const maskedAccountEmailSchema = z
+  .string()
+  .min(7)
+  .max(254)
+  .regex(/^[^@\s]\*{3}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/)
+
+export const accountProtectionSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('password_unprotected') }).strict(),
+  z.object({
+    state: z.literal('yandex_managed'),
+    maskedAccountEmail: maskedAccountEmailSchema,
+  }).strict(),
+  z.object({ state: z.literal('yandex_conflict') }).strict(),
+  z.object({ state: z.literal('yandex_unavailable') }).strict(),
+])
+
+export const accountProtectionResponseSchema = z.object({
+  accountProtection: accountProtectionSchema,
+}).strict()
+
 // ── OAuth ────────────────────────────────────────────────────────────────────
 
 export const oauthProviderSchema = z.literal('yandex')
@@ -133,6 +153,8 @@ export type TokenAuthResponse = z.infer<typeof tokenAuthResponseSchema>
 export type CookieRefreshResponse = z.infer<typeof cookieRefreshResponseSchema>
 export type TokenRefreshResponse = z.infer<typeof tokenRefreshResponseSchema>
 export type MeResponse = z.infer<typeof meResponseSchema>
+export type AccountProtection = z.infer<typeof accountProtectionSchema>
+export type AccountProtectionResponse = z.infer<typeof accountProtectionResponseSchema>
 export type OAuthProviderId = z.infer<typeof oauthProviderSchema>
 export type OAuthStartRequest = z.infer<typeof oauthStartRequestSchema>
 export type OAuthStartResponse = z.infer<typeof oauthStartResponseSchema>

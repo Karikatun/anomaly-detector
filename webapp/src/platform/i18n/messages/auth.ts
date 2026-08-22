@@ -39,4 +39,5 @@ export const authMessages = {
   'auth.oauthConsent.description': 'Аккаунт ещё не зарегистрирован. Для продолжения подтвердите обязательные условия создания аккаунта.',
   'auth.oauthConsent.pending': 'Переходим в Яндекс…',
   'auth.oauthConsent.confirm': 'Согласен и продолжить',
+  'auth.oauthCallback.failed': 'Не удалось завершить вход через Яндекс. Попробуйте снова или войдите другим способом.',
 } as const satisfies Record<string, string>

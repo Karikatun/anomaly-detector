@@ -1,4 +1,9 @@
-import { displayNameMaxLength, type LoginRequest, type RegisterPayload } from '@anomaly-detector/contracts'
+import {
+  displayNameMaxLength,
+  type AccountProtectionResponse,
+  type LoginRequest,
+  type RegisterPayload,
+} from '@anomaly-detector/contracts'
 
 import { AuthFailure } from '../domain/errors'
 import type { OAuthProviderId } from '../domain/oauth'
@@ -7,6 +12,7 @@ import type { AuthUserRecord, AuthenticatedPrincipal } from '../domain/user'
 import { userDtoFromPrincipal } from '../domain/user'
 import type {
   AccountDeletionCleanup,
+  AccountEmailCanonicalizer,
   AccessTokens,
   AuthAbuseProtection,
   AuthRepository,
@@ -20,6 +26,7 @@ import type {
 
 type AuthServiceDependencies = {
   accountDeletionCleanup?: AccountDeletionCleanup
+  accountEmailCanonicalizer?: AccountEmailCanonicalizer
   accessTokens: AccessTokens
   abuseProtection?: AuthAbuseProtection
   clock: Clock
@@ -143,59 +150,41 @@ export class AuthService {
     const userInfo = await provider.getUserInfo(tokenResult.accessToken)
     const providerSubject = userInfo.providerSubject || tokenResult.providerSubject
 
-    // Store the user identity
-    let existingUser = await this.dependencies.repository.findUserByIdentity({
-      provider: transaction.provider,
-      subject: providerSubject,
-    })
-
     const now = this.dependencies.clock.now()
     const refreshToken = this.dependencies.refreshTokens.create()
-
-    let session: { id: string }
-    let user: import('../domain/user').AuthUserRecord
-
-    if (existingUser) {
-      user = existingUser
-      const createdSession = await this.dependencies.repository.createSession({
-        userId: existingUser.id,
-        refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
-        refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
-        expiresAt: this.refreshExpiresAt(now),
-        metadata: input.metadata,
-      })
-      session = createdSession
-    } else {
-      if (!transaction.legalAcceptance) {
-        throw new AuthFailure(
-          'oauth_registration_consent_required',
-          'Legal acceptance is required to create an account',
-        )
-      }
-      const created = await this.dependencies.repository.createOAuthUserWithSession({
-        user: {
+    const accountEmail = await this.canonicalizeProviderAccountEmail(userInfo.accountEmail)
+    const completed = await this.dependencies.repository.completeOAuthSignIn({
+      accountEmail: accountEmail
+        ? { kind: 'candidate', ...accountEmail }
+        : { kind: 'unavailable' },
+      identity: {
+        provider: transaction.provider,
+        subject: providerSubject,
+      },
+      ...(transaction.legalAcceptance ? {
+        newUser: {
           login: oauthLogin(transaction.provider),
           displayName: normalizeProviderDisplayName(userInfo.displayName),
           legalAcceptance: transaction.legalAcceptance,
         },
-        identity: {
-          provider: transaction.provider,
-          subject: providerSubject,
-        },
-        session: {
-          refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
-          refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
-          expiresAt: this.refreshExpiresAt(now),
-          metadata: input.metadata,
-        },
-      })
-      user = created.user
-      session = created.session
+      } : {}),
+      session: {
+        refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+        refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
+        expiresAt: this.refreshExpiresAt(now),
+        metadata: input.metadata,
+      },
+    })
+    if (!completed) {
+      throw new AuthFailure(
+        'oauth_registration_consent_required',
+        'Legal acceptance is required to create an account',
+      )
     }
 
     const webappOrigin = decodeWebappOrigin(input.state) ?? ''
 
-    const response = await this.sessionResponse(user, session.id, refreshToken)
+    const response = await this.sessionResponse(completed.user, completed.session.id, refreshToken)
     return { ...response, webappOrigin }
   }
 
@@ -356,6 +345,31 @@ export class AuthService {
     return { user: userDtoFromPrincipal(await this.authenticateAccessToken(accessToken)) }
   }
 
+  async getAccountProtection(userId: string): Promise<AccountProtectionResponse> {
+    const record = await this.dependencies.repository.readAccountProtection(userId)
+    if (!record) {
+      throw new AuthFailure('session_invalid', 'Session is invalid or expired')
+    }
+    if (!record.hasYandexIdentity) {
+      return { accountProtection: { state: 'password_unprotected' } }
+    }
+    if (
+      record.accountEmailState === 'yandex_managed'
+      && record.accountEmailProviderValue
+    ) {
+      return {
+        accountProtection: {
+          maskedAccountEmail: maskAccountEmail(record.accountEmailProviderValue),
+          state: 'yandex_managed',
+        },
+      }
+    }
+    if (record.accountEmailState === 'yandex_conflict') {
+      return { accountProtection: { state: 'yandex_conflict' } }
+    }
+    return { accountProtection: { state: 'yandex_unavailable' } }
+  }
+
   async logout(refreshToken: string | undefined) {
     if (!refreshToken) return false
 
@@ -420,6 +434,15 @@ export class AuthService {
     }
   }
 
+  private async canonicalizeProviderAccountEmail(value: string | null | undefined) {
+    if (!value || !this.dependencies.accountEmailCanonicalizer) return null
+    try {
+      return await this.dependencies.accountEmailCanonicalizer.canonicalize(value)
+    } catch {
+      return null
+    }
+  }
+
   private refreshExpiresAt(now: Date) {
     return sessionExpiresAt(now, this.dependencies.refreshTokenTtlDays)
   }
@@ -461,4 +484,11 @@ function decodeWebappOrigin(state: string) {
 
 function oauthLogin(provider: OAuthProviderId) {
   return `oauth-${provider}-${crypto.randomUUID().replaceAll('-', '')}`
+}
+
+function maskAccountEmail(value: string) {
+  const separator = value.lastIndexOf('@')
+  const localPart = value.slice(0, separator)
+  const domain = value.slice(separator + 1)
+  return `${Array.from(localPart)[0] ?? '*'}***@${domain}`
 }

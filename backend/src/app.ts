@@ -43,8 +43,17 @@ export function createApp({
   tender: providedTender,
 }: CreateAppOptions) {
   const tender = providedTender ?? createPersistentTenderModule(prisma)
+  const mail = createMailModule({
+    db: prisma,
+    deliveryStatus: {
+      configured: env.MAIL_SMTP_ENABLED,
+      deliveryBudgetPerMinute: env.MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE,
+    },
+    source: mailPolicySource,
+  })
   const auth = createAuthModule({
     accountDeletionCleanup: ({ userId }) => tender.anonymizeParticipant(userId),
+    accountEmailCanonicalizer: mail.accountEmailCanonicalizer,
     db: prisma,
     env,
   })
@@ -59,14 +68,6 @@ export function createApp({
     completedTenderSummaryReader: createPersistentCompletedTenderSummaryReader(prisma),
     db: prisma,
     requireAuth: auth.requireAuth,
-  })
-  const mail = createMailModule({
-    db: prisma,
-    deliveryStatus: {
-      configured: env.MAIL_SMTP_ENABLED,
-      deliveryBudgetPerMinute: env.MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE,
-    },
-    source: mailPolicySource,
   })
   const admin = createAdminModule({
     adminUserIds: new Set(env.ADMIN_USER_IDS),

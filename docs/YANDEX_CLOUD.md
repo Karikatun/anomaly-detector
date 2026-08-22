@@ -185,6 +185,25 @@ Register
 `https://api.anomaly-detector.ru/api/auth/oauth/yandex/callback` at Yandex. The
 domain split does not move this provider callback to either browser host.
 
+In the Yandex OAuth application, grant access to the email address. The backend
+requests the `login:email` scope and reads `default_email` from the bounded user
+information response. Before public release, complete a real provider roundtrip
+and verify all of the following on the exact release image:
+
+- the consent screen grants email access and Yandex returns `default_email`;
+- each Yandex sign-in refreshes the provider attribute while the immutable
+  provider subject remains the only account identity;
+- the profile shows only a masked address and application logs contain neither
+  the address nor the provider response payload;
+- an occupied canonical address produces the non-disclosing conflict state but
+  does not block sign-in or merge accounts.
+
+The published mail-service policy supplies only service-specific alias rules.
+An unlisted Yandex address remains a provider attribute with an exact local part
+and lowercase/IDNA domain, but is not thereby approved for local recovery
+delivery. Do not add global dot removal, plus-tag stripping, or local-part case
+folding.
+
 Leave `ADMIN_USER_IDS` empty to disable the operator surface. When enabled, use immutable user UUIDs from the intended operators' profiles. The current implementation is read-only; the approved MVP adds only the audited commands listed in ADR 0011. Build and serve `adminapp` only from the separately protected `ops.anomaly-detector.ru` host; never include it in the player `webapp` output. Backend authorization and identical `404` responses remain mandatory behind the edge check.
 
 Yandex Application Load Balancer places the source client address first in

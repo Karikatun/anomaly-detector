@@ -15,6 +15,8 @@ import { cleanupTerminalMailOutbox } from './prisma-mail-outbox-cleanup'
 const databaseUrl = process.env.TEST_DATABASE_URL
 const fingerprintKey = 'integration-mail-fingerprint-key-0001'
 const maybeDescribe = databaseUrl ? describe : describe.skip
+const scenarioStart = new Date(Date.now() + 24 * 60 * 60 * 1_000)
+const scenarioTime = (offsetMs = 0) => new Date(scenarioStart.getTime() + offsetMs)
 
 maybeDescribe('Prisma transactional mail outbox', () => {
   if (!databaseUrl) return
@@ -29,7 +31,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     recipient: 'researcher@yandex.ru',
     template: {
       code: '482193',
-      expiresAt: new Date('2026-08-22T12:15:00.000Z'),
+      expiresAt: scenarioTime(15 * 60_000),
       kind: 'account_email_confirmation' as const,
     },
   }
@@ -95,14 +97,14 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     const firstRuntime = new TransactionalMailDeliveryService(dependencies)
     await expect(firstRuntime.drain({
       limit: 1,
-      now: new Date('2026-08-22T12:00:00.000Z'),
+      now: scenarioTime(),
       workerId: 'worker-a',
     })).resolves.toMatchObject({ temporaryFailures: 1 })
 
     const restartedRuntime = new TransactionalMailDeliveryService(dependencies)
     await expect(restartedRuntime.drain({
       limit: 1,
-      now: new Date('2026-08-22T12:00:01.000Z'),
+      now: scenarioTime(1_000),
       workerId: 'worker-b',
     })).resolves.toMatchObject({ accepted: 1 })
 
@@ -149,7 +151,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
 
     await expect(service.drain({
       limit: 3,
-      now: new Date('2026-08-22T12:00:00.000Z'),
+      now: scenarioTime(),
       workerId: 'worker-a',
     })).resolves.toMatchObject({ circuitOpen: true, temporaryFailures: 2 })
     expect(providerCalls).toBe(2)
@@ -157,7 +159,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     providerAvailable = true
     await expect(service.drain({
       limit: 1,
-      now: new Date('2026-08-22T12:01:00.000Z'),
+      now: scenarioTime(60_000),
       workerId: 'worker-b',
     })).resolves.toMatchObject({ accepted: 1, circuitOpen: false })
     expect(await prisma.mailDeliveryControl.findUnique({
@@ -186,13 +188,13 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })
     await expect(acceptedService.drain({
       limit: 3,
-      now: new Date('2026-08-22T12:00:00.000Z'),
+      now: scenarioTime(),
       workerId: 'worker-a',
     })).resolves.toMatchObject({ accepted: 2, budgetExhausted: true })
 
     await expect(acceptedService.drain({
       limit: 1,
-      now: new Date('2026-08-22T12:01:00.000Z'),
+      now: scenarioTime(60_000),
       workerId: 'worker-b',
     })).resolves.toMatchObject({ accepted: 1 })
 
@@ -210,12 +212,12 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })
     await failingService.drain({
       limit: 1,
-      now: new Date('2026-08-22T12:02:00.000Z'),
+      now: scenarioTime(120_000),
       workerId: 'worker-a',
     })
     await expect(failingService.drain({
       limit: 1,
-      now: new Date('2026-08-22T12:02:01.000Z'),
+      now: scenarioTime(121_000),
       workerId: 'worker-b',
     })).resolves.toMatchObject({ terminalFailures: 1 })
     expect(await prisma.mailOutboxMessage.findUnique({
@@ -248,8 +250,8 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       retryBaseMs: 1_000,
     })
     const claims = await Promise.all([
-      repository.claim({ now: new Date('2026-08-22T12:00:00.000Z'), workerId: 'worker-a' }),
-      repository.claim({ now: new Date('2026-08-22T12:00:00.000Z'), workerId: 'worker-b' }),
+      repository.claim({ now: scenarioTime(), workerId: 'worker-a' }),
+      repository.claim({ now: scenarioTime(), workerId: 'worker-b' }),
     ])
     expect(claims.filter((claim) => claim.kind === 'claimed')).toHaveLength(1)
 
@@ -260,7 +262,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })
     await expect(restartedService.drain({
       limit: 1,
-      now: new Date('2026-08-22T12:00:01.001Z'),
+      now: scenarioTime(1_001),
       workerId: 'worker-c',
     })).resolves.toMatchObject({ accepted: 1 })
     expect(await prisma.mailDeliveryAttempt.findMany({
@@ -281,11 +283,11 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       retryBaseMs: 1_000,
     })
     await exhaustingRepository.claim({
-      now: new Date('2026-08-22T12:01:00.000Z'),
+      now: scenarioTime(60_000),
       workerId: 'worker-d',
     })
     await expect(exhaustingRepository.claim({
-      now: new Date('2026-08-22T12:01:01.001Z'),
+      now: scenarioTime(61_001),
       workerId: 'worker-e',
     })).resolves.toEqual({ kind: 'empty' })
     expect(await prisma.mailOutboxMessage.findUnique({
@@ -301,7 +303,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       messageId: '019f8099-7e26-7760-ad08-66d1d66b2861',
       recipient: request.recipient,
       template: {
-        expiresAt: new Date('2026-08-22T12:15:00.000Z'),
+        expiresAt: scenarioTime(15 * 60_000),
         kind: 'password_recovery',
         recoveryUrl: 'https://anomaly-detector.ru/recover/opaque-token',
       },
@@ -332,7 +334,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
 
     await expect(service.drain({
       limit: 1,
-      now: new Date('2026-08-22T12:00:00.000Z'),
+      now: scenarioTime(),
       workerId: 'worker-a',
     })).resolves.toMatchObject({ blocked: 1 })
     expect(providerCalls).toBe(0)
@@ -344,7 +346,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
 
     await expect(service.drain({
       limit: 1,
-      now: new Date('2026-08-22T12:00:00.001Z'),
+      now: scenarioTime(1),
       workerId: 'worker-b',
     })).resolves.toMatchObject({ accepted: 1 })
     expect(providerCalls).toBe(1)
@@ -363,7 +365,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       configured: false,
       deliveryBudgetPerMinute: 60,
     })
-    let view = await reader.read(new Date('2026-08-22T12:00:00.000Z'))
+    let view = await reader.read(scenarioTime())
     expect(view).toMatchObject({
       circuit: { state: 'disabled' },
       groups: [],
@@ -376,7 +378,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       messageId: '019f8099-7e26-7760-ad08-66d1d66b2874',
       recipient: 'researcher@outbox-test.invalid',
     })
-    view = await reader.read(new Date('2026-08-22T12:00:00.000Z'))
+    view = await reader.read(scenarioTime())
     expect(view.groups).toEqual([{
       requested: 5,
       service: 'other',
@@ -400,7 +402,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       maxAttempts: 1,
       retryBaseMs: 1_000,
     })
-    const now = new Date('2026-08-22T12:00:00.000Z')
+    const now = scenarioTime()
     await new TransactionalMailDeliveryService({
       delivery: { send: async () => ({ kind: 'accepted' }) },
       policy: { evaluate: async () => ({ acceptsNewAddress: true, allowsRecoveryDelivery: true }) },
@@ -414,7 +416,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
 
     expect(await cleanupTerminalMailOutbox(
       prisma,
-      new Date('2026-08-22T12:00:00.001Z'),
+      scenarioTime(1),
     )).toEqual({ count: 2 })
     expect(await prisma.mailOutboxMessage.findMany({ select: { state: true } }))
       .toEqual([{ state: 'queued' }])

@@ -85,6 +85,14 @@ describe('auth routes', () => {
     expect(oauthCallbackErrorCode(new Error('provider failed'))).toBe('oauth_failed')
   })
 
+  test('conceals an occupied email behind the generic OAuth callback failure', () => {
+    const failure = new AuthFailure(
+      'oauth_account_email_conflict',
+      'message must not disclose the other account',
+    )
+    expect(oauthCallbackErrorCode(toAuthAppError(failure))).toBe('oauth_failed')
+  })
+
   test('limits auth request bodies before validation or password work', async () => {
     const app = createApp({ env: { ...env, AUTH_BODY_LIMIT_BYTES: 32 }, prisma: {} as DbClient })
     const response = await app.request('/api/auth/register', {

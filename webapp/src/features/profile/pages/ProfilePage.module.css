@@ -133,6 +133,74 @@
   width: min(100%, 42rem);
 }
 
+.protectionSection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.25rem clamp(1.5rem, 3vw, 2.25rem);
+  border-top: 1px solid rgba(42, 82, 117, .44);
+  background: rgba(4, 17, 29, .72);
+}
+
+.protectionCopy {
+  display: grid;
+  min-width: 0;
+  gap: .3rem;
+}
+
+.protectionTitle {
+  color: #dceaf5;
+  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+  font-weight: 560;
+}
+
+.protectionDescription,
+.protectionNote {
+  color: #849db3;
+  font-size: .9rem;
+}
+
+.protectionNote {
+  color: #a9bfd1;
+}
+
+.protectionState {
+  display: grid;
+  min-width: min(100%, 14rem);
+  justify-items: end;
+  gap: .3rem;
+  padding: .75rem 1rem;
+  border: 1px solid rgba(73, 133, 172, .42);
+  border-radius: var(--radius-panel);
+  background: rgba(8, 30, 47, .72);
+  text-align: right;
+}
+
+.protectionState[data-tone='managed'] {
+  border-color: rgba(72, 167, 146, .48);
+  background: rgba(8, 43, 40, .64);
+}
+
+.protectionState[data-tone='attention'] {
+  border-color: rgba(211, 153, 73, .5);
+  background: rgba(54, 32, 8, .58);
+}
+
+.protectionLabel {
+  color: #c9dbe9;
+  font-size: .78rem;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.protectionValue {
+  color: #f0f7fb;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+}
+
 .nameControls {
   display: flex;
   align-items: center;
@@ -494,6 +562,18 @@
     height: 3rem;
     flex-basis: 100%;
     font-size: 1.25rem;
+  }
+
+  .protectionSection {
+    grid-template-columns: 1fr;
+    gap: .9rem;
+    padding: 1rem;
+  }
+
+  .protectionState {
+    width: 100%;
+    justify-items: start;
+    text-align: left;
   }
 
   .summary {

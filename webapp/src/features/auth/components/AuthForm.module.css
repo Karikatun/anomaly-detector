@@ -74,6 +74,15 @@
   gap: var(--space-5);
 }
 
+.oauthCallbackError {
+  padding: .85rem 1rem;
+  border: 1px solid rgba(235, 117, 108, .45);
+  border-radius: var(--radius-control);
+  background: rgba(79, 23, 23, .64);
+  line-height: 1.45;
+  text-align: center;
+}
+
 .modeTabs {
   display: grid;
   grid-template-columns: 1fr 1fr;

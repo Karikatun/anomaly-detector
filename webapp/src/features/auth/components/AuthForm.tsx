@@ -34,9 +34,14 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
     if (typeof window === 'undefined') return false
     return new URL(window.location.href).searchParams.get('auth_error') === 'oauth_registration_consent_required'
   })
+  const [oauthCallbackFailed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const error = new URL(window.location.href).searchParams.get('auth_error')
+    return error !== null && error !== 'oauth_registration_consent_required'
+  })
   useEffect(() => {
     const url = new URL(window.location.href)
-    if (url.searchParams.get('auth_error') === 'oauth_registration_consent_required') {
+    if (url.searchParams.has('auth_error')) {
       url.searchParams.delete('auth_error')
       window.history.replaceState(window.history.state, '', url)
     }
@@ -59,6 +64,11 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
         </header>
 
         <div className={styles.content}>
+          {oauthCallbackFailed && (
+            <Typography role="alert" tone="destructive" className={styles.oauthCallbackError}>
+              {t('auth.oauthCallback.failed')}
+            </Typography>
+          )}
           <div className={styles.modeTabs} role="tablist" aria-label={t('auth.mode.label')}>
             <Button
               id="auth-login-tab"

@@ -8,25 +8,28 @@ datasource db {
 }
 
 model User {
-  id                    String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  login                 String             @unique
-  passwordHash          String             @map("password_hash")
-  displayName           String?            @map("display_name")
-  locale                String             @default("ru") @map("locale")
-  privacyConsentVersion String?            @map("privacy_consent_version")
-  privacyConsentAt      DateTime?          @map("privacy_consent_at")
-  termsVersion          String?            @map("terms_version")
-  termsAcceptedAt       DateTime?          @map("terms_accepted_at")
-  anonymizedAt          DateTime?          @map("anonymized_at")
-  tutorialCompletedAt   DateTime?          @map("tutorial_completed_at")
-  createdAt             DateTime           @default(now()) @map("created_at")
-  updatedAt             DateTime           @updatedAt @map("updated_at")
-  sessions              AuthSession[]
-  realtimeTickets       RealtimeTicket[]
-  identities            AuthIdentity[]
-  hostedRooms           TenderRoom[]       @relation("TenderRoomHost")
-  roomMemberships       TenderRoomMember[]
-  currentMatch          CurrentMatch?
+  id                        String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  login                     String             @unique
+  passwordHash              String?            @map("password_hash")
+  accountEmailProviderValue String?            @map("account_email_provider_value") @db.VarChar(254)
+  accountEmailCanonicalKey  String?            @unique(map: "users_account_email_canonical_key_key") @map("account_email_canonical_key") @db.VarChar(254)
+  accountEmailState         String             @default("absent") @map("account_email_state") @db.VarChar(32)
+  displayName               String?            @map("display_name")
+  locale                    String             @default("ru") @map("locale")
+  privacyConsentVersion     String?            @map("privacy_consent_version")
+  privacyConsentAt          DateTime?          @map("privacy_consent_at")
+  termsVersion              String?            @map("terms_version")
+  termsAcceptedAt           DateTime?          @map("terms_accepted_at")
+  anonymizedAt              DateTime?          @map("anonymized_at")
+  tutorialCompletedAt       DateTime?          @map("tutorial_completed_at")
+  createdAt                 DateTime           @default(now()) @map("created_at")
+  updatedAt                 DateTime           @updatedAt @map("updated_at")
+  sessions                  AuthSession[]
+  realtimeTickets           RealtimeTicket[]
+  identities                AuthIdentity[]
+  hostedRooms               TenderRoom[]       @relation("TenderRoomHost")
+  roomMemberships           TenderRoomMember[]
+  currentMatch              CurrentMatch?
 
   @@map("users")
 }

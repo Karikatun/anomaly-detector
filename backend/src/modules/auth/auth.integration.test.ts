@@ -4,6 +4,8 @@ import { createApp } from '../../app'
 import { createPrisma } from '../../db'
 import type { AppEnv } from '../../env'
 import type { SecurityEvent } from '../../security/events'
+import { createPrismaAuthRepository } from './infrastructure/auth-repository'
+import { signAccessToken } from './infrastructure/access-tokens'
 import { createRoomStartModule } from '../room'
 import { createPersistentTenderModule } from '../tender'
 
@@ -118,6 +120,14 @@ maybeDescribe('auth API integration', () => {
     const meBody = await me.json()
     expect(meBody).toEqual({ user: registerBody.user })
     expect('sessionId' in meBody.user).toBe(false)
+
+    const protection = await app.request('/api/auth/account-protection', {
+      headers: { Authorization: `Bearer ${registerBody.accessToken}` },
+    })
+    expect(protection.status).toBe(200)
+    expect(await protection.json()).toEqual({
+      accountProtection: { state: 'password_unprotected' },
+    })
 
     const refresh = await app.request('/api/auth/token/refresh', {
       method: 'POST',
@@ -2158,6 +2168,7 @@ maybeDescribe('auth API integration', () => {
     })
 
     expect(login.status).toBe(200)
+    if (!storedUser.passwordHash) throw new Error('Expected a password credential')
     expect(storedUser.passwordHash).toStartWith('$argon2id$v=19$m=65536,t=2,p=1$')
     expect(storedUser.passwordHash).not.toBe(legacyHash)
     expect(await Bun.password.verify(password, storedUser.passwordHash)).toBe(true)
@@ -2184,6 +2195,189 @@ maybeDescribe('auth API integration', () => {
     expect(await login.json()).toEqual({
       error: { code: 'UNAUTHORIZED', message: 'Invalid login or password' },
     })
+  })
+
+  test('rejects a competing Yandex registration while preserving linked sign-in conflicts', async () => {
+    const repository = createPrismaAuthRepository(prisma, env.JWT_SECRET)
+    const complete = (
+      suffix: string,
+      canonicalKey = 'player@yandex.ru',
+      providerValue = 'Player@yandex.ru',
+    ) => repository.completeOAuthSignIn({
+      accountEmail: {
+        kind: 'candidate',
+        canonicalKey,
+        providerValue,
+      },
+      identity: { provider: 'yandex', subject: `provider-${suffix}` },
+      newUser: {
+        displayName: `Player ${suffix}`,
+        legalAcceptance: {
+          acceptedAt: new Date('2026-08-22T12:00:00.000Z'),
+          privacyConsentVersion: '1.0',
+          termsVersion: '1.0',
+        },
+        login: `oauth-yandex-${suffix}`,
+      },
+      session: {
+        expiresAt: new Date('2026-09-22T12:00:00.000Z'),
+        metadata: {},
+        refreshTokenFamilyHash: `family-${suffix}`,
+        refreshTokenHash: `refresh-${suffix}`,
+      },
+    })
+
+    const concurrent = await Promise.allSettled([complete('one'), complete('two')])
+    expect(concurrent.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    expect(concurrent.filter((result) => result.status === 'rejected')).toHaveLength(1)
+    expect(concurrent.find((result) => result.status === 'rejected')).toMatchObject({
+      reason: { kind: 'oauth_account_email_conflict' },
+    })
+
+    const winnerSuffix = concurrent[0].status === 'fulfilled' ? 'one' : 'two'
+    const loserSuffix = winnerSuffix === 'one' ? 'two' : 'one'
+    let users = await prisma.user.findMany({
+      where: { login: { in: ['oauth-yandex-one', 'oauth-yandex-two'] } },
+      orderBy: { login: 'asc' },
+    })
+
+    expect(users).toHaveLength(1)
+    expect(users[0]).toMatchObject({
+      accountEmailCanonicalKey: 'player@yandex.ru',
+      accountEmailState: 'yandex_managed',
+      login: `oauth-yandex-${winnerSuffix}`,
+      passwordHash: null,
+    })
+    expect(await prisma.authIdentity.count({
+      where: { subject: { in: ['provider-one', 'provider-two'] } },
+    })).toBe(1)
+    expect(await prisma.authSession.count({
+      where: { userId: { in: users.map((candidate) => candidate.id) } },
+    })).toBe(1)
+
+    await expect(complete(
+      loserSuffix,
+      'alternate@yandex.ru',
+      'Alternate@yandex.ru',
+    )).resolves.toBeTruthy()
+    users = await prisma.user.findMany({
+      where: { login: { in: ['oauth-yandex-one', 'oauth-yandex-two'] } },
+      orderBy: { login: 'asc' },
+    })
+    expect(users).toHaveLength(2)
+
+    const managed = users.find((candidate) => candidate.login === `oauth-yandex-${winnerSuffix}`)!
+    const conflicted = users.find((candidate) => candidate.login === `oauth-yandex-${loserSuffix}`)!
+    const managedIdentity = await prisma.authIdentity.findFirstOrThrow({
+      where: { userId: managed.id },
+      select: { subject: true },
+    })
+    const conflictedIdentity = await prisma.authIdentity.findFirstOrThrow({
+      where: { userId: conflicted.id },
+      select: { subject: true },
+    })
+    const completeExisting = (
+      subject: string,
+      canonicalKey: string,
+      providerValue: string,
+      sessionSuffix: string,
+    ) => repository.completeOAuthSignIn({
+      accountEmail: { kind: 'candidate', canonicalKey, providerValue },
+      identity: { provider: 'yandex', subject },
+      session: {
+        expiresAt: new Date('2026-09-22T12:00:00.000Z'),
+        metadata: {},
+        refreshTokenFamilyHash: `existing-family-${sessionSuffix}`,
+        refreshTokenHash: `existing-refresh-${sessionSuffix}`,
+      },
+    })
+
+    await expect(completeExisting(
+      conflictedIdentity.subject,
+      'player@yandex.ru',
+      'Player@yandex.ru',
+      'occupied',
+    )).resolves.toMatchObject({ user: { id: conflicted.id } })
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: conflicted.id } }))
+      .toMatchObject({
+        accountEmailCanonicalKey: null,
+        accountEmailProviderValue: null,
+        accountEmailState: 'yandex_conflict',
+      })
+
+    await expect(repository.completeOAuthSignIn({
+      accountEmail: {
+        kind: 'candidate',
+        canonicalKey: 'changed@yandex.ru',
+        providerValue: 'Changed@yandex.ru',
+      },
+      identity: { provider: 'yandex', subject: managedIdentity.subject },
+      session: {
+        expiresAt: new Date('2026-09-22T12:00:00.000Z'),
+        metadata: {},
+        refreshTokenFamilyHash: `family-${winnerSuffix}`,
+        refreshTokenHash: `refresh-${winnerSuffix}`,
+      },
+    })).rejects.toMatchObject({ code: 'P2002' })
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: managed.id } }))
+      .toMatchObject({ accountEmailCanonicalKey: 'player@yandex.ru' })
+
+    await completeExisting(
+      managedIdentity.subject,
+      'changed@yandex.ru',
+      'Changed@yandex.ru',
+      'changed',
+    )
+    await completeExisting(
+      conflictedIdentity.subject,
+      'player@yandex.ru',
+      'Player@yandex.ru',
+      'released',
+    )
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: managed.id } }))
+      .toMatchObject({ accountEmailCanonicalKey: 'changed@yandex.ru' })
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: conflicted.id } }))
+      .toMatchObject({
+        accountEmailCanonicalKey: 'player@yandex.ru',
+        accountEmailState: 'yandex_managed',
+      })
+
+    await repository.eraseUserIdentity({
+      now: new Date('2026-08-22T12:30:00.000Z'),
+      userId: conflicted.id,
+    })
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: conflicted.id } }))
+      .toMatchObject({
+        accountEmailCanonicalKey: null,
+        accountEmailProviderValue: null,
+        accountEmailState: 'absent',
+      })
+    expect(await prisma.authIdentity.count({ where: { userId: conflicted.id } })).toBe(0)
+    expect(await prisma.authSession.count({ where: { userId: conflicted.id } })).toBe(0)
+
+    const reused = await complete('three')
+    expect(reused?.user.id).not.toBe(conflicted.id)
+    expect(reused?.user).toMatchObject({
+      accountEmailCanonicalKey: 'player@yandex.ru',
+      accountEmailState: 'yandex_managed',
+    })
+    const accessToken = await signAccessToken({
+      login: reused!.user.login,
+      sessionId: reused!.session.id,
+      sub: reused!.user.id,
+    }, env)
+    const protection = await app.request('/api/auth/account-protection', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    const protectionText = await protection.text()
+    expect(protection.status).toBe(200)
+    expect(JSON.parse(protectionText)).toEqual({
+      accountProtection: {
+        maskedAccountEmail: 'P***@yandex.ru',
+        state: 'yandex_managed',
+      },
+    })
+    expect(protectionText).not.toContain('Player@yandex.ru')
   })
 
   test('deleting an account removes auth links and its identifier from Tender history', async () => {

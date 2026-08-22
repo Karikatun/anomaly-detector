@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   apiErrorSchema,
+  accountProtectionResponseSchema,
   cookieAuthResponseSchema,
   cookieLogoutRequestSchema,
   cookieRefreshRequestSchema,
@@ -28,6 +29,31 @@ const validUser = {
 }
 
 describe('auth contracts', () => {
+  test('exposes only bounded Account Email protection states and a masked address', () => {
+    expect(accountProtectionResponseSchema.parse({
+      accountProtection: {
+        state: 'yandex_managed',
+        maskedAccountEmail: 'P***@yandex.ru',
+      },
+    })).toEqual({
+      accountProtection: {
+        state: 'yandex_managed',
+        maskedAccountEmail: 'P***@yandex.ru',
+      },
+    })
+    for (const state of ['password_unprotected', 'yandex_conflict', 'yandex_unavailable']) {
+      expect(accountProtectionResponseSchema.safeParse({
+        accountProtection: { state },
+      }).success).toBe(true)
+    }
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        state: 'yandex_managed',
+        maskedAccountEmail: 'player@yandex.ru',
+      },
+    }).success).toBe(false)
+  })
+
   test('normalizes registration and login input', () => {
     expect(
       registerRequestSchema.parse({

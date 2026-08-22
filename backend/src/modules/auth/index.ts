@@ -1,7 +1,13 @@
 import type { DbClient } from '../../db'
 import type { AppEnv } from '../../env'
 import { AuthService } from './application/auth-service'
-import type { AccountDeletionCleanup, Clock, LogoutCleanup, ProjectUser } from './application/ports'
+import type {
+  AccountDeletionCleanup,
+  AccountEmailCanonicalizer,
+  Clock,
+  LogoutCleanup,
+  ProjectUser,
+} from './application/ports'
 import { toBaseUserDto } from './domain/user'
 import { createPrismaAuthRepository } from './infrastructure/auth-repository'
 import { signAccessToken, verifyAccessToken } from './infrastructure/access-tokens'
@@ -26,6 +32,7 @@ import { createPrismaRequestBudget } from '../../security/request-budget'
 import { createAuthenticatedMutationBudget } from './transport/authenticated-mutation-budget'
 
 type CreateAuthModuleOptions = {
+  accountEmailCanonicalizer?: AccountEmailCanonicalizer
   clock?: Clock
   accountDeletionCleanup?: AccountDeletionCleanup
   db: DbClient
@@ -42,6 +49,7 @@ const noLogoutCleanup: LogoutCleanup = () => undefined
 const noAccountDeletionCleanup: AccountDeletionCleanup = () => undefined
 
 export function createAuthModule({
+  accountEmailCanonicalizer,
   clock = systemClock,
   accountDeletionCleanup = noAccountDeletionCleanup,
   db,
@@ -61,6 +69,7 @@ export function createAuthModule({
 
   const service = new AuthService({
     accountDeletionCleanup,
+    accountEmailCanonicalizer,
     accessTokens: {
       sign: (payload) => signAccessToken(payload, env),
       verify: (token) => verifyAccessToken(token, env),
