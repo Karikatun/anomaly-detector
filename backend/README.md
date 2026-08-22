@@ -39,7 +39,7 @@ bun run --cwd backend prisma:deploy
 
 On Windows PowerShell, use `Copy-Item backend/.env.example backend/.env` instead of `cp`. Workspace aliases are also available from the repository root: `bun run dev:backend`, `bun run build:backend`, `bun run typecheck:backend`, and `bun run test:backend`.
 
-`bun run test:integration` starts `postgres_test` from `../docker-compose.yml`, applies Prisma migrations to `anomaly_detector_test`, and runs DB-backed auth, operator-access, Room, Tender, and realtime tests. If Docker is managed separately, set `TEST_SKIP_DOCKER=1` and `TEST_DATABASE_URL`. The test database name must end with `_test` unless `TEST_ALLOW_NON_TEST_DATABASE=1` is set intentionally.
+`bun run test:integration` starts `postgres_test` from `../docker-compose.yml`, applies Prisma migrations to `anomaly_detector_test`, and runs DB-backed auth, operator-access, Feedback Report, Room, Tender, and realtime tests. If Docker is managed separately, set `TEST_SKIP_DOCKER=1` and `TEST_DATABASE_URL`. The test database name must end with `_test` unless `TEST_ALLOW_NON_TEST_DATABASE=1` is set intentionally.
 
 `bun run smoke:docker` builds the backend Docker image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created.
 
@@ -57,7 +57,7 @@ Keep an explicit username and password in Prisma connection URLs even on local n
 
 `ADMIN_USER_IDS` is an optional comma-separated allowlist of immutable user UUIDs for the separate operator application. Empty means that nobody has access. The backend returns the same `404 NOT_FOUND` to anonymous and ordinary authenticated users and does not publish operator routes in OpenAPI. Obtain an operator UUID from that user's profile and configure it only in backend runtime env; changing a login or display name does not change access. The separate Caddy-host is an additional edge boundary, not a replacement for this backend check.
 
-The operator overview remains read-only. Approved Mail Service policy has the only currently implemented mutation surface: `GET /api/operations/mail-policy` reads its safe projection, while `/import`, `/publish`, and `/status` accept narrow audited commands. Import never publishes automatically. Every command requires a recent authenticated session, an allowlisted operator UUID, an optimistic version precondition, and an idempotent `commandId`; source or suspicious-removal failure retains the last-known-good policy.
+The operator overview remains read-only. Approved Mail Service policy exposes a safe read projection plus narrow audited `/import`, `/publish`, and `/status` commands; those policy mutations require a recent authenticated session. Feedback Report processing has its own protected queue and only take, resolve, reject, record-sanitized-GitHub-number, and delete-contact commands. Both command sets require an allowlisted operator UUID, an optimistic version precondition, an idempotent `commandId`, and immutable audit. Feedback source text and authorship cannot be edited, and no command publishes an external issue or sends mail automatically.
 
 `COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production also requires `WEBAPP_ORIGIN`: one origin-only HTTPS URL for the player application, included in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
 
@@ -65,7 +65,7 @@ When enabling Yandex ID or VK ID, set both provider credentials and `OAUTH_CALLB
 
 Auth writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind the documented Yandex Application Load Balancer path, set `TRUST_PROXY=true`, use `x-forwarded-for` as `TRUSTED_PROXY_CLIENT_IP_HEADER`, and select the first value. Before horizontally scaling, keep shared PostgreSQL auth buckets and add an edge/WAF layer for request-rate protection.
 
-`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `maintenance:cleanup` daily to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`; the same task removes expired abuse buckets, unfinished OAuth transactions, one-time realtime tickets, and waiting rooms older than 24 hours. `auth:sessions:cleanup` remains a backwards-compatible alias for the same maintenance task.
+`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `maintenance:cleanup` daily to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`; the same task removes expired abuse buckets, unfinished OAuth transactions, one-time realtime tickets, waiting rooms older than 24 hours, expired Feedback Reports, and terminal mail outbox rows. `auth:sessions:cleanup` remains a backwards-compatible alias for the same maintenance task.
 
 Yandex Object Storage env is optional. Leave `YANDEX_STORAGE_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
 
@@ -110,12 +110,31 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 - `GET /health/ready`
 
 The remaining approved but not yet implemented Public MVP extensions are specified in
-ADRs 0005–0016 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). They add
-user-held Recovery Code, password reset, consent-scoped funnel analytics and
-Feedback Report intake. Do not add env keys or advertise endpoints in this
-README until their implementation and contracts exist; when they do, document
-every new key here, in `.env.example`, the Yandex runbook and production setup
-without exposing values.
+ADRs 0005–0016 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). The main
+remaining product slice is consent-scoped funnel analytics; production mail,
+domain, legal and release verification remain separate owner-operated gates.
+Do not add env keys or advertise endpoints in this README until their
+implementation and contracts exist; when they do, document every new key here,
+in `.env.example`, the Yandex runbook and production setup without exposing
+values.
+
+## Feedback API
+
+- `POST /api/feedback` — authenticated strict intake; returns only a public
+  receipt number and exposes no player read route.
+- `GET /api/operations/feedback` — allowlisted operator queue, concealed from
+  ordinary users and omitted from OpenAPI.
+- `POST /api/operations/feedback/:reportId/take`
+- `POST /api/operations/feedback/:reportId/resolve`
+- `POST /api/operations/feedback/:reportId/reject`
+- `POST /api/operations/feedback/:reportId/github-issue`
+- `POST /api/operations/feedback/:reportId/contact/delete`
+
+The intake stores only bounded source fields and safe coarse technical context.
+Account linkage and reply contact are separate voluntary values; account and
+trusted-IP daily budget identities are HMAC-derived. Operator commands cannot
+edit source content. `maintenance:cleanup` deletes `new`/`in_review` reports at
+180 days and terminal or transferred reports 30 days after that event.
 
 `GET /api/auth/account-protection` exposes only the current account's bounded
 protection state. A Yandex-managed address is masked by the server; conflict and

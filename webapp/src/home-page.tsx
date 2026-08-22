@@ -22,6 +22,7 @@ import {
   useAuth,
   useLogoutAction,
 } from '@/features/auth'
+import { captureFeedbackOrigin } from '@/features/feedback'
 import {
   ProfileApi,
   useTutorialProgressQuery,
@@ -199,6 +200,15 @@ function AuthenticatedHome({
             title={t('nav.profile').toUpperCase()}
             icon={UserCircleIcon}
             onClick={() => void navigate({ to: '/profile' })}
+          />
+          <MenuCard
+            accent="plain"
+            title={t('feedback.menu')}
+            icon={File01Icon}
+            onClick={() => {
+              captureFeedbackOrigin(sessionStorage, window.location.pathname)
+              void navigate({ to: '/feedback' })
+            }}
           />
           <RulesReferenceDialog
             triggerVariant="ghost"

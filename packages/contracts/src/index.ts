@@ -1,6 +1,7 @@
 export * from './admin'
 export * from './auth'
 export * from './errors'
+export * from './feedback'
 export * from './profile'
 export * from './room'
 export * from './realtime'

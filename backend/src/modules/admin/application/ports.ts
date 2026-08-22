@@ -1,6 +1,14 @@
 import type {
   AdminOverview,
   AdminOverviewQuery,
+  FeedbackDeleteContactCommand,
+  FeedbackOperatorCommandResponse,
+  FeedbackQueueQuery,
+  FeedbackQueueResponse,
+  FeedbackRecordGithubIssueCommand,
+  FeedbackRejectCommand,
+  FeedbackResolveCommand,
+  FeedbackTakeCommand,
   MailPolicyImportCommand,
   MailPolicyPublishCommand,
   MailPolicyStatusCommand,
@@ -21,4 +29,13 @@ export type AdminMailPolicyOperator = {
   importCandidates(command: MailPolicyImportCommand, operator: AdminOperator): Promise<MailOperationsView>
   publish(command: MailPolicyPublishCommand, operator: AdminOperator): Promise<MailOperationsView>
   read(): Promise<MailOperationsView>
+}
+
+export type AdminFeedbackOperator = {
+  deleteContact(command: FeedbackDeleteContactCommand, operator: AdminOperator, reportId: string): Promise<FeedbackOperatorCommandResponse>
+  read(query: FeedbackQueueQuery): Promise<FeedbackQueueResponse>
+  recordGithubIssue(command: FeedbackRecordGithubIssueCommand, operator: AdminOperator, reportId: string): Promise<FeedbackOperatorCommandResponse>
+  reject(command: FeedbackRejectCommand, operator: AdminOperator, reportId: string): Promise<FeedbackOperatorCommandResponse>
+  resolve(command: FeedbackResolveCommand, operator: AdminOperator, reportId: string): Promise<FeedbackOperatorCommandResponse>
+  take(command: FeedbackTakeCommand, operator: AdminOperator, reportId: string): Promise<FeedbackOperatorCommandResponse>
 }

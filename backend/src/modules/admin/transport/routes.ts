@@ -1,6 +1,14 @@
 import {
   adminOverviewQuerySchema,
   adminOverviewSchema,
+  feedbackDeleteContactCommandSchema,
+  feedbackOperatorCommandResponseSchema,
+  feedbackQueueQuerySchema,
+  feedbackQueueResponseSchema,
+  feedbackRecordGithubIssueCommandSchema,
+  feedbackRejectCommandSchema,
+  feedbackResolveCommandSchema,
+  feedbackTakeCommandSchema,
   mailPolicyImportCommandSchema,
   mailPolicyPublishCommandSchema,
   mailPolicyStatusCommandSchema,
@@ -9,14 +17,20 @@ import {
 import { OpenAPIHono } from '@hono/zod-openapi'
 import type { Context } from 'hono'
 
-import { errorResponse } from '../../../http/errors'
+import { AppError, errorResponse } from '../../../http/errors'
 import type { AuthenticatedPrincipal, AuthHttpEnv } from '../../auth'
+import { executeFeedbackOperator } from '../../feedback'
 import { executeMailPolicy } from '../../mail'
-import type { AdminMailPolicyOperator, AdminOverviewReader } from '../application/ports'
+import type {
+  AdminFeedbackOperator,
+  AdminMailPolicyOperator,
+  AdminOverviewReader,
+} from '../application/ports'
 
 type CreateAdminRoutesInput = {
   adminUserIds: ReadonlySet<string>
   authenticate: (accessToken: string | undefined) => Promise<AuthenticatedPrincipal>
+  feedback: AdminFeedbackOperator
   mailPolicy: AdminMailPolicyOperator
   onAccessDenied?: (context: Context<AuthHttpEnv>, kind: 'authentication' | 'authorization') => void
   overviewReader: AdminOverviewReader
@@ -56,6 +70,39 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
     return c.json(mailOperationsViewSchema.parse(await input.mailPolicy.read()))
   })
 
+  routes.get('/feedback', async (c) => {
+    const query = feedbackQueueQuerySchema.parse(c.req.query())
+    return c.json(feedbackQueueResponseSchema.parse(await input.feedback.read(query)))
+  })
+
+  routes.post('/feedback/:reportId/take', async (c) => {
+    const command = feedbackTakeCommandSchema.parse(await c.req.json())
+    return feedbackCommandResponse(c, input.feedback.take(command, operator(c), reportId(c)))
+  })
+
+  routes.post('/feedback/:reportId/resolve', async (c) => {
+    const command = feedbackResolveCommandSchema.parse(await c.req.json())
+    return feedbackCommandResponse(c, input.feedback.resolve(command, operator(c), reportId(c)))
+  })
+
+  routes.post('/feedback/:reportId/reject', async (c) => {
+    const command = feedbackRejectCommandSchema.parse(await c.req.json())
+    return feedbackCommandResponse(c, input.feedback.reject(command, operator(c), reportId(c)))
+  })
+
+  routes.post('/feedback/:reportId/github-issue', async (c) => {
+    const command = feedbackRecordGithubIssueCommandSchema.parse(await c.req.json())
+    return feedbackCommandResponse(
+      c,
+      input.feedback.recordGithubIssue(command, operator(c), reportId(c)),
+    )
+  })
+
+  routes.post('/feedback/:reportId/contact/delete', async (c) => {
+    const command = feedbackDeleteContactCommandSchema.parse(await c.req.json())
+    return feedbackCommandResponse(c, input.feedback.deleteContact(command, operator(c), reportId(c)))
+  })
+
   routes.post('/mail-policy/import', async (c) => {
     const command = mailPolicyImportCommandSchema.parse(await c.req.json())
     const result = await executeMailPolicy(() => input.mailPolicy.importCandidates(command, operator(c)))
@@ -75,6 +122,22 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
   })
 
   return routes
+}
+
+async function feedbackCommandResponse(
+  c: Context<AuthHttpEnv>,
+  operation: Promise<unknown>,
+) {
+  const result = await executeFeedbackOperator(() => operation)
+  return c.json(feedbackOperatorCommandResponseSchema.parse(result))
+}
+
+function reportId(c: Context<AuthHttpEnv>) {
+  const value = c.req.param('reportId')
+  if (!value || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new AppError(400, 'BAD_REQUEST', 'Invalid feedback report identifier')
+  }
+  return value
 }
 
 function operator(c: Context<AuthHttpEnv>) {

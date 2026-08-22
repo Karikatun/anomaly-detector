@@ -47,6 +47,43 @@ const mailPolicy = {
   read: async () => mailPolicyView,
 }
 
+const feedbackQueue = {
+  items: [],
+  page: 1,
+  pageSize: 20,
+  totalItems: 0,
+  totalPages: 1,
+}
+
+const feedback = {
+  deleteContact: async () => ({
+    commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
+    reportId: '019f8099-7e26-7760-ad08-66d1d66b2721',
+    version: 2,
+  }),
+  read: async () => feedbackQueue,
+  recordGithubIssue: async () => ({
+    commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
+    reportId: '019f8099-7e26-7760-ad08-66d1d66b2721',
+    version: 2,
+  }),
+  reject: async () => ({
+    commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
+    reportId: '019f8099-7e26-7760-ad08-66d1d66b2721',
+    version: 2,
+  }),
+  resolve: async () => ({
+    commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
+    reportId: '019f8099-7e26-7760-ad08-66d1d66b2721',
+    version: 2,
+  }),
+  take: async () => ({
+    commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
+    reportId: '019f8099-7e26-7760-ad08-66d1d66b2721',
+    version: 2,
+  }),
+}
+
 test('conceals the admin route from anonymous and ordinary users', async () => {
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
@@ -55,11 +92,12 @@ test('conceals the admin route from anonymous and ordinary users', async () => {
       if (token === 'player-token') return { ...admin, id: '019f8099-7e26-7760-ad08-66d1d66b2720' }
       throw new Error('invalid token')
     },
+    feedback,
     mailPolicy,
     overviewReader: { read: async () => overview },
   })
 
-  for (const path of ['/overview', '/mail-policy']) {
+  for (const path of ['/overview', '/mail-policy', '/feedback']) {
     for (const authorization of [undefined, 'Bearer player-token']) {
       const response = await module.routes.request(path, {
         headers: authorization ? { Authorization: authorization } : undefined,
@@ -77,6 +115,7 @@ test('returns a no-store overview to an allowlisted administrator', async () => 
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
     authenticate: async () => admin,
+    feedback,
     mailPolicy,
     overviewReader: { read: async () => overview },
   })
@@ -99,6 +138,7 @@ test('returns the requested page from the complete user list', async () => {
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
     authenticate: async () => admin,
+    feedback,
     mailPolicy,
     overviewReader: {
       read: async (query) => {
@@ -121,6 +161,7 @@ test('does not conceal an overview read failure as an access denial', async () =
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
     authenticate: async () => admin,
+    feedback,
     mailPolicy,
     overviewReader: { read: async () => { throw new Error('database unavailable') } },
   })
@@ -138,6 +179,7 @@ test('passes a bounded import command and authenticated operator to the mail pol
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
     authenticate: async () => admin,
+    feedback,
     mailPolicy: {
       ...mailPolicy,
       importCandidates: async (command, operator) => {
@@ -170,4 +212,62 @@ test('passes a bounded import command and authenticated operator to the mail pol
     operator: { authenticatedAt: admin.authenticatedAt, id: admin.id },
   })
   expect(await response.json()).toEqual(mailPolicyView)
+})
+
+test('passes bounded feedback queue queries and commands to the domain owner', async () => {
+  let readQuery: unknown
+  let commandInput: unknown
+  const reportId = '019f8099-7e26-7760-ad08-66d1d66b2721'
+  const module = createAdminModule({
+    adminUserIds: new Set([admin.id]),
+    authenticate: async () => admin,
+    feedback: {
+      ...feedback,
+      read: async (query) => {
+        readQuery = query
+        return feedbackQueue
+      },
+      take: async (command, operator, receivedReportId) => {
+        commandInput = { command, operator, reportId: receivedReportId }
+        return {
+          commandId: command.commandId,
+          reportId: receivedReportId,
+          version: 2,
+        }
+      },
+    },
+    mailPolicy,
+    overviewReader: { read: async () => overview },
+  })
+
+  const queueResponse = await module.routes.request('/feedback?page=2&pageSize=10&status=new', {
+    headers: { Authorization: 'Bearer admin-token' },
+  })
+  expect(queueResponse.status).toBe(200)
+  expect(readQuery).toEqual({ page: 2, pageSize: 10, status: 'new' })
+
+  const command = {
+    commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
+    expectedVersion: 1,
+  }
+  const commandResponse = await module.routes.request(`/feedback/${reportId}/take`, {
+    body: JSON.stringify(command),
+    headers: {
+      Authorization: 'Bearer admin-token',
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  })
+
+  expect(commandResponse.status).toBe(200)
+  expect(commandInput).toEqual({
+    command,
+    operator: { authenticatedAt: admin.authenticatedAt, id: admin.id },
+    reportId,
+  })
+  expect(await commandResponse.json()).toEqual({
+    commandId: command.commandId,
+    reportId,
+    version: 2,
+  })
 })

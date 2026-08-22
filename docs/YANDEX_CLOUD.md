@@ -410,7 +410,7 @@ Do not run `prisma migrate dev` in production and do not hand-write Prisma migra
 
 ## Maintenance Cleanup Timer
 
-Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, and only accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. Queued and leased mail is never removed by this cleanup. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, expired Feedback Reports (180 days for `new`/`in_review`, 30 days after terminal or transferred status), and only accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. Queued and leased mail is never removed by this cleanup. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
 
 Create the cleanup container and deploy its revision. The image `WORKDIR` is already `/app/backend`, so the command can call the existing cron runner directly:
 
@@ -457,7 +457,7 @@ yc serverless trigger create timer \
   --retry-interval 30s
 ```
 
-After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, ... realtime tickets, ... expired waiting rooms, and ... terminal mail outbox records.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
+After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, ... realtime tickets, ... expired waiting rooms, ... terminal mail outbox records, and ... expired feedback reports.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
 
 ## Real-Time Pub/Sub
 
@@ -670,6 +670,7 @@ Build locally or in CI:
 ```bash
 VITE_API_URL=https://api.anomaly-detector.ru \
 VITE_OAUTH_API_URL=https://api.anomaly-detector.ru \
+VITE_BUILD_SHA=<exact-40-character-release-sha> \
 VITE_PUBLIC_LEGAL_OPERATOR_NAME='<public operator name>' \
 VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT='<public operator name in dative case>' \
 VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS='<public address for legal requests>' \
@@ -683,6 +684,9 @@ bun run build:website
 The webapp and adminapp API values are embedded at build time and must point to the
 Application Load Balancer custom host. `VITE_API_URL` owns ordinary requests;
 `VITE_OAUTH_API_URL` owns the browser-visible OAuth start request.
+`VITE_BUILD_SHA` must be the exact lowercase 40-character release commit and is
+included only as safe technical context when a player submits a Feedback Report;
+omit it rather than substituting a branch, short SHA or mutable tag.
 `VITE_PUBLIC_LEGAL_OPERATOR_NAME`, `VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT`, and
 `VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS` are required for a webapp production build;
 they render into the public legal pages, so they are not secrets. Store the actual
