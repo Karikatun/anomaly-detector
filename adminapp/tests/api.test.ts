@@ -153,3 +153,59 @@ test('uses the authenticated narrow mail-policy endpoints without generic mutati
   expect(requests[1].body).toEqual({ commandId, expectedVersion: 0 })
   expect(requests.some(({ url }) => /create|update|delete/.test(url))).toBe(false)
 })
+
+test('uses only the explicit authenticated feedback queue commands', async () => {
+  const requests: Array<{ authorization: string | null; body: unknown; method: string; url: string }> = []
+  const reportId = '019f8099-7e26-7760-ad08-66d1d66b2718'
+  const commandId = '019f8099-7e26-7760-ad08-66d1d66b2720'
+  const api = new AdminApi('', async (input, init) => {
+    const url = String(input)
+    if (url.endsWith('/api/auth/refresh')) return Response.json({ accessToken: 'operator-token' })
+    requests.push({
+      authorization: new Headers(init?.headers).get('authorization'),
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      method: init?.method ?? 'GET',
+      url,
+    })
+    if ((init?.method ?? 'GET') === 'GET') {
+      return Response.json({ items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 1 })
+    }
+    return Response.json({ commandId, reportId, version: 2 })
+  })
+
+  await api.restoreSession()
+  await api.getFeedbackQueue({ page: 1, pageSize: 20, status: 'new' })
+  await api.takeFeedback(reportId, { commandId, expectedVersion: 1 })
+  await api.resolveFeedback(reportId, { commandId, expectedVersion: 1 })
+  await api.rejectFeedback(reportId, {
+    commandId,
+    expectedVersion: 1,
+    reason: 'Недостаточно сведений.',
+  })
+  await api.recordFeedbackGithubIssue(reportId, {
+    commandId,
+    expectedVersion: 1,
+    githubIssueNumber: 41,
+  })
+  await api.deleteFeedbackContact(reportId, { commandId, expectedVersion: 1 })
+
+  expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
+    { method: 'GET', url: '/api/operations/feedback?page=1&pageSize=20&status=new' },
+    { method: 'POST', url: `/api/operations/feedback/${reportId}/take` },
+    { method: 'POST', url: `/api/operations/feedback/${reportId}/resolve` },
+    { method: 'POST', url: `/api/operations/feedback/${reportId}/reject` },
+    { method: 'POST', url: `/api/operations/feedback/${reportId}/github-issue` },
+    { method: 'POST', url: `/api/operations/feedback/${reportId}/contact/delete` },
+  ])
+  expect(requests.every((request) => request.authorization === 'Bearer operator-token')).toBe(true)
+  expect(requests[3].body).toEqual({
+    commandId,
+    expectedVersion: 1,
+    reason: 'Недостаточно сведений.',
+  })
+  expect(requests[4].body).toEqual({
+    commandId,
+    expectedVersion: 1,
+    githubIssueNumber: 41,
+  })
+})

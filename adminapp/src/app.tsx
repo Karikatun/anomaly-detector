@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
-import type { AdminOverview, MailOperationsView } from '@anomaly-detector/contracts'
+import type {
+  AdminOverview,
+  FeedbackQueueResponse,
+  MailOperationsView,
+} from '@anomaly-detector/contracts'
 
 import { AdminApi, AdminApiError } from './api'
+import { FeedbackScreen } from './feedback-screen'
 import { getApiBaseUrl } from './api-base-url'
 import { MailPolicyScreen } from './mail-policy-screen'
 import { OverviewScreen } from './overview-screen'
@@ -12,9 +17,14 @@ type AppState =
   | { kind: 'anonymous'; error?: string }
   | { kind: 'concealed' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; data: AdminOverview; mailPolicy: MailOperationsView }
+  | {
+      kind: 'ready'
+      data: AdminOverview
+      feedback: FeedbackQueueResponse
+      mailPolicy: MailOperationsView
+    }
 
-type ReadyView = 'mail-policy' | 'overview'
+type ReadyView = 'feedback' | 'mail-policy' | 'overview'
 
 export default function App() {
   const api = useMemo(() => new AdminApi(getApiBaseUrl()), [])
@@ -24,8 +34,12 @@ export default function App() {
 
   const loadWorkspace = useCallback(async () => {
     try {
-      const [data, mailPolicy] = await Promise.all([api.getOverview(), api.getMailPolicy()])
-      setState({ kind: 'ready', data, mailPolicy })
+      const [data, feedback, mailPolicy] = await Promise.all([
+        api.getOverview(),
+        api.getFeedbackQueue({ page: 1, pageSize: 20 }),
+        api.getMailPolicy(),
+      ])
+      setState({ kind: 'ready', data, feedback, mailPolicy })
     } catch (error) {
       if (error instanceof AdminApiError && error.status === 404) {
         setState({ kind: 'concealed' })
@@ -106,6 +120,31 @@ export default function App() {
       throw error
     }
   }
+  const reloadFeedback = async (page = state.feedback.page) => {
+    const feedback = await api.getFeedbackQueue({ page, pageSize: state.feedback.pageSize })
+    setState((current) => current.kind === 'ready' ? { ...current, feedback } : current)
+  }
+  const executeFeedbackCommand = async (operation: () => Promise<unknown>) => {
+    await operation()
+    await reloadFeedback()
+  }
+
+  if (view === 'feedback') {
+    return (
+      <FeedbackScreen
+        data={state.feedback}
+        onBack={() => setView('overview')}
+        onDeleteContact={(reportId, command) => executeFeedbackCommand(() => api.deleteFeedbackContact(reportId, command))}
+        onLogout={() => void logout()}
+        onPageChange={(page) => void reloadFeedback(page)}
+        onRecordGithubIssue={(reportId, command) => executeFeedbackCommand(() => api.recordFeedbackGithubIssue(reportId, command))}
+        onReject={(reportId, command) => executeFeedbackCommand(() => api.rejectFeedback(reportId, command))}
+        onReload={() => reloadFeedback()}
+        onResolve={(reportId, command) => executeFeedbackCommand(() => api.resolveFeedback(reportId, command))}
+        onTake={(reportId, command) => executeFeedbackCommand(() => api.takeFeedback(reportId, command))}
+      />
+    )
+  }
 
   if (view === 'mail-policy') {
     return (
@@ -125,6 +164,7 @@ export default function App() {
       data={state.data}
       isRefreshing={isRefreshing}
       onLogout={() => void logout()}
+      onOpenFeedback={() => setView('feedback')}
       onOpenMailPolicy={() => setView('mail-policy')}
       onPageChange={(page) => void changePage(page)}
       onRefresh={() => void refresh()}

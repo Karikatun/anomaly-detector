@@ -5,10 +5,11 @@ import { secureHeaders } from 'hono/secure-headers'
 import type { DbClient } from './db'
 import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
-import { createApiBodyLimit, createAuthSecurity } from './http/security'
+import { clientAddress, createApiBodyLimit, createAuthSecurity } from './http/security'
 import { createPrismaRequestBudget } from './security/request-budget'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 import { createAdminModule } from './modules/admin'
+import { createFeedbackModule } from './modules/feedback'
 import { createMailModule, type MailServiceCandidateSource } from './modules/mail'
 import { createProfileModule } from './modules/profile'
 import { createRoomModule } from './modules/room'
@@ -69,10 +70,22 @@ export function createApp({
     db: prisma,
     requireAuth: auth.requireAuth,
   })
+  const feedback = createFeedbackModule({
+    authenticatedMutationBudget: auth.authenticatedMutationBudget,
+    clientAddress: (context) => clientAddress(context, {
+      trustProxy: env.TRUST_PROXY,
+      trustedProxyClientIpHeader: env.TRUSTED_PROXY_CLIENT_IP_HEADER,
+      trustedProxyClientIpPosition: env.TRUSTED_PROXY_CLIENT_IP_POSITION,
+    }),
+    db: prisma,
+    fingerprintKey: env.JWT_SECRET,
+    requireAuth: auth.requireAuth,
+  })
   const admin = createAdminModule({
     adminUserIds: new Set(env.ADMIN_USER_IDS),
     authenticate: auth.authenticateAccessToken,
     db: prisma,
+    feedback: feedback.operator,
     mailPolicy: mail.operatorPolicy,
     securityEvents,
   })
@@ -141,6 +154,7 @@ export function createApp({
   })
 
   app.route('/api/auth', auth.routes)
+  app.route('/api/feedback', feedback.routes)
   app.route('/api/operations', admin.routes)
   app.route('/api/profile', profile.routes)
   app.route('/api/rooms', rooms.routes)

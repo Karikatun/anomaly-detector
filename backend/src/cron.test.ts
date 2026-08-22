@@ -14,13 +14,14 @@ describe('runCronTask', () => {
     await expect(runCronTask('missing', runtime)).rejects.toThrow('Unknown cron task')
   })
 
-  test('deletes expired auth data and waiting rooms older than 24 hours', async () => {
+  test('deletes expired auth data, feedback and waiting rooms', async () => {
     const calls: unknown[] = []
     const abuseCalls: unknown[] = []
     const oauthCalls: unknown[] = []
     const realtimeCalls: unknown[] = []
     const roomCalls: unknown[] = []
     const mailOutboxCalls: unknown[] = []
+    const feedbackCalls: unknown[] = []
     const cleanupRuntime = {
       env: {
         MAIL_OUTBOX_RETENTION_DAYS: 30,
@@ -28,6 +29,12 @@ describe('runCronTask', () => {
         SESSION_RETENTION_DAYS: 7,
       },
       prisma: {
+        feedbackReport: {
+          deleteMany: async (input: unknown) => {
+            feedbackCalls.push(input)
+            return { count: 8 }
+          },
+        },
         authAbuseBucket: {
           deleteMany: async (input: unknown) => {
             abuseCalls.push(input)
@@ -92,6 +99,19 @@ describe('runCronTask', () => {
         state: { in: ['smtp_accepted', 'terminal_failure'] },
       },
     }])
+    expect(feedbackCalls).toEqual([{
+      where: {
+        OR: [
+          {
+            createdAt: { lte: new Date('2025-10-10T12:00:00.000Z') },
+            status: { in: ['new', 'in_review'] },
+          },
+          { resolvedAt: { lte: new Date('2026-03-09T12:00:00.000Z') } },
+          { rejectedAt: { lte: new Date('2026-03-09T12:00:00.000Z') } },
+          { transferredAt: { lte: new Date('2026-03-09T12:00:00.000Z') } },
+        ],
+      },
+    }])
     expect(calls[0]).toMatchObject({
       where: {
         OR: [
@@ -106,5 +126,6 @@ describe('runCronTask', () => {
       runCronTask('auth:sessions:cleanup', cleanupRuntime, now),
     ).resolves.toBeUndefined()
     expect(roomCalls).toHaveLength(2)
+    expect(feedbackCalls).toHaveLength(2)
   })
 })

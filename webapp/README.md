@@ -44,6 +44,7 @@ Create `webapp/.env` when needed:
 ```bash
 VITE_API_URL=http://localhost:3000
 # VITE_OAUTH_API_URL=https://api.example.com
+# VITE_BUILD_SHA=<exact-40-character-release-sha>
 ```
 
 `VITE_API_URL` is build-time config for ordinary API requests.
@@ -52,6 +53,11 @@ development may omit it and use the `VITE_API_URL` fallback, but production
 builds must set it explicitly even when both values use the same public API
 origin. If either value changes, rebuild and redeploy the static site so the
 built bundle stops using the old URL.
+
+`VITE_BUILD_SHA` is optional in local development and required for a production
+release. It must contain the exact 40-character commit SHA. The Feedback Report
+form includes it only as bounded technical context; an invalid or missing value
+is sent as `null`, never replaced with a branch, short SHA or mutable tag.
 
 ## Deployment
 

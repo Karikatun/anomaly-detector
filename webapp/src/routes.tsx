@@ -32,6 +32,12 @@ const profileRoute = createRoute({
   component: lazyRouteComponent(() => import('./features/profile/public/profile'), 'ProfileRoute'),
 })
 
+const feedbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/feedback',
+  component: lazyRouteComponent(() => import('./features/feedback/public/feedback'), 'FeedbackRoute'),
+})
+
 const recoveryCodeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/recover/code',
@@ -104,6 +110,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   appRoute,
   profileRoute,
+  feedbackRoute,
   recoveryCodeRoute,
   passwordRecoveryRoute,
   roomsRoute,

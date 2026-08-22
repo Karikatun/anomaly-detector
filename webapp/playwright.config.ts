@@ -77,6 +77,7 @@ export default defineConfig({
         ...process.env,
         VITE_API_URL: backendUrl,
         VITE_AGENTATION_ENABLED: process.env.UX_AUDIT_DIR ? 'true' : 'false',
+        VITE_BUILD_SHA: process.env.VITE_BUILD_SHA ?? 'e'.repeat(40),
       }),
       url: frontendUrl,
       reuseExistingServer: false,

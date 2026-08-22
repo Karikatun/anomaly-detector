@@ -3,12 +3,28 @@ import {
   apiErrorSchema,
   cookieAuthResponseSchema,
   cookieRefreshResponseSchema,
+  feedbackDeleteContactCommandSchema,
+  feedbackOperatorCommandResponseSchema,
+  feedbackQueueQuerySchema,
+  feedbackQueueResponseSchema,
+  feedbackRecordGithubIssueCommandSchema,
+  feedbackRejectCommandSchema,
+  feedbackResolveCommandSchema,
+  feedbackTakeCommandSchema,
   loginRequestSchema,
   mailPolicyImportCommandSchema,
   mailPolicyPublishCommandSchema,
   mailPolicyStatusCommandSchema,
   mailOperationsViewSchema,
   type AdminOverview,
+  type FeedbackDeleteContactCommand,
+  type FeedbackOperatorCommandResponse,
+  type FeedbackQueueQuery,
+  type FeedbackQueueResponse,
+  type FeedbackRecordGithubIssueCommand,
+  type FeedbackRejectCommand,
+  type FeedbackResolveCommand,
+  type FeedbackTakeCommand,
   type LoginRequest,
   type MailPolicyImportCommand,
   type MailPolicyPublishCommand,
@@ -89,6 +105,55 @@ export class AdminApi {
     return mailOperationsViewSchema.parse(await response.json())
   }
 
+  async getFeedbackQueue(input: FeedbackQueueQuery): Promise<FeedbackQueueResponse> {
+    const query = feedbackQueueQuerySchema.parse(input)
+    const search = new URLSearchParams({
+      page: String(query.page),
+      pageSize: String(query.pageSize),
+      ...(query.category ? { category: query.category } : {}),
+      ...(query.status ? { status: query.status } : {}),
+    })
+    const response = await this.request(`/api/operations/feedback?${search}`, {
+      headers: this.authenticatedHeaders(),
+    })
+    return feedbackQueueResponseSchema.parse(await response.json())
+  }
+
+  takeFeedback(reportId: string, input: FeedbackTakeCommand) {
+    return this.feedbackCommand(
+      `/api/operations/feedback/${reportId}/take`,
+      feedbackTakeCommandSchema.parse(input),
+    )
+  }
+
+  resolveFeedback(reportId: string, input: FeedbackResolveCommand) {
+    return this.feedbackCommand(
+      `/api/operations/feedback/${reportId}/resolve`,
+      feedbackResolveCommandSchema.parse(input),
+    )
+  }
+
+  rejectFeedback(reportId: string, input: FeedbackRejectCommand) {
+    return this.feedbackCommand(
+      `/api/operations/feedback/${reportId}/reject`,
+      feedbackRejectCommandSchema.parse(input),
+    )
+  }
+
+  recordFeedbackGithubIssue(reportId: string, input: FeedbackRecordGithubIssueCommand) {
+    return this.feedbackCommand(
+      `/api/operations/feedback/${reportId}/github-issue`,
+      feedbackRecordGithubIssueCommandSchema.parse(input),
+    )
+  }
+
+  deleteFeedbackContact(reportId: string, input: FeedbackDeleteContactCommand) {
+    return this.feedbackCommand(
+      `/api/operations/feedback/${reportId}/contact/delete`,
+      feedbackDeleteContactCommandSchema.parse(input),
+    )
+  }
+
   async importMailPolicy(input: MailPolicyImportCommand): Promise<MailOperationsView> {
     return this.mailPolicyCommand('/api/operations/mail-policy/import', mailPolicyImportCommandSchema.parse(input))
   }
@@ -108,6 +173,18 @@ export class AdminApi {
       method: 'POST',
     })
     return mailOperationsViewSchema.parse(await response.json())
+  }
+
+  private async feedbackCommand(
+    path: string,
+    body: unknown,
+  ): Promise<FeedbackOperatorCommandResponse> {
+    const response = await this.request(path, {
+      body,
+      headers: this.authenticatedHeaders(),
+      method: 'POST',
+    })
+    return feedbackOperatorCommandResponseSchema.parse(await response.json())
   }
 
   private authenticatedHeaders() {
