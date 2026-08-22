@@ -96,6 +96,10 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 - `POST /api/auth/account-protection/recovery-email/resend`
 - `POST /api/auth/account-protection/recovery-email/confirm`
 - `POST /api/auth/account-protection/recovery-email/cancel`
+- `POST /api/auth/account-protection/recovery-email/replacement/start`
+- `POST /api/auth/account-protection/recovery-email/replacement/resend`
+- `POST /api/auth/account-protection/recovery-email/replacement/confirm`
+- `POST /api/auth/account-protection/recovery-email/replacement/cancel`
 - `POST /api/auth/logout`
 - `POST /api/auth/token/register`
 - `POST /api/auth/token/login`
@@ -107,11 +111,11 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 
 The remaining approved but not yet implemented Public MVP extensions are specified in
 ADRs 0005–0016 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). They add
-Recovery Email replacement, user-held Recovery Code, password reset,
-consent-scoped funnel analytics and Feedback Report intake. Do not add env keys
-or advertise endpoints in this README until their implementation and contracts
-exist; when they do, document every new key here, in `.env.example`, the Yandex
-runbook and production setup without exposing values.
+user-held Recovery Code, password reset, consent-scoped funnel analytics and
+Feedback Report intake. Do not add env keys or advertise endpoints in this
+README until their implementation and contracts exist; when they do, document
+every new key here, in `.env.example`, the Yandex runbook and production setup
+without exposing values.
 
 `GET /api/auth/account-protection` exposes only the current account's bounded
 protection state. A Yandex-managed address is masked by the server; conflict and
@@ -131,6 +135,17 @@ created may cancel it; cancellation revokes newer sessions. The API returns only
 the masked address and bounded state. The full provider value, canonical key,
 HMAC code derivative and HMAC abuse-budget keys remain private persistence
 fields. Yandex-managed accounts cannot enter this password flow.
+
+An active Recovery Email is replaced only after the owner re-enters the current
+password and independently confirms 15-minute codes sent to the old and new
+masked addresses. Each factor has its own five-attempt counter and resend
+identity. The old binding remains authoritative until one PostgreSQL transaction
+verifies both factors, rechecks the current Approved Mail Service policy and
+uniqueness, updates the binding, revokes every other session, clears outstanding
+Recovery Email challenges and queues a security notification. `deprecated`
+services remain valid for delivery to the old address but cannot become the new
+binding; `blocked` services fail closed. Only the initiating session can manage
+or abandon a pending replacement, and no support/operator override exists.
 
 The `mail` context now exposes a narrow internal requester for exactly three
 templates: Account Email confirmation, password recovery and security

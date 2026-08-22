@@ -18,6 +18,7 @@ const transactionalMailRequestSchema = z.discriminatedUnion('kind', [
     addressRole: z.enum(['account', 'recovery']).optional(),
     kind: z.literal('account_email_confirmation'),
     expiresAt: z.date(),
+    recoveryPurpose: z.enum(['replacement_new', 'replacement_old']).optional(),
   }).strict(),
   messageBaseSchema.extend({
     kind: z.literal('password_recovery'),
@@ -39,6 +40,7 @@ export type TransactionalMailRequest =
         addressRole?: 'account' | 'recovery'
         expiresAt: Date
         kind: 'account_email_confirmation'
+        recoveryPurpose?: 'replacement_new' | 'replacement_old'
       }
     }
   | {
@@ -148,6 +150,7 @@ function toStoredTemplate(
       ...(parsed.addressRole ? { addressRole: parsed.addressRole } : {}),
       expiresAt: parsed.expiresAt.toISOString(),
       kind: parsed.kind,
+      ...(parsed.recoveryPurpose ? { recoveryPurpose: parsed.recoveryPurpose } : {}),
     }
   }
   if (parsed.kind === 'password_recovery') {

@@ -37,6 +37,10 @@ const defaultAuthRepository: AuthRepository = {
   confirmRecoveryEmail: unconfiguredRepositoryMethod('confirmRecoveryEmail'),
   resendRecoveryEmail: unconfiguredRepositoryMethod('resendRecoveryEmail'),
   startRecoveryEmail: unconfiguredRepositoryMethod('startRecoveryEmail'),
+  confirmRecoveryEmailReplacement: unconfiguredRepositoryMethod('confirmRecoveryEmailReplacement'),
+  cancelRecoveryEmailReplacement: unconfiguredRepositoryMethod('cancelRecoveryEmailReplacement'),
+  resendRecoveryEmailReplacement: unconfiguredRepositoryMethod('resendRecoveryEmailReplacement'),
+  startRecoveryEmailReplacement: unconfiguredRepositoryMethod('startRecoveryEmailReplacement'),
 }
 
 const createAuthRepository = (

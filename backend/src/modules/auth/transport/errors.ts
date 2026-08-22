@@ -19,6 +19,9 @@ export function toAuthAppError(error: unknown) {
   if (error.kind === 'recovery_cancellation_forbidden') {
     return new AppError(403, 'FORBIDDEN', error.message, undefined, error.kind)
   }
+  if (error.kind === 'recovery_replacement_forbidden') {
+    return new AppError(403, 'FORBIDDEN', error.message, undefined, error.kind)
+  }
   if (error.kind === 'recovery_email_limited') {
     return new AppError(429, 'RATE_LIMITED', error.message, undefined, error.kind)
   }

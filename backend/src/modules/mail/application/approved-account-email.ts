@@ -6,6 +6,41 @@ export type ApprovedAccountEmail = {
   providerValue: string
 }
 
+export function accountEmailDomain(value: string) {
+  return parseEmailAddress(value)?.domain ?? null
+}
+
+export function canonicalizeAccountEmailWithDecision(
+  value: string,
+  decision: MailPolicyDecision,
+): ApprovedAccountEmail | null {
+  const parsed = parseEmailAddress(value)
+  if (!parsed) return null
+
+  const canonicalization = decision.canonicalization ?? {
+    ignoreDots: false,
+    localPartCaseInsensitive: false,
+    stripPlusTag: false,
+  }
+
+  let canonicalLocalPart = parsed.localPart
+  if (canonicalization.stripPlusTag) {
+    canonicalLocalPart = canonicalLocalPart.split('+', 1)[0] ?? ''
+  }
+  if (canonicalization.ignoreDots) {
+    canonicalLocalPart = canonicalLocalPart.replaceAll('.', '')
+  }
+  if (canonicalization.localPartCaseInsensitive) {
+    canonicalLocalPart = canonicalLocalPart.toLowerCase()
+  }
+  if (!isValidLocalPart(canonicalLocalPart)) return null
+
+  return {
+    canonicalKey: `${canonicalLocalPart}@${parsed.domain}`,
+    providerValue: `${parsed.localPart}@${parsed.domain}`,
+  }
+}
+
 export function createAccountEmailCanonicalizer(policy: {
   evaluate(emailDomain: string): Promise<MailPolicyDecision>
 }) {
@@ -34,30 +69,12 @@ async function canonicalizeWithPolicy(
   if (!parsed) return null
 
   const decision = await policy.evaluate(parsed.domain)
-  const canonicalization = decision.canonicalization ?? {
-    ignoreDots: false,
-    localPartCaseInsensitive: false,
-    stripPlusTag: false,
-  }
-
-  let canonicalLocalPart = parsed.localPart
-  if (canonicalization.stripPlusTag) {
-    canonicalLocalPart = canonicalLocalPart.split('+', 1)[0] ?? ''
-  }
-  if (canonicalization.ignoreDots) {
-    canonicalLocalPart = canonicalLocalPart.replaceAll('.', '')
-  }
-  if (canonicalization.localPartCaseInsensitive) {
-    canonicalLocalPart = canonicalLocalPart.toLowerCase()
-  }
-  if (!isValidLocalPart(canonicalLocalPart)) return null
+  const email = canonicalizeAccountEmailWithDecision(value, decision)
+  if (!email) return null
 
   return {
     decision,
-    email: {
-      canonicalKey: `${canonicalLocalPart}@${parsed.domain}`,
-      providerValue: `${parsed.localPart}@${parsed.domain}`,
-    },
+    email,
   }
 }
 

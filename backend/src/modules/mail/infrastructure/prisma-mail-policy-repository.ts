@@ -9,8 +9,8 @@ import type {
   MailPolicyRepository,
   StoredMailPolicyCommand,
 } from '../application/ports'
+import { lockMailPolicyTransaction } from './mail-policy-lock'
 
-const MAIL_POLICY_ADVISORY_LOCK = 4_919_726_117n
 const SUSPICIOUS_REMOVAL_RATIO = 0.3
 const MIN_SUSPICIOUS_REMOVALS = 5
 const MAX_POLICY_ENTRIES = 100
@@ -337,7 +337,7 @@ async function withPolicyLock(
   ) => Promise<MailPolicyCommitResult>,
 ) {
   return db.$transaction<MailPolicyCommitResult>(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(${MAIL_POLICY_ADVISORY_LOCK})::text AS lock_result`
+    await lockMailPolicyTransaction(tx)
     const existing = await tx.mailPolicyCommand.findUnique({ where: { commandId } })
     if (existing) return { kind: 'command_exists', ...toStoredCommand(existing) }
     const currentPolicy = await readCurrentPolicy(tx)

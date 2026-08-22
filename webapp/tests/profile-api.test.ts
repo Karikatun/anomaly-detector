@@ -84,3 +84,64 @@ test('profile API sends bounded first Recovery Email commands', async () => {
     },
   ])
 })
+
+test('profile API sends one factor at a time for Recovery Email replacement', async () => {
+  const requests: Array<{ body?: unknown; method?: string; path: string }> = []
+  const api = new ProfileApi({
+    request: async (path, schema, options) => {
+      requests.push({ path, method: options?.method, body: options?.body })
+      const replacementResponse = path.endsWith('/cancel')
+        ? { accountProtection: { maskedAccountEmail: 'o***@mail.ru', state: 'password_active' } }
+        : {
+            accountProtection: {
+              canManage: true,
+              newAddress: {
+                codeExpiresAt: '2030-08-22T15:15:00.000Z',
+                maskedAccountEmail: 'n***@mail.ru',
+                status: 'pending',
+              },
+              oldAddress: {
+                codeExpiresAt: '2030-08-22T15:15:00.000Z',
+                maskedAccountEmail: 'o***@mail.ru',
+                status: 'pending',
+              },
+              state: 'password_replacing',
+            },
+            replacement: {
+              currentSession: 'active',
+              otherSessions: 'unchanged',
+              status: 'pending',
+            },
+          }
+      return schema.parse(replacementResponse)
+    },
+  } as AuthenticatedTransport)
+
+  await api.startRecoveryEmailReplacement({ email: 'new@mail.ru', password: 'password123' })
+  await api.resendRecoveryEmailReplacement({ factor: 'old' })
+  await api.confirmRecoveryEmailReplacement({ code: '123456', factor: 'new' })
+  await api.cancelRecoveryEmailReplacement()
+
+  expect(requests).toEqual([
+    {
+      body: { email: 'new@mail.ru', password: 'password123' },
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-email/replacement/start',
+    },
+    {
+      body: { factor: 'old' },
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-email/replacement/resend',
+    },
+    {
+      body: { code: '123456', factor: 'new' },
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-email/replacement/confirm',
+    },
+    {
+      body: {},
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-email/replacement/cancel',
+    },
+  ])
+})

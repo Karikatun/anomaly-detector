@@ -354,6 +354,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
         addressRole: 'recovery',
         expiresAt: scenarioTime(15 * 60_000),
         kind: 'account_email_confirmation',
+        recoveryPurpose: 'replacement_old',
       },
     })
     await enqueuer.enqueue({
@@ -408,7 +409,10 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       workerId: 'worker-b',
     })).resolves.toMatchObject({ accepted: 2 })
     expect(providerMessages).toHaveLength(2)
-    expect(providerMessages[0].text).toContain('Код подтверждения почты восстановления')
+    expect(providerMessages[0].subject).toBe(
+      'Подтверждение старой почты восстановления — Anomaly Detector',
+    )
+    expect(providerMessages[0].text).toContain('Код для старой почты восстановления')
   })
 
   test('suppresses small service groups from the operator delivery projection', async () => {

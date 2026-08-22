@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createPrisma } from '../../../db'
 import { MailPolicyService } from '../application/mail-policy-service'
 import { MailPolicyFailure } from '../domain/errors'
+import { evaluateTransactionalAccountEmail } from './prisma-account-email-policy'
 import { createPrismaMailPolicyRepository } from './prisma-mail-policy-repository'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -192,6 +193,93 @@ maybeDescribe('Prisma mail policy repository', () => {
     expect(await prisma.mailPolicyAuditEvent.count()).toBe(4)
   })
 
+  test('holds the published policy stable until an owning account transaction commits', async () => {
+    const imported = await prisma.mailRegistryImport.create({
+      data: {
+        actorId,
+        addedDomains: ['mail.example.ru'],
+        checksum: '7'.repeat(64),
+        outcome: 'succeeded',
+        removedDomains: [],
+        sourceDate: '2026-08-22',
+        sourceUrl: 'https://rkn.gov.ru/opendata/7705846236-InformationDistributor/data.xml',
+        unchangedCount: 0,
+        candidates: {
+          create: {
+            evidence: 'service_description_mentions_mail',
+            registryEntryId: 'policy-lock-PP',
+            serviceDomain: 'mail.example.ru',
+          },
+        },
+      },
+      include: { candidates: true },
+    })
+    await prisma.mailPolicyVersion.create({
+      data: {
+        publishedBy: actorId,
+        version: 1,
+        entries: {
+          create: {
+            emailDomain: 'example.ru',
+            ignoreDots: false,
+            localPartCaseInsensitive: true,
+            sourceCandidateId: imported.candidates[0]!.id,
+            state: 'approved',
+            stripPlusTag: false,
+          },
+        },
+      },
+    })
+
+    let releaseOwnerTransaction!: () => void
+    const ownerTransactionReleased = new Promise<void>((resolve) => {
+      releaseOwnerTransaction = resolve
+    })
+    let ownerPolicyRead!: () => void
+    const ownerPolicyReadPromise = new Promise<void>((resolve) => {
+      ownerPolicyRead = resolve
+    })
+    const ownerTransaction = prisma.$transaction(async (transaction) => {
+      const decision = await evaluateTransactionalAccountEmail(
+        transaction,
+        'Player@example.ru',
+      )
+      ownerPolicyRead()
+      await ownerTransactionReleased
+      return decision
+    })
+    await ownerPolicyReadPromise
+
+    const statusChange = repository.changeStatus({
+      actorId,
+      commandId: '019f8099-7e26-7760-ad08-66d1d66b2750',
+      emailDomain: 'example.ru',
+      expectedVersion: 1,
+      fingerprint: '8'.repeat(64),
+      reason: 'Новые привязки приостановлены',
+      state: 'deprecated',
+    })
+    try {
+      await waitForAdvisoryLockWaiter(prisma)
+      expect(await prisma.mailPolicyVersion.findFirst({
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      })).toEqual({ version: 1 })
+    } finally {
+      releaseOwnerTransaction()
+    }
+
+    await expect(ownerTransaction).resolves.toMatchObject({
+      acceptsNewAddress: true,
+      canonicalKey: 'player@example.ru',
+      policyVersion: 1,
+    })
+    await expect(statusChange).resolves.toEqual({
+      kind: 'committed',
+      receipt: { kind: 'status_changed', version: 2 },
+    })
+  })
+
   test('records failed and suspicious imports while preserving the last-known-good policy', async () => {
     const baselineCandidates = Array.from({ length: 10 }, (_, index) => ({
       evidence: 'service_description_mentions_mail' as const,
@@ -322,3 +410,16 @@ maybeDescribe('Prisma mail policy repository', () => {
     expect((await repository.readView(new Date('2026-08-22T12:00:00.000Z'))).currentVersion).toBe(1)
   })
 })
+
+async function waitForAdvisoryLockWaiter(prisma: ReturnType<typeof createPrisma>) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [result] = await prisma.$queryRaw<Array<{ waiting: bigint }>>`
+      SELECT count(*)::bigint AS waiting
+      FROM pg_locks
+      WHERE locktype = 'advisory' AND NOT granted
+    `
+    if ((result?.waiting ?? 0n) > 0n) return
+    await Bun.sleep(10)
+  }
+  throw new Error('Expected mail-policy publication to wait for the owning transaction')
+}

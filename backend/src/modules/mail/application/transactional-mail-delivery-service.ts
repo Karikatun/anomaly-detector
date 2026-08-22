@@ -19,6 +19,7 @@ const storedTemplateSchema = z.discriminatedUnion('kind', [
     addressRole: z.enum(['account', 'recovery']).optional(),
     expiresAt: z.string().datetime(),
     kind: z.literal('account_email_confirmation'),
+    recoveryPurpose: z.enum(['replacement_new', 'replacement_old']).optional(),
   }).strict(),
   z.object({
     expiresAt: z.string().datetime(),
@@ -162,12 +163,21 @@ function renderTemplate(
 ) {
   if (template.kind === 'account_email_confirmation') {
     const code = deriveAccountEmailConfirmationCode(confirmationCodeSecret, messageId)
+    const replacementSide = template.recoveryPurpose === 'replacement_old'
+      ? 'старой'
+      : template.recoveryPurpose === 'replacement_new'
+        ? 'новой'
+        : null
     return {
-      subject: 'Подтверждение почты — Anomaly Detector',
+      subject: replacementSide
+        ? `Подтверждение ${replacementSide} почты восстановления — Anomaly Detector`
+        : 'Подтверждение почты — Anomaly Detector',
       text: [
-        template.addressRole === 'recovery'
-          ? 'Код подтверждения почты восстановления:'
-          : 'Код подтверждения почты аккаунта:',
+        replacementSide
+          ? `Код для ${replacementSide} почты восстановления:`
+          : template.addressRole === 'recovery'
+            ? 'Код подтверждения почты восстановления:'
+            : 'Код подтверждения почты аккаунта:',
         code,
         `Код действует до ${template.expiresAt}.`,
         'Если вы не запрашивали код, просто проигнорируйте письмо.',

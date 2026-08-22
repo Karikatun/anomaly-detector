@@ -120,6 +120,16 @@ export type AuthRepository = {
       providerValue: string
       requestedAt: Date
     } | null
+    recoveryEmailReplacement?: {
+      newCanonicalKey: string
+      newConfirmedAt: Date | null
+      newExpiresAt: Date
+      newProviderValue: string
+      oldConfirmedAt: Date | null
+      oldExpiresAt: Date
+      oldProviderValue: string
+      requestingSessionId: string
+    } | null
     hasYandexIdentity: boolean
   } | null>
   startRecoveryEmail(input: {
@@ -146,6 +156,36 @@ export type AuthRepository = {
     userId: string
   }): Promise<'already_confirmed' | 'confirmed' | 'invalid'>
   cancelRecoveryEmail(input: {
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<'cancelled' | 'forbidden' | 'unavailable'>
+  startRecoveryEmailReplacement(input: {
+    expectedPasswordHash: string
+    expiresAt: Date
+    ipAddress?: string
+    newCanonicalKey: string
+    newProviderValue: string
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<void>
+  resendRecoveryEmailReplacement(input: {
+    expiresAt: Date
+    factor: 'new' | 'old'
+    ipAddress?: string
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<void>
+  confirmRecoveryEmailReplacement(input: {
+    code: string
+    factor: 'new' | 'old'
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<'completed' | 'confirmed' | 'invalid'>
+  cancelRecoveryEmailReplacement(input: {
     now: Date
     sessionId: string
     userId: string

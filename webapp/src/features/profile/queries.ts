@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ConfirmRecoveryEmailRequest, StartRecoveryEmailRequest } from '@anomaly-detector/contracts'
+import type {
+  ConfirmRecoveryEmailReplacementRequest,
+  ConfirmRecoveryEmailRequest,
+  ResendRecoveryEmailReplacementRequest,
+  StartRecoveryEmailReplacementRequest,
+  StartRecoveryEmailRequest,
+} from '@anomaly-detector/contracts'
 
 import { sessionQueryKeys } from '@/platform/query'
 
@@ -56,6 +62,62 @@ export function useCancelRecoveryEmailMutation(api: ProfileApi) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api.cancelRecoveryEmail(),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useStartRecoveryEmailReplacementMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: StartRecoveryEmailReplacementRequest) =>
+      api.startRecoveryEmailReplacement(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
+  })
+}
+
+export function useResendRecoveryEmailReplacementMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ResendRecoveryEmailReplacementRequest) =>
+      api.resendRecoveryEmailReplacement(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
+  })
+}
+
+export function useConfirmRecoveryEmailReplacementMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ConfirmRecoveryEmailReplacementRequest) =>
+      api.confirmRecoveryEmailReplacement(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
+  })
+}
+
+export function useCancelRecoveryEmailReplacementMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.cancelRecoveryEmailReplacement(),
     onError: () => queryClient.invalidateQueries({
       queryKey: profileQueryKeys.accountProtection(),
     }),
