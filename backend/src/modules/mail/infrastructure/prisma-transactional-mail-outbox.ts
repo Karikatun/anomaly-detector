@@ -8,6 +8,45 @@ import type {
 } from '../application/transactional-mail-ports'
 
 type TransactionalMailWriterDb = Pick<Prisma.TransactionClient, 'mailOutboxMessage'>
+type TransactionalMailCancellationDb = Pick<
+  Prisma.TransactionClient,
+  'mailDeliveryAttempt' | 'mailOutboxMessage'
+>
+
+export async function cancelQueuedTransactionalMail(
+  db: TransactionalMailCancellationDb,
+  input: { messageId: string; now: Date },
+) {
+  const cancelled = await db.mailOutboxMessage.updateMany({
+    where: {
+      messageId: input.messageId,
+      state: 'queued',
+    },
+    data: {
+      completedAt: input.now,
+      lastFailureCode: 'owner_operation_cancelled',
+      leaseExpiresAt: null,
+      leaseOwner: null,
+      recipient: '[redacted]',
+      state: 'terminal_failure',
+      templatePayload: {},
+    },
+  })
+  if (cancelled.count === 0) return false
+  const message = await db.mailOutboxMessage.findUniqueOrThrow({
+    where: { messageId: input.messageId },
+    select: { id: true },
+  })
+  await db.mailDeliveryAttempt.create({
+    data: {
+      attemptedAt: input.now,
+      failureCode: 'owner_operation_cancelled',
+      outcome: 'terminal_failure',
+      outboxId: message.id,
+    },
+  })
+  return true
+}
 
 export function createPrismaTransactionalMailWriter(
   db: TransactionalMailWriterDb,
@@ -306,11 +345,11 @@ async function releaseBlocked(
 }
 
 async function ensureAndLockControl(tx: Prisma.TransactionClient, now: Date) {
-  await tx.mailDeliveryControl.upsert({
-    where: { id: DELIVERY_CONTROL_ID },
-    create: { id: DELIVERY_CONTROL_ID, windowStartedAt: now },
-    update: {},
-  })
+  await tx.$executeRaw`
+    INSERT INTO mail_delivery_controls (id, window_started_at, updated_at)
+    VALUES (${DELIVERY_CONTROL_ID}, ${now}, ${now})
+    ON CONFLICT (id) DO NOTHING
+  `
   await tx.$queryRaw`
     SELECT id
     FROM mail_delivery_controls

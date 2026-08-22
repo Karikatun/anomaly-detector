@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { deriveAccountEmailConfirmationCode } from './account-email-confirmation-code'
+
 import type {
   ClaimedTransactionalMail,
   MailDeliveryPolicy,
@@ -14,7 +16,7 @@ const workerIdSchema = z.string().min(1).max(64).regex(/^[A-Za-z0-9._:-]+$/)
 const failureCodeSchema = z.string().min(1).max(64).regex(/^[a-z0-9_]+$/)
 const storedTemplateSchema = z.discriminatedUnion('kind', [
   z.object({
-    code: z.string().regex(/^\d{6}$/),
+    addressRole: z.enum(['account', 'recovery']).optional(),
     expiresAt: z.string().datetime(),
     kind: z.literal('account_email_confirmation'),
   }).strict(),
@@ -32,6 +34,7 @@ const storedTemplateSchema = z.discriminatedUnion('kind', [
 
 export class TransactionalMailDeliveryService {
   constructor(private readonly dependencies: {
+    confirmationCodeSecret: string
     delivery: TransactionalMailDelivery
     policy: MailDeliveryPolicy
     repository: MailOutboxRepository
@@ -61,7 +64,7 @@ export class TransactionalMailDeliveryService {
       let rendered: RenderedTransactionalMail
       let requiresNewAddress: boolean
       try {
-        const prepared = prepareMessage(claim.message)
+        const prepared = prepareMessage(claim.message, this.dependencies.confirmationCodeSecret)
         rendered = prepared.rendered
         requiresNewAddress = prepared.requiresNewAddress
       } catch {
@@ -137,9 +140,9 @@ export class TransactionalMailDeliveryService {
   }
 }
 
-function prepareMessage(message: ClaimedTransactionalMail) {
+function prepareMessage(message: ClaimedTransactionalMail, confirmationCodeSecret: string) {
   const template = storedTemplateSchema.parse(message.template)
-  const rendered = renderTemplate(template)
+  const rendered = renderTemplate(template, message.messageId, confirmationCodeSecret)
   return {
     rendered: {
       createdAt: message.createdAt,
@@ -147,17 +150,25 @@ function prepareMessage(message: ClaimedTransactionalMail) {
       recipient: message.recipient,
       ...rendered,
     },
-    requiresNewAddress: template.kind === 'account_email_confirmation',
+    requiresNewAddress: template.kind === 'account_email_confirmation'
+      && template.addressRole !== 'recovery',
   }
 }
 
-function renderTemplate(template: StoredTransactionalMailTemplate) {
+function renderTemplate(
+  template: StoredTransactionalMailTemplate,
+  messageId: string,
+  confirmationCodeSecret: string,
+) {
   if (template.kind === 'account_email_confirmation') {
+    const code = deriveAccountEmailConfirmationCode(confirmationCodeSecret, messageId)
     return {
       subject: 'Подтверждение почты — Anomaly Detector',
       text: [
-        'Код подтверждения Account Email:',
-        template.code,
+        template.addressRole === 'recovery'
+          ? 'Код подтверждения почты восстановления:'
+          : 'Код подтверждения почты аккаунта:',
+        code,
         `Код действует до ${template.expiresAt}.`,
         'Если вы не запрашивали код, просто проигнорируйте письмо.',
       ].join('\n\n'),

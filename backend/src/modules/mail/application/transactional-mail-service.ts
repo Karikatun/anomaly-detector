@@ -15,8 +15,8 @@ const messageBaseSchema = z.object({
 
 const transactionalMailRequestSchema = z.discriminatedUnion('kind', [
   messageBaseSchema.extend({
+    addressRole: z.enum(['account', 'recovery']).optional(),
     kind: z.literal('account_email_confirmation'),
-    code: z.string().regex(/^\d{6}$/),
     expiresAt: z.date(),
   }).strict(),
   messageBaseSchema.extend({
@@ -36,7 +36,7 @@ export type TransactionalMailRequest =
       messageId: string
       recipient: string
       template: {
-        code: string
+        addressRole?: 'account' | 'recovery'
         expiresAt: Date
         kind: 'account_email_confirmation'
       }
@@ -145,7 +145,7 @@ function toStoredTemplate(
 ): StoredTransactionalMailTemplate {
   if (parsed.kind === 'account_email_confirmation') {
     return {
-      code: parsed.code,
+      ...(parsed.addressRole ? { addressRole: parsed.addressRole } : {}),
       expiresAt: parsed.expiresAt.toISOString(),
       kind: parsed.kind,
     }

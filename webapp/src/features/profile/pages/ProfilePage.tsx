@@ -8,9 +8,13 @@ import {
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 
-import { displayNameMaxLength, displayNameMinLength } from '@anomaly-detector/contracts'
+import {
+  displayNameMaxLength,
+  displayNameMinLength,
+  type AccountProtection,
+} from '@anomaly-detector/contracts'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -30,7 +34,14 @@ import { ApiRequestError } from '@/platform/api/http-client'
 import { useI18n } from '@/platform/i18n'
 
 import { ProfileApi } from '../api'
-import { useAccountProtectionQuery, useProfileStatisticsQuery } from '../queries'
+import {
+  useAccountProtectionQuery,
+  useCancelRecoveryEmailMutation,
+  useConfirmRecoveryEmailMutation,
+  useProfileStatisticsQuery,
+  useResendRecoveryEmailMutation,
+  useStartRecoveryEmailMutation,
+} from '../queries'
 import styles from './ProfilePage.module.css'
 
 export function ProfilePage() {
@@ -86,7 +97,7 @@ function ProfileContent() {
             />
           </div>
 
-          <AccountProtectionContent protection={accountProtection} />
+          <AccountProtectionContent api={api} protection={accountProtection} />
 
           <StatisticsContent statistics={statistics} />
 
@@ -107,11 +118,31 @@ function ProfileContent() {
 }
 
 function AccountProtectionContent({
+  api,
   protection,
 }: {
+  api: ProfileApi
   protection: ReturnType<typeof useAccountProtectionQuery>
 }) {
   const { t } = useI18n()
+  const startRecoveryEmail = useStartRecoveryEmailMutation(api)
+  const resendRecoveryEmail = useResendRecoveryEmailMutation(api)
+  const confirmRecoveryEmail = useConfirmRecoveryEmailMutation(api)
+  const cancelRecoveryEmail = useCancelRecoveryEmailMutation(api)
+  const [isStartOpen, setIsStartOpen] = useState(false)
+  const [isCodeOpen, setIsCodeOpen] = useState(false)
+  const [isCancelOpen, setIsCancelOpen] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
+  const [startError, setStartError] = useState<string | null>(null)
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null)
+  const sectionRef = useRef<HTMLElement>(null)
+  const startButtonRef = useRef<HTMLButtonElement>(null)
+  const codeButtonRef = useRef<HTMLButtonElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
 
   if (protection.isPending) {
     return (
@@ -146,40 +177,70 @@ function AccountProtectionContent({
   }
 
   const state = protection.data.accountProtection
-  const content = state.state === 'password_unprotected'
-    ? {
-        description: t('profile.protection.passwordDescription'),
-        label: t('profile.protection.password'),
-        note: null,
-        tone: 'neutral',
-        value: null,
-      }
-    : state.state === 'yandex_managed'
-      ? {
-          description: t('profile.protection.yandexManagedDescription'),
-          label: t('profile.protection.yandexManaged'),
-          note: null,
-          tone: 'managed',
-          value: state.maskedAccountEmail,
-        }
-      : state.state === 'yandex_conflict'
-        ? {
-            description: t('profile.protection.yandexConflictDescription'),
-            label: t('profile.protection.yandexConflict'),
-            note: t('profile.protection.yandexContinues'),
-            tone: 'attention',
-            value: null,
-          }
-        : {
-            description: t('profile.protection.yandexUnavailableDescription'),
-            label: t('profile.protection.yandexUnavailable'),
-            note: t('profile.protection.yandexContinues'),
-            tone: 'attention',
-            value: null,
-          }
+  const content = protectionContent(state, t)
+  const canCancel = 'canCancel' in state && state.canCancel
+  const isMutating = startRecoveryEmail.isPending
+    || resendRecoveryEmail.isPending
+    || confirmRecoveryEmail.isPending
+    || cancelRecoveryEmail.isPending
+
+  const submitStart = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setStartError(null)
+    setActionFeedback(null)
+    try {
+      await startRecoveryEmail.mutateAsync({ email, password })
+      setEmail('')
+      setPassword('')
+      setIsStartOpen(false)
+      setCode('')
+      setIsCodeOpen(true)
+    } catch (error) {
+      setStartError(recoveryEmailErrorMessage(error, 'start', t))
+    }
+  }
+
+  const submitCode = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setCodeError(null)
+    setActionFeedback(null)
+    try {
+      await confirmRecoveryEmail.mutateAsync({ code })
+      setCode('')
+      setIsCodeOpen(false)
+    } catch (error) {
+      setCodeError(recoveryEmailErrorMessage(error, 'confirm', t))
+    }
+  }
+
+  const resendCode = async () => {
+    setActionFeedback(null)
+    try {
+      await resendRecoveryEmail.mutateAsync()
+      setActionFeedback(t('profile.protection.resendSuccess'))
+    } catch (error) {
+      setActionFeedback(recoveryEmailErrorMessage(error, 'resend', t))
+    }
+  }
+
+  const cancelProtection = async () => {
+    setCancelError(null)
+    setActionFeedback(null)
+    try {
+      await cancelRecoveryEmail.mutateAsync()
+      setIsCancelOpen(false)
+    } catch (error) {
+      setCancelError(recoveryEmailErrorMessage(error, 'cancel', t))
+    }
+  }
 
   return (
-    <section className={styles.protectionSection} aria-labelledby="profile-protection-title">
+    <section
+      ref={sectionRef}
+      className={styles.protectionSection}
+      aria-labelledby="profile-protection-title"
+      tabIndex={-1}
+    >
       <div className={styles.protectionCopy}>
         <Typography as="h2" id="profile-protection-title" className={styles.protectionTitle}>
           {t('profile.protection.title')}
@@ -188,15 +249,347 @@ function AccountProtectionContent({
         {content.note && (
           <Typography className={styles.protectionNote}>{content.note}</Typography>
         )}
-      </div>
-      <div className={styles.protectionState} data-tone={content.tone}>
-        <Typography className={styles.protectionLabel}>{content.label}</Typography>
-        {content.value && (
-          <Typography className={styles.protectionValue}>{content.value}</Typography>
+        {actionFeedback && (
+          <Typography role="status" className={styles.protectionFeedback}>
+            {actionFeedback}
+          </Typography>
         )}
       </div>
+      <div className={styles.protectionControlColumn}>
+        <div className={styles.protectionState} data-tone={content.tone}>
+          <Typography className={styles.protectionLabel}>{content.label}</Typography>
+          {content.value && (
+            <Typography className={styles.protectionValue}>{content.value}</Typography>
+          )}
+        </div>
+        <div className={styles.protectionActions}>
+          {state.state === 'password_unprotected' && (
+            <Button ref={startButtonRef} type="button" size="sm" onClick={() => setIsStartOpen(true)}>
+              {t('profile.protection.startAction')}
+            </Button>
+          )}
+          {state.state === 'password_pending_code' && (
+            <>
+              <Button ref={codeButtonRef} type="button" size="sm" onClick={() => setIsCodeOpen(true)}>
+                {t('profile.protection.enterCode')}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isMutating}
+                onClick={() => void resendCode()}
+              >
+                {resendRecoveryEmail.isPending
+                  ? t('profile.protection.resending')
+                  : t('profile.protection.resend')}
+              </Button>
+            </>
+          )}
+          {canCancel && (
+            <Button
+              type="button"
+              ref={cancelButtonRef}
+              size="sm"
+              variant="ghost"
+              disabled={isMutating}
+              onClick={() => setIsCancelOpen(true)}
+            >
+              {t('profile.protection.cancelAction')}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Dialog
+        open={isStartOpen}
+        onOpenChange={(open) => {
+          if (startRecoveryEmail.isPending) return
+          setIsStartOpen(open)
+          if (!open) {
+            setEmail('')
+            setPassword('')
+            setStartError(null)
+          }
+        }}
+      >
+        <DialogContent
+          className={styles.protectionDialog}
+          showCloseButton={!startRecoveryEmail.isPending}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            const target = startButtonRef.current ?? codeButtonRef.current ?? sectionRef.current
+            target?.focus()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{t('profile.protection.startTitle')}</DialogTitle>
+            <DialogDescription>{t('profile.protection.startDescription')}</DialogDescription>
+          </DialogHeader>
+          <form className={styles.protectionForm} onSubmit={(event) => void submitStart(event)}>
+            <label className={styles.protectionField} htmlFor="recovery-email">
+              <Typography as="span">{t('profile.protection.emailLabel')}</Typography>
+              <Input
+                autoFocus
+                autoComplete="email"
+                id="recovery-email"
+                maxLength={254}
+                required
+                type="email"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value)
+                  setStartError(null)
+                }}
+              />
+            </label>
+            <label className={styles.protectionField} htmlFor="recovery-password">
+              <Typography as="span">{t('profile.protection.passwordLabel')}</Typography>
+              <Input
+                autoComplete="current-password"
+                id="recovery-password"
+                minLength={8}
+                required
+                type="password"
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value)
+                  setStartError(null)
+                }}
+              />
+            </label>
+            {startError && <Typography role="alert" className={styles.formError}>{startError}</Typography>}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={startRecoveryEmail.isPending}
+                onClick={() => {
+                  setEmail('')
+                  setPassword('')
+                  setIsStartOpen(false)
+                }}
+              >
+                {t('profile.protection.later')}
+              </Button>
+              <Button type="submit" disabled={startRecoveryEmail.isPending}>
+                {startRecoveryEmail.isPending
+                  ? t('profile.protection.startPending')
+                  : t('profile.protection.startSubmit')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isCodeOpen && state.state === 'password_pending_code'}
+        onOpenChange={(open) => {
+          if (confirmRecoveryEmail.isPending) return
+          setIsCodeOpen(open)
+          if (!open) {
+            setCode('')
+            setCodeError(null)
+          }
+        }}
+      >
+        <DialogContent
+          className={styles.protectionDialog}
+          showCloseButton={!confirmRecoveryEmail.isPending}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            const target = codeButtonRef.current ?? cancelButtonRef.current ?? sectionRef.current
+            target?.focus()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{t('profile.protection.codeTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('profile.protection.codeDescription', { email: content.value ?? '' })}
+            </DialogDescription>
+          </DialogHeader>
+          <form className={styles.protectionForm} onSubmit={(event) => void submitCode(event)}>
+            <label className={styles.protectionField} htmlFor="recovery-code">
+              <Typography as="span">{t('profile.protection.codeLabel')}</Typography>
+              <Input
+                autoFocus
+                autoComplete="one-time-code"
+                id="recovery-code"
+                inputMode="numeric"
+                maxLength={6}
+                pattern="[0-9]{6}"
+                required
+                value={code}
+                onChange={(event) => {
+                  setCode(event.target.value.replace(/\D/g, '').slice(0, 6))
+                  setCodeError(null)
+                }}
+              />
+            </label>
+            {codeError && <Typography role="alert" className={styles.formError}>{codeError}</Typography>}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={confirmRecoveryEmail.isPending}
+                onClick={() => {
+                  setCode('')
+                  setIsCodeOpen(false)
+                }}
+              >
+                {t('profile.protection.later')}
+              </Button>
+              <Button type="submit" disabled={confirmRecoveryEmail.isPending || code.length !== 6}>
+                {confirmRecoveryEmail.isPending
+                  ? t('profile.protection.codePending')
+                  : t('profile.protection.codeSubmit')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isCancelOpen && canCancel}
+        onOpenChange={(open) => {
+          if (cancelRecoveryEmail.isPending) return
+          setIsCancelOpen(open)
+          if (!open) setCancelError(null)
+        }}
+      >
+        <DialogContent
+          className={styles.protectionDialog}
+          showCloseButton={!cancelRecoveryEmail.isPending}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            const target = cancelButtonRef.current ?? startButtonRef.current ?? sectionRef.current
+            target?.focus()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{t('profile.protection.cancelTitle')}</DialogTitle>
+            <DialogDescription>{t('profile.protection.cancelDescription')}</DialogDescription>
+          </DialogHeader>
+          {cancelError && <Typography role="alert" className={styles.formError}>{cancelError}</Typography>}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cancelRecoveryEmail.isPending}
+              onClick={() => setIsCancelOpen(false)}
+            >
+              {t('profile.name.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={cancelRecoveryEmail.isPending}
+              onClick={() => void cancelProtection()}
+            >
+              {cancelRecoveryEmail.isPending
+                ? t('profile.protection.cancelling')
+                : t('profile.protection.cancelSubmit')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
+}
+
+function protectionContent(
+  state: AccountProtection,
+  t: ReturnType<typeof useI18n>['t'],
+) {
+  switch (state.state) {
+    case 'password_unprotected':
+      return {
+        description: t('profile.protection.passwordDescription'),
+        label: t('profile.protection.password'),
+        note: t('profile.protection.optional'),
+        tone: 'neutral',
+        value: null,
+      }
+    case 'password_pending_code':
+      return {
+        description: t('profile.protection.pendingDescription'),
+        label: t('profile.protection.pending'),
+        note: t('profile.protection.codeExpires', { date: formatProtectionTime(state.codeExpiresAt) }),
+        tone: 'attention',
+        value: state.maskedAccountEmail,
+      }
+    case 'password_cooling_off':
+      return {
+        description: t('profile.protection.coolingDescription'),
+        label: t('profile.protection.cooling'),
+        note: state.canCancel
+          ? t('profile.protection.activates', { date: formatProtectionTime(state.activatesAt) })
+          : t('profile.protection.cancelFromOlderSession'),
+        tone: 'attention',
+        value: state.maskedAccountEmail,
+      }
+    case 'password_active':
+      return {
+        description: t('profile.protection.activeDescription'),
+        label: t('profile.protection.active'),
+        note: null,
+        tone: 'managed',
+        value: state.maskedAccountEmail,
+      }
+    case 'password_service_blocked':
+      return {
+        description: t('profile.protection.blockedDescription'),
+        label: t('profile.protection.blocked'),
+        note: state.canCancel ? t('profile.protection.blockedCancelable') : null,
+        tone: 'attention',
+        value: state.maskedAccountEmail,
+      }
+    case 'yandex_managed':
+      return {
+        description: t('profile.protection.yandexManagedDescription'),
+        label: t('profile.protection.yandexManaged'),
+        note: null,
+        tone: 'managed',
+        value: state.maskedAccountEmail,
+      }
+    case 'yandex_conflict':
+      return {
+        description: t('profile.protection.yandexConflictDescription'),
+        label: t('profile.protection.yandexConflict'),
+        note: t('profile.protection.yandexContinues'),
+        tone: 'attention',
+        value: null,
+      }
+    case 'yandex_unavailable':
+      return {
+        description: t('profile.protection.yandexUnavailableDescription'),
+        label: t('profile.protection.yandexUnavailable'),
+        note: t('profile.protection.yandexContinues'),
+        tone: 'attention',
+        value: null,
+      }
+  }
+}
+
+function recoveryEmailErrorMessage(
+  error: unknown,
+  operation: 'cancel' | 'confirm' | 'resend' | 'start',
+  t: ReturnType<typeof useI18n>['t'],
+) {
+  if (error instanceof ApiRequestError) {
+    if (operation === 'start' && error.status === 401) {
+      return t('profile.protection.errorPassword')
+    }
+    if (operation === 'confirm' && error.status === 400) {
+      return t('profile.protection.errorCode')
+    }
+    if (operation === 'cancel' && error.status === 403) {
+      return t('profile.protection.errorCancelSession')
+    }
+    if (error.status === 429) return t('profile.protection.errorLimited')
+    if (error.status === 409) return t('profile.protection.errorUnavailable')
+  }
+  return t('profile.protection.errorGeneric')
 }
 
 function DeleteAccountControl({
@@ -512,4 +905,13 @@ function formatRegistrationDate(createdAt: string) {
     month: 'long',
     year: 'numeric',
   }).format(new Date(createdAt)).replace(/\s*г\.$/, '')
+}
+
+function formatProtectionTime(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+  }).format(new Date(value)).replace(/\.$/, '')
 }

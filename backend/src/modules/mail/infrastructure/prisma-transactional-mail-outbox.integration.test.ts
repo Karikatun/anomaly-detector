@@ -6,6 +6,7 @@ import { TransactionalMailDeliveryService } from '../application/transactional-m
 import { TransactionalMailService } from '../application/transactional-mail-service'
 import type { RenderedTransactionalMail } from '../application/transactional-mail-ports'
 import {
+  cancelQueuedTransactionalMail,
   createPrismaMailOutboxRepository,
   createPrismaTransactionalMailWriter,
 } from './prisma-transactional-mail-outbox'
@@ -14,6 +15,7 @@ import { cleanupTerminalMailOutbox } from './prisma-mail-outbox-cleanup'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const fingerprintKey = 'integration-mail-fingerprint-key-0001'
+const confirmationCodeSecret = 'integration-mail-confirmation-key-0001'
 const maybeDescribe = databaseUrl ? describe : describe.skip
 const scenarioStart = new Date(Date.now() + 24 * 60 * 60 * 1_000)
 const scenarioTime = (offsetMs = 0) => new Date(scenarioStart.getTime() + offsetMs)
@@ -30,7 +32,6 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     messageId: '019f8099-7e26-7760-ad08-66d1d66b2810',
     recipient: 'researcher@yandex.ru',
     template: {
-      code: '482193',
       expiresAt: scenarioTime(15 * 60_000),
       kind: 'account_email_confirmation' as const,
     },
@@ -72,6 +73,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     const sent: RenderedTransactionalMail[] = []
     let attempts = 0
     const dependencies = {
+      confirmationCodeSecret,
       delivery: {
         send: async (message: RenderedTransactionalMail) => {
           sent.push(message)
@@ -121,6 +123,48 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })).toEqual({ recipient: '[redacted]', state: 'smtp_accepted', templatePayload: {} })
   })
 
+  test('does not claim cancellation after a worker has leased the SMTP delivery', async () => {
+    const enqueuer = createEnqueuer()
+    await enqueuer.enqueue(request)
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 3,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+    const claim = await repository.claim({
+      now: scenarioTime(),
+      workerId: 'worker-a',
+    })
+    expect(claim.kind).toBe('claimed')
+    if (claim.kind !== 'claimed') throw new Error('Expected a claimed message')
+
+    await expect(prisma.$transaction((tx) => cancelQueuedTransactionalMail(tx, {
+      messageId: request.messageId,
+      now: scenarioTime(1),
+    }))).resolves.toBe(false)
+    expect(await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId: request.messageId },
+      select: { leaseOwner: true, recipient: true, state: true },
+    })).toEqual({
+      leaseOwner: 'worker-a',
+      recipient: request.recipient,
+      state: 'leased',
+    })
+
+    await expect(repository.recordAccepted({
+      id: claim.message.id,
+      now: scenarioTime(2),
+      workerId: 'worker-a',
+    })).resolves.toBe(true)
+    expect(await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId: request.messageId },
+      select: { recipient: true, state: true },
+    })).toEqual({ recipient: '[redacted]', state: 'smtp_accepted' })
+  })
+
   test('opens one global circuit after provider failures and permits one recovery probe', async () => {
     const enqueuer = createEnqueuer()
     for (const suffix of ['20', '21', '22']) {
@@ -137,6 +181,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       retryBaseMs: 1_000,
     })
     const service = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
       delivery: {
         send: async () => {
           providerCalls += 1
@@ -182,6 +227,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       retryBaseMs: 1_000,
     })
     const acceptedService = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
       delivery: { send: async () => ({ kind: 'accepted' }) },
       policy: { evaluate: async () => ({ acceptsNewAddress: true, allowsRecoveryDelivery: true }) },
       repository: budgetRepository,
@@ -200,6 +246,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
 
     await enqueuer.enqueue({ ...request, messageId: '019f8099-7e26-7760-ad08-66d1d66b2840' })
     const failingService = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
       delivery: {
         send: async () => ({
           ambiguous: true,
@@ -256,6 +303,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     expect(claims.filter((claim) => claim.kind === 'claimed')).toHaveLength(1)
 
     const restartedService = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
       delivery: { send: async () => ({ kind: 'accepted' }) },
       policy: { evaluate: async () => ({ acceptsNewAddress: true, allowsRecoveryDelivery: true }) },
       repository,
@@ -303,16 +351,26 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       messageId: '019f8099-7e26-7760-ad08-66d1d66b2861',
       recipient: request.recipient,
       template: {
+        addressRole: 'recovery',
+        expiresAt: scenarioTime(15 * 60_000),
+        kind: 'account_email_confirmation',
+      },
+    })
+    await enqueuer.enqueue({
+      messageId: '019f8099-7e26-7760-ad08-66d1d66b2862',
+      recipient: request.recipient,
+      template: {
         expiresAt: scenarioTime(15 * 60_000),
         kind: 'password_recovery',
         recoveryUrl: 'https://anomaly-detector.ru/recover/opaque-token',
       },
     })
-    let providerCalls = 0
+    const providerMessages: RenderedTransactionalMail[] = []
     const service = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
       delivery: {
-        send: async () => {
-          providerCalls += 1
+        send: async (message) => {
+          providerMessages.push(message)
           return { kind: 'accepted' }
         },
       },
@@ -337,7 +395,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       now: scenarioTime(),
       workerId: 'worker-a',
     })).resolves.toMatchObject({ blocked: 1 })
-    expect(providerCalls).toBe(0)
+    expect(providerMessages).toHaveLength(0)
     expect(await prisma.mailOutboxMessage.findUnique({
       where: { messageId: '019f8099-7e26-7760-ad08-66d1d66b2860' },
       select: { attemptCount: true, lastFailureCode: true, state: true },
@@ -345,11 +403,12 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     expect(await prisma.mailDeliveryAttempt.count()).toBe(0)
 
     await expect(service.drain({
-      limit: 1,
+      limit: 2,
       now: scenarioTime(1),
       workerId: 'worker-b',
-    })).resolves.toMatchObject({ accepted: 1 })
-    expect(providerCalls).toBe(1)
+    })).resolves.toMatchObject({ accepted: 2 })
+    expect(providerMessages).toHaveLength(2)
+    expect(providerMessages[0].text).toContain('Код подтверждения почты восстановления')
   })
 
   test('suppresses small service groups from the operator delivery projection', async () => {
@@ -404,11 +463,13 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })
     const now = scenarioTime()
     await new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
       delivery: { send: async () => ({ kind: 'accepted' }) },
       policy: { evaluate: async () => ({ acceptsNewAddress: true, allowsRecoveryDelivery: true }) },
       repository,
     }).drain({ limit: 1, now, workerId: 'worker-a' })
     await new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
       delivery: { send: async () => ({ code: 'smtp_recipient_rejected', kind: 'terminal_failure' }) },
       policy: { evaluate: async () => ({ acceptsNewAddress: true, allowsRecoveryDelivery: true }) },
       repository,

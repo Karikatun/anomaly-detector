@@ -4,6 +4,8 @@ import {
   tutorialProgressSchema,
   type ProfileStatistics,
   type AccountProtectionResponse,
+  type ConfirmRecoveryEmailRequest,
+  type StartRecoveryEmailRequest,
   type TutorialProgress,
 } from '@anomaly-detector/contracts'
 
@@ -24,6 +26,38 @@ export class ProfileApi {
     return this.transport.request(
       '/api/auth/account-protection',
       accountProtectionResponseSchema,
+    )
+  }
+
+  startRecoveryEmail(input: StartRecoveryEmailRequest): Promise<AccountProtectionResponse> {
+    return this.transport.request(
+      '/api/auth/account-protection/recovery-email/start',
+      accountProtectionResponseSchema,
+      { body: input, method: 'POST' },
+    )
+  }
+
+  resendRecoveryEmail(): Promise<AccountProtectionResponse> {
+    return this.transport.request(
+      '/api/auth/account-protection/recovery-email/resend',
+      accountProtectionResponseSchema,
+      { body: {}, method: 'POST' },
+    )
+  }
+
+  confirmRecoveryEmail(input: ConfirmRecoveryEmailRequest): Promise<AccountProtectionResponse> {
+    return this.transport.request(
+      '/api/auth/account-protection/recovery-email/confirm',
+      accountProtectionResponseSchema,
+      { body: input, method: 'POST' },
+    )
+  }
+
+  cancelRecoveryEmail(): Promise<AccountProtectionResponse> {
+    return this.transport.request(
+      '/api/auth/account-protection/recovery-email/cancel',
+      accountProtectionResponseSchema,
+      { body: {}, method: 'POST' },
     )
   }
 

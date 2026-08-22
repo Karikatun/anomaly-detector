@@ -12,6 +12,7 @@ export async function runWorker() {
   const roomStart = createRoomStartModule(runtime.prisma)
   const mail = runtime.env.MAIL_SMTP_ENABLED
     ? createMailModule({
+        confirmationCodeSecret: runtime.env.JWT_SECRET,
         db: runtime.prisma,
         delivery: createRegRuSmtpDelivery({
           from: runtime.env.MAIL_SMTP_FROM!,

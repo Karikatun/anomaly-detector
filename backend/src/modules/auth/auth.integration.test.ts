@@ -1,13 +1,14 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createApp } from '../../app'
-import { createPrisma } from '../../db'
+import { createPrisma, type DbClient } from '../../db'
 import type { AppEnv } from '../../env'
 import type { SecurityEvent } from '../../security/events'
 import { createPrismaAuthRepository } from './infrastructure/auth-repository'
 import { signAccessToken } from './infrastructure/access-tokens'
 import { createRoomStartModule } from '../room'
 import { createPersistentTenderModule } from '../tender'
+import { createTransactionalMailRequester, deriveAccountEmailConfirmationCode } from '../mail'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 
@@ -62,6 +63,12 @@ maybeDescribe('auth API integration', () => {
 
   beforeEach(async () => {
     securityEvents.length = 0
+    await prisma.mailDeliveryAttempt.deleteMany()
+    await prisma.mailOutboxMessage.deleteMany()
+    await prisma.mailPolicyEntry.deleteMany()
+    await prisma.mailPolicyVersion.deleteMany()
+    await prisma.mailRegistryCandidate.deleteMany()
+    await prisma.mailRegistryImport.deleteMany()
     await prisma.authAbuseBucket.deleteMany()
     await prisma.tenderRoomMember.deleteMany()
     await prisma.tenderRoom.deleteMany()
@@ -187,6 +194,626 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({ refreshToken: staleRefreshBody.refreshToken }),
     })
     expect(revokedRefresh.status).toBe(401)
+  })
+
+  test('starts first Recovery Email protection without persisting the plaintext code', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'first-recovery-email',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsAccepted: true,
+        termsVersion: '1.0',
+      }),
+    })
+    const account = await register.json()
+
+    const started = await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${account.accessToken}`,
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '198.51.100.11',
+      },
+      body: JSON.stringify({ email: 'Player@mail.ru', password: 'password123' }),
+    })
+
+    expect(started.status).toBe(200)
+    expect(await started.json()).toEqual({
+      accountProtection: {
+        canCancel: true,
+        codeExpiresAt: expect.any(String),
+        maskedAccountEmail: 'P***@mail.ru',
+        state: 'password_pending_code',
+      },
+    })
+    const outbox = await prisma.mailOutboxMessage.findFirstOrThrow({
+      where: { templateKind: 'account_email_confirmation' },
+    })
+    expect(outbox.recipient).toBe('Player@mail.ru')
+    expect(outbox.templatePayload).toEqual({
+      addressRole: 'recovery',
+      expiresAt: expect.any(String),
+      kind: 'account_email_confirmation',
+    })
+    expect(JSON.stringify(outbox)).not.toContain('password123')
+    expect(JSON.stringify(outbox.templatePayload)).not.toMatch(/\d{6}/)
+    const recoveryOwner = await prisma.user.findUniqueOrThrow({
+      where: { login: 'first-recovery-email' },
+      select: { id: true },
+    })
+    const challenge = await prisma.recoveryEmailChallenge.findUniqueOrThrow({
+      where: { userId: recoveryOwner.id },
+      select: { codeHash: true, policyVersion: true },
+    })
+    expect(challenge).toEqual({ codeHash: expect.stringMatching(/^[a-f0-9]{64}$/), policyVersion: 1 })
+    const recoveryBudgets = await prisma.authAbuseBucket.findMany({
+      where: { scope: { startsWith: 'rec_email_' } },
+      select: { keyHash: true, scope: true },
+    })
+    expect(recoveryBudgets).toHaveLength(7)
+    expect(recoveryBudgets.every((budget) => /^[a-f0-9]{64}$/.test(budget.keyHash))).toBe(true)
+    const storedBudgets = JSON.stringify(recoveryBudgets)
+    expect(storedBudgets).not.toContain('Player@mail.ru')
+    expect(storedBudgets).not.toContain('player@mail.ru')
+    expect(storedBudgets).not.toContain('198.51.100.11')
+    expect(storedBudgets).not.toContain(recoveryOwner.id)
+  })
+
+  test('invalidates the old code on resend and confirms one cooling-off Recovery Email', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'confirm-first-recovery-email',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsAccepted: true,
+        termsVersion: '1.0',
+      }),
+    })
+    const account = await register.json()
+    const authHeaders = {
+      Authorization: `Bearer ${account.accessToken}`,
+      'Content-Type': 'application/json',
+      'x-test-client-ip': '198.51.100.12',
+    }
+
+    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ email: 'Player@mail.ru', password: 'password123' }),
+    })).status).toBe(200)
+    const firstMessage = await prisma.mailOutboxMessage.findFirstOrThrow({
+      orderBy: { createdAt: 'asc' },
+    })
+    const oldCode = deriveAccountEmailConfirmationCode(env.JWT_SECRET, firstMessage.messageId)
+
+    const earlyResend = await app.request('/api/auth/account-protection/recovery-email/resend', {
+      method: 'POST',
+      headers: authHeaders,
+      body: '{}',
+    })
+    expect(earlyResend.status).toBe(429)
+    await prisma.authAbuseBucket.updateMany({
+      where: { scope: { endsWith: '_min' } },
+      data: { expiresAt: new Date(Date.now() - 1) },
+    })
+
+    const resent = await app.request('/api/auth/account-protection/recovery-email/resend', {
+      method: 'POST',
+      headers: authHeaders,
+      body: '{}',
+    })
+    expect(resent.status).toBe(200)
+    const messages = await prisma.mailOutboxMessage.findMany({ orderBy: { createdAt: 'asc' } })
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toMatchObject({
+      lastFailureCode: 'owner_operation_cancelled',
+      recipient: '[redacted]',
+      state: 'terminal_failure',
+      templatePayload: {},
+    })
+    const newCode = deriveAccountEmailConfirmationCode(env.JWT_SECRET, messages[1].messageId)
+    expect(newCode).not.toBe(oldCode)
+    const restartedApp = createApp({ env, prisma })
+
+    const oldConfirmation = await restartedApp.request('/api/auth/account-protection/recovery-email/confirm', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ code: oldCode }),
+    })
+    expect(oldConfirmation.status).toBe(400)
+    expect(await oldConfirmation.json()).toEqual({
+      error: { code: 'BAD_REQUEST', message: 'Confirmation code is invalid or expired' },
+    })
+
+    const confirmed = await restartedApp.request('/api/auth/account-protection/recovery-email/confirm', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ code: newCode }),
+    })
+    expect(confirmed.status).toBe(200)
+    const confirmedText = await confirmed.text()
+    expect(JSON.parse(confirmedText)).toEqual({
+      accountProtection: {
+        activatesAt: expect.any(String),
+        canCancel: true,
+        maskedAccountEmail: 'P***@mail.ru',
+        state: 'password_cooling_off',
+      },
+    })
+    expect(confirmedText).not.toContain('Player@mail.ru')
+    expect((await restartedApp.request('/api/auth/account-protection/recovery-email/confirm', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ code: newCode }),
+    })).status).toBe(200)
+    expect(await prisma.recoveryEmailChallenge.count()).toBe(0)
+    expect(await prisma.recoveryEmailBinding.count()).toBe(1)
+    expect(await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId: messages[1].messageId },
+      select: { lastFailureCode: true, recipient: true, state: true, templatePayload: true },
+    })).toEqual({
+      lastFailureCode: 'owner_operation_cancelled',
+      recipient: '[redacted]',
+      state: 'terminal_failure',
+      templatePayload: {},
+    })
+
+    await prisma.recoveryEmailBinding.updateMany({
+      data: { activatesAt: new Date(Date.now() - 1) },
+    })
+    const active = await restartedApp.request('/api/auth/account-protection', {
+      headers: authHeaders,
+    })
+    expect(active.status).toBe(200)
+    expect(await active.json()).toEqual({
+      accountProtection: {
+        maskedAccountEmail: 'P***@mail.ru',
+        state: 'password_active',
+      },
+    })
+  })
+
+  test('rejects an invalid password, an unapproved service, and a Yandex-managed account', async () => {
+    const account = await registerTokenAccount('reject-first-recovery-email')
+    const headers = {
+      Authorization: `Bearer ${account.accessToken}`,
+      'Content-Type': 'application/json',
+      'x-test-client-ip': '198.51.100.14',
+    }
+    const request = (password: string) => app.request(
+      '/api/auth/account-protection/recovery-email/start',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ email: 'player@mail.ru', password }),
+      },
+    )
+
+    const wrongPassword = await request('incorrect-password')
+    expect(wrongPassword.status).toBe(401)
+    expect(await wrongPassword.json()).toEqual({
+      error: { code: 'UNAUTHORIZED', message: 'Current password is invalid' },
+    })
+    expect((await request('password123')).status).toBe(400)
+
+    await seedApprovedMailService(prisma, 'mail.ru')
+    await prisma.authIdentity.create({
+      data: {
+        provider: 'yandex',
+        subject: 'recovery-email-must-remain-yandex-managed',
+        userId: account.user.id,
+      },
+    })
+    const yandexManaged = await request('password123')
+    expect(yandexManaged.status).toBe(400)
+    expect(await yandexManaged.json()).toEqual({
+      error: { code: 'BAD_REQUEST', message: 'Recovery Email is unavailable' },
+    })
+    expect(await prisma.recoveryEmailChallenge.count()).toBe(0)
+    expect(await prisma.mailOutboxMessage.count()).toBe(0)
+    expect(await prisma.authAbuseBucket.count({
+      where: { scope: { startsWith: 'rec_email_' } },
+    })).toBe(0)
+  })
+
+  test('enforces code expiry and five attempts while a resend resets the challenge', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const account = await registerTokenAccount('bounded-first-recovery-email')
+    const headers = {
+      Authorization: `Bearer ${account.accessToken}`,
+      'Content-Type': 'application/json',
+      'x-test-client-ip': '198.51.100.15',
+    }
+    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email: 'player@mail.ru', password: 'password123' }),
+    })).status).toBe(200)
+    let challenge = await prisma.recoveryEmailChallenge.findUniqueOrThrow({
+      where: { userId: account.user.id },
+    })
+    const expiredCode = deriveAccountEmailConfirmationCode(env.JWT_SECRET, challenge.messageId)
+    await prisma.recoveryEmailChallenge.update({
+      where: { id: challenge.id },
+      data: { expiresAt: new Date(Date.now() - 1) },
+    })
+    expect((await app.request('/api/auth/account-protection/recovery-email/confirm', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ code: expiredCode }),
+    })).status).toBe(400)
+
+    await expireRecoveryEmailMinuteBudgets(prisma)
+    expect((await app.request('/api/auth/account-protection/recovery-email/resend', {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })).status).toBe(200)
+    challenge = await prisma.recoveryEmailChallenge.findUniqueOrThrow({
+      where: { userId: account.user.id },
+    })
+    const validCode = deriveAccountEmailConfirmationCode(env.JWT_SECRET, challenge.messageId)
+    const wrongCode = validCode === '000000' ? '000001' : '000000'
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      expect((await app.request('/api/auth/account-protection/recovery-email/confirm', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ code: wrongCode }),
+      })).status).toBe(400)
+    }
+    expect((await prisma.recoveryEmailChallenge.findUniqueOrThrow({
+      where: { userId: account.user.id },
+      select: { attemptCount: true },
+    })).attemptCount).toBe(5)
+    expect((await app.request('/api/auth/account-protection/recovery-email/confirm', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ code: validCode }),
+    })).status).toBe(400)
+
+    await expireRecoveryEmailMinuteBudgets(prisma)
+    expect((await app.request('/api/auth/account-protection/recovery-email/resend', {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })).status).toBe(200)
+    challenge = await prisma.recoveryEmailChallenge.findUniqueOrThrow({
+      where: { userId: account.user.id },
+    })
+    expect(challenge.attemptCount).toBe(0)
+    const replacementCode = deriveAccountEmailConfirmationCode(env.JWT_SECRET, challenge.messageId)
+    expect((await app.request('/api/auth/account-protection/recovery-email/confirm', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ code: replacementCode }),
+    })).status).toBe(200)
+  })
+
+  test('fails safe when the Recovery Email service becomes blocked', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const account = await registerTokenAccount('blocked-first-recovery-email')
+    const headers = {
+      Authorization: `Bearer ${account.accessToken}`,
+      'Content-Type': 'application/json',
+      'x-test-client-ip': '198.51.100.21',
+    }
+    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email: 'player@mail.ru', password: 'password123' }),
+    })).status).toBe(200)
+    const challenge = await prisma.recoveryEmailChallenge.findUniqueOrThrow({
+      where: { userId: account.user.id },
+    })
+    const code = deriveAccountEmailConfirmationCode(env.JWT_SECRET, challenge.messageId)
+    await publishMailServiceState(prisma, 'mail.ru', 'blocked')
+
+    const view = await app.request('/api/auth/account-protection', { headers })
+    expect(await view.json()).toEqual({
+      accountProtection: {
+        blockedStage: 'pending_code',
+        canCancel: true,
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_service_blocked',
+      },
+    })
+    expect((await app.request('/api/auth/account-protection/recovery-email/confirm', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ code }),
+    })).status).toBe(400)
+    expect((await app.request('/api/auth/account-protection/recovery-email/resend', {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })).status).toBe(400)
+    expect((await app.request('/api/auth/account-protection/recovery-email/cancel', {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })).status).toBe(200)
+  })
+
+  test('gives one safe conflict when two accounts confirm the same canonical Recovery Email', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const first = await registerTokenAccount('recovery-email-owner-one')
+    const second = await registerTokenAccount('recovery-email-owner-two')
+    const headers = (account: { accessToken: string }, ipAddress: string) => ({
+      Authorization: `Bearer ${account.accessToken}`,
+      'Content-Type': 'application/json',
+      'x-test-client-ip': ipAddress,
+    })
+    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers: headers(first, '198.51.100.16'),
+      body: JSON.stringify({ email: 'Player@mail.ru', password: 'password123' }),
+    })).status).toBe(200)
+    await prisma.authAbuseBucket.updateMany({
+      where: { scope: 'rec_email_address_min' },
+      data: { expiresAt: new Date(Date.now() - 1) },
+    })
+    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers: headers(second, '198.51.100.17'),
+      body: JSON.stringify({ email: 'player@mail.ru', password: 'password123' }),
+    })).status).toBe(200)
+
+    const challenges = await prisma.recoveryEmailChallenge.findMany()
+    expect(challenges).toHaveLength(2)
+    const codeFor = (userId: string) => {
+      const challenge = challenges.find((candidate) => candidate.userId === userId)
+      if (!challenge) throw new Error('Expected Recovery Email challenge')
+      return deriveAccountEmailConfirmationCode(env.JWT_SECRET, challenge.messageId)
+    }
+    const responses = await Promise.all([
+      app.request('/api/auth/account-protection/recovery-email/confirm', {
+        method: 'POST',
+        headers: headers(first, '198.51.100.16'),
+        body: JSON.stringify({ code: codeFor(first.user.id) }),
+      }),
+      app.request('/api/auth/account-protection/recovery-email/confirm', {
+        method: 'POST',
+        headers: headers(second, '198.51.100.17'),
+        body: JSON.stringify({ code: codeFor(second.user.id) }),
+      }),
+    ])
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409])
+    const conflict = responses.find((response) => response.status === 409)
+    expect(await conflict?.json()).toEqual({
+      error: { code: 'CONFLICT', message: 'Recovery Email is unavailable' },
+    })
+    expect(await prisma.recoveryEmailBinding.count()).toBe(1)
+    expect(await prisma.recoveryEmailChallenge.count()).toBe(1)
+  })
+
+  test('serializes confirmation with cancellation without leaving partial protection', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const account = await registerTokenAccount('race-first-recovery-email')
+    const headers = {
+      Authorization: `Bearer ${account.accessToken}`,
+      'Content-Type': 'application/json',
+      'x-test-client-ip': '198.51.100.18',
+    }
+    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email: 'player@mail.ru', password: 'password123' }),
+    })).status).toBe(200)
+    const challenge = await prisma.recoveryEmailChallenge.findUniqueOrThrow({
+      where: { userId: account.user.id },
+    })
+    const code = deriveAccountEmailConfirmationCode(env.JWT_SECRET, challenge.messageId)
+    const [confirmation, cancellation] = await Promise.all([
+      app.request('/api/auth/account-protection/recovery-email/confirm', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ code }),
+      }),
+      app.request('/api/auth/account-protection/recovery-email/cancel', {
+        method: 'POST',
+        headers,
+        body: '{}',
+      }),
+    ])
+    expect([200, 400]).toContain(confirmation.status)
+    expect(cancellation.status).toBe(200)
+    expect(await prisma.recoveryEmailChallenge.count()).toBe(0)
+    expect(await prisma.recoveryEmailBinding.count()).toBe(0)
+  })
+
+  test('rolls back the Recovery Email owner operation when its outbox write conflicts', async () => {
+    const user = await prisma.user.create({
+      data: { login: 'recovery-outbox-rollback', passwordHash: 'stored-password-hash' },
+    })
+    const session = await prisma.authSession.create({
+      data: {
+        expiresAt: new Date(Date.now() + 60_000),
+        refreshTokenFamilyHash: 'rollback-family-hash',
+        refreshTokenHash: 'rollback-refresh-hash',
+        userId: user.id,
+      },
+    })
+    const messageId = '019f8099-7e26-7760-ad08-66d1d66b2890'
+    await prisma.$transaction(async (tx) => {
+      await createTransactionalMailRequester(tx, env.JWT_SECRET).enqueue({
+        messageId,
+        recipient: 'occupied@mail.ru',
+        template: {
+          expiresAt: new Date(Date.now() + 15 * 60_000),
+          kind: 'account_email_confirmation',
+        },
+      })
+    })
+    const repository = createPrismaAuthRepository(prisma, env.JWT_SECRET, {
+      createMessageId: () => messageId,
+    })
+    await expect(repository.startRecoveryEmail({
+      canonicalKey: 'player@mail.ru',
+      expectedPasswordHash: 'stored-password-hash',
+      expiresAt: new Date(Date.now() + 15 * 60_000),
+      ipAddress: '198.51.100.19',
+      now: new Date(Date.now() + 1_000),
+      policyVersion: 1,
+      providerValue: 'player@mail.ru',
+      sessionId: session.id,
+      userId: user.id,
+    })).rejects.toMatchObject({ kind: 'message_conflict' })
+    expect(await prisma.recoveryEmailChallenge.count()).toBe(0)
+    expect(await prisma.authAbuseBucket.count({
+      where: { scope: { startsWith: 'rec_email_' } },
+    })).toBe(0)
+    expect(await prisma.mailOutboxMessage.count()).toBe(1)
+  })
+
+  test('lets only a pre-request session cancel cooling off and revokes newer sessions', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'cancel-first-recovery-email',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsAccepted: true,
+        termsVersion: '1.0',
+      }),
+    })
+    const original = await register.json()
+    const originalHeaders = {
+      Authorization: `Bearer ${original.accessToken}`,
+      'Content-Type': 'application/json',
+      'x-test-client-ip': '198.51.100.13',
+    }
+
+    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers: originalHeaders,
+      body: JSON.stringify({ email: 'player@mail.ru', password: 'password123' }),
+    })).status).toBe(200)
+    const message = await prisma.mailOutboxMessage.findFirstOrThrow()
+    const code = deriveAccountEmailConfirmationCode(env.JWT_SECRET, message.messageId)
+    expect((await app.request('/api/auth/account-protection/recovery-email/confirm', {
+      method: 'POST',
+      headers: originalHeaders,
+      body: JSON.stringify({ code }),
+    })).status).toBe(200)
+
+    const login = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'cancel-first-recovery-email', password: 'password123' }),
+    })
+    expect(login.status).toBe(200)
+    const newer = await login.json()
+    const newerHeaders = {
+      Authorization: `Bearer ${newer.accessToken}`,
+      'Content-Type': 'application/json',
+    }
+    const newerView = await app.request('/api/auth/account-protection', {
+      headers: newerHeaders,
+    })
+    expect(await newerView.json()).toEqual({
+      accountProtection: {
+        activatesAt: expect.any(String),
+        canCancel: false,
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_cooling_off',
+      },
+    })
+    const forbidden = await app.request('/api/auth/account-protection/recovery-email/cancel', {
+      method: 'POST',
+      headers: newerHeaders,
+      body: '{}',
+    })
+    expect(forbidden.status).toBe(403)
+
+    const cancelled = await app.request('/api/auth/account-protection/recovery-email/cancel', {
+      method: 'POST',
+      headers: originalHeaders,
+      body: '{}',
+    })
+    expect(cancelled.status).toBe(200)
+    expect(await cancelled.json()).toEqual({
+      accountProtection: { state: 'password_unprotected' },
+    })
+    expect(await prisma.recoveryEmailBinding.count()).toBe(0)
+    expect((await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${newer.accessToken}` },
+    })).status).toBe(401)
+    expect((await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${original.accessToken}` },
+    })).status).toBe(200)
+  })
+
+  test('does not transfer Recovery Email cancellation authority after the requester logs out', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const account = await registerTokenAccount('logout-first-recovery-email')
+    const originalHeaders = {
+      Authorization: `Bearer ${account.accessToken}`,
+      'Content-Type': 'application/json',
+      'x-test-client-ip': '198.51.100.19',
+    }
+    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers: originalHeaders,
+      body: JSON.stringify({ email: 'logout@mail.ru', password: 'password123' }),
+    })).status).toBe(200)
+    const challenge = await prisma.recoveryEmailChallenge.findFirstOrThrow()
+    const code = deriveAccountEmailConfirmationCode(env.JWT_SECRET, challenge.messageId)
+    expect((await app.request('/api/auth/account-protection/recovery-email/confirm', {
+      method: 'POST',
+      headers: originalHeaders,
+      body: JSON.stringify({ code }),
+    })).status).toBe(200)
+
+    expect((await app.request('/api/auth/token/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: account.refreshToken }),
+    })).status).toBe(204)
+    expect((await app.request('/api/auth/account-protection/recovery-email/cancel', {
+      method: 'POST',
+      headers: originalHeaders,
+      body: '{}',
+    })).status).toBe(401)
+
+    const newer = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'logout-first-recovery-email', password: 'password123' }),
+    })
+    expect(newer.status).toBe(200)
+    const newerAccount = await newer.json()
+    const newerHeaders = {
+      Authorization: `Bearer ${newerAccount.accessToken}`,
+      'Content-Type': 'application/json',
+    }
+    expect((await app.request('/api/auth/account-protection/recovery-email/cancel', {
+      method: 'POST',
+      headers: newerHeaders,
+      body: '{}',
+    })).status).toBe(403)
+    expect(await prisma.recoveryEmailBinding.count()).toBe(1)
+    expect(await (await app.request('/api/auth/account-protection', {
+      headers: newerHeaders,
+    })).json()).toEqual({
+      accountProtection: {
+        activatesAt: expect.any(String),
+        canCancel: false,
+        maskedAccountEmail: 'l***@mail.ru',
+        state: 'password_cooling_off',
+      },
+    })
   })
 
   test('issues a short-lived realtime ticket for an authenticated session', async () => {
@@ -2402,6 +3029,16 @@ maybeDescribe('auth API integration', () => {
     const remainingAccount = await register('keep-me', 'Борис')
     const deletedUserId = deletedAccount.user.id as string
     const remainingUserId = remainingAccount.user.id as string
+    await seedApprovedMailService(prisma, 'mail.ru')
+    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${deletedAccount.accessToken}`,
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '198.51.100.20',
+      },
+      body: JSON.stringify({ email: 'delete-me@mail.ru', password: 'password123' }),
+    })).status).toBe(200)
     const tender = createPersistentTenderModule(prisma)
     const { tenderId } = await tender.createTender({
       players: [
@@ -2425,6 +3062,16 @@ maybeDescribe('auth API integration', () => {
     expect(deleted.status).toBe(204)
     expect(await prisma.authIdentity.count({ where: { userId: deletedUserId } })).toBe(0)
     expect(await prisma.authSession.count({ where: { userId: deletedUserId } })).toBe(0)
+    expect(await prisma.recoveryEmailChallenge.count({ where: { userId: deletedUserId } })).toBe(0)
+    expect(await prisma.recoveryEmailBinding.count({ where: { userId: deletedUserId } })).toBe(0)
+    expect(await prisma.mailOutboxMessage.findFirstOrThrow({
+      select: { lastFailureCode: true, recipient: true, state: true, templatePayload: true },
+    })).toEqual({
+      lastFailureCode: 'owner_operation_cancelled',
+      recipient: '[redacted]',
+      state: 'terminal_failure',
+      templatePayload: {},
+    })
     expect(await prisma.user.findUniqueOrThrow({
       where: { id: deletedUserId },
       select: {
@@ -2774,4 +3421,94 @@ maybeDescribe('auth API integration', () => {
       userId: user.id,
     }
   }
+
+  async function registerTokenAccount(login: string) {
+    const response = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login,
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.0',
+        termsAccepted: true,
+        termsVersion: '1.0',
+      }),
+    })
+    expect(response.status).toBe(201)
+    return response.json()
+  }
 })
+
+async function seedApprovedMailService(prisma: DbClient, emailDomain: string) {
+  const sourceImport = await prisma.mailRegistryImport.create({
+    data: {
+      actorId: crypto.randomUUID(),
+      addedDomains: [emailDomain],
+      checksum: 'a'.repeat(64),
+      outcome: 'succeeded',
+      removedDomains: [],
+      sourceDate: '2026-08-22',
+      sourceUrl: 'https://example.test/registry.xml',
+      unchangedCount: 0,
+    },
+  })
+  const candidate = await prisma.mailRegistryCandidate.create({
+    data: {
+      evidence: 'service_description_mentions_mail',
+      importId: sourceImport.id,
+      registryEntryId: `test-${emailDomain}`,
+      serviceDomain: emailDomain,
+    },
+  })
+  await prisma.mailPolicyVersion.create({
+    data: {
+      publishedBy: crypto.randomUUID(),
+      version: 1,
+      entries: {
+        create: {
+          emailDomain,
+          ignoreDots: false,
+          localPartCaseInsensitive: true,
+          sourceCandidateId: candidate.id,
+          state: 'approved',
+          stripPlusTag: false,
+        },
+      },
+    },
+  })
+}
+
+async function expireRecoveryEmailMinuteBudgets(prisma: DbClient) {
+  await prisma.authAbuseBucket.updateMany({
+    where: { scope: { endsWith: '_min' } },
+    data: { expiresAt: new Date(Date.now() - 1) },
+  })
+}
+
+async function publishMailServiceState(
+  prisma: DbClient,
+  emailDomain: string,
+  state: 'blocked' | 'deprecated',
+) {
+  const candidate = await prisma.mailRegistryCandidate.findFirstOrThrow({
+    where: { serviceDomain: emailDomain },
+  })
+  await prisma.mailPolicyVersion.create({
+    data: {
+      publishedBy: crypto.randomUUID(),
+      version: 2,
+      entries: {
+        create: {
+          emailDomain,
+          ignoreDots: false,
+          localPartCaseInsensitive: true,
+          reason: 'integration state transition',
+          sourceCandidateId: candidate.id,
+          state,
+          stripPlusTag: false,
+        },
+      },
+    },
+  })
+}

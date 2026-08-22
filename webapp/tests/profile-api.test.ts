@@ -46,3 +46,41 @@ test('profile API accepts only a masked Account Email protection response', asyn
   })
   expect(requests).toEqual(['/api/auth/account-protection'])
 })
+
+test('profile API sends bounded first Recovery Email commands', async () => {
+  const requests: Array<{ body?: unknown; method?: string; path: string }> = []
+  const api = new ProfileApi({
+    request: async (path, schema, options) => {
+      requests.push({ path, method: options?.method, body: options?.body })
+      return schema.parse({ accountProtection: { state: 'password_unprotected' } })
+    },
+  } as AuthenticatedTransport)
+
+  await api.startRecoveryEmail({ email: 'player@mail.ru', password: 'password123' })
+  await api.resendRecoveryEmail()
+  await api.confirmRecoveryEmail({ code: '123456' })
+  await api.cancelRecoveryEmail()
+
+  expect(requests).toEqual([
+    {
+      body: { email: 'player@mail.ru', password: 'password123' },
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-email/start',
+    },
+    {
+      body: {},
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-email/resend',
+    },
+    {
+      body: { code: '123456' },
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-email/confirm',
+    },
+    {
+      body: {},
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-email/cancel',
+    },
+  ])
+})

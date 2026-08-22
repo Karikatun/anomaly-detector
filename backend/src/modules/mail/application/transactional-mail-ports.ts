@@ -1,6 +1,6 @@
 export type StoredTransactionalMailTemplate =
   | {
-      code: string
+      addressRole?: 'account' | 'recovery'
       expiresAt: string
       kind: 'account_email_confirmation'
     }

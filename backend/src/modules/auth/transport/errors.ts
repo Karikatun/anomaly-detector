@@ -16,6 +16,21 @@ export function toAuthAppError(error: unknown) {
   if (error.kind === 'recent_authentication_required') {
     return new AppError(403, 'FORBIDDEN', error.message, undefined, error.kind)
   }
+  if (error.kind === 'recovery_cancellation_forbidden') {
+    return new AppError(403, 'FORBIDDEN', error.message, undefined, error.kind)
+  }
+  if (error.kind === 'recovery_email_limited') {
+    return new AppError(429, 'RATE_LIMITED', error.message, undefined, error.kind)
+  }
+  if (error.kind === 'recovery_email_conflict' || error.kind === 'recovery_email_pending') {
+    return new AppError(409, 'CONFLICT', error.message, undefined, error.kind)
+  }
+  if (error.kind === 'recovery_email_unavailable') {
+    return new AppError(400, 'BAD_REQUEST', error.message, undefined, error.kind)
+  }
+  if (error.kind === 'recovery_code_invalid') {
+    return new AppError(400, 'BAD_REQUEST', error.message, undefined, error.kind)
+  }
 
   return new AppError(401, 'UNAUTHORIZED', error.message, undefined, error.kind)
 }

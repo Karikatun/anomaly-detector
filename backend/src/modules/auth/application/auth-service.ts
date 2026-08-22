@@ -43,6 +43,8 @@ type AuthServiceDependencies = {
 
 const ACCOUNT_DELETION_RECENT_AUTH_MS = 10 * 60 * 1_000
 const AUTHENTICATION_CLOCK_SKEW_MS = 60 * 1_000
+const RECOVERY_EMAIL_CODE_TTL_MS = 15 * 60 * 1_000
+const RECOVERY_EMAIL_COOLING_OFF_MS = 24 * 60 * 60 * 1_000
 
 export class AuthService {
   constructor(private readonly dependencies: AuthServiceDependencies) {}
@@ -345,15 +347,17 @@ export class AuthService {
     return { user: userDtoFromPrincipal(await this.authenticateAccessToken(accessToken)) }
   }
 
-  async getAccountProtection(userId: string): Promise<AccountProtectionResponse> {
+  async getAccountProtection(
+    userId: string,
+    sessionId?: string,
+  ): Promise<AccountProtectionResponse> {
     const record = await this.dependencies.repository.readAccountProtection(userId)
     if (!record) {
       throw new AuthFailure('session_invalid', 'Session is invalid or expired')
     }
-    if (!record.hasYandexIdentity) {
-      return { accountProtection: { state: 'password_unprotected' } }
-    }
     if (
+      record.hasYandexIdentity
+      &&
       record.accountEmailState === 'yandex_managed'
       && record.accountEmailProviderValue
     ) {
@@ -364,10 +368,175 @@ export class AuthService {
         },
       }
     }
-    if (record.accountEmailState === 'yandex_conflict') {
+    if (record.hasYandexIdentity && record.accountEmailState === 'yandex_conflict') {
       return { accountProtection: { state: 'yandex_conflict' } }
     }
-    return { accountProtection: { state: 'yandex_unavailable' } }
+    if (record.hasYandexIdentity) {
+      return { accountProtection: { state: 'yandex_unavailable' } }
+    }
+
+    const challenge = record.recoveryEmailChallenge
+    if (challenge) {
+      const canCancel = sessionId !== undefined
+        && challenge.cancellationSessionIds.includes(sessionId)
+      if (!await this.recoveryDeliveryAllowed(challenge.providerValue)) {
+        return {
+          accountProtection: {
+            blockedStage: 'pending_code',
+            canCancel,
+            maskedAccountEmail: maskAccountEmail(challenge.providerValue),
+            state: 'password_service_blocked',
+          },
+        }
+      }
+      return {
+        accountProtection: {
+          canCancel,
+          codeExpiresAt: challenge.expiresAt.toISOString(),
+          maskedAccountEmail: maskAccountEmail(challenge.providerValue),
+          state: 'password_pending_code',
+        },
+      }
+    }
+
+    const binding = record.recoveryEmailBinding
+    if (!binding) return { accountProtection: { state: 'password_unprotected' } }
+
+    const coolingOff = binding.activatesAt > this.dependencies.clock.now()
+    const canCancel = coolingOff
+      && sessionId !== undefined
+      && binding.cancellationSessionIds.includes(sessionId)
+    if (!await this.recoveryDeliveryAllowed(binding.providerValue)) {
+      return {
+        accountProtection: {
+          blockedStage: coolingOff ? 'cooling_off' : 'active',
+          canCancel,
+          maskedAccountEmail: maskAccountEmail(binding.providerValue),
+          state: 'password_service_blocked',
+        },
+      }
+    }
+    if (coolingOff) {
+      return {
+        accountProtection: {
+          activatesAt: binding.activatesAt.toISOString(),
+          canCancel,
+          maskedAccountEmail: maskAccountEmail(binding.providerValue),
+          state: 'password_cooling_off',
+        },
+      }
+    }
+    return {
+      accountProtection: {
+        maskedAccountEmail: maskAccountEmail(binding.providerValue),
+        state: 'password_active',
+      },
+    }
+  }
+
+  async startRecoveryEmail(input: {
+    email: string
+    ipAddress?: string
+    password: string
+    sessionId: string
+    userId: string
+  }): Promise<AccountProtectionResponse> {
+    const user = await this.dependencies.repository.findUserById(input.userId)
+    if (!user?.passwordHash) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    if (!await this.dependencies.passwords.verify(input.password, user.passwordHash)) {
+      throw new AuthFailure('recovery_password_invalid', 'Current password is invalid')
+    }
+
+    const candidate = await this.dependencies.accountEmailCanonicalizer
+      ?.canonicalizeForRecovery?.(input.email)
+    if (!candidate) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    const now = this.dependencies.clock.now()
+    await this.dependencies.repository.startRecoveryEmail({
+      canonicalKey: candidate.canonicalKey,
+      expectedPasswordHash: user.passwordHash,
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      now,
+      policyVersion: candidate.policyVersion,
+      providerValue: candidate.providerValue,
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    return this.getAccountProtection(input.userId, input.sessionId)
+  }
+
+  async resendRecoveryEmail(input: {
+    ipAddress?: string
+    sessionId: string
+    userId: string
+  }): Promise<AccountProtectionResponse> {
+    const record = await this.dependencies.repository.readAccountProtection(input.userId)
+    const challenge = record?.recoveryEmailChallenge
+    if (!record || record.hasYandexIdentity || !challenge) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    if (!await this.recoveryDeliveryAllowed(challenge.providerValue)) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    const now = this.dependencies.clock.now()
+    await this.dependencies.repository.resendRecoveryEmail({
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      now,
+      userId: input.userId,
+    })
+    return this.getAccountProtection(input.userId, input.sessionId)
+  }
+
+  async confirmRecoveryEmail(input: {
+    code: string
+    sessionId: string
+    userId: string
+  }): Promise<AccountProtectionResponse> {
+    const record = await this.dependencies.repository.readAccountProtection(input.userId)
+    const challenge = record?.recoveryEmailChallenge
+    if (challenge && !await this.recoveryDeliveryAllowed(challenge.providerValue)) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    const now = this.dependencies.clock.now()
+    const result = await this.dependencies.repository.confirmRecoveryEmail({
+      activatesAt: new Date(now.getTime() + RECOVERY_EMAIL_COOLING_OFF_MS),
+      code: input.code,
+      now,
+      userId: input.userId,
+    })
+    if (result === 'invalid') {
+      throw new AuthFailure(
+        'recovery_code_invalid',
+        'Confirmation code is invalid or expired',
+      )
+    }
+    return this.getAccountProtection(input.userId, input.sessionId)
+  }
+
+  async cancelRecoveryEmail(input: {
+    sessionId: string
+    userId: string
+  }): Promise<AccountProtectionResponse> {
+    const result = await this.dependencies.repository.cancelRecoveryEmail({
+      now: this.dependencies.clock.now(),
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    if (result === 'forbidden') {
+      throw new AuthFailure(
+        'recovery_cancellation_forbidden',
+        'This session cannot cancel Recovery Email protection',
+      )
+    }
+    if (result === 'unavailable') {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    return this.getAccountProtection(input.userId, input.sessionId)
   }
 
   async logout(refreshToken: string | undefined) {
@@ -441,6 +610,14 @@ export class AuthService {
     } catch {
       return null
     }
+  }
+
+  private async recoveryDeliveryAllowed(providerValue: string) {
+    const evaluate = this.dependencies.accountEmailCanonicalizer?.evaluate
+    if (!evaluate) return false
+    const separator = providerValue.lastIndexOf('@')
+    if (separator <= 0) return false
+    return (await evaluate(providerValue.slice(separator + 1))).allowsRecoveryDelivery
   }
 
   private refreshExpiresAt(now: Date) {

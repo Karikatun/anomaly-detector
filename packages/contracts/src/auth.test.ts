@@ -3,6 +3,8 @@ import { describe, expect, test } from 'bun:test'
 import {
   apiErrorSchema,
   accountProtectionResponseSchema,
+  cancelRecoveryEmailRequestSchema,
+  confirmRecoveryEmailRequestSchema,
   cookieAuthResponseSchema,
   cookieLogoutRequestSchema,
   cookieRefreshRequestSchema,
@@ -14,6 +16,8 @@ import {
   oauthStartRequestSchema,
   oauthStartResponseSchema,
   registerRequestSchema,
+  resendRecoveryEmailRequestSchema,
+  startRecoveryEmailRequestSchema,
   tokenAuthResponseSchema,
   tokenLogoutRequestSchema,
   tokenRefreshRequestSchema,
@@ -52,6 +56,72 @@ describe('auth contracts', () => {
         maskedAccountEmail: 'player@yandex.ru',
       },
     }).success).toBe(false)
+
+    expect(accountProtectionResponseSchema.parse({
+      accountProtection: {
+        canCancel: true,
+        codeExpiresAt: '2026-08-22T12:15:00.000Z',
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_pending_code',
+      },
+    })).toEqual({
+      accountProtection: {
+        canCancel: true,
+        codeExpiresAt: '2026-08-22T12:15:00.000Z',
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_pending_code',
+      },
+    })
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        activatesAt: '2026-08-23T12:00:00.000Z',
+        canCancel: false,
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_cooling_off',
+      },
+    }).success).toBe(true)
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_active',
+      },
+    }).success).toBe(true)
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        blockedStage: 'pending_code',
+        canCancel: true,
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_service_blocked',
+      },
+    }).success).toBe(true)
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        canonicalKey: 'player@mail.ru',
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_active',
+      },
+    }).success).toBe(false)
+  })
+
+  test('validates first Recovery Email commands without normalizing secrets in the contract', () => {
+    expect(startRecoveryEmailRequestSchema.parse({
+      email: ' Player@mail.ru ',
+      password: 'password123',
+    })).toEqual({
+      email: 'Player@mail.ru',
+      password: 'password123',
+    })
+    expect(confirmRecoveryEmailRequestSchema.parse({ code: '012345' })).toEqual({ code: '012345' })
+    expect(resendRecoveryEmailRequestSchema.parse(undefined)).toEqual({})
+    expect(cancelRecoveryEmailRequestSchema.parse({})).toEqual({})
+
+    expect(startRecoveryEmailRequestSchema.safeParse({
+      email: 'player@mail.ru',
+      password: 'short',
+    }).success).toBe(false)
+    expect(confirmRecoveryEmailRequestSchema.safeParse({ code: '12345' }).success).toBe(false)
+    expect(confirmRecoveryEmailRequestSchema.safeParse({ code: '123456', extra: true }).success).toBe(false)
+    expect(resendRecoveryEmailRequestSchema.safeParse({ email: 'player@mail.ru' }).success).toBe(false)
   })
 
   test('normalizes registration and login input', () => {

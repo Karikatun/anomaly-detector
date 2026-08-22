@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ConfirmRecoveryEmailRequest, StartRecoveryEmailRequest } from '@anomaly-detector/contracts'
 
 import { sessionQueryKeys } from '@/platform/query'
 
@@ -15,6 +16,50 @@ export function useAccountProtectionQuery(api: ProfileApi) {
   return useQuery({
     queryKey: profileQueryKeys.accountProtection(),
     queryFn: () => api.getAccountProtection(),
+  })
+}
+
+export function useStartRecoveryEmailMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: StartRecoveryEmailRequest) => api.startRecoveryEmail(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useResendRecoveryEmailMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.resendRecoveryEmail(),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useConfirmRecoveryEmailMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ConfirmRecoveryEmailRequest) => api.confirmRecoveryEmail(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useCancelRecoveryEmailMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.cancelRecoveryEmail(),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
   })
 }
 

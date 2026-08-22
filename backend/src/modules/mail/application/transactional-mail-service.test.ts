@@ -4,6 +4,7 @@ import {
   TransactionalMailFailure,
   TransactionalMailService,
 } from './transactional-mail-service'
+import { deriveAccountEmailConfirmationCode } from './account-email-confirmation-code'
 import type { TransactionalMailWriter } from './transactional-mail-ports'
 
 describe('TransactionalMailService', () => {
@@ -29,7 +30,6 @@ describe('TransactionalMailService', () => {
       messageId: '019f8099-7e26-7760-ad08-66d1d66b2801',
       recipient: 'researcher@yandex.ru',
       template: {
-        code: '482193',
         expiresAt: new Date('2026-08-22T12:15:00.000Z'),
         kind: 'account_email_confirmation' as const,
       },
@@ -62,6 +62,17 @@ describe('TransactionalMailService', () => {
     })).rejects.toMatchObject({
       kind: 'message_conflict',
     } satisfies Partial<TransactionalMailFailure>)
+  })
+
+  test('derives a bounded confirmation code without storing the credential', () => {
+    const secret = 'mail-confirmation-code-key-0000001'
+    const messageId = '019f8099-7e26-7760-ad08-66d1d66b2801'
+    const code = deriveAccountEmailConfirmationCode(secret, messageId)
+
+    expect(code).toMatch(/^\d{6}$/)
+    expect(deriveAccountEmailConfirmationCode(secret, messageId)).toBe(code)
+    expect(deriveAccountEmailConfirmationCode(secret, '019f8099-7e26-7760-ad08-66d1d66b2802'))
+      .not.toBe(code)
   })
 
   test('rejects unsupported mail purposes and insecure recovery links', async () => {

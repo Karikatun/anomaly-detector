@@ -13,6 +13,7 @@ import { createPrismaMailPolicyRepository } from './infrastructure/prisma-mail-p
 import { createPrismaMailDeliveryOverviewReader } from './infrastructure/prisma-mail-delivery-overview-reader'
 import { cleanupTerminalMailOutbox } from './infrastructure/prisma-mail-outbox-cleanup'
 import {
+  cancelQueuedTransactionalMail,
   createPrismaMailOutboxRepository,
   createPrismaTransactionalMailWriter,
   type MailOutboxRepositoryOptions,
@@ -22,6 +23,7 @@ import { RknMailServiceCandidateSource } from './infrastructure/rkn-mail-service
 
 export function createMailModule(input: {
   clock?: Clock
+  confirmationCodeSecret?: string
   db: DbClient
   delivery?: TransactionalMailDelivery
   deliveryOptions?: MailOutboxRepositoryOptions
@@ -45,6 +47,7 @@ export function createMailModule(input: {
   }
   const outboxDrainer = input.delivery && input.deliveryOptions
     ? new TransactionalMailDeliveryService({
+        confirmationCodeSecret: input.confirmationCodeSecret ?? '',
         delivery: input.delivery,
         policy,
         repository: createPrismaMailOutboxRepository(input.db, input.deliveryOptions),
@@ -52,6 +55,9 @@ export function createMailModule(input: {
     : null
   if ((input.delivery === undefined) !== (input.deliveryOptions === undefined)) {
     throw new Error('Mail delivery and outbox options must be configured together')
+  }
+  if (input.delivery && !input.confirmationCodeSecret) {
+    throw new Error('Mail confirmation code secret must be configured with delivery')
   }
   const deliveryOverview = createPrismaMailDeliveryOverviewReader(input.db, input.deliveryStatus ?? {
     configured: input.delivery !== undefined,
@@ -92,7 +98,8 @@ export function createRegRuSmtpDelivery(config: RegRuSmtpConfig) {
   return new RegRuSmtpDelivery({ config })
 }
 
-export { cleanupTerminalMailOutbox }
+export { cancelQueuedTransactionalMail, cleanupTerminalMailOutbox }
+export { deriveAccountEmailConfirmationCode } from './application/account-email-confirmation-code'
 
 export type { MailServiceCandidateSource } from './application/ports'
 export type { TransactionalMailRequest } from './application/transactional-mail-service'

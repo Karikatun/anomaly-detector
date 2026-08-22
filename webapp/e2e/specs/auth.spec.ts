@@ -436,3 +436,84 @@ test('shows masked Yandex protection and a non-disclosing email conflict state',
   await expect(page.getByText('Не удалось синхронизировать актуальный адрес.')).toBeVisible()
   await expect(page.getByText('Вход через Яндекс ID продолжает работать.')).toBeVisible()
 })
+
+test('keeps Recovery Email optional and completes its protected cooling-off flow', async ({ page }) => {
+  await registerBrowserUser(page, 'Восстановление E2E', 'recovery-protection')
+  let state: Record<string, unknown> = { state: 'password_unprotected' }
+  const mutationBodies: unknown[] = []
+  await page.route('**/api/auth/account-protection', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accountProtection: state }),
+    })
+  })
+  await page.route('**/api/auth/account-protection/recovery-email/**', async (route) => {
+    mutationBodies.push(route.request().postDataJSON())
+    const pathname = new URL(route.request().url()).pathname
+    if (pathname.endsWith('/start')) {
+      state = {
+        canCancel: true,
+        codeExpiresAt: '2030-08-22T15:15:00.000Z',
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_pending_code',
+      }
+    } else if (pathname.endsWith('/confirm')) {
+      state = {
+        activatesAt: '2030-08-23T15:00:00.000Z',
+        canCancel: true,
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_cooling_off',
+      }
+    } else if (pathname.endsWith('/cancel')) {
+      state = { state: 'password_unprotected' }
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accountProtection: state }),
+    })
+  })
+
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await expect(page.getByText('Это необязательно: урок и игра доступны без почты.')).toBeVisible()
+  await page.getByRole('button', { name: 'Добавить почту' }).click()
+  const startDialog = page.getByRole('dialog', { name: 'Добавить почту восстановления' })
+  await expect(startDialog).toBeVisible()
+  await startDialog.getByLabel('Почта восстановления').fill('postponed@mail.ru')
+  await startDialog.getByLabel('Текущий пароль').fill(e2ePassword)
+  await startDialog.getByRole('button', { name: 'Сделать позже' }).click()
+  await expect(startDialog).toBeHidden()
+  await page.getByRole('button', { name: 'Добавить почту' }).click()
+  await expect(startDialog.getByLabel('Почта восстановления')).toHaveValue('')
+  await expect(startDialog.getByLabel('Текущий пароль')).toHaveValue('')
+  await startDialog.getByRole('button', { name: 'Сделать позже' }).click()
+  await page.getByRole('button', { name: 'Назад' }).click()
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await page.getByRole('button', { name: 'Добавить почту' }).click()
+  await page.getByLabel('Почта восстановления').fill('player@mail.ru')
+  await page.getByLabel('Текущий пароль').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Отправить код' }).click()
+  const codeDialog = page.getByRole('dialog', { name: 'Подтвердить почту' })
+  await expect(codeDialog).toBeVisible()
+  await expect(codeDialog).toContainText('p***@mail.ru')
+  await page.getByLabel('Код из письма').fill('123456')
+  await codeDialog.getByRole('button', { name: 'Подтвердить' }).click()
+
+  await expect(page.getByText('Период защиты')).toBeVisible()
+  await expect(page.getByText('p***@mail.ru', { exact: true })).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('player@mail.ru')
+  await expect(page.locator('body')).not.toContainText('123456')
+  await page.getByRole('button', { name: 'Отменить привязку' }).click()
+  const cancelDialog = page.getByRole('dialog', { name: 'Отменить защиту?' })
+  await expect(cancelDialog).toContainText('Сеансы, открытые после запроса, завершатся')
+  await cancelDialog.getByRole('button', { name: 'Отменить защиту' }).click()
+  await expect(page.getByText('Почта восстановления пока не настроена.')).toBeVisible()
+  expect(mutationBodies).toEqual([
+    { email: 'player@mail.ru', password: e2ePassword },
+    { code: '123456' },
+    {},
+  ])
+})

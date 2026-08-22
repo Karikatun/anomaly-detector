@@ -27,7 +27,16 @@ test('keeps the provider value separate from service-specific canonicalization',
     canonicalKey: 'firstlast@xn--d1acpjx3f.xn--p1ai',
     providerValue: 'First.Last+campaign@xn--d1acpjx3f.xn--p1ai',
   })
-  expect(evaluatedDomains).toEqual(['xn--d1acpjx3f.xn--p1ai'])
+  await expect(canonicalizer.canonicalizeForRecovery('First.Last+campaign@ЯНДЕКС.РФ'))
+    .resolves.toEqual({
+      canonicalKey: 'firstlast@xn--d1acpjx3f.xn--p1ai',
+      policyVersion: 4,
+      providerValue: 'First.Last+campaign@xn--d1acpjx3f.xn--p1ai',
+    })
+  expect(evaluatedDomains).toEqual([
+    'xn--d1acpjx3f.xn--p1ai',
+    'xn--d1acpjx3f.xn--p1ai',
+  ])
 })
 
 test('never removes dots or plus aliases without a published service rule', async () => {
@@ -67,4 +76,6 @@ test('keeps an unpublished provider address without inventing alias rules', asyn
     canonicalKey: 'First.Last+tag@example.com',
     providerValue: 'First.Last+tag@example.com',
   })
+  await expect(canonicalizer.canonicalizeForRecovery('First.Last+tag@Example.COM'))
+    .resolves.toBeNull()
 })

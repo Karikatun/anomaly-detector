@@ -1,15 +1,31 @@
-import { createHmac } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 
 import type { DbClient } from '../../../db'
 import { Prisma } from '../../../generated/prisma/client'
+import {
+  cancelQueuedTransactionalMail,
+  createTransactionalMailRequester,
+  deriveAccountEmailConfirmationCode,
+} from '../../mail'
 import type { AuthRepository } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
 
 const registrationDeviceWindowMs = 180 * 24 * 60 * 60 * 1_000
 const registrationIpWindowMs = 24 * 60 * 60 * 1_000
+const minuteMs = 60 * 1_000
+const hourMs = 60 * minuteMs
+const dayMs = 24 * hourMs
 
-export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): AuthRepository {
+export function createPrismaAuthRepository(
+  db: DbClient,
+  abuseSecret: string,
+  options: { createMessageId?: () => string } = {},
+): AuthRepository {
   return {
+    findUserById(userId) {
+      return db.user.findUnique({ where: { id: userId } })
+    },
+
     findUserByLogin(login) {
       return db.user.findUnique({ where: { login } })
     },
@@ -356,7 +372,15 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
                 where: { accountEmailCanonicalKey: input.accountEmail.canonicalKey },
                 select: { id: true },
               })
-              if (isNewIdentity && owner && owner.id !== user.id) {
+              const recoveryOwner = await tx.recoveryEmailBinding.findUnique({
+                where: { canonicalKey: input.accountEmail.canonicalKey },
+                select: { userId: true },
+              })
+              const occupiedByAnother = Boolean(
+                (owner && owner.id !== user.id)
+                || (recoveryOwner && recoveryOwner.userId !== user.id),
+              )
+              if (isNewIdentity && occupiedByAnother) {
                 throw new AuthFailure(
                   'oauth_account_email_conflict',
                   'Unable to create this Yandex account',
@@ -364,7 +388,7 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
               }
               user = await tx.user.update({
                 where: { id: user.id },
-                data: owner && owner.id !== user.id
+                data: occupiedByAnother
                   ? {
                       accountEmailCanonicalKey: null,
                       accountEmailProviderValue: null,
@@ -409,28 +433,427 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
     },
 
     async readAccountProtection(userId) {
-      const user = await db.user.findUnique({
-        where: { id: userId },
-        select: {
-          accountEmailProviderValue: true,
-          accountEmailState: true,
-          identities: {
-            where: { provider: 'yandex' },
-            select: { id: true },
-            take: 1,
+      return db.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: {
+            accountEmailProviderValue: true,
+            accountEmailState: true,
           },
-        },
+        })
+        if (!user) return null
+        const recoveryEmailBinding = await tx.recoveryEmailBinding.findUnique({
+          where: { userId },
+          select: {
+            activatesAt: true,
+            cancellationSessionIds: true,
+            providerValue: true,
+            requestedAt: true,
+          },
+        })
+        const recoveryEmailChallenge = await tx.recoveryEmailChallenge.findUnique({
+          where: { userId },
+          select: {
+            cancellationSessionIds: true,
+            expiresAt: true,
+            providerValue: true,
+            requestedAt: true,
+          },
+        })
+        const yandexIdentity = await tx.authIdentity.findFirst({
+          where: { provider: 'yandex', userId },
+          select: { id: true },
+        })
+        return {
+          accountEmailProviderValue: user.accountEmailProviderValue,
+          accountEmailState: user.accountEmailState,
+          hasYandexIdentity: yandexIdentity !== null,
+          recoveryEmailBinding,
+          recoveryEmailChallenge,
+        }
       })
-      if (!user) return null
-      return {
-        accountEmailProviderValue: user.accountEmailProviderValue,
-        accountEmailState: user.accountEmailState,
-        hasYandexIdentity: user.identities.length > 0,
+    },
+
+    async startRecoveryEmail(input) {
+      const messageId = options.createMessageId?.() ?? crypto.randomUUID()
+      const confirmationCode = deriveAccountEmailConfirmationCode(abuseSecret, messageId)
+      const codeHash = hashRecoveryEmailCode(
+        abuseSecret,
+        input.userId,
+        input.canonicalKey,
+        confirmationCode,
+      )
+      const quotas = recoveryEmailQuotas(abuseSecret, input)
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await db.$transaction(async (tx) => {
+            const locks = [
+              { scope: 'recovery-user', value: input.userId },
+              { scope: 'account-email', value: input.canonicalKey },
+              ...quotas.map((quota) => ({
+                scope: 'recovery-budget',
+                value: `${quota.scope}:${quota.keyHash}`,
+              })),
+            ].sort((left, right) =>
+              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+            for (const lock of locks) {
+              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+            }
+
+            const user = await tx.user.findUnique({
+              where: { id: input.userId },
+              select: { passwordHash: true },
+            })
+            if (!user?.passwordHash || user.passwordHash !== input.expectedPasswordHash) {
+              throw new AuthFailure('recovery_password_invalid', 'Current password is invalid')
+            }
+            const yandexIdentity = await tx.authIdentity.findFirst({
+              where: { provider: 'yandex', userId: input.userId },
+              select: { id: true },
+            })
+            const recoveryEmailBinding = await tx.recoveryEmailBinding.findUnique({
+              where: { userId: input.userId },
+              select: { id: true },
+            })
+            if (yandexIdentity || recoveryEmailBinding) {
+              throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+            }
+            const recoveryEmailChallenge = await tx.recoveryEmailChallenge.findUnique({
+              where: { userId: input.userId },
+              select: { id: true },
+            })
+            if (recoveryEmailChallenge) {
+              throw new AuthFailure('recovery_email_pending', 'Recovery Email confirmation is already pending')
+            }
+            const sessions = await tx.authSession.findMany({
+              where: {
+                createdAt: { lte: input.now },
+                expiresAt: { gt: input.now },
+                revokedAt: null,
+                userId: input.userId,
+              },
+              select: { id: true },
+            })
+            const cancellationSessionIds = sessions
+              .map((session) => session.id)
+              .sort()
+            if (!cancellationSessionIds.includes(input.sessionId)) {
+              throw new AuthFailure('session_invalid', 'Session is invalid or expired')
+            }
+
+            const accountOwner = await tx.user.findUnique({
+              where: { accountEmailCanonicalKey: input.canonicalKey },
+              select: { id: true },
+            })
+            const recoveryOwner = await tx.recoveryEmailBinding.findUnique({
+              where: { canonicalKey: input.canonicalKey },
+              select: { userId: true },
+            })
+            if (
+              (accountOwner && accountOwner.id !== input.userId)
+              || (recoveryOwner && recoveryOwner.userId !== input.userId)
+            ) {
+              throw new AuthFailure('recovery_email_conflict', 'Recovery Email is unavailable')
+            }
+
+            for (const quota of quotas) {
+              await consumeRecoveryEmailQuota(tx, { ...quota, now: input.now })
+            }
+            await tx.recoveryEmailChallenge.create({
+              data: {
+                attemptCount: 0,
+                cancellationSessionIds,
+                canonicalKey: input.canonicalKey,
+                codeHash,
+                expiresAt: input.expiresAt,
+                messageId,
+                policyVersion: input.policyVersion,
+                providerValue: input.providerValue,
+                requestedAt: input.now,
+                userId: input.userId,
+              },
+            })
+            await createTransactionalMailRequester(tx, abuseSecret).enqueue({
+              messageId,
+              recipient: input.providerValue,
+              template: {
+                addressRole: 'recovery',
+                expiresAt: input.expiresAt,
+                kind: 'account_email_confirmation',
+              },
+            })
+          })
+          return
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) continue
+          throw error
+        }
       }
+    },
+
+    async resendRecoveryEmail(input) {
+      const snapshot = await db.recoveryEmailChallenge.findUnique({
+        where: { userId: input.userId },
+        select: { canonicalKey: true, id: true },
+      })
+      if (!snapshot) {
+        throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+      }
+      const messageId = options.createMessageId?.() ?? crypto.randomUUID()
+      const confirmationCode = deriveAccountEmailConfirmationCode(abuseSecret, messageId)
+      const codeHash = hashRecoveryEmailCode(
+        abuseSecret,
+        input.userId,
+        snapshot.canonicalKey,
+        confirmationCode,
+      )
+      const quotas = recoveryEmailQuotas(abuseSecret, {
+        canonicalKey: snapshot.canonicalKey,
+        ipAddress: input.ipAddress,
+        userId: input.userId,
+      })
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await db.$transaction(async (tx) => {
+            const locks = [
+              { scope: 'recovery-user', value: input.userId },
+              { scope: 'account-email', value: snapshot.canonicalKey },
+              ...quotas.map((quota) => ({
+                scope: 'recovery-budget',
+                value: `${quota.scope}:${quota.keyHash}`,
+              })),
+            ].sort((left, right) =>
+              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+            for (const lock of locks) {
+              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+            }
+
+            const challenge = await tx.recoveryEmailChallenge.findUnique({
+              where: { userId: input.userId },
+            })
+            if (!challenge || challenge.id !== snapshot.id) {
+              throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+            }
+            for (const quota of quotas) {
+              await consumeRecoveryEmailQuota(tx, { ...quota, now: input.now })
+            }
+            await tx.recoveryEmailChallenge.update({
+              where: { id: challenge.id },
+              data: {
+                attemptCount: 0,
+                codeHash,
+                expiresAt: input.expiresAt,
+                messageId,
+              },
+            })
+            await cancelQueuedTransactionalMail(tx, {
+              messageId: challenge.messageId,
+              now: input.now,
+            })
+            await createTransactionalMailRequester(tx, abuseSecret).enqueue({
+              messageId,
+              recipient: challenge.providerValue,
+              template: {
+                addressRole: 'recovery',
+                expiresAt: input.expiresAt,
+                kind: 'account_email_confirmation',
+              },
+            })
+          })
+          return
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) continue
+          throw error
+        }
+      }
+    },
+
+    async confirmRecoveryEmail(input) {
+      const snapshot = await db.recoveryEmailChallenge.findUnique({
+        where: { userId: input.userId },
+        select: { canonicalKey: true },
+      })
+      if (!snapshot) {
+        return await db.recoveryEmailBinding.findUnique({ where: { userId: input.userId } })
+          ? 'already_confirmed'
+          : 'invalid'
+      }
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await db.$transaction(async (tx) => {
+            const locks = [
+              { scope: 'recovery-user', value: input.userId },
+              { scope: 'account-email', value: snapshot.canonicalKey },
+            ].sort((left, right) =>
+              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+            for (const lock of locks) {
+              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+            }
+
+            const binding = await tx.recoveryEmailBinding.findUnique({
+              where: { userId: input.userId },
+              select: { id: true },
+            })
+            if (binding) return 'already_confirmed' as const
+
+            const challenge = await tx.recoveryEmailChallenge.findUnique({
+              where: { userId: input.userId },
+            })
+            if (
+              !challenge
+              || challenge.canonicalKey !== snapshot.canonicalKey
+              || challenge.expiresAt <= input.now
+              || challenge.attemptCount >= 5
+            ) {
+              return 'invalid' as const
+            }
+
+            const presentedHash = hashRecoveryEmailCode(
+              abuseSecret,
+              input.userId,
+              challenge.canonicalKey,
+              input.code,
+            )
+            if (!codeHashesEqual(challenge.codeHash, presentedHash)) {
+              await tx.recoveryEmailChallenge.update({
+                where: { id: challenge.id },
+                data: { attemptCount: { increment: 1 } },
+              })
+              return 'invalid' as const
+            }
+
+            const accountOwner = await tx.user.findUnique({
+              where: { accountEmailCanonicalKey: challenge.canonicalKey },
+              select: { id: true },
+            })
+            const recoveryOwner = await tx.recoveryEmailBinding.findUnique({
+              where: { canonicalKey: challenge.canonicalKey },
+              select: { userId: true },
+            })
+            if (
+              (accountOwner && accountOwner.id !== input.userId)
+              || (recoveryOwner && recoveryOwner.userId !== input.userId)
+            ) {
+              throw new AuthFailure('recovery_email_conflict', 'Recovery Email is unavailable')
+            }
+
+            await tx.recoveryEmailBinding.create({
+              data: {
+                activatesAt: input.activatesAt,
+                cancellationSessionIds: challenge.cancellationSessionIds,
+                canonicalKey: challenge.canonicalKey,
+                providerValue: challenge.providerValue,
+                policyVersion: challenge.policyVersion,
+                requestedAt: challenge.requestedAt,
+                userId: input.userId,
+              },
+            })
+            await cancelQueuedTransactionalMail(tx, {
+              messageId: challenge.messageId,
+              now: input.now,
+            })
+            await tx.recoveryEmailChallenge.delete({ where: { id: challenge.id } })
+            return 'confirmed' as const
+          })
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) continue
+          if (isUniqueConstraintError(error)) {
+            throw new AuthFailure('recovery_email_conflict', 'Recovery Email is unavailable')
+          }
+          throw error
+        }
+      }
+      throw new Error('Unreachable Recovery Email confirmation retry state')
+    },
+
+    async cancelRecoveryEmail(input) {
+      const challengeSnapshot = await db.recoveryEmailChallenge.findUnique({
+        where: { userId: input.userId },
+        select: { canonicalKey: true },
+      })
+      const bindingSnapshot = challengeSnapshot
+        ? null
+        : await db.recoveryEmailBinding.findUnique({
+            where: { userId: input.userId },
+            select: { activatesAt: true, canonicalKey: true },
+          })
+      if (!challengeSnapshot && (!bindingSnapshot || bindingSnapshot.activatesAt <= input.now)) {
+        return 'unavailable'
+      }
+      const canonicalKey = challengeSnapshot?.canonicalKey ?? bindingSnapshot?.canonicalKey
+      if (!canonicalKey) return 'unavailable'
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await db.$transaction(async (tx) => {
+            const locks = [
+              { scope: 'recovery-user', value: input.userId },
+              { scope: 'account-email', value: canonicalKey },
+            ].sort((left, right) =>
+              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+            for (const lock of locks) {
+              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+            }
+
+            const binding = await tx.recoveryEmailBinding.findUnique({
+              where: { userId: input.userId },
+            })
+            const challenge = binding
+              ? null
+              : await tx.recoveryEmailChallenge.findUnique({
+                  where: { userId: input.userId },
+                })
+            if (binding?.activatesAt && binding.activatesAt <= input.now) return 'unavailable' as const
+            const target = binding ?? challenge
+            if (!target || target.canonicalKey !== canonicalKey) return 'unavailable' as const
+            if (!target.cancellationSessionIds.includes(input.sessionId)) {
+              return 'forbidden' as const
+            }
+
+            if (binding) {
+              await tx.recoveryEmailBinding.delete({ where: { id: binding.id } })
+            } else if (challenge) {
+              await cancelQueuedTransactionalMail(tx, {
+                messageId: challenge.messageId,
+                now: input.now,
+              })
+              await tx.recoveryEmailChallenge.delete({ where: { id: challenge.id } })
+            }
+            await tx.authSession.updateMany({
+              where: {
+                id: { notIn: target.cancellationSessionIds },
+                revokedAt: null,
+                userId: input.userId,
+              },
+              data: { revokedAt: input.now },
+            })
+            return 'cancelled' as const
+          })
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) continue
+          throw error
+        }
+      }
+      throw new Error('Unreachable Recovery Email cancellation retry state')
     },
 
     async eraseUserIdentity({ userId, now }) {
       await db.$transaction(async (tx) => {
+        const recoveryEmailChallenge = await tx.recoveryEmailChallenge.findUnique({
+          where: { userId },
+          select: { messageId: true },
+        })
+        if (recoveryEmailChallenge) {
+          await cancelQueuedTransactionalMail(tx, {
+            messageId: recoveryEmailChallenge.messageId,
+            now,
+          })
+        }
+        await tx.recoveryEmailChallenge.deleteMany({ where: { userId } })
+        await tx.recoveryEmailBinding.deleteMany({ where: { userId } })
         await tx.authIdentity.deleteMany({ where: { userId } })
         await tx.authSession.deleteMany({ where: { userId } })
         await tx.currentMatch.deleteMany({ where: { userId } })
@@ -499,6 +922,98 @@ async function consumeRegistrationQuota(
       windowStartedAt,
     },
   })
+}
+
+function recoveryEmailQuotas(
+  secret: string,
+  input: { canonicalKey: string; ipAddress?: string; userId: string },
+) {
+  const definitions = [
+    ['rec_email_account_min', input.userId, 1, minuteMs],
+    ['rec_email_account_hour', input.userId, 3, hourMs],
+    ['rec_email_account_day', input.userId, 5, dayMs],
+    ['rec_email_address_min', input.canonicalKey, 1, minuteMs],
+    ['rec_email_address_hour', input.canonicalKey, 3, hourMs],
+    ['rec_email_address_day', input.canonicalKey, 5, dayMs],
+    ['rec_email_ip_hour', input.ipAddress ?? 'unknown', 20, hourMs],
+  ] as const
+  return definitions.map(([scope, value, limit, windowMs]) => ({
+    keyHash: hashRecoveryBudgetKey(secret, scope, value),
+    limit,
+    scope,
+    windowMs,
+  }))
+}
+
+async function consumeRecoveryEmailQuota(
+  tx: Prisma.TransactionClient,
+  input: {
+    keyHash: string
+    limit: number
+    now: Date
+    scope: string
+    windowMs: number
+  },
+) {
+  const existing = await tx.authAbuseBucket.findUnique({
+    where: { scope_keyHash: { scope: input.scope, keyHash: input.keyHash } },
+  })
+  const windowExpired = !existing || existing.expiresAt <= input.now
+  const count = windowExpired ? 1 : existing.count + 1
+  if (count > input.limit) {
+    throw new AuthFailure(
+      'recovery_email_limited',
+      'Recovery Email request is temporarily unavailable',
+    )
+  }
+  const windowStartedAt = windowExpired ? input.now : existing.windowStartedAt
+  await tx.authAbuseBucket.upsert({
+    where: { scope_keyHash: { scope: input.scope, keyHash: input.keyHash } },
+    create: {
+      count,
+      expiresAt: new Date(windowStartedAt.getTime() + input.windowMs),
+      keyHash: input.keyHash,
+      scope: input.scope,
+      windowStartedAt,
+    },
+    update: {
+      blockedUntil: null,
+      count,
+      expiresAt: new Date(windowStartedAt.getTime() + input.windowMs),
+      windowStartedAt,
+    },
+  })
+}
+
+function hashRecoveryBudgetKey(secret: string, scope: string, value: string) {
+  return createHmac('sha256', secret)
+    .update('recovery-email-budget-v1\0')
+    .update(scope)
+    .update('\0')
+    .update(value)
+    .digest('hex')
+}
+
+function hashRecoveryEmailCode(
+  secret: string,
+  userId: string,
+  canonicalKey: string,
+  code: string,
+) {
+  return createHmac('sha256', secret)
+    .update('recovery-email-verification-v1\0')
+    .update(userId)
+    .update('\0')
+    .update(canonicalKey)
+    .update('\0')
+    .update(code)
+    .digest('hex')
+}
+
+function codeHashesEqual(storedHash: string, presentedHash: string) {
+  const stored = Buffer.from(storedHash, 'hex')
+  const presented = Buffer.from(presentedHash, 'hex')
+  return stored.length === presented.length && timingSafeEqual(stored, presented)
 }
 
 function hashRegistrationKey(secret: string, scope: string, value: string) {

@@ -1,6 +1,8 @@
 import {
   apiErrorSchema,
   accountProtectionResponseSchema,
+  cancelRecoveryEmailRequestSchema,
+  confirmRecoveryEmailRequestSchema,
   cookieAuthResponseSchema,
   cookieLogoutRequestSchema,
   cookieRefreshRequestSchema,
@@ -12,6 +14,8 @@ import {
   oauthStartRequestSchema,
   oauthStartResponseSchema,
   registerRequestSchema,
+  resendRecoveryEmailRequestSchema,
+  startRecoveryEmailRequestSchema,
   tokenAuthResponseSchema,
   tokenLogoutRequestSchema,
   tokenRefreshRequestSchema,
@@ -262,6 +266,101 @@ const accountProtectionRoute = createRoute({
   },
 })
 
+const startRecoveryEmailRoute = createRoute({
+  method: 'post',
+  path: '/account-protection/recovery-email/start',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: startRecoveryEmailRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: accountProtectionResponseContent,
+      description: 'Started first Recovery Email confirmation',
+    },
+    400: { content: errorResponseContent, description: 'Recovery Email is unavailable' },
+    401: { content: errorResponseContent, description: 'Authentication or password invalid' },
+    409: { content: errorResponseContent, description: 'Recovery Email conflicts or is pending' },
+    429: { content: errorResponseContent, description: 'Recovery Email request limited' },
+  },
+})
+
+const resendRecoveryEmailRoute = createRoute({
+  method: 'post',
+  path: '/account-protection/recovery-email/resend',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: resendRecoveryEmailRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: accountProtectionResponseContent,
+      description: 'Replaced the pending Recovery Email confirmation code',
+    },
+    400: { content: errorResponseContent, description: 'Recovery Email is unavailable' },
+    401: { content: errorResponseContent, description: 'Authentication required' },
+    429: { content: errorResponseContent, description: 'Recovery Email request limited' },
+  },
+})
+
+const confirmRecoveryEmailRoute = createRoute({
+  method: 'post',
+  path: '/account-protection/recovery-email/confirm',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: confirmRecoveryEmailRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: accountProtectionResponseContent,
+      description: 'Confirmed the first Recovery Email and started cooling off',
+    },
+    400: { content: errorResponseContent, description: 'Code or Recovery Email is unavailable' },
+    401: { content: errorResponseContent, description: 'Authentication required' },
+    409: { content: errorResponseContent, description: 'Recovery Email conflicts' },
+    429: { content: errorResponseContent, description: 'Authentication mutation limited' },
+  },
+})
+
+const cancelRecoveryEmailRoute = createRoute({
+  method: 'post',
+  path: '/account-protection/recovery-email/cancel',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: cancelRecoveryEmailRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: accountProtectionResponseContent,
+      description: 'Cancelled pending Recovery Email protection',
+    },
+    400: { content: errorResponseContent, description: 'Recovery Email is unavailable' },
+    401: { content: errorResponseContent, description: 'Authentication required' },
+    403: { content: errorResponseContent, description: 'Session cannot cancel protection' },
+    429: { content: errorResponseContent, description: 'Authentication mutation limited' },
+  },
+})
+
 const cookieLogoutRoute = createRoute({
   method: 'post',
   path: '/logout',
@@ -454,7 +553,54 @@ export function createAuthRoutes({
   })
   protectedRoutes.use('/account-protection', requireAuth)
   protectedRoutes.openapi(accountProtectionRoute, async (c) => {
-    return c.json(await executeAuth(() => service.getAccountProtection(c.var.user.id)), 200)
+    return c.json(await executeAuth(() => service.getAccountProtection(
+      c.var.user.id,
+      c.var.user.sessionId,
+    )), 200)
+  })
+  protectedRoutes.use('/account-protection/recovery-email/start', requireAuth)
+  protectedRoutes.use('/account-protection/recovery-email/start', authenticatedMutationBudget)
+  protectedRoutes.openapi(startRecoveryEmailRoute, async (c) => {
+    const user = c.var.user
+    const request = c.req.valid('json')
+    const metadata = requestMetadata(c, env)
+    return c.json(await executeAuth(() => service.startRecoveryEmail({
+      email: request.email,
+      ipAddress: metadata.ipAddress,
+      password: request.password,
+      sessionId: user.sessionId,
+      userId: user.id,
+    })), 200)
+  })
+  protectedRoutes.use('/account-protection/recovery-email/resend', requireAuth)
+  protectedRoutes.use('/account-protection/recovery-email/resend', authenticatedMutationBudget)
+  protectedRoutes.openapi(resendRecoveryEmailRoute, async (c) => {
+    const user = c.var.user
+    const metadata = requestMetadata(c, env)
+    return c.json(await executeAuth(() => service.resendRecoveryEmail({
+      ipAddress: metadata.ipAddress,
+      sessionId: user.sessionId,
+      userId: user.id,
+    })), 200)
+  })
+  protectedRoutes.use('/account-protection/recovery-email/confirm', requireAuth)
+  protectedRoutes.use('/account-protection/recovery-email/confirm', authenticatedMutationBudget)
+  protectedRoutes.openapi(confirmRecoveryEmailRoute, async (c) => {
+    const user = c.var.user
+    return c.json(await executeAuth(() => service.confirmRecoveryEmail({
+      code: c.req.valid('json').code,
+      sessionId: user.sessionId,
+      userId: user.id,
+    })), 200)
+  })
+  protectedRoutes.use('/account-protection/recovery-email/cancel', requireAuth)
+  protectedRoutes.use('/account-protection/recovery-email/cancel', authenticatedMutationBudget)
+  protectedRoutes.openapi(cancelRecoveryEmailRoute, async (c) => {
+    const user = c.var.user
+    return c.json(await executeAuth(() => service.cancelRecoveryEmail({
+      sessionId: user.sessionId,
+      userId: user.id,
+    })), 200)
   })
   protectedRoutes.use('/account', requireAuth)
   protectedRoutes.use('/account', authenticatedMutationBudget)
