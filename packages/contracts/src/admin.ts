@@ -92,6 +92,52 @@ export const mailPolicyViewSchema = z.object({
   }).strict().nullable(),
 }).strict()
 
+const mailDeliveryGroupSchema = z.object({
+  service: z.string().min(1).max(253),
+  smtpAccepted: z.number().int().nonnegative(),
+  templateKind: z.enum([
+    'account_email_confirmation',
+    'password_recovery',
+    'security_notification',
+  ]),
+  temporaryFailures: z.number().int().nonnegative(),
+  terminalFailures: z.number().int().nonnegative(),
+  requested: z.number().int().min(5),
+}).strict()
+
+export const mailDeliveryOverviewSchema = z.object({
+  budget: z.object({
+    limitPerMinute: z.number().int().positive(),
+    usedInWindow: z.number().int().nonnegative(),
+    windowStartedAt: z.string().datetime().nullable(),
+  }).strict(),
+  circuit: z.object({
+    consecutiveFailures: z.number().int().nonnegative(),
+    openUntil: z.string().datetime().nullable(),
+    state: z.enum(['disabled', 'closed', 'open']),
+  }).strict(),
+  configured: z.boolean(),
+  groups: z.array(mailDeliveryGroupSchema).max(50),
+  lastSmtpSuccessAt: z.string().datetime().nullable(),
+  outbox: z.object({
+    leased: z.number().int().nonnegative(),
+    oldestQueuedAt: z.string().datetime().nullable(),
+    queued: z.number().int().nonnegative(),
+  }).strict(),
+  provider: z.literal('reg_ru'),
+  registryLastSuccessfulImportAt: z.string().datetime().nullable(),
+  totals: z.object({
+    requested: z.number().int().nonnegative(),
+    smtpAccepted: z.number().int().nonnegative(),
+    temporaryFailures: z.number().int().nonnegative(),
+    terminalFailures: z.number().int().nonnegative(),
+  }).strict(),
+}).strict()
+
+export const mailOperationsViewSchema = mailPolicyViewSchema.extend({
+  delivery: mailDeliveryOverviewSchema,
+}).strict()
+
 const mailPolicyCommandBaseSchema = z.object({
   commandId: z.string().uuid(),
   expectedVersion: z.number().int().nonnegative(),
@@ -114,6 +160,8 @@ export const mailPolicyStatusCommandSchema = mailPolicyCommandBaseSchema.extend(
 }).strict()
 
 export type MailPolicyView = z.infer<typeof mailPolicyViewSchema>
+export type MailDeliveryOverview = z.infer<typeof mailDeliveryOverviewSchema>
+export type MailOperationsView = z.infer<typeof mailOperationsViewSchema>
 export type MailPolicyEntry = z.infer<typeof mailPolicyEntrySchema>
 export type MailPolicyCanonicalization = z.infer<typeof mailPolicyCanonicalizationSchema>
 export type MailRegistryCandidate = z.infer<typeof mailRegistryCandidateSchema>

@@ -286,3 +286,53 @@ model MailPolicyAuditEvent {
   @@index([occurredAt], map: "mail_policy_audit_events_occurred_at_idx")
   @@map("mail_policy_audit_events")
 }
+
+model MailOutboxMessage {
+  id                String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  messageId         String                @unique @map("message_id") @db.Uuid
+  fingerprint       String                @db.Char(64)
+  recipient         String                @db.VarChar(254)
+  recipientDomain   String                @map("recipient_domain") @db.VarChar(253)
+  templateKind      String                @map("template_kind") @db.VarChar(40)
+  templatePayload   Json                  @map("template_payload")
+  state             String                @default("queued") @db.VarChar(24)
+  attemptCount      Int                   @default(0) @map("attempt_count")
+  availableAt       DateTime              @default(now()) @map("available_at")
+  leaseOwner        String?               @map("lease_owner") @db.VarChar(64)
+  leaseExpiresAt    DateTime?             @map("lease_expires_at")
+  lastFailureCode   String?               @map("last_failure_code") @db.VarChar(64)
+  providerMessageId String                @unique @map("provider_message_id") @db.VarChar(320)
+  completedAt       DateTime?             @map("completed_at")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  attempts          MailDeliveryAttempt[]
+
+  @@index([state, availableAt, createdAt], map: "mail_outbox_messages_state_available_created_idx")
+  @@index([recipientDomain, templateKind], map: "mail_outbox_messages_domain_template_idx")
+  @@index([completedAt], map: "mail_outbox_messages_completed_at_idx")
+  @@map("mail_outbox_messages")
+}
+
+model MailDeliveryAttempt {
+  id          String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  outboxId    String            @map("outbox_id") @db.Uuid
+  outcome     String            @db.VarChar(24)
+  failureCode String?           @map("failure_code") @db.VarChar(64)
+  attemptedAt DateTime          @default(now()) @map("attempted_at")
+  outbox      MailOutboxMessage @relation(fields: [outboxId], references: [id], onDelete: Cascade, map: "mail_delivery_attempts_outbox_id_fkey")
+
+  @@index([outcome, attemptedAt], map: "mail_delivery_attempts_outcome_attempted_idx")
+  @@map("mail_delivery_attempts")
+}
+
+model MailDeliveryControl {
+  id                   String    @id @db.VarChar(32)
+  windowStartedAt      DateTime  @map("window_started_at")
+  deliveriesInWindow   Int       @default(0) @map("deliveries_in_window")
+  consecutiveFailures  Int       @default(0) @map("consecutive_failures")
+  circuitOpenUntil     DateTime? @map("circuit_open_until")
+  lastSuccessAt        DateTime? @map("last_success_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@map("mail_delivery_controls")
+}

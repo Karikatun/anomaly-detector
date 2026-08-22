@@ -74,7 +74,7 @@ Yandex Object Storage env is optional. Leave `YANDEX_STORAGE_*` blank until the 
 The backend is one workspace with one Prisma schema and one Dockerfile, but it has separate runtime entrypoints:
 
 - API: `bun run start:api`, backed by `src/index.ts`.
-- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases and scheduled Room starts. `bun run dev` starts both API and worker locally; production runs them as separate processes. The worker serves internal `/health/live` and `/health/ready` endpoints on `WORKER_HEALTH_PORT` or `PORT + 1`; readiness requires recent successful passes from both polling loops.
+- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases, scheduled Room starts, and the PostgreSQL transactional-mail outbox. `bun run dev` starts both API and worker locally; production runs them as separate processes. The worker serves internal `/health/live` and `/health/ready` endpoints on `WORKER_HEALTH_PORT` or `PORT + 1`; readiness requires recent successful passes from the two base loops and, when SMTP is enabled, the mail-delivery loop.
 - Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, `maintenance:cleanup`, and the backwards-compatible `auth:sessions:cleanup` alias.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
@@ -103,11 +103,30 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 The remaining approved but not yet implemented Public MVP extensions are specified in
 ADRs 0005–0016 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). They add
 Account Email/Yandex synchronisation, Recovery Email and Recovery Code,
-password reset, transactional outbox, consent-scoped funnel analytics and
+password reset, consent-scoped funnel analytics and
 Feedback Report intake. Do not add env keys
 or advertise endpoints in this README until their implementation and contracts
 exist; when they do, document every new key here, in `.env.example`, the Yandex
 runbook and production setup without exposing values.
+
+The `mail` context now exposes a narrow internal requester for exactly three
+templates: Account Email confirmation, password recovery and security
+notification. Callers create it from the owning Prisma transaction; the module
+does not expose an unbound requester, so the product state change and logical
+mail request commit or roll back together. The existing worker drains the
+request through the protected REG.RU SMTP adapter. Delivery remains
+disabled by default. Logical request fingerprints are keyed HMAC values, and
+accepted or terminal rows immediately redact the recipient and secret-bearing
+template payload. `MAIL_SMTP_ENABLED`, `MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`,
+`MAIL_SMTP_TLS_MODE`, `MAIL_SMTP_USERNAME`, `MAIL_SMTP_PASSWORD`,
+`MAIL_SMTP_FROM`, `MAIL_SMTP_REPLY_TO`, `MAIL_SMTP_TIMEOUT_MS`,
+`MAIL_SMTP_MAX_ATTEMPTS`, `MAIL_SMTP_RETRY_BASE_SECONDS`,
+`MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD`, `MAIL_SMTP_CIRCUIT_OPEN_SECONDS`,
+`MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE`, `MAIL_SMTP_LEASE_SECONDS`,
+`MAIL_SMTP_WORKER_INTERVAL_MS` and `MAIL_OUTBOX_RETENTION_DAYS` are documented
+with safe empty/default values in `.env.example`; production secret placement,
+verification and recovery procedures live in the Yandex runbook. The configured
+lease must be longer than the SMTP timeout.
 
 Личная игровая статистика доступна авторизованному пользователю через `GET /api/profile/statistics`. Сервер рассчитывает её по завершённым совместимым партиям и журналу принятых игровых действий; формулы закреплены в [../docs/GAME_DESIGN_BRIEF.md](../docs/GAME_DESIGN_BRIEF.md).
 

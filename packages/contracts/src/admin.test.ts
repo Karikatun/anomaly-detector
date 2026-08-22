@@ -6,6 +6,7 @@ import {
   mailPolicyImportCommandSchema,
   mailPolicyPublishCommandSchema,
   mailPolicyStatusCommandSchema,
+  mailOperationsViewSchema,
   mailPolicyViewSchema,
 } from './admin'
 
@@ -127,6 +128,46 @@ describe('mailPolicyViewSchema', () => {
       additions: [],
       commandId,
       expectedVersion: 0,
+    })).toThrow()
+  })
+})
+
+describe('mailOperationsViewSchema', () => {
+  test('accepts only privacy-safe delivery aggregates and suppresses small groups', () => {
+    const result = mailOperationsViewSchema.parse({
+      currentVersion: 0,
+      delivery: {
+        budget: { limitPerMinute: 60, usedInWindow: 3, windowStartedAt: '2026-08-22T12:00:00.000Z' },
+        circuit: { consecutiveFailures: 0, openUntil: null, state: 'closed' },
+        configured: true,
+        groups: [{
+          requested: 12,
+          service: 'mail.yandex.ru',
+          smtpAccepted: 10,
+          templateKind: 'account_email_confirmation',
+          temporaryFailures: 2,
+          terminalFailures: 0,
+        }],
+        lastSmtpSuccessAt: '2026-08-22T12:01:00.000Z',
+        outbox: { leased: 1, oldestQueuedAt: '2026-08-22T11:59:00.000Z', queued: 2 },
+        provider: 'reg_ru',
+        registryLastSuccessfulImportAt: '2026-08-22T10:00:00.000Z',
+        totals: { requested: 12, smtpAccepted: 10, temporaryFailures: 2, terminalFailures: 0 },
+      },
+      generatedAt: '2026-08-22T12:02:00.000Z',
+      latestAttempt: null,
+      lastSuccessfulImport: null,
+      publishedPolicy: null,
+    })
+
+    expect(result.delivery.totals.smtpAccepted).toBe(10)
+    expect(JSON.stringify(result.delivery)).not.toMatch(/recipient|address|token|code|content/i)
+    expect(() => mailOperationsViewSchema.parse({
+      ...result,
+      delivery: {
+        ...result.delivery,
+        groups: [{ ...result.delivery.groups[0], requested: 4 }],
+      },
     })).toThrow()
   })
 })

@@ -4,7 +4,7 @@ import {
   mailPolicyImportCommandSchema,
   mailPolicyPublishCommandSchema,
   mailPolicyStatusCommandSchema,
-  mailPolicyViewSchema,
+  mailOperationsViewSchema,
 } from '@anomaly-detector/contracts'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import type { Context } from 'hono'
@@ -53,25 +53,25 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
   })
 
   routes.get('/mail-policy', async (c) => {
-    return c.json(mailPolicyViewSchema.parse(await input.mailPolicy.read()))
+    return c.json(mailOperationsViewSchema.parse(await input.mailPolicy.read()))
   })
 
   routes.post('/mail-policy/import', async (c) => {
     const command = mailPolicyImportCommandSchema.parse(await c.req.json())
     const result = await executeMailPolicy(() => input.mailPolicy.importCandidates(command, operator(c)))
-    return c.json(mailPolicyViewSchema.parse(result))
+    return c.json(mailOperationsViewSchema.parse(result))
   })
 
   routes.post('/mail-policy/publish', async (c) => {
     const command = mailPolicyPublishCommandSchema.parse(await c.req.json())
     const result = await executeMailPolicy(() => input.mailPolicy.publish(command, operator(c)))
-    return c.json(mailPolicyViewSchema.parse(result))
+    return c.json(mailOperationsViewSchema.parse(result))
   })
 
   routes.post('/mail-policy/status', async (c) => {
     const command = mailPolicyStatusCommandSchema.parse(await c.req.json())
     const result = await executeMailPolicy(() => input.mailPolicy.changeStatus(command, operator(c)))
-    return c.json(mailPolicyViewSchema.parse(result))
+    return c.json(mailOperationsViewSchema.parse(result))
   })
 
   return routes

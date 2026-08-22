@@ -109,7 +109,7 @@ security-сценарий.
    last-known-good версию. Публикация использует version precondition,
    идемпотентный `commandId`, недавний вход, `ADMIN_USER_IDS` и неизменяемый
    аудит.
-6. [ ] Использовать отдельный `no-reply@anomaly-detector.ru` на REG.RU с
+6. [x] Использовать отдельный `no-reply@anomaly-detector.ru` на REG.RU с
    `Reply-To: support@anomaly-detector.ru` только для подтверждения почты,
    восстановления и security-уведомлений. Добавить transactional outbox,
    ограниченные retry и состояние окончательного отказа.
@@ -118,9 +118,11 @@ security-сценарий.
 8. [ ] Добавить распределённые PostgreSQL budgets из ADR 0013, HMAC-ключи без
    сырых логинов/email в anti-abuse bucket, общий circuit breaker и alerts.
    Пороговые значения меняются только по production evidence.
-9. [ ] Показать в adminapp read-only агрегаты SMTP/outbox, rate limit,
+9. [-] Показать в adminapp read-only агрегаты SMTP/outbox, rate limit,
    circuit breaker и свежести реестра без адресов, текста, кодов, токенов и
-   малых раскрывающих групп.
+   малых раскрывающих групп. SMTP/outbox, circuit breaker и свежесть реестра
+   реализованы; распределённые anti-abuse rate-limit агрегаты остаются в срезе
+   ADR 0013.
 
 **Gate:** новый password email принимается только из опубликованной версии
 реестра, Yandex ID email синхронизируется без merge, outbox переживает retry и

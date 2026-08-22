@@ -17,6 +17,24 @@ test('renders candidate evidence and only the three approved operator workflows'
     <MailPolicyScreen
       data={{
         currentVersion: 2,
+        delivery: {
+          budget: { limitPerMinute: 60, usedInWindow: 7, windowStartedAt: '2026-08-22T12:00:00.000Z' },
+          circuit: { consecutiveFailures: 1, openUntil: null, state: 'closed' },
+          configured: true,
+          groups: [{
+            requested: 12,
+            service: 'mail.yandex.ru',
+            smtpAccepted: 10,
+            templateKind: 'account_email_confirmation',
+            temporaryFailures: 2,
+            terminalFailures: 0,
+          }],
+          lastSmtpSuccessAt: '2026-08-22T11:59:00.000Z',
+          outbox: { leased: 1, oldestQueuedAt: '2026-08-22T11:58:00.000Z', queued: 2 },
+          provider: 'reg_ru',
+          registryLastSuccessfulImportAt: '2026-08-22T11:55:00.000Z',
+          totals: { requested: 12, smtpAccepted: 10, temporaryFailures: 2, terminalFailures: 0 },
+        },
         generatedAt: '2026-08-22T12:00:00.000Z',
         latestAttempt: {
           checksum: 'a'.repeat(64),
@@ -69,6 +87,9 @@ test('renders candidate evidence and only the three approved operator workflows'
   expect(html).toContain('mail.yandex.ru')
   expect(html).toContain('yandex.ru')
   expect(html).toContain('Новые адреса запрещены')
+  expect(html).toContain('Состояние отправки')
+  expect(html).toContain('Принято SMTP')
+  expect(html).toContain('это не подтверждение доставки в ящик')
   expect(html).not.toContain('distributorEmail')
   expect(html).not.toContain('Редактировать запись')
   expect(html).not.toContain('Удалить запись')

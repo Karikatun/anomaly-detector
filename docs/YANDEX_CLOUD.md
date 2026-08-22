@@ -136,9 +136,10 @@ API:    GET http://<instance>:3000/health/ready
 Worker: GET http://<instance>:3001/health/ready
 ```
 
-The worker readiness endpoint stays unavailable until both deadline loops complete
-successfully. It becomes unavailable after a loop error or stale heartbeat and recovers
-after the next successful pass.
+The worker readiness endpoint stays unavailable until every configured loop completes
+successfully: the two deadline loops always run, and transactional mail adds a third loop
+only when SMTP is enabled. It becomes unavailable after a loop error or stale heartbeat
+and recovers after the next successful pass.
 
 Production env must include:
 
@@ -302,8 +303,9 @@ personal address. The mailbox is hosted by REG.RU and its MX records are configu
 
 The approved recovery flow uses a separate
 `no-reply@anomaly-detector.ru` mailbox at REG.RU with
-`Reply-To: support@anomaly-detector.ru`. It is not implemented by the current
-runtime yet. Before enabling it:
+`Reply-To: support@anomaly-detector.ru`. The runtime implements the protected SMTP
+adapter and PostgreSQL outbox, but keeps delivery disabled by default. Before enabling
+it in production:
 
 1. configure the exact SMTP host, TLS mode and credentials through production
    secrets and version every new env key in code, examples and this runbook;
@@ -316,6 +318,56 @@ runtime yet. Before enabling it:
    marketing and gameplay messages;
 6. document secret rotation, provider outage, circuit breaker, backlog recovery
    and rollback before production enablement.
+
+Use these versioned settings. Obtain the exact host, port and TLS mode from the active
+REG.RU mailbox instead of copying an unverified example. Only `implicit_tls` and
+`starttls` are accepted; certificate verification and TLS 1.2 or newer are mandatory.
+`MAIL_SMTP_LEASE_SECONDS` must be strictly greater than
+`MAIL_SMTP_TIMEOUT_MS / 1000`, so a second worker cannot reclaim a message while
+the first SMTP attempt is still waiting for its bounded response.
+
+```bash
+MAIL_SMTP_ENABLED=true
+MAIL_SMTP_HOST=<verified-REG.RU-SMTP-hostname>
+MAIL_SMTP_PORT=<verified-port>
+MAIL_SMTP_TLS_MODE=<implicit_tls-or-starttls>
+MAIL_SMTP_USERNAME=no-reply@anomaly-detector.ru
+MAIL_SMTP_PASSWORD=<Lockbox-backed-secret>
+MAIL_SMTP_FROM=no-reply@anomaly-detector.ru
+MAIL_SMTP_REPLY_TO=support@anomaly-detector.ru
+MAIL_SMTP_TIMEOUT_MS=10000
+MAIL_SMTP_MAX_ATTEMPTS=5
+MAIL_SMTP_RETRY_BASE_SECONDS=30
+MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD=5
+MAIL_SMTP_CIRCUIT_OPEN_SECONDS=300
+MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE=60
+MAIL_SMTP_LEASE_SECONDS=60
+MAIL_SMTP_WORKER_INTERVAL_MS=1000
+MAIL_OUTBOX_RETENTION_DAYS=30
+```
+
+The API and worker receive the same non-secret tuning values. Only the worker needs the
+SMTP credential at runtime; keep it out of API/static-client environments when the
+deployment mechanism can scope secrets per process. SMTP acceptance is recorded as
+`Принято SMTP`, never as final inbox delivery. A response lost after `DATA` is an
+ambiguous outcome: retry keeps one logical outbox row and a stable `Message-ID`, but SMTP
+cannot guarantee that the recipient will never see a duplicate. Confirmation and reset
+operations must therefore remain replay-safe when the same message is received twice.
+The logical-request fingerprint is a domain-separated HMAC under the backend secret,
+so a stored fingerprint cannot be used to brute-force a short confirmation code.
+Queued and leased rows necessarily retain the recipient and template payload for
+delivery. SMTP-accepted and terminal-failure rows immediately replace those fields
+with redacted values; only safe operational metadata and attempt outcomes remain until
+the retention cleanup removes the row.
+
+For provider outage or suspected credential compromise, set `MAIL_SMTP_ENABLED=false`
+and restart only the worker. Queued rows remain in PostgreSQL. Rotate the credential in
+Lockbox, verify TLS and a controlled message under issue #36, then re-enable the worker;
+the global circuit breaker releases one probe after its cooldown before normal draining.
+If backlog age or terminal failures keep growing, leave delivery disabled and diagnose
+the provider/configuration rather than increasing retries. Rollback uses the previous
+immutable API/worker image after applying only backward-compatible migrations; do not
+delete queued rows. Terminal rows are removed later by the named retention cleanup.
 
 ## Managed PostgreSQL
 
@@ -339,7 +391,7 @@ Do not run `prisma migrate dev` in production and do not hand-write Prisma migra
 
 ## Maintenance Cleanup Timer
 
-Production must run `maintenance:cleanup` daily; setting `SESSION_RETENTION_DAYS` alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, and waiting rooms older than 24 hours. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, and only accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. Queued and leased mail is never removed by this cleanup. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
 
 Create the cleanup container and deploy its revision. The image `WORKDIR` is already `/app/backend`, so the command can call the existing cron runner directly:
 
@@ -356,10 +408,10 @@ yc serverless container revision deploy \
   --memory 256MB \
   --execution-timeout 60s \
   --service-account-id <cleanup_runtime_service_account_ID> \
-  --environment DATABASE_URL='<production_database_url>',JWT_SECRET='<production_jwt_secret>',CORS_ORIGINS=https://app.anomaly-detector.ru,WEBAPP_ORIGIN=https://app.anomaly-detector.ru,COOKIE_SECURE=true,SESSION_ABSOLUTE_TTL_DAYS=90,SESSION_RETENTION_DAYS=7
+  --environment DATABASE_URL='<production_database_url>',JWT_SECRET='<production_jwt_secret>',CORS_ORIGINS=https://app.anomaly-detector.ru,WEBAPP_ORIGIN=https://app.anomaly-detector.ru,COOKIE_SECURE=true,SESSION_ABSOLUTE_TTL_DAYS=90,SESSION_RETENTION_DAYS=7,MAIL_OUTBOX_RETENTION_DAYS=30
 ```
 
-Configure the cleanup revision with the same production `DATABASE_URL`, `JWT_SECRET`, session TTL, retention, network, and Lockbox policy as the API revision. Prefer Lockbox or the console instead of putting real secrets into shell history. Do not make the cleanup container public.
+Configure the cleanup revision with the same production `DATABASE_URL`, `JWT_SECRET`, session and outbox retention, network, and Lockbox policy as the API revision. It does not need SMTP credentials. Prefer Lockbox or the console instead of putting real secrets into shell history. Do not make the cleanup container public.
 
 Create a narrowly scoped service account for the timer, grant it invocation access only to the cleanup container, and schedule the task daily at 03:00 UTC. Yandex timer expressions have six fields and use UTC:
 
@@ -386,7 +438,7 @@ yc serverless trigger create timer \
   --retry-interval 30s
 ```
 
-After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, ... realtime tickets, and ... expired waiting rooms.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
+After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, ... realtime tickets, ... expired waiting rooms, and ... terminal mail outbox records.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
 
 ## Real-Time Pub/Sub
 
