@@ -287,48 +287,146 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
       })
     },
 
-    async findUserByIdentity({ provider, subject }) {
-      const identity = await db.authIdentity.findUnique({
-        where: { provider_subject: { provider, subject } },
-        include: { user: true },
-      })
-      return identity?.user ?? null
+    async completeOAuthSignIn(input) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await db.$transaction(async (tx) => {
+            await lockAuthTransactionKey(
+              tx,
+              abuseSecret,
+              'oauth-identity',
+              `${input.identity.provider}\u0000${input.identity.subject}`,
+            )
+
+            const identity = await tx.authIdentity.findUnique({
+              where: {
+                provider_subject: {
+                  provider: input.identity.provider,
+                  subject: input.identity.subject,
+                },
+              },
+              select: { userId: true },
+            })
+            const isNewIdentity = identity === null
+
+            let user = identity
+              ? await tx.user.findUniqueOrThrow({ where: { id: identity.userId } })
+              : null
+            if (!user) {
+              if (!input.newUser) return null
+              user = await tx.user.create({
+                data: {
+                  displayName: input.newUser.displayName ?? null,
+                  login: input.newUser.login,
+                  passwordHash: null,
+                  privacyConsentAt: input.newUser.legalAcceptance.acceptedAt,
+                  privacyConsentVersion: input.newUser.legalAcceptance.privacyConsentVersion,
+                  termsAcceptedAt: input.newUser.legalAcceptance.acceptedAt,
+                  termsVersion: input.newUser.legalAcceptance.termsVersion,
+                },
+              })
+              await tx.authIdentity.create({
+                data: {
+                  provider: input.identity.provider,
+                  subject: input.identity.subject,
+                  userId: user.id,
+                },
+              })
+            }
+
+            const emailLockKeys = [
+              user.accountEmailCanonicalKey,
+              input.accountEmail.kind === 'candidate'
+                ? input.accountEmail.canonicalKey
+                : null,
+            ].filter((value): value is string => value !== null)
+              .filter((value, index, values) => values.indexOf(value) === index)
+              .sort()
+            for (const canonicalKey of emailLockKeys) {
+              await lockAuthTransactionKey(
+                tx,
+                abuseSecret,
+                'account-email',
+                canonicalKey,
+              )
+            }
+
+            if (input.accountEmail.kind === 'candidate') {
+              const owner = await tx.user.findUnique({
+                where: { accountEmailCanonicalKey: input.accountEmail.canonicalKey },
+                select: { id: true },
+              })
+              if (isNewIdentity && owner && owner.id !== user.id) {
+                throw new AuthFailure(
+                  'oauth_account_email_conflict',
+                  'Unable to create this Yandex account',
+                )
+              }
+              user = await tx.user.update({
+                where: { id: user.id },
+                data: owner && owner.id !== user.id
+                  ? {
+                      accountEmailCanonicalKey: null,
+                      accountEmailProviderValue: null,
+                      accountEmailState: 'yandex_conflict',
+                    }
+                  : {
+                      accountEmailCanonicalKey: input.accountEmail.canonicalKey,
+                      accountEmailProviderValue: input.accountEmail.providerValue,
+                      accountEmailState: 'yandex_managed',
+                    },
+              })
+            } else {
+              user = await tx.user.update({
+                where: { id: user.id },
+                data: {
+                  accountEmailCanonicalKey: null,
+                  accountEmailProviderValue: null,
+                  accountEmailState: 'yandex_unavailable',
+                },
+              })
+            }
+
+            const session = await tx.authSession.create({
+              data: {
+                userId: user.id,
+                refreshTokenHash: input.session.refreshTokenHash,
+                refreshTokenFamilyHash: input.session.refreshTokenFamilyHash,
+                expiresAt: input.session.expiresAt,
+                userAgent: input.session.metadata.userAgent,
+                ipAddress: input.session.metadata.ipAddress,
+              },
+              select: { id: true },
+            })
+            return { user, session }
+          })
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) continue
+          throw error
+        }
+      }
+      throw new Error('Unreachable OAuth completion transaction retry state')
     },
 
-    async createOAuthUserWithSession(input) {
-      const { user: userData, identity: identityData, session: sessionData } = input
-      return await db.$transaction(async (tx) => {
-        const user = await tx.user.create({
-          data: {
-            login: userData.login,
-            passwordHash: 'OAUTH_USER',
-            displayName: userData.displayName ?? null,
-            privacyConsentAt: userData.legalAcceptance.acceptedAt,
-            privacyConsentVersion: userData.legalAcceptance.privacyConsentVersion,
-            termsAcceptedAt: userData.legalAcceptance.acceptedAt,
-            termsVersion: userData.legalAcceptance.termsVersion,
+    async readAccountProtection(userId) {
+      const user = await db.user.findUnique({
+        where: { id: userId },
+        select: {
+          accountEmailProviderValue: true,
+          accountEmailState: true,
+          identities: {
+            where: { provider: 'yandex' },
+            select: { id: true },
+            take: 1,
           },
-        })
-        await tx.authIdentity.create({
-          data: {
-            userId: user.id,
-            provider: identityData.provider,
-            subject: identityData.subject,
-          },
-        })
-        const session = await tx.authSession.create({
-          data: {
-            userId: user.id,
-            refreshTokenHash: sessionData.refreshTokenHash,
-            refreshTokenFamilyHash: sessionData.refreshTokenFamilyHash,
-            expiresAt: sessionData.expiresAt,
-            userAgent: sessionData.metadata.userAgent,
-            ipAddress: sessionData.metadata.ipAddress,
-          },
-          select: { id: true },
-        })
-        return { user, session }
+        },
       })
+      if (!user) return null
+      return {
+        accountEmailProviderValue: user.accountEmailProviderValue,
+        accountEmailState: user.accountEmailState,
+        hasYandexIdentity: user.identities.length > 0,
+      }
     },
 
     async eraseUserIdentity({ userId, now }) {
@@ -344,7 +442,10 @@ export function createPrismaAuthRepository(db: DbClient, abuseSecret: string): A
             displayName: null,
             locale: 'ru',
             login: `deleted-${crypto.randomUUID()}`,
-            passwordHash: 'ANONYMIZED',
+            passwordHash: null,
+            accountEmailCanonicalKey: null,
+            accountEmailProviderValue: null,
+            accountEmailState: 'absent',
             privacyConsentAt: null,
             privacyConsentVersion: null,
             termsAcceptedAt: null,
@@ -404,6 +505,18 @@ function hashRegistrationKey(secret: string, scope: string, value: string) {
   return createHmac('sha256', secret)
     .update(`auth-registration:${scope}:${value}`)
     .digest('hex')
+}
+
+async function lockAuthTransactionKey(
+  tx: Prisma.TransactionClient,
+  secret: string,
+  scope: string,
+  value: string,
+) {
+  const key = createHmac('sha256', secret)
+    .update(`auth-transaction:${scope}:${value}`)
+    .digest('hex')
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text AS "lock"`
 }
 
 function isRetryableTransactionError(error: unknown) {

@@ -30,7 +30,7 @@ import { ApiRequestError } from '@/platform/api/http-client'
 import { useI18n } from '@/platform/i18n'
 
 import { ProfileApi } from '../api'
-import { useProfileStatisticsQuery } from '../queries'
+import { useAccountProtectionQuery, useProfileStatisticsQuery } from '../queries'
 import styles from './ProfilePage.module.css'
 
 export function ProfilePage() {
@@ -48,6 +48,7 @@ function ProfileContent() {
   const user = auth.user
   const api = useMemo(() => new ProfileApi(auth.transport), [auth.transport])
   const statistics = useProfileStatisticsQuery(api)
+  const accountProtection = useAccountProtectionQuery(api)
 
   if (!user) return null
 
@@ -85,6 +86,8 @@ function ProfileContent() {
             />
           </div>
 
+          <AccountProtectionContent protection={accountProtection} />
+
           <StatisticsContent statistics={statistics} />
 
           <Typography className={styles.memberSince}>
@@ -100,6 +103,99 @@ function ProfileContent() {
         />
       </section>
     </main>
+  )
+}
+
+function AccountProtectionContent({
+  protection,
+}: {
+  protection: ReturnType<typeof useAccountProtectionQuery>
+}) {
+  const { t } = useI18n()
+
+  if (protection.isPending) {
+    return (
+      <section className={styles.protectionSection} aria-labelledby="profile-protection-title">
+        <Typography as="h2" id="profile-protection-title" className={styles.protectionTitle}>
+          {t('profile.protection.title')}
+        </Typography>
+        <Typography role="status" className={styles.protectionDescription}>
+          {t('profile.protection.loading')}
+        </Typography>
+      </section>
+    )
+  }
+
+  if (protection.isError) {
+    return (
+      <section className={styles.protectionSection} aria-labelledby="profile-protection-title">
+        <div className={styles.protectionCopy}>
+          <Typography as="h2" id="profile-protection-title" className={styles.protectionTitle}>
+            {t('profile.protection.title')}
+          </Typography>
+          <Typography role="alert" className={styles.protectionDescription}>
+            {t('profile.protection.failed')}
+          </Typography>
+        </div>
+        <Button type="button" variant="outline" onClick={() => void protection.refetch()}>
+          <HugeiconsIcon icon={Refresh01Icon} strokeWidth={1.7} aria-hidden="true" />
+          {t('profile.protection.retry')}
+        </Button>
+      </section>
+    )
+  }
+
+  const state = protection.data.accountProtection
+  const content = state.state === 'password_unprotected'
+    ? {
+        description: t('profile.protection.passwordDescription'),
+        label: t('profile.protection.password'),
+        note: null,
+        tone: 'neutral',
+        value: null,
+      }
+    : state.state === 'yandex_managed'
+      ? {
+          description: t('profile.protection.yandexManagedDescription'),
+          label: t('profile.protection.yandexManaged'),
+          note: null,
+          tone: 'managed',
+          value: state.maskedAccountEmail,
+        }
+      : state.state === 'yandex_conflict'
+        ? {
+            description: t('profile.protection.yandexConflictDescription'),
+            label: t('profile.protection.yandexConflict'),
+            note: t('profile.protection.yandexContinues'),
+            tone: 'attention',
+            value: null,
+          }
+        : {
+            description: t('profile.protection.yandexUnavailableDescription'),
+            label: t('profile.protection.yandexUnavailable'),
+            note: t('profile.protection.yandexContinues'),
+            tone: 'attention',
+            value: null,
+          }
+
+  return (
+    <section className={styles.protectionSection} aria-labelledby="profile-protection-title">
+      <div className={styles.protectionCopy}>
+        <Typography as="h2" id="profile-protection-title" className={styles.protectionTitle}>
+          {t('profile.protection.title')}
+        </Typography>
+        <Typography className={styles.protectionDescription}>{content.description}</Typography>
+        {content.note && (
+          <Typography className={styles.protectionNote}>{content.note}</Typography>
+        )}
+      </div>
+      <div className={styles.protectionState} data-tone={content.tone}>
+        <Typography className={styles.protectionLabel}>{content.label}</Typography>
+        {content.value && (
+          <Typography className={styles.protectionValue}>{content.value}</Typography>
+        )}
+      </div>
+    </section>
   )
 }
 

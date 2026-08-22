@@ -6,8 +6,16 @@ import type { ProfileApi } from './api'
 
 export const profileQueryKeys = {
   all: [...sessionQueryKeys.all, 'profile'] as const,
+  accountProtection: () => [...profileQueryKeys.all, 'account-protection'] as const,
   statistics: () => [...profileQueryKeys.all, 'statistics'] as const,
   tutorial: () => [...profileQueryKeys.all, 'tutorial'] as const,
+}
+
+export function useAccountProtectionQuery(api: ProfileApi) {
+  return useQuery({
+    queryKey: profileQueryKeys.accountProtection(),
+    queryFn: () => api.getAccountProtection(),
+  })
 }
 
 export function useTutorialProgressQuery(api: ProfileApi) {

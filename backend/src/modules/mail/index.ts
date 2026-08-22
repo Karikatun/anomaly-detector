@@ -8,6 +8,7 @@ import type {
 } from './application/transactional-mail-ports'
 import { TransactionalMailService } from './application/transactional-mail-service'
 import type { Clock, MailServiceCandidateSource } from './application/ports'
+import { createAccountEmailCanonicalizer } from './application/approved-account-email'
 import { createPrismaMailPolicyRepository } from './infrastructure/prisma-mail-policy-repository'
 import { createPrismaMailDeliveryOverviewReader } from './infrastructure/prisma-mail-delivery-overview-reader'
 import { cleanupTerminalMailOutbox } from './infrastructure/prisma-mail-outbox-cleanup'
@@ -35,6 +36,9 @@ export function createMailModule(input: {
     clock,
     repository: createPrismaMailPolicyRepository(input.db),
     source: input.source ?? new RknMailServiceCandidateSource(),
+  })
+  const accountEmailCanonicalizer = createAccountEmailCanonicalizer({
+    evaluate: (emailDomain: string) => service.evaluate(emailDomain),
   })
   const policy: MailDeliveryPolicy = {
     evaluate: (emailDomain: string) => service.evaluate(emailDomain),
@@ -67,6 +71,7 @@ export function createMailModule(input: {
     read: async () => readOperationsView(await service.read()),
   }
   return {
+    accountEmailCanonicalizer,
     operatorPolicy,
     outboxDrainer,
     policy,

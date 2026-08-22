@@ -30,8 +30,8 @@ const defaultAuthRepository: AuthRepository = {
   eraseUserIdentity: unconfiguredRepositoryMethod('eraseUserIdentity'),
   createOAuthTransaction: unconfiguredRepositoryMethod('createOAuthTransaction'),
   consumeOAuthTransactionByState: unconfiguredRepositoryMethod('consumeOAuthTransactionByState'),
-  findUserByIdentity: unconfiguredRepositoryMethod('findUserByIdentity'),
-  createOAuthUserWithSession: unconfiguredRepositoryMethod('createOAuthUserWithSession'),
+  completeOAuthSignIn: unconfiguredRepositoryMethod('completeOAuthSignIn'),
+  readAccountProtection: unconfiguredRepositoryMethod('readAccountProtection'),
 }
 
 const createAuthRepository = (
@@ -118,8 +118,8 @@ test('refresh keeps the logical session id stable while rotating its credential'
     eraseUserIdentity: async () => undefined,
     createOAuthTransaction: async () => undefined,
     consumeOAuthTransactionByState: async () => null,
-    findUserByIdentity: async () => null,
-    createOAuthUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
+    completeOAuthSignIn: async () => ({ user, session: { id: 'session-created' } }),
+    readAccountProtection: async () => null,
   })
 
   const service = new AuthService({
@@ -347,8 +347,7 @@ test('consumes an OAuth transaction before provider exchange and rejects replay'
           state: 'state',
         }
       },
-      findUserByIdentity: async () => user,
-      createSession: async () => ({ id: 'session-1' }),
+      completeOAuthSignIn: async () => ({ user, session: { id: 'session-1' } }),
     }),
   })
 
@@ -363,6 +362,69 @@ test('consumes an OAuth transaction before provider exchange and rejects replay'
     state: 'state',
   })).rejects.toMatchObject({ kind: 'oauth_transaction_invalid' })
   expect(exchangeCalls).toBe(1)
+})
+
+test('completes Yandex sign-in atomically with a canonical Account Email candidate', async () => {
+  let completionInput: Record<string, unknown> | undefined
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    accountEmailCanonicalizer: {
+      canonicalize: async (providerValue: string) => {
+        expect(providerValue).toBe('Player@Яндекс.рф')
+        return {
+          canonicalKey: 'player@xn--d1acpjx3f.xn--p1ai',
+          providerValue: 'Player@xn--d1acpjx3f.xn--p1ai',
+        }
+      },
+    },
+    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    oauthProviders: {
+      require: () => ({
+        authorizationUrl: () => 'https://provider.example/authorize',
+        exchangeCode: async () => ({ accessToken: 'provider-token', providerSubject: '' }),
+        getUserInfo: async () => ({
+          accountEmail: 'Player@Яндекс.рф',
+          displayName: 'OAuth User',
+          providerSubject: 'provider-sub-1',
+        }),
+      }),
+    },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      consumeOAuthTransactionByState: async () => ({
+        codeVerifier: 'verifier',
+        expiresAt: new Date('2026-07-20T12:10:00.000Z'),
+        provider: 'yandex',
+        redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
+        state: 'state',
+      }),
+      completeOAuthSignIn: async (input: Record<string, unknown>) => {
+        completionInput = input
+        return { session: { id: 'session-1' }, user }
+      },
+    }),
+  })
+
+  await expect(service.completeOAuthSignIn({
+    code: 'authorization-code',
+    metadata: { ipAddress: '203.0.113.10' },
+    state: 'state',
+  })).resolves.toMatchObject({ accessToken: 'access-token' })
+  expect(completionInput).toMatchObject({
+    accountEmail: {
+      canonicalKey: 'player@xn--d1acpjx3f.xn--p1ai',
+      kind: 'candidate',
+      providerValue: 'Player@xn--d1acpjx3f.xn--p1ai',
+    },
+    identity: { provider: 'yandex', subject: 'provider-sub-1' },
+    session: { metadata: { ipAddress: '203.0.113.10' } },
+  })
 })
 
 test('refuses to create an OAuth user without a separately confirmed legal acceptance', async () => {
@@ -391,7 +453,7 @@ test('refuses to create an OAuth user without a separately confirmed legal accep
         redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
         state: 'state',
       }),
-      findUserByIdentity: async () => null,
+      completeOAuthSignIn: async () => null,
     }),
   })
 
@@ -434,11 +496,10 @@ test('limits a provider display name before creating an OAuth user', async () =>
         redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
         state: 'state',
       }),
-      findUserByIdentity: async () => null,
-      createOAuthUserWithSession: async (
-        input: Parameters<AuthRepository['createOAuthUserWithSession']>[0],
+      completeOAuthSignIn: async (
+        input: Parameters<AuthRepository['completeOAuthSignIn']>[0],
       ) => {
-        createdDisplayName = input.user.displayName
+        createdDisplayName = input.newUser?.displayName
         return { session: { id: 'session-1' }, user }
       },
     }),
@@ -448,6 +509,34 @@ test('limits a provider display name before creating an OAuth user', async () =>
 
   expect(createdDisplayName).toBe('Очень длинное имя по')
   expect(createdDisplayName?.length).toBe(20)
+})
+
+test('projects a Yandex-managed Account Email as a masked protection state', async () => {
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      readAccountProtection: async () => ({
+        accountEmailProviderValue: 'Player@yandex.ru',
+        accountEmailState: 'yandex_managed',
+        hasYandexIdentity: true,
+      }),
+    }),
+  })
+
+  await expect(service.getAccountProtection(user.id)).resolves.toEqual({
+    accountProtection: {
+      maskedAccountEmail: 'P***@yandex.ru',
+      state: 'yandex_managed',
+    },
+  })
 })
 
 test('deleteAccount removes identity links only after Tender history is anonymised', async () => {

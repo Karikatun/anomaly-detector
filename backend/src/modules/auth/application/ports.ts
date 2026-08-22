@@ -83,9 +83,12 @@ export type AuthRepository = {
     now: Date
     state: string
   }): Promise<OAuthTransaction | null>
-  findUserByIdentity(input: { provider: string; subject: string }): Promise<AuthUserRecord | null>
-  createOAuthUserWithSession(input: {
-    user: {
+  completeOAuthSignIn(input: {
+    accountEmail:
+      | { kind: 'candidate'; canonicalKey: string; providerValue: string }
+      | { kind: 'unavailable' }
+    identity: { provider: OAuthProviderId; subject: string }
+    newUser?: {
       displayName?: string | null
       legalAcceptance: {
         acceptedAt: Date
@@ -94,14 +97,25 @@ export type AuthRepository = {
       }
       login: string
     }
-    identity: { provider: string; subject: string }
     session: {
       refreshTokenHash: string
       refreshTokenFamilyHash: string
       expiresAt: Date
       metadata: SessionMetadata
     }
-  }): Promise<{ user: AuthUserRecord; session: { id: string } }>
+  }): Promise<{ user: AuthUserRecord; session: { id: string } } | null>
+  readAccountProtection(userId: string): Promise<{
+    accountEmailProviderValue: string | null
+    accountEmailState: string
+    hasYandexIdentity: boolean
+  } | null>
+}
+
+export type AccountEmailCanonicalizer = {
+  canonicalize(value: string): Promise<{
+    canonicalKey: string
+    providerValue: string
+  } | null>
 }
 
 export type OAuthProvider = {
@@ -119,6 +133,7 @@ export type OAuthProvider = {
     providerSubject: string
   }>
   getUserInfo(accessToken: string): Promise<{
+    accountEmail?: string | null
     displayName?: string | null
     providerSubject: string
   }>

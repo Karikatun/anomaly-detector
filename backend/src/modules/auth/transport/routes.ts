@@ -1,5 +1,6 @@
 import {
   apiErrorSchema,
+  accountProtectionResponseSchema,
   cookieAuthResponseSchema,
   cookieLogoutRequestSchema,
   cookieRefreshRequestSchema,
@@ -70,6 +71,12 @@ const tokenRefreshResponseContent = {
 const meResponseContent = {
   'application/json': {
     schema: meResponseSchema,
+  },
+}
+
+const accountProtectionResponseContent = {
+  'application/json': {
+    schema: accountProtectionResponseSchema,
   },
 }
 
@@ -239,6 +246,18 @@ const meRoute = createRoute({
   path: '/me',
   responses: {
     200: { content: meResponseContent, description: 'Current user' },
+    401: { content: errorResponseContent, description: 'Invalid access token' },
+  },
+})
+
+const accountProtectionRoute = createRoute({
+  method: 'get',
+  path: '/account-protection',
+  responses: {
+    200: {
+      content: accountProtectionResponseContent,
+      description: 'Current account protection state',
+    },
     401: { content: errorResponseContent, description: 'Invalid access token' },
   },
 })
@@ -432,6 +451,10 @@ export function createAuthRoutes({
   protectedRoutes.use('/me', requireAuth)
   protectedRoutes.openapi(meRoute, async (c) => {
     return c.json({ user: userDtoFromPrincipal(c.var.user) }, 200)
+  })
+  protectedRoutes.use('/account-protection', requireAuth)
+  protectedRoutes.openapi(accountProtectionRoute, async (c) => {
+    return c.json(await executeAuth(() => service.getAccountProtection(c.var.user.id)), 200)
   })
   protectedRoutes.use('/account', requireAuth)
   protectedRoutes.use('/account', authenticatedMutationBudget)

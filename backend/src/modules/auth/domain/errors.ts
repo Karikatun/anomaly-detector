@@ -5,6 +5,7 @@ export type AuthFailureKind =
   | 'invalid_credentials'
   | 'login_throttled'
   | 'oauth_not_configured'
+  | 'oauth_account_email_conflict'
   | 'oauth_registration_consent_required'
   | 'oauth_transaction_invalid'
   | 'recent_authentication_required'

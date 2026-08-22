@@ -61,7 +61,7 @@ The operator overview remains read-only. Approved Mail Service policy has the on
 
 `COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production also requires `WEBAPP_ORIGIN`: one origin-only HTTPS URL for the player application, included in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
 
-When enabling Yandex ID or VK ID, set both provider credentials and `OAUTH_CALLBACK_BASE_URL` to the public API origin, for example `https://api.example.com`. The server derives the provider callback as `/api/auth/oauth/<provider>/callback`; it never accepts a callback URL from the browser. The browser-supplied post-login `webappOrigin` must exactly match `WEBAPP_ORIGIN`; another CORS-allowed surface such as the operator app cannot become an OAuth return target.
+When enabling Yandex ID or VK ID, set both provider credentials and `OAUTH_CALLBACK_BASE_URL` to the public API origin, for example `https://api.example.com`. The server derives the provider callback as `/api/auth/oauth/<provider>/callback`; it never accepts a callback URL from the browser. The browser-supplied post-login `webappOrigin` must exactly match `WEBAPP_ORIGIN`; another CORS-allowed surface such as the operator app cannot become an OAuth return target. The Yandex application must grant email-address access: the backend requests `login:email`, validates the bounded `default_email` response, and synchronises it on every Yandex sign-in. The immutable provider subject remains the identity. Matching email never links or merges accounts, and a conflict does not block the already-linked Yandex sign-in. Only the masked protection projection is returned to the player.
 
 Auth writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind the documented Yandex Application Load Balancer path, set `TRUST_PROXY=true`, use `x-forwarded-for` as `TRUSTED_PROXY_CLIENT_IP_HEADER`, and select the first value. Before horizontally scaling, keep shared PostgreSQL auth buckets and add an edge/WAF layer for request-rate protection.
 
@@ -91,6 +91,7 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `GET /api/auth/me`
+- `GET /api/auth/account-protection`
 - `POST /api/auth/logout`
 - `POST /api/auth/token/register`
 - `POST /api/auth/token/login`
@@ -102,12 +103,21 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 
 The remaining approved but not yet implemented Public MVP extensions are specified in
 ADRs 0005–0016 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). They add
-Account Email/Yandex synchronisation, Recovery Email and Recovery Code,
-password reset, consent-scoped funnel analytics and
+password-account Recovery Email and Recovery Code protection, password reset,
+consent-scoped funnel analytics and
 Feedback Report intake. Do not add env keys
 or advertise endpoints in this README until their implementation and contracts
 exist; when they do, document every new key here, in `.env.example`, the Yandex
 runbook and production setup without exposing values.
+
+`GET /api/auth/account-protection` exposes only the current account's bounded
+protection state. A Yandex-managed address is masked by the server; conflict and
+unavailable states contain no address. The full provider value and the separate
+canonical uniqueness key remain private persistence fields. Domains are
+lowercased and IDNA-normalised. Dot, plus-tag, and local-part case rules are
+applied only from the published service policy; an unlisted Yandex address is
+still retained as a provider attribute without inventing alias rules or making
+it eligible for local recovery delivery.
 
 The `mail` context now exposes a narrow internal requester for exactly three
 templates: Account Email confirmation, password recovery and security

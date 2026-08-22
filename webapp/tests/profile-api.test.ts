@@ -23,3 +23,26 @@ test('profile API reads and validates authenticated statistics', async () => {
   await expect(api.getStatistics()).resolves.toMatchObject({ matchesPlayed: 0 })
   expect(requests).toEqual(['/api/profile/statistics'])
 })
+
+test('profile API accepts only a masked Account Email protection response', async () => {
+  const requests: string[] = []
+  const api = new ProfileApi({
+    request: async (path, schema) => {
+      requests.push(path)
+      return schema.parse({
+        accountProtection: {
+          maskedAccountEmail: 'P***@yandex.ru',
+          state: 'yandex_managed',
+        },
+      })
+    },
+  } as AuthenticatedTransport)
+
+  await expect(api.getAccountProtection()).resolves.toEqual({
+    accountProtection: {
+      maskedAccountEmail: 'P***@yandex.ru',
+      state: 'yandex_managed',
+    },
+  })
+  expect(requests).toEqual(['/api/auth/account-protection'])
+})
