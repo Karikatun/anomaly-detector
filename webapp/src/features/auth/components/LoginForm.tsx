@@ -188,6 +188,12 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
           }}
         </form.Field>
 
+        {mode === 'login' && (
+          <Link className={styles.recoveryLink} to="/recover/code">
+            {t('auth.recoveryCode.open')}
+          </Link>
+        )}
+
         {mode === 'register' && (
           <>
             <form.Field name="displayName">

@@ -91,7 +91,13 @@ test('profile API sends one factor at a time for Recovery Email replacement', as
     request: async (path, schema, options) => {
       requests.push({ path, method: options?.method, body: options?.body })
       const replacementResponse = path.endsWith('/cancel')
-        ? { accountProtection: { maskedAccountEmail: 'o***@mail.ru', state: 'password_active' } }
+        ? {
+            accountProtection: {
+              maskedAccountEmail: 'o***@mail.ru',
+              recoveryCodes: 'available',
+              state: 'password_active',
+            },
+          }
         : {
             accountProtection: {
               canManage: true,
@@ -142,6 +148,57 @@ test('profile API sends one factor at a time for Recovery Email replacement', as
       body: {},
       method: 'POST',
       path: '/api/auth/account-protection/recovery-email/replacement/cancel',
+    },
+  ])
+})
+
+test('profile API issues and reissues exactly one Recovery Code set through bounded commands', async () => {
+  const requests: Array<{ body?: unknown; method?: string; path: string }> = []
+  const recoveryCodes = Array.from(
+    { length: 8 },
+    (_, index) => `${String(index + 1).repeat(4)}-AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000`,
+  )
+  const api = new ProfileApi({
+    request: async (path, schema, options) => {
+      requests.push({ path, method: options?.method, body: options?.body })
+      if (path.endsWith('/reissue/start')) {
+        return schema.parse({
+          challenge: {
+            codeExpiresAt: '2030-08-22T15:15:00.000Z',
+            maskedAccountEmail: 'p***@mail.ru',
+          },
+        })
+      }
+      return schema.parse({
+        accountProtection: {
+          maskedAccountEmail: 'p***@mail.ru',
+          recoveryCodes: 'available',
+          state: 'password_active',
+        },
+        recoveryCodes,
+      })
+    },
+  } as AuthenticatedTransport)
+
+  await api.issueRecoveryCodes()
+  await api.startRecoveryCodeReissue({ password: 'password123' })
+  await api.confirmRecoveryCodeReissue({ code: '123456' })
+
+  expect(requests).toEqual([
+    {
+      body: {},
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-codes/issue',
+    },
+    {
+      body: { password: 'password123' },
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-codes/reissue/start',
+    },
+    {
+      body: { code: '123456' },
+      method: 'POST',
+      path: '/api/auth/account-protection/recovery-codes/reissue/confirm',
     },
   ])
 })

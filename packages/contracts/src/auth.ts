@@ -122,6 +122,40 @@ export const confirmRecoveryEmailRequestSchema = z.object({
 
 export const cancelRecoveryEmailRequestSchema = z.object({}).strict().optional().default({})
 
+export const recoveryCodeSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.replace(/[\s-]/g, '').toUpperCase())
+  .pipe(z.string().regex(/^[A-F0-9]{32}$/))
+  .transform((value) => value.match(/.{4}/g)!.join('-'))
+
+export const issueRecoveryCodesRequestSchema = z.object({}).strict().optional().default({})
+
+export const startRecoveryCodeReissueRequestSchema = z.object({
+  password: passwordSchema,
+}).strict()
+
+export const confirmRecoveryCodeReissueRequestSchema = z.object({
+  code: z.string().regex(/^\d{6}$/),
+}).strict()
+
+export const recoveryCodePasswordRequestSchema = z.object({
+  login: loginSchema,
+  newPassword: passwordSchema,
+  recoveryCode: recoveryCodeSchema,
+}).strict()
+
+export const recoveryCodeEmailReplacementStartRequestSchema = z.object({
+  email: recoveryEmailSchema,
+  login: loginSchema,
+  recoveryCode: recoveryCodeSchema,
+}).strict()
+
+export const recoveryCodeEmailReplacementConfirmRequestSchema = z.object({
+  code: z.string().regex(/^\d{6}$/),
+  login: loginSchema,
+}).strict()
+
 const recoveryEmailReplacementFactorSchema = z.enum(['old', 'new'])
 
 export const startRecoveryEmailReplacementRequestSchema = z.object({
@@ -165,6 +199,7 @@ export const accountProtectionSchema = z.discriminatedUnion('state', [
   }).strict(),
   z.object({
     maskedAccountEmail: maskedAccountEmailSchema,
+    recoveryCodes: z.enum(['not_issued', 'available', 'consumed']),
     state: z.literal('password_active'),
   }).strict(),
   z.object({
@@ -198,6 +233,42 @@ export const recoveryEmailReplacementCommandResponseSchema = accountProtectionRe
     status: z.enum(['pending', 'completed']),
   }).strict(),
 }).strict()
+
+export const recoveryCodeSetResponseSchema = accountProtectionResponseSchema.extend({
+  recoveryCodes: z.array(recoveryCodeSchema).length(8),
+}).strict()
+
+export const startRecoveryCodeReissueResponseSchema = z.object({
+  challenge: z.object({
+    codeExpiresAt: z.string().datetime(),
+    maskedAccountEmail: maskedAccountEmailSchema,
+  }).strict(),
+}).strict()
+
+export const recoveryCodeUseResponseSchema = z.object({
+  outcome: z.enum(['accepted', 'completed']),
+}).strict()
+
+export const recoveryCodeEmailReplacementStartResponseSchema = z.discriminatedUnion('outcome', [
+  z.object({ outcome: z.literal('accepted') }).strict(),
+  z.object({
+    codeExpiresAt: z.string().datetime(),
+    maskedAccountEmail: maskedAccountEmailSchema,
+    outcome: z.literal('pending'),
+  }).strict(),
+])
+
+export const recoveryCodeEmailReplacementConfirmResponseSchema = z.discriminatedUnion(
+  'outcome',
+  [
+    z.object({ outcome: z.literal('accepted') }).strict(),
+    z.object({
+      activatesAt: z.string().datetime(),
+      maskedAccountEmail: maskedAccountEmailSchema,
+      outcome: z.literal('completed'),
+    }).strict(),
+  ],
+)
 
 // ── OAuth ────────────────────────────────────────────────────────────────────
 
@@ -254,6 +325,30 @@ export type ConfirmRecoveryEmailReplacementRequest = z.infer<
 >
 export type CancelRecoveryEmailReplacementRequest = z.infer<
   typeof cancelRecoveryEmailReplacementRequestSchema
+>
+export type ConfirmRecoveryCodeReissueRequest = z.infer<
+  typeof confirmRecoveryCodeReissueRequestSchema
+>
+export type RecoveryCodeEmailReplacementConfirmRequest = z.infer<
+  typeof recoveryCodeEmailReplacementConfirmRequestSchema
+>
+export type RecoveryCodeEmailReplacementConfirmResponse = z.infer<
+  typeof recoveryCodeEmailReplacementConfirmResponseSchema
+>
+export type RecoveryCodeEmailReplacementStartRequest = z.infer<
+  typeof recoveryCodeEmailReplacementStartRequestSchema
+>
+export type RecoveryCodeEmailReplacementStartResponse = z.infer<
+  typeof recoveryCodeEmailReplacementStartResponseSchema
+>
+export type RecoveryCodePasswordRequest = z.infer<typeof recoveryCodePasswordRequestSchema>
+export type RecoveryCodeSetResponse = z.infer<typeof recoveryCodeSetResponseSchema>
+export type RecoveryCodeUseResponse = z.infer<typeof recoveryCodeUseResponseSchema>
+export type StartRecoveryCodeReissueRequest = z.infer<
+  typeof startRecoveryCodeReissueRequestSchema
+>
+export type StartRecoveryCodeReissueResponse = z.infer<
+  typeof startRecoveryCodeReissueResponseSchema
 >
 export type RecoveryEmailReplacementCommandResponse = z.infer<
   typeof recoveryEmailReplacementCommandResponseSchema

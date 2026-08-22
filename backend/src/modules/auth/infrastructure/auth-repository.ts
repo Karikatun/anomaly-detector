@@ -32,9 +32,13 @@ export function createPrismaAuthRepository(
     },
 
     async updatePasswordHash({ userId, currentPasswordHash, nextPasswordHash }) {
-      await db.user.updateMany({
-        where: { id: userId, passwordHash: currentPasswordHash },
-        data: { passwordHash: nextPasswordHash },
+      return db.$transaction(async (tx) => {
+        await lockAuthTransactionKey(tx, abuseSecret, 'recovery-user', userId)
+        const result = await tx.user.updateMany({
+          where: { id: userId, passwordHash: currentPasswordHash },
+          data: { passwordHash: nextPasswordHash },
+        })
+        return result.count === 1
       })
     },
 
@@ -117,16 +121,26 @@ export function createPrismaAuthRepository(
     },
 
     createSession(input) {
-      return db.authSession.create({
-        data: {
-          userId: input.userId,
-          refreshTokenHash: input.refreshTokenHash,
-          refreshTokenFamilyHash: input.refreshTokenFamilyHash,
-          expiresAt: input.expiresAt,
-          userAgent: input.metadata.userAgent,
-          ipAddress: input.metadata.ipAddress,
-        },
-        select: { id: true },
+      return db.$transaction(async (tx) => {
+        await lockAuthTransactionKey(tx, abuseSecret, 'recovery-user', input.userId)
+        const credential = await tx.user.findUnique({
+          where: { id: input.userId },
+          select: { passwordHash: true },
+        })
+        if (credential?.passwordHash !== input.expectedPasswordHash) {
+          throw new AuthFailure('invalid_credentials', 'Invalid login or password')
+        }
+        return tx.authSession.create({
+          data: {
+            userId: input.userId,
+            refreshTokenHash: input.refreshTokenHash,
+            refreshTokenFamilyHash: input.refreshTokenFamilyHash,
+            expiresAt: input.expiresAt,
+            userAgent: input.metadata.userAgent,
+            ipAddress: input.metadata.ipAddress,
+          },
+          select: { id: true },
+        })
       })
     },
 
@@ -474,6 +488,13 @@ export function createPrismaAuthRepository(
             requestingSessionId: true,
           },
         })
+        const recoveryCodeSet = await tx.recoveryCodeSet.findUnique({
+          where: { userId },
+          select: { consumedAt: true },
+        })
+        const activeCodeCount = recoveryCodeSet
+          ? await tx.recoveryCode.count({ where: { userId } })
+          : 0
         const yandexIdentity = await tx.authIdentity.findFirst({
           where: { provider: 'yandex', userId },
           select: { id: true },
@@ -485,7 +506,558 @@ export function createPrismaAuthRepository(
           recoveryEmailBinding,
           recoveryEmailChallenge,
           recoveryEmailReplacement,
+          recoveryCodeSet: recoveryCodeSet
+            ? { activeCodeCount, consumedAt: recoveryCodeSet.consumedAt }
+            : null,
         }
+      })
+    },
+
+    async issueRecoveryCodes(input) {
+      if (input.codes.length !== 8 || new Set(input.codes).size !== 8) {
+        throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+      }
+      return db.$transaction(async (tx) => {
+        await lockAuthTransactionKey(tx, abuseSecret, 'recovery-user', input.userId)
+        const [user, binding, existingSet, yandexIdentity, replacement, codeReplacement] =
+          await Promise.all([
+            tx.user.findUnique({
+              where: { id: input.userId },
+              select: { passwordHash: true },
+            }),
+            tx.recoveryEmailBinding.findUnique({ where: { userId: input.userId } }),
+            tx.recoveryCodeSet.findUnique({ where: { userId: input.userId } }),
+            tx.authIdentity.findFirst({
+              where: { provider: 'yandex', userId: input.userId },
+              select: { id: true },
+            }),
+            tx.recoveryEmailReplacement.findUnique({
+              where: { userId: input.userId },
+              select: { id: true },
+            }),
+            tx.recoveryCodeEmailReplacement.findUnique({
+              where: { userId: input.userId },
+              select: { id: true },
+            }),
+          ])
+        if (
+          !user?.passwordHash
+          || !binding
+          || binding.activatesAt > input.now
+          || existingSet
+          || yandexIdentity
+          || replacement
+          || codeReplacement
+        ) {
+          return 'unavailable' as const
+        }
+
+        await tx.recoveryCodeSet.create({
+          data: { issuedAt: input.now, userId: input.userId },
+        })
+        await tx.recoveryCode.createMany({
+          data: input.codes.map((code) => ({
+            codeHash: hashRecoveryCode(abuseSecret, input.userId, code),
+            userId: input.userId,
+          })),
+        })
+        return 'issued' as const
+      })
+    },
+
+    async startRecoveryCodeReissue(input) {
+      const bindingSnapshot = await db.recoveryEmailBinding.findUnique({
+        where: { userId: input.userId },
+      })
+      if (!bindingSnapshot) return null
+      const messageId = options.createMessageId?.() ?? crypto.randomUUID()
+      const confirmationCode = deriveAccountEmailConfirmationCode(abuseSecret, messageId)
+      const codeHash = hashRecoveryEmailCode(
+        abuseSecret,
+        input.userId,
+        bindingSnapshot.canonicalKey,
+        confirmationCode,
+      )
+      const quotas = recoveryEmailQuotas(abuseSecret, {
+        canonicalKey: bindingSnapshot.canonicalKey,
+        ipAddress: input.ipAddress,
+        userId: input.userId,
+      })
+
+      return db.$transaction(async (tx) => {
+        const locks = [
+          { scope: 'recovery-user', value: input.userId },
+          { scope: 'account-email', value: bindingSnapshot.canonicalKey },
+          ...quotas.map((quota) => ({
+            scope: 'recovery-budget',
+            value: `${quota.scope}:${quota.keyHash}`,
+          })),
+        ].sort((left, right) =>
+          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+        for (const lock of locks) {
+          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+        }
+
+        const [user, binding, session, yandexIdentity, replacement, codeReplacement] =
+          await Promise.all([
+            tx.user.findUnique({
+              where: { id: input.userId },
+              select: { passwordHash: true },
+            }),
+            tx.recoveryEmailBinding.findUnique({ where: { userId: input.userId } }),
+            tx.authSession.findFirst({
+              where: {
+                expiresAt: { gt: input.now },
+                id: input.sessionId,
+                revokedAt: null,
+                userId: input.userId,
+              },
+              select: { id: true },
+            }),
+            tx.authIdentity.findFirst({
+              where: { provider: 'yandex', userId: input.userId },
+              select: { id: true },
+            }),
+            tx.recoveryEmailReplacement.findUnique({
+              where: { userId: input.userId },
+              select: { id: true },
+            }),
+            tx.recoveryCodeEmailReplacement.findUnique({
+              where: { userId: input.userId },
+              select: { id: true },
+            }),
+          ])
+        if (!user?.passwordHash || user.passwordHash !== input.expectedPasswordHash) {
+          throw new AuthFailure('recovery_password_invalid', 'Current password is invalid')
+        }
+        if (
+          !binding
+          || binding.id !== bindingSnapshot.id
+          || binding.activatesAt > input.now
+          || !session
+          || yandexIdentity
+          || replacement
+          || codeReplacement
+        ) {
+          return null
+        }
+        await requireRecoveryEmailPolicy(tx, {
+          canonicalKey: binding.canonicalKey,
+          providerValue: binding.providerValue,
+          requirement: 'delivery',
+        })
+        for (const quota of quotas) {
+          await consumeRecoveryEmailQuota(tx, { ...quota, now: input.now })
+        }
+        const previous = await tx.recoveryCodeReissueChallenge.findUnique({
+          where: { userId: input.userId },
+        })
+        if (previous) {
+          await cancelQueuedTransactionalMail(tx, {
+            messageId: previous.messageId,
+            now: input.now,
+          })
+          await tx.recoveryCodeReissueChallenge.delete({ where: { id: previous.id } })
+        }
+        await tx.recoveryCodeReissueChallenge.create({
+          data: {
+            attemptCount: 0,
+            codeHash,
+            expiresAt: input.expiresAt,
+            messageId,
+            recoveryCanonicalKey: binding.canonicalKey,
+            requestedAt: input.now,
+            requestingSessionId: input.sessionId,
+            userId: input.userId,
+          },
+        })
+        await createTransactionalMailRequester(tx, abuseSecret).enqueue({
+          messageId,
+          recipient: binding.providerValue,
+          template: {
+            addressRole: 'recovery',
+            expiresAt: input.expiresAt,
+            kind: 'account_email_confirmation',
+          },
+        })
+        return { expiresAt: input.expiresAt, providerValue: binding.providerValue }
+      })
+    },
+
+    async confirmRecoveryCodeReissue(input) {
+      if (input.codes.length !== 8 || new Set(input.codes).size !== 8) return 'unavailable'
+      const snapshot = await db.recoveryCodeReissueChallenge.findUnique({
+        where: { userId: input.userId },
+      })
+      if (!snapshot) return 'unavailable'
+
+      return db.$transaction(async (tx) => {
+        const locks = [
+          { scope: 'recovery-user', value: input.userId },
+          { scope: 'account-email', value: snapshot.recoveryCanonicalKey },
+        ].sort((left, right) =>
+          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+        for (const lock of locks) {
+          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+        }
+        const challenge = await tx.recoveryCodeReissueChallenge.findUnique({
+          where: { userId: input.userId },
+        })
+        const binding = await tx.recoveryEmailBinding.findUnique({
+          where: { userId: input.userId },
+        })
+        const session = await tx.authSession.findFirst({
+          where: {
+            expiresAt: { gt: input.now },
+            id: input.sessionId,
+            revokedAt: null,
+            userId: input.userId,
+          },
+          select: { id: true },
+        })
+        if (
+          !challenge
+          || challenge.id !== snapshot.id
+          || !binding
+          || binding.canonicalKey !== challenge.recoveryCanonicalKey
+          || binding.activatesAt > input.now
+          || challenge.requestingSessionId !== input.sessionId
+          || !session
+          || challenge.expiresAt <= input.now
+          || challenge.attemptCount >= 5
+        ) {
+          return 'unavailable' as const
+        }
+        await requireRecoveryEmailPolicy(tx, {
+          canonicalKey: binding.canonicalKey,
+          providerValue: binding.providerValue,
+          requirement: 'delivery',
+        })
+        const presentedHash = hashRecoveryEmailCode(
+          abuseSecret,
+          input.userId,
+          challenge.recoveryCanonicalKey,
+          input.code,
+        )
+        if (!codeHashesEqual(challenge.codeHash, presentedHash)) {
+          await tx.recoveryCodeReissueChallenge.update({
+            where: { id: challenge.id },
+            data: { attemptCount: { increment: 1 } },
+          })
+          return 'invalid' as const
+        }
+
+        await replaceRecoveryCodeSet(tx, abuseSecret, input)
+        await cancelQueuedTransactionalMail(tx, {
+          messageId: challenge.messageId,
+          now: input.now,
+        })
+        await tx.recoveryCodeReissueChallenge.delete({ where: { id: challenge.id } })
+        return 'issued' as const
+      })
+    },
+
+    async reserveRecoveryCodeUseBudget(input) {
+      const quotas = recoveryCodeUseQuotas(abuseSecret, input)
+      return db.$transaction(async (tx) => {
+        const locks = quotas.map((quota) => ({
+          scope: 'recovery-budget',
+          value: `${quota.scope}:${quota.keyHash}`,
+        })).sort((left, right) =>
+          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+        for (const lock of locks) {
+          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+        }
+        return consumeRecoveryCodeUseQuotas(tx, quotas, input.now)
+      })
+    },
+
+    async recoverPasswordWithRecoveryCode(input) {
+      const snapshot = await db.user.findUnique({
+        where: { login: input.login },
+        select: { id: true },
+      })
+      return db.$transaction(async (tx) => {
+        const locks = snapshot
+          ? [{ scope: 'recovery-user', value: snapshot.id }]
+          : []
+        for (const lock of locks) {
+          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+        }
+        const user = await tx.user.findUnique({
+          where: { login: input.login },
+          select: { id: true, passwordHash: true },
+        })
+        if (!snapshot || !user?.passwordHash || user.id !== snapshot.id) {
+          performDummyRecoveryCodeComparison(abuseSecret, input.login, input.recoveryCode)
+          return false
+        }
+        const [binding, yandexIdentity] = await Promise.all([
+          tx.recoveryEmailBinding.findUnique({ where: { userId: user.id } }),
+          tx.authIdentity.findFirst({
+            where: { provider: 'yandex', userId: user.id },
+            select: { id: true },
+          }),
+        ])
+        if (!binding || binding.activatesAt > input.now || yandexIdentity) {
+          performDummyRecoveryCodeComparison(abuseSecret, user.id, input.recoveryCode)
+          return false
+        }
+        if (!await recoveryCodeMatches(tx, abuseSecret, user.id, input.recoveryCode)) return false
+
+        await cancelOutstandingRecoveryCredentials(tx, user.id, input.now)
+        await consumeRecoveryCodeSet(tx, user.id, input.now)
+        await tx.user.update({
+          where: { id: user.id },
+          data: { passwordHash: input.newPasswordHash },
+        })
+        await tx.authSession.updateMany({
+          where: { revokedAt: null, userId: user.id },
+          data: { revokedAt: input.now },
+        })
+        return true
+      })
+    },
+
+    async startRecoveryEmailWithRecoveryCode(input) {
+      const snapshot = await db.user.findUnique({
+        where: { login: input.login },
+        select: {
+          id: true,
+          recoveryEmailBinding: {
+            select: { canonicalKey: true, id: true },
+          },
+        },
+      })
+      const quotas = recoveryCodeUseQuotas(abuseSecret, input)
+      const messageId = options.createMessageId?.() ?? crypto.randomUUID()
+      const confirmationCode = deriveAccountEmailConfirmationCode(abuseSecret, messageId)
+      const newCodeHash = snapshot
+        ? hashRecoveryEmailCode(
+            abuseSecret,
+            snapshot.id,
+            input.newCanonicalKey,
+            confirmationCode,
+          )
+        : createHmac('sha256', abuseSecret).update(confirmationCode).digest('hex')
+
+      return db.$transaction(async (tx) => {
+        const locks = [
+          ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
+          ...(snapshot?.recoveryEmailBinding
+            ? [{ scope: 'account-email', value: snapshot.recoveryEmailBinding.canonicalKey }]
+            : []),
+          { scope: 'account-email', value: input.newCanonicalKey },
+          ...quotas.map((quota) => ({
+            scope: 'recovery-budget',
+            value: `${quota.scope}:${quota.keyHash}`,
+          })),
+        ].sort((left, right) =>
+          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+        for (const lock of locks) {
+          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+        }
+        const budgetAvailable = await consumeRecoveryCodeUseQuotas(tx, quotas, input.now)
+        const user = await tx.user.findUnique({
+          where: { login: input.login },
+          select: { id: true, passwordHash: true },
+        })
+        if (!budgetAvailable || !snapshot || !user?.passwordHash || user.id !== snapshot.id) {
+          performDummyRecoveryCodeComparison(abuseSecret, input.login, input.recoveryCode)
+          return null
+        }
+        const [binding, yandexIdentity] = await Promise.all([
+          tx.recoveryEmailBinding.findUnique({ where: { userId: user.id } }),
+          tx.authIdentity.findFirst({
+            where: { provider: 'yandex', userId: user.id },
+            select: { id: true },
+          }),
+        ])
+        if (
+          !binding
+          || binding.activatesAt > input.now
+          || yandexIdentity
+          || binding.canonicalKey === input.newCanonicalKey
+          || !await recoveryCodeMatches(tx, abuseSecret, user.id, input.recoveryCode)
+        ) {
+          return null
+        }
+        let policy
+        try {
+          policy = await requireRecoveryEmailPolicy(tx, {
+            canonicalKey: input.newCanonicalKey,
+            providerValue: input.newProviderValue,
+            requirement: 'new_address',
+          })
+        } catch (error) {
+          if (error instanceof AuthFailure) return null
+          throw error
+        }
+        const [accountOwner, recoveryOwner] = await Promise.all([
+          tx.user.findUnique({
+            where: { accountEmailCanonicalKey: input.newCanonicalKey },
+            select: { id: true },
+          }),
+          tx.recoveryEmailBinding.findUnique({
+            where: { canonicalKey: input.newCanonicalKey },
+            select: { userId: true },
+          }),
+        ])
+        if (
+          (accountOwner && accountOwner.id !== user.id)
+          || (recoveryOwner && recoveryOwner.userId !== user.id)
+        ) {
+          return null
+        }
+
+        await cancelOutstandingRecoveryCredentials(tx, user.id, input.now)
+        await consumeRecoveryCodeSet(tx, user.id, input.now)
+        await tx.authSession.updateMany({
+          where: { revokedAt: null, userId: user.id },
+          data: { revokedAt: input.now },
+        })
+        await tx.recoveryCodeEmailReplacement.create({
+          data: {
+            newCanonicalKey: policy.canonicalKey,
+            newCodeHash,
+            newExpiresAt: input.expiresAt,
+            newMessageId: messageId,
+            newPolicyVersion: policy.policyVersion,
+            newProviderValue: policy.providerValue,
+            oldCanonicalKey: binding.canonicalKey,
+            oldProviderValue: binding.providerValue,
+            requestedAt: input.now,
+            userId: user.id,
+          },
+        })
+        await createTransactionalMailRequester(tx, abuseSecret).enqueue({
+          messageId,
+          recipient: policy.providerValue,
+          template: {
+            addressRole: 'recovery',
+            expiresAt: input.expiresAt,
+            kind: 'account_email_confirmation',
+          },
+        })
+        return { expiresAt: input.expiresAt, providerValue: policy.providerValue }
+      })
+    },
+
+    async confirmRecoveryEmailWithRecoveryCode(input) {
+      const snapshot = await db.user.findUnique({
+        where: { login: input.login },
+        select: {
+          id: true,
+          recoveryCodeReplacement: {
+            select: { newCanonicalKey: true, oldCanonicalKey: true },
+          },
+        },
+      })
+      const quotas = recoveryCodeUseQuotas(abuseSecret, input)
+      return db.$transaction(async (tx) => {
+        const locks = [
+          ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
+          ...(snapshot?.recoveryCodeReplacement
+            ? [
+                { scope: 'account-email', value: snapshot.recoveryCodeReplacement.oldCanonicalKey },
+                { scope: 'account-email', value: snapshot.recoveryCodeReplacement.newCanonicalKey },
+              ]
+            : []),
+          ...quotas.map((quota) => ({
+            scope: 'recovery-budget',
+            value: `${quota.scope}:${quota.keyHash}`,
+          })),
+        ].sort((left, right) =>
+          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+        for (const lock of locks) {
+          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+        }
+        const budgetAvailable = await consumeRecoveryCodeUseQuotas(tx, quotas, input.now)
+        const user = await tx.user.findUnique({
+          where: { login: input.login },
+          select: { id: true, passwordHash: true },
+        })
+        if (!budgetAvailable || !snapshot || !user?.passwordHash || user.id !== snapshot.id) {
+          return null
+        }
+        const replacement = await tx.recoveryCodeEmailReplacement.findUnique({
+          where: { userId: user.id },
+        })
+        const binding = await tx.recoveryEmailBinding.findUnique({
+          where: { userId: user.id },
+        })
+        if (
+          !replacement
+          || !binding
+          || binding.canonicalKey !== replacement.oldCanonicalKey
+          || binding.providerValue !== replacement.oldProviderValue
+          || replacement.newExpiresAt <= input.now
+          || replacement.newAttemptCount >= 5
+        ) {
+          return null
+        }
+        let policy
+        try {
+          policy = await requireRecoveryEmailPolicy(tx, {
+            canonicalKey: replacement.newCanonicalKey,
+            providerValue: replacement.newProviderValue,
+            requirement: 'new_address',
+          })
+        } catch (error) {
+          if (error instanceof AuthFailure) return null
+          throw error
+        }
+        const presentedHash = hashRecoveryEmailCode(
+          abuseSecret,
+          user.id,
+          replacement.newCanonicalKey,
+          input.code,
+        )
+        if (!codeHashesEqual(replacement.newCodeHash, presentedHash)) {
+          await tx.recoveryCodeEmailReplacement.update({
+            where: { id: replacement.id },
+            data: { newAttemptCount: { increment: 1 } },
+          })
+          return null
+        }
+        const [accountOwner, recoveryOwner] = await Promise.all([
+          tx.user.findUnique({
+            where: { accountEmailCanonicalKey: replacement.newCanonicalKey },
+            select: { id: true },
+          }),
+          tx.recoveryEmailBinding.findUnique({
+            where: { canonicalKey: replacement.newCanonicalKey },
+            select: { userId: true },
+          }),
+        ])
+        if (
+          (accountOwner && accountOwner.id !== user.id)
+          || (recoveryOwner && recoveryOwner.userId !== user.id)
+        ) {
+          return null
+        }
+
+        await tx.recoveryEmailBinding.update({
+          where: { id: binding.id },
+          data: {
+            activatesAt: input.activatesAt,
+            cancellationSessionIds: [],
+            canonicalKey: policy.canonicalKey,
+            policyVersion: policy.policyVersion,
+            providerValue: policy.providerValue,
+            requestedAt: replacement.requestedAt,
+          },
+        })
+        await cancelQueuedTransactionalMail(tx, {
+          messageId: replacement.newMessageId,
+          now: input.now,
+        })
+        await tx.recoveryCodeEmailReplacement.delete({ where: { id: replacement.id } })
+        await tx.authSession.updateMany({
+          where: { revokedAt: null, userId: user.id },
+          data: { revokedAt: input.now },
+        })
+        return { activatesAt: input.activatesAt, providerValue: policy.providerValue }
       })
     },
 
@@ -1326,6 +1898,7 @@ export function createPrismaAuthRepository(
               })
               await tx.recoveryEmailChallenge.delete({ where: { id: outstandingChallenge.id } })
             }
+            await revokeRecoveryCodeCredentials(tx, input.userId, input.now)
             await tx.recoveryEmailBinding.update({
               where: { id: binding.id },
               data: {
@@ -1434,32 +2007,10 @@ export function createPrismaAuthRepository(
 
     async eraseUserIdentity({ userId, now }) {
       await db.$transaction(async (tx) => {
-        const recoveryEmailChallenge = await tx.recoveryEmailChallenge.findUnique({
-          where: { userId },
-          select: { messageId: true },
-        })
-        if (recoveryEmailChallenge) {
-          await cancelQueuedTransactionalMail(tx, {
-            messageId: recoveryEmailChallenge.messageId,
-            now,
-          })
-        }
-        const recoveryEmailReplacement = await tx.recoveryEmailReplacement.findUnique({
-          where: { userId },
-          select: { newMessageId: true, oldMessageId: true },
-        })
-        if (recoveryEmailReplacement) {
-          await cancelQueuedTransactionalMail(tx, {
-            messageId: recoveryEmailReplacement.oldMessageId,
-            now,
-          })
-          await cancelQueuedTransactionalMail(tx, {
-            messageId: recoveryEmailReplacement.newMessageId,
-            now,
-          })
-        }
-        await tx.recoveryEmailChallenge.deleteMany({ where: { userId } })
-        await tx.recoveryEmailReplacement.deleteMany({ where: { userId } })
+        await lockAuthTransactionKey(tx, abuseSecret, 'recovery-user', userId)
+        await cancelOutstandingRecoveryCredentials(tx, userId, now)
+        await tx.recoveryCode.deleteMany({ where: { userId } })
+        await tx.recoveryCodeSet.deleteMany({ where: { userId } })
         await tx.recoveryEmailBinding.deleteMany({ where: { userId } })
         await tx.authIdentity.deleteMany({ where: { userId } })
         await tx.authSession.deleteMany({ where: { userId } })
@@ -1510,6 +2061,178 @@ async function requireRecoveryEmailPolicy(
     throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
   }
   return policy
+}
+
+async function replaceRecoveryCodeSet(
+  tx: Prisma.TransactionClient,
+  secret: string,
+  input: { codes: string[]; now: Date; userId: string },
+) {
+  await tx.recoveryCode.deleteMany({ where: { userId: input.userId } })
+  await tx.recoveryCodeSet.upsert({
+    where: { userId: input.userId },
+    create: {
+      consumedAt: null,
+      issuedAt: input.now,
+      userId: input.userId,
+    },
+    update: {
+      consumedAt: null,
+      generation: { increment: 1 },
+      issuedAt: input.now,
+    },
+  })
+  await tx.recoveryCode.createMany({
+    data: input.codes.map((code) => ({
+      codeHash: hashRecoveryCode(secret, input.userId, code),
+      userId: input.userId,
+    })),
+  })
+}
+
+async function consumeRecoveryCodeSet(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  now: Date,
+) {
+  await tx.recoveryCode.deleteMany({ where: { userId } })
+  await tx.recoveryCodeSet.updateMany({
+    where: { userId },
+    data: { consumedAt: now },
+  })
+}
+
+async function recoveryCodeMatches(
+  tx: Prisma.TransactionClient,
+  secret: string,
+  userId: string,
+  recoveryCode: string,
+) {
+  const presentedHash = hashRecoveryCode(secret, userId, recoveryCode)
+  const stored = await tx.recoveryCode.findMany({
+    where: { userId },
+    select: { codeHash: true },
+  })
+  let matched = false
+  for (const credential of stored) {
+    matched = codeHashesEqual(credential.codeHash, presentedHash) || matched
+  }
+  if (stored.length === 0) codeHashesEqual('0'.repeat(64), presentedHash)
+  return matched
+}
+
+function performDummyRecoveryCodeComparison(
+  secret: string,
+  identity: string,
+  recoveryCode: string,
+) {
+  const presentedHash = hashRecoveryCode(secret, identity, recoveryCode)
+  codeHashesEqual('0'.repeat(64), presentedHash)
+}
+
+function hashRecoveryCode(secret: string, userId: string, recoveryCode: string) {
+  return createHmac('sha256', secret)
+    .update('user-held-recovery-code-v1\0')
+    .update(userId)
+    .update('\0')
+    .update(recoveryCode.replace(/[\s-]/g, '').toUpperCase())
+    .digest('hex')
+}
+
+function recoveryCodeUseQuotas(
+  secret: string,
+  input: { ipAddress?: string; login: string },
+) {
+  const definitions = [
+    ['rec_code_login_hour', input.login, 3, hourMs],
+    ['rec_code_login_day', input.login, 5, dayMs],
+    ['rec_code_ip_hour', input.ipAddress ?? 'unknown', 10, hourMs],
+    ['rec_code_ip_day', input.ipAddress ?? 'unknown', 30, dayMs],
+  ] as const
+  return definitions.map(([scope, value, limit, windowMs]) => ({
+    keyHash: hashRecoveryBudgetKey(secret, scope, value),
+    limit,
+    scope,
+    windowMs,
+  }))
+}
+
+async function consumeRecoveryCodeUseQuotas(
+  tx: Prisma.TransactionClient,
+  quotas: ReturnType<typeof recoveryCodeUseQuotas>,
+  now: Date,
+) {
+  let available = true
+  for (const quota of quotas) {
+    const existing = await tx.authAbuseBucket.findUnique({
+      where: { scope_keyHash: { scope: quota.scope, keyHash: quota.keyHash } },
+    })
+    const windowExpired = !existing || existing.expiresAt <= now
+    const count = windowExpired ? 1 : existing.count + 1
+    if (count > quota.limit) available = false
+    const windowStartedAt = windowExpired ? now : existing.windowStartedAt
+    await tx.authAbuseBucket.upsert({
+      where: { scope_keyHash: { scope: quota.scope, keyHash: quota.keyHash } },
+      create: {
+        count: Math.min(count, quota.limit + 1),
+        expiresAt: new Date(windowStartedAt.getTime() + quota.windowMs),
+        keyHash: quota.keyHash,
+        scope: quota.scope,
+        windowStartedAt,
+      },
+      update: {
+        blockedUntil: null,
+        count: Math.min(count, quota.limit + 1),
+        expiresAt: new Date(windowStartedAt.getTime() + quota.windowMs),
+        windowStartedAt,
+      },
+    })
+  }
+  return available
+}
+
+async function cancelOutstandingRecoveryCredentials(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  now: Date,
+) {
+  const [challenge, replacement, reissue, codeReplacement] = await Promise.all([
+    tx.recoveryEmailChallenge.findUnique({ where: { userId } }),
+    tx.recoveryEmailReplacement.findUnique({ where: { userId } }),
+    tx.recoveryCodeReissueChallenge.findUnique({ where: { userId } }),
+    tx.recoveryCodeEmailReplacement.findUnique({ where: { userId } }),
+  ])
+  const messageIds = [
+    challenge?.messageId,
+    replacement?.oldMessageId,
+    replacement?.newMessageId,
+    reissue?.messageId,
+    codeReplacement?.newMessageId,
+  ].filter((messageId): messageId is string => Boolean(messageId))
+  for (const messageId of messageIds) {
+    await cancelQueuedTransactionalMail(tx, { messageId, now })
+  }
+  await tx.recoveryEmailChallenge.deleteMany({ where: { userId } })
+  await tx.recoveryEmailReplacement.deleteMany({ where: { userId } })
+  await tx.recoveryCodeReissueChallenge.deleteMany({ where: { userId } })
+  await tx.recoveryCodeEmailReplacement.deleteMany({ where: { userId } })
+}
+
+async function revokeRecoveryCodeCredentials(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  now: Date,
+) {
+  const [reissue, replacement] = await Promise.all([
+    tx.recoveryCodeReissueChallenge.findUnique({ where: { userId } }),
+    tx.recoveryCodeEmailReplacement.findUnique({ where: { userId } }),
+  ])
+  for (const messageId of [reissue?.messageId, replacement?.newMessageId]) {
+    if (messageId) await cancelQueuedTransactionalMail(tx, { messageId, now })
+  }
+  await tx.recoveryCodeReissueChallenge.deleteMany({ where: { userId } })
+  await tx.recoveryCodeEmailReplacement.deleteMany({ where: { userId } })
+  await consumeRecoveryCodeSet(tx, userId, now)
 }
 
 async function consumeRegistrationQuota(

@@ -41,6 +41,13 @@ const defaultAuthRepository: AuthRepository = {
   cancelRecoveryEmailReplacement: unconfiguredRepositoryMethod('cancelRecoveryEmailReplacement'),
   resendRecoveryEmailReplacement: unconfiguredRepositoryMethod('resendRecoveryEmailReplacement'),
   startRecoveryEmailReplacement: unconfiguredRepositoryMethod('startRecoveryEmailReplacement'),
+  issueRecoveryCodes: unconfiguredRepositoryMethod('issueRecoveryCodes'),
+  startRecoveryCodeReissue: unconfiguredRepositoryMethod('startRecoveryCodeReissue'),
+  confirmRecoveryCodeReissue: unconfiguredRepositoryMethod('confirmRecoveryCodeReissue'),
+  recoverPasswordWithRecoveryCode: unconfiguredRepositoryMethod('recoverPasswordWithRecoveryCode'),
+  reserveRecoveryCodeUseBudget: unconfiguredRepositoryMethod('reserveRecoveryCodeUseBudget'),
+  startRecoveryEmailWithRecoveryCode: unconfiguredRepositoryMethod('startRecoveryEmailWithRecoveryCode'),
+  confirmRecoveryEmailWithRecoveryCode: unconfiguredRepositoryMethod('confirmRecoveryEmailWithRecoveryCode'),
 }
 
 const createAuthRepository = (
@@ -61,6 +68,7 @@ test('login opportunistically replaces a verified password hash that no longer m
       nextPasswordHash: string
     }) => {
       passwordHashUpdates.push(input)
+      return true
     },
     createSession: async () => ({ id: 'session-created' }),
   })
@@ -106,7 +114,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
   const refreshCutoffs: Date[] = []
   const repository = createAuthRepository({
     findUserByLogin: async () => null,
-    updatePasswordHash: async () => undefined,
+    updatePasswordHash: async () => true,
     createPasswordUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
     createSession: async () => ({ id: 'session-created' }),
     findActiveRefreshSession: async (input) => {
@@ -546,6 +554,45 @@ test('projects a Yandex-managed Account Email as a masked protection state', asy
       state: 'yandex_managed',
     },
   })
+})
+
+test('rejects an exhausted Recovery Code budget before expensive password hashing', async () => {
+  let passwordHashCalls = 0
+  let recoveryCalls = 0
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    clock: { now: () => new Date('2026-08-22T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: {
+      hash: async () => {
+        passwordHashCalls += 1
+        return 'new-password-hash'
+      },
+      needsRehash: () => false,
+      verify: async () => true,
+    },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      reserveRecoveryCodeUseBudget: async () => false,
+      recoverPasswordWithRecoveryCode: async () => {
+        recoveryCalls += 1
+        return false
+      },
+    }),
+  })
+
+  await expect(service.recoverPasswordWithRecoveryCode({
+    ipAddress: '198.51.100.90',
+    login: 'user',
+    newPassword: 'new-password123',
+    recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+  })).resolves.toEqual({ outcome: 'accepted' })
+  expect(passwordHashCalls).toBe(0)
+  expect(recoveryCalls).toBe(0)
 })
 
 test('deleteAccount removes identity links only after Tender history is anonymised', async () => {

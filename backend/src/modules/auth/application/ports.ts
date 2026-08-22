@@ -17,7 +17,7 @@ export type AuthRepository = {
     userId: string
     currentPasswordHash: string
     nextPasswordHash: string
-  }): Promise<void>
+  }): Promise<boolean>
   createPasswordUserWithSession(input: {
     registration?: {
       deviceId?: string
@@ -33,6 +33,7 @@ export type AuthRepository = {
     }
   }): Promise<{ user: AuthUserRecord; session: { id: string } }>
   createSession(input: {
+    expectedPasswordHash: string
     userId: string
     refreshTokenHash: string
     refreshTokenFamilyHash: string
@@ -130,8 +131,59 @@ export type AuthRepository = {
       oldProviderValue: string
       requestingSessionId: string
     } | null
+    recoveryCodeSet?: {
+      activeCodeCount: number
+      consumedAt: Date | null
+    } | null
     hasYandexIdentity: boolean
   } | null>
+  issueRecoveryCodes(input: {
+    codes: string[]
+    now: Date
+    userId: string
+  }): Promise<'issued' | 'unavailable'>
+  startRecoveryCodeReissue(input: {
+    expectedPasswordHash: string
+    expiresAt: Date
+    ipAddress?: string
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<{ expiresAt: Date; providerValue: string } | null>
+  confirmRecoveryCodeReissue(input: {
+    code: string
+    codes: string[]
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<'issued' | 'invalid' | 'unavailable'>
+  reserveRecoveryCodeUseBudget(input: {
+    ipAddress?: string
+    login: string
+    now: Date
+  }): Promise<boolean>
+  recoverPasswordWithRecoveryCode(input: {
+    login: string
+    newPasswordHash: string
+    now: Date
+    recoveryCode: string
+  }): Promise<boolean>
+  startRecoveryEmailWithRecoveryCode(input: {
+    expiresAt: Date
+    ipAddress?: string
+    login: string
+    newCanonicalKey: string
+    newProviderValue: string
+    now: Date
+    recoveryCode: string
+  }): Promise<{ expiresAt: Date; providerValue: string } | null>
+  confirmRecoveryEmailWithRecoveryCode(input: {
+    activatesAt: Date
+    code: string
+    ipAddress?: string
+    login: string
+    now: Date
+  }): Promise<{ activatesAt: Date; providerValue: string } | null>
   startRecoveryEmail(input: {
     canonicalKey: string
     expectedPasswordHash: string
