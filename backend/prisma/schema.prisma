@@ -8,30 +8,70 @@ datasource db {
 }
 
 model User {
-  id                        String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  login                     String             @unique
-  passwordHash              String?            @map("password_hash")
-  accountEmailProviderValue String?            @map("account_email_provider_value") @db.VarChar(254)
-  accountEmailCanonicalKey  String?            @unique(map: "users_account_email_canonical_key_key") @map("account_email_canonical_key") @db.VarChar(254)
-  accountEmailState         String             @default("absent") @map("account_email_state") @db.VarChar(32)
-  displayName               String?            @map("display_name")
-  locale                    String             @default("ru") @map("locale")
-  privacyConsentVersion     String?            @map("privacy_consent_version")
-  privacyConsentAt          DateTime?          @map("privacy_consent_at")
-  termsVersion              String?            @map("terms_version")
-  termsAcceptedAt           DateTime?          @map("terms_accepted_at")
-  anonymizedAt              DateTime?          @map("anonymized_at")
-  tutorialCompletedAt       DateTime?          @map("tutorial_completed_at")
-  createdAt                 DateTime           @default(now()) @map("created_at")
-  updatedAt                 DateTime           @updatedAt @map("updated_at")
+  id                        String                  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  login                     String                  @unique
+  passwordHash              String?                 @map("password_hash")
+  accountEmailProviderValue String?                 @map("account_email_provider_value") @db.VarChar(254)
+  accountEmailCanonicalKey  String?                 @unique(map: "users_account_email_canonical_key_key") @map("account_email_canonical_key") @db.VarChar(254)
+  accountEmailState         String                  @default("absent") @map("account_email_state") @db.VarChar(32)
+  displayName               String?                 @map("display_name")
+  locale                    String                  @default("ru") @map("locale")
+  privacyConsentVersion     String?                 @map("privacy_consent_version")
+  privacyConsentAt          DateTime?               @map("privacy_consent_at")
+  termsVersion              String?                 @map("terms_version")
+  termsAcceptedAt           DateTime?               @map("terms_accepted_at")
+  anonymizedAt              DateTime?               @map("anonymized_at")
+  tutorialCompletedAt       DateTime?               @map("tutorial_completed_at")
+  createdAt                 DateTime                @default(now()) @map("created_at")
+  updatedAt                 DateTime                @updatedAt @map("updated_at")
   sessions                  AuthSession[]
   realtimeTickets           RealtimeTicket[]
   identities                AuthIdentity[]
-  hostedRooms               TenderRoom[]       @relation("TenderRoomHost")
+  hostedRooms               TenderRoom[]            @relation("TenderRoomHost")
   roomMemberships           TenderRoomMember[]
   currentMatch              CurrentMatch?
+  recoveryEmailBinding      RecoveryEmailBinding?
+  recoveryEmailChallenge    RecoveryEmailChallenge?
 
   @@map("users")
+}
+
+model RecoveryEmailChallenge {
+  id                     String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                 String   @unique(map: "recovery_email_challenges_user_id_key") @map("user_id") @db.Uuid
+  providerValue          String   @map("provider_value") @db.VarChar(254)
+  canonicalKey           String   @map("canonical_key") @db.VarChar(254)
+  codeHash               String   @map("code_hash") @db.Char(64)
+  messageId              String   @unique(map: "recovery_email_challenges_message_id_key") @map("message_id") @db.Uuid
+  attemptCount           Int      @default(0) @map("attempt_count")
+  cancellationSessionIds String[] @default([]) @map("cancellation_session_ids") @db.Uuid
+  policyVersion          Int      @map("policy_version")
+  requestedAt            DateTime @map("requested_at")
+  expiresAt              DateTime @map("expires_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "recovery_email_challenges_user_id_fkey")
+
+  @@index([expiresAt], map: "recovery_email_challenges_expires_at_idx")
+  @@index([canonicalKey], map: "recovery_email_challenges_canonical_key_idx")
+  @@map("recovery_email_challenges")
+}
+
+model RecoveryEmailBinding {
+  id                     String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                 String   @unique(map: "recovery_email_bindings_user_id_key") @map("user_id") @db.Uuid
+  providerValue          String   @map("provider_value") @db.VarChar(254)
+  canonicalKey           String   @unique(map: "recovery_email_bindings_canonical_key_key") @map("canonical_key") @db.VarChar(254)
+  cancellationSessionIds String[] @default([]) @map("cancellation_session_ids") @db.Uuid
+  policyVersion          Int      @map("policy_version")
+  requestedAt            DateTime @map("requested_at")
+  activatesAt            DateTime @map("activates_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "recovery_email_bindings_user_id_fkey")
+
+  @@index([activatesAt], map: "recovery_email_bindings_activates_at_idx")
+  @@map("recovery_email_bindings")
 }
 
 model AuthIdentity {
@@ -329,13 +369,13 @@ model MailDeliveryAttempt {
 }
 
 model MailDeliveryControl {
-  id                   String    @id @db.VarChar(32)
-  windowStartedAt      DateTime  @map("window_started_at")
-  deliveriesInWindow   Int       @default(0) @map("deliveries_in_window")
-  consecutiveFailures  Int       @default(0) @map("consecutive_failures")
-  circuitOpenUntil     DateTime? @map("circuit_open_until")
-  lastSuccessAt        DateTime? @map("last_success_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
+  id                  String    @id @db.VarChar(32)
+  windowStartedAt     DateTime  @map("window_started_at")
+  deliveriesInWindow  Int       @default(0) @map("deliveries_in_window")
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  circuitOpenUntil    DateTime? @map("circuit_open_until")
+  lastSuccessAt       DateTime? @map("last_success_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   @@map("mail_delivery_controls")
 }

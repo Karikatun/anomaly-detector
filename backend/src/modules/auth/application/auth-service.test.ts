@@ -17,6 +17,7 @@ const unconfiguredRepositoryMethod = (name: keyof AuthRepository) => async (): P
 }
 
 const defaultAuthRepository: AuthRepository = {
+  findUserById: unconfiguredRepositoryMethod('findUserById'),
   findUserByLogin: unconfiguredRepositoryMethod('findUserByLogin'),
   updatePasswordHash: unconfiguredRepositoryMethod('updatePasswordHash'),
   createPasswordUserWithSession: unconfiguredRepositoryMethod('createPasswordUserWithSession'),
@@ -32,6 +33,10 @@ const defaultAuthRepository: AuthRepository = {
   consumeOAuthTransactionByState: unconfiguredRepositoryMethod('consumeOAuthTransactionByState'),
   completeOAuthSignIn: unconfiguredRepositoryMethod('completeOAuthSignIn'),
   readAccountProtection: unconfiguredRepositoryMethod('readAccountProtection'),
+  cancelRecoveryEmail: unconfiguredRepositoryMethod('cancelRecoveryEmail'),
+  confirmRecoveryEmail: unconfiguredRepositoryMethod('confirmRecoveryEmail'),
+  resendRecoveryEmail: unconfiguredRepositoryMethod('resendRecoveryEmail'),
+  startRecoveryEmail: unconfiguredRepositoryMethod('startRecoveryEmail'),
 }
 
 const createAuthRepository = (

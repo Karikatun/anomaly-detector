@@ -92,6 +92,10 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 - `POST /api/auth/refresh`
 - `GET /api/auth/me`
 - `GET /api/auth/account-protection`
+- `POST /api/auth/account-protection/recovery-email/start`
+- `POST /api/auth/account-protection/recovery-email/resend`
+- `POST /api/auth/account-protection/recovery-email/confirm`
+- `POST /api/auth/account-protection/recovery-email/cancel`
 - `POST /api/auth/logout`
 - `POST /api/auth/token/register`
 - `POST /api/auth/token/login`
@@ -103,9 +107,8 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 
 The remaining approved but not yet implemented Public MVP extensions are specified in
 ADRs 0005–0016 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). They add
-password-account Recovery Email and Recovery Code protection, password reset,
-consent-scoped funnel analytics and
-Feedback Report intake. Do not add env keys
+Recovery Email replacement, user-held Recovery Code, password reset,
+consent-scoped funnel analytics and Feedback Report intake. Do not add env keys
 or advertise endpoints in this README until their implementation and contracts
 exist; when they do, document every new key here, in `.env.example`, the Yandex
 runbook and production setup without exposing values.
@@ -119,13 +122,25 @@ applied only from the published service policy; an unlisted Yandex address is
 still retained as a provider attribute without inventing alias rules or making
 it eligible for local recovery delivery.
 
+A password account can voluntarily start its first Recovery Email protection
+through the four recovery-email commands above. The first request verifies the
+current password and a published Approved Mail Service policy, sends a 15-minute
+code with at most five confirmation attempts, and activates only after a
+24-hour cooling-off period. Only sessions that existed when the request was
+created may cancel it; cancellation revokes newer sessions. The API returns only
+the masked address and bounded state. The full provider value, canonical key,
+HMAC code derivative and HMAC abuse-budget keys remain private persistence
+fields. Yandex-managed accounts cannot enter this password flow.
+
 The `mail` context now exposes a narrow internal requester for exactly three
 templates: Account Email confirmation, password recovery and security
 notification. Callers create it from the owning Prisma transaction; the module
 does not expose an unbound requester, so the product state change and logical
 mail request commit or roll back together. The existing worker drains the
 request through the protected REG.RU SMTP adapter. Delivery remains
-disabled by default. Logical request fingerprints are keyed HMAC values, and
+disabled by default. Confirmation codes are derived only at delivery from a
+domain-separated HMAC and are never stored in the outbox payload. Logical
+request fingerprints are keyed HMAC values, and
 accepted or terminal rows immediately redact the recipient and secret-bearing
 template payload. `MAIL_SMTP_ENABLED`, `MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`,
 `MAIL_SMTP_TLS_MODE`, `MAIL_SMTP_USERNAME`, `MAIL_SMTP_PASSWORD`,

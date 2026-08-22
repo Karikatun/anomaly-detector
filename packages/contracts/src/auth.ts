@@ -99,8 +99,53 @@ const maskedAccountEmailSchema = z
   .max(254)
   .regex(/^[^@\s]\*{3}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/)
 
+const recoveryEmailSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(254)
+  .refine((value) => {
+    const separator = value.indexOf('@')
+    return separator > 0 && separator === value.lastIndexOf('@') && separator < value.length - 1
+  }, 'Recovery Email must contain one address separator')
+
+export const startRecoveryEmailRequestSchema = z.object({
+  email: recoveryEmailSchema,
+  password: passwordSchema,
+}).strict()
+
+export const resendRecoveryEmailRequestSchema = z.object({}).strict().optional().default({})
+
+export const confirmRecoveryEmailRequestSchema = z.object({
+  code: z.string().regex(/^\d{6}$/),
+}).strict()
+
+export const cancelRecoveryEmailRequestSchema = z.object({}).strict().optional().default({})
+
 export const accountProtectionSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('password_unprotected') }).strict(),
+  z.object({
+    canCancel: z.boolean(),
+    codeExpiresAt: z.string().datetime(),
+    maskedAccountEmail: maskedAccountEmailSchema,
+    state: z.literal('password_pending_code'),
+  }).strict(),
+  z.object({
+    activatesAt: z.string().datetime(),
+    canCancel: z.boolean(),
+    maskedAccountEmail: maskedAccountEmailSchema,
+    state: z.literal('password_cooling_off'),
+  }).strict(),
+  z.object({
+    maskedAccountEmail: maskedAccountEmailSchema,
+    state: z.literal('password_active'),
+  }).strict(),
+  z.object({
+    blockedStage: z.enum(['pending_code', 'cooling_off', 'active']),
+    canCancel: z.boolean(),
+    maskedAccountEmail: maskedAccountEmailSchema,
+    state: z.literal('password_service_blocked'),
+  }).strict(),
   z.object({
     state: z.literal('yandex_managed'),
     maskedAccountEmail: maskedAccountEmailSchema,
@@ -155,6 +200,8 @@ export type TokenRefreshResponse = z.infer<typeof tokenRefreshResponseSchema>
 export type MeResponse = z.infer<typeof meResponseSchema>
 export type AccountProtection = z.infer<typeof accountProtectionSchema>
 export type AccountProtectionResponse = z.infer<typeof accountProtectionResponseSchema>
+export type StartRecoveryEmailRequest = z.infer<typeof startRecoveryEmailRequestSchema>
+export type ConfirmRecoveryEmailRequest = z.infer<typeof confirmRecoveryEmailRequestSchema>
 export type OAuthProviderId = z.infer<typeof oauthProviderSchema>
 export type OAuthStartRequest = z.infer<typeof oauthStartRequestSchema>
 export type OAuthStartResponse = z.infer<typeof oauthStartResponseSchema>

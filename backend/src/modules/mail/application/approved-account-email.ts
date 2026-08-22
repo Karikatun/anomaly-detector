@@ -11,32 +11,52 @@ export function createAccountEmailCanonicalizer(policy: {
 }) {
   return {
     async canonicalize(value: string): Promise<ApprovedAccountEmail | null> {
-      const parsed = parseEmailAddress(value)
-      if (!parsed) return null
-
-      const decision = await policy.evaluate(parsed.domain)
-      const canonicalization = decision.canonicalization ?? {
-        ignoreDots: false,
-        localPartCaseInsensitive: false,
-        stripPlusTag: false,
-      }
-
-      let canonicalLocalPart = parsed.localPart
-      if (canonicalization.stripPlusTag) {
-        canonicalLocalPart = canonicalLocalPart.split('+', 1)[0] ?? ''
-      }
-      if (canonicalization.ignoreDots) {
-        canonicalLocalPart = canonicalLocalPart.replaceAll('.', '')
-      }
-      if (canonicalization.localPartCaseInsensitive) {
-        canonicalLocalPart = canonicalLocalPart.toLowerCase()
-      }
-      if (!isValidLocalPart(canonicalLocalPart)) return null
-
+      const result = await canonicalizeWithPolicy(value, policy)
+      return result ? result.email : null
+    },
+    async canonicalizeForRecovery(value: string) {
+      const result = await canonicalizeWithPolicy(value, policy)
+      if (!result?.decision.acceptsNewAddress) return null
       return {
-        canonicalKey: `${canonicalLocalPart}@${parsed.domain}`,
-        providerValue: `${parsed.localPart}@${parsed.domain}`,
+        ...result.email,
+        policyVersion: result.decision.version,
       }
+    },
+    evaluate: (emailDomain: string) => policy.evaluate(normalizeEmailDomain(emailDomain)),
+  }
+}
+
+async function canonicalizeWithPolicy(
+  value: string,
+  policy: { evaluate(emailDomain: string): Promise<MailPolicyDecision> },
+) {
+  const parsed = parseEmailAddress(value)
+  if (!parsed) return null
+
+  const decision = await policy.evaluate(parsed.domain)
+  const canonicalization = decision.canonicalization ?? {
+    ignoreDots: false,
+    localPartCaseInsensitive: false,
+    stripPlusTag: false,
+  }
+
+  let canonicalLocalPart = parsed.localPart
+  if (canonicalization.stripPlusTag) {
+    canonicalLocalPart = canonicalLocalPart.split('+', 1)[0] ?? ''
+  }
+  if (canonicalization.ignoreDots) {
+    canonicalLocalPart = canonicalLocalPart.replaceAll('.', '')
+  }
+  if (canonicalization.localPartCaseInsensitive) {
+    canonicalLocalPart = canonicalLocalPart.toLowerCase()
+  }
+  if (!isValidLocalPart(canonicalLocalPart)) return null
+
+  return {
+    decision,
+    email: {
+      canonicalKey: `${canonicalLocalPart}@${parsed.domain}`,
+      providerValue: `${parsed.localPart}@${parsed.domain}`,
     },
   }
 }

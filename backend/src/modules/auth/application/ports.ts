@@ -11,6 +11,7 @@ export type AccessTokenPayload = {
 }
 
 export type AuthRepository = {
+  findUserById(userId: string): Promise<AuthUserRecord | null>
   findUserByLogin(login: string): Promise<AuthUserRecord | null>
   updatePasswordHash(input: {
     userId: string
@@ -107,8 +108,48 @@ export type AuthRepository = {
   readAccountProtection(userId: string): Promise<{
     accountEmailProviderValue: string | null
     accountEmailState: string
+    recoveryEmailBinding?: {
+      activatesAt: Date
+      cancellationSessionIds: string[]
+      providerValue: string
+      requestedAt: Date
+    } | null
+    recoveryEmailChallenge?: {
+      cancellationSessionIds: string[]
+      expiresAt: Date
+      providerValue: string
+      requestedAt: Date
+    } | null
     hasYandexIdentity: boolean
   } | null>
+  startRecoveryEmail(input: {
+    canonicalKey: string
+    expectedPasswordHash: string
+    expiresAt: Date
+    ipAddress?: string
+    now: Date
+    policyVersion: number
+    providerValue: string
+    sessionId: string
+    userId: string
+  }): Promise<void>
+  resendRecoveryEmail(input: {
+    expiresAt: Date
+    ipAddress?: string
+    now: Date
+    userId: string
+  }): Promise<void>
+  confirmRecoveryEmail(input: {
+    activatesAt: Date
+    code: string
+    now: Date
+    userId: string
+  }): Promise<'already_confirmed' | 'confirmed' | 'invalid'>
+  cancelRecoveryEmail(input: {
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<'cancelled' | 'forbidden' | 'unavailable'>
 }
 
 export type AccountEmailCanonicalizer = {
@@ -116,6 +157,17 @@ export type AccountEmailCanonicalizer = {
     canonicalKey: string
     providerValue: string
   } | null>
+  canonicalizeForRecovery?(value: string): Promise<{
+    canonicalKey: string
+    policyVersion: number
+    providerValue: string
+  } | null>
+  evaluate?(emailDomain: string): Promise<{
+    acceptsNewAddress: boolean
+    allowsRecoveryDelivery: boolean
+    state: 'approved' | 'blocked' | 'deprecated' | 'unlisted'
+    version: number
+  }>
 }
 
 export type OAuthProvider = {
