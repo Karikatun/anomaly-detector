@@ -122,62 +122,69 @@ export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: (
     },
 
     async join(input) {
-      try {
-        return await db.$transaction(async (tx) => {
-          const currentMatch = await tx.currentMatch.findUnique({
-            where: { userId: input.actorId },
-            select: { roomId: true },
-          })
-          if (currentMatch && currentMatch.roomId !== input.roomId) {
-            throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
-          }
-          const room = await tx.tenderRoom.findUnique({
-            where: { id: input.roomId },
-            include: roomMembersInclude,
-          })
-        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
-        if (room.members.some((member) => member.userId === input.actorId)) {
-          if (!currentMatch) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await db.$transaction(async (tx) => {
+            const currentMatch = await tx.currentMatch.findUnique({
+              where: { userId: input.actorId },
+              select: { roomId: true },
+            })
+            if (currentMatch && currentMatch.roomId !== input.roomId) {
+              throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
+            }
+            const room = await tx.tenderRoom.findUnique({
+              where: { id: input.roomId },
+              include: roomMembersInclude,
+            })
+            if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+            if (room.members.some((member) => member.userId === input.actorId)) {
+              if (!currentMatch) {
+                await tx.currentMatch.create({
+                  data: { roomId: room.id, userId: input.actorId },
+                })
+              }
+              // Already joined — return current room state (idempotent poll)
+              return toRoomRecord(room)
+            }
+            if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
+            if (room.members.length >= room.capacity) throw new RoomFailure('room_full', 'Room is already full')
+
+            const occupiedSeats = new Set(room.members.map((member) => member.seat))
+            const seat = Array.from({ length: room.capacity }, (_, index) => index + 1)
+              .find((candidate) => !occupiedSeats.has(candidate))
+            if (!seat) throw new RoomFailure('room_full', 'Room is already full')
+
+            await tx.tenderRoomMember.updateMany({
+              where: { roomId: room.id },
+              data: { ready: false },
+            })
+            await tx.tenderRoomMember.create({
+              data: { roomId: room.id, seat, userId: input.actorId },
+            })
             await tx.currentMatch.create({
               data: { roomId: room.id, userId: input.actorId },
             })
+            return toRoomRecord(room, {
+              members: [
+                ...room.members.map((member) => ({ ...member, ready: false })),
+                { ready: false, seat, userId: input.actorId },
+              ]
+                .sort((left, right) => left.seat - right.seat)
+                .map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
+            })
+          }, { isolationLevel: 'Serializable' })
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) {
+            await waitForTransactionRetry(attempt)
+            continue
           }
-          // Already joined — return current room state (idempotent poll)
-          return toRoomRecord(room)
+          if (isCurrentMatchUniqueConstraintError(error)) {
+            throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
+          }
+          throw error
         }
-        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
-        if (room.members.length >= room.capacity) throw new RoomFailure('room_full', 'Room is already full')
-
-        const occupiedSeats = new Set(room.members.map((member) => member.seat))
-        const seat = Array.from({ length: room.capacity }, (_, index) => index + 1)
-          .find((candidate) => !occupiedSeats.has(candidate))
-        if (!seat) throw new RoomFailure('room_full', 'Room is already full')
-
-        await tx.tenderRoomMember.updateMany({
-          where: { roomId: room.id },
-          data: { ready: false },
-        })
-        await tx.tenderRoomMember.create({
-          data: { roomId: room.id, seat, userId: input.actorId },
-        })
-        await tx.currentMatch.create({
-          data: { roomId: room.id, userId: input.actorId },
-        })
-        return toRoomRecord(room, {
-          members: [
-            ...room.members.map((member) => ({ ...member, ready: false })),
-            { ready: false, seat, userId: input.actorId },
-          ]
-            .sort((left, right) => left.seat - right.seat)
-            .map((member) => ({ ready: member.ready, seat: member.seat, userId: member.userId })),
-        })
-        }, { isolationLevel: 'Serializable' })
-      } catch (error) {
-        if (isCurrentMatchUniqueConstraintError(error)) {
-          throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
-        }
-        throw error
       }
+      throw new Error('Unreachable room join transaction retry state')
     },
 
     async joinByCode(input) {
