@@ -53,6 +53,59 @@ describe('loadEnv', () => {
     expect(env.WORKER_HEALTH_PORT).toBe(3001)
   })
 
+  test('enables transactional SMTP only with a complete protected configuration', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+    expect(loadEnv(baseEnv).MAIL_SMTP_ENABLED).toBe(false)
+    expect(() => loadEnv({
+      ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+    })).toThrow('MAIL_SMTP_USERNAME')
+    expect(() => loadEnv({
+      ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_FROM: 'no-reply@anomaly-detector.ru',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+      MAIL_SMTP_PASSWORD: 'smtp-password-must-not-leak',
+      MAIL_SMTP_PORT: '465',
+      MAIL_SMTP_REPLY_TO: 'support@anomaly-detector.ru',
+      MAIL_SMTP_TLS_MODE: 'plain',
+      MAIL_SMTP_USERNAME: 'no-reply@anomaly-detector.ru',
+    })).toThrow('MAIL_SMTP_TLS_MODE')
+    expect(() => loadEnv({
+      ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_FROM: 'no-reply@anomaly-detector.ru',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+      MAIL_SMTP_LEASE_SECONDS: '60',
+      MAIL_SMTP_PASSWORD: 'smtp-password-must-not-leak',
+      MAIL_SMTP_PORT: '465',
+      MAIL_SMTP_REPLY_TO: 'support@anomaly-detector.ru',
+      MAIL_SMTP_TIMEOUT_MS: '60000',
+      MAIL_SMTP_TLS_MODE: 'implicit_tls',
+      MAIL_SMTP_USERNAME: 'no-reply@anomaly-detector.ru',
+    })).toThrow('MAIL_SMTP_LEASE_SECONDS')
+
+    const env = loadEnv({
+      ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_FROM: 'no-reply@anomaly-detector.ru',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+      MAIL_SMTP_PASSWORD: 'smtp-password-must-not-leak',
+      MAIL_SMTP_PORT: '465',
+      MAIL_SMTP_REPLY_TO: 'support@anomaly-detector.ru',
+      MAIL_SMTP_TLS_MODE: 'implicit_tls',
+      MAIL_SMTP_USERNAME: 'no-reply@anomaly-detector.ru',
+    })
+    expect(env.MAIL_SMTP_ENABLED).toBe(true)
+    expect(env.MAIL_SMTP_TLS_MODE).toBe('implicit_tls')
+    expect(env.MAIL_SMTP_MAX_ATTEMPTS).toBe(5)
+    expect(env.MAIL_OUTBOX_RETENTION_DAYS).toBe(30)
+  })
+
   test('allows both local browser clients by default', () => {
     const env = loadEnv({
       DATABASE_URL: 'postgresql://localhost/test',

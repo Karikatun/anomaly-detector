@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
-import type { AdminOverview, MailPolicyView } from '@anomaly-detector/contracts'
+import type { AdminOverview, MailOperationsView } from '@anomaly-detector/contracts'
 
 import { AdminApi, AdminApiError } from './api'
 import { getApiBaseUrl } from './api-base-url'
@@ -12,7 +12,7 @@ type AppState =
   | { kind: 'anonymous'; error?: string }
   | { kind: 'concealed' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; data: AdminOverview; mailPolicy: MailPolicyView }
+  | { kind: 'ready'; data: AdminOverview; mailPolicy: MailOperationsView }
 
 type ReadyView = 'mail-policy' | 'overview'
 
@@ -97,7 +97,7 @@ export default function App() {
     const mailPolicy = await api.getMailPolicy()
     setState((current) => current.kind === 'ready' ? { ...current, mailPolicy } : current)
   }
-  const executeMailCommand = async (operation: () => Promise<MailPolicyView>) => {
+  const executeMailCommand = async (operation: () => Promise<MailOperationsView>) => {
     try {
       const mailPolicy = await operation()
       setState((current) => current.kind === 'ready' ? { ...current, mailPolicy } : current)

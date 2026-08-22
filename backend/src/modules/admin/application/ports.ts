@@ -4,7 +4,7 @@ import type {
   MailPolicyImportCommand,
   MailPolicyPublishCommand,
   MailPolicyStatusCommand,
-  MailPolicyView,
+  MailOperationsView,
 } from '@anomaly-detector/contracts'
 
 export type AdminOverviewReader = {
@@ -17,8 +17,8 @@ type AdminOperator = {
 }
 
 export type AdminMailPolicyOperator = {
-  changeStatus(command: MailPolicyStatusCommand, operator: AdminOperator): Promise<MailPolicyView>
-  importCandidates(command: MailPolicyImportCommand, operator: AdminOperator): Promise<MailPolicyView>
-  publish(command: MailPolicyPublishCommand, operator: AdminOperator): Promise<MailPolicyView>
-  read(): Promise<MailPolicyView>
+  changeStatus(command: MailPolicyStatusCommand, operator: AdminOperator): Promise<MailOperationsView>
+  importCandidates(command: MailPolicyImportCommand, operator: AdminOperator): Promise<MailOperationsView>
+  publish(command: MailPolicyPublishCommand, operator: AdminOperator): Promise<MailOperationsView>
+  read(): Promise<MailOperationsView>
 }

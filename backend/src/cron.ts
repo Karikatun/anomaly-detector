@@ -1,4 +1,5 @@
 import { createBackendRuntime, type BackendRuntime } from './runtime'
+import { cleanupTerminalMailOutbox } from './modules/mail'
 
 type CronTask = (runtime: BackendRuntime, now: Date) => Promise<void>
 
@@ -13,7 +14,10 @@ const cleanupMaintenance: CronTask = async ({ env, prisma }, now) => {
     now.getTime() - (env.SESSION_ABSOLUTE_TTL_DAYS + env.SESSION_RETENTION_DAYS) * dayMs,
   )
   const waitingRoomCutoff = new Date(now.getTime() - waitingRoomTtlMs)
-  const [sessions, abuseBuckets, oauthTransactions, realtimeTickets, waitingRooms] = await Promise.all([
+  const mailOutboxCutoff = new Date(
+    now.getTime() - env.MAIL_OUTBOX_RETENTION_DAYS * dayMs,
+  )
+  const [sessions, abuseBuckets, oauthTransactions, realtimeTickets, waitingRooms, mailOutbox] = await Promise.all([
     prisma.authSession.deleteMany({
       where: {
         OR: [
@@ -38,9 +42,10 @@ const cleanupMaintenance: CronTask = async ({ env, prisma }, now) => {
         status: 'waiting',
       },
     }),
+    cleanupTerminalMailOutbox(prisma, mailOutboxCutoff),
   ])
   console.log(
-    `Cron maintenance:cleanup removed ${sessions.count} stale sessions, ${abuseBuckets.count} expired abuse buckets, ${oauthTransactions.count} OAuth transactions, ${realtimeTickets.count} realtime tickets, and ${waitingRooms.count} expired waiting rooms.`,
+    `Cron maintenance:cleanup removed ${sessions.count} stale sessions, ${abuseBuckets.count} expired abuse buckets, ${oauthTransactions.count} OAuth transactions, ${realtimeTickets.count} realtime tickets, ${waitingRooms.count} expired waiting rooms, and ${mailOutbox.count} terminal mail outbox records.`,
   )
 }
 

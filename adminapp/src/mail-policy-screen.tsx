@@ -4,14 +4,14 @@ import type {
   MailPolicyImportCommand,
   MailPolicyPublishCommand,
   MailPolicyStatusCommand,
-  MailPolicyView,
+  MailOperationsView,
 } from '@anomaly-detector/contracts'
 
 import { AdminApiError } from './api'
 import { shouldRetainCommand } from './mail-policy-command-retry'
 
 type MailPolicyScreenProps = {
-  data: MailPolicyView
+  data: MailOperationsView
   onBack: () => void
   onChangeStatus: (command: MailPolicyStatusCommand) => Promise<void>
   onImport: (command: MailPolicyImportCommand) => Promise<void>
@@ -20,7 +20,7 @@ type MailPolicyScreenProps = {
   onReload: () => Promise<void>
 }
 
-type BusyCommand = 'import' | 'publish' | 'status'
+type BusyCommand = 'import' | 'publish' | 'reload' | 'status'
 type Feedback = { kind: 'error' | 'success'; message: string }
 
 export function MailPolicyScreen({
@@ -108,6 +108,18 @@ export function MailPolicyScreen({
     )
   }
 
+  const reload = async () => {
+    setBusy('reload')
+    setFeedback(null)
+    try {
+      await onReload()
+    } catch {
+      setFeedback({ kind: 'error', message: 'Состояние почтового контура не обновлено. Повторите запрос.' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <main className="screen">
       <div className="content">
@@ -120,6 +132,14 @@ export function MailPolicyScreen({
             </p>
           </div>
           <div className="header-actions">
+            <button
+              type="button"
+              className="button"
+              disabled={busy !== null}
+              onClick={() => void reload()}
+            >
+              {busy === 'reload' ? 'Обновляем…' : 'Обновить контур'}
+            </button>
             <button type="button" className="button button-secondary" onClick={onBack}>Системный обзор</button>
             <button type="button" className="button button-secondary" onClick={onLogout}>Выйти</button>
           </div>
@@ -130,6 +150,83 @@ export function MailPolicyScreen({
             {feedback.message}
           </p>
         )}
+
+        <section className="panel mail-operations-panel" aria-labelledby="mail-delivery-title">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">REG.RU · только транзакционные письма</p>
+              <h2 id="mail-delivery-title">Состояние отправки</h2>
+            </div>
+            <span className={`state-badge state-${deliveryStateTone(data.delivery)}`}>
+              {deliveryStateLabel(data.delivery)}
+            </span>
+          </div>
+          <div className="mail-summary-grid">
+            <div className="mail-metric">
+              <span>В очереди</span>
+              <strong>{data.delivery.outbox.queued}</strong>
+              <small>{data.delivery.outbox.oldestQueuedAt
+                ? `старейшее с ${formatDate(data.delivery.outbox.oldestQueuedAt)}`
+                : 'ожидающих заявок нет'}</small>
+            </div>
+            <div className="mail-metric">
+              <span>Принято SMTP</span>
+              <strong>{data.delivery.totals.smtpAccepted}</strong>
+              <small>это не подтверждение доставки в ящик</small>
+            </div>
+            <div className="mail-metric">
+              <span>Отказы</span>
+              <strong>{data.delivery.totals.temporaryFailures} / {data.delivery.totals.terminalFailures}</strong>
+              <small>временные / окончательные</small>
+            </div>
+            <div className="mail-metric">
+              <span>Минутный budget</span>
+              <strong>{data.delivery.budget.usedInWindow} / {data.delivery.budget.limitPerMinute}</strong>
+              <small>{data.delivery.outbox.leased} сейчас обрабатывается</small>
+            </div>
+          </div>
+          <dl className="mail-health-details">
+            <div>
+              <dt>Последнее принятие SMTP</dt>
+              <dd>{formatOptionalDate(data.delivery.lastSmtpSuccessAt)}</dd>
+            </div>
+            <div>
+              <dt>Последний успешный реестр</dt>
+              <dd>{formatOptionalDate(data.delivery.registryLastSuccessfulImportAt)}</dd>
+            </div>
+            <div>
+              <dt>Повторные сбои</dt>
+              <dd>{data.delivery.circuit.consecutiveFailures}</dd>
+            </div>
+            <div>
+              <dt>Circuit до</dt>
+              <dd>{formatOptionalDate(data.delivery.circuit.openUntil)}</dd>
+            </div>
+          </dl>
+          {data.delivery.groups.length === 0 ? (
+            <p className="empty-copy">Группы меньше пяти запросов скрыты; адреса, содержимое, коды и токены здесь не показываются.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Тип письма</th><th>Сервис</th><th>Запросы</th><th>Принято SMTP</th><th>Временные</th><th>Окончательные</th></tr>
+                </thead>
+                <tbody>
+                  {data.delivery.groups.map((group) => (
+                    <tr key={`${group.templateKind}:${group.service}`}>
+                      <td>{templateKindLabel(group.templateKind)}</td>
+                      <td><code>{group.service}</code></td>
+                      <td>{group.requested}</td>
+                      <td>{group.smtpAccepted}</td>
+                      <td>{group.temporaryFailures}</td>
+                      <td>{group.terminalFailures}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <section className="policy-layout" aria-label="Импорт и активная политика">
           <article className="panel policy-summary-panel">
@@ -308,7 +405,7 @@ function DomainDiff({ domains, title }: { domains: string[]; title: string }) {
   )
 }
 
-function attemptLabel(outcome: MailPolicyView['latestAttempt'] extends infer T
+function attemptLabel(outcome: MailOperationsView['latestAttempt'] extends infer T
   ? T extends { outcome: infer O } ? O : never
   : never) {
   return outcome === 'succeeded' ? 'Кандидаты проверены' : outcome === 'rejected' ? 'Отклонён как подозрительный' : 'Ошибка источника'
@@ -343,4 +440,26 @@ function formatDate(value: string) {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+function formatOptionalDate(value: string | null) {
+  return value ? formatDate(value) : 'Нет данных'
+}
+
+function deliveryStateLabel(delivery: MailOperationsView['delivery']) {
+  if (!delivery.configured) return 'Отключено'
+  if (delivery.circuit.state === 'open') return 'Circuit открыт'
+  return 'Включено'
+}
+
+function deliveryStateTone(delivery: MailOperationsView['delivery']) {
+  if (!delivery.configured) return 'deprecated'
+  if (delivery.circuit.state === 'open') return 'blocked'
+  return 'approved'
+}
+
+function templateKindLabel(kind: MailOperationsView['delivery']['groups'][number]['templateKind']) {
+  if (kind === 'account_email_confirmation') return 'Подтверждение почты'
+  if (kind === 'password_recovery') return 'Восстановление пароля'
+  return 'Security-уведомление'
 }

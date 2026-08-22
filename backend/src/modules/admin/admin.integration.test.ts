@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
-import { mailPolicyViewSchema } from '@anomaly-detector/contracts'
+import { mailOperationsViewSchema } from '@anomaly-detector/contracts'
 
 import { createApp } from '../../app'
 import { createPrisma } from '../../db'
@@ -20,6 +20,16 @@ maybeDescribe('concealed operations API integration', () => {
     AUTH_RATE_LIMIT_MAX: 60,
     AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
     COOKIE_SECURE: false,
+    MAIL_SMTP_ENABLED: false,
+    MAIL_SMTP_TIMEOUT_MS: 10_000,
+    MAIL_SMTP_MAX_ATTEMPTS: 5,
+    MAIL_SMTP_RETRY_BASE_SECONDS: 30,
+    MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD: 5,
+    MAIL_SMTP_CIRCUIT_OPEN_SECONDS: 300,
+    MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE: 60,
+    MAIL_SMTP_LEASE_SECONDS: 60,
+    MAIL_SMTP_WORKER_INTERVAL_MS: 1_000,
+    MAIL_OUTBOX_RETENTION_DAYS: 30,
     CORS_ORIGINS: ['http://localhost:5173'],
     WEBAPP_ORIGIN: 'http://localhost:5173',
     DATABASE_URL: databaseUrl,
@@ -154,7 +164,7 @@ maybeDescribe('concealed operations API integration', () => {
     })
     expect(importedResponse.status).toBe(200)
     expect(importedResponse.headers.get('cache-control')).toBe('no-store')
-    const imported = mailPolicyViewSchema.parse(await importedResponse.json())
+    const imported = mailOperationsViewSchema.parse(await importedResponse.json())
     expect(sourceCalls).toBe(1)
 
     const publishedResponse = await app.request('/api/operations/mail-policy/publish', {
@@ -178,7 +188,7 @@ maybeDescribe('concealed operations API integration', () => {
       method: 'POST',
     })
     expect(publishedResponse.status).toBe(200)
-    expect(mailPolicyViewSchema.parse(await publishedResponse.json())).toMatchObject({
+    expect(mailOperationsViewSchema.parse(await publishedResponse.json())).toMatchObject({
       currentVersion: 1,
       publishedPolicy: { entries: [{ emailDomain: 'yandex.ru', state: 'approved' }] },
     })

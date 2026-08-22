@@ -20,8 +20,13 @@ describe('runCronTask', () => {
     const oauthCalls: unknown[] = []
     const realtimeCalls: unknown[] = []
     const roomCalls: unknown[] = []
+    const mailOutboxCalls: unknown[] = []
     const cleanupRuntime = {
-      env: { SESSION_ABSOLUTE_TTL_DAYS: 90, SESSION_RETENTION_DAYS: 7 },
+      env: {
+        MAIL_OUTBOX_RETENTION_DAYS: 30,
+        SESSION_ABSOLUTE_TTL_DAYS: 90,
+        SESSION_RETENTION_DAYS: 7,
+      },
       prisma: {
         authAbuseBucket: {
           deleteMany: async (input: unknown) => {
@@ -45,6 +50,12 @@ describe('runCronTask', () => {
           deleteMany: async (input: unknown) => {
             realtimeCalls.push(input)
             return { count: 5 }
+          },
+        },
+        mailOutboxMessage: {
+          deleteMany: async (input: unknown) => {
+            mailOutboxCalls.push(input)
+            return { count: 7 }
           },
         },
         tenderRoom: {
@@ -73,6 +84,12 @@ describe('runCronTask', () => {
       where: {
         createdAt: { lt: new Date('2026-04-07T12:00:00.000Z') },
         status: 'waiting',
+      },
+    }])
+    expect(mailOutboxCalls).toEqual([{
+      where: {
+        completedAt: { lt: new Date('2026-03-09T12:00:00.000Z') },
+        state: { in: ['smtp_accepted', 'terminal_failure'] },
       },
     }])
     expect(calls[0]).toMatchObject({

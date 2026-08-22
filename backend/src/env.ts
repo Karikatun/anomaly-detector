@@ -68,6 +68,23 @@ const envSchema = z.object({
   TRUSTED_PROXY_CLIENT_IP_HEADER: optionalHttpHeaderNameSchema,
   TRUSTED_PROXY_CLIENT_IP_POSITION: z.enum(['first', 'last']).optional(),
   COOKIE_SECURE: booleanStringSchema,
+  MAIL_SMTP_ENABLED: booleanStringSchema,
+  MAIL_SMTP_HOST: optionalStringSchema,
+  MAIL_SMTP_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+  MAIL_SMTP_TLS_MODE: z.enum(['implicit_tls', 'starttls']).optional(),
+  MAIL_SMTP_USERNAME: optionalStringSchema,
+  MAIL_SMTP_PASSWORD: optionalStringSchema,
+  MAIL_SMTP_FROM: optionalStringSchema,
+  MAIL_SMTP_REPLY_TO: optionalStringSchema,
+  MAIL_SMTP_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+  MAIL_SMTP_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
+  MAIL_SMTP_RETRY_BASE_SECONDS: z.coerce.number().int().min(1).max(3_600).default(30),
+  MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().min(1).max(100).default(5),
+  MAIL_SMTP_CIRCUIT_OPEN_SECONDS: z.coerce.number().int().min(10).max(86_400).default(300),
+  MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(60),
+  MAIL_SMTP_LEASE_SECONDS: z.coerce.number().int().min(10).max(3_600).default(60),
+  MAIL_SMTP_WORKER_INTERVAL_MS: z.coerce.number().int().min(250).max(60_000).default(1_000),
+  MAIL_OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   YANDEX_OAUTH_CLIENT_ID: optionalStringSchema,
   YANDEX_OAUTH_CLIENT_SECRET: optionalStringSchema,
   OAUTH_CALLBACK_BASE_URL: optionalUrlSchema,
@@ -90,6 +107,7 @@ const envSchema = z.object({
   validateTrustedProxy(env, ctx)
   validateOAuth(env, ctx)
   validateStorageEnv(env, ctx)
+  validateSmtpEnv(env, ctx)
 })
 
 export type AppEnv = z.infer<typeof envSchema>
@@ -317,6 +335,66 @@ function validateOAuth(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
       code: 'custom',
       path: ['OAUTH_CALLBACK_BASE_URL'],
       message: 'OAUTH_CALLBACK_BASE_URL must use HTTPS in production',
+    })
+  }
+}
+
+function validateSmtpEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  const requiredSmtpKeys = [
+    'MAIL_SMTP_HOST',
+    'MAIL_SMTP_PORT',
+    'MAIL_SMTP_TLS_MODE',
+    'MAIL_SMTP_USERNAME',
+    'MAIL_SMTP_PASSWORD',
+    'MAIL_SMTP_FROM',
+    'MAIL_SMTP_REPLY_TO',
+  ] as const
+  const smtpConfigured = env.MAIL_SMTP_ENABLED
+    || requiredSmtpKeys.some((key) => env[key] !== undefined)
+  if (!smtpConfigured) return
+
+  for (const key of requiredSmtpKeys) {
+    if (env[key] === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: `${key} is required when transactional SMTP is configured`,
+      })
+    }
+  }
+  if (env.MAIL_SMTP_HOST && !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i.test(env.MAIL_SMTP_HOST)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_HOST'],
+      message: 'MAIL_SMTP_HOST must be a DNS hostname used for TLS verification',
+    })
+  }
+  if (env.MAIL_SMTP_FROM && env.MAIL_SMTP_FROM !== 'no-reply@anomaly-detector.ru') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_FROM'],
+      message: 'MAIL_SMTP_FROM must use the dedicated no-reply mailbox',
+    })
+  }
+  if (env.MAIL_SMTP_USERNAME && env.MAIL_SMTP_USERNAME !== 'no-reply@anomaly-detector.ru') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_USERNAME'],
+      message: 'MAIL_SMTP_USERNAME must use the dedicated no-reply mailbox',
+    })
+  }
+  if (env.MAIL_SMTP_REPLY_TO && env.MAIL_SMTP_REPLY_TO !== 'support@anomaly-detector.ru') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_REPLY_TO'],
+      message: 'MAIL_SMTP_REPLY_TO must use the product support mailbox',
+    })
+  }
+  if (env.MAIL_SMTP_LEASE_SECONDS * 1_000 <= env.MAIL_SMTP_TIMEOUT_MS) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_LEASE_SECONDS'],
+      message: 'MAIL_SMTP_LEASE_SECONDS must exceed MAIL_SMTP_TIMEOUT_MS',
     })
   }
 }

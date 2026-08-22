@@ -7,13 +7,13 @@ import {
   mailPolicyImportCommandSchema,
   mailPolicyPublishCommandSchema,
   mailPolicyStatusCommandSchema,
-  mailPolicyViewSchema,
+  mailOperationsViewSchema,
   type AdminOverview,
   type LoginRequest,
   type MailPolicyImportCommand,
   type MailPolicyPublishCommand,
   type MailPolicyStatusCommand,
-  type MailPolicyView,
+  type MailOperationsView,
   type UserDto,
 } from '@anomaly-detector/contracts'
 
@@ -82,22 +82,22 @@ export class AdminApi {
     return adminOverviewSchema.parse(await response.json())
   }
 
-  async getMailPolicy(): Promise<MailPolicyView> {
+  async getMailPolicy(): Promise<MailOperationsView> {
     const response = await this.request('/api/operations/mail-policy', {
       headers: this.authenticatedHeaders(),
     })
-    return mailPolicyViewSchema.parse(await response.json())
+    return mailOperationsViewSchema.parse(await response.json())
   }
 
-  async importMailPolicy(input: MailPolicyImportCommand): Promise<MailPolicyView> {
+  async importMailPolicy(input: MailPolicyImportCommand): Promise<MailOperationsView> {
     return this.mailPolicyCommand('/api/operations/mail-policy/import', mailPolicyImportCommandSchema.parse(input))
   }
 
-  async publishMailPolicy(input: MailPolicyPublishCommand): Promise<MailPolicyView> {
+  async publishMailPolicy(input: MailPolicyPublishCommand): Promise<MailOperationsView> {
     return this.mailPolicyCommand('/api/operations/mail-policy/publish', mailPolicyPublishCommandSchema.parse(input))
   }
 
-  async changeMailPolicyStatus(input: MailPolicyStatusCommand): Promise<MailPolicyView> {
+  async changeMailPolicyStatus(input: MailPolicyStatusCommand): Promise<MailOperationsView> {
     return this.mailPolicyCommand('/api/operations/mail-policy/status', mailPolicyStatusCommandSchema.parse(input))
   }
 
@@ -107,7 +107,7 @@ export class AdminApi {
       headers: this.authenticatedHeaders(),
       method: 'POST',
     })
-    return mailPolicyViewSchema.parse(await response.json())
+    return mailOperationsViewSchema.parse(await response.json())
   }
 
   private authenticatedHeaders() {

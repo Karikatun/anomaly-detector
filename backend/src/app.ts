@@ -60,7 +60,14 @@ export function createApp({
     db: prisma,
     requireAuth: auth.requireAuth,
   })
-  const mail = createMailModule({ db: prisma, source: mailPolicySource })
+  const mail = createMailModule({
+    db: prisma,
+    deliveryStatus: {
+      configured: env.MAIL_SMTP_ENABLED,
+      deliveryBudgetPerMinute: env.MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE,
+    },
+    source: mailPolicySource,
+  })
   const admin = createAdminModule({
     adminUserIds: new Set(env.ADMIN_USER_IDS),
     authenticate: auth.authenticateAccessToken,

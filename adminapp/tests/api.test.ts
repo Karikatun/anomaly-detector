@@ -92,6 +92,17 @@ test('uses the authenticated narrow mail-policy endpoints without generic mutati
   const requests: Array<{ body: unknown; method: string; url: string }> = []
   const view = {
     currentVersion: 0,
+    delivery: {
+      budget: { limitPerMinute: 60, usedInWindow: 0, windowStartedAt: null },
+      circuit: { consecutiveFailures: 0, openUntil: null, state: 'disabled' },
+      configured: false,
+      groups: [],
+      lastSmtpSuccessAt: null,
+      outbox: { leased: 0, oldestQueuedAt: null, queued: 0 },
+      provider: 'reg_ru',
+      registryLastSuccessfulImportAt: null,
+      totals: { requested: 0, smtpAccepted: 0, temporaryFailures: 0, terminalFailures: 0 },
+    },
     generatedAt: '2026-08-22T12:00:00.000Z',
     latestAttempt: null,
     lastSuccessfulImport: null,
