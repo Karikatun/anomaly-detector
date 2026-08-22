@@ -41,6 +41,15 @@ const recoveryCodeRoute = createRoute({
   ),
 })
 
+const passwordRecoveryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/recover/password',
+  component: lazyRouteComponent(
+    () => import('./features/auth/public/password-recovery'),
+    'PasswordRecoveryRoute',
+  ),
+})
+
 const roomsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/rooms',
@@ -96,6 +105,7 @@ const routeTree = rootRoute.addChildren([
   appRoute,
   profileRoute,
   recoveryCodeRoute,
+  passwordRecoveryRoute,
   roomsRoute,
   roomLobbyRoute,
   tenderRoute,

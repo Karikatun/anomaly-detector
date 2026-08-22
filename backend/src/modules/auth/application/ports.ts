@@ -168,6 +168,18 @@ export type AuthRepository = {
     now: Date
     recoveryCode: string
   }): Promise<boolean>
+  requestPasswordReset(input: {
+    expiresAt: Date
+    ipAddress?: string
+    login: string
+    now: Date
+    recoveryUrl: string
+  }): Promise<void>
+  completePasswordReset(input: {
+    newPasswordHash: string
+    now: Date
+    token: string
+  }): Promise<boolean>
   startRecoveryEmailWithRecoveryCode(input: {
     expiresAt: Date
     ipAddress?: string

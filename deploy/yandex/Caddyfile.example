@@ -1,6 +1,6 @@
 anomaly-detector.ru {
 	@legacyPlayerRoutes {
-		path /app /profile /rooms /rooms/* /tenders/* /tutorial /privacy /personal-data-consent /terms
+		path /app /profile /rooms /rooms/* /tenders/* /tutorial /recover/code /recover/password /privacy /personal-data-consent /terms
 	}
 	redir @legacyPlayerRoutes https://app.anomaly-detector.ru{uri} permanent
 

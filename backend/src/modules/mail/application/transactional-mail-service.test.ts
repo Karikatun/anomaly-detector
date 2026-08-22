@@ -99,4 +99,29 @@ describe('TransactionalMailService', () => {
       },
     })).rejects.toMatchObject({ kind: 'invalid_request' })
   })
+
+  test('permits a token-free loopback recovery route only for local development', async () => {
+    const service = new TransactionalMailService(
+      { enqueue: async () => ({ kind: 'inserted' }) },
+      'mail-fingerprint-primary-key-0001',
+    )
+    await expect(service.enqueue({
+      messageId: '019f8099-7e26-7760-ad08-66d1d66b2804',
+      recipient: 'researcher@yandex.ru',
+      template: {
+        expiresAt: new Date('2026-08-22T12:15:00.000Z'),
+        kind: 'password_recovery',
+        recoveryUrl: 'http://127.0.0.1:5173/recover/password',
+      },
+    })).resolves.toMatchObject({ kind: 'queued' })
+    await expect(service.enqueue({
+      messageId: '019f8099-7e26-7760-ad08-66d1d66b2805',
+      recipient: 'researcher@yandex.ru',
+      template: {
+        expiresAt: new Date('2026-08-22T12:15:00.000Z'),
+        kind: 'password_recovery',
+        recoveryUrl: 'http://127.0.0.1:5173/recover/password#token=secret',
+      },
+    })).rejects.toMatchObject({ kind: 'invalid_request' })
+  })
 })

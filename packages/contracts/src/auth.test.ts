@@ -17,6 +17,10 @@ import {
   oauthProviderSchema,
   oauthStartRequestSchema,
   oauthStartResponseSchema,
+  completePasswordResetRequestSchema,
+  passwordResetCompletionResponseSchema,
+  requestPasswordResetRequestSchema,
+  requestPasswordResetResponseSchema,
   registerRequestSchema,
   recoveryEmailReplacementCommandResponseSchema,
   recoveryCodeEmailReplacementConfirmRequestSchema,
@@ -333,6 +337,37 @@ describe('auth contracts', () => {
       login: 'owner',
       recoveryCode: unformattedCode,
       ownerId: 'secret',
+    }).success).toBe(false)
+  })
+
+  test('keeps email-link password recovery bounded and non-enumerating', () => {
+    expect(requestPasswordResetRequestSchema.parse({ login: ' Owner ' }))
+      .toEqual({ login: 'owner' })
+    expect(requestPasswordResetResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+
+    const token = 'A'.repeat(43)
+    expect(completePasswordResetRequestSchema.parse({
+      newPassword: 'new-password123',
+      token,
+    })).toEqual({ newPassword: 'new-password123', token })
+    expect(passwordResetCompletionResponseSchema.parse({ outcome: 'completed' }))
+      .toEqual({ outcome: 'completed' })
+    expect(passwordResetCompletionResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+
+    expect(completePasswordResetRequestSchema.safeParse({
+      newPassword: 'new-password123',
+      token: 'short',
+    }).success).toBe(false)
+    expect(completePasswordResetRequestSchema.safeParse({
+      newPassword: 'new-password123',
+      token,
+      userId: 'must-not-be-accepted',
+    }).success).toBe(false)
+    expect(requestPasswordResetResponseSchema.safeParse({
+      outcome: 'accepted',
+      maskedEmail: 'o***@mail.ru',
     }).success).toBe(false)
   })
 

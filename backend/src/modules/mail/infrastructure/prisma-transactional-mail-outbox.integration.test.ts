@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createPrisma } from '../../../db'
-import { createTransactionalMailRequester } from '..'
+import { createTransactionalMailRequester, derivePasswordResetToken } from '..'
 import { TransactionalMailDeliveryService } from '../application/transactional-mail-delivery-service'
 import { TransactionalMailService } from '../application/transactional-mail-service'
 import type { RenderedTransactionalMail } from '../application/transactional-mail-ports'
@@ -363,7 +363,17 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       template: {
         expiresAt: scenarioTime(15 * 60_000),
         kind: 'password_recovery',
-        recoveryUrl: 'https://anomaly-detector.ru/recover/opaque-token',
+        recoveryUrl: 'https://anomaly-detector.ru/recover/password',
+      },
+    })
+    expect(await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId: '019f8099-7e26-7760-ad08-66d1d66b2862' },
+      select: { templatePayload: true },
+    })).toEqual({
+      templatePayload: {
+        expiresAt: scenarioTime(15 * 60_000).toISOString(),
+        kind: 'password_recovery',
+        recoveryUrl: 'https://anomaly-detector.ru/recover/password',
       },
     })
     const providerMessages: RenderedTransactionalMail[] = []
@@ -413,6 +423,12 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       'Подтверждение старой почты восстановления — Anomaly Detector',
     )
     expect(providerMessages[0].text).toContain('Код для старой почты восстановления')
+    expect(providerMessages[1].text).toContain(
+      `https://anomaly-detector.ru/recover/password#token=${derivePasswordResetToken(
+        confirmationCodeSecret,
+        '019f8099-7e26-7760-ad08-66d1d66b2862',
+      )}`,
+    )
   })
 
   test('suppresses small service groups from the operator delivery projection', async () => {

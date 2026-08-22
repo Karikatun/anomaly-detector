@@ -6,6 +6,7 @@ import {
   cancelQueuedTransactionalMail,
   createTransactionalMailRequester,
   deriveAccountEmailConfirmationCode,
+  derivePasswordResetToken,
   evaluateTransactionalAccountEmail,
 } from '../../mail'
 import type { AuthRepository } from '../application/ports'
@@ -817,6 +818,227 @@ export function createPrismaAuthRepository(
         })
         return true
       })
+    },
+
+    async requestPasswordReset(input) {
+      const snapshot = await db.user.findUnique({
+        where: { login: input.login },
+        select: { id: true },
+      })
+      const messageId = options.createMessageId?.() ?? crypto.randomUUID()
+      const token = derivePasswordResetToken(abuseSecret, messageId)
+      const tokenHash = hashPasswordResetToken(abuseSecret, token)
+      const quotas = passwordResetRequestQuotas(abuseSecret, input)
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await db.$transaction(async (tx) => {
+            const locks = [
+              ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
+              ...quotas.map((quota) => ({
+                scope: 'recovery-budget',
+                value: `${quota.scope}:${quota.keyHash}`,
+              })),
+            ].sort((left, right) =>
+              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+            for (const lock of locks) {
+              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+            }
+
+            const budgetAvailable = await consumePasswordResetRequestQuotas(
+              tx,
+              quotas,
+              input.now,
+            )
+            const user = await tx.user.findUnique({
+              where: { login: input.login },
+              select: {
+                id: true,
+                passwordHash: true,
+                recoveryEmailBinding: true,
+                identities: {
+                  where: { provider: 'yandex' },
+                  select: { id: true },
+                  take: 1,
+                },
+              },
+            })
+            const binding = user?.recoveryEmailBinding
+            const policyProbe = binding ?? {
+              canonicalKey: 'password-reset-probe@invalid.example',
+              providerValue: 'password-reset-probe@invalid.example',
+            }
+            let policyAvailable = true
+            try {
+              await requireRecoveryEmailPolicy(tx, {
+                ...policyProbe,
+                requirement: 'delivery',
+              })
+            } catch (error) {
+              if (!(error instanceof AuthFailure)) throw error
+              policyAvailable = false
+            }
+            const previous = await tx.passwordResetCredential.findUnique({
+              where: { userId: user?.id ?? '00000000-0000-0000-0000-000000000000' },
+            })
+            const eligible = Boolean(
+              budgetAvailable
+              && snapshot
+              && user?.id === snapshot.id
+              && user.passwordHash
+              && binding
+              && binding.activatesAt <= input.now
+              && user.identities.length === 0
+              && policyAvailable,
+            )
+            if (!eligible || !user || !binding) {
+              // Preserve a comparable policy/read path for every public result without
+              // creating a credential or outbox side effect for an ineligible account.
+              await Promise.all([
+                tx.passwordResetCredential.findUnique({
+                  where: { tokenHash },
+                  select: { id: true },
+                }),
+                tx.mailOutboxMessage.findUnique({
+                  where: { messageId },
+                  select: { id: true },
+                }),
+              ])
+              codeHashesEqual('0'.repeat(64), tokenHash)
+              return
+            }
+
+            if (previous) {
+              await cancelQueuedTransactionalMail(tx, {
+                messageId: previous.messageId,
+                now: input.now,
+              })
+              await tx.passwordResetCredential.delete({ where: { id: previous.id } })
+            }
+            await tx.passwordResetCredential.create({
+              data: {
+                expiresAt: input.expiresAt,
+                messageId,
+                recoveryCanonicalKey: binding.canonicalKey,
+                requestedAt: input.now,
+                tokenHash,
+                userId: user.id,
+              },
+            })
+            await createTransactionalMailRequester(tx, abuseSecret).enqueue({
+              messageId,
+              recipient: binding.providerValue,
+              template: {
+                expiresAt: input.expiresAt,
+                kind: 'password_recovery',
+                recoveryUrl: input.recoveryUrl,
+              },
+            })
+          })
+          return
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) continue
+          throw error
+        }
+      }
+    },
+
+    async completePasswordReset(input) {
+      const tokenHash = hashPasswordResetToken(abuseSecret, input.token)
+      const snapshot = await db.passwordResetCredential.findUnique({
+        where: { tokenHash },
+        select: { id: true, recoveryCanonicalKey: true, userId: true },
+      })
+      if (!snapshot) {
+        codeHashesEqual('0'.repeat(64), tokenHash)
+        return false
+      }
+      const notificationMessageId = options.createMessageId?.() ?? crypto.randomUUID()
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await db.$transaction(async (tx) => {
+            const locks = [
+              { scope: 'recovery-user', value: snapshot.userId },
+              { scope: 'account-email', value: snapshot.recoveryCanonicalKey },
+            ].sort((left, right) =>
+              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+            for (const lock of locks) {
+              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+            }
+
+            const credential = await tx.passwordResetCredential.findUnique({
+              where: { tokenHash },
+            })
+            if (!credential || credential.id !== snapshot.id) return false
+            const [user, binding, yandexIdentity] = await Promise.all([
+              tx.user.findUnique({
+                where: { id: credential.userId },
+                select: { passwordHash: true },
+              }),
+              tx.recoveryEmailBinding.findUnique({ where: { userId: credential.userId } }),
+              tx.authIdentity.findFirst({
+                where: { provider: 'yandex', userId: credential.userId },
+                select: { id: true },
+              }),
+            ])
+            if (
+              !user?.passwordHash
+              || !binding
+              || binding.activatesAt > input.now
+              || binding.canonicalKey !== credential.recoveryCanonicalKey
+              || credential.expiresAt <= input.now
+              || yandexIdentity
+            ) {
+              await cancelQueuedTransactionalMail(tx, {
+                messageId: credential.messageId,
+                now: input.now,
+              })
+              await tx.passwordResetCredential.delete({ where: { id: credential.id } })
+              return false
+            }
+
+            let notificationAllowed = false
+            try {
+              await requireRecoveryEmailPolicy(tx, {
+                canonicalKey: binding.canonicalKey,
+                providerValue: binding.providerValue,
+                requirement: 'delivery',
+              })
+              notificationAllowed = true
+            } catch (error) {
+              if (!(error instanceof AuthFailure)) throw error
+            }
+
+            await cancelOutstandingRecoveryCredentials(tx, credential.userId, input.now)
+            await consumeRecoveryCodeSet(tx, credential.userId, input.now)
+            await tx.user.update({
+              where: { id: credential.userId },
+              data: { passwordHash: input.newPasswordHash },
+            })
+            await tx.authSession.updateMany({
+              where: { revokedAt: null, userId: credential.userId },
+              data: { revokedAt: input.now },
+            })
+            if (notificationAllowed) {
+              await createTransactionalMailRequester(tx, abuseSecret).enqueue({
+                messageId: notificationMessageId,
+                recipient: binding.providerValue,
+                template: {
+                  event: 'password_changed',
+                  kind: 'security_notification',
+                  occurredAt: input.now,
+                },
+              })
+            }
+            return true
+          })
+        } catch (error) {
+          if (isRetryableTransactionError(error) && attempt < 2) continue
+          throw error
+        }
+      }
+      return false
     },
 
     async startRecoveryEmailWithRecoveryCode(input) {
@@ -2157,6 +2379,65 @@ function recoveryCodeUseQuotas(
   }))
 }
 
+function passwordResetRequestQuotas(
+  secret: string,
+  input: { ipAddress?: string; login: string },
+) {
+  const definitions = [
+    ['password_reset_login_hour', input.login, 3, hourMs],
+    ['password_reset_login_day', input.login, 5, dayMs],
+    ['password_reset_ip_hour', input.ipAddress ?? 'unknown', 10, hourMs],
+    ['password_reset_ip_day', input.ipAddress ?? 'unknown', 30, dayMs],
+  ] as const
+  return definitions.map(([scope, value, limit, windowMs]) => ({
+    keyHash: hashRecoveryBudgetKey(secret, scope, value),
+    limit,
+    scope,
+    windowMs,
+  }))
+}
+
+async function consumePasswordResetRequestQuotas(
+  tx: Prisma.TransactionClient,
+  quotas: ReturnType<typeof passwordResetRequestQuotas>,
+  now: Date,
+) {
+  let available = true
+  for (const quota of quotas) {
+    const existing = await tx.authAbuseBucket.findUnique({
+      where: { scope_keyHash: { scope: quota.scope, keyHash: quota.keyHash } },
+    })
+    const windowExpired = !existing || existing.expiresAt <= now
+    const count = windowExpired ? 1 : existing.count + 1
+    if (count > quota.limit) available = false
+    const windowStartedAt = windowExpired ? now : existing.windowStartedAt
+    await tx.authAbuseBucket.upsert({
+      where: { scope_keyHash: { scope: quota.scope, keyHash: quota.keyHash } },
+      create: {
+        count: Math.min(count, quota.limit + 1),
+        expiresAt: new Date(windowStartedAt.getTime() + quota.windowMs),
+        keyHash: quota.keyHash,
+        scope: quota.scope,
+        windowStartedAt,
+      },
+      update: {
+        blockedUntil: null,
+        count: Math.min(count, quota.limit + 1),
+        expiresAt: new Date(windowStartedAt.getTime() + quota.windowMs),
+        windowStartedAt,
+      },
+    })
+  }
+  return available
+}
+
+function hashPasswordResetToken(secret: string, token: string) {
+  return createHmac('sha256', secret)
+    .update('password-reset-token-hash-v1\0')
+    .update(token)
+    .digest('hex')
+}
+
 async function consumeRecoveryCodeUseQuotas(
   tx: Prisma.TransactionClient,
   quotas: ReturnType<typeof recoveryCodeUseQuotas>,
@@ -2196,11 +2477,12 @@ async function cancelOutstandingRecoveryCredentials(
   userId: string,
   now: Date,
 ) {
-  const [challenge, replacement, reissue, codeReplacement] = await Promise.all([
+  const [challenge, replacement, reissue, codeReplacement, passwordReset] = await Promise.all([
     tx.recoveryEmailChallenge.findUnique({ where: { userId } }),
     tx.recoveryEmailReplacement.findUnique({ where: { userId } }),
     tx.recoveryCodeReissueChallenge.findUnique({ where: { userId } }),
     tx.recoveryCodeEmailReplacement.findUnique({ where: { userId } }),
+    tx.passwordResetCredential.findUnique({ where: { userId } }),
   ])
   const messageIds = [
     challenge?.messageId,
@@ -2208,6 +2490,7 @@ async function cancelOutstandingRecoveryCredentials(
     replacement?.newMessageId,
     reissue?.messageId,
     codeReplacement?.newMessageId,
+    passwordReset?.messageId,
   ].filter((messageId): messageId is string => Boolean(messageId))
   for (const messageId of messageIds) {
     await cancelQueuedTransactionalMail(tx, { messageId, now })
@@ -2216,6 +2499,7 @@ async function cancelOutstandingRecoveryCredentials(
   await tx.recoveryEmailReplacement.deleteMany({ where: { userId } })
   await tx.recoveryCodeReissueChallenge.deleteMany({ where: { userId } })
   await tx.recoveryCodeEmailReplacement.deleteMany({ where: { userId } })
+  await tx.passwordResetCredential.deleteMany({ where: { userId } })
 }
 
 async function revokeRecoveryCodeCredentials(

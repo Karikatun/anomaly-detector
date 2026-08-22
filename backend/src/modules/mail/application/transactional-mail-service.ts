@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto'
 import { z } from 'zod'
 
 import { normalizeEmailDomain } from './mail-policy-service'
+import { isSafePasswordRecoveryBaseUrl } from './password-reset-token'
 import type {
   StoredTransactionalMailTemplate,
   TransactionalMailWriter,
@@ -23,7 +24,7 @@ const transactionalMailRequestSchema = z.discriminatedUnion('kind', [
   messageBaseSchema.extend({
     kind: z.literal('password_recovery'),
     expiresAt: z.date(),
-    recoveryUrl: z.string().url().max(2_048).refine((value) => new URL(value).protocol === 'https:'),
+    recoveryUrl: z.string().url().max(2_048).refine(isSafePasswordRecoveryBaseUrl),
   }).strict(),
   messageBaseSchema.extend({
     kind: z.literal('security_notification'),

@@ -1,6 +1,7 @@
 import {
   apiErrorSchema,
   accountProtectionResponseSchema,
+  completePasswordResetRequestSchema,
   cancelRecoveryEmailReplacementRequestSchema,
   cancelRecoveryEmailRequestSchema,
   confirmRecoveryEmailReplacementRequestSchema,
@@ -16,6 +17,9 @@ import {
   oauthProviderSchema,
   oauthStartRequestSchema,
   oauthStartResponseSchema,
+  passwordResetCompletionResponseSchema,
+  requestPasswordResetRequestSchema,
+  requestPasswordResetResponseSchema,
   registerRequestSchema,
   recoveryEmailReplacementCommandResponseSchema,
   recoveryCodeEmailReplacementConfirmRequestSchema,
@@ -116,6 +120,14 @@ const recoveryCodeReissueStartResponseContent = {
 
 const recoveryCodeUseResponseContent = {
   'application/json': { schema: recoveryCodeUseResponseSchema },
+}
+
+const requestPasswordResetResponseContent = {
+  'application/json': { schema: requestPasswordResetResponseSchema },
+}
+
+const passwordResetCompletionResponseContent = {
+  'application/json': { schema: passwordResetCompletionResponseSchema },
 }
 
 const recoveryCodeEmailReplacementStartResponseContent = {
@@ -566,6 +578,38 @@ const recoverPasswordWithRecoveryCodeRoute = createRoute({
   },
 })
 
+const requestPasswordResetRoute = createRoute({
+  method: 'post',
+  path: '/password-recovery/request',
+  request: {
+    body: { content: { 'application/json': { schema: requestPasswordResetRequestSchema } } },
+  },
+  responses: {
+    ...authWriteErrorResponses,
+    200: {
+      content: requestPasswordResetResponseContent,
+      description: 'Returned a non-enumerating password recovery request result',
+    },
+    400: { content: errorResponseContent, description: 'Invalid payload' },
+  },
+})
+
+const completePasswordResetRoute = createRoute({
+  method: 'post',
+  path: '/password-recovery/complete',
+  request: {
+    body: { content: { 'application/json': { schema: completePasswordResetRequestSchema } } },
+  },
+  responses: {
+    ...authWriteErrorResponses,
+    200: {
+      content: passwordResetCompletionResponseContent,
+      description: 'Consumed one password reset credential without creating a session',
+    },
+    400: { content: errorResponseContent, description: 'Invalid payload' },
+  },
+})
+
 const startRecoveryEmailWithRecoveryCodeRoute = createRoute({
   method: 'post',
   path: '/recovery-code/recovery-email/start',
@@ -781,6 +825,23 @@ export function createAuthRoutes({
       login: request.login,
       newPassword: request.newPassword,
       recoveryCode: request.recoveryCode,
+    })), 200)
+  })
+
+  routes.openapi(requestPasswordResetRoute, async (c) => {
+    const request = c.req.valid('json')
+    const metadata = requestMetadata(c, env)
+    return c.json(await executeAuth(() => service.requestPasswordReset({
+      ipAddress: metadata.ipAddress,
+      login: request.login,
+    })), 200)
+  })
+
+  routes.openapi(completePasswordResetRoute, async (c) => {
+    const request = c.req.valid('json')
+    return c.json(await executeAuth(() => service.completePasswordReset({
+      newPassword: request.newPassword,
+      token: request.token,
     })), 200)
   })
 

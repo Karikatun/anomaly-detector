@@ -19,6 +19,14 @@ export default defineConfig(({ command, mode }) => {
   return {
     server: {
       host: '0.0.0.0',
+      headers: {
+        'Referrer-Policy': 'no-referrer',
+      },
+    },
+    preview: {
+      headers: {
+        'Referrer-Policy': 'no-referrer',
+      },
     },
     build: {
       rolldownOptions: {
