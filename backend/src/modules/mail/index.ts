@@ -10,6 +10,7 @@ import { TransactionalMailService } from './application/transactional-mail-servi
 import type { Clock, MailServiceCandidateSource } from './application/ports'
 import { createAccountEmailCanonicalizer } from './application/approved-account-email'
 import { createPrismaMailPolicyRepository } from './infrastructure/prisma-mail-policy-repository'
+import { evaluateTransactionalAccountEmail } from './infrastructure/prisma-account-email-policy'
 import { createPrismaMailDeliveryOverviewReader } from './infrastructure/prisma-mail-delivery-overview-reader'
 import { cleanupTerminalMailOutbox } from './infrastructure/prisma-mail-outbox-cleanup'
 import {
@@ -99,6 +100,7 @@ export function createRegRuSmtpDelivery(config: RegRuSmtpConfig) {
 }
 
 export { cancelQueuedTransactionalMail, cleanupTerminalMailOutbox }
+export { evaluateTransactionalAccountEmail }
 export { deriveAccountEmailConfirmationCode } from './application/account-email-confirmation-code'
 
 export type { MailServiceCandidateSource } from './application/ports'

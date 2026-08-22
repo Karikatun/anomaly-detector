@@ -517,3 +517,160 @@ test('keeps Recovery Email optional and completes its protected cooling-off flow
     {},
   ])
 })
+
+test('replaces Recovery Email only after both masked factors and supports safe abandonment', async ({ page }) => {
+  await registerBrowserUser(page, 'Замена почты E2E', 'recovery-replacement')
+  type ProtectionState = Record<string, unknown>
+  const replacementState = (
+    oldStatus: 'confirmed' | 'pending' = 'pending',
+    canManage = true,
+  ): ProtectionState => ({
+    canManage,
+    newAddress: {
+      codeExpiresAt: '2030-08-22T15:15:00.000Z',
+      maskedAccountEmail: 'N***@mail.ru',
+      status: 'pending',
+    },
+    oldAddress: {
+      codeExpiresAt: '2030-08-22T15:15:00.000Z',
+      maskedAccountEmail: 'O***@mail.ru',
+      status: oldStatus,
+    },
+    state: 'password_replacing',
+  })
+  let state: ProtectionState = {
+    maskedAccountEmail: 'O***@mail.ru',
+    state: 'password_active',
+  }
+  let replacementRound = 0
+  const mutationBodies: unknown[] = []
+  await page.route('**/api/auth/account-protection', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accountProtection: state }),
+    })
+  })
+  await page.route(
+    '**/api/auth/account-protection/recovery-email/replacement/**',
+    async (route) => {
+      const pathname = new URL(route.request().url()).pathname
+      const body = route.request().postDataJSON()
+      mutationBodies.push(body)
+      if (pathname.endsWith('/start')) {
+        replacementRound += 1
+        state = replacementRound === 1
+          ? replacementState()
+          : {
+              canManage: true,
+              newAddress: {
+                codeExpiresAt: '2030-08-22T15:30:00.000Z',
+                maskedAccountEmail: 'T***@mail.ru',
+                status: 'pending',
+              },
+              oldAddress: {
+                codeExpiresAt: '2030-08-22T15:30:00.000Z',
+                maskedAccountEmail: 'N***@mail.ru',
+                status: 'pending',
+              },
+              state: 'password_replacing',
+            }
+      } else if (pathname.endsWith('/confirm') && body.factor === 'old') {
+        state = replacementState('confirmed')
+      } else if (pathname.endsWith('/confirm')) {
+        state = {
+          maskedAccountEmail: 'N***@mail.ru',
+          state: 'password_active',
+        }
+      } else if (pathname.endsWith('/cancel')) {
+        state = {
+          maskedAccountEmail: 'N***@mail.ru',
+          state: 'password_active',
+        }
+      }
+      const response = pathname.endsWith('/cancel')
+        ? { accountProtection: state }
+        : {
+            accountProtection: state,
+            replacement: state.state === 'password_active'
+              ? {
+                  currentSession: 'active',
+                  otherSessions: 'revoked',
+                  status: 'completed',
+                }
+              : {
+                  currentSession: 'active',
+                  otherSessions: 'unchanged',
+                  status: 'pending',
+                },
+          }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(response),
+      })
+    },
+  )
+
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await expect(page.getByText('O***@mail.ru', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Заменить почту' }).click()
+  const startDialog = page.getByRole('dialog', { name: 'Заменить почту восстановления' })
+  await startDialog.getByLabel('Новая почта восстановления').fill('discarded@mail.ru')
+  await startDialog.getByLabel('Текущий пароль').fill(e2ePassword)
+  await startDialog.getByRole('button', { name: 'Отмена' }).click()
+  await page.getByRole('button', { name: 'Заменить почту' }).click()
+  await expect(startDialog.getByLabel('Новая почта восстановления')).toHaveValue('')
+  await expect(startDialog.getByLabel('Текущий пароль')).toHaveValue('')
+  await startDialog.getByLabel('Новая почта восстановления').fill('new@mail.ru')
+  await startDialog.getByLabel('Текущий пароль').fill(e2ePassword)
+  await startDialog.getByRole('button', { name: 'Отправить два кода' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Подтвердите оба адреса' })).toBeVisible()
+  const oldFactor = page.getByRole('heading', { name: 'Старый адрес' }).locator('..').locator('..')
+  const newFactor = page.getByRole('heading', { name: 'Новый адрес' }).locator('..').locator('..')
+  await expect(oldFactor).toContainText('O***@mail.ru')
+  await expect(newFactor).toContainText('N***@mail.ru')
+  await oldFactor.getByRole('button', { name: 'Ввести код' }).click()
+  const oldCodeDialog = page.getByRole('dialog', { name: 'Подтвердить старый адрес' })
+  await oldCodeDialog.getByLabel('Код из письма').fill('111111')
+  await oldCodeDialog.getByRole('button', { name: 'Подтвердить' }).click()
+  await expect(oldFactor).toContainText('Подтверждён')
+
+  await newFactor.getByRole('button', { name: 'Новый код' }).click()
+  await expect(page.getByRole('status')).toContainText('Предыдущий код для этого адреса больше не действует')
+  await newFactor.getByRole('button', { name: 'Ввести код' }).click()
+  const newCodeDialog = page.getByRole('dialog', { name: 'Подтвердить новый адрес' })
+  await newCodeDialog.getByLabel('Код из письма').fill('222222')
+  await newCodeDialog.getByRole('button', { name: 'Подтвердить' }).click()
+  await expect(page.getByText('Почта заменена. Все остальные сессии завершены.')).toBeVisible()
+  await expect(page.getByText('N***@mail.ru', { exact: true })).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('new@mail.ru')
+  await expect(page.locator('body')).not.toContainText('111111')
+  await expect(page.locator('body')).not.toContainText('222222')
+
+  await page.getByRole('button', { name: 'Заменить почту' }).click()
+  await page.getByLabel('Новая почта восстановления').fill('third@mail.ru')
+  await page.getByLabel('Текущий пароль').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Отправить два кода' }).click()
+  await page.getByRole('button', { name: 'Отменить замену' }).click()
+  const cancelDialog = page.getByRole('dialog', { name: 'Отменить замену почты?' })
+  await expect(cancelDialog).toContainText('Старый адрес останется активным')
+  await cancelDialog.getByRole('button', { name: 'Отменить замену' }).click()
+  await expect(page.getByText('Замена отменена. Старый адрес сохранён.')).toBeVisible()
+
+  state = replacementState('pending', false)
+  await page.reload()
+  await expect(page.getByText('Продолжите в той сессии, где началась замена.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Ввести код' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Новый код' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Отменить замену' })).toHaveCount(0)
+  expect(mutationBodies).toEqual([
+    { email: 'new@mail.ru', password: e2ePassword },
+    { code: '111111', factor: 'old' },
+    { factor: 'new' },
+    { code: '222222', factor: 'new' },
+    { email: 'third@mail.ru', password: e2ePassword },
+    {},
+  ])
+})

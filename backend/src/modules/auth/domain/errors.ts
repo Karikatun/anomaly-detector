@@ -16,6 +16,7 @@ export type AuthFailureKind =
   | 'recovery_email_pending'
   | 'recovery_email_unavailable'
   | 'recovery_password_invalid'
+  | 'recovery_replacement_forbidden'
   | 'registration_limited'
   | 'refresh_session_invalid'
   | 'refresh_token_reused'

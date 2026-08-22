@@ -42,6 +42,7 @@ import {
   useResendRecoveryEmailMutation,
   useStartRecoveryEmailMutation,
 } from '../queries'
+import { RecoveryEmailReplacementControl } from './RecoveryEmailReplacementControl'
 import styles from './ProfilePage.module.css'
 
 export function ProfilePage() {
@@ -177,6 +178,9 @@ function AccountProtectionContent({
   }
 
   const state = protection.data.accountProtection
+  if (state.state === 'password_active' || state.state === 'password_replacing') {
+    return <RecoveryEmailReplacementControl api={api} state={state} />
+  }
   const content = protectionContent(state, t)
   const canCancel = 'canCancel' in state && state.canCancel
   const isMutating = startRecoveryEmail.isPending
@@ -535,6 +539,14 @@ function protectionContent(
         note: null,
         tone: 'managed',
         value: state.maskedAccountEmail,
+      }
+    case 'password_replacing':
+      return {
+        description: t('profile.protection.replacement.pendingDescription'),
+        label: t('profile.protection.replacement.pendingTitle'),
+        note: state.canManage ? null : t('profile.protection.replacement.otherSession'),
+        tone: 'attention',
+        value: null,
       }
     case 'password_service_blocked':
       return {

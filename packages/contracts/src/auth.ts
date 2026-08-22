@@ -122,6 +122,33 @@ export const confirmRecoveryEmailRequestSchema = z.object({
 
 export const cancelRecoveryEmailRequestSchema = z.object({}).strict().optional().default({})
 
+const recoveryEmailReplacementFactorSchema = z.enum(['old', 'new'])
+
+export const startRecoveryEmailReplacementRequestSchema = z.object({
+  email: recoveryEmailSchema,
+  password: passwordSchema,
+}).strict()
+
+export const resendRecoveryEmailReplacementRequestSchema = z.object({
+  factor: recoveryEmailReplacementFactorSchema,
+}).strict()
+
+export const confirmRecoveryEmailReplacementRequestSchema = z.object({
+  code: z.string().regex(/^\d{6}$/),
+  factor: recoveryEmailReplacementFactorSchema,
+}).strict()
+
+export const cancelRecoveryEmailReplacementRequestSchema = z.object({})
+  .strict()
+  .optional()
+  .default({})
+
+const recoveryEmailReplacementAddressSchema = z.object({
+  codeExpiresAt: z.string().datetime(),
+  maskedAccountEmail: maskedAccountEmailSchema,
+  status: z.enum(['pending', 'confirmed', 'expired', 'service_blocked']),
+}).strict()
+
 export const accountProtectionSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('password_unprotected') }).strict(),
   z.object({
@@ -141,6 +168,12 @@ export const accountProtectionSchema = z.discriminatedUnion('state', [
     state: z.literal('password_active'),
   }).strict(),
   z.object({
+    canManage: z.boolean(),
+    newAddress: recoveryEmailReplacementAddressSchema,
+    oldAddress: recoveryEmailReplacementAddressSchema,
+    state: z.literal('password_replacing'),
+  }).strict(),
+  z.object({
     blockedStage: z.enum(['pending_code', 'cooling_off', 'active']),
     canCancel: z.boolean(),
     maskedAccountEmail: maskedAccountEmailSchema,
@@ -156,6 +189,14 @@ export const accountProtectionSchema = z.discriminatedUnion('state', [
 
 export const accountProtectionResponseSchema = z.object({
   accountProtection: accountProtectionSchema,
+}).strict()
+
+export const recoveryEmailReplacementCommandResponseSchema = accountProtectionResponseSchema.extend({
+  replacement: z.object({
+    currentSession: z.literal('active'),
+    otherSessions: z.enum(['unchanged', 'revoked']),
+    status: z.enum(['pending', 'completed']),
+  }).strict(),
 }).strict()
 
 // ── OAuth ────────────────────────────────────────────────────────────────────
@@ -202,6 +243,21 @@ export type AccountProtection = z.infer<typeof accountProtectionSchema>
 export type AccountProtectionResponse = z.infer<typeof accountProtectionResponseSchema>
 export type StartRecoveryEmailRequest = z.infer<typeof startRecoveryEmailRequestSchema>
 export type ConfirmRecoveryEmailRequest = z.infer<typeof confirmRecoveryEmailRequestSchema>
+export type StartRecoveryEmailReplacementRequest = z.infer<
+  typeof startRecoveryEmailReplacementRequestSchema
+>
+export type ResendRecoveryEmailReplacementRequest = z.infer<
+  typeof resendRecoveryEmailReplacementRequestSchema
+>
+export type ConfirmRecoveryEmailReplacementRequest = z.infer<
+  typeof confirmRecoveryEmailReplacementRequestSchema
+>
+export type CancelRecoveryEmailReplacementRequest = z.infer<
+  typeof cancelRecoveryEmailReplacementRequestSchema
+>
+export type RecoveryEmailReplacementCommandResponse = z.infer<
+  typeof recoveryEmailReplacementCommandResponseSchema
+>
 export type OAuthProviderId = z.infer<typeof oauthProviderSchema>
 export type OAuthStartRequest = z.infer<typeof oauthStartRequestSchema>
 export type OAuthStartResponse = z.infer<typeof oauthStartResponseSchema>

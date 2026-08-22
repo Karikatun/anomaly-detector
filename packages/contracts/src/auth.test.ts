@@ -3,7 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import {
   apiErrorSchema,
   accountProtectionResponseSchema,
+  cancelRecoveryEmailReplacementRequestSchema,
   cancelRecoveryEmailRequestSchema,
+  confirmRecoveryEmailReplacementRequestSchema,
   confirmRecoveryEmailRequestSchema,
   cookieAuthResponseSchema,
   cookieLogoutRequestSchema,
@@ -16,7 +18,10 @@ import {
   oauthStartRequestSchema,
   oauthStartResponseSchema,
   registerRequestSchema,
+  recoveryEmailReplacementCommandResponseSchema,
+  resendRecoveryEmailReplacementRequestSchema,
   resendRecoveryEmailRequestSchema,
+  startRecoveryEmailReplacementRequestSchema,
   startRecoveryEmailRequestSchema,
   tokenAuthResponseSchema,
   tokenLogoutRequestSchema,
@@ -122,6 +127,98 @@ describe('auth contracts', () => {
     expect(confirmRecoveryEmailRequestSchema.safeParse({ code: '12345' }).success).toBe(false)
     expect(confirmRecoveryEmailRequestSchema.safeParse({ code: '123456', extra: true }).success).toBe(false)
     expect(resendRecoveryEmailRequestSchema.safeParse({ email: 'player@mail.ru' }).success).toBe(false)
+  })
+
+  test('exposes a bounded two-sided Recovery Email replacement contract', () => {
+    expect(startRecoveryEmailReplacementRequestSchema.parse({
+      email: ' New@mail.ru ',
+      password: 'password123',
+    })).toEqual({
+      email: 'New@mail.ru',
+      password: 'password123',
+    })
+    expect(resendRecoveryEmailReplacementRequestSchema.parse({ factor: 'old' })).toEqual({
+      factor: 'old',
+    })
+    expect(confirmRecoveryEmailReplacementRequestSchema.parse({
+      code: '012345',
+      factor: 'new',
+    })).toEqual({ code: '012345', factor: 'new' })
+    expect(cancelRecoveryEmailReplacementRequestSchema.parse({})).toEqual({})
+    expect(cancelRecoveryEmailReplacementRequestSchema.safeParse({ factor: 'old' }).success)
+      .toBe(false)
+
+    expect(accountProtectionResponseSchema.parse({
+      accountProtection: {
+        canManage: true,
+        newAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'n***@mail.ru',
+          status: 'pending',
+        },
+        oldAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'o***@mail.ru',
+          status: 'confirmed',
+        },
+        state: 'password_replacing',
+      },
+    })).toEqual({
+      accountProtection: {
+        canManage: true,
+        newAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'n***@mail.ru',
+          status: 'pending',
+        },
+        oldAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'o***@mail.ru',
+          status: 'confirmed',
+        },
+        state: 'password_replacing',
+      },
+    })
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        canManage: true,
+        newAddress: {
+          canonicalKey: 'new@mail.ru',
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'n***@mail.ru',
+          status: 'pending',
+        },
+        oldAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'o***@mail.ru',
+          status: 'pending',
+        },
+        state: 'password_replacing',
+      },
+    }).success).toBe(false)
+    expect(recoveryEmailReplacementCommandResponseSchema.parse({
+      accountProtection: {
+        maskedAccountEmail: 'n***@mail.ru',
+        state: 'password_active',
+      },
+      replacement: {
+        currentSession: 'active',
+        otherSessions: 'revoked',
+        status: 'completed',
+      },
+    }).replacement).toEqual({
+      currentSession: 'active',
+      otherSessions: 'revoked',
+      status: 'completed',
+    })
+
+    expect(resendRecoveryEmailReplacementRequestSchema.safeParse({ factor: 'both' }).success)
+      .toBe(false)
+    expect(confirmRecoveryEmailReplacementRequestSchema.safeParse({
+      code: '123456',
+      factor: 'new',
+      rawEmail: 'new@mail.ru',
+    }).success).toBe(false)
   })
 
   test('normalizes registration and login input', () => {

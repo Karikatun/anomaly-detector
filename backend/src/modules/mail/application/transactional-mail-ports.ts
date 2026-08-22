@@ -3,6 +3,7 @@ export type StoredTransactionalMailTemplate =
       addressRole?: 'account' | 'recovery'
       expiresAt: string
       kind: 'account_email_confirmation'
+      recoveryPurpose?: 'replacement_new' | 'replacement_old'
     }
   | {
       expiresAt: string

@@ -220,6 +220,97 @@
   gap: .45rem;
 }
 
+.replacementSection {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.replacementControl {
+  display: grid;
+  width: 100%;
+  justify-items: end;
+  gap: .75rem;
+}
+
+.replacementFactors {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.replacementFactor {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: .55rem;
+  padding: 1rem;
+  border: 1px solid rgba(211, 153, 73, .44);
+  border-radius: var(--radius-panel);
+  background: rgba(36, 25, 11, .56);
+}
+
+.replacementFactor[data-status='confirmed'] {
+  border-color: rgba(72, 167, 146, .48);
+  background: rgba(8, 43, 40, .6);
+}
+
+.replacementFactor[data-status='expired'],
+.replacementFactor[data-status='service_blocked'] {
+  border-color: rgba(190, 91, 91, .45);
+  background: rgba(46, 15, 20, .52);
+}
+
+.replacementFactorHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.replacementFactorName {
+  color: #dceaf5;
+  font-size: .9rem;
+  font-weight: 560;
+}
+
+.replacementFactorStatus {
+  color: #c6a976;
+  font-size: .7rem;
+  letter-spacing: .04em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.replacementFactor[data-status='confirmed'] .replacementFactorStatus {
+  color: #86cbb6;
+}
+
+.replacementFactor[data-status='expired'] .replacementFactorStatus,
+.replacementFactor[data-status='service_blocked'] .replacementFactorStatus {
+  color: #e7a0a0;
+}
+
+.replacementFactorValue {
+  overflow-wrap: anywhere;
+  color: #f0f7fb;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+}
+
+.replacementFactorNote {
+  color: #91a9bf;
+  font-size: .8rem;
+}
+
+.replacementFactorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-top: .2rem;
+}
+
 .protectionDialog {
   border: 1px solid rgba(73, 133, 172, .42);
   background: #07111c;
@@ -636,6 +727,16 @@
   }
 
   .protectionActions button {
+    width: 100%;
+  }
+
+  .replacementFactors {
+    grid-template-columns: 1fr;
+  }
+
+  .replacementControl > button,
+  .replacementFactorActions,
+  .replacementFactorActions button {
     width: 100%;
   }
 
