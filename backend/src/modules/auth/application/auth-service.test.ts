@@ -45,6 +45,8 @@ const defaultAuthRepository: AuthRepository = {
   startRecoveryCodeReissue: unconfiguredRepositoryMethod('startRecoveryCodeReissue'),
   confirmRecoveryCodeReissue: unconfiguredRepositoryMethod('confirmRecoveryCodeReissue'),
   recoverPasswordWithRecoveryCode: unconfiguredRepositoryMethod('recoverPasswordWithRecoveryCode'),
+  requestPasswordReset: unconfiguredRepositoryMethod('requestPasswordReset'),
+  completePasswordReset: unconfiguredRepositoryMethod('completePasswordReset'),
   reserveRecoveryCodeUseBudget: unconfiguredRepositoryMethod('reserveRecoveryCodeUseBudget'),
   startRecoveryEmailWithRecoveryCode: unconfiguredRepositoryMethod('startRecoveryEmailWithRecoveryCode'),
   confirmRecoveryEmailWithRecoveryCode: unconfiguredRepositoryMethod('confirmRecoveryEmailWithRecoveryCode'),

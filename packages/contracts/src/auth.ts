@@ -145,6 +145,21 @@ export const recoveryCodePasswordRequestSchema = z.object({
   recoveryCode: recoveryCodeSchema,
 }).strict()
 
+export const requestPasswordResetRequestSchema = z.object({
+  login: loginSchema,
+}).strict()
+
+const passwordResetTokenSchema = z
+  .string()
+  .min(43)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/)
+
+export const completePasswordResetRequestSchema = z.object({
+  newPassword: passwordSchema,
+  token: passwordResetTokenSchema,
+}).strict()
+
 export const recoveryCodeEmailReplacementStartRequestSchema = z.object({
   email: recoveryEmailSchema,
   login: loginSchema,
@@ -249,6 +264,14 @@ export const recoveryCodeUseResponseSchema = z.object({
   outcome: z.enum(['accepted', 'completed']),
 }).strict()
 
+export const requestPasswordResetResponseSchema = z.object({
+  outcome: z.literal('accepted'),
+}).strict()
+
+export const passwordResetCompletionResponseSchema = z.object({
+  outcome: z.enum(['accepted', 'completed']),
+}).strict()
+
 export const recoveryCodeEmailReplacementStartResponseSchema = z.discriminatedUnion('outcome', [
   z.object({ outcome: z.literal('accepted') }).strict(),
   z.object({
@@ -342,6 +365,12 @@ export type RecoveryCodeEmailReplacementStartResponse = z.infer<
   typeof recoveryCodeEmailReplacementStartResponseSchema
 >
 export type RecoveryCodePasswordRequest = z.infer<typeof recoveryCodePasswordRequestSchema>
+export type RequestPasswordResetRequest = z.infer<typeof requestPasswordResetRequestSchema>
+export type RequestPasswordResetResponse = z.infer<typeof requestPasswordResetResponseSchema>
+export type CompletePasswordResetRequest = z.infer<typeof completePasswordResetRequestSchema>
+export type PasswordResetCompletionResponse = z.infer<
+  typeof passwordResetCompletionResponseSchema
+>
 export type RecoveryCodeSetResponse = z.infer<typeof recoveryCodeSetResponseSchema>
 export type RecoveryCodeUseResponse = z.infer<typeof recoveryCodeUseResponseSchema>
 export type StartRecoveryCodeReissueRequest = z.infer<

@@ -806,7 +806,9 @@ test.describe('privacy-sensitive Recovery Code journeys', () => {
     ))
     await page.goto('/')
     await bootstrapRefresh
-    await page.getByRole('link', { name: 'Восстановить доступ резервным кодом' }).click()
+    await page.getByRole('link', { name: 'Восстановить пароль' }).click()
+    await expect(page).toHaveURL('/recover/password')
+    await page.getByRole('link', { name: 'Использовать сохранённый резервный код' }).click()
     await expect(page).toHaveURL('/recover/code')
     await page.waitForLoadState('networkidle')
     await expect(page.getByRole('heading', { name: 'Восстановление по резервному коду' }))

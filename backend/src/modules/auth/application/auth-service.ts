@@ -34,6 +34,7 @@ type AuthServiceDependencies = {
   logoutCleanup: LogoutCleanup
   oauthProviders?: OAuthProviderRegistry
   passwords: Passwords
+  passwordResetUrl?: string
   projectUser: ProjectUser
   refreshTokenTtlDays: number
   refreshReuseGraceSeconds: number
@@ -820,6 +821,31 @@ export class AuthService {
       newPasswordHash,
       now,
       recoveryCode: input.recoveryCode,
+    })
+    return { outcome: completed ? 'completed' as const : 'accepted' as const }
+  }
+
+  async requestPasswordReset(input: { ipAddress?: string; login: string }) {
+    if (!this.dependencies.passwordResetUrl) {
+      throw new Error('Password reset URL is not configured')
+    }
+    const now = this.dependencies.clock.now()
+    await this.dependencies.repository.requestPasswordReset({
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+      recoveryUrl: this.dependencies.passwordResetUrl,
+    })
+    return { outcome: 'accepted' as const }
+  }
+
+  async completePasswordReset(input: { newPassword: string; token: string }) {
+    const newPasswordHash = await this.dependencies.passwords.hash(input.newPassword)
+    const completed = await this.dependencies.repository.completePasswordReset({
+      newPasswordHash,
+      now: this.dependencies.clock.now(),
+      token: input.token,
     })
     return { outcome: completed ? 'completed' as const : 'accepted' as const }
   }

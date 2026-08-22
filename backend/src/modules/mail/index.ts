@@ -102,6 +102,7 @@ export function createRegRuSmtpDelivery(config: RegRuSmtpConfig) {
 export { cancelQueuedTransactionalMail, cleanupTerminalMailOutbox }
 export { evaluateTransactionalAccountEmail }
 export { deriveAccountEmailConfirmationCode } from './application/account-email-confirmation-code'
+export { derivePasswordResetToken } from './application/password-reset-token'
 
 export type { MailServiceCandidateSource } from './application/ports'
 export type { TransactionalMailRequest } from './application/transactional-mail-service'

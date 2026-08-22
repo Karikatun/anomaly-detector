@@ -11,6 +11,10 @@ import type {
   TransactionalMailDelivery,
   TransactionalMailDeliveryResult,
 } from './transactional-mail-ports'
+import {
+  derivePasswordResetToken,
+  isSafePasswordRecoveryBaseUrl,
+} from './password-reset-token'
 
 const workerIdSchema = z.string().min(1).max(64).regex(/^[A-Za-z0-9._:-]+$/)
 const failureCodeSchema = z.string().min(1).max(64).regex(/^[a-z0-9_]+$/)
@@ -24,7 +28,7 @@ const storedTemplateSchema = z.discriminatedUnion('kind', [
   z.object({
     expiresAt: z.string().datetime(),
     kind: z.literal('password_recovery'),
-    recoveryUrl: z.string().url().max(2_048).refine((value) => new URL(value).protocol === 'https:'),
+    recoveryUrl: z.string().url().max(2_048).refine(isSafePasswordRecoveryBaseUrl),
   }).strict(),
   z.object({
     event: z.enum(['password_changed', 'recovery_email_changed']),
@@ -185,11 +189,13 @@ function renderTemplate(
     }
   }
   if (template.kind === 'password_recovery') {
+    const recoveryUrl = new URL(template.recoveryUrl)
+    recoveryUrl.hash = `token=${derivePasswordResetToken(confirmationCodeSecret, messageId)}`
     return {
       subject: 'Восстановление доступа — Anomaly Detector',
       text: [
         'Для восстановления password-аккаунта откройте ссылку:',
-        template.recoveryUrl,
+        recoveryUrl.toString(),
         `Ссылка действует до ${template.expiresAt}.`,
         'Если вы не запрашивали восстановление, просто проигнорируйте письмо.',
       ].join('\n\n'),
