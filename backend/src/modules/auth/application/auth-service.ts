@@ -189,7 +189,7 @@ export class AuthService {
     const webappOrigin = decodeWebappOrigin(input.state) ?? ''
 
     const response = await this.sessionResponse(completed.user, completed.session.id, refreshToken)
-    return { ...response, webappOrigin }
+    return { ...response, created: completed.created === true, webappOrigin }
   }
 
   async login(input: LoginRequest, metadata: SessionMetadata) {

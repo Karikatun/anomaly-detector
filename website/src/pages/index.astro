@@ -2,11 +2,19 @@
 import reconnaissance from '../assets/landing/reconnaissance.png'
 import laboratory from '../assets/landing/laboratory.png'
 import completedTender from '../assets/landing/completed-tender.png'
+import AnalyticsConsent from '../components/AnalyticsConsent.astro'
 
 const title = 'Anomaly Detector — бесплатная браузерная игра на дедукцию'
 const description = 'Исследуйте аномалию, проверяйте гипотезы и опередите соперников в научной игре на дедукцию для 2–4 друзей.'
 const publicWebsiteUrl = import.meta.env.PUBLIC_WEBSITE_URL
 const publicWebappUrl = import.meta.env.PUBLIC_WEBAPP_URL
+const analyticsApiUrl = import.meta.env.PUBLIC_ANALYTICS_API_URL
+	? new URL(import.meta.env.PUBLIC_ANALYTICS_API_URL).origin
+	: undefined
+const analyticsCampaignAllowlist = (import.meta.env.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST ?? '')
+	.split(',')
+	.map((item: string) => item.trim().toLowerCase())
+	.filter((item: string) => /^[a-z0-9_-]{1,64}$/.test(item))
 const canonicalUrl = publicWebsiteUrl
 	? new URL(Astro.url.pathname, publicWebsiteUrl).toString()
 	: undefined
@@ -98,7 +106,7 @@ const structuredData = [
 								<h1>Разгадайте аномалию раньше соперников</h1>
 								<p class="lead">Научная игра на дедукцию для 2–4 друзей прямо в браузере. Освойте правила в коротком одиночном обучении.</p>
 								<div class="actions">
-									<a class="primary-action" href={tutorialUrl}>Пройти обучение</a>
+									<a class="primary-action" href={tutorialUrl} data-analytics-event={analyticsApiUrl ? 'tutorial_cta' : undefined}>Пройти обучение</a>
 									<a class="secondary-action" href="#how">Как проходит игра</a>
 								</div>
 								<p class="facts">Бесплатно · без скачивания · 2–4 игрока</p>
@@ -109,6 +117,11 @@ const structuredData = [
 								<figcaption>Собирайте образцы. Соперники видят результат, но не ваши выводы.</figcaption>
 							</figure>
 						</section>
+						{analyticsApiUrl && <AnalyticsConsent
+							apiUrl={analyticsApiUrl}
+							campaignAllowlist={analyticsCampaignAllowlist}
+							privacyUrl={legalUrl('/privacy')}
+						/>}
 						<section id="how" class="a-cycle" aria-labelledby="cycle-title">
 							<div><p class="section-index">01 / ЦИКЛ ИССЛЕДОВАНИЯ</p><h2 id="cycle-title">Каждый факт меняет вашу модель</h2></div>
 							<ol>
@@ -143,7 +156,7 @@ const structuredData = [
 							<div class="section-heading"><p class="section-index">04 / ПЕРЕД СТАРТОМ</p><h2 id="faq-title">Частые вопросы</h2></div>
 							<div class="faq-list">{faq.map(([question, answer]) => <details><summary>{question}</summary><p>{answer}</p></details>)}</div>
 						</section>
-						<section class="final-cta"><p class="kicker">Готовы начать исследование?</p><h2>Сначала — короткое обучение</h2><p>Освойте правила в одиночку, затем соберите друзей в частном Тендере.</p><a class="primary-action" href={tutorialUrl}>Пройти обучение</a></section>
+						<section class="final-cta"><p class="kicker">Готовы начать исследование?</p><h2>Сначала — короткое обучение</h2><p>Освойте правила в одиночку, затем соберите друзей в частном Тендере.</p><a class="primary-action" href={tutorialUrl} data-analytics-event={analyticsApiUrl ? 'tutorial_cta' : undefined}>Пройти обучение</a></section>
 					</article>
 		</main>
 		<footer><a class="wordmark" href="#top"><span>Anomaly</span><strong>Detector</strong></a><div><a href={legalUrl('/terms')}>Условия использования</a><a href={legalUrl('/privacy')}>Политика конфиденциальности</a><a href={legalUrl('/personal-data-consent')}>Согласие на обработку данных</a></div><a href="mailto:support@anomaly-detector.ru">support@anomaly-detector.ru</a></footer>

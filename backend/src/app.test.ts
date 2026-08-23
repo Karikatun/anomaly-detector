@@ -45,6 +45,39 @@ test('CORS preflight allows the standard mutation methods exposed by the client 
   expect(response.headers.get('cross-origin-resource-policy')).toBe('cross-origin')
 })
 
+test('limits the public landing origin to the analytics path and keeps analytics disabled by default', async () => {
+  const prisma = { $queryRaw: async () => [{ '?column?': 1 }] } as unknown as DbClient
+  const analyticsEnv = loadEnv({
+    ANALYTICS_ENABLED: 'true',
+    ANALYTICS_ORIGINS: 'http://localhost:5173,http://localhost:4321',
+    CORS_ORIGINS: 'http://localhost:5173',
+    DATABASE_URL: 'postgresql://localhost/test',
+    JWT_SECRET: '12345678901234567890123456789012',
+    WEBAPP_ORIGIN: 'http://localhost:5173',
+  })
+  const app = createApp({ env: analyticsEnv, prisma })
+
+  const analyticsPreflight = await app.request('/api/analytics/events/landing', {
+    headers: {
+      'Access-Control-Request-Method': 'POST',
+      Origin: 'http://localhost:4321',
+    },
+    method: 'OPTIONS',
+  })
+  const authPreflight = await app.request('/api/auth/login', {
+    headers: {
+      'Access-Control-Request-Method': 'POST',
+      Origin: 'http://localhost:4321',
+    },
+    method: 'OPTIONS',
+  })
+
+  expect(analyticsPreflight.headers.get('access-control-allow-origin')).toBe('http://localhost:4321')
+  expect(analyticsPreflight.headers.get('access-control-allow-credentials')).toBe('true')
+  expect(authPreflight.headers.get('access-control-allow-origin')).toBeNull()
+  expect((await createApp({ env, prisma }).request('/api/analytics/consent/status')).status).toBe(404)
+})
+
 test('limits request bodies for non-authenticated product routes before route validation', async () => {
   const events: SecurityEvent[] = []
   const app = createApp({

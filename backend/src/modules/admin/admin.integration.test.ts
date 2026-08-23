@@ -1,6 +1,9 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
-import { mailOperationsViewSchema } from '@anomaly-detector/contracts'
+import {
+  analyticsAdminOverviewSchema,
+  mailOperationsViewSchema,
+} from '@anomaly-detector/contracts'
 
 import { createApp } from '../../app'
 import { createPrisma } from '../../db'
@@ -16,6 +19,9 @@ maybeDescribe('concealed operations API integration', () => {
   const baseEnv: AppEnv = {
     ACCESS_TOKEN_TTL_SECONDS: 60,
     ADMIN_USER_IDS: [],
+    ANALYTICS_ENABLED: false,
+    ANALYTICS_ORIGINS: [],
+    ANALYTICS_CAMPAIGN_ALLOWLIST: [],
     AUTH_BODY_LIMIT_BYTES: 64 * 1024,
     AUTH_RATE_LIMIT_MAX: 60,
     AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
@@ -48,6 +54,9 @@ maybeDescribe('concealed operations API integration', () => {
   }
 
   beforeEach(async () => {
+    await prisma.analyticsEvent.deleteMany()
+    await prisma.analyticsJourney.deleteMany()
+    await prisma.analyticsDailyAggregate.deleteMany()
     await prisma.mailPolicyAuditEvent.deleteMany()
     await prisma.mailPolicyCommand.deleteMany()
     await prisma.mailPolicyEntry.deleteMany()
@@ -69,18 +78,32 @@ maybeDescribe('concealed operations API integration', () => {
     const administrator = await register(bootstrapApp, 'operations-admin')
     const player = await register(bootstrapApp, 'operations-player')
     const app = createApp({
-      env: { ...baseEnv, ADMIN_USER_IDS: [administrator.user.id] },
+      env: {
+        ...baseEnv,
+        ADMIN_USER_IDS: [administrator.user.id],
+        ANALYTICS_ENABLED: true,
+        ANALYTICS_ORIGINS: [baseEnv.WEBAPP_ORIGIN],
+      },
       prisma,
     })
 
+    const landingResponse = await app.request('/api/analytics/events/landing', {
+      body: JSON.stringify({ campaign: null, referrerDomain: null }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    })
+    expect(landingResponse.status).toBe(204)
+
     for (const authorization of [undefined, `Bearer ${player.accessToken}`]) {
-      const response = await app.request('/api/operations/overview', {
-        headers: authorization ? { Authorization: authorization } : undefined,
-      })
-      expect(response.status).toBe(404)
-      expect(await response.json()).toEqual({
-        error: { code: 'NOT_FOUND', message: 'Route not found' },
-      })
+      for (const path of ['/api/operations/overview', '/api/operations/analytics?windowDays=30']) {
+        const response = await app.request(path, {
+          headers: authorization ? { Authorization: authorization } : undefined,
+        })
+        expect(response.status).toBe(404)
+        expect(await response.json()).toEqual({
+          error: { code: 'NOT_FOUND', message: 'Route not found' },
+        })
+      }
     }
 
     const response = await app.request('/api/operations/overview', {
@@ -108,6 +131,15 @@ maybeDescribe('concealed operations API integration', () => {
       users: { page: 2, pageSize: 1, totalItems: 2, totalPages: 2 },
     })
     expect(secondPage.users.items).toHaveLength(1)
+
+    const analyticsResponse = await app.request('/api/operations/analytics?windowDays=30', {
+      headers: { Authorization: `Bearer ${administrator.accessToken}` },
+    })
+    const analytics = analyticsAdminOverviewSchema.parse(await analyticsResponse.json())
+    expect(analyticsResponse.status).toBe(200)
+    expect(analytics.steps.find((step) => step.event === 'landing_view')?.count).toBe(1)
+    expect(analytics.botLandingViews).toBe(0)
+    expect(JSON.stringify(analytics)).not.toMatch(/"(?:accountId|cookie|email|ipAddress|journeyId|login|rawEvents|userId)"/i)
 
     const openApi = await (await app.request('/openapi.json')).json()
     expect(JSON.stringify(openApi)).not.toContain('/api/operations')

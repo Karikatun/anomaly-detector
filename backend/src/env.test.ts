@@ -16,6 +16,9 @@ describe('loadEnv', () => {
     expect(env.REFRESH_REUSE_GRACE_SECONDS).toBe(10)
     expect(env.SESSION_ABSOLUTE_TTL_DAYS).toBe(90)
     expect(env.COOKIE_SECURE).toBe(false)
+    expect(env.ANALYTICS_ENABLED).toBe(false)
+    expect(env.ANALYTICS_ORIGINS).toEqual([])
+    expect(env.ANALYTICS_CAMPAIGN_ALLOWLIST).toEqual([])
     expect(env.ADMIN_USER_IDS).toEqual([])
     expect(env.CORS_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:8081'])
     expect(env.WEBAPP_ORIGIN).toBe('http://localhost:5173')
@@ -114,6 +117,68 @@ describe('loadEnv', () => {
 
     expect(env.CORS_ORIGINS).toContain('http://localhost:5173')
     expect(env.CORS_ORIGINS).toContain('http://localhost:5174')
+  })
+
+  test('enables first-party analytics only for explicit bounded origins and campaigns', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+      CORS_ORIGINS: 'http://localhost:5173',
+      WEBAPP_ORIGIN: 'http://localhost:5173',
+    }
+
+    expect(() => loadEnv({ ...baseEnv, ANALYTICS_ENABLED: 'true' }))
+      .toThrow('ANALYTICS_ORIGINS')
+    expect(() => loadEnv({
+      ...baseEnv,
+      ANALYTICS_ENABLED: 'true',
+      ANALYTICS_ORIGINS: '*,http://localhost:5173',
+    })).toThrow('ANALYTICS_ORIGINS')
+    expect(() => loadEnv({
+      ...baseEnv,
+      ANALYTICS_ENABLED: 'true',
+      ANALYTICS_ORIGINS: 'http://localhost:5174',
+    })).toThrow('WEBAPP_ORIGIN')
+    expect(() => loadEnv({
+      ...baseEnv,
+      ANALYTICS_CAMPAIGN_ALLOWLIST: 'launch_ru,contains@email',
+      ANALYTICS_ENABLED: 'true',
+      ANALYTICS_ORIGINS: 'http://localhost:5173,http://localhost:5174',
+    })).toThrow('ANALYTICS_CAMPAIGN_ALLOWLIST')
+
+    const env = loadEnv({
+      ...baseEnv,
+      ANALYTICS_CAMPAIGN_ALLOWLIST: 'launch_ru, PARTNER-1',
+      ANALYTICS_ENABLED: 'true',
+      ANALYTICS_ORIGINS: 'http://localhost:5174,http://localhost:5173',
+    })
+    expect(env.ANALYTICS_ENABLED).toBe(true)
+    expect(env.ANALYTICS_ORIGINS).toEqual([
+      'http://localhost:5174',
+      'http://localhost:5173',
+    ])
+    expect(env.ANALYTICS_CAMPAIGN_ALLOWLIST).toEqual(['launch_ru', 'partner-1'])
+  })
+
+  test('requires HTTPS analytics origins in production', () => {
+    const productionBase = {
+      ANALYTICS_ENABLED: 'true',
+      COOKIE_SECURE: 'true',
+      CORS_ORIGINS: 'https://app.example.com',
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '01'.repeat(32),
+      NODE_ENV: 'production',
+      WEBAPP_ORIGIN: 'https://app.example.com',
+    }
+
+    expect(() => loadEnv({
+      ...productionBase,
+      ANALYTICS_ORIGINS: 'https://app.example.com,http://public.example.com',
+    })).toThrow('ANALYTICS_ORIGINS')
+    expect(() => loadEnv({
+      ...productionBase,
+      ANALYTICS_ORIGINS: 'https://app.example.com,https://public.example.com',
+    })).not.toThrow()
   })
 
   test('requires complete Yandex Object Storage configuration when storage is enabled', () => {

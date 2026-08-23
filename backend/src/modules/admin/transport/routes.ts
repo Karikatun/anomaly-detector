@@ -1,4 +1,6 @@
 import {
+  analyticsAdminOverviewSchema,
+  analyticsAdminQuerySchema,
   adminOverviewQuerySchema,
   adminOverviewSchema,
   feedbackDeleteContactCommandSchema,
@@ -22,6 +24,7 @@ import type { AuthenticatedPrincipal, AuthHttpEnv } from '../../auth'
 import { executeFeedbackOperator } from '../../feedback'
 import { executeMailPolicy } from '../../mail'
 import type {
+  AdminAnalyticsReader,
   AdminFeedbackOperator,
   AdminMailPolicyOperator,
   AdminOverviewReader,
@@ -29,6 +32,7 @@ import type {
 
 type CreateAdminRoutesInput = {
   adminUserIds: ReadonlySet<string>
+  analyticsReader?: AdminAnalyticsReader
   authenticate: (accessToken: string | undefined) => Promise<AuthenticatedPrincipal>
   feedback: AdminFeedbackOperator
   mailPolicy: AdminMailPolicyOperator
@@ -65,6 +69,13 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
     const overview = adminOverviewSchema.parse(await input.overviewReader.read(query))
     return c.json(overview)
   })
+
+  if (input.analyticsReader) {
+    routes.get('/analytics', async (c) => {
+      const query = analyticsAdminQuerySchema.parse(c.req.query())
+      return c.json(analyticsAdminOverviewSchema.parse(await input.analyticsReader!.read(query)))
+    })
+  }
 
   routes.get('/mail-policy', async (c) => {
     return c.json(mailOperationsViewSchema.parse(await input.mailPolicy.read()))

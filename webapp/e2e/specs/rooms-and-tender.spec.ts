@@ -736,7 +736,9 @@ test('two players complete every Tender stage and receive each realtime phase tr
       if (!expectedInjectedFailure) runtimeIssues.push(`${source}: console: ${message.text()}`)
     })
     currentPage.on('requestfailed', (request) => {
-      runtimeIssues.push(`${source}: requestfailed: ${request.method()} ${new URL(request.url()).pathname}`)
+      runtimeIssues.push(
+        `${source}: requestfailed: ${request.method()} ${new URL(request.url()).pathname} (${request.failure()?.errorText ?? 'unknown failure'})`,
+      )
     })
   }
   collectRuntimeIssues('host')

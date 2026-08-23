@@ -366,7 +366,7 @@ test('consumes an OAuth transaction before provider exchange and rejects replay'
           state: 'state',
         }
       },
-      completeOAuthSignIn: async () => ({ user, session: { id: 'session-1' } }),
+      completeOAuthSignIn: async () => ({ created: true, user, session: { id: 'session-1' } }),
     }),
   })
 
@@ -374,7 +374,7 @@ test('consumes an OAuth transaction before provider exchange and rejects replay'
     code: 'authorization-code',
     metadata: {},
     state: 'state',
-  })).resolves.toMatchObject({ accessToken: 'access-token' })
+  })).resolves.toMatchObject({ accessToken: 'access-token', created: true })
   await expect(service.completeOAuthSignIn({
     code: 'authorization-code',
     metadata: {},

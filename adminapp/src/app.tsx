@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 
 import type {
   AdminOverview,
+  AnalyticsAdminOverview,
   FeedbackQueueResponse,
   MailOperationsView,
 } from '@anomaly-detector/contracts'
 
 import { AdminApi, AdminApiError } from './api'
+import { AnalyticsScreen } from './analytics-screen'
 import { FeedbackScreen } from './feedback-screen'
 import { getApiBaseUrl } from './api-base-url'
 import { MailPolicyScreen } from './mail-policy-screen'
@@ -19,27 +21,33 @@ type AppState =
   | { kind: 'error'; message: string }
   | {
       kind: 'ready'
+      analytics: AnalyticsAdminOverview | null
       data: AdminOverview
       feedback: FeedbackQueueResponse
       mailPolicy: MailOperationsView
     }
 
-type ReadyView = 'feedback' | 'mail-policy' | 'overview'
+type ReadyView = 'analytics' | 'feedback' | 'mail-policy' | 'overview'
 
 export default function App() {
   const api = useMemo(() => new AdminApi(getApiBaseUrl()), [])
   const [state, setState] = useState<AppState>({ kind: 'bootstrapping' })
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isAnalyticsRefreshing, setIsAnalyticsRefreshing] = useState(false)
   const [view, setView] = useState<ReadyView>('overview')
 
   const loadWorkspace = useCallback(async () => {
     try {
-      const [data, feedback, mailPolicy] = await Promise.all([
+      const [data, feedback, mailPolicy, analytics] = await Promise.all([
         api.getOverview(),
         api.getFeedbackQueue({ page: 1, pageSize: 20 }),
         api.getMailPolicy(),
+        api.getAnalytics(30).catch((error) => {
+          if (error instanceof AdminApiError && error.status === 404) return null
+          throw error
+        }),
       ])
-      setState({ kind: 'ready', data, feedback, mailPolicy })
+      setState({ kind: 'ready', analytics, data, feedback, mailPolicy })
     } catch (error) {
       if (error instanceof AdminApiError && error.status === 404) {
         setState({ kind: 'concealed' })
@@ -128,6 +136,28 @@ export default function App() {
     await operation()
     await reloadFeedback()
   }
+  const reloadAnalytics = async (windowDays = state.analytics?.windowDays ?? 30) => {
+    setIsAnalyticsRefreshing(true)
+    try {
+      const analytics = await api.getAnalytics(windowDays)
+      setState((current) => current.kind === 'ready' ? { ...current, analytics } : current)
+    } finally {
+      setIsAnalyticsRefreshing(false)
+    }
+  }
+
+  if (view === 'analytics' && state.analytics) {
+    return (
+      <AnalyticsScreen
+        data={state.analytics}
+        isRefreshing={isAnalyticsRefreshing}
+        onBack={() => setView('overview')}
+        onLogout={() => void logout()}
+        onRefresh={() => void reloadAnalytics()}
+        onWindowChange={(windowDays) => void reloadAnalytics(windowDays)}
+      />
+    )
+  }
 
   if (view === 'feedback') {
     return (
@@ -164,6 +194,7 @@ export default function App() {
       data={state.data}
       isRefreshing={isRefreshing}
       onLogout={() => void logout()}
+      onOpenAnalytics={state.analytics ? () => setView('analytics') : undefined}
       onOpenFeedback={() => setView('feedback')}
       onOpenMailPolicy={() => setView('mail-policy')}
       onPageChange={(page) => void changePage(page)}

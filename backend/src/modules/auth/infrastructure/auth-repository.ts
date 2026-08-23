@@ -438,7 +438,7 @@ export function createPrismaAuthRepository(
               },
               select: { id: true },
             })
-            return { user, session }
+            return { created: isNewIdentity, user, session }
           })
         } catch (error) {
           if (isRetryableTransactionError(error) && attempt < 2) continue

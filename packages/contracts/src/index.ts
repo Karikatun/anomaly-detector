@@ -1,4 +1,5 @@
 export * from './admin'
+export * from './analytics'
 export * from './auth'
 export * from './errors'
 export * from './feedback'

@@ -38,6 +38,20 @@ const uuidListSchema = z
   .transform((value) => value.split(',').map((item) => item.trim()).filter(Boolean))
   .pipe(z.array(z.string().uuid()))
 
+const originListSchema = z
+  .string()
+  .default('')
+  .transform((value) => value.split(',').map((item) => item.trim()).filter(Boolean))
+
+const analyticsCampaignListSchema = z
+  .string()
+  .default('')
+  .transform((value) => value
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean))
+  .pipe(z.array(z.string().min(1).max(64).regex(/^[a-z0-9_-]+$/)).max(100))
+
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -45,6 +59,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   ADMIN_USER_IDS: uuidListSchema,
+  ANALYTICS_ENABLED: booleanStringSchema,
+  ANALYTICS_ORIGINS: originListSchema,
+  ANALYTICS_CAMPAIGN_ALLOWLIST: analyticsCampaignListSchema,
   CORS_ORIGINS: z
     .string()
     .default('http://localhost:5173,http://localhost:5174,http://localhost:8081,http://localhost:19006')
@@ -103,6 +120,7 @@ const envSchema = z.object({
   validateProductionRuntime(env, ctx)
   validateCorsOrigins(env, ctx)
   validateWebappOrigin(env, ctx)
+  validateAnalyticsEnv(env, ctx)
   validateSessionTtls(env, ctx)
   validateTrustedProxy(env, ctx)
   validateOAuth(env, ctx)
@@ -281,6 +299,63 @@ function validateWebappOrigin(env: z.infer<typeof envSchema>, ctx: z.RefinementC
       code: 'custom',
       path: ['WEBAPP_ORIGIN'],
       message: 'WEBAPP_ORIGIN must use HTTPS when COOKIE_SECURE=true',
+    })
+  }
+}
+
+function validateAnalyticsEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  if (!env.ANALYTICS_ENABLED) return
+  if (env.ANALYTICS_ORIGINS.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['ANALYTICS_ORIGINS'],
+      message: 'ANALYTICS_ORIGINS is required when first-party analytics is enabled',
+    })
+    return
+  }
+
+  for (const origin of env.ANALYTICS_ORIGINS) {
+    if (origin === '*') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ANALYTICS_ORIGINS'],
+        message: 'ANALYTICS_ORIGINS must not use wildcard origins',
+      })
+      continue
+    }
+    let url: URL
+    try {
+      url = new URL(origin)
+    } catch {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ANALYTICS_ORIGINS'],
+        message: `ANALYTICS_ORIGINS contains an invalid URL: ${origin}`,
+      })
+      continue
+    }
+    if (!['http:', 'https:'].includes(url.protocol) || url.origin !== origin) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ANALYTICS_ORIGINS'],
+        message: `ANALYTICS_ORIGINS must contain http or https origins only: ${origin}`,
+      })
+    }
+    if ((env.COOKIE_SECURE || env.NODE_ENV === 'production') && url.protocol !== 'https:') {
+      if (url.hostname === 'localhost' || isPrivateLanIp(url.hostname)) continue
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ANALYTICS_ORIGINS'],
+        message: `ANALYTICS_ORIGINS must use HTTPS in production: ${origin}`,
+      })
+    }
+  }
+
+  if (!env.ANALYTICS_ORIGINS.includes(env.WEBAPP_ORIGIN)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['ANALYTICS_ORIGINS'],
+      message: 'ANALYTICS_ORIGINS must include WEBAPP_ORIGIN when analytics is enabled',
     })
   }
 }

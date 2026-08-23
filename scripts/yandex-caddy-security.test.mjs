@@ -35,6 +35,11 @@ test('Yandex VM Caddy config serves the public website without a private SPA fal
   expect(publicSite).toContain('X-Content-Type-Options "nosniff"')
 })
 
+test('Yandex VM Caddy config permits the public site to call only the first-party API', () => {
+  expect(publicSite).toContain("connect-src 'self' https://api.anomaly-detector.ru")
+  expect(publicSite).not.toMatch(/connect-src[^\"]*\*/)
+})
+
 test('Yandex VM Caddy config redirects only fixed legacy player route families', () => {
   for (const route of [
     '/app',

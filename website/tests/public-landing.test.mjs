@@ -38,6 +38,31 @@ test('publishes the approved landing and a bounded tutorial continuation in init
   expect(html.match(/<img /g)).toHaveLength(3)
   expect(html).not.toContain('Утверждённый прототип')
   expect(html).not.toContain('№1')
+  expect(html).not.toContain('Разрешить аналитику')
+  expect(html).not.toContain('data-analytics-consent')
+})
+
+test('renders an equal-choice first-party consent panel only when explicitly enabled', async () => {
+  const analyticsApiUrl = 'https://api.anomaly-detector.ru'
+  const build = spawnSync('bun', ['run', 'build'], {
+    cwd: websiteRoot,
+    env: {
+      ...process.env,
+      PUBLIC_ANALYTICS_API_URL: analyticsApiUrl,
+      PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'launch_ru',
+      PUBLIC_WEBSITE_URL: publicWebsiteUrl,
+      PUBLIC_WEBAPP_URL: publicWebappUrl,
+    },
+    encoding: 'utf8',
+  })
+  expect(build.status, build.stderr).toBe(0)
+  const enabledHtml = await readFile(resolve(websiteRoot, 'dist/index.html'), 'utf8')
+
+  expect(enabledHtml).toContain('data-analytics-consent')
+  expect(enabledHtml).toContain('Разрешить аналитику')
+  expect(enabledHtml).toContain('Только необходимые')
+  expect(enabledHtml).toContain(`data-api-url="${analyticsApiUrl}"`)
+  expect(enabledHtml).not.toMatch(/google-analytics|googletagmanager|mc\.yandex|metrika|session.?replay/i)
 })
 
 test('publishes canonical social and structured product metadata without invented proof', () => {
