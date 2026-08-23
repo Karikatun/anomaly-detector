@@ -98,9 +98,9 @@ maybeDescribe('auth API integration', () => {
         password: 'password123',
         displayName: 'User',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const registerBody = await register.json()
@@ -120,9 +120,9 @@ maybeDescribe('auth API integration', () => {
       },
     })).toEqual({
       privacyConsentAt: expect.any(Date),
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAcceptedAt: expect.any(Date),
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     })
 
     const me = await app.request('/api/auth/me', {
@@ -212,9 +212,9 @@ maybeDescribe('auth API integration', () => {
         login: 'first-recovery-email',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const account = await register.json()
@@ -280,9 +280,9 @@ maybeDescribe('auth API integration', () => {
         login: 'confirm-first-recovery-email',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const account = await register.json()
@@ -1466,9 +1466,9 @@ maybeDescribe('auth API integration', () => {
         login: 'cancel-first-recovery-email',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const original = await register.json()
@@ -2568,9 +2568,9 @@ maybeDescribe('auth API integration', () => {
         login: 'ticket',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken } = await register.json()
@@ -2595,9 +2595,9 @@ maybeDescribe('auth API integration', () => {
         login: 'ticket-budget',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken } = await register.json()
@@ -2651,9 +2651,9 @@ maybeDescribe('auth API integration', () => {
         login: 'shared-room-join-budget',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken } = await register.json()
@@ -2703,9 +2703,9 @@ maybeDescribe('auth API integration', () => {
         login: 'independent-room-join-budget',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const other = await otherRegister.json()
@@ -2733,9 +2733,9 @@ maybeDescribe('auth API integration', () => {
         login: 'concurrent-room-join-budget',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken } = await register.json()
@@ -2764,9 +2764,9 @@ maybeDescribe('auth API integration', () => {
           login,
           password: 'password123',
           privacyConsent: true,
-          privacyConsentVersion: '1.0',
+          privacyConsentVersion: '1.1',
           termsAccepted: true,
-          termsVersion: '1.0',
+          termsVersion: '1.1',
         }),
       })
       expect(response.status).toBe(201)
@@ -2867,9 +2867,9 @@ maybeDescribe('auth API integration', () => {
         login: 'shared-authenticated-mutation-budget',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken } = await register.json()
@@ -2986,9 +2986,9 @@ maybeDescribe('auth API integration', () => {
         login: 'room-host',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken, user } = await register.json()
@@ -3021,9 +3021,9 @@ maybeDescribe('auth API integration', () => {
         login: 'room-joiner',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const joiner = await joinerRegister.json()
@@ -3064,9 +3064,9 @@ maybeDescribe('auth API integration', () => {
         login: 'room-extra',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const extra = await extraRegister.json()
@@ -3311,9 +3311,9 @@ maybeDescribe('auth API integration', () => {
           login,
           password: 'password123',
           privacyConsent: true,
-          privacyConsentVersion: '1.0',
+          privacyConsentVersion: '1.1',
           termsAccepted: true,
-          termsVersion: '1.0',
+          termsVersion: '1.1',
         }),
       })
       expect(response.status).toBe(201)
@@ -3477,9 +3477,9 @@ maybeDescribe('auth API integration', () => {
         login: 'single-current-room',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken } = await register.json()
@@ -3522,9 +3522,9 @@ maybeDescribe('auth API integration', () => {
         login: 'single-current-other-host',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const other = await otherRegister.json()
@@ -3576,9 +3576,9 @@ maybeDescribe('auth API integration', () => {
         login: 'direct-join-host',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const host = await hostRegister.json()
@@ -3599,9 +3599,9 @@ maybeDescribe('auth API integration', () => {
         login: 'direct-join-outsider',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const outsider = await outsiderRegister.json()
@@ -3621,9 +3621,9 @@ maybeDescribe('auth API integration', () => {
         login: 'leave-idor-host',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const host = await hostRegister.json()
@@ -3644,9 +3644,9 @@ maybeDescribe('auth API integration', () => {
         login: 'leave-idor-outsider',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const outsider = await outsiderRegister.json()
@@ -3686,9 +3686,9 @@ maybeDescribe('auth API integration', () => {
           login,
           password: 'password123',
           privacyConsent: true,
-          privacyConsentVersion: '1.0',
+          privacyConsentVersion: '1.1',
           termsAccepted: true,
-          termsVersion: '1.0',
+          termsVersion: '1.1',
         }),
       })
       return response.json()
@@ -3794,9 +3794,9 @@ maybeDescribe('auth API integration', () => {
           login,
           password: 'password123',
           privacyConsent: true,
-          privacyConsentVersion: '1.0',
+          privacyConsentVersion: '1.1',
           termsAccepted: true,
-          termsVersion: '1.0',
+          termsVersion: '1.1',
         }),
       })
       return response.json()
@@ -3867,9 +3867,9 @@ maybeDescribe('auth API integration', () => {
           login,
           password: 'password123',
           privacyConsent: true,
-          privacyConsentVersion: '1.0',
+          privacyConsentVersion: '1.1',
           termsAccepted: true,
-          termsVersion: '1.0',
+          termsVersion: '1.1',
         }),
       })
       return response.json()
@@ -3971,9 +3971,9 @@ maybeDescribe('auth API integration', () => {
         login: 'leave-host-transfer-host',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const host = await hostRegister.json()
@@ -3984,9 +3984,9 @@ maybeDescribe('auth API integration', () => {
         login: 'leave-host-transfer-member',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const member = await memberRegister.json()
@@ -4039,9 +4039,9 @@ maybeDescribe('auth API integration', () => {
         login: 'concurrent-current-room',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken } = await register.json()
@@ -4074,9 +4074,9 @@ maybeDescribe('auth API integration', () => {
         login: 'race',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const registerBody = await register.json()
@@ -4151,9 +4151,9 @@ maybeDescribe('auth API integration', () => {
         login: 'reuse',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const registered = await register.json()
@@ -4209,9 +4209,9 @@ maybeDescribe('auth API integration', () => {
         login: 'web-cookie',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const registerBody = await register.json()
@@ -4279,9 +4279,9 @@ maybeDescribe('auth API integration', () => {
         login: 'production-cookie',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const registerBody = await register.json()
@@ -4317,9 +4317,9 @@ maybeDescribe('auth API integration', () => {
         login: 'csrf-cookie',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const cookie = register.headers.get('set-cookie')!.split(';')[0]
@@ -4479,9 +4479,9 @@ maybeDescribe('auth API integration', () => {
       login: 'dupe',
       password: 'password123',
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     }
 
     await app.request('/api/auth/register', {
@@ -4585,8 +4585,8 @@ maybeDescribe('auth API integration', () => {
         displayName: `Player ${suffix}`,
         legalAcceptance: {
           acceptedAt: new Date('2026-08-22T12:00:00.000Z'),
-          privacyConsentVersion: '1.0',
-          termsVersion: '1.0',
+          privacyConsentVersion: '1.1',
+          termsVersion: '1.1',
         },
         login: `oauth-yandex-${suffix}`,
       },
@@ -4761,9 +4761,9 @@ maybeDescribe('auth API integration', () => {
           login,
           password: 'password123',
           privacyConsent: true,
-          privacyConsentVersion: '1.0',
+          privacyConsentVersion: '1.1',
           termsAccepted: true,
-          termsVersion: '1.0',
+          termsVersion: '1.1',
         }),
       })
       expect(response.status).toBe(201)
@@ -4859,9 +4859,9 @@ maybeDescribe('auth API integration', () => {
         login: 'delete-requires-recent-auth',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const account = await register.json()
@@ -4906,9 +4906,9 @@ maybeDescribe('auth API integration', () => {
         login,
         password,
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     expect(register.status).toBe(201)
@@ -4961,9 +4961,9 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const attempts = await Promise.all(Array.from({ length: 6 }, () =>
@@ -5003,9 +5003,9 @@ maybeDescribe('auth API integration', () => {
       login: 'register-race',
       password: 'password123',
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     }
 
     const [first, second] = await Promise.all([
@@ -5043,9 +5043,9 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
 
@@ -5105,9 +5105,9 @@ maybeDescribe('auth API integration', () => {
           login: `registration-ip-budget-${index}`,
           password: 'password123',
           privacyConsent: true,
-          privacyConsentVersion: '1.0',
+          privacyConsentVersion: '1.1',
           termsAccepted: true,
-          termsVersion: '1.0',
+          termsVersion: '1.1',
         }),
       })
       expect(response.status).toBe(201)
@@ -5123,9 +5123,9 @@ maybeDescribe('auth API integration', () => {
         login: 'registration-ip-budget-limited',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     expect(limited.status).toBe(429)
@@ -5141,9 +5141,9 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const registerBody = await register.json()
@@ -5174,9 +5174,9 @@ maybeDescribe('auth API integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     expect(response.status).toBe(201)

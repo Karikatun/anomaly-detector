@@ -9,7 +9,10 @@ import termsOfUse from '../../../../docs/terms-of-use.md?raw'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
 import styles from './LegalDocumentPage.module.css'
-import { applyLegalDocumentTemplate, publicLegalOperatorFromBuildEnvironment } from './legal-document-template'
+import {
+  applyLegalDocumentTemplate,
+  publicLegalDocumentTemplateValuesFromBuildEnvironment,
+} from './legal-document-template'
 
 type LegalDocumentId = 'personal-data-consent' | 'privacy' | 'terms'
 
@@ -31,7 +34,10 @@ const legalDocuments: Record<LegalDocumentId, { bodyStart: string; markdown: str
 export function LegalDocumentPage({ documentId }: { documentId: LegalDocumentId }) {
   const { t } = useI18n()
   const document = legalDocuments[documentId]
-  const lines = applyLegalDocumentTemplate(document.markdown, publicLegalOperatorFromBuildEnvironment()).split(/\r?\n/)
+  const lines = applyLegalDocumentTemplate(
+    document.markdown,
+    publicLegalDocumentTemplateValuesFromBuildEnvironment(),
+  ).split(/\r?\n/)
   const title = cleanInline(lines[0]?.replace(/^#\s+/, '') ?? '')
   const bodyStart = lines.findIndex((line) => line.trim() === document.bodyStart)
   const publicationLines = bodyStart >= 0 ? lines.slice(bodyStart) : lines.slice(1)

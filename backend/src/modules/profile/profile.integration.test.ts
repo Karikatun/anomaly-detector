@@ -69,9 +69,9 @@ maybeDescribe('profile statistics API integration', () => {
         login: 'profile-player',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken, user } = await registration.json()
@@ -178,9 +178,9 @@ maybeDescribe('profile statistics API integration', () => {
         login: 'tutorial-player',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken } = await registration.json()

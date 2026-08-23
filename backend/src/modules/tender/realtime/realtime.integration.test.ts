@@ -91,9 +91,9 @@ maybeDescribe('realtime websocket integration', () => {
         login,
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     expect(response.status).toBe(201)

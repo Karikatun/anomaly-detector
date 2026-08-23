@@ -29,8 +29,8 @@ export const passwordSchema = z
 
 export const localeSchema = z.union([z.literal('ru'), z.literal('en')]).default('ru')
 
-export const personalDataConsentVersion = '1.0' as const
-export const termsVersion = '1.0' as const
+export const personalDataConsentVersion = '1.1' as const
+export const termsVersion = '1.1' as const
 
 const registrationLegalAcceptanceSchema = z.object({
   privacyConsent: z.literal(true),
