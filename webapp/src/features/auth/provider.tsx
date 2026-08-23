@@ -15,6 +15,7 @@ import {
   useState,
 } from 'react'
 
+import { productAnalytics } from '@/platform/analytics/product-analytics'
 import { AuthApi } from './api'
 import {
   clearAuthenticatedSession,
@@ -35,6 +36,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [bootstrapError, setBootstrapError] = useState<Error | null>(null)
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const bootstrapGeneration = useRef(0)
+  const sentRegistrationAnalyticsVersion = useRef(0)
+  const [registrationAnalyticsVersion, setRegistrationAnalyticsVersion] = useState(() => {
+    if (typeof window === 'undefined') return 0
+    return new URL(window.location.href).searchParams.get('analytics_registration') === '1' ? 1 : 0
+  })
 
   const setAccessToken = useCallback(
     (nextAccessToken: string | null) => setAccessTokenState(nextAccessToken),
@@ -118,6 +124,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const { mutateAsync: logoutAsync } = useLogoutMutation({ api, setAccessToken })
   const { mutateAsync: deleteAccountAsync } = useDeleteAccountMutation({ api, setAccessToken })
 
+  useEffect(() => {
+    if (
+      registrationAnalyticsVersion === 0
+      || !meQuery.data?.user
+      || sentRegistrationAnalyticsVersion.current === registrationAnalyticsVersion
+    ) return
+    sentRegistrationAnalyticsVersion.current = registrationAnalyticsVersion
+    const url = new URL(window.location.href)
+    url.searchParams.delete('analytics_registration')
+    window.history.replaceState(window.history.state, '', url)
+    void productAnalytics.record('registration_complete')
+  }, [meQuery.data?.user, registrationAnalyticsVersion])
+
   const updateProfile = useCallback(
     async (input: UpdateProfileRequest) => {
       await api.updateProfile(input)
@@ -129,6 +148,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const register = useCallback(
     async (input: RegisterRequest) => {
       await registerAsync(input)
+      setRegistrationAnalyticsVersion((version) => version + 1)
     },
     [registerAsync],
   )

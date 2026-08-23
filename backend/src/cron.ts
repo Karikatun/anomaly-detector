@@ -1,4 +1,5 @@
 import { createBackendRuntime, type BackendRuntime } from './runtime'
+import { cleanupAnalyticsData } from './modules/analytics'
 import { cleanupFeedbackReports } from './modules/feedback'
 import { cleanupTerminalMailOutbox } from './modules/mail'
 
@@ -18,7 +19,7 @@ const cleanupMaintenance: CronTask = async ({ env, prisma }, now) => {
   const mailOutboxCutoff = new Date(
     now.getTime() - env.MAIL_OUTBOX_RETENTION_DAYS * dayMs,
   )
-  const [sessions, abuseBuckets, oauthTransactions, realtimeTickets, waitingRooms, mailOutbox, feedback] = await Promise.all([
+  const [sessions, abuseBuckets, oauthTransactions, realtimeTickets, waitingRooms, mailOutbox, feedback, analytics] = await Promise.all([
     prisma.authSession.deleteMany({
       where: {
         OR: [
@@ -45,9 +46,17 @@ const cleanupMaintenance: CronTask = async ({ env, prisma }, now) => {
     }),
     cleanupTerminalMailOutbox(prisma, mailOutboxCutoff),
     cleanupFeedbackReports(prisma, now),
+    cleanupAnalyticsData(prisma, now),
   ])
   console.log(
-    `Cron maintenance:cleanup removed ${sessions.count} stale sessions, ${abuseBuckets.count} expired abuse buckets, ${oauthTransactions.count} OAuth transactions, ${realtimeTickets.count} realtime tickets, ${waitingRooms.count} expired waiting rooms, ${mailOutbox.count} terminal mail outbox records, and ${feedback.count} expired feedback reports.`,
+    `Cron maintenance:cleanup removed ${sessions.count} stale sessions, ${abuseBuckets.count} expired abuse buckets, ${oauthTransactions.count} OAuth transactions, ${realtimeTickets.count} realtime tickets, ${waitingRooms.count} expired waiting rooms, ${mailOutbox.count} terminal mail outbox records, ${feedback.count} expired feedback reports, ${analytics.journeys} expired analytics journeys, and ${analytics.aggregates} expired analytics aggregates.`,
+  )
+}
+
+const cleanupAnalytics: CronTask = async ({ prisma }, now) => {
+  const result = await cleanupAnalyticsData(prisma, now)
+  console.log(
+    `Cron analytics:cleanup removed ${result.journeys} expired journeys and ${result.aggregates} expired aggregates.`,
   )
 }
 
@@ -61,6 +70,7 @@ const cronTasks = {
   },
   'maintenance:cleanup': cleanupMaintenance,
   'auth:sessions:cleanup': cleanupMaintenance,
+  'analytics:cleanup': cleanupAnalytics,
 } satisfies Record<string, CronTask>
 
 export type CronTaskName = keyof typeof cronTasks

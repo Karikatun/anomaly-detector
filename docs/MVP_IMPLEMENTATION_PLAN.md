@@ -225,24 +225,30 @@ restart, а оператор видит безопасный diff и состо�
 **Результат:** продукт измеряет путь без рекламного слежения и не смешивает
 аналитику с security или персональными данными.
 
-1. [ ] Считать воронку `landing_view → tutorial_cta → registration_complete →
+1. [x] Считать воронку `landing_view → tutorial_cta → registration_complete →
    tutorial_complete → recovery_email_confirmed`.
-2. [ ] До выбора посетителя хранить только несвязанные агрегированные просмотры.
+2. [x] До выбора посетителя хранить только несвязанные агрегированные просмотры.
    Отдельная панель с равноправными действиями «Разрешить аналитику» и «Только
    необходимые» создаёт 30-дневный first-party `journey_id` только после
    согласия. Отказ/отзыв удаляет его и ничего не блокирует.
-3. [ ] Не собирать email, login, account ID, игровые данные, полный IP,
+3. [x] Не собирать email, login, account ID, игровые данные, полный IP,
    fingerprint или advertising identifiers. Сырые события удалять через 30
    дней, дневные агрегаты хранить 13 месяцев; security telemetry держать
    отдельно.
-4. [ ] Нормализовать только referrer domain и allowlisted UTM. В adminapp
+4. [x] Нормализовать только referrer domain и allowlisted UTM. В adminapp
    показывать 7/30/90 дней, counts, переходы, дневную динамику, категории
    источника и отдельно исключённых известных bots; не показывать raw events
    или пользователей.
-5. [ ] Не подключать Яндекс Метрику, Google Analytics, рекламные pixels или
+5. [-] Не подключать Яндекс Метрику, Google Analytics, рекламные pixels или
    session replay без отдельного privacy/legal решения. Перед production
    проверить отдельное согласие, data map, российское хранение и отзыв с
    профильным юристом.
+
+Локальная реализация issue
+[#42](https://github.com/Karikatun/anomaly-detector/issues/42) завершена, но
+`ANALYTICS_ENABLED` по умолчанию остаётся `false`. Production-активация и
+встраивание панели в release build заблокированы issue #2 и #31 до синхронного
+обновления legal copy, data map и проверки split-domain deployment.
 
 **Gate:** отказ от аналитики сохраняет полный Public MVP Journey, adminapp не
 позволяет восстановить личность посетителя, а автоматическая очистка оставляет

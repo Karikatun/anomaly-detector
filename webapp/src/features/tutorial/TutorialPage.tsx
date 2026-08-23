@@ -32,6 +32,7 @@ import {
   type TenderCommandInput,
 } from '@/features/tender/public/tutorial-board'
 import { useI18n } from '@/platform/i18n'
+import { productAnalytics } from '@/platform/analytics/product-analytics'
 import {
   advanceTutorial,
   createTutorialState,
@@ -184,6 +185,7 @@ function TutorialContent() {
     setCompletionSaveStatus('pending')
     try {
       await completeTutorial.mutateAsync()
+      void productAnalytics.record('tutorial_complete')
       clearTutorialSession(sessionStorage)
       setCompletionSaveStatus('saved')
     } catch {

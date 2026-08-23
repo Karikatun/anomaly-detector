@@ -1029,6 +1029,12 @@ test('preserves the mobile step through dynamic viewport and orientation changes
 test('completes the two-round tutorial, restores its tab-local step, and records only completion', async ({ page }) => {
   test.setTimeout(120_000)
   page.setDefaultTimeout(15_000)
+  const analyticsEvents: string[] = []
+  page.on('request', (request) => {
+    if (!request.url().endsWith('/api/analytics/events') || request.method() !== 'POST') return
+    const payload = request.postDataJSON() as { event?: string }
+    if (payload.event) analyticsEvents.push(payload.event)
+  })
   await page.setViewportSize({ width: 1440, height: 900 })
   await registerBrowserUser(page, 'Ученик E2E', 'tutorial-happy')
   const runtimeErrors = captureRuntimeErrors(page)
@@ -1210,6 +1216,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect(
     page.getByText('Сыграно матчей').locator('..').getByText('0', { exact: true }),
   ).toBeVisible()
+  await expect.poll(() => analyticsEvents).toContain('tutorial_complete')
   expect(runtimeErrors).toEqual([])
 })
 

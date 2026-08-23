@@ -22,6 +22,8 @@ describe('runCronTask', () => {
     const roomCalls: unknown[] = []
     const mailOutboxCalls: unknown[] = []
     const feedbackCalls: unknown[] = []
+    const analyticsJourneyCalls: unknown[] = []
+    const analyticsAggregateCalls: unknown[] = []
     const cleanupRuntime = {
       env: {
         MAIL_OUTBOX_RETENTION_DAYS: 30,
@@ -29,6 +31,18 @@ describe('runCronTask', () => {
         SESSION_RETENTION_DAYS: 7,
       },
       prisma: {
+        analyticsDailyAggregate: {
+          deleteMany: async (input: unknown) => {
+            analyticsAggregateCalls.push(input)
+            return { count: 10 }
+          },
+        },
+        analyticsJourney: {
+          deleteMany: async (input: unknown) => {
+            analyticsJourneyCalls.push(input)
+            return { count: 9 }
+          },
+        },
         feedbackReport: {
           deleteMany: async (input: unknown) => {
             feedbackCalls.push(input)
@@ -112,6 +126,12 @@ describe('runCronTask', () => {
         ],
       },
     }])
+    expect(analyticsJourneyCalls).toEqual([{
+      where: { expiresAt: { lte: now } },
+    }])
+    expect(analyticsAggregateCalls).toEqual([{
+      where: { day: { lt: new Date('2025-03-08T00:00:00.000Z') } },
+    }])
     expect(calls[0]).toMatchObject({
       where: {
         OR: [
@@ -127,5 +147,11 @@ describe('runCronTask', () => {
     ).resolves.toBeUndefined()
     expect(roomCalls).toHaveLength(2)
     expect(feedbackCalls).toHaveLength(2)
+
+    await expect(
+      runCronTask('analytics:cleanup', cleanupRuntime, now),
+    ).resolves.toBeUndefined()
+    expect(analyticsJourneyCalls).toHaveLength(3)
+    expect(analyticsAggregateCalls).toHaveLength(3)
   })
 })

@@ -89,10 +89,11 @@ screen:
 - the admin context authorises the operator and composes safe projections, but
   does not become a generic CRUD owner for auth, mail, analytics or feedback.
 
-These are target boundaries for the MVP slices. Approved Mail Service policy is
-implemented in the `mail` module and Feedback Report intake/workflow in the
-`feedback` module. The analytics context is created only when its vertical slice
-is implemented. The ADRs do not justify empty folders or placeholder services.
+These boundaries are implemented for the current mail, analytics and feedback
+MVP slices. The analytics context is composed only when `ANALYTICS_ENABLED` is
+explicitly enabled; disabled deployments expose neither its player routes nor
+its operator projection. The ADRs do not justify empty folders or placeholder
+services.
 
 ## Runtime Shape And Real-Time
 

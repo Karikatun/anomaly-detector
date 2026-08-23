@@ -8,6 +8,7 @@ import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { clientAddress, createApiBodyLimit, createAuthSecurity } from './http/security'
 import { createPrismaRequestBudget } from './security/request-budget'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
+import { createAnalyticsModule } from './modules/analytics'
 import { createAdminModule } from './modules/admin'
 import { createFeedbackModule } from './modules/feedback'
 import { createMailModule, type MailServiceCandidateSource } from './modules/mail'
@@ -81,8 +82,17 @@ export function createApp({
     fingerprintKey: env.JWT_SECRET,
     requireAuth: auth.requireAuth,
   })
+  const analytics = env.ANALYTICS_ENABLED
+    ? createAnalyticsModule({
+        campaignAllowlist: new Set(env.ANALYTICS_CAMPAIGN_ALLOWLIST),
+        cookieSecure: env.COOKIE_SECURE,
+        db: prisma,
+        fingerprintKey: env.JWT_SECRET,
+      })
+    : null
   const admin = createAdminModule({
     adminUserIds: new Set(env.ADMIN_USER_IDS),
+    ...(analytics ? { analyticsReader: { read: analytics.store.readOverview } } : {}),
     authenticate: auth.authenticateAccessToken,
     db: prisma,
     feedback: feedback.operator,
@@ -99,9 +109,12 @@ export function createApp({
   app.use(
     '*',
     cors({
-      origin: (origin) => {
-        if (!origin) return env.CORS_ORIGINS[0] ?? null
-        return env.CORS_ORIGINS.includes(origin) ? origin : null
+      origin: (origin, context) => {
+        const origins = context.req.path.startsWith('/api/analytics/')
+          ? env.ANALYTICS_ORIGINS
+          : env.CORS_ORIGINS
+        if (!origin) return origins[0] ?? null
+        return origins.includes(origin) ? origin : null
       },
       allowHeaders: [
         'Content-Type',
@@ -154,6 +167,7 @@ export function createApp({
   })
 
   app.route('/api/auth', auth.routes)
+  if (analytics) app.route('/api/analytics', analytics.routes)
   app.route('/api/feedback', feedback.routes)
   app.route('/api/operations', admin.routes)
   app.route('/api/profile', profile.routes)

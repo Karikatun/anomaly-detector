@@ -14,6 +14,9 @@ maybeDescribe('profile statistics API integration', () => {
   const prisma = createPrisma(databaseUrl)
   const env: AppEnv = {
     ACCESS_TOKEN_TTL_SECONDS: 60,
+    ANALYTICS_CAMPAIGN_ALLOWLIST: [],
+    ANALYTICS_ENABLED: false,
+    ANALYTICS_ORIGINS: [],
     AUTH_BODY_LIMIT_BYTES: 64 * 1024,
     AUTH_RATE_LIMIT_MAX: 60,
     AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,

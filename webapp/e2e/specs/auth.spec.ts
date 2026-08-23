@@ -3,6 +3,37 @@ import { e2ePassword, expect, registerBrowserUser, test } from '../helpers/test'
 // Authentication journeys handle passwords and one-time credentials; keep them out of CI artifacts.
 test.use({ screenshot: 'off', trace: 'off', video: 'off' })
 
+test('submits registration once and queues its optional analytics event', async ({ page }) => {
+  let analyticsRequests = 0
+  let registrationRequests = 0
+  const analyticsOutcome = new Promise<string>((resolve) => {
+    const isRegistrationEvent = (request: import('@playwright/test').Request) =>
+      request.method() === 'POST' && request.url().endsWith('/api/analytics/events')
+    page.on('requestfinished', (request) => {
+      if (isRegistrationEvent(request)) resolve('finished')
+    })
+    page.on('requestfailed', (request) => {
+      if (isRegistrationEvent(request)) {
+        resolve(`failed: ${request.failure()?.errorText ?? 'unknown failure'}`)
+      }
+    })
+  })
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/analytics/events')) {
+      analyticsRequests += 1
+    }
+    if (request.method() === 'POST' && request.url().endsWith('/api/auth/register')) {
+      registrationRequests += 1
+    }
+  })
+
+  await registerBrowserUser(page, 'Аналитика E2E', 'analytics-registration')
+
+  expect(analyticsRequests).toBe(1)
+  expect(registrationRequests).toBe(1)
+  expect(await analyticsOutcome).toBe('finished')
+})
+
 test('shows the primary sign-in paths immediately and exposes accurate auth headings', async ({ page }) => {
   await page.goto('/')
 
@@ -55,7 +86,25 @@ test('continues a landing registration into tutorial and ignores unknown destina
   }
   expect(new URL(websiteUrl).origin).not.toBe(new URL(webappUrl).origin)
 
-  await page.goto(websiteUrl)
+  const analyticsEvents: string[] = []
+  page.on('request', (request) => {
+    if (!request.url().endsWith('/api/analytics/events') || request.method() !== 'POST') return
+    const payload = request.postDataJSON() as { event?: string }
+    if (payload.event) analyticsEvents.push(payload.event)
+  })
+
+  await page.goto(`${websiteUrl}/?utm_campaign=e2e_launch`)
+  const undecidedAnalytics = page.locator('[data-analytics-panel="undecided"]')
+  await expect(undecidedAnalytics.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
+  await expect(undecidedAnalytics.getByRole('button', { name: 'Только необходимые' })).toBeVisible()
+  expect((await page.context().cookies()).some((cookie) =>
+    cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
+  await undecidedAnalytics.getByRole('button', { name: 'Разрешить аналитику' }).click()
+  await expect(page.getByText('Выбор сохранён. Его можно изменить в любой момент.')).toBeVisible()
+  await expect.poll(async () =>
+    (await page.context().cookies()).some((cookie) =>
+      cookie.name === 'anomaly_detector_analytics_journey' && cookie.httpOnly),
+  ).toBe(true)
   const tutorialLink = page.getByRole('link', { name: 'Пройти обучение' }).first()
   await expect(tutorialLink).toHaveAttribute(
     'href',
@@ -75,6 +124,35 @@ test('continues a landing registration into tutorial and ignores unknown destina
 
   await expect(page).toHaveURL('/tutorial')
   await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toBeVisible()
+  await expect.poll(() => analyticsEvents).toEqual(expect.arrayContaining([
+    'tutorial_cta',
+    'registration_complete',
+  ]))
+
+  await page.goto(websiteUrl)
+  await expect(page.getByRole('button', { name: 'Отключить аналитику' })).toBeVisible()
+  await page.getByRole('button', { name: 'Отключить аналитику' }).click()
+  await expect(page.getByText('Аналитика отключена, связанный 30-дневный идентификатор удалён.')).toBeVisible()
+  await expect.poll(async () =>
+    (await page.context().cookies()).some((cookie) =>
+      cookie.name === 'anomaly_detector_analytics_journey'),
+  ).toBe(false)
+})
+
+test('keeps the landing journey available after choosing only necessary functions', async ({ page }) => {
+  const websiteUrl = process.env.E2E_WEBSITE_URL
+  const webappUrl = process.env.E2E_WEB_URL
+  if (!websiteUrl || !webappUrl) throw new Error('Public and player origins are required')
+
+  await page.goto(websiteUrl)
+  await page.getByRole('button', { name: 'Только необходимые' }).click()
+  await expect(page.getByText('Сохранены только необходимые функции.')).toBeVisible()
+  expect((await page.context().cookies()).some((cookie) =>
+    cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
+
+  await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
+  await expect(page).toHaveURL(new URL('/?continue=tutorial', webappUrl).toString())
+  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
 })
 
 test('explains how to register when a Yandex ID has no game account', async ({ page }) => {
@@ -444,6 +522,12 @@ test('keeps Recovery Email optional and completes its protected cooling-off flow
   await registerBrowserUser(page, 'Восстановление E2E', 'recovery-protection')
   let state: Record<string, unknown> = { state: 'password_unprotected' }
   const mutationBodies: unknown[] = []
+  const analyticsEvents: string[] = []
+  page.on('request', (request) => {
+    if (!request.url().endsWith('/api/analytics/events') || request.method() !== 'POST') return
+    const payload = request.postDataJSON() as { event?: string }
+    if (payload.event) analyticsEvents.push(payload.event)
+  })
   await page.route('**/api/auth/account-protection', async (route) => {
     await route.fulfill({
       status: 200,
@@ -506,6 +590,7 @@ test('keeps Recovery Email optional and completes its protected cooling-off flow
   await codeDialog.getByRole('button', { name: 'Подтвердить' }).click()
 
   await expect(page.getByText('Период защиты')).toBeVisible()
+  await expect.poll(() => analyticsEvents).toContain('recovery_email_confirmed')
   await expect(page.getByText('p***@mail.ru', { exact: true })).toBeVisible()
   await expect(page.locator('body')).not.toContainText('player@mail.ru')
   await expect(page.locator('body')).not.toContainText('123456')

@@ -1096,6 +1096,7 @@ export function createAuthRoutes({
       // discards headers set by setCookie() from hono/cookie
       const redirectUrl = new URL(trustedOAuthWebappOrigin(result.webappOrigin, webappUrl))
       redirectUrl.pathname = '/'
+      if (result.created) redirectUrl.searchParams.set('analytics_registration', '1')
       const cookieMaxAge = env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60
       const cookieSameSite = env.COOKIE_SECURE ? 'None' : 'Lax'
       return new Response(null, {

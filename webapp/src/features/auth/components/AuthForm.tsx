@@ -43,8 +43,8 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
     const url = new URL(window.location.href)
     if (url.searchParams.has('auth_error')) {
       url.searchParams.delete('auth_error')
-      window.history.replaceState(window.history.state, '', url)
     }
+    window.history.replaceState(window.history.state, '', url)
   }, [])
   const [oauthBusy, setOauthBusy] = useState(false)
   const [oauthPrivacyConsent, setOauthPrivacyConsent] = useState(false)

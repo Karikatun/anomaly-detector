@@ -19,6 +19,9 @@ maybeDescribe('feedback API integration', () => {
   const baseEnv: AppEnv = {
     ACCESS_TOKEN_TTL_SECONDS: 60,
     ADMIN_USER_IDS: [],
+    ANALYTICS_ENABLED: false,
+    ANALYTICS_ORIGINS: [],
+    ANALYTICS_CAMPAIGN_ALLOWLIST: [],
     AUTH_BODY_LIMIT_BYTES: 64 * 1024,
     AUTH_RATE_LIMIT_MAX: 60,
     AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,

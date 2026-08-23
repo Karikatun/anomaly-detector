@@ -1,4 +1,6 @@
 import type {
+  AnalyticsAdminOverview,
+  AnalyticsAdminQuery,
   AdminOverview,
   AdminOverviewQuery,
   FeedbackDeleteContactCommand,
@@ -14,6 +16,10 @@ import type {
   MailPolicyStatusCommand,
   MailOperationsView,
 } from '@anomaly-detector/contracts'
+
+export type AdminAnalyticsReader = {
+  read(query: AnalyticsAdminQuery): Promise<AnalyticsAdminOverview>
+}
 
 export type AdminOverviewReader = {
   read(query: AdminOverviewQuery): Promise<AdminOverview>

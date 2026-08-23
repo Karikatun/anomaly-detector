@@ -152,6 +152,9 @@ JWT_SECRET=<64-or-more-hex-characters>
 ADMIN_USER_IDS=<comma-separated-operator-user-uuids>
 CORS_ORIGINS=https://app.anomaly-detector.ru,https://ops.anomaly-detector.ru
 WEBAPP_ORIGIN=https://app.anomaly-detector.ru
+ANALYTICS_ENABLED=false
+ANALYTICS_ORIGINS=
+ANALYTICS_CAMPAIGN_ALLOWLIST=
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 REFRESH_REUSE_GRACE_SECONDS=10
@@ -171,6 +174,13 @@ This is the split-domain target configuration. Until the coordinated cutover,
 the active production `WEBAPP_ORIGIN` and player entry in `CORS_ORIGINS` remain
 the current root origin. `WEBAPP_ORIGIN` is mandatory in production, must be an
 origin-only HTTPS URL, and must also appear in `CORS_ORIGINS`.
+
+Keep `ANALYTICS_ENABLED=false` and both client build flags absent until issues
+#2 and #31 close the legal-copy and split-domain gates. After approval, set
+`ANALYTICS_ORIGINS=https://anomaly-detector.ru,https://app.anomaly-detector.ru`
+and only safe reviewed slugs in `ANALYTICS_CAMPAIGN_ALLOWLIST`. The public root
+must remain absent from general `CORS_ORIGINS`: it receives credentialed CORS
+only on `/api/analytics/*`, while auth and operator routes continue to reject it.
 
 When Yandex ID is enabled, keep the provider callback on the API host while the
 post-login destination comes from `WEBAPP_ORIGIN`:
@@ -247,9 +257,10 @@ is switched. Enable access logs with redaction and alerts for elevated `4xx`, `5
 backend latency. Use `https://api.anomaly-detector.ru` as both `VITE_API_URL`
 and `VITE_OAUTH_API_URL`. Before ADR 0014 migration, the webapp origin is
 `https://anomaly-detector.ru`; after the coordinated migration it is
-`https://app.anomaly-detector.ru`. The public root is excluded from credentialed
-CORS until a separate consent-scoped analytics endpoint is implemented and
-reviewed. Never enable credentialed wildcard CORS.
+`https://app.anomaly-detector.ru`. The public root remains excluded from general
+credentialed `CORS_ORIGINS`. Once issue #2 and #31 approve production analytics,
+list it only in `ANALYTICS_ORIGINS`; the composition root applies that allowlist
+exclusively to `/api/analytics/*`. Never enable credentialed wildcard CORS.
 
 ### Edge abuse-protection profile
 
@@ -410,7 +421,7 @@ Do not run `prisma migrate dev` in production and do not hand-write Prisma migra
 
 ## Maintenance Cleanup Timer
 
-Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, expired Feedback Reports (180 days for `new`/`in_review`, 30 days after terminal or transferred status), and only accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. Queued and leased mail is never removed by this cleanup. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, expired Feedback Reports (180 days for `new`/`in_review`, 30 days after terminal or transferred status), expired 30-day analytics journeys with their raw events, analytics daily aggregates older than 13 months, and only accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. Queued and leased mail is never removed by this cleanup. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
 
 Create the cleanup container and deploy its revision. The image `WORKDIR` is already `/app/backend`, so the command can call the existing cron runner directly:
 
@@ -457,7 +468,7 @@ yc serverless trigger create timer \
   --retry-interval 30s
 ```
 
-After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, ... realtime tickets, ... expired waiting rooms, ... terminal mail outbox records, and ... expired feedback reports.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
+After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, ... realtime tickets, ... expired waiting rooms, ... terminal mail outbox records, ... expired feedback reports, ... expired analytics journeys, and ... expired analytics aggregates.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
 
 ## Real-Time Pub/Sub
 
@@ -705,6 +716,26 @@ For the prepared ADR 0014 target, `PUBLIC_WEBSITE_URL` remains
 `https://anomaly-detector.ru` and `PUBLIC_WEBAPP_URL` is exactly
 `https://app.anomaly-detector.ru`. These build values do not prove that the
 target routing is already deployed.
+
+Only after issues #2 and #31 are accepted, add
+`VITE_ANALYTICS_ENABLED=true` to the complete webapp release-build command above
+and enable the website client in the same exact-SHA release:
+
+```bash
+PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
+PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
+PUBLIC_ANALYTICS_API_URL=https://api.anomaly-detector.ru \
+PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST='<reviewed-safe-slugs>' \
+bun run build:website
+```
+
+Omitting these client variables is the supported disabled state: the landing
+contains no consent panel or analytics script, the player client sends no funnel
+event, and the backend routes remain absent while `ANALYTICS_ENABLED=false`.
+Before activation verify consent, refusal and revoke in a real browser; confirm
+the 30-day HttpOnly cookie is absent before consent and deleted on revoke; prove
+the public origin cannot call auth/operator routes; run `analytics:cleanup`; and
+check that the operator view exposes only 7/30/90-day aggregates.
 
 Before uploading, create a Yandex Object Storage static access key for a service account and configure the AWS CLI with it. Yandex's Object Storage docs recommend `aws configure` with the static key and `ru-central1` as the region.
 

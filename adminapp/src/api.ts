@@ -1,4 +1,6 @@
 import {
+  analyticsAdminOverviewSchema,
+  analyticsAdminQuerySchema,
   adminOverviewSchema,
   apiErrorSchema,
   cookieAuthResponseSchema,
@@ -17,6 +19,7 @@ import {
   mailPolicyStatusCommandSchema,
   mailOperationsViewSchema,
   type AdminOverview,
+  type AnalyticsAdminOverview,
   type FeedbackDeleteContactCommand,
   type FeedbackOperatorCommandResponse,
   type FeedbackQueueQuery,
@@ -96,6 +99,15 @@ export class AdminApi {
       headers: this.authenticatedHeaders(),
     })
     return adminOverviewSchema.parse(await response.json())
+  }
+
+  async getAnalytics(windowDays: 7 | 30 | 90): Promise<AnalyticsAdminOverview> {
+    const query = analyticsAdminQuerySchema.parse({ windowDays })
+    const search = new URLSearchParams({ windowDays: String(query.windowDays) })
+    const response = await this.request(`/api/operations/analytics?${search}`, {
+      headers: this.authenticatedHeaders(),
+    })
+    return analyticsAdminOverviewSchema.parse(await response.json())
   }
 
   async getMailPolicy(): Promise<MailOperationsView> {

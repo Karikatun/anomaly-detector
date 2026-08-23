@@ -209,3 +209,36 @@ test('uses only the explicit authenticated feedback queue commands', async () =>
     githubIssueNumber: 41,
   })
 })
+
+test('reads only a bounded aggregate analytics window', async () => {
+  const requests: Array<{ authorization: string | null; method: string; url: string }> = []
+  const api = new AdminApi('', async (input, init) => {
+    const url = String(input)
+    if (url.endsWith('/api/auth/refresh')) return Response.json({ accessToken: 'operator-token' })
+    requests.push({
+      authorization: new Headers(init?.headers).get('authorization'),
+      method: init?.method ?? 'GET',
+      url,
+    })
+    return Response.json({
+      botLandingViews: 2,
+      daily: [],
+      generatedAt: '2026-08-23T12:00:00.000Z',
+      sources: [{ category: 'direct', landingViews: 10 }],
+      steps: [{ count: 10, event: 'landing_view' }],
+      transitions: [],
+      windowDays: 30,
+    })
+  })
+
+  await api.restoreSession()
+  const result = await api.getAnalytics(30)
+
+  expect(result.windowDays).toBe(30)
+  expect(requests).toEqual([{
+    authorization: 'Bearer operator-token',
+    method: 'GET',
+    url: '/api/operations/analytics?windowDays=30',
+  }])
+  expect(JSON.stringify(result)).not.toMatch(/"(?:accountId|cookie|email|ipAddress|journeyId|login|rawEvents|userId)"/i)
+})

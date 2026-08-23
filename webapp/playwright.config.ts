@@ -27,6 +27,9 @@ function normalizeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 }
 
 const backendEnv = normalizeEnv(e2eBackendEnv({
+  ANALYTICS_ENABLED: 'true',
+  ANALYTICS_ORIGINS: [frontendUrl, websiteUrl].join(','),
+  ANALYTICS_CAMPAIGN_ALLOWLIST: 'e2e_launch',
   PORT: String(backendPort),
   DATABASE_URL: databaseUrl,
   CORS_ORIGINS: [frontendUrl, 'http://localhost:5173'].join(','),
@@ -76,6 +79,7 @@ export default defineConfig({
       env: normalizeEnv({
         ...process.env,
         VITE_API_URL: backendUrl,
+        VITE_ANALYTICS_ENABLED: 'true',
         VITE_AGENTATION_ENABLED: process.env.UX_AUDIT_DIR ? 'true' : 'false',
         VITE_BUILD_SHA: process.env.VITE_BUILD_SHA ?? 'e'.repeat(40),
       }),
@@ -93,6 +97,8 @@ export default defineConfig({
         ASTRO_DEV_BACKGROUND: '0',
         PUBLIC_WEBSITE_URL: websiteUrl,
         PUBLIC_WEBAPP_URL: frontendUrl,
+        PUBLIC_ANALYTICS_API_URL: backendUrl,
+        PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'e2e_launch',
       }),
       url: websiteUrl,
       reuseExistingServer: false,

@@ -1,0 +1,169 @@
+---
+type Props = {
+	apiUrl: string
+	campaignAllowlist: string[]
+	privacyUrl: string
+}
+
+const { apiUrl, campaignAllowlist, privacyUrl } = Astro.props
+---
+
+<section
+	class="analytics-consent"
+	data-analytics-consent
+	data-api-url={apiUrl}
+	data-campaign-allowlist={JSON.stringify(campaignAllowlist)}
+	aria-labelledby="analytics-consent-title"
+>
+	<div class="analytics-copy">
+		<p class="analytics-index">НЕОБЯЗАТЕЛЬНАЯ АНАЛИТИКА</p>
+		<h2 id="analytics-consent-title">Помогите улучшить первый запуск</h2>
+		<p>С согласия мы считаем только шаги от landing до обучения и защиты аккаунта. Без логина, почты, игровых данных, полного IP и рекламных идентификаторов.</p>
+		<a href={privacyUrl}>Как устроена приватность</a>
+	</div>
+	<div class="analytics-controls">
+		<div class="analytics-choice" data-analytics-panel="undecided">
+			<button type="button" data-analytics-action="allow">Разрешить аналитику</button>
+			<button type="button" data-analytics-action="necessary">Только необходимые</button>
+		</div>
+		<div class="analytics-choice" data-analytics-panel="necessary" hidden>
+			<p>Выбраны только необходимые функции. Обучение и игра доступны полностью.</p>
+			<button type="button" data-analytics-action="allow">Разрешить аналитику</button>
+		</div>
+		<div class="analytics-choice" data-analytics-panel="allowed" hidden>
+			<p>Анонимный путь первого запуска учитывается не дольше 30 дней.</p>
+			<button type="button" data-analytics-action="revoke">Отключить аналитику</button>
+		</div>
+		<p class="analytics-status" data-analytics-status aria-live="polite"></p>
+	</div>
+</section>
+
+<script>
+	type ConsentMode = 'allowed' | 'necessary' | 'undecided'
+	type ConsentStatus = { expiresAt: string | null; mode: ConsentMode }
+
+	const root = document.querySelector<HTMLElement>('[data-analytics-consent]')
+	if (root) {
+		const apiUrl = root.dataset.apiUrl?.replace(/\/$/, '') ?? ''
+		const statusNode = root.querySelector<HTMLElement>('[data-analytics-status]')
+		const panels = [...root.querySelectorAll<HTMLElement>('[data-analytics-panel]')]
+		const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-analytics-action]')]
+		const campaignAllowlist = new Set<string>(parseCampaignAllowlist(root.dataset.campaignAllowlist))
+		const source = analyticsSource(campaignAllowlist)
+
+		const setMode = (mode: ConsentMode, message = '') => {
+			for (const panel of panels) panel.hidden = panel.dataset.analyticsPanel !== mode
+			if (statusNode) statusNode.textContent = message
+		}
+		const setPending = (pending: boolean) => {
+			for (const button of buttons) button.disabled = pending
+		}
+		async function request<T>(path: string, init?: RequestInit): Promise<T> {
+			const response = await fetch(`${apiUrl}${path}`, {
+				credentials: 'include',
+				...init,
+				headers: {
+					...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+					...init?.headers,
+				},
+			})
+			if (!response.ok) throw new Error('analytics request failed')
+			return response.status === 204 ? undefined as T : response.json() as Promise<T>
+		}
+
+		void request<void>('/api/analytics/events/landing', {
+			body: JSON.stringify(source),
+			method: 'POST',
+		}).catch(() => undefined)
+
+		void request<ConsentStatus>('/api/analytics/consent/status')
+			.then((status) => setMode(status.mode))
+			.catch(() => setMode('undecided', 'Выбор можно сделать позже. Игра работает без аналитики.'))
+
+		for (const button of buttons) {
+			button.addEventListener('click', async () => {
+				const action = button.dataset.analyticsAction
+				setPending(true)
+				try {
+					if (action === 'allow') {
+						const status = await request<ConsentStatus>('/api/analytics/consent/allow', {
+							body: JSON.stringify({ ...source, commandId: crypto.randomUUID() }),
+							method: 'POST',
+						})
+						setMode(status.mode, 'Выбор сохранён. Его можно изменить в любой момент.')
+					} else {
+						const path = action === 'revoke' ? 'revoke' : 'necessary'
+						await request<ConsentStatus>(`/api/analytics/consent/${path}`, { method: 'POST' })
+						setMode('necessary', action === 'revoke'
+							? 'Аналитика отключена, связанный 30-дневный идентификатор удалён.'
+							: 'Сохранены только необходимые функции.')
+					}
+				} catch {
+					if (action !== 'allow') setMode('necessary')
+					if (statusNode) statusNode.textContent = 'Сервис выбора временно недоступен. Это не мешает обучению и игре.'
+				} finally {
+					setPending(false)
+				}
+			})
+		}
+
+		for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-analytics-event="tutorial_cta"]')) {
+			link.addEventListener('click', () => {
+				void request<void>('/api/analytics/events', {
+					body: JSON.stringify({ event: 'tutorial_cta' }),
+					keepalive: true,
+					method: 'POST',
+				}).catch(() => undefined)
+			})
+		}
+	}
+
+	function parseCampaignAllowlist(raw: string | undefined) {
+		try {
+			const parsed: unknown = JSON.parse(raw ?? '[]')
+			return Array.isArray(parsed)
+				? parsed.filter((item): item is string => typeof item === 'string')
+				: []
+		} catch {
+			return []
+		}
+	}
+
+	function analyticsSource(campaignAllowlist: ReadonlySet<string>) {
+		let referrerDomain: string | null = null
+		try {
+			referrerDomain = document.referrer ? new URL(document.referrer).hostname.toLowerCase() : null
+		} catch {
+			referrerDomain = null
+		}
+		const candidate = new URLSearchParams(location.search).get('utm_campaign')?.toLowerCase() ?? null
+		const campaign = candidate && /^[a-z0-9_-]{1,64}$/.test(candidate) && campaignAllowlist.has(candidate)
+			? candidate
+			: null
+		return { campaign, referrerDomain }
+	}
+</script>
+
+<style>
+	.analytics-consent { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, .9fr); gap: clamp(28px, 5vw, 72px); align-items: center; margin: 0; padding: 32px clamp(20px, 5vw, 72px); border-block: 1px solid rgb(56 189 248 / 18%); background: #050c16; }
+	.analytics-copy { display: grid; gap: 10px; max-width: 780px; }
+	.analytics-index { margin: 0; color: #67e8f9; font: 600 .7rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; }
+	.analytics-copy h2 { margin: 0; font-size: clamp(1.3rem, 2.2vw, 2rem); line-height: 1.1; letter-spacing: -.025em; }
+	.analytics-copy p:not(.analytics-index), .analytics-choice p, .analytics-status { margin: 0; color: #94a3b8; font-size: .86rem; line-height: 1.55; text-wrap: pretty; }
+	.analytics-copy a { width: fit-content; color: #bae6fd; font-size: .82rem; text-underline-offset: 4px; }
+	.analytics-controls { display: grid; gap: 10px; }
+	.analytics-choice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+	.analytics-choice[hidden] { display: none; }
+	.analytics-choice p { grid-column: 1 / -1; }
+	.analytics-choice button { min-height: 48px; padding: 10px 14px; border: 1px solid rgb(125 211 252 / 42%); border-radius: 8px; background: rgb(14 116 144 / 16%); color: #e0f2fe; font: 650 .84rem/1.3 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+	.analytics-choice button:hover { border-color: #7dd3fc; background: rgb(14 116 144 / 26%); }
+	.analytics-choice button:disabled { cursor: wait; opacity: .62; }
+	.analytics-choice button:focus-visible { outline: 3px solid #7dd3fc; outline-offset: 3px; }
+	.analytics-status { min-height: 1.4em; }
+	@media (max-width: 760px) {
+		.analytics-consent { grid-template-columns: 1fr; }
+	}
+	@media (max-width: 420px) {
+		.analytics-choice { grid-template-columns: 1fr; }
+	}
+</style>

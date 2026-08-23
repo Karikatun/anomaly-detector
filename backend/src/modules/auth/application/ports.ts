@@ -105,7 +105,7 @@ export type AuthRepository = {
       expiresAt: Date
       metadata: SessionMetadata
     }
-  }): Promise<{ user: AuthUserRecord; session: { id: string } } | null>
+  }): Promise<{ created?: boolean; user: AuthUserRecord; session: { id: string } } | null>
   readAccountProtection(userId: string): Promise<{
     accountEmailProviderValue: string | null
     accountEmailState: string

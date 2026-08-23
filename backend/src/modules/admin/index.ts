@@ -2,6 +2,7 @@ import type { DbClient } from '../../db'
 import type { AuthenticatedPrincipal } from '../auth'
 import { emitSecurityEvent, type SecurityEventLogger } from '../../security/events'
 import type {
+  AdminAnalyticsReader,
   AdminFeedbackOperator,
   AdminMailPolicyOperator,
   AdminOverviewReader,
@@ -11,6 +12,7 @@ import { createAdminRoutes } from './transport/routes'
 
 type CreateAdminModuleInput = {
   adminUserIds: ReadonlySet<string>
+  analyticsReader?: AdminAnalyticsReader
   authenticate: (accessToken: string | undefined) => Promise<AuthenticatedPrincipal>
   feedback: AdminFeedbackOperator
   mailPolicy: AdminMailPolicyOperator
@@ -26,6 +28,7 @@ export function createAdminModule(input: CreateAdminModuleInput) {
   return {
     routes: createAdminRoutes({
       adminUserIds: input.adminUserIds,
+      analyticsReader: input.analyticsReader,
       authenticate: input.authenticate,
       feedback: input.feedback,
       mailPolicy: input.mailPolicy,

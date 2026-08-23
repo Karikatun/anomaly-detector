@@ -55,6 +55,21 @@ const feedbackQueue = {
   totalPages: 1,
 }
 
+const analyticsOverview = {
+  botLandingViews: 2,
+  daily: [{ count: 10, date: '2026-08-03', event: 'landing_view' as const }],
+  generatedAt: '2026-08-03T12:00:00.000Z',
+  sources: [{ category: 'direct' as const, landingViews: 10 }],
+  steps: [{ count: 10, event: 'landing_view' as const }],
+  transitions: [{
+    conversionRate: 0.5,
+    count: 5,
+    from: 'landing_view' as const,
+    to: 'tutorial_cta' as const,
+  }],
+  windowDays: 30 as const,
+}
+
 const feedback = {
   deleteContact: async () => ({
     commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
@@ -127,6 +142,39 @@ test('returns a no-store overview to an allowlisted administrator', async () => 
   expect(response.status).toBe(200)
   expect(response.headers.get('cache-control')).toBe('no-store')
   expect(await response.json()).toEqual(overview)
+})
+
+test('returns only a bounded aggregate analytics projection to an allowlisted administrator', async () => {
+  let receivedQuery: unknown
+  const module = createAdminModule({
+    adminUserIds: new Set([admin.id]),
+    analyticsReader: {
+      read: async (query) => {
+        receivedQuery = query
+        return analyticsOverview
+      },
+    },
+    authenticate: async () => admin,
+    feedback,
+    mailPolicy,
+    overviewReader: { read: async () => overview },
+  })
+
+  const response = await module.routes.request('/analytics?windowDays=30', {
+    headers: { Authorization: 'Bearer admin-token' },
+  })
+
+  expect(response.status).toBe(200)
+  expect(response.headers.get('cache-control')).toBe('no-store')
+  expect(receivedQuery).toEqual({ windowDays: 30 })
+  expect(await response.json()).toEqual(analyticsOverview)
+  expect(JSON.stringify(await (await module.routes.request('/analytics?windowDays=30', {
+    headers: { Authorization: 'Bearer admin-token' },
+  })).json())).not.toMatch(/"(?:accountId|cookie|email|ipAddress|journeyId|login|rawEvents|userId)"/i)
+
+  expect((await module.routes.request('/analytics?windowDays=31', {
+    headers: { Authorization: 'Bearer admin-token' },
+  })).status).toBe(500)
 })
 
 test('returns the requested page from the complete user list', async () => {

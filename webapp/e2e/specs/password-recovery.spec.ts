@@ -20,6 +20,7 @@ test('requests a generic link, resets once, rejects the old session, and require
   })
   const recoveryPage = await recoveryContext.newPage()
   const unexpectedOrigins: string[] = []
+  let analyticsRequests = 0
   const allowedOrigins = new Set([
     new URL(process.env.E2E_WEB_URL!).origin,
     new URL(process.env.E2E_BACKEND_URL!).origin,
@@ -27,6 +28,7 @@ test('requests a generic link, resets once, rejects the old session, and require
   recoveryPage.on('request', (request) => {
     const origin = new URL(request.url()).origin
     if (!allowedOrigins.has(origin)) unexpectedOrigins.push(origin)
+    if (new URL(request.url()).pathname.startsWith('/api/analytics/')) analyticsRequests += 1
   })
 
   try {
@@ -82,6 +84,7 @@ test('requests a generic link, resets once, rejects the old session, and require
     await expect(recoveryPage).toHaveURL(/\/recover\/password$/)
     await expect(recoveryPage.getByRole('heading', { name: 'Новый пароль' })).toBeVisible()
     await expect(recoveryPage.locator('body')).not.toContainText(token)
+    expect(analyticsRequests).toBe(0)
     expect(await prisma.passwordResetCredential.count({ where: { userId: user.id } })).toBe(1)
     await expectNoAxeViolations(recoveryPage)
 

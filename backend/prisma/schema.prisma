@@ -260,6 +260,47 @@ model AuthAbuseBucket {
   @@map("auth_abuse_buckets")
 }
 
+model AnalyticsJourney {
+  id              String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  journeyKey      String           @unique(map: "analytics_journeys_journey_key_key") @map("journey_key") @db.Char(64)
+  grantCommandKey String           @unique(map: "analytics_journeys_grant_command_key_key") @map("grant_command_key") @db.Char(64)
+  sourceCategory  String           @map("source_category") @db.VarChar(16)
+  trafficClass    String           @map("traffic_class") @db.VarChar(16)
+  consentedAt     DateTime         @map("consented_at")
+  expiresAt       DateTime         @map("expires_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  events          AnalyticsEvent[]
+
+  @@index([expiresAt], map: "analytics_journeys_expires_at_idx")
+  @@map("analytics_journeys")
+}
+
+model AnalyticsEvent {
+  id         String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  journeyId  String           @map("journey_id") @db.Uuid
+  kind       String           @db.VarChar(40)
+  occurredAt DateTime         @map("occurred_at")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  journey    AnalyticsJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade, map: "analytics_events_journey_id_fkey")
+
+  @@unique([journeyId, kind], map: "analytics_events_journey_id_kind_key")
+  @@index([occurredAt], map: "analytics_events_occurred_at_idx")
+  @@map("analytics_events")
+}
+
+model AnalyticsDailyAggregate {
+  day            DateTime @db.Date
+  metric         String   @db.VarChar(96)
+  sourceCategory String   @map("source_category") @db.VarChar(16)
+  trafficClass   String   @map("traffic_class") @db.VarChar(16)
+  count          Int      @default(0)
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@id([day, metric, sourceCategory, trafficClass], map: "analytics_daily_aggregates_pkey")
+  @@index([day, metric, trafficClass], map: "analytics_daily_aggregates_day_metric_traffic_idx")
+  @@map("analytics_daily_aggregates")
+}
+
 model FeedbackReport {
   id                      String                    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   publicNumber            String                    @unique(map: "feedback_reports_public_number_key") @map("public_number") @db.VarChar(13)

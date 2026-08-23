@@ -31,6 +31,7 @@ import { Input } from '@/components/ui/input'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
 import { ApiRequestError } from '@/platform/api/http-client'
+import { productAnalytics } from '@/platform/analytics/product-analytics'
 import { useI18n } from '@/platform/i18n'
 
 import { ProfileApi } from '../api'
@@ -210,6 +211,7 @@ function AccountProtectionContent({
     setActionFeedback(null)
     try {
       await confirmRecoveryEmail.mutateAsync({ code })
+      void productAnalytics.record('recovery_email_confirmed')
       setCode('')
       setIsCodeOpen(false)
     } catch (error) {
