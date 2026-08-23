@@ -385,19 +385,35 @@ cannot guarantee that the recipient will never see a duplicate. Confirmation and
 operations must therefore remain replay-safe when the same message is received twice.
 The logical-request fingerprint is a domain-separated HMAC under the backend secret,
 so a stored fingerprint cannot be used to brute-force a short confirmation code.
-Queued and leased rows necessarily retain the recipient and template payload for
-delivery. SMTP-accepted and terminal-failure rows immediately replace those fields
-with redacted values; only safe operational metadata and attempt outcomes remain until
-the retention cleanup removes the row.
+Queued and leased rows retain the recipient and template payload while awaiting
+delivery. Credential mail becomes ineligible at its template `expiresAt`, and a
+security notification becomes ineligible after seven days in the outbox. The worker
+checks the deadlines immediately before starting SMTP delivery and terminalises an
+overdue claimed row; the daily cleanup terminalises and redacts any remaining overdue
+queued or leased row within the next 24 hours. SMTP-accepted and other terminal-failure
+rows immediately replace recipient and payload with redacted values;
+only safe operational metadata and attempt outcomes remain until terminal retention
+removes the row. An SMTP request that started before its deadline may finish after a
+concurrent cleanup, but its stale lease cannot overwrite the terminal database state,
+and an expired credential remains unusable. Owner cancellation immediately redacts a
+still-queued credential message. If the worker already leased it, the current outbox
+contract allows the attempt and configured retries to continue only until the original
+delivery deadline; the cancelled credential is already unusable, and terminal handling
+or deadline cleanup redacts the row.
 
 For provider outage or suspected credential compromise, set `MAIL_SMTP_ENABLED=false`
 and restart only the worker. Queued rows remain in PostgreSQL. Rotate the credential in
 Lockbox, verify TLS and a controlled message under issue #36, then re-enable the worker;
 the global circuit breaker releases one probe after its cooldown before normal draining.
 If backlog age or terminal failures keep growing, leave delivery disabled and diagnose
-the provider/configuration rather than increasing retries. Rollback uses the previous
-immutable API/worker image after applying only backward-compatible migrations; do not
-delete queued rows. Terminal rows are removed later by the named retention cleanup.
+the provider/configuration rather than increasing retries. Do not extend credential
+expiry or the seven-day security-notification limit to drain a backlog. Rollback uses
+the previous immutable API/worker image after applying only backward-compatible
+migrations; do not manually delete queued rows. The named retention cleanup applies
+the deadlines and later removes terminal rows. Recovery and pending-mail cleanup is
+one PostgreSQL transaction; it retries that whole unit at most three times only for
+transaction conflicts (`P2034`, `40P01`, `40001`) and otherwise fails the cron task for
+operator investigation.
 
 ## Managed PostgreSQL
 
@@ -421,16 +437,12 @@ Do not run `prisma migrate dev` in production and do not hand-write Prisma migra
 
 ## Maintenance Cleanup Timer
 
-Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, expired Feedback Reports (180 days for `new`/`in_review`, 30 days after terminal or transferred status), expired 30-day analytics journeys with their raw events, analytics daily aggregates older than 13 months, and only accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. Queued and leased mail is never removed by this cleanup. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, expired Feedback Reports (180 days for `new`/`in_review`, 30 days after terminal or transferred status), expired 30-day analytics journeys with their raw events, analytics daily aggregates older than 13 months, expired recovery challenges and reset credentials, pending credential mail at its own `expiresAt`, security notifications pending for seven days, and accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. A two-sided Recovery Email replacement keeps its still-valid side and redacts only the expired side's code derivative; the row is removed when both sides expire. Pending-mail redaction and recovery cleanup run in one PostgreSQL transaction. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
 
-The current cleanup does not delete expired Recovery Email challenges,
-replacement factors, Recovery Code reissue/replacement challenges, or password
-reset credentials solely because their 15-minute validity ended. They become
-unusable at expiry and are removed by the next owning operation, revocation, or
-account deletion. Do not claim a shorter deletion period. Before production,
-issue #2 must either accept this retention explicitly or require a bounded
-transactional cleanup that also cancels/redacts the related queued mail and is
-covered through PostgreSQL recovery tests.
+`MAIL_OUTBOX_RETENTION_DAYS` defaults to 30 and is schema-bounded to at most 30.
+That value is the terminal-metadata deletion-eligibility deadline; the next daily
+cleanup removes eligible rows, so normal operation adds at most a 24-hour technical
+window. Increasing the eligibility period requires a code and legal-policy change.
 
 Create the cleanup container and deploy its revision. The image `WORKDIR` is already `/app/backend`, so the command can call the existing cron runner directly:
 
@@ -477,7 +489,7 @@ yc serverless trigger create timer \
   --retry-interval 30s
 ```
 
-After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, ... realtime tickets, ... expired waiting rooms, ... terminal mail outbox records, ... expired feedback reports, ... expired analytics journeys, and ... expired analytics aggregates.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
+After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired waiting rooms; cleaned ... expired recovery artifacts and ... expired pending mail records; removed ... terminal mail outbox records, ... expired analytics aggregates.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
 
 ## Real-Time Pub/Sub
 

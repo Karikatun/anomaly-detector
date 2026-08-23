@@ -274,17 +274,21 @@ restart, а оператор видит безопасный diff и состо�
    Privacy `1.2`, personal-data consent `1.1`, Terms `1.1`, registration
    versions и account-deletion copy подготовлены локально по фактическому data
    map. Это не закрывает issue: owner/legal gates, подтверждённая дата
-   публикации, mailbox/provider evidence, retention decision и сверка
-   уведомления Роскомнадзору перечислены в
+   публикации, mailbox/provider evidence и сверка уведомления Роскомнадзору
+   перечислены в
    [аудите legal documents](audits/2026-08-23-legal-documents.md).
    OWNER принял mapping оснований и balance test для aggregate-only
    `landing_view`; это не является внешним юридическим заключением, не решает
    existing-user re-acceptance и не активирует production analytics.
+   OWNER также ограничил recovery-артефакты их сроком действия, а ожидающие
+   security notifications — 7 днями; атомарный cleanup и PostgreSQL race/
+   rollback tests реализованы локально, но ещё не опубликованы в production.
 4. [-] Проверить support и `no-reply` mailbox, incident ownership, SPF/DKIM/DMARC,
    retention и восстановление доступа оператора к REG.RU.
 5. [-] Повторить migration, backup/restore, health, alerting и rollback drill;
-   добавить cleanup новых токенов, outbox, аналитики и feedback в именованный
-   cron task ([#21](https://github.com/Karikatun/anomaly-detector/issues/21)).
+   именованный cron уже покрывает новые recovery-артефакты, outbox, аналитику и
+   feedback, но его production invocation/log evidence остаётся частью #21
+   ([#21](https://github.com/Karikatun/anomaly-detector/issues/21)).
 6. [ ] Провести production-like abuse/performance validation для auth, mail,
    feedback, Argon2id, rooms, Tender, WebSocket и reconnect
    ([#19](https://github.com/Karikatun/anomaly-detector/issues/19),

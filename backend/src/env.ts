@@ -101,7 +101,7 @@ const envSchema = z.object({
   MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(60),
   MAIL_SMTP_LEASE_SECONDS: z.coerce.number().int().min(10).max(3_600).default(60),
   MAIL_SMTP_WORKER_INTERVAL_MS: z.coerce.number().int().min(250).max(60_000).default(1_000),
-  MAIL_OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  MAIL_OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(30).default(30),
   YANDEX_OAUTH_CLIENT_ID: optionalStringSchema,
   YANDEX_OAUTH_CLIENT_SECRET: optionalStringSchema,
   OAUTH_CALLBACK_BASE_URL: optionalUrlSchema,

@@ -15,6 +15,8 @@ import {
   derivePasswordResetToken,
   isSafePasswordRecoveryBaseUrl,
 } from './password-reset-token'
+import type { Clock } from './ports'
+import { isTransactionalMailPastDeliveryDeadline } from './transactional-mail-retention'
 
 const workerIdSchema = z.string().min(1).max(64).regex(/^[A-Za-z0-9._:-]+$/)
 const failureCodeSchema = z.string().min(1).max(64).regex(/^[a-z0-9_]+$/)
@@ -39,6 +41,7 @@ const storedTemplateSchema = z.discriminatedUnion('kind', [
 
 export class TransactionalMailDeliveryService {
   constructor(private readonly dependencies: {
+    clock?: Clock
     confirmationCodeSecret: string
     delivery: TransactionalMailDelivery
     policy: MailDeliveryPolicy
@@ -59,7 +62,8 @@ export class TransactionalMailDeliveryService {
     }
 
     for (let processed = 0; processed < limit; processed += 1) {
-      const claim = await this.dependencies.repository.claim({ now: input.now, workerId })
+      const claimNow = this.now(input.now)
+      const claim = await this.dependencies.repository.claim({ now: claimNow, workerId })
       if (claim.kind !== 'claimed') {
         result.budgetExhausted = claim.kind === 'budget_exhausted'
         result.circuitOpen = claim.kind === 'circuit_open'
@@ -68,16 +72,24 @@ export class TransactionalMailDeliveryService {
 
       let rendered: RenderedTransactionalMail
       let requiresNewAddress: boolean
+      let template: StoredTransactionalMailTemplate
       try {
-        const prepared = prepareMessage(claim.message, this.dependencies.confirmationCodeSecret)
+        const prepared = prepareMessage(
+          claim.message,
+          this.dependencies.confirmationCodeSecret,
+          claimNow,
+        )
         rendered = prepared.rendered
         requiresNewAddress = prepared.requiresNewAddress
-      } catch {
+        template = prepared.template
+      } catch (error) {
         const state = await this.dependencies.repository.recordFailure({
           affectsCircuit: false,
-          code: 'stored_message_invalid',
+          code: error instanceof TransactionalMailRetentionExpired
+            ? 'retention_expired'
+            : 'stored_message_invalid',
           id: claim.message.id,
-          now: input.now,
+          now: this.now(input.now),
           temporary: false,
           workerId,
         })
@@ -95,10 +107,28 @@ export class TransactionalMailDeliveryService {
       } catch {
         allowed = false
       }
+      const deliveryNow = this.now(input.now)
+      if (isTransactionalMailPastDeliveryDeadline({
+        createdAt: claim.message.createdAt,
+        now: deliveryNow,
+        template,
+      })) {
+        const state = await this.dependencies.repository.recordFailure({
+          affectsCircuit: false,
+          code: 'retention_expired',
+          id: claim.message.id,
+          now: deliveryNow,
+          temporary: false,
+          workerId,
+        })
+        if (state === 'stale_claim') result.staleClaims += 1
+        else result.terminalFailures += 1
+        continue
+      }
       if (!allowed) {
         const released = await this.dependencies.repository.releaseBlocked({
           id: claim.message.id,
-          now: input.now,
+          now: deliveryNow,
           workerId,
         })
         if (released) result.blocked += 1
@@ -120,7 +150,7 @@ export class TransactionalMailDeliveryService {
       if (deliveryResult.kind === 'accepted') {
         const accepted = await this.dependencies.repository.recordAccepted({
           id: claim.message.id,
-          now: input.now,
+          now: this.now(input.now),
           workerId,
         })
         if (accepted) result.accepted += 1
@@ -132,7 +162,7 @@ export class TransactionalMailDeliveryService {
         affectsCircuit: deliveryResult.kind === 'temporary_failure',
         code: safeFailureCode(deliveryResult.code),
         id: claim.message.id,
-        now: input.now,
+        now: this.now(input.now),
         temporary: deliveryResult.kind === 'temporary_failure',
         workerId,
       })
@@ -143,10 +173,27 @@ export class TransactionalMailDeliveryService {
 
     return result
   }
+
+  private now(fallback: Date) {
+    return this.dependencies.clock?.now() ?? fallback
+  }
 }
 
-function prepareMessage(message: ClaimedTransactionalMail, confirmationCodeSecret: string) {
+class TransactionalMailRetentionExpired extends Error {}
+
+function prepareMessage(
+  message: ClaimedTransactionalMail,
+  confirmationCodeSecret: string,
+  now: Date,
+) {
   const template = storedTemplateSchema.parse(message.template)
+  if (isTransactionalMailPastDeliveryDeadline({
+    createdAt: message.createdAt,
+    now,
+    template,
+  })) {
+    throw new TransactionalMailRetentionExpired()
+  }
   const rendered = renderTemplate(template, message.messageId, confirmationCodeSecret)
   return {
     rendered: {
@@ -157,6 +204,7 @@ function prepareMessage(message: ClaimedTransactionalMail, confirmationCodeSecre
     },
     requiresNewAddress: template.kind === 'account_email_confirmation'
       && template.addressRole !== 'recovery',
+    template,
   }
 }
 

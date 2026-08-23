@@ -12,7 +12,10 @@ import { createAccountEmailCanonicalizer } from './application/approved-account-
 import { createPrismaMailPolicyRepository } from './infrastructure/prisma-mail-policy-repository'
 import { evaluateTransactionalAccountEmail } from './infrastructure/prisma-account-email-policy'
 import { createPrismaMailDeliveryOverviewReader } from './infrastructure/prisma-mail-delivery-overview-reader'
-import { cleanupTerminalMailOutbox } from './infrastructure/prisma-mail-outbox-cleanup'
+import {
+  cleanupExpiredPendingMailOutbox,
+  cleanupTerminalMailOutbox,
+} from './infrastructure/prisma-mail-outbox-cleanup'
 import {
   cancelQueuedTransactionalMail,
   createPrismaMailOutboxRepository,
@@ -48,6 +51,7 @@ export function createMailModule(input: {
   }
   const outboxDrainer = input.delivery && input.deliveryOptions
     ? new TransactionalMailDeliveryService({
+        clock,
         confirmationCodeSecret: input.confirmationCodeSecret ?? '',
         delivery: input.delivery,
         policy,
@@ -99,7 +103,11 @@ export function createRegRuSmtpDelivery(config: RegRuSmtpConfig) {
   return new RegRuSmtpDelivery({ config })
 }
 
-export { cancelQueuedTransactionalMail, cleanupTerminalMailOutbox }
+export {
+  cancelQueuedTransactionalMail,
+  cleanupExpiredPendingMailOutbox,
+  cleanupTerminalMailOutbox,
+}
 export { evaluateTransactionalAccountEmail }
 export { deriveAccountEmailConfirmationCode } from './application/account-email-confirmation-code'
 export { derivePasswordResetToken } from './application/password-reset-token'

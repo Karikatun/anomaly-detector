@@ -11,7 +11,10 @@ import {
   createPrismaTransactionalMailWriter,
 } from './prisma-transactional-mail-outbox'
 import { createPrismaMailDeliveryOverviewReader } from './prisma-mail-delivery-overview-reader'
-import { cleanupTerminalMailOutbox } from './prisma-mail-outbox-cleanup'
+import {
+  cleanupExpiredPendingMailOutbox,
+  cleanupTerminalMailOutbox,
+} from './prisma-mail-outbox-cleanup'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const fingerprintKey = 'integration-mail-fingerprint-key-0001'
@@ -163,6 +166,349 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       where: { messageId: request.messageId },
       select: { recipient: true, state: true },
     })).toEqual({ recipient: '[redacted]', state: 'smtp_accepted' })
+  })
+
+  test('redacts expired queued and leased mail once under concurrent retention cleanup', async () => {
+    const enqueuer = createEnqueuer()
+    const cleanupNow = scenarioTime(8 * 24 * 60 * 60_000)
+    const expiredConfirmationId = '019f8099-7e26-7760-ad08-66d1d66b2811'
+    const expiredLeaseId = '019f8099-7e26-7760-ad08-66d1d66b2812'
+    const staleSecurityId = '019f8099-7e26-7760-ad08-66d1d66b2813'
+    const futureRecoveryId = '019f8099-7e26-7760-ad08-66d1d66b2814'
+    const freshSecurityId = '019f8099-7e26-7760-ad08-66d1d66b2815'
+
+    await enqueuer.enqueue({
+      ...request,
+      messageId: expiredConfirmationId,
+      template: {
+        expiresAt: new Date(cleanupNow.getTime() - 1),
+        kind: 'account_email_confirmation',
+      },
+    })
+    await enqueuer.enqueue({
+      ...request,
+      messageId: expiredLeaseId,
+      template: {
+        expiresAt: new Date(cleanupNow.getTime() - 1),
+        kind: 'password_recovery',
+        recoveryUrl: 'https://anomaly-detector.ru/recover/password',
+      },
+    })
+    await enqueuer.enqueue({
+      messageId: staleSecurityId,
+      recipient: request.recipient,
+      template: {
+        event: 'password_changed',
+        kind: 'security_notification',
+        occurredAt: new Date(cleanupNow.getTime() - 7 * 24 * 60 * 60_000),
+      },
+    })
+    await enqueuer.enqueue({
+      ...request,
+      messageId: futureRecoveryId,
+      template: {
+        expiresAt: new Date(cleanupNow.getTime() + 1),
+        kind: 'password_recovery',
+        recoveryUrl: 'https://anomaly-detector.ru/recover/password',
+      },
+    })
+    await enqueuer.enqueue({
+      messageId: freshSecurityId,
+      recipient: request.recipient,
+      template: {
+        event: 'recovery_email_changed',
+        kind: 'security_notification',
+        occurredAt: cleanupNow,
+      },
+    })
+    await prisma.mailOutboxMessage.updateMany({
+      where: {
+        messageId: {
+          in: [
+            expiredConfirmationId,
+            expiredLeaseId,
+            futureRecoveryId,
+            freshSecurityId,
+          ],
+        },
+      },
+      data: { createdAt: cleanupNow },
+    })
+    await prisma.mailOutboxMessage.update({
+      where: { messageId: staleSecurityId },
+      data: { createdAt: new Date(cleanupNow.getTime() - 7 * 24 * 60 * 60_000) },
+    })
+    await prisma.mailOutboxMessage.update({
+      where: { messageId: expiredLeaseId },
+      data: {
+        attemptCount: 1,
+        leaseExpiresAt: new Date(cleanupNow.getTime() + 60_000),
+        leaseOwner: 'worker-in-flight',
+        state: 'leased',
+      },
+    })
+
+    const results = await Promise.all([
+      prisma.$transaction((tx) => cleanupExpiredPendingMailOutbox(tx, cleanupNow)),
+      prisma.$transaction((tx) => cleanupExpiredPendingMailOutbox(tx, cleanupNow)),
+    ])
+    expect(results.reduce((sum, result) => sum + result.count, 0)).toBe(3)
+    expect(await prisma.mailOutboxMessage.findMany({
+      orderBy: { messageId: 'asc' },
+      select: {
+        lastFailureCode: true,
+        leaseOwner: true,
+        messageId: true,
+        recipient: true,
+        state: true,
+        templatePayload: true,
+      },
+    })).toEqual([
+      {
+        lastFailureCode: 'retention_expired',
+        leaseOwner: null,
+        messageId: expiredConfirmationId,
+        recipient: '[redacted]',
+        state: 'terminal_failure',
+        templatePayload: {},
+      },
+      {
+        lastFailureCode: 'retention_expired',
+        leaseOwner: null,
+        messageId: expiredLeaseId,
+        recipient: '[redacted]',
+        state: 'terminal_failure',
+        templatePayload: {},
+      },
+      {
+        lastFailureCode: 'retention_expired',
+        leaseOwner: null,
+        messageId: staleSecurityId,
+        recipient: '[redacted]',
+        state: 'terminal_failure',
+        templatePayload: {},
+      },
+      {
+        lastFailureCode: null,
+        leaseOwner: null,
+        messageId: futureRecoveryId,
+        recipient: request.recipient,
+        state: 'queued',
+        templatePayload: {
+          expiresAt: new Date(cleanupNow.getTime() + 1).toISOString(),
+          kind: 'password_recovery',
+          recoveryUrl: 'https://anomaly-detector.ru/recover/password',
+        },
+      },
+      {
+        lastFailureCode: null,
+        leaseOwner: null,
+        messageId: freshSecurityId,
+        recipient: request.recipient,
+        state: 'queued',
+        templatePayload: {
+          event: 'recovery_email_changed',
+          kind: 'security_notification',
+          occurredAt: cleanupNow.toISOString(),
+        },
+      },
+    ])
+    expect(await prisma.mailDeliveryAttempt.findMany({
+      orderBy: { outboxId: 'asc' },
+      select: { failureCode: true, outcome: true },
+    })).toEqual([
+      { failureCode: 'retention_expired', outcome: 'terminal_failure' },
+      { failureCode: 'retention_expired', outcome: 'terminal_failure' },
+      { failureCode: 'retention_expired', outcome: 'terminal_failure' },
+    ])
+  })
+
+  test('does not deliver credential or security mail after its retention deadline', async () => {
+    const enqueuer = createEnqueuer()
+    const deliveryNow = scenarioTime(8 * 24 * 60 * 60_000)
+    const expiredConfirmationId = '019f8099-7e26-7760-ad08-66d1d66b2816'
+    const staleSecurityId = '019f8099-7e26-7760-ad08-66d1d66b2817'
+    await enqueuer.enqueue({
+      ...request,
+      messageId: expiredConfirmationId,
+      template: {
+        expiresAt: deliveryNow,
+        kind: 'account_email_confirmation',
+      },
+    })
+    await enqueuer.enqueue({
+      messageId: staleSecurityId,
+      recipient: request.recipient,
+      template: {
+        event: 'password_changed',
+        kind: 'security_notification',
+        occurredAt: new Date(deliveryNow.getTime() - 7 * 24 * 60 * 60_000),
+      },
+    })
+    await prisma.mailOutboxMessage.update({
+      where: { messageId: staleSecurityId },
+      data: { createdAt: new Date(deliveryNow.getTime() - 7 * 24 * 60 * 60_000) },
+    })
+    let providerCalls = 0
+    const service = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
+      delivery: {
+        send: async () => {
+          providerCalls += 1
+          return { kind: 'accepted' }
+        },
+      },
+      policy: { evaluate: async () => ({ acceptsNewAddress: true, allowsRecoveryDelivery: true }) },
+      repository: createPrismaMailOutboxRepository(prisma, {
+        circuitFailureThreshold: 3,
+        circuitOpenMs: 60_000,
+        deliveryBudgetPerMinute: 20,
+        leaseMs: 30_000,
+        maxAttempts: 3,
+        retryBaseMs: 1_000,
+      }),
+    })
+
+    await expect(service.drain({
+      limit: 2,
+      now: deliveryNow,
+      workerId: 'worker-retention',
+    })).resolves.toMatchObject({ terminalFailures: 2 })
+    expect(providerCalls).toBe(0)
+    expect(await prisma.mailOutboxMessage.findMany({
+      orderBy: { messageId: 'asc' },
+      select: { lastFailureCode: true, recipient: true, state: true },
+    })).toEqual([
+      {
+        lastFailureCode: 'retention_expired',
+        recipient: '[redacted]',
+        state: 'terminal_failure',
+      },
+      {
+        lastFailureCode: 'retention_expired',
+        recipient: '[redacted]',
+        state: 'terminal_failure',
+      },
+    ])
+  })
+
+  test('rechecks the deadline after policy evaluation before starting SMTP', async () => {
+    const enqueuer = createEnqueuer()
+    const deadline = scenarioTime(1_000)
+    const messageId = '019f8099-7e26-7760-ad08-66d1d66b2819'
+    await enqueuer.enqueue({
+      ...request,
+      messageId,
+      template: {
+        expiresAt: deadline,
+        kind: 'account_email_confirmation',
+      },
+    })
+    let currentNow = new Date(deadline.getTime() - 1)
+    let providerCalls = 0
+    const service = new TransactionalMailDeliveryService({
+      clock: { now: () => currentNow },
+      confirmationCodeSecret,
+      delivery: {
+        send: async () => {
+          providerCalls += 1
+          return { kind: 'accepted' }
+        },
+      },
+      policy: {
+        evaluate: async () => {
+          currentNow = deadline
+          return { acceptsNewAddress: true, allowsRecoveryDelivery: true }
+        },
+      },
+      repository: createPrismaMailOutboxRepository(prisma, {
+        circuitFailureThreshold: 3,
+        circuitOpenMs: 60_000,
+        deliveryBudgetPerMinute: 20,
+        leaseMs: 30_000,
+        maxAttempts: 3,
+        retryBaseMs: 1_000,
+      }),
+    })
+
+    await expect(service.drain({
+      limit: 1,
+      now: new Date(deadline.getTime() - 1),
+      workerId: 'worker-deadline-recheck',
+    })).resolves.toMatchObject({ terminalFailures: 1 })
+    expect(providerCalls).toBe(0)
+    expect(await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId },
+      select: { lastFailureCode: true, recipient: true, state: true },
+    })).toEqual({
+      lastFailureCode: 'retention_expired',
+      recipient: '[redacted]',
+      state: 'terminal_failure',
+    })
+  })
+
+  test('keeps cleanup authoritative when SMTP was already in flight at the deadline', async () => {
+    const enqueuer = createEnqueuer()
+    const deadline = scenarioTime(1_000)
+    const messageId = '019f8099-7e26-7760-ad08-66d1d66b2818'
+    await enqueuer.enqueue({
+      ...request,
+      messageId,
+      template: {
+        expiresAt: deadline,
+        kind: 'account_email_confirmation',
+      },
+    })
+    let markDeliveryStarted: () => void = () => undefined
+    let releaseDelivery: () => void = () => undefined
+    const deliveryStarted = new Promise<void>((resolve) => {
+      markDeliveryStarted = resolve
+    })
+    const deliveryReleased = new Promise<void>((resolve) => {
+      releaseDelivery = resolve
+    })
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 3,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+    const service = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
+      delivery: {
+        send: async () => {
+          markDeliveryStarted()
+          await deliveryReleased
+          return { kind: 'accepted' }
+        },
+      },
+      policy: { evaluate: async () => ({ acceptsNewAddress: true, allowsRecoveryDelivery: true }) },
+      repository,
+    })
+
+    const drain = service.drain({
+      limit: 1,
+      now: new Date(deadline.getTime() - 1),
+      workerId: 'worker-in-flight',
+    })
+    await deliveryStarted
+    await prisma.$transaction((tx) => cleanupExpiredPendingMailOutbox(tx, deadline))
+    releaseDelivery()
+
+    await expect(drain).resolves.toMatchObject({ accepted: 0, staleClaims: 1 })
+    expect(await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId },
+      select: { lastFailureCode: true, recipient: true, state: true },
+    })).toEqual({
+      lastFailureCode: 'retention_expired',
+      recipient: '[redacted]',
+      state: 'terminal_failure',
+    })
+    expect(await prisma.mailDeliveryAttempt.findMany({
+      select: { failureCode: true, outcome: true },
+    })).toEqual([{ failureCode: 'retention_expired', outcome: 'terminal_failure' }])
   })
 
   test('opens one global circuit after provider failures and permits one recovery probe', async () => {

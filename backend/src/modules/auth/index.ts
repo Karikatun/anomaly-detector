@@ -27,6 +27,7 @@ import { createAuthRoutes } from './transport/routes'
 import { OAuthProviderRegistry } from './infrastructure/oauth-registry'
 import { createYandexOAuthProvider } from './infrastructure/oauth-yandex'
 import { createPrismaAuthAbuseProtection } from './infrastructure/auth-abuse-protection'
+import { cleanupExpiredAuthRecovery } from './infrastructure/prisma-auth-recovery-cleanup'
 import { createDeviceTokens } from './infrastructure/device-token'
 import { createPrismaRequestBudget } from '../../security/request-budget'
 import { createAuthenticatedMutationBudget } from './transport/authenticated-mutation-budget'
@@ -119,5 +120,6 @@ export function createAuthModule({
 }
 
 export type { AuthHttpEnv }
+export { cleanupExpiredAuthRecovery }
 export type { LogoutCleanup, ProjectUser } from './application/ports'
 export type { AuthenticatedPrincipal } from './domain/user'
