@@ -313,9 +313,9 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
     redirectUri: 'https://app.example.ru/api/auth/oauth/yandex/callback',
     registration: {
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     },
     webappOrigin: 'https://app.example.ru',
   })
@@ -324,8 +324,8 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
   expect(transactions).toEqual([expect.objectContaining({
     legalAcceptance: {
       acceptedAt: new Date('2026-07-20T12:00:00.000Z'),
-      privacyConsentVersion: '1.0',
-      termsVersion: '1.0',
+      privacyConsentVersion: '1.1',
+      termsVersion: '1.1',
     },
     provider: 'yandex',
   })])
@@ -508,8 +508,8 @@ test('limits a provider display name before creating an OAuth user', async () =>
         expiresAt: new Date('2026-07-20T12:10:00.000Z'),
         legalAcceptance: {
           acceptedAt: new Date('2026-07-20T12:00:00.000Z'),
-          privacyConsentVersion: '1.0',
-          termsVersion: '1.0',
+          privacyConsentVersion: '1.1',
+          termsVersion: '1.1',
         },
         provider: 'yandex',
         redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',

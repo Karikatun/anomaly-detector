@@ -19,6 +19,7 @@ import {
   oauthStartResponseSchema,
   completePasswordResetRequestSchema,
   passwordResetCompletionResponseSchema,
+  personalDataConsentVersion,
   requestPasswordResetRequestSchema,
   requestPasswordResetResponseSchema,
   registerRequestSchema,
@@ -42,6 +43,7 @@ import {
   tokenLogoutRequestSchema,
   tokenRefreshRequestSchema,
   tokenRefreshResponseSchema,
+  termsVersion,
 } from './index'
 
 const validUser = {
@@ -53,6 +55,20 @@ const validUser = {
 }
 
 describe('auth contracts', () => {
+  test('requires the current legal document versions for new registration', () => {
+    const staleVersion = '1.0'
+    expect(personalDataConsentVersion).toBe('1.1')
+    expect(termsVersion).toBe('1.1')
+    expect(registerRequestSchema.safeParse({
+      login: 'user',
+      password: 'password123',
+      privacyConsent: true,
+      privacyConsentVersion: staleVersion,
+      termsAccepted: true,
+      termsVersion: staleVersion,
+    }).success).toBe(false)
+  })
+
   test('exposes only bounded Account Email protection states and a masked address', () => {
     expect(accountProtectionResponseSchema.parse({
       accountProtection: {
@@ -378,18 +394,18 @@ describe('auth contracts', () => {
         password: 'password123',
         displayName: ' Jane ',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toEqual({
       login: 'user_1',
       password: 'password123',
       displayName: 'Jane',
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     })
 
     expect(
@@ -398,18 +414,18 @@ describe('auth contracts', () => {
         password: 'password123',
         displayName: '',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toEqual({
       login: 'user',
       password: 'password123',
       displayName: undefined,
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     })
 
     expect(
@@ -430,8 +446,8 @@ describe('auth contracts', () => {
         password: 'short',
         displayName: 'A',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
-        termsVersion: '1.0',
+        privacyConsentVersion: '1.1',
+        termsVersion: '1.1',
       }),
     ).toThrow()
 
@@ -440,8 +456,8 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'short',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
-        termsVersion: '1.0',
+        privacyConsentVersion: '1.1',
+        termsVersion: '1.1',
       }),
     ).toThrow()
 
@@ -466,9 +482,9 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'password123',
         privacyConsent: false,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toThrow()
 
@@ -478,9 +494,9 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: false,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toThrow()
 
@@ -490,7 +506,7 @@ describe('auth contracts', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: 'outdated',
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toThrow()
   })
@@ -498,9 +514,9 @@ describe('auth contracts', () => {
   test('limits new and updated display names to twenty characters', () => {
     const legalAcceptance = {
       privacyConsent: true as const,
-      privacyConsentVersion: '1.0' as const,
+      privacyConsentVersion: '1.1' as const,
       termsAccepted: true as const,
-      termsVersion: '1.0' as const,
+      termsVersion: '1.1' as const,
     }
 
     expect(registerRequestSchema.safeParse({
@@ -620,18 +636,18 @@ describe('auth contracts', () => {
     const start = oauthStartRequestSchema.parse({
       registration: {
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       },
       webappOrigin: 'http://localhost:5173',
     })
     expect(start.webappOrigin).toBe('http://localhost:5173')
     expect(start.registration).toEqual({
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     })
 
     // webappOrigin is optional — the backend falls back to its configured origin.
@@ -641,7 +657,7 @@ describe('auth contracts', () => {
         privacyConsent: true,
         privacyConsentVersion: 'outdated',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       },
     })).toThrow()
 

@@ -270,6 +270,13 @@ restart, а оператор видит безопасный diff и состо�
      Feedback Report с точными основаниями, получателями и retention;
    - провести юридическую проверку, заполнить operator placeholders и сверить
      уведомление Роскомнадзору до production-сбора новых данных.
+
+   Privacy `1.2`, personal-data consent `1.1`, Terms `1.1`, registration
+   versions и account-deletion copy подготовлены локально по фактическому data
+   map. Это не закрывает issue: owner/legal gates, подтверждённая дата
+   публикации, mailbox/provider evidence, retention decision и сверка
+   уведомления Роскомнадзору перечислены в
+   [аудите legal documents](audits/2026-08-23-legal-documents.md).
 4. [-] Проверить support и `no-reply` mailbox, incident ownership, SPF/DKIM/DMARC,
    retention и восстановление доступа оператора к REG.RU.
 5. [-] Повторить migration, backup/restore, health, alerting и rollback drill;

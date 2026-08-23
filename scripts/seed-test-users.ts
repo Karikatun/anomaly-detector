@@ -34,9 +34,9 @@ async function registerOrVerify(
     login,
     password,
     privacyConsent: true,
-    privacyConsentVersion: '1.0',
+    privacyConsentVersion: '1.1',
     termsAccepted: true,
-    termsVersion: '1.0',
+    termsVersion: '1.1',
   })
   if (registration.ok) {
     return { result: await registration.json() as TokenAuthResponse, status: 'created' }

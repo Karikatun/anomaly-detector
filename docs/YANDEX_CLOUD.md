@@ -423,6 +423,15 @@ Do not run `prisma migrate dev` in production and do not hand-write Prisma migra
 
 Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, expired Feedback Reports (180 days for `new`/`in_review`, 30 days after terminal or transferred status), expired 30-day analytics journeys with their raw events, analytics daily aggregates older than 13 months, and only accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. Queued and leased mail is never removed by this cleanup. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
 
+The current cleanup does not delete expired Recovery Email challenges,
+replacement factors, Recovery Code reissue/replacement challenges, or password
+reset credentials solely because their 15-minute validity ended. They become
+unusable at expiry and are removed by the next owning operation, revocation, or
+account deletion. Do not claim a shorter deletion period. Before production,
+issue #2 must either accept this retention explicitly or require a bounded
+transactional cleanup that also cancels/redacts the related queued mail and is
+covered through PostgreSQL recovery tests.
+
 Create the cleanup container and deploy its revision. The image `WORKDIR` is already `/app/backend`, so the command can call the existing cron runner directly:
 
 ```bash
@@ -685,6 +694,7 @@ VITE_BUILD_SHA=<exact-40-character-release-sha> \
 VITE_PUBLIC_LEGAL_OPERATOR_NAME='<public operator name>' \
 VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT='<public operator name in dative case>' \
 VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS='<public address for legal requests>' \
+VITE_PUBLIC_LEGAL_DOCUMENTS_EFFECTIVE_DATE='<approved Russian publication date>' \
 bun run --cwd webapp build:release
 VITE_API_URL=https://api.anomaly-detector.ru bun run build:adminapp
 PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
@@ -698,11 +708,14 @@ Application Load Balancer custom host. `VITE_API_URL` owns ordinary requests;
 `VITE_BUILD_SHA` must be the exact lowercase 40-character release commit and is
 included only as safe technical context when a player submits a Feedback Report;
 omit it rather than substituting a branch, short SHA or mutable tag.
-`VITE_PUBLIC_LEGAL_OPERATOR_NAME`, `VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT`, and
-`VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS` are required for a webapp production build;
-they render into the public legal pages, so they are not secrets. Store the actual
-values only in the deployment environment, not in Git. Rebuild after either origin
-or legal value changes, then verify that the generated main JavaScript bundle
+`VITE_PUBLIC_LEGAL_OPERATOR_NAME`, `VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT`,
+`VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS`, and
+`VITE_PUBLIC_LEGAL_DOCUMENTS_EFFECTIVE_DATE` are required for a webapp production
+build; they render into the public legal pages, so they are not secrets. The date
+must be the owner/legal-approved effective date for the exact published revisions,
+not the build date guessed by automation. Store the actual values only in the
+deployment environment, not in Git. Rebuild after either origin or legal value
+changes, then verify that the generated main JavaScript bundle
 contains the production API origin for both paths and does not contain
 `http://localhost:3000`.
 

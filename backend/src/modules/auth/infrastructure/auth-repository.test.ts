@@ -40,9 +40,9 @@ test('creates a password user and initial session inside one database transactio
       passwordHash: 'password-hash',
       displayName: undefined,
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     },
     session: {
       refreshTokenHash: 'refresh-hash',
