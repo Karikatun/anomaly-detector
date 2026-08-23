@@ -7,19 +7,30 @@ import { spawnSync } from 'node:child_process'
 const websiteRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const publicWebsiteUrl = 'https://anomaly-detector.ru'
 const publicWebappUrl = 'https://app.anomaly-detector.ru'
+const recoveryAnswer = 'Для аккаунта с паролем доступ можно восстановить через активную почту восстановления или сохранённый резервный код. Для аккаунта Яндекс ID вход и восстановление выполняются на стороне Яндекса.'
+const socialImageAlt = 'Экран Разведки Anomaly Detector: выбор сигналов, игроки и Рабочая модель'
 
 let html = ''
 let robots = ''
 let sitemap = ''
 
+const buildEnvironment = ({ analyticsApiUrl, campaignAllowlist } = {}) => {
+  const env = {
+    ...process.env,
+    PUBLIC_WEBSITE_URL: publicWebsiteUrl,
+    PUBLIC_WEBAPP_URL: publicWebappUrl,
+  }
+  delete env.PUBLIC_ANALYTICS_API_URL
+  delete env.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST
+  if (analyticsApiUrl) env.PUBLIC_ANALYTICS_API_URL = analyticsApiUrl
+  if (campaignAllowlist) env.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST = campaignAllowlist
+  return env
+}
+
 beforeAll(async () => {
   const build = spawnSync('bun', ['run', 'build'], {
     cwd: websiteRoot,
-    env: {
-      ...process.env,
-      PUBLIC_WEBSITE_URL: publicWebsiteUrl,
-      PUBLIC_WEBAPP_URL: publicWebappUrl,
-    },
+    env: buildEnvironment(),
     encoding: 'utf8',
   })
   expect(build.status, build.stderr).toBe(0)
@@ -46,13 +57,7 @@ test('renders an equal-choice first-party consent panel only when explicitly ena
   const analyticsApiUrl = 'https://api.anomaly-detector.ru'
   const build = spawnSync('bun', ['run', 'build'], {
     cwd: websiteRoot,
-    env: {
-      ...process.env,
-      PUBLIC_ANALYTICS_API_URL: analyticsApiUrl,
-      PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'launch_ru',
-      PUBLIC_WEBSITE_URL: publicWebsiteUrl,
-      PUBLIC_WEBAPP_URL: publicWebappUrl,
-    },
+    env: buildEnvironment({ analyticsApiUrl, campaignAllowlist: 'launch_ru' }),
     encoding: 'utf8',
   })
   expect(build.status, build.stderr).toBe(0)
@@ -61,20 +66,53 @@ test('renders an equal-choice first-party consent panel only when explicitly ena
   expect(enabledHtml).toContain('data-analytics-consent')
   expect(enabledHtml).toContain('Разрешить аналитику')
   expect(enabledHtml).toContain('Только необходимые')
+  expect(enabledHtml).toContain('от публичного лендинга до обучения')
+  expect(enabledHtml).not.toContain('от landing до обучения')
   expect(enabledHtml).toContain(`data-api-url="${analyticsApiUrl}"`)
   expect(enabledHtml).not.toMatch(/google-analytics|googletagmanager|mc\.yandex|metrika|session.?replay/i)
 })
 
-test('publishes canonical social and structured product metadata without invented proof', () => {
+test('publishes complete social metadata backed by a real image asset', async () => {
   expect(html).toContain(`<link rel="canonical" href="${publicWebsiteUrl}/">`)
-  expect(html).toContain('<meta property="og:image" content="https://anomaly-detector.ru/')
+  const imageMatch = html.match(/<meta property="og:image" content="([^"]+)">/)
+  expect(imageMatch).not.toBeNull()
+  const socialImageUrl = imageMatch?.[1] ?? ''
+  expect(socialImageUrl).toStartWith(`${publicWebsiteUrl}/`)
+  expect(html).toContain('<meta property="og:image:type" content="image/png">')
+  expect(html).toContain('<meta property="og:image:width" content="1440">')
+  expect(html).toContain('<meta property="og:image:height" content="900">')
+  expect(html).toContain(`<meta property="og:image:alt" content="${socialImageAlt}">`)
   expect(html).toContain('<meta name="twitter:card" content="summary_large_image">')
+  expect(html).toContain('<meta name="twitter:title" content="Anomaly Detector — бесплатная браузерная игра на дедукцию">')
+  expect(html).toContain('<meta name="twitter:description" content="Исследуйте аномалию, проверяйте гипотезы и опередите соперников в научной игре на дедукцию для 2–4 друзей.">')
+  expect(html).toContain(`<meta name="twitter:image" content="${socialImageUrl}">`)
+  expect(html).toContain(`<meta name="twitter:image:alt" content="${socialImageAlt}">`)
+
+  const imagePath = resolve(websiteRoot, 'dist', new URL(socialImageUrl).pathname.slice(1))
+  const image = await readFile(imagePath)
+  expect(image.subarray(1, 4).toString()).toBe('PNG')
+  expect(image.readUInt32BE(16)).toBe(1440)
+  expect(image.readUInt32BE(20)).toBe(900)
+})
+
+test('publishes structured product metadata that matches the visible current FAQ', () => {
   expect(html).toContain('<script type="application/ld+json">')
-  expect(html).toContain('"@type":"VideoGame"')
-  expect(html).toContain('"@type":"WebApplication"')
-  expect(html).toContain('"@type":"FAQPage"')
+  const jsonLdMatch = html.match(/<script type="application\/ld\+json">([^<]+)<\/script>/)
+  expect(jsonLdMatch).not.toBeNull()
+  const structuredData = JSON.parse(jsonLdMatch?.[1] ?? 'null')
+  expect(structuredData.map((item) => item['@type'])).toEqual([
+    'VideoGame',
+    'WebApplication',
+    'FAQPage',
+  ])
+  const faqPage = structuredData.find((item) => item['@type'] === 'FAQPage')
+  const recoveryQuestion = faqPage.mainEntity.find((item) => item.name === 'Как восстановить доступ?')
+  expect(recoveryQuestion.acceptedAnswer.text).toBe(recoveryAnswer)
+  expect(html.split(recoveryAnswer)).toHaveLength(3)
+  expect(html).not.toContain('появится до публичного запуска')
   expect(html).not.toContain('aggregateRating')
   expect(html).not.toContain('"review":')
+  expect(html).not.toMatch(/<video\b|autoplay|scroll-reveal/i)
 })
 
 test('indexes only the public root and explicitly allows supported search and AI crawlers', () => {
@@ -85,11 +123,15 @@ test('indexes only the public root and explicitly allows supported search and AI
     'Yandex',
     'OAI-SearchBot',
     'GPTBot',
+    'ChatGPT-User',
     'ClaudeBot',
     'Claude-SearchBot',
+    'Claude-User',
     'PerplexityBot',
+    'Perplexity-User',
   ]) {
     expect(robots).toContain(`User-agent: ${agent}\nAllow: /`)
   }
   expect(robots).toContain(`Sitemap: ${publicWebsiteUrl}/sitemap.xml`)
+  expect(sitemap.match(/<loc>/g)).toHaveLength(1)
 })
