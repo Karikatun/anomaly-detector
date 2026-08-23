@@ -1,6 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-import type { DbClient } from '../../../db'
+import {
+  isRetryableDatabaseTransactionConflict,
+  type DbClient,
+} from '../../../db'
 import { Prisma } from '../../../generated/prisma/client'
 import {
   cancelQueuedTransactionalMail,
@@ -585,7 +588,7 @@ export function createPrismaAuthRepository(
         userId: input.userId,
       })
 
-      return db.$transaction(async (tx) => {
+      return runRetryableAuthTransaction(db, async (tx) => {
         const locks = [
           { scope: 'recovery-user', value: input.userId },
           { scope: 'account-email', value: bindingSnapshot.canonicalKey },
@@ -692,7 +695,7 @@ export function createPrismaAuthRepository(
       })
       if (!snapshot) return 'unavailable'
 
-      return db.$transaction(async (tx) => {
+      return runRetryableAuthTransaction(db, async (tx) => {
         const locks = [
           { scope: 'recovery-user', value: input.userId },
           { scope: 'account-email', value: snapshot.recoveryCanonicalKey },
@@ -778,7 +781,7 @@ export function createPrismaAuthRepository(
         where: { login: input.login },
         select: { id: true },
       })
-      return db.$transaction(async (tx) => {
+      return runRetryableAuthTransaction(db, async (tx) => {
         const locks = snapshot
           ? [{ scope: 'recovery-user', value: snapshot.id }]
           : []
@@ -1063,7 +1066,7 @@ export function createPrismaAuthRepository(
           )
         : createHmac('sha256', abuseSecret).update(confirmationCode).digest('hex')
 
-      return db.$transaction(async (tx) => {
+      return runRetryableAuthTransaction(db, async (tx) => {
         const locks = [
           ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
           ...(snapshot?.recoveryEmailBinding
@@ -1176,7 +1179,7 @@ export function createPrismaAuthRepository(
         },
       })
       const quotas = recoveryCodeUseQuotas(abuseSecret, input)
-      return db.$transaction(async (tx) => {
+      return runRetryableAuthTransaction(db, async (tx) => {
         const locks = [
           ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
           ...(snapshot?.recoveryCodeReplacement
@@ -2228,7 +2231,7 @@ export function createPrismaAuthRepository(
     },
 
     async eraseUserIdentity({ userId, now }) {
-      await db.$transaction(async (tx) => {
+      await runRetryableAuthTransaction(db, async (tx) => {
         await lockAuthTransactionKey(tx, abuseSecret, 'recovery-user', userId)
         await cancelOutstandingRecoveryCredentials(tx, userId, now)
         await tx.recoveryCode.deleteMany({ where: { userId } })
@@ -2696,16 +2699,36 @@ async function lockAuthTransactionKey(
 }
 
 function isRetryableTransactionError(error: unknown) {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && (error.code === 'P2034'
-      || (error.code === 'P2002'
-        && 'meta' in error
-        && typeof error.meta === 'object'
-        && error.meta !== null
-        && 'modelName' in error.meta
-        && error.meta.modelName === 'AuthAbuseBucket'))
+  return isRetryableDatabaseTransactionConflict(error)
+    || (typeof error === 'object'
+      && error !== null
+      && 'code' in error
+      && error.code === 'P2025')
+    || (typeof error === 'object'
+      && error !== null
+      && 'code' in error
+      && error.code === 'P2002'
+      && 'meta' in error
+      && typeof error.meta === 'object'
+      && error.meta !== null
+      && 'modelName' in error.meta
+      && error.meta.modelName === 'AuthAbuseBucket')
+}
+
+async function runRetryableAuthTransaction<T>(
+  db: DbClient,
+  operation: (tx: Prisma.TransactionClient) => Promise<T>,
+) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await db.$transaction(operation)
+    } catch (error) {
+      if (!isRetryableTransactionError(error) || attempt >= 2) throw error
+      await new Promise((resolve) => setTimeout(resolve, 10 * (2 ** attempt)))
+    }
+  }
+
+  throw new Error('Unreachable auth transaction retry state')
 }
 
 async function sha256(value: string) {

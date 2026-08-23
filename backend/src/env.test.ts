@@ -91,6 +91,10 @@ describe('loadEnv', () => {
       MAIL_SMTP_TLS_MODE: 'implicit_tls',
       MAIL_SMTP_USERNAME: 'no-reply@anomaly-detector.ru',
     })).toThrow('MAIL_SMTP_LEASE_SECONDS')
+    expect(() => loadEnv({
+      ...baseEnv,
+      MAIL_OUTBOX_RETENTION_DAYS: '31',
+    })).toThrow('MAIL_OUTBOX_RETENTION_DAYS')
 
     const env = loadEnv({
       ...baseEnv,
