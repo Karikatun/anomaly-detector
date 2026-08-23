@@ -277,6 +277,9 @@ restart, а оператор видит безопасный diff и состо�
    публикации, mailbox/provider evidence, retention decision и сверка
    уведомления Роскомнадзору перечислены в
    [аудите legal documents](audits/2026-08-23-legal-documents.md).
+   OWNER принял mapping оснований и balance test для aggregate-only
+   `landing_view`; это не является внешним юридическим заключением, не решает
+   existing-user re-acceptance и не активирует production analytics.
 4. [-] Проверить support и `no-reply` mailbox, incident ownership, SPF/DKIM/DMARC,
    retention и восстановление доступа оператора к REG.RU.
 5. [-] Повторить migration, backup/restore, health, alerting и rollback drill;
