@@ -13,12 +13,11 @@
 - Read `README.md`, root `CONTEXT.md`, relevant `docs/`, and applicable ADRs for non-trivial work. Discover the current structure rather than treating README as a file inventory.
 - For backend, contract, persistence, auth, or API work, read `backend/AGENTS.md`.
 - For player web application work, read `webapp/AGENTS.md`. For substantial UI, UX, responsive, animation, design-system, or rendered-flow work in any client, use `$anomaly-ui`.
-- While `docs/agents/ux-agent-pilot.md` has status `PILOT`, every substantial player webapp UI/UX task must classify itself as `UX pilot: RUN`, `N/A`, or `BLOCKED` and follow that document when eligible. Do not install gstack or production analytics as part of this pilot.
 - For mobile application or Maestro work, read `mobile/AGENTS.md`.
 - For testing strategy and commands, use `docs/TESTING.md`. For deployment or infrastructure, read the relevant runbook in `docs/`, especially `DEPLOYMENT.md`, `STORAGE.md`, `LOCAL_DATABASE.md`, or `YANDEX_CLOUD.md`.
 - For vulnerability handling and security-sensitive changes, read `SECURITY.md` and use `$anomaly-security-review`. For CI protection and release approval, use `docs/CI.md` and `docs/RELEASE_CHECKLIST.md`.
-- While `docs/agents/security-agent-pilot.md` has status `PENDING`, the first eligible security-sensitive task started after the pilot commit must classify itself as `Security-agent pilot: RUN`, `N/A`, or `BLOCKED` and follow that document. The pilot does not authorize a new skill, MCP server, dependency, hosted workflow, external scan, or disclosure of private repository content.
-- For every non-trivial task, select the applicable product, architecture, quality, security, UX, performance, release, and operational checks from `docs/AUDIT_GUIDE.md`, then complete `docs/agents/audit-checklist.md`. Mark skipped checks `N/A` or `BLOCKED` with the reason and residual risk; never silently omit an applicable audit.
+- For material security diffs, `$anomaly-security-review` automatically applies the adopted history, blast-radius, neighboring-variant, and independent-refutation pass from `docs/agents/security-agent-pilot.md`; the completed pilot is not classified or repeated.
+- For every non-trivial task, the agent automatically classifies touched surfaces and selects and runs the applicable checks from `docs/AUDIT_GUIDE.md` through `docs/agents/audit-checklist.md`; the user does not need to request an audit. An ordinary task records the primary signal and 1–3 relevant checks without an exhaustive `N/A` inventory. Automatically use and combine every triggered full profile for cross-layer or product-contract changes, auth/security/privacy, persistence/migrations/concurrency, substantial UI/UX, a performance-sensitive path or regression, release/production, or an incident.
 - Tasks and PRDs live in GitHub Issues. Use the workflow in `docs/agents/issue-tracker.md` and labels in `docs/agents/triage-labels.md`. Maintain domain docs according to `docs/agents/domain.md`.
 - Use the repository package manager, scripts, test runner, formatter, linter, build tools, generators, existing utilities, and installed dependencies. Do not add dependencies without explicit approval unless the user requested that dependency by name.
 - In Codex shell sessions, do not assume JavaScript tooling is on `PATH`; when needed use `PATH="/opt/homebrew/bin:$HOME/.bun/bin:$PATH"`.
@@ -44,7 +43,7 @@
   - `Review`: read-only evaluation or recommendation. Report evidence and do not edit.
   - `Direct`: obvious local or visual-only change without behavioral impact. Inspect nearby usage and run narrow validation.
   - `Investigation`: unclear failure or performance problem. Reproduce or trace it, use the diagnosing workflow, and find the owning layer before patching. Reframe after two attempts that do not move the primary signal.
-  - `TDD-first`: behavior, contracts, auth, permissions, persistence, validation, routing, state transitions, concurrency, or non-trivial user-facing behavior. Use the TDD workflow and start with the highest-value failing test at the highest-confidence practical boundary.
+  - `TDD-first`: behavior, contracts, auth, permissions, persistence, validation, routing, state transitions, concurrency, or non-trivial user-facing behavior. Select this mode automatically when behavior risk warrants it and start with the highest-value failing test at the highest-confidence practical boundary; an obvious test seam does not require user approval.
 - Frontend visual-only work is `Direct` unless it changes behavior, accessibility semantics, navigation, validation, permissions, persistence, or meaningful state transitions.
 - For non-trivial work, define 3–5 observable pass/fail criteria when useful. Identify the primary user-visible or runtime signal and the smallest relevant secondary checks.
 - Proceed on obvious, low-risk local choices. Present at most two options and recommend one when product behavior, architecture, cost, ownership, data exposure, rollout risk, or timeline materially changes.
@@ -88,7 +87,7 @@
 
 ## Learning Loop
 
-- After non-trivial work, use `$learn-from-task` only for evidence-backed lessons likely to recur.
+- Use `$learn-from-task` only after an explicit request, a repeated proven pattern, a user correction, or a verified recurring root cause creates a plausible durable lesson; do not invoke it ceremonially after every non-trivial task.
 - Store repository rules in `AGENTS.md`, reusable procedures in skills, architecture decisions in ADRs, and enforceable invariants in tests, linters, or hooks. Do not persist temporary or uncertain information.
 - Show the proposed diff and obtain explicit approval before writing any learning artifact.
 
