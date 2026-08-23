@@ -87,7 +87,20 @@ sessions, OAuth, permissions, player privacy, operator access, cryptography,
 rate limits, audit events, personal-data handling, storage, production network
 boundaries, migrations, backup/restore, or legal/security copy.
 
-Answer at least:
+Use `$anomaly-security-review`, which automatically selects the review mode.
+`full` is mandatory for a real auth/authz/privacy/operator/crypto/rate-limit/
+audit/trust-boundary/recovery change and for a migration that changes access or
+existing persisted data, as well as for a repository rule or skill that decides
+whether and how these security checks run. `targeted` scopes the review to affected storage,
+schema-only migration, compatibility, backup/restore and data-lifecycle risks
+outside those full-mode triggers. `semantic` applies to copy or a mechanical
+change only after the diff proves that no security boundary or runtime behavior
+changed. Uncertain scope escalates to `full`; the user does not need to request
+the audit or choose its mode.
+
+For `full`, answer every applicable question below. For `targeted`, answer the
+affected persistence and lifecycle questions; for `semantic`, verify the claim
+and wording without manufacturing an actor or concurrency matrix.
 
 1. Which data, action, resource, or invariant is protected?
 2. Who is the actor, and which backend permission or ownership check applies?
