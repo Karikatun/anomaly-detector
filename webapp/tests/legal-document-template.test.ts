@@ -47,6 +47,10 @@ test('rejects a document with an unknown legal placeholder', () => {
 })
 
 test('keeps published legal revisions aligned with the implemented personal-data flows', () => {
+  const audit = readFileSync(
+    new URL('../../docs/audits/2026-08-23-legal-documents.md', import.meta.url),
+    'utf8',
+  )
   const consent = readFileSync(
     new URL('../../docs/personal-data-consent.md', import.meta.url),
     'utf8',
@@ -99,4 +103,34 @@ test('keeps published legal revisions aligned with the implemented personal-data
   expect(privacy).toContain('Условия собственной необязательной аналитики')
   expect(privacy).toContain('ООО «Айди Тех»')
   expect(consent).toContain('ООО «Айди Тех»')
+
+  const recoveryBasis = privacy.slice(
+    privacy.indexOf('### 4.6.'),
+    privacy.indexOf('### 4.7.'),
+  )
+  expect(recoveryBasis).not.toContain('согласие пользователя')
+  expect(recoveryBasis).toContain('исполнение Пользовательского соглашения')
+  expect(recoveryBasis).toMatch(/законных\s+интересов/)
+
+  const mailBasis = privacy.slice(
+    privacy.indexOf('### 4.7.'),
+    privacy.indexOf('### 4.8.'),
+  )
+  expect(mailBasis).not.toContain('согласие пользователя')
+  expect(mailBasis).toContain('исполнение Пользовательского соглашения')
+
+  const feedbackBasis = privacy.slice(
+    privacy.indexOf('### 4.9.'),
+    privacy.indexOf('### 4.10.'),
+  )
+  expect(feedbackBasis).toContain('по запросу пользователя')
+  expect(feedbackBasis).toMatch(/законных\s+интересов/)
+
+  const analyticsBasis = privacy.slice(
+    privacy.indexOf('### 4.10.'),
+    privacy.indexOf('## 5.'),
+  )
+  expect(analyticsBasis).toContain('отдельное однозначное согласие')
+  expect(audit).toContain('OWNER decision: `ACCEPTED`')
+  expect(audit).toContain('### Balance test для `landing_view` до выбора')
 })

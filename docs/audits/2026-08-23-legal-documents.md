@@ -81,15 +81,52 @@ Shared contracts: `packages/contracts/src/auth.ts`,
 - Account-deletion dialog называет удаление Account Email/recovery credentials,
   снятие Feedback link и отдельный retention содержания/контакта.
 
+## Принятое OWNER-решение по правовым основаниям
+
+OWNER decision: `ACCEPTED` 23 августа 2026 года; внешнее юридическое заключение:
+`NOT RUN`.
+
+- Account Email, Recovery Email и запрошенная транзакционная отправка опираются
+  на исполнение Пользовательского соглашения и действия по инициативе
+  пользователя.
+- Anti-abuse, security notifications и предотвращение неправомерного доступа
+  опираются на законный интерес в защите пользователя и Сервиса при условии,
+  что права пользователя не нарушаются.
+- Feedback Report обрабатывается для выполнения добровольного запроса
+  пользователя; улучшение и защита Сервиса дополнительно относятся к законному
+  интересу при тех же ограничениях прав пользователя.
+- 30-дневный аналитический путь и связанные события создаются только после
+  отдельного однозначного разрешения; отказ и отзыв не ограничивают Сервис.
+- Несвязанный дневной `landing_view` до выбора допускается на основании
+  законного интереса только в пределах balance test ниже.
+
+### Balance test для `landing_view` до выбора
+
+- **Интерес:** понимать доступность и фактическое использование публичной
+  страницы, чтобы оценивать путь к регистрации и обучению без сторонних
+  трекеров.
+- **Необходимость:** хранится только дневной count по укрупнённым
+  `sourceCategory` и `trafficClass`; постоянный идентификатор, сырой IP-адрес,
+  полный URL, fingerprint и последовательность действий не создаются.
+- **Влияние на пользователя:** данные не позволяют выделить путь отдельного
+  посетителя, не используются для рекламы, профилирования, принятия решений или
+  ограничения функций.
+- **Меры:** backend-маршруты отсутствуют при `ANALYTICS_ENABLED=false`;
+  first-party клиенты включаются отдельно; агрегаты хранятся 13 месяцев плюс
+  ближайшее ежедневное окно удаления; добавление идентификатора, новых
+  измерений или сырого retention повторно открывает OWNER/LEGAL gate.
+- **Решение:** законный интерес принят только для текущего aggregate-only
+  `landing_view`. Это решение не активирует аналитику и не заменяет production
+  verification из issue #31.
+
 ## OWNER/LEGAL gates до публикации
 
 1. **OWNER:** заполнить подтверждённые operator values и дату вступления в силу;
    доказать владение `support@`/`no-reply@`, inbound/outbound delivery,
    privacy-request и incident ownership. Значения не помещать в Git или issue.
-2. **OWNER/LEGAL:** принять или изменить mapping оснований из privacy sections
-   4.6–4.10, отдельно зафиксировав balance test для несвязанного
-   `landing_view`, и решить, нужно ли повторное принятие Terms/consent
-   существующими аккаунтами. Текущий код требует `1.1` только для новой
+2. **OWNER/LEGAL:** решить, нужно ли повторное принятие Terms/consent
+   существующими аккаунтами. Принятое выше сопоставление оснований само по себе
+   этого решения не заменяет; текущий код требует `1.1` только для новой
    регистрации.
 3. **OWNER/LEGAL:** сверить финальный data map, REG.RU/Yandex agreements,
    российское размещение и released retention с уведомлением Роскомнадзору.
@@ -109,7 +146,8 @@ Shared contracts: `packages/contracts/src/auth.ts`,
   условное описание, а runtime/build flags остаются отдельным production gate.
 - Residual risks: три OWNER/LEGAL gate выше, production publication/date,
   provider delivery, RKN notification, existing-user re-acceptance и bounded
-  deletion expired recovery/outbox data.
+  deletion expired recovery/outbox data. Mapping оснований и balance test
+  приняты OWNER, но внешнее юридическое заключение не выполнялось.
 - Active DAST: `NOT RUN`; semantic copy/template change не оправдывает активную
   атаку, production не является разрешённой целью.
 
@@ -120,6 +158,9 @@ Shared contracts: `packages/contracts/src/auth.ts`,
   boundaries.
 - `PASS` — contracts: 47 tests; webapp: 172 tests; website: 5 tests; backend
   unit: 232 tests.
+- `PASS` — legal source test фиксирует принятое разделение contract/request,
+  security legitimate interest и отдельного analytics consent, а также наличие
+  OWNER decision и balance test.
 - `PASS` — monorepo typecheck, frontend lint и architecture check (380 source
   files).
 - `PASS` — release build без `VITE_PUBLIC_LEGAL_DOCUMENTS_EFFECTIVE_DATE`
