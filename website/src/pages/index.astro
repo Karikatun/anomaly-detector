@@ -21,6 +21,7 @@ const canonicalUrl = publicWebsiteUrl
 const tutorialUrl = publicWebappUrl ? new URL('/?continue=tutorial', publicWebappUrl).toString() : '#launch-pending'
 const loginUrl = publicWebappUrl ? new URL('/', publicWebappUrl).toString() : '#launch-pending'
 const socialImageUrl = publicWebsiteUrl ? new URL(reconnaissance.src, publicWebsiteUrl).toString() : undefined
+const socialImageAlt = 'Экран Разведки Anomaly Detector: выбор сигналов, игроки и Рабочая модель'
 const legalUrl = (path: string) => publicWebappUrl ? new URL(path, publicWebappUrl).toString() : '#launch-pending'
 
 const faq = [
@@ -29,7 +30,7 @@ const faq = [
 	['Сколько человек нужно для игры?', 'Для Тендера нужны 2–4 игрока. Перед первой партией можно пройти короткое одиночное обучение.'],
 	['Нужна регистрация?', 'Да. Аккаунт сохраняет ваш прогресс и позволяет присоединяться к частным Тендерам.'],
 	['Как пригласить друзей?', 'Создайте частный Тендер и передайте друзьям код приглашения. Посторонние игроки не увидят вашу комнату.'],
-	['Как восстановить доступ?', 'Восстановление пароля через подтверждённую почту появится до публичного запуска. Пока не используйте игру как единственное место хранения важных данных.'],
+	['Как восстановить доступ?', 'Для аккаунта с паролем доступ можно восстановить через активную почту восстановления или сохранённый резервный код. Для аккаунта Яндекс ID вход и восстановление выполняются на стороне Яндекса.'],
 ] as const
 const structuredData = [
 	{
@@ -84,7 +85,15 @@ const structuredData = [
 		<meta property="og:description" content={description} />
 		{canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
 		{socialImageUrl && <meta property="og:image" content={socialImageUrl} />}
+		{socialImageUrl && <meta property="og:image:type" content="image/png" />}
+		{socialImageUrl && <meta property="og:image:width" content={reconnaissance.width.toString()} />}
+		{socialImageUrl && <meta property="og:image:height" content={reconnaissance.height.toString()} />}
+		{socialImageUrl && <meta property="og:image:alt" content={socialImageAlt} />}
 		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+		{socialImageUrl && <meta name="twitter:image" content={socialImageUrl} />}
+		{socialImageUrl && <meta name="twitter:image:alt" content={socialImageAlt} />}
 		<script is:inline type="application/ld+json" set:html={JSON.stringify(structuredData)} />
 	</head>
 	<body>

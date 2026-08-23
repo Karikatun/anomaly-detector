@@ -18,7 +18,7 @@ const { apiUrl, campaignAllowlist, privacyUrl } = Astro.props
 	<div class="analytics-copy">
 		<p class="analytics-index">НЕОБЯЗАТЕЛЬНАЯ АНАЛИТИКА</p>
 		<h2 id="analytics-consent-title">Помогите улучшить первый запуск</h2>
-		<p>С согласия мы считаем только шаги от landing до обучения и защиты аккаунта. Без логина, почты, игровых данных, полного IP и рекламных идентификаторов.</p>
+		<p>С согласия мы считаем только шаги от публичного лендинга до обучения и защиты аккаунта. Без логина, почты, игровых данных, полного IP и рекламных идентификаторов.</p>
 		<a href={privacyUrl}>Как устроена приватность</a>
 	</div>
 	<div class="analytics-controls">
@@ -151,6 +151,7 @@ const { apiUrl, campaignAllowlist, privacyUrl } = Astro.props
 	.analytics-copy h2 { margin: 0; font-size: clamp(1.3rem, 2.2vw, 2rem); line-height: 1.1; letter-spacing: -.025em; }
 	.analytics-copy p:not(.analytics-index), .analytics-choice p, .analytics-status { margin: 0; color: #94a3b8; font-size: .86rem; line-height: 1.55; text-wrap: pretty; }
 	.analytics-copy a { width: fit-content; color: #bae6fd; font-size: .82rem; text-underline-offset: 4px; }
+	.analytics-copy a:focus-visible { outline: 3px solid #7dd3fc; outline-offset: 4px; }
 	.analytics-controls { display: grid; gap: 10px; }
 	.analytics-choice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 	.analytics-choice[hidden] { display: none; }

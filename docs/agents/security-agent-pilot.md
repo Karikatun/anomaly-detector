@@ -2,8 +2,9 @@
 
 ## Статус и граница
 
-- **Статус:** `PENDING` — ожидает первую подходящую задачу, начатую после
-  commit, который добавил этот документ.
+- **Статус:** `ADOPT` — 2026-08-23, acceptance-проверка публичного лендинга;
+  вариантный review предотвратил два неточных recovery/social утверждения в
+  task diff без новых полномочий. Запись: [аудит публичного лендинга](../audits/2026-08-20-public-landing.md#security-agent-pilot).
 - **Цель:** проверить, добавляют ли security-review диффа с учётом истории,
   blast radius, поиск вариантов и независимое опровержение гипотез полезный
   сигнал поверх действующих `$anomaly-security-review`, `SECURITY.md`,
@@ -107,6 +108,28 @@ ID | candidate source | existing/new/duplicate/rejected | attacker/path/control/
 
 ## Запись запуска
 
-Пока не запускался. При `RUN` заменить этот текст на задачу и дату, границу
-security review, baseline и дополнительный набор findings, фактические метрики,
-выполненные/невыполненные tool checks и итоговое решение.
+Дата и задача: 2026-08-23, acceptance-проверка публичного лендинга. Граница:
+статические recovery/privacy claims, JSON-LD и social metadata; auth, API,
+persistence, permissions и production не изменялись.
+
+- Обычный threat review подтвердил один уже существовавший public recovery-claim
+  drift и не подтвердил уязвимостей.
+- Проверка истории, blast radius и соседних вариантов нашла два новых
+  недублирующих дефекта ещё не зафиксированного diff: recovery copy не учитывал
+  activation/cooling-off и сокращал provider boundary; social alt подменял
+  термин «Рабочая модель». Оба исправлены до handoff.
+- Независимо отвергнуты три гипотезы: расширение analytics privacy scope,
+  account enumeration через email и disclosure через публичный screenshot.
+- Accepted findings / все candidates: `3 / 6`; additive signal: `2 / 5`.
+  Regression guards: artifact-тест идентичности видимого FAQ и FAQPage, точных
+  Open Graph/Twitter alt и русской analytics copy.
+- Использовались только repository-owned команды, локальный изолированный
+  browser и существующие skills. Новые dependencies, MCP, permissions, hosted
+  workflows, внешние scanners и передача private repository content отсутствуют.
+  Snyk Agent Scan, Promptfoo, Garak и agent harness — `NOT RUN`, не применимы к
+  статическому runtime без LLM.
+- Дополнительное время отдельно не измерялось; новых privacy, permission,
+  supply-chain или process risks не выявлено.
+
+Итог: `ADOPT` — добавка дала два воспроизводимых недублирующих сигнала и
+доказательно сняла три ложные гипотезы без несоразмерной церемонии.
