@@ -15,6 +15,7 @@ export type RealtimeState = {
 }
 
 export type RealtimeErrorCode =
+  | 'access-denied'
   | 'connection-failed'
   | 'ticket-failed'
   | 'invalid-message'
@@ -46,6 +47,7 @@ const disconnectedState = (): RealtimeState => ({
 
 const RECONNECT_BASE_DELAY_MS = 5_000
 const RECONNECT_MAX_DELAY_MS = 30_000
+const CONCEALED_TENDER_CLOSE_CODE = 4404
 
 export class TenderRealtimeSession {
   private readonly options: RealtimeSessionOptions
@@ -127,9 +129,17 @@ export class TenderRealtimeSession {
         })
       }
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (!this.owns(socket)) return
         this.socket = null
+        if (event.code === CONCEALED_TENDER_CLOSE_CODE) {
+          this.updateState({
+            connected: false,
+            error: 'access-denied',
+            tenderView: null,
+          })
+          return
+        }
         this.updateState({ connected: false })
         this.scheduleReconnect()
       }
@@ -202,10 +212,10 @@ export function useRealtimeTender(transport: AuthenticatedTransport, tenderId: s
   useEffect(() => {
     const session = new TenderRealtimeSession({
       apiBaseUrl: getApiBaseUrl(),
-      cancelReconnect: clearTimeout,
+      cancelReconnect: (timer) => globalThis.clearTimeout(timer),
       createSocket: (url) => new WebSocket(url),
       onState: setState,
-      scheduleReconnect: setTimeout,
+      scheduleReconnect: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
       tenderId,
       transport,
     })

@@ -33,6 +33,8 @@ type TenderModule = {
 
 The API's realtime hub synchronises the versions of actively subscribed Tenders from the shared store. This lets clients receive a timeout update when a separate worker performed the commit; it is a delivery mechanism only and does not implement or duplicate game rules.
 
+Realtime uses private close code `4404` with the generic reason `Unavailable` for a concealed missing-Tender, non-participant, or forfeited-player denial. Operational read failures close with `1011` so the client reconnects and refetches its authorised view. Clients keep the formerly overloaded `4403` retryable during rolling deployment and rollback; old/new pairs may reconnect until both sides have drained, but they do not turn an operational failure into a permanent access denial. A failed established subscription is removed and closed, while other subscribers continue independently; disconnect during initial subscription must also release any late-created subscription.
+
 The initial in-memory implementation establishes this public interface for TDD. Milestone 1 replaces its storage with PostgreSQL and an audit log without changing the interface shape.
 
 Cross-context reads do not expand this command/view facade. Tender separately
@@ -82,14 +84,25 @@ New persisted payloads use this JSON envelope:
 ```
 
 The adapter validates the envelope, event kind, and matching payload when it
-reads an event. An unsupported version or an invalid current payload fails
-closed with a diagnostic error instead of silently omitting audit information.
+reads a current event. Invalid format version `1` data fails closed with a
+diagnostic error instead of being mistaken for historical incompatibility.
 Rows written before the envelope was introduced remain readable through one
-explicit legacy decoder. They are marked as format version `0` in the internal
-stored-event model, so compatibility logic stays at the persistence boundary
-rather than spreading fallback parsing through projectors.
+explicit legacy decoder and are marked as format version `0` in the internal
+stored-event model.
+
+Each read model then accepts only the documented version `0` semantics it can
+faithfully project. The participant audit validates every legacy event against
+the current event contract or an explicit historical projection variant. If an
+unsupported version or legacy payload cannot produce a complete audit, the
+outer completed Tender view remains available but omits `audit`; the player
+client treats that backward-compatible shape as a terminal unavailable-audit
+state. It never publishes a partial audit. Current projection corruption and
+operational or programmer errors still propagate. Sparse historical events may
+remain valid for a narrower read model, such as profile statistics, without
+being accepted as complete participant-audit evidence.
 
 Adding or changing an event requires updating the application union, its
-projector classification, producer tests, and the in-memory/PostgreSQL store
-contract tests. Existing versions remain immutable; a future incompatible
-format gets a new version and a deliberate decoder or upcaster.
+projector classification and semantic validation, producer tests, and the
+in-memory/PostgreSQL store contract tests. Existing versions remain immutable;
+a future incompatible format gets a new version and a deliberate decoder or
+upcaster.

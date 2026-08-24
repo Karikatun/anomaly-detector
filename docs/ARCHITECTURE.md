@@ -196,9 +196,13 @@ ready -> submitting -> accepted
 The Tender page follows the humble-object boundary: React owns composition,
 refs and visual overlay state, while command exclusivity, resume eligibility,
 turn-focus decisions and stale-error visibility live in a pure page controller.
-The completed-match component renders a pure audit presentation model for
-ranking, winners and rating entries. These seams are tested without mounting
-the full page; realtime and multiplayer recovery remain protected by E2E.
+The completed-match component renders a pure audit presentation model around
+the server-authoritative placement and winners; it does not recompute ranking
+in the client. Explanatory factors come from stable completed-view state, with
+v1 correct public Theses and unique fully-correct v2 Signals derived from the
+audit so rolling rollback does not change their meaning. These seams are tested
+without mounting the full page; realtime and multiplayer recovery remain
+protected by E2E.
 
 New i18n messages use semantic keys that name feature, state and role (for
 example, `tender.completed.summary.title`). Existing `*.copy.NNN` keys form a

@@ -9,8 +9,16 @@ import type {
   TenderView,
   TenderViewQuery,
 } from '@anomaly-detector/contracts'
-import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@anomaly-detector/contracts'
-import { createParticipantAuditRounds } from './audit-view'
+import {
+  createTenderSchema,
+  tenderAuditViewSchema,
+  tenderCommandSchema,
+  tenderViewQuerySchema,
+} from '@anomaly-detector/contracts'
+import {
+  createParticipantAuditRounds,
+  hasParticipantAuditSemantics,
+} from './audit-view'
 import {
   createFinalScientificModelAuditByPlayer,
   createRatingBreakdownByPlayer,
@@ -19,8 +27,10 @@ import type { TenderModule } from './tender-module'
 import type {
   PendingTenderAuditEvent,
   StoredTender,
+  StoredTenderAuditEvent,
   TenderStore,
 } from './tender-store'
+import { TenderAuditEventDecodeError } from './tender-audit-event'
 import { resolveAccessSlots, rotateTiePriority } from '../domain/access-slots'
 import { createAnomalyConfiguration, resolvePublicResult, signalIds, type SignalId } from '../domain/anomaly-configuration'
 import { createRoundContracts } from '../domain/contracts'
@@ -1365,9 +1375,43 @@ export function createTenderService({
         throw new TenderFailure('player_forfeited', 'Player permanently forfeited this Tender')
       }
       const activePlayerId = activePlayerIdForView(tender)
-      const auditEvents = tender.phase === 'complete'
-        ? await store.readAuditEvents(tenderId)
-        : undefined
+      let auditEvents: StoredTenderAuditEvent[] | undefined
+      if (tender.phase === 'complete') {
+        try {
+          auditEvents = await store.readAuditEvents(tenderId)
+        } catch (error) {
+          if (
+            !(error instanceof TenderAuditEventDecodeError)
+            || error.kind !== 'historical_incompatible'
+          ) throw error
+        }
+      }
+      let completedAudit: TenderView['audit']
+      if (auditEvents !== undefined) {
+        const createAuditProjection = (events: StoredTenderAuditEvent[]) => ({
+          anomalyConfiguration: tender.anomalyConfiguration,
+          completionReason: tender.completionReason ?? 'standard',
+          finalScientificModelsByPlayer: createFinalScientificModelAuditByPlayer(tender),
+          forfeitedAtByPlayer: tender.forfeitedAtByPlayer,
+          placementByPlayer: createPlacementByPlayer(tender),
+          privateThesesByPlayer: tender.privateThesesByPlayer,
+          privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
+          privateTelemetryByPlayer: tender.privateMeasurementsByPlayer,
+          publicLaboratoryResults: tender.publicLaboratoryResults,
+          publicScientificJournal: tender.publicScientificJournal,
+          ratingBreakdownByPlayer: createRatingBreakdownByPlayer(tender, events),
+          rounds: createParticipantAuditRounds(tender, events),
+          ruleset: tender.ruleset,
+        })
+        const hasIncompatibleHistoricalEvent = auditEvents.some((event) =>
+          event.formatVersion === 0 && !hasParticipantAuditSemantics(event),
+        )
+        if (!hasIncompatibleHistoricalEvent) {
+          const projectedAudit = tenderAuditViewSchema.safeParse(createAuditProjection(auditEvents))
+          if (!projectedAudit.success) throw projectedAudit.error
+          completedAudit = projectedAudit.data
+        }
+      }
       const tiePriorities = Object.fromEntries(
         rotateTiePriority(tender.players, tender.round).map((candidate) => [candidate.id, candidate.tiePriority]),
       )
@@ -1535,23 +1579,7 @@ export function createTenderService({
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
         publicTheses: tender.ruleset === 'tender-v2' ? [] : tender.publicTheses,
         ...(tender.phase === 'complete' ? { winnerPlayerIds: tender.winnerPlayerIds } : {}),
-        ...(tender.phase === 'complete' ? {
-          audit: {
-            anomalyConfiguration: tender.anomalyConfiguration,
-            completionReason: tender.completionReason ?? 'standard',
-            finalScientificModelsByPlayer: createFinalScientificModelAuditByPlayer(tender),
-            forfeitedAtByPlayer: tender.forfeitedAtByPlayer,
-            placementByPlayer: createPlacementByPlayer(tender),
-            privateThesesByPlayer: tender.privateThesesByPlayer,
-            privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
-            privateTelemetryByPlayer: tender.privateMeasurementsByPlayer,
-            publicLaboratoryResults: tender.publicLaboratoryResults,
-            publicScientificJournal: tender.publicScientificJournal,
-            ratingBreakdownByPlayer: createRatingBreakdownByPlayer(tender, auditEvents!),
-            rounds: createParticipantAuditRounds(tender, auditEvents!),
-            ruleset: tender.ruleset,
-          },
-        } : {}),
+        ...(completedAudit ? { audit: completedAudit } : {}),
       }
     },
 

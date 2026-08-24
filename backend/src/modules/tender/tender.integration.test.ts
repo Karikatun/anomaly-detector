@@ -99,6 +99,99 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     })
   })
 
+  test('fails closed when a completed Tender contains an unsupported persisted audit event', async () => {
+    const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'forfeit-a-corrupted-audit',
+      tenderId,
+      type: 'forfeit-tender',
+    })
+    await prisma.tenderAuditEvent.update({
+      where: { tenderId_sequence: { sequence: 1, tenderId } },
+      data: { payload: { data: {}, formatVersion: 999 } },
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const view = await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })
+
+    expect(view).toMatchObject({
+      phase: 'complete',
+      winnerPlayerIds: ['player-b'],
+    })
+    expect(view).not.toHaveProperty('audit')
+    expect(view).not.toHaveProperty('auditUnavailableReason')
+  })
+
+  test('omits the completed audit when a persisted legacy event is missing participant semantics', async () => {
+    const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'forfeit-a-legacy-audit',
+      tenderId,
+      type: 'forfeit-tender',
+    })
+    await prisma.tenderAuditEvent.update({
+      where: { tenderId_sequence: { sequence: 1, tenderId } },
+      data: {
+        kind: 'power_allocated',
+        payload: {},
+      },
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const view = await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })
+
+    expect(view).toMatchObject({
+      phase: 'complete',
+      winnerPlayerIds: ['player-b'],
+    })
+    expect(view).not.toHaveProperty('audit')
+    expect(view).not.toHaveProperty('auditUnavailableReason')
+  })
+
+  test('does not mask malformed current persisted audit data as historical incompatibility', async () => {
+    const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    await firstModule.execute({
+      actorId: 'player-a',
+      commandId: 'forfeit-a-current-audit-corruption',
+      tenderId,
+      type: 'forfeit-tender',
+    })
+    await prisma.tenderAuditEvent.update({
+      where: { tenderId_sequence: { sequence: 1, tenderId } },
+      data: {
+        kind: 'power_allocated',
+        payload: { data: {}, formatVersion: 1 },
+      },
+    })
+
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    await expect(restartedModule.readTenderView({ tenderId, playerId: 'player-b' }))
+      .rejects.toMatchObject({
+        kind: 'current_corruption',
+        name: 'TenderAuditEventDecodeError',
+      })
+  })
+
   test('persists a due Access Slot deadline and resolves it after a restart', async () => {
     const createdAt = new Date('2026-07-20T12:00:00.000Z')
     const firstModule = createTenderModule({

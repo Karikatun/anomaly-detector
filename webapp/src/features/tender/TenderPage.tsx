@@ -49,6 +49,7 @@ import {
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import { CompletedTenderPanel } from './components/CompletedTenderPanel'
 import { ContractPlanningPanel } from './components/ContractPlanningPanel'
+import { TenderTerminalState } from './components/TenderTerminalState'
 import { TenderResearchDialog } from './components/TenderResearchDialog'
 import { TenderHeaderFrame } from './components/TenderHeaderFrame'
 import {
@@ -94,6 +95,7 @@ const sequentialPhases = new Set([
 ])
 
 const realtimeErrorKeys = {
+  'access-denied': 'tender.realtime.error.access-denied',
   'connection-failed': 'tender.realtime.error.connection-failed',
   'ticket-failed': 'tender.realtime.error.ticket-failed',
   'invalid-message': 'tender.realtime.error.invalid-message',
@@ -126,6 +128,8 @@ export function PhasePanel({
   activePlayerId,
   workingModelDialog,
   training,
+  onAuditRetry,
+  onReturnToHistory,
 }: {
   view: TenderView
   disabled: boolean
@@ -141,6 +145,8 @@ export function PhasePanel({
     open: boolean
     openDisabled: boolean
   }
+  onAuditRetry?: () => void
+  onReturnToHistory?: () => void
   training?: {
     laboratoryInitialMode?: 'broad' | 'deep'
     onLaboratoryModeSelect?: (mode: 'broad' | 'deep') => void
@@ -332,10 +338,11 @@ export function PhasePanel({
       return view.audit ? (
         <CompletedTenderPanel currentUserId={auth.user?.id} view={{ ...view, audit: view.audit }} />
       ) : (
-        <Card>
-          <CardHeader><CardTitle>{translate('tender.tenderPage.copy.014')}</CardTitle></CardHeader>
-          <CardContent><Typography tone="muted">{translate('tender.tenderPage.copy.015')}</Typography></CardContent>
-        </Card>
+        <TenderTerminalState
+          kind="audit"
+          onRetry={onAuditRetry ?? (() => undefined)}
+          onReturnToHistory={onReturnToHistory ?? (() => undefined)}
+        />
       )
 
     default:
@@ -525,6 +532,21 @@ function TenderContent() {
       // The shared command error remains visible; stay in the match so the player can retry.
     }
   }, [handleCommand, navigate, queryClient])
+  const returnToHistory = useCallback(() => {
+    void navigate({ to: '/app' })
+  }, [navigate])
+
+  if (error === 'access-denied' && !tenderView) {
+    return (
+      <section className="mx-auto grid min-h-dvh w-full max-w-6xl place-items-center px-5 py-16">
+        <TenderTerminalState
+          kind="access"
+          onRetry={retry}
+          onReturnToHistory={returnToHistory}
+        />
+      </section>
+    )
+  }
 
   if (error && !tenderView) {
     return (
@@ -823,6 +845,8 @@ function TenderContent() {
               onCommand={handleCommand}
               onSaveWorkingModel={saveWorkingModel}
               activePlayerId={tenderView.activePlayerId}
+              onAuditRetry={retry}
+              onReturnToHistory={returnToHistory}
               workingModelDialog={{
                 onOpenChange: (open) => setOverlayOpen('working-model', open),
                 onSaveStatusChange: handleWorkingModelSaveStatus,

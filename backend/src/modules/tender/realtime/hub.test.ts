@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 
+import { TenderFailure } from '../domain/errors'
 import { createTenderModule } from '../index'
 import { createInMemoryTenderStore } from '../infrastructure/in-memory-tender-store'
 import { createRealtimeHub, type RealtimeSocket } from './hub'
@@ -7,11 +8,61 @@ import { createRealtimeHub, type RealtimeSocket } from './hub'
 const players = [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }]
 
 const collectSocket = () => {
+  const closeEvents: Array<{ code: number; reason: string }> = []
   const messages: string[] = []
-  const socket: RealtimeSocket = {
+  const socket = {
+    close: (code: number, reason: string) => { closeEvents.push({ code, reason }) },
     send: (message) => { messages.push(message) },
+  } satisfies RealtimeSocket
+  return { closeEvents, messages, socket }
+}
+
+const exerciseConcurrentFailedReads = async (failure: Error) => {
+  const baseTender = createTenderModule()
+  const { tenderId } = await baseTender.createTender({ players })
+  let failPlayerARead = false
+  let failedReads = 0
+  let markBothReadsStarted = () => {}
+  const bothReadsStarted = new Promise<void>((resolve) => {
+    markBothReadsStarted = resolve
+  })
+  let releaseFailedReads = () => {}
+  const failedReadsReleased = new Promise<void>((resolve) => {
+    releaseFailedReads = resolve
+  })
+  const tender = {
+    ...baseTender,
+    async readTenderView(input: Parameters<typeof baseTender.readTenderView>[0]) {
+      if (failPlayerARead && input.playerId === 'player-a') {
+        failedReads += 1
+        if (failedReads === 2) markBothReadsStarted()
+        await failedReadsReleased
+        throw failure
+      }
+      return baseTender.readTenderView(input)
+    },
   }
-  return { messages, socket }
+  const hub = createRealtimeHub({ tender })
+  const failed = collectSocket()
+  const healthy = collectSocket()
+  await hub.subscribe({ playerId: 'player-a', socket: failed.socket, tenderId })
+  await hub.subscribe({ playerId: 'player-b', socket: healthy.socket, tenderId })
+  await baseTender.execute({
+    actorId: 'player-a',
+    commandId: 'command-concurrent-read-failure',
+    slot: 1,
+    tenderId,
+    type: 'request-access-slot',
+  })
+  failPlayerARead = true
+
+  const publishing = hub.handleTenderChanged(tenderId)
+  const synchronising = hub.syncActiveTenders()
+  await bothReadsStarted
+  releaseFailedReads()
+  await Promise.all([publishing, synchronising])
+
+  return { failed, failedReads, healthy, hub, tenderId }
 }
 
 describe('realtime hub', () => {
@@ -123,6 +174,106 @@ describe('realtime hub', () => {
     })
   })
 
+  test.each([
+    {
+      name: 'local publish',
+      notify: (hub: ReturnType<typeof createRealtimeHub>, tenderId: string) => hub.handleTenderChanged(tenderId),
+    },
+    {
+      name: 'periodic synchronisation',
+      notify: (hub: ReturnType<typeof createRealtimeHub>, _tenderId: string) => hub.syncActiveTenders(),
+    },
+  ])('closes a failed $name subscription for retry while other subscribers keep receiving updates', async ({ notify }) => {
+    const baseTender = createTenderModule()
+    const { tenderId } = await baseTender.createTender({ players })
+    let failPlayerARead = false
+    const tender = {
+      ...baseTender,
+      async readTenderView(input: Parameters<typeof baseTender.readTenderView>[0]) {
+        if (failPlayerARead && input.playerId === 'player-a') {
+          throw new Error('transient database read failure')
+        }
+        return baseTender.readTenderView(input)
+      },
+    }
+    const hub = createRealtimeHub({ tender })
+    const failed = collectSocket()
+    const healthy = collectSocket()
+    await hub.subscribe({ playerId: 'player-a', socket: failed.socket, tenderId })
+    await hub.subscribe({ playerId: 'player-b', socket: healthy.socket, tenderId })
+
+    await baseTender.execute({
+      actorId: 'player-a',
+      commandId: 'command-player-a',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    failPlayerARead = true
+    await notify(hub, tenderId)
+
+    expect(failed.closeEvents).toEqual([{ code: 1011, reason: 'Internal error' }])
+    expect(healthy.closeEvents).toEqual([])
+    expect(healthy.messages).toHaveLength(2)
+
+    await baseTender.execute({
+      actorId: 'player-b',
+      commandId: 'command-player-b',
+      slot: 2,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    await notify(hub, tenderId)
+
+    expect(failed.closeEvents).toHaveLength(1)
+    expect(healthy.closeEvents).toEqual([])
+    expect(healthy.messages).toHaveLength(3)
+  })
+
+  test.each([
+    'tender_not_found',
+    'player_not_in_tender',
+    'player_forfeited',
+  ] as const)('closes concurrent established %s once without reporting an error', async (kind) => {
+    const consoleError = spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const result = await exerciseConcurrentFailedReads(
+        new TenderFailure(kind, 'private failure detail'),
+      )
+
+      expect(result.failedReads).toBe(2)
+      expect(result.failed.closeEvents).toEqual([{ code: 4404, reason: 'Unavailable' }])
+      expect(result.healthy.closeEvents).toEqual([])
+      expect(result.healthy.messages.length).toBeGreaterThanOrEqual(2)
+      expect(consoleError).not.toHaveBeenCalled()
+
+      await result.hub.handleTenderChanged(result.tenderId)
+      expect(result.failed.closeEvents).toHaveLength(1)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  test('closes and reports a concurrent established operational failure once', async () => {
+    const consoleError = spyOn(console, 'error').mockImplementation(() => undefined)
+    const operationalFailure = new Error('transient database read failure')
+    try {
+      const result = await exerciseConcurrentFailedReads(operationalFailure)
+
+      expect(result.failedReads).toBe(2)
+      expect(result.failed.closeEvents).toEqual([{ code: 1011, reason: 'Internal error' }])
+      expect(result.healthy.closeEvents).toEqual([])
+      expect(result.healthy.messages.length).toBeGreaterThanOrEqual(2)
+      expect(consoleError).toHaveBeenCalledTimes(1)
+      expect(consoleError.mock.calls[0]?.[1]).toBe(operationalFailure)
+
+      await result.hub.handleTenderChanged(result.tenderId)
+      expect(result.failed.closeEvents).toHaveLength(1)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
   test('waits for an active synchronisation before the sync loop stops', async () => {
     const baseTender = createTenderModule()
     const { tenderId } = await baseTender.createTender({ players })
@@ -182,8 +333,11 @@ describe('realtime hub', () => {
     const tender = createTenderModule()
     const { tenderId } = await tender.createTender({ players })
     const hub = createRealtimeHub({ tender })
+    let brokenSendAttempts = 0
     const brokenSocket: RealtimeSocket = {
+      close: () => undefined,
       send: () => {
+        brokenSendAttempts += 1
         throw new Error('socket closed during send')
       },
     }
@@ -197,6 +351,7 @@ describe('realtime hub', () => {
     await hub.subscribe({ playerId: 'player-b', socket: healthy.socket, tenderId })
 
     await expect(hub.handleTenderChanged(tenderId)).resolves.toBeUndefined()
+    expect(brokenSendAttempts).toBe(1)
     expect(healthy.messages).toHaveLength(2)
   })
 

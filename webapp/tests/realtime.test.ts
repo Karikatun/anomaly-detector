@@ -101,6 +101,98 @@ test('an active realtime session reports stale state and schedules recovery afte
   expect(reconnect).not.toBeNull()
 })
 
+test('a dedicated concealed Tender rejection becomes terminal and does not reconnect', async () => {
+  const states: RealtimeState[] = []
+  const socket = new FakeSocket()
+  let reconnectScheduled = false
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => socket,
+    onState: (state) => states.push(state),
+    scheduleReconnect: () => {
+      reconnectScheduled = true
+      return 1
+    },
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-concealed',
+    transport: resolvedTicketTransport(),
+  })
+
+  session.start()
+  await flushMicrotasks()
+  socket.emitOpen()
+  socket.emitClose(4404)
+
+  expect(states.at(-1)).toEqual({
+    connected: false,
+    error: 'access-denied',
+    tenderView: null,
+  })
+  expect(reconnectScheduled).toBeFalse()
+})
+
+test('a legacy ambiguous 4403 close stays retryable during backend rollback', async () => {
+  const states: RealtimeState[] = []
+  const socket = new FakeSocket()
+  let reconnectScheduled = false
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => socket,
+    onState: (state) => states.push(state),
+    scheduleReconnect: () => {
+      reconnectScheduled = true
+      return 1
+    },
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-legacy-ambiguous',
+    transport: resolvedTicketTransport(),
+  })
+
+  session.start()
+  await flushMicrotasks()
+  socket.emitOpen()
+  socket.emitClose(4403)
+
+  expect(states.at(-1)).toEqual({
+    connected: false,
+    error: null,
+    tenderView: null,
+  })
+  expect(states.some((state) => state.error === 'access-denied')).toBeFalse()
+  expect(reconnectScheduled).toBeTrue()
+})
+
+test('an operational realtime close stays retryable and is not reported as access denied', async () => {
+  const states: RealtimeState[] = []
+  const socket = new FakeSocket()
+  let reconnectScheduled = false
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => socket,
+    onState: (state) => states.push(state),
+    scheduleReconnect: () => {
+      reconnectScheduled = true
+      return 1
+    },
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-operational-failure',
+    transport: resolvedTicketTransport(),
+  })
+
+  session.start()
+  await flushMicrotasks()
+  socket.emitOpen()
+  socket.emitClose(1011)
+
+  expect(states.at(-1)).toEqual({
+    connected: false,
+    error: null,
+    tenderView: null,
+  })
+  expect(states.some((state) => state.error === 'access-denied')).toBeFalse()
+  expect(reconnectScheduled).toBeTrue()
+})
+
 test('two tabs stay within the shared ten-ticket budget during continuous failure', async () => {
   let nowMs = 0
   const requestTimes: number[] = []
@@ -261,9 +353,9 @@ class FakeSocket {
     this.onopen?.(new Event('open'))
   }
 
-  emitClose() {
+  emitClose(code = 1006) {
     this.readyState = this.CLOSED
-    this.onclose?.({} as CloseEvent)
+    this.onclose?.({ code } as CloseEvent)
   }
 
   emitMessage(data: string) {

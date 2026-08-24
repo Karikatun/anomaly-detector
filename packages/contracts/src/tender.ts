@@ -531,7 +531,15 @@ export const tenderViewSchema = z.object({
   }).strict().optional(),
   audit: tenderAuditViewSchema.optional(),
   winnerPlayerIds: z.array(playerIdSchema).optional(),
-}).strict()
+}).strict().superRefine((view, context) => {
+  if (view.phase !== 'complete' && view.audit !== undefined) {
+    context.addIssue({
+      code: 'custom',
+      message: 'An active Tender cannot expose a post-match audit',
+      path: ['audit'],
+    })
+  }
+})
 
 export const tenderViewQuerySchema = z.object({
   tenderId: tenderIdSchema,

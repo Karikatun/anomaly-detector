@@ -338,11 +338,26 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
           <HugeiconsIcon icon={UserGroupIcon} strokeWidth={1.7} aria-hidden="true" />
         </div>
 
+        <section className={styles.finalStandingExplanation} aria-labelledby="completed-standing-explanation-heading">
+          <div className={styles.finalStandingCopy}>
+            <Typography id="completed-standing-explanation-heading" as="h4" variant="bodySmMedium">
+              {translate('tender.completedTenderPanel.finalStanding.title')}
+            </Typography>
+            <Typography variant="caption" tone="muted">
+              {translate('tender.completedTenderPanel.finalStanding.order')}
+            </Typography>
+          </div>
+          <Typography variant="caption" className={styles.trustExplanation}>
+            {translate('tender.completedTenderPanel.finalStanding.trustExplanation')}
+          </Typography>
+        </section>
+
         <ol className={styles.ranking}>
           {rankedPlayers.map((player) => {
             const isWinner = winnerIds.has(player.playerId)
             const placement = view.audit.placementByPlayer[player.playerId] ?? 1
             const earnedRating = ratingEntries(player.playerId)
+            const finalStanding = presentation.standingFactors(player.playerId)
             return (
               <li
                 key={player.playerId}
@@ -374,12 +389,24 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                       <Typography as="span" variant="caption" tone="destructive">{translate('tender.completedTenderPanel.copy.050')}</Typography>
                     )}
                   </span>
-                  <span className={styles.playerStats}>
-                    <span>
-                      <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.051')}</Typography>
-                      <Typography as="strong" variant="bodySmMedium">{formatPoints(player.rating)}</Typography>
-                    </span>
-                  </span>
+                  <ul
+                    className={styles.playerStats}
+                    aria-label={translate('tender.completedTenderPanel.finalStanding.playerAria', {
+                      player: player.displayName ?? player.playerId.slice(0, 8),
+                    })}
+                  >
+                    {[
+                      [translate('tender.completedTenderPanel.finalStanding.rating'), formatPoints(finalStanding.rating)],
+                      [translate('tender.completedTenderPanel.finalStanding.correctTheses'), finalStanding.correctTheses],
+                      [translate('tender.completedTenderPanel.finalStanding.remainingBudget'), finalStanding.remainingBudget],
+                      [translate('tender.completedTenderPanel.finalStanding.corporateTrust'), finalStanding.corporateTrust],
+                    ].map(([label, value]) => (
+                      <li key={label}>
+                        <Typography as="small" variant="caption">{label}</Typography>
+                        <Typography as="strong" variant="bodySmMedium">{value}</Typography>
+                      </li>
+                    ))}
+                  </ul>
                   {isWinner && (
                     <span className={styles.winnerBadge}>
                       <HugeiconsIcon icon={Award02Icon} strokeWidth={1.8} aria-hidden="true" />
