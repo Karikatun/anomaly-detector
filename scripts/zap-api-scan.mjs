@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -16,6 +16,8 @@ import {
   repositoryHash,
   repositoryRoot,
 } from './repo-env.mjs'
+import { runZapCleanupSteps } from './zap-cleanup.mjs'
+import { publishRedactedZapReports } from './zap-report-redaction.mjs'
 
 const tools = JSON.parse(readFileSync(resolve(repositoryRoot, '.security/tools.json'), 'utf8'))
 const imageName = process.env.ZAP_BACKEND_IMAGE ?? 'anomaly-detector-backend:zap'
@@ -26,7 +28,9 @@ const composeArgs = ['compose', '-p', composeProjectName]
 const databaseUrlForHost = process.env.TEST_DATABASE_URL ?? defaultTestDatabaseUrl(defaultPostgresTestPort)
 const databaseUrlForContainer =
   'postgresql://superuser:superpassword@postgres_test:5432/anomaly_detector_test?schema=public'
-const reportDirectory = resolve(repositoryRoot, '.scratch/security/zap', String(process.pid))
+const reportRunDirectory = resolve(repositoryRoot, '.scratch/security/zap', String(process.pid))
+const rawReportDirectory = resolve(reportRunDirectory, 'raw')
+const reportDirectory = resolve(reportRunDirectory, 'sanitized')
 const configuredFailureIds = new Set(
   readFileSync(resolve(repositoryRoot, '.zap/rules.tsv'), 'utf8')
     .split('\n')
@@ -53,6 +57,17 @@ function run(command, args, options = {}) {
     throw new Error(`${command} ${args.join(' ')} failed with exit code ${result.status ?? 1}`)
   }
   return result
+}
+
+function removeContainerIfPresent(name) {
+  const lookup = run(
+    'docker',
+    ['container', 'ls', '--all', '--quiet', '--filter', `name=^/${name}$`],
+    { stdio: 'pipe' },
+  )
+  if (lookup.stdout.toString('utf8').trim()) {
+    run('docker', ['rm', '-f', name], { stdio: 'ignore' })
+  }
 }
 
 function findOpenPort() {
@@ -128,21 +143,9 @@ async function writeSafeOpenApi() {
   // Active DAST must not revoke its own session or exercise account deletion.
   delete document.paths?.['/api/auth/account']?.delete
 
-  const path = resolve(reportDirectory, 'openapi.json')
+  const path = resolve(rawReportDirectory, 'openapi.json')
   writeFileSync(path, `${JSON.stringify(document, null, 2)}\n`)
   return path
-}
-
-function redactReports(secret) {
-  for (const name of ['report.html', 'report.json', 'report.md']) {
-    const path = resolve(reportDirectory, name)
-    try {
-      const source = readFileSync(path, 'utf8')
-      writeFileSync(path, source.replaceAll(secret, '[REDACTED]'))
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error
-    }
-  }
 }
 
 function enforceConfiguredFailures() {
@@ -166,15 +169,24 @@ function enforceConfiguredFailures() {
 
 let accessToken
 let scanResult
+let operationError
+let reportError
+let backendContainerLaunchAttempted = false
+let composeStarted = false
+let cleanupErrors = []
 try {
-  mkdirSync(reportDirectory, { recursive: true })
-  chmodSync(reportDirectory, 0o777)
+  mkdirSync(reportRunDirectory, { recursive: true })
+  chmodSync(reportRunDirectory, 0o700)
+  mkdirSync(rawReportDirectory)
+  chmodSync(rawReportDirectory, 0o777)
+  composeStarted = true
   run('docker', [...composeArgs, 'up', '-d', 'postgres_test'], { env: dockerEnv })
   await waitForPostgres()
   run('bun', ['run', '--cwd', 'backend', 'prisma:deploy'], {
     env: { ...process.env, DATABASE_URL: databaseUrlForHost },
   })
   run('docker', ['build', '-f', 'backend/Dockerfile', '-t', imageName, '.'])
+  backendContainerLaunchAttempted = true
   run('docker', [
     'run', '-d',
     '--name', containerName,
@@ -196,30 +208,64 @@ try {
     'run', '--rm',
     '--network', networkName,
     '-e', 'ZAP_AUTH_HEADER=Authorization',
-    '-e', `ZAP_AUTH_HEADER_VALUE=Bearer ${accessToken}`,
+    '-e', 'ZAP_AUTH_HEADER_VALUE',
     '-e', `ZAP_AUTH_HEADER_SITE=${containerName}`,
-    '--volume', `${reportDirectory}:/zap/wrk:rw`,
+    '--volume', `${rawReportDirectory}:/zap/wrk:rw`,
     tools.zap.image,
     'zap-api-scan.py',
     '-t', '/zap/wrk/openapi.json',
     '-f', 'openapi',
     '-I',
     '-T', '20',
-    '-r', 'report.html',
-    '-J', 'report.json',
-    '-w', 'report.md',
-  ], { allowFailure: true })
-} finally {
-  if (accessToken) redactReports(accessToken)
-  run('docker', ['rm', '-f', containerName], { allowFailure: true, stdio: 'ignore' })
-  run('docker', [...composeArgs, 'down', '--volumes', '--remove-orphans'], {
+    '-r', 'raw-report.html',
+    '-J', 'raw-report.json',
+    '-w', 'raw-report.md',
+  ], {
     allowFailure: true,
-    env: dockerEnv,
+    env: { ...process.env, ZAP_AUTH_HEADER_VALUE: `Bearer ${accessToken}` },
   })
+} catch (error) {
+  operationError = error
+} finally {
+  try {
+    if (accessToken && scanResult) {
+      publishRedactedZapReports(rawReportDirectory, reportDirectory, accessToken)
+    }
+  } catch (error) {
+    reportError = error
+  }
+
+  cleanupErrors = runZapCleanupSteps([
+    ...(backendContainerLaunchAttempted
+      ? [[
+          'ZAP backend container cleanup',
+          () => removeContainerIfPresent(containerName),
+        ]]
+      : []),
+    ...(composeStarted
+      ? [[
+          'isolated ZAP database cleanup',
+          () => run('docker', [...composeArgs, 'down', '--volumes', '--remove-orphans'], {
+            env: dockerEnv,
+          }),
+        ]]
+      : []),
+    [
+      'raw ZAP report cleanup',
+      () => rmSync(rawReportDirectory, { force: true, recursive: true }),
+    ],
+  ])
 }
 
-if (!scanResult || scanResult.status !== 0) {
-  throw new Error(`ZAP API scan failed with exit code ${scanResult?.status ?? 1}`)
+const scanError = scanResult && scanResult.status !== 0
+  ? new Error(`ZAP API scan failed with exit code ${scanResult.status ?? 1}`)
+  : undefined
+const orchestrationErrors = [operationError, scanError, reportError, ...cleanupErrors].filter(Boolean)
+if (orchestrationErrors.length === 1) throw orchestrationErrors[0]
+if (orchestrationErrors.length > 1) {
+  throw new AggregateError(orchestrationErrors, 'ZAP orchestration failed in multiple stages')
 }
+
+if (!scanResult) throw new Error('ZAP API scan did not run')
 enforceConfiguredFailures()
 process.stdout.write(`Redacted ZAP reports: ${reportDirectory}\n`)
