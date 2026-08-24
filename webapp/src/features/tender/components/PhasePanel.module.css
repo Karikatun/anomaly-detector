@@ -1379,17 +1379,6 @@
   box-shadow: 0 0 .65rem color-mix(in srgb, var(--warning) 60%, transparent);
 }
 
-.reconnectBackdrop {
-  position: fixed;
-  z-index: var(--layer-system);
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgba(0, 7, 16, .76);
-  backdrop-filter: blur(.32rem);
-}
-
 .reconnectDialog {
   display: grid;
   width: min(100%, 27rem);

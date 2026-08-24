@@ -44,6 +44,27 @@ const view = {
         outcome: 'awarded',
         playerId: 'player-a',
         ratingAward: 4,
+      }, {
+        conditions: {
+          kind: 'light',
+          ratingReward: 2,
+          requiredPublicResult: 'attenuation',
+          targetRole: 'receiver',
+          targetSignal: 'boreal',
+        },
+        contractId: 'contract-2',
+        evidenceTestIds: ['r1-t2'],
+        evidenceTests: [{
+          playerId: 'player-a',
+          protocol: 'impulse',
+          publicResult: 'reflection',
+          receiverSignal: 'boreal',
+          sourceSignal: 'cinder',
+          testId: 'r1-t2',
+        }],
+        outcome: 'failed',
+        playerId: 'player-a',
+        ratingAward: 0,
       }],
       laboratory: [{
         mode: 'broad',
@@ -178,6 +199,9 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('Тезисы')
   expect(html).toContain('Тип поля: Инерционное · верно')
   expect(html).toContain('Полярность: Отрицательная · неверно')
+  expect(html).toContain('Заявка не прошла проверку — Рейтинг не начислен')
+  expect(html).toContain('Условия: Ослабление')
+  expect(html).toContain('Доказательство: Cinder → Boreal · Импульс · Отражение')
   expect(html).not.toContain('Приватные тезисы')
   expect(html).toContain('Модели остальных игроков')
   expect(html).toContain('Финальная модель не отправлена')

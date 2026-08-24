@@ -58,6 +58,41 @@ const createAuthRepository = (
   overrides: Partial<AuthRepository>,
 ): AuthRepository => ({ ...defaultAuthRepository, ...overrides })
 
+test('logout cleans up only the exact revoked session', async () => {
+  const cleanupCalls: Array<{ sessionId: string; userId: string }> = []
+  const service = new AuthService({
+    accessTokens: {
+      sign: async () => 'access-token',
+      verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-revoked' }),
+    },
+    clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
+    logoutCleanup: async (input) => { cleanupCalls.push(input) },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({
+      id: user.id,
+      login: user.login,
+      displayName: null,
+      locale: 'ru',
+      createdAt: user.createdAt.toISOString(),
+    }),
+    refreshReuseGraceSeconds: 10,
+    refreshTokenTtlDays: 30,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: {
+      create: () => 'refresh-token',
+      hash: (token) => `hash:${token}`,
+      familyHash: (token) => `family:${token}`,
+      rotate: (token) => token,
+    },
+    repository: createAuthRepository({
+      revokeSession: async () => ({ sessionId: 'session-revoked', userId: user.id }),
+    }),
+  })
+
+  await expect(service.logout('refresh-token')).resolves.toBe(true)
+  expect(cleanupCalls).toEqual([{ sessionId: 'session-revoked', userId: user.id }])
+})
+
 test('login opportunistically replaces a verified password hash that no longer meets policy', async () => {
   const passwordHashUpdates: Array<{
     userId: string

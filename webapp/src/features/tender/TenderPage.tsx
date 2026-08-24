@@ -391,10 +391,54 @@ function TenderContent() {
   const previousSequentialTurnRef = useRef<string | undefined>(undefined)
   const leavingTenderIdRef = useRef<string | null>(null)
   const resumingTenderIdRef = useRef<string | null>(null)
+  const lastConnectedFocusRef = useRef<HTMLElement | null>(null)
+  const reconnectRestoreFocusRef = useRef<HTMLElement | null>(null)
+  const wasConnectedRef = useRef(connected)
 
   useLayoutEffect(() => {
     latestTenderViewRef.current = tenderView
   }, [tenderView])
+
+  useEffect(() => {
+    if (!connected) return
+
+    const rememberFocus = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement) || target === document.body) return
+      if (target.closest('[role="alertdialog"]')) return
+      lastConnectedFocusRef.current = target
+    }
+    const handleFocus = (event: FocusEvent) => rememberFocus(event.target)
+
+    rememberFocus(document.activeElement)
+    document.addEventListener('focusin', handleFocus)
+    return () => document.removeEventListener('focusin', handleFocus)
+  }, [connected])
+
+  useEffect(() => {
+    const wasConnected = wasConnectedRef.current
+    wasConnectedRef.current = connected
+
+    if (wasConnected && !connected && tenderView) {
+      reconnectRestoreFocusRef.current = exitOpen
+        ? primaryContentRef.current
+        : lastConnectedFocusRef.current ?? primaryContentRef.current
+      setExitOpen(false)
+      return
+    }
+
+    if (!wasConnected && connected && tenderView && reconnectRestoreFocusRef.current) {
+      const restoreTarget = reconnectRestoreFocusRef.current
+      reconnectRestoreFocusRef.current = null
+      requestAnimationFrame(() => {
+        const targetIsDisabled = 'disabled' in restoreTarget && restoreTarget.disabled === true
+        if (restoreTarget.isConnected && !targetIsDisabled) {
+          restoreTarget.focus()
+        } else {
+          primaryContentRef.current?.focus()
+        }
+      })
+    }
+  }, [connected, exitOpen, tenderView])
 
   useLayoutEffect(() => {
     const header = headerRef.current
@@ -623,7 +667,10 @@ function TenderContent() {
   }
 
   return (
-    <section className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}>
+    <section
+      className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}
+      data-reconnecting={!connected || undefined}
+    >
       <TenderHeaderFrame
         ariaLabel={isComplete ? translate('tender.results.headerAria') : t('tender.phase.status')}
         completed={isComplete}
@@ -757,7 +804,7 @@ function TenderContent() {
             className={styles.leaveAction}
             aria-label={t('nav.leaveMatch')}
             title={t('nav.leaveMatch')}
-            disabled={submitting || resuming || tenderView.hasLeft}
+            disabled={!connected || submitting || resuming || tenderView.hasLeft}
             onClick={() => {
               if (tenderView.phase === 'complete') {
                 void collapseMatch()
@@ -810,12 +857,11 @@ function TenderContent() {
       )}
 
       <div className={styles.content}>
-        {!connected && (
-          <ReconnectOverlay
-            errorText={error ? t(realtimeErrorKeys[error]) : undefined}
-            onRetry={retry}
-          />
-        )}
+        <ReconnectOverlay
+          errorText={error ? t(realtimeErrorKeys[error]) : undefined}
+          open={!connected}
+          onRetry={retry}
+        />
         {workingModelSaveError && (
           <Typography role="alert" variant="bodySm" tone="destructive">
             {workingModelSaveError}
@@ -828,6 +874,7 @@ function TenderContent() {
             <div
               ref={primaryContentRef}
               tabIndex={-1}
+              data-tender-primary-content
               className="grid min-w-0 self-start gap-4 outline-none"
             >
             {isSharedFinalScientificModel && (

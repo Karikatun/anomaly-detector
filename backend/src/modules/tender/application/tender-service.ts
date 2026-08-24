@@ -16,6 +16,7 @@ import {
   tenderViewQuerySchema,
 } from '@anomaly-detector/contracts'
 import {
+  assertCurrentParticipantAuditSemantics,
   createParticipantAuditRounds,
   hasParticipantAuditSemantics,
 } from './audit-view'
@@ -1406,10 +1407,18 @@ export function createTenderService({
         const hasIncompatibleHistoricalEvent = auditEvents.some((event) =>
           event.formatVersion === 0 && !hasParticipantAuditSemantics(event),
         )
+        assertCurrentParticipantAuditSemantics(tender, auditEvents)
         if (!hasIncompatibleHistoricalEvent) {
-          const projectedAudit = tenderAuditViewSchema.safeParse(createAuditProjection(auditEvents))
-          if (!projectedAudit.success) throw projectedAudit.error
-          completedAudit = projectedAudit.data
+          try {
+            const projectedAudit = tenderAuditViewSchema.safeParse(createAuditProjection(auditEvents))
+            if (!projectedAudit.success) throw projectedAudit.error
+            completedAudit = projectedAudit.data
+          } catch (error) {
+            if (
+              !(error instanceof TenderAuditEventDecodeError)
+              || error.kind !== 'historical_incompatible'
+            ) throw error
+          }
         }
       }
       const tiePriorities = Object.fromEntries(

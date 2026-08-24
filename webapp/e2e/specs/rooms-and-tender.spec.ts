@@ -80,6 +80,33 @@ async function auditCheckpoint(page: Page, name: string) {
   if (process.env.UX_AUDIT_ASSERT_AXE === '1') expect(findings).toEqual([])
 }
 
+async function captureViewportCheckpoint(page: Page, name: string) {
+  if (!uxAuditDirectory) return
+
+  const outputDirectory = resolve(uxAuditDirectory)
+  await mkdir(outputDirectory, { recursive: true })
+  await page.evaluate(() => new Promise<void>((resolveFrame) => {
+    const startedAt = performance.now()
+    const waitForSettledFrame = () => {
+      if (performance.now() - startedAt >= 320) {
+        resolveFrame()
+        return
+      }
+      requestAnimationFrame(waitForSettledFrame)
+    }
+    requestAnimationFrame(waitForSettledFrame)
+  }))
+  await page.locator('[data-agentation-root]').evaluateAll((elements) => {
+    for (const element of elements) {
+      if (element instanceof HTMLElement) element.hidden = true
+    }
+  })
+  await page.screenshot({
+    path: resolve(outputDirectory, `${name}.viewport.png`),
+    animations: 'disabled',
+  })
+}
+
 const headings = {
   access: '1. Выбор слота доступа',
   power: '2. Распределение мощности',
@@ -535,7 +562,25 @@ test('requires every lobby player to be ready before enabling the match start', 
 })
 
 test('lets a player collapse and return, then permanently forfeit the match', async ({ browser, page }) => {
-  test.setTimeout(60_000)
+  test.setTimeout(120_000)
+  await page.addInitScript(() => {
+    const controlledWindow = window as Window & { __e2eWebSockets: WebSocket[] }
+    const NativeWebSocket = window.WebSocket
+    controlledWindow.__e2eWebSockets = []
+    Object.defineProperty(window, 'WebSocket', {
+      configurable: true,
+      value: class TrackedWebSocket extends NativeWebSocket {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          if (protocols === undefined) {
+            super(url)
+          } else {
+            super(url, protocols)
+          }
+          controlledWindow.__e2eWebSockets.push(this)
+        }
+      },
+    })
+  })
   await registerBrowserUser(page, 'Хост выхода E2E', 'leave-host')
   const webOrigin = new URL(page.url()).origin
   const guestContext = await browser.newContext({ baseURL: webOrigin })
@@ -558,6 +603,75 @@ test('lets a player collapse and return, then permanently forfeit the match', as
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
 
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const leaveMatchButton = page.locator('button[aria-label="Выйти из матча"]')
+    await leaveMatchButton.click()
+    const exitDialog = page.getByRole('dialog', { name: 'Что сделать с матчем?' })
+    await expect(exitDialog).toBeVisible()
+
+    await page.route('**/api/realtime/tickets', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'E2E reconnect hold' } }),
+      })
+    })
+    await page.evaluate(() => {
+      const controlledWindow = window as Window & { __e2eWebSockets?: WebSocket[] }
+      const openSockets = controlledWindow.__e2eWebSockets?.filter(
+        (socket) => socket.readyState === WebSocket.OPEN && socket.url.includes('/api/realtime/ws'),
+      ) ?? []
+      if (openSockets.length === 0) throw new Error('No open Tender WebSocket to disconnect')
+      for (const socket of openSockets) socket.close(4001, 'E2E disconnect')
+    })
+    const reconnectDialog = page.getByRole('alertdialog', { name: 'Связь с сервером прервана' })
+    const reconnectButton = reconnectDialog.getByRole('button', { name: 'Переподключиться' })
+    await expect(exitDialog).toHaveCount(0)
+    await expect(reconnectDialog).toBeVisible()
+    await expect(reconnectButton).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(reconnectButton).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(reconnectButton).toBeFocused()
+    await expect(leaveMatchButton).toBeDisabled()
+    const reconnectAxe = await new AxeBuilder({ page })
+      .include('[role="alertdialog"]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+    expect(reconnectAxe.violations.map((violation) => violation.id)).toEqual([])
+    await captureViewportCheckpoint(page, 'reconnect-overlay-desktop-1440x900')
+
+    await page.unroute('**/api/realtime/tickets')
+    await reconnectButton.click()
+    const primaryContent = page.locator('[data-tender-primary-content]')
+    await expect(primaryContent).toBeFocused()
+    await expect(page.getByText('На связи', { exact: true })).toBeVisible()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    const firstAccessSlot = page.getByRole('button', { name: /^Слот доступа 1:/ })
+    await firstAccessSlot.focus()
+    await page.route('**/api/realtime/tickets', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'E2E reconnect hold' } }),
+      })
+    })
+    await page.evaluate(() => {
+      const controlledWindow = window as Window & { __e2eWebSockets?: WebSocket[] }
+      const openSockets = controlledWindow.__e2eWebSockets?.filter(
+        (socket) => socket.readyState === WebSocket.OPEN && socket.url.includes('/api/realtime/ws'),
+      ) ?? []
+      if (openSockets.length === 0) throw new Error('No open Tender WebSocket to disconnect')
+      for (const socket of openSockets) socket.close(4001, 'E2E disconnect')
+    })
+    await expect(reconnectDialog).toBeVisible()
+    await expect(reconnectButton).toBeFocused()
+    await captureViewportCheckpoint(page, 'reconnect-overlay-mobile-390x844')
+    await page.unroute('**/api/realtime/tickets')
+    await expect(firstAccessSlot).toBeFocused({ timeout: 30_000 })
+    await expect(page.getByText('На связи', { exact: true })).toBeVisible()
+
     const headerTimer = page
       .locator('header[aria-label="Текущая фаза игры"]')
       .locator('[role="timer"]')
@@ -570,7 +684,6 @@ test('lets a player collapse and return, then permanently forfeit the match', as
       initialHeaderSeconds - toSeconds(await headerTimer.textContent()),
     ).toBeGreaterThanOrEqual(2)
     await page.getByRole('button', { name: 'Выйти из матча' }).click()
-    const exitDialog = page.getByRole('dialog', { name: 'Что сделать с матчем?' })
     const exitTimer = exitDialog.getByRole('timer', { name: 'До конца фазы' })
     await expect.poll(async () => {
       return Math.abs(toSeconds(await headerTimer.textContent()) - toSeconds(await exitTimer.textContent()))
@@ -582,7 +695,11 @@ test('lets a player collapse and return, then permanently forfeit the match', as
 
     await page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()
     await expect(page.getByText('Активен', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Детали' }).click()
+    await expect(page.getByRole('button', { name: 'Продолжить' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'История матчей' })).toBeVisible()
+    await expect(page.getByText('Хост выхода E2E', { exact: true })).toBeVisible()
+    await captureViewportCheckpoint(page, 'match-history-active-mobile-390x844')
+    await page.getByRole('button', { name: 'Продолжить' }).click()
     await expect(page).toHaveURL((url) =>
       /^\/tenders\/[0-9a-f-]{36}$/.test(url.pathname)
       && url.searchParams.get('from') === 'matches')
@@ -596,6 +713,18 @@ test('lets a player collapse and return, then permanently forfeit the match', as
 
     await page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()
     await expect(page.getByText('Вы выбыли', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Открыть результаты' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'История матчей' })).toBeVisible()
+    await expect(page.getByText('Хост выхода E2E', { exact: true })).toBeVisible()
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await captureViewportCheckpoint(page, 'match-history-forfeited-complete-mobile-390x844')
+    await page.getByRole('button', { name: 'Открыть результаты' }).click()
+    await expect(page).toHaveURL((url) =>
+      /^\/tenders\/[0-9a-f-]{36}$/.test(url.pathname)
+      && url.searchParams.get('from') === 'matches')
+    await expect(page.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
+    await expect(page.locator('details[data-audit-section="full-audit"] > summary')).toBeVisible()
+    await captureViewportCheckpoint(page, 'forfeited-participant-audit-mobile-390x844')
   } finally {
     await guestContext.close()
   }

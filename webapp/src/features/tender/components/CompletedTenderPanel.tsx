@@ -895,14 +895,16 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                             ? translate('tender.completedTenderPanel.copy.105')
                             : entry.outcome === 'skipped'
                               ? translate('tender.completedTenderPanel.copy.106')
-                              : translate('tender.completedTenderPanel.copy.107')}
+                              : entry.outcome === 'failed'
+                                ? translate('tender.completedTenderPanel.contract.failed')
+                                : translate('tender.completedTenderPanel.copy.107')}
                         </Typography>
                         {entry.outcome === 'skipped' ? (
                           <Typography variant="caption" tone="muted">
                             
                             {translate('tender.completedTenderPanel.copy.108')}
                           </Typography>
-                        ) : entry.outcome === 'awarded' && (
+                        ) : (entry.outcome === 'awarded' || entry.outcome === 'failed') && (
                           <div className={styles.contractDetails}>
                             {entry.conditions && (
                               <>

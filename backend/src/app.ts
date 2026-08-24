@@ -12,7 +12,7 @@ import {
   requestBudgetPolicyEntries,
 } from './security/request-budget-policy'
 import { createRequestBudgetOverviewReader } from './security/request-budget-overview'
-import { createAuthModule, type AuthHttpEnv } from './modules/auth'
+import { createAuthModule, type AuthHttpEnv, type LogoutCleanup } from './modules/auth'
 import { createAnalyticsModule } from './modules/analytics'
 import { createAdminModule } from './modules/admin'
 import { createFeedbackModule } from './modules/feedback'
@@ -36,6 +36,7 @@ import {
 
 type CreateAppOptions = {
   env: AppEnv
+  logoutCleanup?: LogoutCleanup
   prisma: DbClient
   securityEvents?: SecurityEventLogger
   mailPolicySource?: MailServiceCandidateSource
@@ -44,6 +45,7 @@ type CreateAppOptions = {
 
 export function createApp({
   env,
+  logoutCleanup,
   mailPolicySource,
   prisma,
   securityEvents = consoleSecurityEventLogger,
@@ -65,6 +67,7 @@ export function createApp({
     accountEmailCanonicalizer: mail.accountEmailCanonicalizer,
     db: prisma,
     env,
+    ...(logoutCleanup ? { logoutCleanup } : {}),
     requestBudgetPolicies,
   })
   const rooms = createRoomModule({

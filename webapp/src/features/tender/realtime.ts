@@ -110,15 +110,9 @@ export class TenderRealtimeSession {
       )
       this.socket = socket
 
-      socket.onopen = () => {
-        if (!this.owns(socket)) return
-        this.reconnectAttempt = 0
-        this.updateState({ connected: true, error: null })
-      }
-
       socket.onmessage = (event) => {
         if (!this.owns(socket)) return
-        this.handleMessage(event)
+        this.handleMessage(event, socket)
       }
 
       socket.onerror = () => {
@@ -157,16 +151,22 @@ export class TenderRealtimeSession {
     }
   }
 
-  private handleMessage(event: MessageEvent<string>) {
+  private handleMessage(event: MessageEvent<string>, socket: RealtimeSocket) {
     try {
       const message = realtimeServerMessageSchema.parse(JSON.parse(event.data)) as RealtimeServerMessage
       if (message.type === 'tender-view') {
-        this.updateState({ tenderView: message.view })
+        if (
+          this.state.tenderView
+          && message.view.version < this.state.tenderView.version
+        ) return
+        this.reconnectAttempt = 0
+        this.updateState({ connected: true, error: null, tenderView: message.view })
       } else {
         this.updateState({ error: 'server-error' })
       }
     } catch {
-      this.updateState({ error: 'invalid-message' })
+      this.updateState({ connected: false, error: 'invalid-message' })
+      socket.close()
     }
   }
 

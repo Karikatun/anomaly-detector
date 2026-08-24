@@ -429,7 +429,7 @@ export const tenderAuditContractSchema = z.object({
   contractId: contractIdSchema.optional(),
   evidenceTestIds: z.array(z.string().min(1).max(128)).max(2),
   evidenceTests: z.array(scientificJournalEntrySchema).max(2).default([]),
-  outcome: z.enum(['awarded', 'skipped', 'timeout_released']),
+  outcome: z.enum(['awarded', 'failed', 'skipped', 'timeout_released']),
   playerId: playerIdSchema,
   ratingAward: z.number().int().min(0),
   researchCertificationSignal: signalIdSchema.optional(),

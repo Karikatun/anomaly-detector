@@ -1,4 +1,6 @@
 export type RealtimeFailureKind =
+  | 'realtime_session_invalid'
+  | 'realtime_subscription_limit'
   | 'realtime_ticket_expired'
   | 'realtime_ticket_invalid'
   | 'realtime_ticket_used'

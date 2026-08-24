@@ -10,6 +10,10 @@
   z-index: var(--layer-system);
 }
 
+.page[data-reconnecting] .header {
+  z-index: var(--layer-sticky);
+}
+
 .header[data-completed] {
   grid-template-columns: minmax(0, 1fr) auto;
 }

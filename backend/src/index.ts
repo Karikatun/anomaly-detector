@@ -1,4 +1,5 @@
 import { createApp } from './app'
+import { createPrismaActiveSessionGuard } from './modules/auth'
 import {
   createPrismaRealtimeTicketStore,
   createPrismaTenderStore,
@@ -16,6 +17,9 @@ const runtime = createBackendRuntime()
 const ticketStore = createPrismaRealtimeTicketStore(runtime.prisma, {
   sessionAbsoluteTtlDays: runtime.env.SESSION_ABSOLUTE_TTL_DAYS,
 })
+const sessionGuard = createPrismaActiveSessionGuard(runtime.prisma, {
+  sessionAbsoluteTtlDays: runtime.env.SESSION_ABSOLUTE_TTL_DAYS,
+})
 const tenderStore = createPrismaTenderStore(runtime.prisma)
 
 let realtime: RealtimeHub
@@ -26,11 +30,16 @@ const tender = createTenderModule({
   },
   store: tenderStore,
 })
-realtime = createRealtimeHub({ tender })
+realtime = createRealtimeHub({ sessionGuard, tender })
 
 const stopRealtimeSyncLoop = realtime.startSyncLoop()
 
-const app = createApp({ env: runtime.env, prisma: runtime.prisma, tender })
+const app = createApp({
+  env: runtime.env,
+  logoutCleanup: ({ sessionId }) => realtime.closeSession(sessionId),
+  prisma: runtime.prisma,
+  tender,
+})
 
 const server = Bun.serve<RealtimeSocketData>({
   port: runtime.env.PORT,

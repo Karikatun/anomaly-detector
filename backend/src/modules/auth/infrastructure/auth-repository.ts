@@ -272,7 +272,9 @@ export function createPrismaAuthRepository(
           where: { id: session.id, revokedAt: null },
           data: { revokedAt: input.now },
         })
-        return revoked.count === 1 ? session.userId : null
+        return revoked.count === 1
+          ? { sessionId: session.id, userId: session.userId }
+          : null
       })
     },
 

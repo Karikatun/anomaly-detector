@@ -93,6 +93,9 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       type: 'forfeit-tender',
     })
     expect(await restartedModule.readTenderView({ tenderId, playerId: 'player-a' })).toMatchObject({
+      audit: {
+        rounds: expect.any(Array),
+      },
       completionReason: 'last_active_player',
       phase: 'complete',
       winnerPlayerIds: ['player-c'],
@@ -453,10 +456,20 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     })
 
     await module.anonymizeParticipant('player-a')
+    await module.execute({
+      actorId: 'player-b',
+      commandId: 'complete-after-anonymisation',
+      tenderId,
+      type: 'forfeit-tender',
+    })
 
     const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
     const view = await restartedModule.readTenderView({ tenderId, playerId: 'player-b' })
     expect(JSON.stringify(view)).not.toContain('player-a')
+    expect(view).toMatchObject({
+      audit: { rounds: expect.any(Array) },
+      phase: 'complete',
+    })
     expect(view.players).toContainEqual(expect.objectContaining({
       displayName: 'Deleted participant',
       playerId: expect.stringMatching(/^deleted-participant-/),
