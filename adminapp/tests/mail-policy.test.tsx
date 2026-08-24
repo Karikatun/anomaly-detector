@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import { AdminApiError } from '../src/api'
 import { shouldRetainCommand } from '../src/mail-policy-command-retry'
-import { MailPolicyScreen } from '../src/mail-policy-screen'
+import { MailPolicyScreen, RequestBudgetOverviewPanel } from '../src/mail-policy-screen'
 
 test('retains a command only when the outcome is ambiguous', () => {
   expect(shouldRetainCommand(new TypeError('network failure'))).toBe(true)
@@ -15,6 +15,20 @@ test('retains a command only when the outcome is ambiguous', () => {
 test('renders candidate evidence and only the three approved operator workflows', () => {
   const html = renderToStaticMarkup(
     <MailPolicyScreen
+      antiAbuse={{
+        groups: [
+          {
+            exhaustedBudgetKeysAtLeast: 10,
+            surface: 'authentication',
+          },
+          {
+            exhaustedBudgetKeysAtLeast: 20,
+            surface: 'tender_command',
+          },
+        ],
+        minimumGroupSize: 10,
+        roundingStep: 10,
+      }}
       data={{
         currentVersion: 2,
         delivery: {
@@ -90,7 +104,21 @@ test('renders candidate evidence and only the three approved operator workflows'
   expect(html).toContain('Состояние отправки')
   expect(html).toContain('Принято SMTP')
   expect(html).toContain('это не подтверждение доставки в ящик')
+  expect(html).toContain('Anti-abuse budgets')
+  expect(html).toContain('Публичные login, registration, password-reset и Recovery Code scopes исключены')
+  expect(html).toContain('Аутентификация')
+  expect(html).toContain('Команды Тендера')
+  expect(html).toContain('значения округлены вниз с шагом 10')
+  expect(html).toContain('не менее 10')
+  expect(html).toContain('не менее 20')
   expect(html).not.toContain('distributorEmail')
   expect(html).not.toContain('Редактировать запись')
   expect(html).not.toContain('Удалить запись')
+})
+
+test('renders the rollback compatibility state without fabricating an empty aggregate', () => {
+  const html = renderToStaticMarkup(<RequestBudgetOverviewPanel antiAbuse={null} />)
+
+  expect(html).toContain('Агрегат недоступен в этой версии')
+  expect(html).not.toContain('Нет широких групп')
 })

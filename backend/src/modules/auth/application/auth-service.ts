@@ -210,7 +210,11 @@ export class AuthService {
         now,
       })
       if (failure?.limited) {
-        throw new AuthFailure('login_throttled', 'Invalid login or password. Try again later.')
+        throw new AuthFailure(
+          'login_throttled',
+          'Invalid login or password. Try again later.',
+          failure.retryAfterSeconds,
+        )
       }
       throw new AuthFailure('invalid_credentials', 'Invalid login or password')
     }

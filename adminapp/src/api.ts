@@ -18,6 +18,7 @@ import {
   mailPolicyPublishCommandSchema,
   mailPolicyStatusCommandSchema,
   mailOperationsViewSchema,
+  requestBudgetOverviewSchema,
   type AdminOverview,
   type AnalyticsAdminOverview,
   type FeedbackDeleteContactCommand,
@@ -33,6 +34,7 @@ import {
   type MailPolicyPublishCommand,
   type MailPolicyStatusCommand,
   type MailOperationsView,
+  type RequestBudgetOverview,
   type UserDto,
 } from '@anomaly-detector/contracts'
 
@@ -115,6 +117,28 @@ export class AdminApi {
       headers: this.authenticatedHeaders(),
     })
     return mailOperationsViewSchema.parse(await response.json())
+  }
+
+  async getMailPolicyAntiAbuse(): Promise<RequestBudgetOverview> {
+    const response = await this.request('/api/operations/mail-policy/anti-abuse', {
+      headers: this.authenticatedHeaders(),
+    })
+    return requestBudgetOverviewSchema.parse(await response.json())
+  }
+
+  async getMailPolicyWorkspace(): Promise<{
+    antiAbuse: RequestBudgetOverview | null
+    mailPolicy: MailOperationsView
+  }> {
+    const mailPolicy = await this.getMailPolicy()
+    try {
+      return { antiAbuse: await this.getMailPolicyAntiAbuse(), mailPolicy }
+    } catch (error) {
+      if (error instanceof AdminApiError && error.status === 404) {
+        return { antiAbuse: null, mailPolicy }
+      }
+      throw error
+    }
   }
 
   async getFeedbackQueue(input: FeedbackQueueQuery): Promise<FeedbackQueueResponse> {

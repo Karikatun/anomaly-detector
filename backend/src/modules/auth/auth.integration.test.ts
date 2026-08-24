@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { createHash, createHmac } from 'node:crypto'
 
 import { createApp } from '../../app'
 import { createPrisma, type DbClient } from '../../db'
@@ -264,6 +265,20 @@ maybeDescribe('auth API integration', () => {
     })
     expect(recoveryBudgets).toHaveLength(7)
     expect(recoveryBudgets.every((budget) => /^[a-f0-9]{64}$/.test(budget.keyHash))).toBe(true)
+    const expectedAccountHourKey = createHmac('sha256', env.JWT_SECRET)
+      .update('recovery-email-budget-v1\0')
+      .update('rec_email_account_hour')
+      .update('\0')
+      .update(recoveryOwner.id)
+      .digest('hex')
+    const legacyPlainDigest = createHash('sha256')
+      .update(`rec_email_account_hour:${recoveryOwner.id}`)
+      .digest('hex')
+    expect(recoveryBudgets).toContainEqual({
+      keyHash: expectedAccountHourKey,
+      scope: 'rec_email_account_hour',
+    })
+    expect(recoveryBudgets.some((budget) => budget.keyHash === legacyPlainDigest)).toBe(false)
     const storedBudgets = JSON.stringify(recoveryBudgets)
     expect(storedBudgets).not.toContain('Player@mail.ru')
     expect(storedBudgets).not.toContain('player@mail.ru')
@@ -308,17 +323,40 @@ maybeDescribe('auth API integration', () => {
       body: '{}',
     })
     expect(earlyResend.status).toBe(429)
+    expect(await earlyResend.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Recovery Email request is temporarily unavailable',
+      },
+    })
+    const retryAfter = Number(earlyResend.headers.get('retry-after'))
+    expect(Number.isInteger(retryAfter)).toBe(true)
+    expect(retryAfter).toBeGreaterThanOrEqual(1)
+    expect(retryAfter).toBeLessThanOrEqual(60)
     await prisma.authAbuseBucket.updateMany({
       where: { scope: { endsWith: '_min' } },
       data: { expiresAt: new Date(Date.now() - 1) },
     })
 
-    const resent = await app.request('/api/auth/account-protection/recovery-email/resend', {
-      method: 'POST',
-      headers: authHeaders,
-      body: '{}',
+    const resend = (target: ReturnType<typeof createApp>) => target.request(
+      '/api/auth/account-protection/recovery-email/resend',
+      { method: 'POST', headers: authHeaders, body: '{}' },
+    )
+    const concurrentResends = await Promise.all([
+      resend(createApp({ env, prisma })),
+      resend(createApp({ env, prisma })),
+    ])
+    expect(concurrentResends.map((response) => response.status).sort()).toEqual([200, 429])
+    const limitedResend = concurrentResends.find((response) => response.status === 429)!
+    expect(await limitedResend.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Recovery Email request is temporarily unavailable',
+      },
     })
-    expect(resent.status).toBe(200)
+    const concurrentRetryAfter = Number(limitedResend.headers.get('Retry-After'))
+    expect(concurrentRetryAfter).toBeGreaterThan(0)
+    expect(concurrentRetryAfter).toBeLessThanOrEqual(60)
     const messages = await prisma.mailOutboxMessage.findMany({ orderBy: { createdAt: 'asc' } })
     expect(messages).toHaveLength(2)
     expect(messages[0]).toMatchObject({
@@ -432,6 +470,22 @@ maybeDescribe('auth API integration', () => {
       },
     )
     expect(started.status).toBe(200)
+    const replacementBudgets = await prisma.authAbuseBucket.findMany({
+      where: { scope: { startsWith: 'rec_email_' } },
+      orderBy: [{ scope: 'asc' }, { keyHash: 'asc' }],
+      select: { count: true, keyHash: true, scope: true },
+    })
+    const countsFor = (scope: string) => replacementBudgets
+      .filter((bucket) => bucket.scope === scope)
+      .map((bucket) => bucket.count)
+      .sort((left, right) => left - right)
+    expect(countsFor('rec_email_account_min')).toEqual([1])
+    expect(countsFor('rec_email_account_hour')).toEqual([2])
+    expect(countsFor('rec_email_account_day')).toEqual([2])
+    expect(countsFor('rec_email_address_min')).toEqual([1, 1])
+    expect(countsFor('rec_email_address_hour')).toEqual([1, 1])
+    expect(countsFor('rec_email_address_day')).toEqual([1, 1])
+    expect(countsFor('rec_email_ip_hour')).toEqual([2])
     expect(await started.json()).toEqual({
       accountProtection: {
         canManage: true,
@@ -709,6 +763,22 @@ maybeDescribe('auth API integration', () => {
     })
 
     await expireRecoveryEmailMinuteBudgets(prisma)
+    const hourLimitedResend = await app.request(
+      '/api/auth/account-protection/recovery-email/replacement/resend',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ factor: 'new' }),
+      },
+    )
+    expect(hourLimitedResend.status).toBe(429)
+    const hourRetryAfter = Number(hourLimitedResend.headers.get('Retry-After'))
+    expect(hourRetryAfter).toBeGreaterThan(0)
+    expect(hourRetryAfter).toBeLessThanOrEqual(60 * 60)
+    await prisma.authAbuseBucket.updateMany({
+      data: { expiresAt: new Date(Date.now() - 1) },
+      where: { scope: { endsWith: '_hour', startsWith: 'rec_email_' } },
+    })
     expect((await app.request(
       '/api/auth/account-protection/recovery-email/replacement/resend',
       {
@@ -1963,6 +2033,94 @@ maybeDescribe('auth API integration', () => {
     expect(await prisma.authSession.count({ where: { userId: yandexUser.id } })).toBe(0)
   })
 
+  test('atomically expires Recovery Code login budgets without changing the generic response', async () => {
+    const secondApp = createApp({ env, prisma })
+    const request = (target: typeof app) => target.request('/api/auth/recovery-code/password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '198.51.100.95',
+      },
+      body: JSON.stringify({
+        login: 'concurrent-missing-recovery-code',
+        newPassword: 'new-password123',
+        recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+      }),
+    })
+
+    const concurrent = await Promise.all([
+      request(app),
+      request(secondApp),
+      request(app),
+      request(secondApp),
+    ])
+    expect(concurrent.map((response) => response.status)).toEqual([200, 200, 200, 200])
+    expect(await Promise.all(concurrent.map((response) => response.json())))
+      .toEqual(Array.from({ length: 4 }, () => ({ outcome: 'accepted' })))
+    expect(await prisma.authAbuseBucket.findFirstOrThrow({
+      where: { scope: 'rec_code_login_hour' },
+      select: { count: true },
+    })).toEqual({ count: 4 })
+
+    await prisma.authAbuseBucket.updateMany({
+      data: { expiresAt: new Date(Date.now() - 1) },
+      where: { scope: 'rec_code_login_hour' },
+    })
+    const afterExpiry = await request(secondApp)
+    expect(afterExpiry.status).toBe(200)
+    expect(await afterExpiry.json()).toEqual({ outcome: 'accepted' })
+    expect(await prisma.authAbuseBucket.findFirstOrThrow({
+      where: { scope: 'rec_code_login_hour' },
+      select: { count: true },
+    })).toEqual({ count: 1 })
+    expect(await prisma.mailOutboxMessage.count()).toBe(0)
+  })
+
+  test('does not create login budgets after the Recovery Code IP budget is exhausted', async () => {
+    const secondApp = createApp({ env, prisma })
+    const request = (target: typeof app, login: string) => target.request(
+      '/api/auth/recovery-code/password',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-test-client-ip': '198.51.100.96',
+        },
+        body: JSON.stringify({
+          login,
+          newPassword: 'new-password123',
+          recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+        }),
+      },
+    )
+
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      const response = await request(
+        attempt % 2 === 0 ? app : secondApp,
+        'ip-budgeted-missing-recovery-code',
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ outcome: 'accepted' })
+    }
+    const loginBudgetRowsBefore = await prisma.authAbuseBucket.count({
+      where: { scope: { startsWith: 'rec_code_login_' } },
+    })
+
+    const afterIpExhaustion = await Promise.all(Array.from({ length: 12 }, (_, attempt) =>
+      request(
+        attempt % 2 === 0 ? app : secondApp,
+        `ip-budgeted-missing-recovery-code-${attempt}`,
+      )))
+    expect(afterIpExhaustion.map((response) => response.status))
+      .toEqual(Array.from({ length: 12 }, () => 200))
+    expect(await Promise.all(afterIpExhaustion.map((response) => response.json())))
+      .toEqual(Array.from({ length: 12 }, () => ({ outcome: 'accepted' })))
+    expect(await prisma.authAbuseBucket.count({
+      where: { scope: { startsWith: 'rec_code_login_' } },
+    })).toBe(loginBudgetRowsBefore)
+    expect(await prisma.mailOutboxMessage.count()).toBe(0)
+  })
+
   test('keeps password-reset requests generic and queues one hashed short-lived link', async () => {
     await seedApprovedMailService(prisma, 'mail.ru')
     const account = await registerTokenAccount('email-link-recovery')
@@ -2060,15 +2218,18 @@ maybeDescribe('auth API integration', () => {
   })
 
   test('keeps exhausted password-reset login and IP budgets generic', async () => {
-    const recoveryApp = createApp({
+    const recoveryEnv = {
+      ...env,
+      CORS_ORIGINS: ['https://app.example.test'],
+      WEBAPP_ORIGIN: 'https://app.example.test',
+    }
+    const recoveryApps = [createApp({
       env: {
-        ...env,
-        CORS_ORIGINS: ['https://app.example.test'],
-        WEBAPP_ORIGIN: 'https://app.example.test',
+        ...recoveryEnv,
       },
       prisma,
-    })
-    const requestReset = (login: string) => recoveryApp.request(
+    }), createApp({ env: recoveryEnv, prisma })] as const
+    const requestReset = (target: typeof app, login: string) => target.request(
       '/api/auth/password-recovery/request',
       {
         method: 'POST',
@@ -2081,16 +2242,25 @@ maybeDescribe('auth API integration', () => {
     )
 
     const responses = []
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      responses.push(await requestReset('budgeted-missing-link-recovery'))
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      responses.push(await requestReset(
+        recoveryApps[attempt % recoveryApps.length],
+        'budgeted-missing-link-recovery',
+      ))
     }
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      responses.push(await requestReset(`budgeted-missing-link-${attempt}`))
-    }
+    const loginBudgetRowsBefore = await prisma.authAbuseBucket.count({
+      where: { scope: { startsWith: 'password_reset_login_' } },
+    })
+    const afterIpExhaustion = await Promise.all(Array.from({ length: 12 }, (_, attempt) =>
+      requestReset(
+        recoveryApps[attempt % recoveryApps.length],
+        `budgeted-missing-link-${attempt}`,
+      )))
+    responses.push(...afterIpExhaustion)
 
     expect(responses.every((response) => response.status === 200)).toBe(true)
     expect(await Promise.all(responses.map((response) => response.json()))).toEqual(
-      Array.from({ length: 11 }, () => ({ outcome: 'accepted' })),
+      Array.from({ length: 23 }, () => ({ outcome: 'accepted' })),
     )
     expect(await prisma.passwordResetCredential.count()).toBe(0)
     expect(await prisma.mailOutboxMessage.count()).toBe(0)
@@ -2102,6 +2272,64 @@ maybeDescribe('auth API integration', () => {
       where: { count: 4, scope: 'password_reset_login_hour' },
       select: { count: true },
     })).toEqual({ count: 4 })
+    expect(await prisma.authAbuseBucket.count({
+      where: { scope: { startsWith: 'password_reset_login_' } },
+    })).toBe(loginBudgetRowsBefore)
+  })
+
+  test('atomically limits password-reset mail across API instances and resets an expired window', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const account = await registerTokenAccount('concurrent-email-link-recovery')
+    await seedActiveRecoveryEmail(prisma, {
+      canonicalKey: 'concurrent-email-link-recovery@mail.ru',
+      providerValue: 'Concurrent-email-link-recovery@mail.ru',
+      userId: account.user.id,
+    })
+    const recoveryEnv = {
+      ...env,
+      CORS_ORIGINS: ['https://app.example.test'],
+      WEBAPP_ORIGIN: 'https://app.example.test',
+    }
+    const recoveryApps = [
+      createApp({ env: recoveryEnv, prisma }),
+      createApp({ env: recoveryEnv, prisma }),
+    ] as const
+    const request = (target: typeof app) => target.request('/api/auth/password-recovery/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '198.51.100.110',
+      },
+      body: JSON.stringify({ login: account.user.login }),
+    })
+
+    const concurrent = await Promise.all([
+      request(recoveryApps[0]),
+      request(recoveryApps[1]),
+      request(recoveryApps[0]),
+      request(recoveryApps[1]),
+    ])
+    expect(concurrent.map((response) => response.status)).toEqual([200, 200, 200, 200])
+    expect(await Promise.all(concurrent.map((response) => response.json())))
+      .toEqual(Array.from({ length: 4 }, () => ({ outcome: 'accepted' })))
+    expect(await prisma.mailOutboxMessage.count({
+      where: { templateKind: 'password_recovery' },
+    })).toBe(3)
+
+    await prisma.authAbuseBucket.updateMany({
+      data: { expiresAt: new Date(Date.now() - 1) },
+      where: { scope: 'password_reset_login_hour' },
+    })
+    const afterExpiry = await request(recoveryApps[1])
+    expect(afterExpiry.status).toBe(200)
+    expect(await afterExpiry.json()).toEqual({ outcome: 'accepted' })
+    expect(await prisma.mailOutboxMessage.count({
+      where: { templateKind: 'password_recovery' },
+    })).toBe(4)
+    expect(await prisma.authAbuseBucket.findFirstOrThrow({
+      where: { scope: 'password_reset_login_hour' },
+      select: { count: true },
+    })).toEqual({ count: 1 })
   })
 
   test('consumes one email reset link atomically and revokes every prior credential', async () => {
@@ -2682,7 +2910,9 @@ maybeDescribe('auth API integration', () => {
 
     const limited = await joinUnknownRoom(app)
     expect(limited.status).toBe(429)
-    expect(limited.headers.get('retry-after')).toBeTruthy()
+    const roomRetryAfter = Number(limited.headers.get('retry-after'))
+    expect(roomRetryAfter).toBeGreaterThan(0)
+    expect(roomRetryAfter).toBeLessThanOrEqual(60)
     expect(await limited.json()).toEqual({
       error: {
         code: 'RATE_LIMITED',
@@ -2739,7 +2969,11 @@ maybeDescribe('auth API integration', () => {
       }),
     })
     const { accessToken } = await register.json()
-    const secondApp = createApp({ env, prisma })
+    const secondApp = createApp({
+      env,
+      prisma,
+      securityEvents: { emit: (event) => securityEvents.push(event) },
+    })
 
     const responses = await Promise.all(Array.from({ length: 21 }, (_, index) =>
       (index % 2 === 0 ? app : secondApp).request('/api/rooms/join', {
@@ -2774,13 +3008,46 @@ maybeDescribe('auth API integration', () => {
     }
     const player = await register('shared-tender-command-budget')
     const opponent = await register('shared-tender-command-opponent')
+    const malformedTenderCommand = await app.request('/api/tenders/not-a-uuid/commands', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${player.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        actorId: player.user.id,
+        commandId: 'malformed-resource-budget-command',
+        slot: 3,
+        tenderId: 'not-a-uuid',
+        type: 'request-access-slot',
+      }),
+    })
+    expect(malformedTenderCommand.status).toBe(400)
+    expect(await prisma.authAbuseBucket.count({ where: { scope: 'tender_command' } })).toBe(0)
     const { tenderId } = await createPersistentTenderModule(prisma).createTender({
       players: [
         { displayName: 'Игрок', id: player.user.id, tiePriority: 1 },
         { displayName: 'Оппонент', id: opponent.user.id, tiePriority: 2 },
       ],
     })
-    const secondApp = createApp({ env, prisma })
+    const unauthenticatedCommand = await app.request(`/api/tenders/${tenderId}/commands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actorId: player.user.id,
+        commandId: 'unauthenticated-budget-command',
+        slot: 3,
+        tenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect(unauthenticatedCommand.status).toBe(401)
+    expect(await prisma.authAbuseBucket.count({ where: { scope: 'tender_command' } })).toBe(0)
+    const secondApp = createApp({
+      env,
+      prisma,
+      securityEvents: { emit: (event) => securityEvents.push(event) },
+    })
     const submitCommand = (targetApp: typeof app) => targetApp.request(
       `/api/tenders/${tenderId}/commands`,
       {
@@ -2799,14 +3066,18 @@ maybeDescribe('auth API integration', () => {
       },
     )
 
-    for (let attempt = 1; attempt <= 60; attempt += 1) {
+    for (let attempt = 1; attempt <= 59; attempt += 1) {
       const response = await submitCommand(attempt % 2 === 0 ? app : secondApp)
       expect(response.status).toBe(200)
     }
 
-    const limited = await submitCommand(app)
+    const boundary = await Promise.all([submitCommand(app), submitCommand(secondApp)])
+    expect(boundary.map((response) => response.status).sort()).toEqual([200, 429])
+    const limited = boundary.find((response) => response.status === 429)!
     expect(limited.status).toBe(429)
-    expect(limited.headers.get('retry-after')).toBeTruthy()
+    const tenderRetryAfter = Number(limited.headers.get('retry-after'))
+    expect(tenderRetryAfter).toBeGreaterThan(0)
+    expect(tenderRetryAfter).toBeLessThanOrEqual(60)
     expect(await limited.json()).toEqual({
       error: {
         code: 'RATE_LIMITED',
@@ -2819,6 +3090,14 @@ maybeDescribe('auth API integration', () => {
       reason: 'tender_command_budget',
       type: 'request_rejected',
     }))
+    expect(securityEvents.filter((event) => event.reason === 'tender_command_budget'))
+      .toHaveLength(1)
+
+    await prisma.authAbuseBucket.updateMany({
+      data: { expiresAt: new Date(Date.now() - 1) },
+      where: { scope: 'tender_command' },
+    })
+    expect((await submitCommand(secondApp)).status).toBe(200)
 
     const opponentCommand = await app.request(`/api/tenders/${tenderId}/commands`, {
       method: 'POST',
@@ -2953,6 +3232,9 @@ maybeDescribe('auth API integration', () => {
         message: 'Too many authenticated mutation requests',
       },
     })
+    expect(await prisma.authAbuseBucket.count({
+      where: { scope: 'tender_command' },
+    })).toBe(0)
 
     const limitedRealtimeMutation = await app.request('/api/realtime/tickets', {
       method: 'POST',
@@ -3368,6 +3650,9 @@ maybeDescribe('auth API integration', () => {
     expect(existingTenderCommand.status).toBe(404)
     expect(absentTenderCommand.status).toBe(404)
     expect(await existingTenderCommand.json()).toEqual(await absentTenderCommand.json())
+    expect(await prisma.authAbuseBucket.count({
+      where: { scope: 'tender_command' },
+    })).toBe(1)
 
     const participantCommandIdCollision = await app.request(`/api/tenders/${tenderId}/commands`, {
       method: 'POST',
@@ -4934,6 +5219,10 @@ maybeDescribe('auth API integration', () => {
     }
     const limited = await attempt('wrong-password')
     expect(limited.status).toBe(429)
+    const retryAfter = Number(limited.headers.get('retry-after'))
+    expect(Number.isInteger(retryAfter)).toBe(true)
+    expect(retryAfter).toBeGreaterThanOrEqual(1)
+    expect(retryAfter).toBeLessThanOrEqual(15 * 60)
     expect(await limited.json()).toEqual({
       error: {
         code: 'RATE_LIMITED',
@@ -4978,6 +5267,37 @@ maybeDescribe('auth API integration', () => {
     ])
   })
 
+  test('uses a validated runtime override for the distributed login budget', async () => {
+    const configuredApp = createApp({
+      env: { ...env, ANTI_ABUSE_LOGIN_FAILURE_LIMIT: 2 },
+      prisma,
+    })
+    const login = 'configured-password-budget'
+    expect((await configuredApp.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login,
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.1',
+        termsAccepted: true,
+        termsVersion: '1.1',
+      }),
+    })).status).toBe(201)
+    const attempt = () => configuredApp.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password: 'wrong-password' }),
+    })
+
+    expect((await attempt()).status).toBe(401)
+    expect((await attempt()).status).toBe(401)
+    const limited = await attempt()
+    expect(limited.status).toBe(429)
+    expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThan(0)
+  })
+
   test('limits password verification by client address independently from login buckets', async () => {
     const attempt = (index: number, ipAddress: string) => app.request('/api/auth/token/login', {
       method: 'POST',
@@ -4994,7 +5314,16 @@ maybeDescribe('auth API integration', () => {
     for (let index = 1; index <= 30; index += 1) {
       expect((await attempt(index, '203.0.113.20')).status).toBe(401)
     }
-    expect((await attempt(31, '203.0.113.20')).status).toBe(429)
+    const limited = await attempt(31, '203.0.113.20')
+    expect(limited.status).toBe(429)
+    expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThan(0)
+    for (let index = 32; index <= 35; index += 1) {
+      expect((await attempt(index, '203.0.113.20')).status).toBe(429)
+    }
+    expect(await prisma.authAbuseBucket.findFirstOrThrow({
+      where: { scope: 'login_ip_attempt' },
+      select: { count: true },
+    })).toEqual({ count: 31 })
     expect((await attempt(31, '203.0.113.21')).status).toBe(401)
   }, 10_000)
 
@@ -5069,6 +5398,9 @@ maybeDescribe('auth API integration', () => {
 
     const fourth = await register('device-quota-5', deviceCookie)
     expect(fourth.status).toBe(429)
+    const deviceRetryAfter = Number(fourth.headers.get('Retry-After'))
+    expect(deviceRetryAfter).toBeGreaterThan(0)
+    expect(deviceRetryAfter).toBeLessThanOrEqual(180 * 24 * 60 * 60)
     expect(await fourth.json()).toEqual({
       error: {
         code: 'RATE_LIMITED',
@@ -5129,6 +5461,9 @@ maybeDescribe('auth API integration', () => {
       }),
     })
     expect(limited.status).toBe(429)
+    const ipRetryAfter = Number(limited.headers.get('Retry-After'))
+    expect(ipRetryAfter).toBeGreaterThan(0)
+    expect(ipRetryAfter).toBeLessThanOrEqual(24 * 60 * 60)
   })
 
   async function registerForMeGuard(login: string) {

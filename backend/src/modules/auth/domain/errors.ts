@@ -28,6 +28,7 @@ export class AuthFailure extends Error {
   constructor(
     public readonly kind: AuthFailureKind,
     message: string,
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message)
   }

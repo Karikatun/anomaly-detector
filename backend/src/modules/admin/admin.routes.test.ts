@@ -47,6 +47,17 @@ const mailPolicy = {
   read: async () => mailPolicyView,
 }
 
+const antiAbuse = {
+  groups: [{
+    exhaustedBudgetKeysAtLeast: 10,
+    surface: 'authentication' as const,
+  }],
+  minimumGroupSize: 10 as const,
+  roundingStep: 10 as const,
+}
+
+const requestBudgetOverviewReader = { read: async () => antiAbuse }
+
 const feedbackQueue = {
   items: [],
   page: 1,
@@ -110,6 +121,7 @@ test('conceals the admin route from anonymous and ordinary users', async () => {
     feedback,
     mailPolicy,
     overviewReader: { read: async () => overview },
+    requestBudgetOverviewReader,
   })
 
   for (const path of ['/overview', '/mail-policy', '/feedback']) {
@@ -124,6 +136,17 @@ test('conceals the admin route from anonymous and ordinary users', async () => {
       })
     }
   }
+
+  for (const authorization of [undefined, 'Bearer player-token']) {
+    const response = await module.routes.request('/mail-policy/anti-abuse', {
+      headers: authorization ? { Authorization: authorization } : undefined,
+    })
+
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({
+      error: { code: 'NOT_FOUND', message: 'Route not found' },
+    })
+  }
 })
 
 test('returns a no-store overview to an allowlisted administrator', async () => {
@@ -133,6 +156,7 @@ test('returns a no-store overview to an allowlisted administrator', async () => 
     feedback,
     mailPolicy,
     overviewReader: { read: async () => overview },
+    requestBudgetOverviewReader,
   })
 
   const response = await module.routes.request('/overview', {
@@ -142,6 +166,89 @@ test('returns a no-store overview to an allowlisted administrator', async () => 
   expect(response.status).toBe(200)
   expect(response.headers.get('cache-control')).toBe('no-store')
   expect(await response.json()).toEqual(overview)
+})
+
+test('returns the privacy-safe request-budget projection only from its separate concealed endpoint', async () => {
+  let receivedNow: unknown
+  const module = createAdminModule({
+    adminUserIds: new Set([admin.id]),
+    authenticate: async () => admin,
+    feedback,
+    mailPolicy,
+    overviewReader: { read: async () => overview },
+    requestBudgetOverviewReader: {
+      read: async (now) => {
+        receivedNow = now
+        return antiAbuse
+      },
+    },
+  })
+
+  const response = await module.routes.request('/mail-policy/anti-abuse', {
+    headers: { Authorization: 'Bearer admin-token' },
+  })
+  const body = await response.json()
+
+  expect(response.status).toBe(200)
+  expect(response.headers.get('cache-control')).toBe('no-store')
+  expect(receivedNow).toBeInstanceOf(Date)
+  expect(body).toEqual(antiAbuse)
+  expect(JSON.stringify(body)).not.toMatch(/scope|keyHash|login|email|ip|userId|tenderId/i)
+})
+
+test('keeps every legacy mail endpoint response exact and anti-abuse-free', async () => {
+  const module = createAdminModule({
+    adminUserIds: new Set([admin.id]),
+    authenticate: async () => admin,
+    feedback,
+    mailPolicy,
+    overviewReader: { read: async () => overview },
+    requestBudgetOverviewReader,
+  })
+  const commandId = '019f8099-7e26-7760-ad08-66d1d66b2720'
+  const requests = [
+    module.routes.request('/mail-policy', {
+      headers: { Authorization: 'Bearer admin-token' },
+    }),
+    module.routes.request('/mail-policy/import', {
+      body: JSON.stringify({ commandId, expectedVersion: 0 }),
+      headers: { Authorization: 'Bearer admin-token', 'Content-Type': 'application/json' },
+      method: 'POST',
+    }),
+    module.routes.request('/mail-policy/publish', {
+      body: JSON.stringify({
+        additions: [{
+          canonicalization: {
+            ignoreDots: false,
+            localPartCaseInsensitive: false,
+            stripPlusTag: false,
+          },
+          emailDomain: 'yandex.ru',
+          sourceCandidateId: '019f8099-7e26-7760-ad08-66d1d66b2721',
+        }],
+        commandId,
+        expectedVersion: 0,
+      }),
+      headers: { Authorization: 'Bearer admin-token', 'Content-Type': 'application/json' },
+      method: 'POST',
+    }),
+    module.routes.request('/mail-policy/status', {
+      body: JSON.stringify({
+        commandId,
+        emailDomain: 'yandex.ru',
+        expectedVersion: 1,
+        reason: 'Security-инцидент',
+        state: 'blocked',
+      }),
+      headers: { Authorization: 'Bearer admin-token', 'Content-Type': 'application/json' },
+      method: 'POST',
+    }),
+  ]
+
+  for (const response of await Promise.all(requests)) {
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(mailPolicyView)
+  }
 })
 
 test('returns only a bounded aggregate analytics projection to an allowlisted administrator', async () => {
@@ -158,6 +265,7 @@ test('returns only a bounded aggregate analytics projection to an allowlisted ad
     feedback,
     mailPolicy,
     overviewReader: { read: async () => overview },
+    requestBudgetOverviewReader,
   })
 
   const response = await module.routes.request('/analytics?windowDays=30', {
@@ -194,6 +302,7 @@ test('returns the requested page from the complete user list', async () => {
         return secondPage
       },
     },
+    requestBudgetOverviewReader,
   })
 
   const response = await module.routes.request('/overview?page=2&pageSize=2', {
@@ -212,6 +321,7 @@ test('does not conceal an overview read failure as an access denial', async () =
     feedback,
     mailPolicy,
     overviewReader: { read: async () => { throw new Error('database unavailable') } },
+    requestBudgetOverviewReader,
   })
   module.routes.onError((_error, c) => c.json({ error: 'internal' }, 500))
 
@@ -236,6 +346,7 @@ test('passes a bounded import command and authenticated operator to the mail pol
       },
     },
     overviewReader: { read: async () => overview },
+    requestBudgetOverviewReader,
   })
 
   const response = await module.routes.request('/mail-policy/import', {
@@ -286,6 +397,7 @@ test('passes bounded feedback queue queries and commands to the domain owner', a
     },
     mailPolicy,
     overviewReader: { read: async () => overview },
+    requestBudgetOverviewReader,
   })
 
   const queueResponse = await module.routes.request('/feedback?page=2&pageSize=10&status=new', {

@@ -5,6 +5,7 @@ import type {
   AnalyticsAdminOverview,
   FeedbackQueueResponse,
   MailOperationsView,
+  RequestBudgetOverview,
 } from '@anomaly-detector/contracts'
 
 import { AdminApi, AdminApiError } from './api'
@@ -21,6 +22,7 @@ type AppState =
   | { kind: 'error'; message: string }
   | {
       kind: 'ready'
+      antiAbuse: RequestBudgetOverview | null
       analytics: AnalyticsAdminOverview | null
       data: AdminOverview
       feedback: FeedbackQueueResponse
@@ -38,16 +40,22 @@ export default function App() {
 
   const loadWorkspace = useCallback(async () => {
     try {
-      const [data, feedback, mailPolicy, analytics] = await Promise.all([
+      const [data, feedback, mailWorkspace, analytics] = await Promise.all([
         api.getOverview(),
         api.getFeedbackQueue({ page: 1, pageSize: 20 }),
-        api.getMailPolicy(),
+        api.getMailPolicyWorkspace(),
         api.getAnalytics(30).catch((error) => {
           if (error instanceof AdminApiError && error.status === 404) return null
           throw error
         }),
       ])
-      setState({ kind: 'ready', analytics, data, feedback, mailPolicy })
+      setState({
+        kind: 'ready',
+        analytics,
+        data,
+        feedback,
+        ...mailWorkspace,
+      })
     } catch (error) {
       if (error instanceof AdminApiError && error.status === 404) {
         setState({ kind: 'concealed' })
@@ -116,8 +124,8 @@ export default function App() {
     setIsRefreshing(false)
   }
   const reloadMailPolicy = async () => {
-    const mailPolicy = await api.getMailPolicy()
-    setState((current) => current.kind === 'ready' ? { ...current, mailPolicy } : current)
+    const mailWorkspace = await api.getMailPolicyWorkspace()
+    setState((current) => current.kind === 'ready' ? { ...current, ...mailWorkspace } : current)
   }
   const executeMailCommand = async (operation: () => Promise<MailOperationsView>) => {
     try {
@@ -179,6 +187,7 @@ export default function App() {
   if (view === 'mail-policy') {
     return (
       <MailPolicyScreen
+        antiAbuse={state.antiAbuse}
         data={state.mailPolicy}
         onBack={() => setView('overview')}
         onChangeStatus={(command) => executeMailCommand(() => api.changeMailPolicyStatus(command))}

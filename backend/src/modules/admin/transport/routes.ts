@@ -15,6 +15,7 @@ import {
   mailPolicyPublishCommandSchema,
   mailPolicyStatusCommandSchema,
   mailOperationsViewSchema,
+  requestBudgetOverviewSchema,
 } from '@anomaly-detector/contracts'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import type { Context } from 'hono'
@@ -28,6 +29,7 @@ import type {
   AdminFeedbackOperator,
   AdminMailPolicyOperator,
   AdminOverviewReader,
+  AdminRequestBudgetOverviewReader,
 } from '../application/ports'
 
 type CreateAdminRoutesInput = {
@@ -38,6 +40,7 @@ type CreateAdminRoutesInput = {
   mailPolicy: AdminMailPolicyOperator
   onAccessDenied?: (context: Context<AuthHttpEnv>, kind: 'authentication' | 'authorization') => void
   overviewReader: AdminOverviewReader
+  requestBudgetOverviewReader: AdminRequestBudgetOverviewReader
 }
 
 export function createAdminRoutes(input: CreateAdminRoutesInput) {
@@ -80,6 +83,11 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
   routes.get('/mail-policy', async (c) => {
     return c.json(mailOperationsViewSchema.parse(await input.mailPolicy.read()))
   })
+
+  // Intentionally use a plain route so the operator surface is not published in OpenAPI.
+  routes.get('/mail-policy/anti-abuse', async (c) => c.json(
+    requestBudgetOverviewSchema.parse(await input.requestBudgetOverviewReader.read(new Date())),
+  ))
 
   routes.get('/feedback', async (c) => {
     const query = feedbackQueueQuerySchema.parse(c.req.query())

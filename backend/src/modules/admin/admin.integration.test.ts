@@ -8,6 +8,11 @@ import {
 import { createApp } from '../../app'
 import { createPrisma } from '../../db'
 import type { AppEnv } from '../../env'
+import { createRequestBudgetOverviewReader } from '../../security/request-budget-overview'
+import {
+  createRequestBudgetPolicyCatalog,
+  requestBudgetPolicyEntries,
+} from '../../security/request-budget-policy'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl ? describe : describe.skip
@@ -54,6 +59,7 @@ maybeDescribe('concealed operations API integration', () => {
   }
 
   beforeEach(async () => {
+    await prisma.authAbuseBucket.deleteMany()
     await prisma.analyticsEvent.deleteMany()
     await prisma.analyticsJourney.deleteMany()
     await prisma.analyticsDailyAggregate.deleteMany()
@@ -252,7 +258,60 @@ maybeDescribe('concealed operations API integration', () => {
     })
     expect(await prisma.mailPolicyVersion.count()).toBe(1)
   })
+
+  test('excludes expired and unknown budgets and rounds each exhausted scope before rollup', async () => {
+    const now = new Date('2026-08-24T12:00:00.000Z')
+    const activeUntil = new Date('2026-08-24T12:01:00.000Z')
+    const expiredAt = new Date('2026-08-24T12:00:00.000Z')
+    const rows = [
+      ...budgetRows('login_failure', 10, 5, activeUntil),
+      ...budgetRows('password_reset_login_hour', 10, 3, activeUntil, 20),
+      ...budgetRows('authenticated_mutation', 10, 120, activeUntil, 40),
+      ...budgetRows('rec_email_account_hour', 9, 3, activeUntil, 60),
+      ...budgetRows('rec_email_address_hour', 9, 3, activeUntil, 80),
+      ...budgetRows('room_join', 19, 20, activeUntil, 100),
+      ...budgetRows('tender_command', 20, 60, activeUntil, 120),
+      ...budgetRows('realtime_ticket_issue', 11, 10, expiredAt, 150),
+      ...budgetRows('unlisted_internal_scope', 12, 99, activeUntil, 170),
+    ]
+    await prisma.authAbuseBucket.createMany({ data: rows })
+
+    const overview = await createRequestBudgetOverviewReader(
+      prisma,
+      requestBudgetPolicyEntries(createRequestBudgetPolicyCatalog()),
+    ).read(now)
+
+    expect(overview).toEqual({
+      groups: [
+        { exhaustedBudgetKeysAtLeast: 10, surface: 'authentication' },
+        { exhaustedBudgetKeysAtLeast: 10, surface: 'room_join' },
+        { exhaustedBudgetKeysAtLeast: 20, surface: 'tender_command' },
+      ],
+      minimumGroupSize: 10,
+      roundingStep: 10,
+    })
+    expect(JSON.stringify(overview)).not.toMatch(
+      /activeBudgetKeys|exhaustedBudgetKeys"|requests|scope|keyHash|login|email|ip|userId|tenderId/i,
+    )
+  })
 })
+
+function budgetRows(
+  scope: string,
+  identities: number,
+  count: number,
+  expiresAt: Date,
+  keyOffset = 0,
+) {
+  return Array.from({ length: identities }, (_, index) => ({
+    blockedUntil: null,
+    count,
+    expiresAt,
+    keyHash: (keyOffset + index + 1).toString(16).padStart(64, '0'),
+    scope,
+    windowStartedAt: new Date('2026-08-24T11:59:00.000Z'),
+  }))
+}
 
 async function register(app: ReturnType<typeof createApp>, login: string) {
   const response = await app.request('/api/auth/token/register', {

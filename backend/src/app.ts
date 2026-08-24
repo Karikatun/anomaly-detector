@@ -7,6 +7,11 @@ import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { clientAddress, createApiBodyLimit, createAuthSecurity } from './http/security'
 import { createPrismaRequestBudget } from './security/request-budget'
+import {
+  createRequestBudgetPolicyCatalog,
+  requestBudgetPolicyEntries,
+} from './security/request-budget-policy'
+import { createRequestBudgetOverviewReader } from './security/request-budget-overview'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 import { createAnalyticsModule } from './modules/analytics'
 import { createAdminModule } from './modules/admin'
@@ -44,6 +49,8 @@ export function createApp({
   securityEvents = consoleSecurityEventLogger,
   tender: providedTender,
 }: CreateAppOptions) {
+  const requestBudgetPolicies = createRequestBudgetPolicyCatalog(env)
+  const requestBudget = createPrismaRequestBudget(prisma, env.JWT_SECRET)
   const tender = providedTender ?? createPersistentTenderModule(prisma)
   const mail = createMailModule({
     db: prisma,
@@ -58,11 +65,14 @@ export function createApp({
     accountEmailCanonicalizer: mail.accountEmailCanonicalizer,
     db: prisma,
     env,
+    requestBudgetPolicies,
   })
   const rooms = createRoomModule({
     authenticatedMutationBudget: auth.authenticatedMutationBudget,
     db: prisma,
+    joinBudgetPolicy: requestBudgetPolicies.room_join,
     requireAuth: auth.requireAuth,
+    requestBudgetSecret: env.JWT_SECRET,
     tender,
     tenderLifecycleReader: createPersistentTenderLifecycleReader(prisma),
   })
@@ -97,6 +107,10 @@ export function createApp({
     db: prisma,
     feedback: feedback.operator,
     mailPolicy: mail.operatorPolicy,
+    requestBudgetOverviewReader: createRequestBudgetOverviewReader(
+      prisma,
+      requestBudgetPolicyEntries(requestBudgetPolicies),
+    ),
     securityEvents,
   })
   const app = new OpenAPIHono<AuthHttpEnv>({
@@ -174,13 +188,15 @@ export function createApp({
   app.route('/api/rooms', rooms.routes)
   app.route('/api/tenders', createTenderRoutes({
     authenticatedMutationBudget: auth.authenticatedMutationBudget,
-    commandBudget: createPrismaRequestBudget(prisma),
+    commandBudget: requestBudget,
+    commandBudgetPolicy: requestBudgetPolicies.tender_command,
     requireAuth: auth.requireAuth,
     tender,
   }))
   app.route('/api/realtime', createRealtimeTicketRoutes({
     authenticatedMutationBudget: auth.authenticatedMutationBudget,
-    issueBudget: createPrismaRequestBudget(prisma),
+    issueBudget: requestBudget,
+    issueBudgetPolicy: requestBudgetPolicies.realtime_ticket_issue,
     issuer: createPrismaRealtimeTicketIssuer(prisma),
     requireAuth: auth.requireAuth,
   }))

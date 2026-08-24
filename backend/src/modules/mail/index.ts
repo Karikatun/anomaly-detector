@@ -113,5 +113,6 @@ export { deriveAccountEmailConfirmationCode } from './application/account-email-
 export { derivePasswordResetToken } from './application/password-reset-token'
 
 export type { MailServiceCandidateSource } from './application/ports'
+export type { ClaimedMailDeliveryProtectionAlert } from './application/transactional-mail-ports'
 export type { TransactionalMailRequest } from './application/transactional-mail-service'
 export { executeMailPolicy } from './transport/errors'

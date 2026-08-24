@@ -5,6 +5,9 @@ const booleanStringSchema = z
   .default('false')
   .transform((value) => value === 'true')
 
+const antiAbuseLimitSchema = z.coerce.number().int().min(1).max(1_000_000).optional()
+const antiAbuseTwoMessageLimitSchema = z.coerce.number().int().min(2).max(1_000_000).optional()
+
 const knownWeakJwtSecrets = new Set(['replace-with-at-least-32-random-characters'])
 
 const optionalStringSchema = z.preprocess((value) => {
@@ -80,6 +83,22 @@ const envSchema = z.object({
   AUTH_BODY_LIMIT_BYTES: z.coerce.number().int().positive().max(1024 * 1024).default(64 * 1024),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+  ANTI_ABUSE_LOGIN_FAILURE_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_LOGIN_IP_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_REGISTRATION_DEVICE_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_REGISTRATION_IP_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_EMAIL_MINUTE_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT: antiAbuseTwoMessageLimitSchema,
+  ANTI_ABUSE_RECOVERY_EMAIL_DAY_LIMIT: antiAbuseTwoMessageLimitSchema,
+  ANTI_ABUSE_RECOVERY_EMAIL_IP_HOUR_LIMIT: antiAbuseTwoMessageLimitSchema,
+  ANTI_ABUSE_RECOVERY_LOGIN_HOUR_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_LOGIN_DAY_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_LOGIN_IP_HOUR_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_LOGIN_IP_DAY_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_ROOM_JOIN_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_TENDER_COMMAND_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_REALTIME_TICKET_LIMIT: antiAbuseLimitSchema,
   SHUTDOWN_GRACE_SECONDS: z.coerce.number().int().positive().max(60).default(20),
   TRUST_PROXY: booleanStringSchema,
   TRUSTED_PROXY_CLIENT_IP_HEADER: optionalHttpHeaderNameSchema,

@@ -29,6 +29,36 @@ describe('loadEnv', () => {
     expect(env.YANDEX_STORAGE_PUBLIC_CACHE_CONTROL).toBe('public, max-age=31536000, immutable')
   })
 
+  test('parses bounded anti-abuse policy overrides without changing defaults implicitly', () => {
+    const base = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+    const env = loadEnv({
+      ...base,
+      ANTI_ABUSE_LOGIN_FAILURE_LIMIT: '7',
+      ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT: '4',
+      ANTI_ABUSE_TENDER_COMMAND_LIMIT: '80',
+    })
+
+    expect(env.ANTI_ABUSE_LOGIN_FAILURE_LIMIT).toBe(7)
+    expect(env.ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT).toBe(4)
+    expect(env.ANTI_ABUSE_TENDER_COMMAND_LIMIT).toBe(80)
+    expect(env.ANTI_ABUSE_ROOM_JOIN_LIMIT).toBeUndefined()
+    expect(() => loadEnv({ ...base, ANTI_ABUSE_LOGIN_FAILURE_LIMIT: '0' }))
+      .toThrow('ANTI_ABUSE_LOGIN_FAILURE_LIMIT')
+    expect(() => loadEnv({ ...base, ANTI_ABUSE_ROOM_JOIN_LIMIT: '1000001' }))
+      .toThrow('ANTI_ABUSE_ROOM_JOIN_LIMIT')
+    for (const key of [
+      'ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT',
+      'ANTI_ABUSE_RECOVERY_EMAIL_DAY_LIMIT',
+      'ANTI_ABUSE_RECOVERY_EMAIL_IP_HOUR_LIMIT',
+    ] as const) {
+      expect(() => loadEnv({ ...base, [key]: '1' })).toThrow(key)
+      expect(() => loadEnv({ ...base, [key]: '2' })).not.toThrow()
+    }
+  })
+
   test('parses and validates the administrator UUID allowlist', () => {
     const baseEnv = {
       DATABASE_URL: 'postgresql://localhost/test',

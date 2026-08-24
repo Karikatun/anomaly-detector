@@ -15,6 +15,7 @@ import type {
   MailPolicyPublishCommand,
   MailPolicyStatusCommand,
   MailOperationsView,
+  RequestBudgetOverview,
 } from '@anomaly-detector/contracts'
 
 export type AdminAnalyticsReader = {
@@ -23,6 +24,10 @@ export type AdminAnalyticsReader = {
 
 export type AdminOverviewReader = {
   read(query: AdminOverviewQuery): Promise<AdminOverview>
+}
+
+export type AdminRequestBudgetOverviewReader = {
+  read(now: Date): Promise<RequestBudgetOverview>
 }
 
 type AdminOperator = {

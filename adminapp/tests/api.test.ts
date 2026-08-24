@@ -2,6 +2,30 @@ import { expect, test } from 'bun:test'
 
 import { AdminApi, AdminApiError } from '../src/api'
 
+const mailOperationsView = {
+  currentVersion: 0,
+  delivery: {
+    budget: { limitPerMinute: 60, usedInWindow: 0, windowStartedAt: null },
+    circuit: { consecutiveFailures: 0, openUntil: null, state: 'disabled' },
+    configured: false,
+    groups: [],
+    lastSmtpSuccessAt: null,
+    outbox: { leased: 0, oldestQueuedAt: null, queued: 0 },
+    provider: 'reg_ru',
+    registryLastSuccessfulImportAt: null,
+    totals: { requested: 0, smtpAccepted: 0, temporaryFailures: 0, terminalFailures: 0 },
+  },
+  generatedAt: '2026-08-22T12:00:00.000Z',
+  latestAttempt: null,
+  lastSuccessfulImport: null,
+  publishedPolicy: null,
+}
+const antiAbuseOverview = {
+  groups: [{ exhaustedBudgetKeysAtLeast: 10, surface: 'authentication' }],
+  minimumGroupSize: 10,
+  roundingStep: 10,
+}
+
 test('restores the cookie session and reads the overview with its access token', async () => {
   const requests: Array<{ authorization: string | null; credentials: RequestCredentials | undefined; method: string; url: string }> = []
   const api = new AdminApi('https://api.example.com', async (input, init) => {
@@ -90,24 +114,6 @@ test('invokes the default browser fetch with its global receiver', async () => {
 
 test('uses the authenticated narrow mail-policy endpoints without generic mutations', async () => {
   const requests: Array<{ body: unknown; method: string; url: string }> = []
-  const view = {
-    currentVersion: 0,
-    delivery: {
-      budget: { limitPerMinute: 60, usedInWindow: 0, windowStartedAt: null },
-      circuit: { consecutiveFailures: 0, openUntil: null, state: 'disabled' },
-      configured: false,
-      groups: [],
-      lastSmtpSuccessAt: null,
-      outbox: { leased: 0, oldestQueuedAt: null, queued: 0 },
-      provider: 'reg_ru',
-      registryLastSuccessfulImportAt: null,
-      totals: { requested: 0, smtpAccepted: 0, temporaryFailures: 0, terminalFailures: 0 },
-    },
-    generatedAt: '2026-08-22T12:00:00.000Z',
-    latestAttempt: null,
-    lastSuccessfulImport: null,
-    publishedPolicy: null,
-  }
   const api = new AdminApi('', async (input, init) => {
     const url = String(input)
     if (url.endsWith('/api/auth/refresh')) return Response.json({ accessToken: 'operator-token' })
@@ -116,14 +122,20 @@ test('uses the authenticated narrow mail-policy endpoints without generic mutati
       method: init?.method ?? 'GET',
       url,
     })
-    return Response.json(view)
+    if (url.endsWith('/api/operations/mail-policy/anti-abuse')) {
+      return Response.json(antiAbuseOverview)
+    }
+    return Response.json(mailOperationsView)
   })
   const commandId = '019f8099-7e26-7760-ad08-66d1d66b2750'
 
   await api.restoreSession()
-  await api.getMailPolicy()
-  await api.importMailPolicy({ commandId, expectedVersion: 0 })
-  await api.publishMailPolicy({
+  await expect(api.getMailPolicyWorkspace()).resolves.toEqual({
+    antiAbuse: antiAbuseOverview,
+    mailPolicy: mailOperationsView,
+  })
+  await expect(api.importMailPolicy({ commandId, expectedVersion: 0 })).resolves.toEqual(mailOperationsView)
+  await expect(api.publishMailPolicy({
     additions: [{
       canonicalization: {
         ignoreDots: false,
@@ -135,23 +147,69 @@ test('uses the authenticated narrow mail-policy endpoints without generic mutati
     }],
     commandId,
     expectedVersion: 0,
-  })
-  await api.changeMailPolicyStatus({
+  })).resolves.toEqual(mailOperationsView)
+  await expect(api.changeMailPolicyStatus({
     commandId,
     emailDomain: 'yandex.ru',
     expectedVersion: 1,
     reason: 'Security-инцидент',
     state: 'blocked',
-  })
+  })).resolves.toEqual(mailOperationsView)
 
   expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
     { method: 'GET', url: '/api/operations/mail-policy' },
+    { method: 'GET', url: '/api/operations/mail-policy/anti-abuse' },
     { method: 'POST', url: '/api/operations/mail-policy/import' },
     { method: 'POST', url: '/api/operations/mail-policy/publish' },
     { method: 'POST', url: '/api/operations/mail-policy/status' },
   ])
-  expect(requests[1].body).toEqual({ commandId, expectedVersion: 0 })
+  expect(requests[2].body).toEqual({ commandId, expectedVersion: 0 })
   expect(requests.some(({ url }) => /create|update|delete/.test(url))).toBe(false)
+})
+
+test('keeps the mail screen available only for a missing rollback-era anti-abuse endpoint', async () => {
+  const urls: string[] = []
+  const api = new AdminApi('', async (input) => {
+    const url = String(input)
+    if (url.endsWith('/api/auth/refresh')) return Response.json({ accessToken: 'operator-token' })
+    urls.push(url)
+    if (url.endsWith('/api/operations/mail-policy')) return Response.json(mailOperationsView)
+    return Response.json({ error: { code: 'NOT_FOUND', message: 'Route not found' } }, { status: 404 })
+  })
+
+  await api.restoreSession()
+  await expect(api.getMailPolicyWorkspace()).resolves.toEqual({
+    antiAbuse: null,
+    mailPolicy: mailOperationsView,
+  })
+  expect(urls).toEqual([
+    '/api/operations/mail-policy',
+    '/api/operations/mail-policy/anti-abuse',
+  ])
+
+  const failingApi = new AdminApi('', async (input) => {
+    if (String(input).endsWith('/api/operations/mail-policy')) {
+      return Response.json(mailOperationsView)
+    }
+    return Response.json({ error: { code: 'INTERNAL_ERROR', message: 'failed' } }, { status: 500 })
+  })
+  await expect(failingApi.getMailPolicyWorkspace()).rejects.toEqual(
+    new AdminApiError(500, 'INTERNAL_ERROR', 'failed'),
+  )
+})
+
+test('does not probe anti-abuse after the concealed legacy mail endpoint', async () => {
+  const urls: string[] = []
+  const api = new AdminApi('', async (input) => {
+    const url = String(input)
+    urls.push(url)
+    return Response.json({ error: { code: 'NOT_FOUND', message: 'Route not found' } }, { status: 404 })
+  })
+
+  await expect(api.getMailPolicyWorkspace()).rejects.toEqual(
+    new AdminApiError(404, 'NOT_FOUND', 'Ресурс недоступен'),
+  )
+  expect(urls).toEqual(['/api/operations/mail-policy'])
 })
 
 test('uses only the explicit authenticated feedback queue commands', async () => {
