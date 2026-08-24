@@ -171,13 +171,14 @@ DAST: NOT RUN — production attack запрещён, а локальный driv
   полном integration run.
 - `bun run check:commit`: PASS; 243 backend unit и 199 web tests, остальные
   commit-gate suites также без failures.
-- `bun run check`: secrets, lint, Prisma format/validate/generate, TypeScript,
-  architecture, unit/integration suites, production builds и Docker smoke —
-  PASS. Финальный Playwright gate не зелёный: 44/45 PASS, один известный
-  out-of-scope exact-copy assertion в `webapp/e2e/specs/auth.spec.ts:307`
-  ожидает `История матчей...`, тогда как текущая продуктовая строка содержит
-  продолжение `..., а история матчей...`. Этот срез не менял dialog/copy или
-  E2E spec; failure не скрывался и не исправлялся как abuse-регрессия.
+- Первый `bun run check`: secrets, lint, Prisma format/validate/generate,
+  TypeScript, architecture, unit/integration suites, production builds и Docker
+  smoke — PASS; финальный Playwright дал 44/45 из-за stale exact-copy assertion
+  в `webapp/e2e/specs/auth.spec.ts:307`. Продуктовый legal copy не менялся:
+  assertion выровнен только по сохраняемой семантической фразе
+  `история матчей останется только в обезличенном виде.`. Targeted deletion E2E
+  после исправления — 1/1 PASS; повторный полный Playwright — 45/45 PASS за
+  2.5 min.
 - Dependency audit: PASS, vulnerabilities не обнаружены.
 - Gitleaks: PASS, 428 commits / 7.78 MB, leaks не обнаружены.
 - Semgrep: PASS, 5 rules / 372 files, findings не обнаружены.
