@@ -2,9 +2,19 @@ import type {
   PowerAllocation,
   TenderAuditRound,
 } from '@anomaly-detector/contracts'
+import {
+  contractIdSchema,
+  playerIdSchema,
+  publicResultSchema,
+  signalIdSchema,
+} from '@anomaly-detector/contracts'
+import { z } from 'zod'
 import { rotateTiePriority } from '../domain/access-slots'
 import { createRoundContracts } from '../domain/contracts'
-import type { TenderAuditEventKind } from './tender-audit-event'
+import {
+  tenderAuditEventSchema,
+  type TenderAuditEventKind,
+} from './tender-audit-event'
 import type { StoredTender, StoredTenderAuditEvent } from './tender-store'
 
 const timeoutAllocation: PowerAllocation = {
@@ -36,6 +46,72 @@ const stringArray = (value: unknown) => Array.isArray(value)
   : []
 const payloadValue = (payload: object, key: string): unknown =>
   (payload as Record<string, unknown>)[key]
+
+const accessSlotRecordSchema = z.record(playerIdSchema, z.number().int().min(1).max(6))
+const playerIdListSchema = z.array(playerIdSchema).max(4)
+
+const historicalParticipantAuditVariantSchema = z.discriminatedUnion('kind', [
+  // Early access resolution events did not persist the resulting budget/sample snapshots.
+  z.object({
+    kind: z.literal('access_slots_resolved'),
+    payload: z.object({ accessSlots: accessSlotRecordSchema }).passthrough(),
+  }).passthrough(),
+  z.object({
+    kind: z.literal('access_slot_timeout_resolved'),
+    payload: z.object({
+      accessSlots: accessSlotRecordSchema,
+      timedOutPlayerIds: playerIdListSchema,
+    }).passthrough(),
+  }).passthrough(),
+  // Participant audit expansion predates the state snapshots added to Contract events.
+  z.object({
+    kind: z.literal('contract_bid_assessed'),
+    payload: z.object({
+      awarded: z.boolean(),
+      contractId: contractIdSchema,
+      evidenceTestIds: z.array(z.string().min(1).max(128)).max(2),
+      playerId: playerIdSchema,
+      ratingAward: z.number().int().min(0),
+    }).passthrough(),
+  }).passthrough(),
+  // Versioned Laboratory actions already had mode/results, but not the top-level protocol field.
+  z.object({
+    kind: z.literal('laboratory_test_completed'),
+    payload: z.object({
+      mode: z.enum(['broad', 'deep', 'impulse']),
+      playerId: playerIdSchema,
+      results: z.array(z.object({
+        publicResult: publicResultSchema,
+        receiverSignal: signalIdSchema,
+        sourceSignal: signalIdSchema,
+      }).passthrough()).min(1).max(2),
+    }).passthrough(),
+  }).passthrough(),
+  // Private Thesis events created before the final audit expansion had no ratingAward.
+  z.object({
+    kind: z.literal('private_thesis_checked'),
+    payload: z.object({
+      fieldTypeCorrect: z.boolean(),
+      fullyCorrect: z.boolean(),
+      playerId: playerIdSchema,
+      polarityCorrect: z.boolean(),
+      signalId: signalIdSchema,
+      thesisId: z.string().min(1).max(128),
+    }).passthrough(),
+  }).passthrough(),
+])
+
+export function hasParticipantAuditSemantics(event: StoredTenderAuditEvent) {
+  const unversionedEvent = {
+    ...(event.actorId ? { actorId: event.actorId } : {}),
+    ...(event.commandId ? { commandId: event.commandId } : {}),
+    kind: event.kind,
+    payload: event.payload,
+  }
+  return tenderAuditEventSchema.safeParse(unversionedEvent).success
+    || (event.formatVersion === 0
+      && historicalParticipantAuditVariantSchema.safeParse(event).success)
+}
 
 export function createParticipantAuditRounds(
   tender: StoredTender,

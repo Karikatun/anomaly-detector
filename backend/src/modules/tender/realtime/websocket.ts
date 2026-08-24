@@ -1,10 +1,14 @@
 import type { Server, ServerWebSocket } from 'bun'
 import { tenderResourceIdSchema } from '@anomaly-detector/contracts'
 
-import type { RealtimeHub } from './hub'
+import {
+  resolveRealtimeFailureClose,
+  type RealtimeHub,
+} from './hub'
 import { consumeRealtimeTicket, type RealtimeTicketStore } from './tickets'
 
 export type RealtimeSocketData = {
+  closed: boolean
   playerId: string
   tenderId: string
   closeSubscription?: () => Promise<void>
@@ -20,16 +24,29 @@ export function createRealtimeWebSocketHandlers(input: {
       try {
         const subscription = await input.hub.subscribe({
           playerId,
-          socket: { send: (message) => { ws.send(message) } },
+          socket: {
+            close: (code, reason) => { ws.close(code, reason) },
+            send: (message) => { ws.send(message) },
+          },
           tenderId,
         })
+        if (pending.closed) {
+          await subscription.close()
+          return
+        }
         pending.closeSubscription = () => subscription.close()
-      } catch {
-        ws.close(4403, 'Forbidden')
+      } catch (failure) {
+        if (pending.closed) return
+        const failureClose = resolveRealtimeFailureClose(failure)
+        ws.close(failureClose.code, failureClose.reason)
       }
     },
     async close(ws: ServerWebSocket<RealtimeSocketData>) {
-      await ws.data.closeSubscription?.()
+      const pending = ws.data
+      pending.closed = true
+      const closeSubscription = pending.closeSubscription
+      pending.closeSubscription = undefined
+      await closeSubscription?.()
     },
     message() {
       // Clients do not send messages; commands go through the authenticated HTTP API.
@@ -55,7 +72,7 @@ export async function upgradeRealtimeWebSocket(input: {
   try {
     const principal = await consumeRealtimeTicket({ store: input.ticketStore, ticket })
     const upgraded = input.server.upgrade(input.request, {
-      data: { playerId: principal.userId, tenderId },
+      data: { closed: false, playerId: principal.userId, tenderId },
     })
     if (upgraded) return undefined as unknown as Response
     return Response.json(

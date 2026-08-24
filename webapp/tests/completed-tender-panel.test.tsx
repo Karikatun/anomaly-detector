@@ -141,8 +141,8 @@ const view = {
   knownSignals: [],
   phase: 'complete',
   players: [
-    { accessSlot: 1, budget: 3, contractPowerRestriction: 0, displayName: 'Альфа', playerId: 'player-a', rating: 21 },
-    { accessSlot: 2, budget: 4, contractPowerRestriction: 0, displayName: 'Бета', playerId: 'player-b', rating: 0 },
+    { accessSlot: 1, budget: 3, corporateTrust: 2, contractPowerRestriction: 0, displayName: 'Альфа', playerId: 'player-a', rating: 21 },
+    { accessSlot: 2, budget: 4, corporateTrust: 1, contractPowerRestriction: 0, displayName: 'Бета', playerId: 'player-b', rating: 0 },
   ],
   privateMeasurements: [],
   privateRawTelemetrySignals: [],
@@ -194,6 +194,15 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toMatch(/<details[^>]*data-audit-section="ranking"/)
   expect(html).not.toMatch(/<details[^>]*data-audit-section="ranking"[^>]*open/)
   expect(html).toContain('Место и вклад каждого участника')
+  expect(html).toContain('Как определён результат')
+  expect(html).toContain('Рейтинг → верные тезисы → оставшийся Бюджет')
+  expect(html).toContain('При полном равенстве победа общая')
+  expect(html).toContain('Выбывшие не могут победить, идут после активных')
+  expect(html).toContain('среди них выше тот, кто вышел позже')
+  expect(html).toContain('Корпоративное доверие показывает число выполненных обычных контрактов')
+  expect(html).toContain('Факторы итогового места игрока Альфа')
+  expect(html).toContain('Оставшийся Бюджет')
+  expect(html).toContain('Корпоративное доверие')
   expect(html).toContain('>Вы<')
   expect(html).toMatch(/<details[^>]*aria-label="Из чего сложились очки игрока Альфа"/)
   expect(html).not.toMatch(/<details[^>]*aria-label="Из чего сложились очки игрока Альфа"[^>]*open/)
@@ -247,8 +256,8 @@ test('separates another winner from the current player result', () => {
 test('keeps four-player ties and long names readable in the server ranking order', () => {
   const players = [
     ...view.players,
-    { accessSlot: 3, budget: 2, contractPowerRestriction: 0, displayName: 'Очень длинное имя исследовательской корпорации', playerId: 'player-c', rating: 12 },
-    { accessSlot: 4, budget: 1, contractPowerRestriction: 0, displayName: 'Гамма', playerId: 'player-d', rating: 12 },
+    { accessSlot: 3, budget: 2, corporateTrust: 1, contractPowerRestriction: 0, displayName: 'Очень длинное имя исследовательской корпорации', playerId: 'player-c', rating: 12 },
+    { accessSlot: 4, budget: 1, corporateTrust: 1, contractPowerRestriction: 0, displayName: 'Гамма', playerId: 'player-d', rating: 12 },
   ]
   const tiedView = {
     ...view,

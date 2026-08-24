@@ -856,6 +856,39 @@
   color: var(--primary);
 }
 
+.finalStandingExplanation {
+  display: grid;
+  min-width: 0;
+  gap: .45rem;
+  padding: .62rem;
+  border: 1px solid rgba(54, 184, 255, .28);
+  border-radius: .52rem;
+  background:
+    linear-gradient(100deg, rgba(25, 126, 180, .11), transparent 64%),
+    rgba(3, 18, 31, .72);
+}
+
+.finalStandingCopy {
+  display: grid;
+  min-width: 0;
+  gap: .12rem;
+}
+
+.finalStandingCopy h4 {
+  color: #eaf6fc;
+}
+
+.finalStandingCopy p,
+.trustExplanation {
+  line-height: 1.45;
+}
+
+.trustExplanation {
+  padding-top: .4rem;
+  border-top: 1px solid rgba(70, 128, 164, .2);
+  color: #f4c56b;
+}
+
 .count {
   display: grid;
   min-width: 2.3rem;
@@ -1061,23 +1094,27 @@
 }
 
 .playerStats {
-  display: flex;
-  grid-column: 2;
-  align-items: center;
-  justify-content: flex-start;
-  gap: .65rem;
+  display: grid;
+  min-width: 0;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .3rem;
 }
 
-.playerStats > span {
+.playerStats > li {
   display: grid;
-  justify-items: start;
-  gap: .02rem;
+  min-width: 0;
+  align-content: start;
+  gap: .08rem;
+  padding: .34rem .4rem;
+  border: 1px solid rgba(70, 128, 164, .2);
+  border-radius: .38rem;
+  background: rgba(1, 12, 23, .44);
 }
 
 .playerStats small {
   color: rgba(190, 210, 223, .48);
   font-size: .52rem;
-  text-transform: uppercase;
 }
 
 .playerStats strong {
@@ -1322,6 +1359,24 @@
     font-size: .8rem;
   }
 
+  .finalStandingExplanation {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, .8fr);
+    align-items: center;
+    padding: .8rem;
+  }
+
+  .finalStandingCopy p,
+  .trustExplanation {
+    font-size: .76rem;
+  }
+
+  .trustExplanation {
+    padding-top: 0;
+    padding-left: .8rem;
+    border-top: 0;
+    border-left: 1px solid rgba(70, 128, 164, .2);
+  }
+
   .signalGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1368,7 +1423,7 @@
   }
 
   .playerSummary {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     padding: .62rem .75rem;
   }
 
@@ -1378,12 +1433,13 @@
   }
 
   .playerStats {
-    grid-column: auto;
-    justify-content: flex-end;
+    grid-column: 2 / -1;
+    grid-row: 2;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .playerStats > span {
-    justify-items: end;
+  .playerStats > li {
+    min-height: 3.3rem;
   }
 
   .ratingBreakdown {
@@ -1396,7 +1452,8 @@
 
   .winnerBadge {
     display: flex;
-    grid-column: auto;
+    grid-column: 3;
+    grid-row: 1;
     min-width: 6.8rem;
     justify-content: flex-end;
   }

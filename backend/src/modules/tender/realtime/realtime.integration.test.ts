@@ -279,7 +279,7 @@ maybeDescribe('realtime websocket integration', () => {
       `${wsUrl}?ticket=${missingTicket.ticket}&tenderId=${crypto.randomUUID()}`,
     )
 
-    expect(foreign).toEqual({ code: 4403, messages: [], reason: 'Forbidden' })
+    expect(foreign).toEqual({ code: 4404, messages: [], reason: 'Unavailable' })
     expect(missing).toEqual(foreign)
   })
 

@@ -1,5 +1,6 @@
-import type { Locator, Page } from '@playwright/test'
+import type { BrowserContext, Locator, Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { expect, registerBrowserUser, test } from '../helpers/test'
@@ -109,6 +110,51 @@ async function readRoomJoinCode(page: Page) {
   const code = (await page.getByTestId('room-join-code').textContent())?.trim()
   if (!code) throw new Error('Room join code is missing from the lobby')
   return code
+}
+
+async function registerBrowserUserWithApiAccess(
+  page: Page,
+  displayName: string,
+  prefix: string,
+  startUrl = '/',
+) {
+  const registrationResponsePromise = page.waitForResponse((response) =>
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/auth/register')
+
+  await registerBrowserUser(page, displayName, prefix, startUrl)
+  const registrationResponse = await registrationResponsePromise
+  expect(registrationResponse.ok()).toBe(true)
+  const payload = await registrationResponse.json() as { accessToken?: unknown }
+  if (typeof payload.accessToken !== 'string') {
+    throw new Error('Browser registration response did not include an access token')
+  }
+
+  return {
+    accessToken: payload.accessToken,
+    apiOrigin: new URL(registrationResponse.url()).origin,
+  }
+}
+
+function collectRuntimeIssues(runtimeIssues: string[], source: string, runtimePage: Page) {
+  runtimePage.on('pageerror', (error) => {
+    runtimeIssues.push(`${source}: pageerror: ${error.message}`)
+  })
+  runtimePage.on('console', (message) => {
+    if (message.type() !== 'error') return
+    const resourceUrl = message.location().url
+    let resourcePath = ''
+    try {
+      resourcePath = new URL(resourceUrl).pathname
+    } catch {
+      // A console error without an absolute resource URL is never filtered.
+    }
+    const expectedUnauthenticatedBootstrap = resourcePath === '/api/auth/refresh'
+      && message.text().includes('401')
+    if (!expectedUnauthenticatedBootstrap) {
+      runtimeIssues.push(`${source}: console: ${message.text()}`)
+    }
+  })
 }
 
 async function expectSynchronizedTimers(first: Page, second: Page) {
@@ -557,6 +603,8 @@ test('lets a player collapse and return, then permanently forfeit the match', as
 
 test('keeps a four-player completed leaderboard compact after an early finish', async ({ browser, page }) => {
   test.setTimeout(90_000)
+  const runtimeIssues: string[] = []
+  collectRuntimeIssues(runtimeIssues, 'host', page)
   await page.setViewportSize({ width: 1440, height: 900 })
   await registerBrowserUser(page, 'Хост 4P E2E', 'four-player-host')
   const webOrigin = new URL(page.url()).origin
@@ -567,6 +615,9 @@ test('keeps a four-player completed leaderboard compact after an early finish', 
   ] as const
   const guestContexts = await Promise.all(guestSpecs.map(() => browser.newContext({ baseURL: webOrigin })))
   const guestPages = await Promise.all(guestContexts.map((context) => context.newPage()))
+  guestPages.forEach((guestPage, index) => {
+    collectRuntimeIssues(runtimeIssues, `guest-${index + 1}`, guestPage)
+  })
 
   try {
     for (let index = 0; index < guestPages.length; index += 1) {
@@ -618,8 +669,225 @@ test('keeps a four-player completed leaderboard compact after an early finish', 
     await auditCheckpoint(page, '15-completed-audit-four-player-mobile-360x800')
     await page.setViewportSize({ width: 320, height: 720 })
     await auditCheckpoint(page, '16-completed-audit-four-player-mobile-320x720')
+    expect(runtimeIssues).toEqual([])
   } finally {
     await Promise.all(guestContexts.map((context) => context.close()))
+  }
+})
+
+test('explains a completed Tender and conceals its participant audit from outsiders', async ({ browser, page }) => {
+  test.setTimeout(90_000)
+  page.setDefaultTimeout(12_000)
+  const hostName = 'Оставшийся участник аудита E2E'
+  const guestName = 'Выбывший участник аудита E2E'
+  const runtimeIssues: string[] = []
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  collectRuntimeIssues(runtimeIssues, 'host', page)
+  const hostSession = await registerBrowserUserWithApiAccess(page, hostName, 'issue-nine-host')
+  const webOrigin = new URL(page.url()).origin
+  const guestContext = await browser.newContext({
+    baseURL: webOrigin,
+    viewport: { width: 390, height: 844 },
+  })
+  let outsiderContext: BrowserContext | undefined
+
+  try {
+    const guestPage = await guestContext.newPage()
+    collectRuntimeIssues(runtimeIssues, 'guest', guestPage)
+    await registerBrowserUser(guestPage, guestName, 'issue-nine-guest', webOrigin)
+
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await page.getByLabel('Количество игроков').selectOption('2')
+    await page.getByRole('button', { name: 'Создать команду' }).click()
+    const roomJoinCode = await readRoomJoinCode(page)
+
+    await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
+    await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
+    await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Начать игру' }).click()
+    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    const tenderId = new URL(page.url()).pathname.split('/').at(-1)
+    if (!tenderId) throw new Error('Tender id is missing from the participant URL')
+
+    await guestPage.getByRole('button', { name: 'Выйти из матча' }).click()
+    await guestPage.getByRole('dialog', { name: 'Что сделать с матчем?' })
+      .getByRole('button', { name: 'Выйти', exact: true }).click()
+    await expect(guestPage).toHaveURL('/')
+    await expect(page.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
+    await expect(page.getByText('Вы победили', { exact: true })).toBeVisible()
+    await expect(page.locator('header[aria-label="Результаты завершённого тендера"]')).toBeVisible()
+
+    const participantResponse = await page.context().request.get(
+      `${hostSession.apiOrigin}/api/tenders/${tenderId}`,
+      { headers: { Authorization: `Bearer ${hostSession.accessToken}` } },
+    )
+    expect(participantResponse.status()).toBe(200)
+    const completedView = await participantResponse.json() as {
+      audit?: {
+        ratingBreakdownByPlayer: Record<string, { thesisPoints: number }>
+      }
+      phase: string
+      players: Array<{
+        budget: number
+        corporateTrust?: number
+        displayName?: string
+        playerId: string
+        rating: number
+      }>
+    }
+    expect(completedView.phase).toBe('complete')
+    if (!completedView.audit) throw new Error('Completed participant view is missing its audit')
+    expect(completedView.players).toHaveLength(2)
+
+    const ranking = page.locator('details[data-audit-section="ranking"]')
+    const rankingSummary = ranking.locator(':scope > summary')
+    const explanation = page.locator('section[aria-labelledby="completed-standing-explanation-heading"]')
+    const assertParticipantFactors = async () => {
+      for (const player of completedView.players) {
+        const playerLabel = player.displayName ?? player.playerId.slice(0, 8)
+        const breakdown = completedView.audit!.ratingBreakdownByPlayer[player.playerId]
+        if (!breakdown) throw new Error(`Rating breakdown is missing for ${playerLabel}`)
+        const standing = {
+          corporateTrust: player.corporateTrust ?? 0,
+          correctTheses: breakdown.thesisPoints,
+          rating: player.rating,
+          remainingBudget: player.budget,
+        }
+        const factors = page.getByRole('list', {
+          name: `Факторы итогового места игрока ${playerLabel}`,
+        })
+        await expect(factors).toBeVisible()
+        await expect(factors.getByText('Рейтинг', { exact: true }).locator('..').locator('strong'))
+          .toHaveText(new RegExp(`^${standing.rating} (?:очко|очка|очков)$`))
+        await expect(factors.getByText('Верные тезисы', { exact: true }).locator('..').locator('strong'))
+          .toHaveText(String(standing.correctTheses))
+        await expect(factors.getByText('Оставшийся Бюджет', { exact: true }).locator('..').locator('strong'))
+          .toHaveText(String(standing.remainingBudget))
+        await expect(factors.getByText('Корпоративное доверие', { exact: true }).locator('..').locator('strong'))
+          .toHaveText(String(standing.corporateTrust))
+        await expect(page.getByLabel(`Из чего сложились очки игрока ${playerLabel}`)).toBeVisible()
+      }
+    }
+    const assertAuditViewport = async (
+      viewport: { height: number; width: number },
+      checkpoint: string,
+    ) => {
+      await page.setViewportSize(viewport)
+      await page.evaluate(() => new Promise<void>((resolveFrame) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+      }))
+      if (!await ranking.evaluate((element) => (element as HTMLDetailsElement).open)) {
+        await rankingSummary.focus()
+        await expect(rankingSummary).toBeFocused()
+        await rankingSummary.press('Enter')
+      }
+      await expect(ranking).toHaveAttribute('open', '')
+      await expect(ranking.locator('ol > li')).toHaveCount(2)
+      await expect(explanation).toBeVisible()
+      await expect(explanation).toContainText('Рейтинг → верные тезисы → оставшийся Бюджет')
+      await expect(explanation).toContainText('Корпоративное доверие')
+      await expect(explanation).toContainText('Финальный контракт')
+      await expect(explanation).toContainText('не участвует в тай-брейке')
+      await assertParticipantFactors()
+      await expect.poll(() => page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      )).toBe(true)
+      await expect.poll(() => ranking.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      )).toBe(true)
+      await auditCheckpoint(page, checkpoint)
+    }
+
+    await assertAuditViewport(
+      { width: 1440, height: 900 },
+      '17-issue-9-completed-audit-desktop-1440x900',
+    )
+    await assertAuditViewport(
+      { width: 1024, height: 768 },
+      '18-issue-9-completed-audit-compact-1024x768',
+    )
+    await assertAuditViewport(
+      { width: 390, height: 844 },
+      '19-issue-9-completed-audit-mobile-390x844',
+    )
+
+    outsiderContext = await browser.newContext({
+      baseURL: webOrigin,
+      viewport: { width: 390, height: 844 },
+    })
+    const outsiderPage = await outsiderContext.newPage()
+    collectRuntimeIssues(runtimeIssues, 'outsider', outsiderPage)
+    const outsiderSession = await registerBrowserUserWithApiAccess(
+      outsiderPage,
+      'Посторонний аудита E2E',
+      'issue-nine-outsider',
+      webOrigin,
+    )
+    const absentTenderId = randomUUID()
+    expect(absentTenderId).not.toBe(tenderId)
+    const outsiderHeaders = { Authorization: `Bearer ${outsiderSession.accessToken}` }
+    const [existingTenderResponse, absentTenderResponse] = await Promise.all([
+      outsiderContext.request.get(`${outsiderSession.apiOrigin}/api/tenders/${tenderId}`, {
+        headers: outsiderHeaders,
+      }),
+      outsiderContext.request.get(`${outsiderSession.apiOrigin}/api/tenders/${absentTenderId}`, {
+        headers: outsiderHeaders,
+      }),
+    ])
+    expect(existingTenderResponse.status()).toBe(404)
+    expect(absentTenderResponse.status()).toBe(404)
+    const [existingTenderBody, absentTenderBody] = await Promise.all([
+      existingTenderResponse.text(),
+      absentTenderResponse.text(),
+    ])
+    expect(existingTenderBody).toBe(absentTenderBody)
+    const concealedBody = JSON.parse(existingTenderBody) as unknown
+    expect(concealedBody).toEqual({
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Tender not found',
+      },
+    })
+    expect(JSON.stringify(concealedBody)).not.toMatch(
+      /audit|anomalyConfiguration|finalStanding|privateMeasurements|privateTheses|players/i,
+    )
+
+    await outsiderPage.goto(`${webOrigin}/tenders/${tenderId}`)
+    await expect(outsiderPage.getByRole('heading', { name: 'Матч недоступен' })).toBeVisible()
+    await expect(outsiderPage.getByRole('button', { name: 'Повторить' })).toBeVisible()
+    await expect(outsiderPage.getByRole('button', { name: 'В Историю матчей' })).toBeVisible()
+    await expect(outsiderPage.locator('[data-audit-section]')).toHaveCount(0)
+    await expect(outsiderPage.getByText(hostName, { exact: true })).toHaveCount(0)
+    await expect(outsiderPage.getByText(guestName, { exact: true })).toHaveCount(0)
+    await expect.poll(() => outsiderPage.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    )).toBe(true)
+    await auditCheckpoint(
+      outsiderPage,
+      '20-issue-9-outsider-terminal-mobile-390x844',
+    )
+
+    const retryTicketResponse = outsiderPage.waitForResponse((response) =>
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/realtime/tickets')
+    await outsiderPage.getByRole('button', { name: 'Повторить' }).click()
+    expect((await retryTicketResponse).ok()).toBe(true)
+    await expect(outsiderPage.getByRole('heading', { name: 'Матч недоступен' })).toBeVisible()
+
+    await outsiderPage.getByRole('button', { name: 'В Историю матчей' }).click()
+    await expect(outsiderPage).toHaveURL((url) => url.pathname === '/app')
+    await expect(outsiderPage.locator('[data-audit-section]')).toHaveCount(0)
+
+    expect(runtimeIssues).toEqual([])
+  } finally {
+    await Promise.all([
+      guestContext.close(),
+      outsiderContext?.close(),
+    ])
   }
 })
 

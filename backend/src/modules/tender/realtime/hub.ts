@@ -1,8 +1,27 @@
 import type { RealtimeServerMessage } from '@anomaly-detector/contracts'
 
 import type { TenderModule } from '../application/tender-module'
+import { TenderFailure } from '../domain/errors'
+
+type RealtimeFailureClose = {
+  code: 1011 | 4404
+  reason: 'Internal error' | 'Unavailable'
+  reportAsError: boolean
+}
+
+export function resolveRealtimeFailureClose(failure: unknown): RealtimeFailureClose {
+  if (failure instanceof TenderFailure && (
+    failure.kind === 'tender_not_found'
+    || failure.kind === 'player_not_in_tender'
+    || failure.kind === 'player_forfeited'
+  )) {
+    return { code: 4404, reason: 'Unavailable', reportAsError: false }
+  }
+  return { code: 1011, reason: 'Internal error', reportAsError: true }
+}
 
 export type RealtimeSocket = {
+  close(code: number, reason: string): void
   send(message: string): void
 }
 
@@ -29,6 +48,21 @@ export function createRealtimeHub({ onTenderChanged, tender }: RealtimeHubOption
     socket.send(JSON.stringify(message))
   }
 
+  const closeFailedSubscription = (
+    subscription: Subscription,
+    message: string,
+    error: unknown,
+  ) => {
+    if (!subscriptions.delete(subscription)) return
+    const failureClose = resolveRealtimeFailureClose(error)
+    try {
+      subscription.socket.close(failureClose.code, failureClose.reason)
+    } catch (closeError) {
+      console.error('Realtime subscriber socket close failed:', closeError)
+    }
+    if (failureClose.reportAsError) console.error(message, error)
+  }
+
   const publish = async (tenderId: string) => {
     const targets = [...subscriptions].filter((subscription) => subscription.tenderId === tenderId)
     await Promise.all(targets.map(async (subscription) => {
@@ -40,8 +74,7 @@ export function createRealtimeHub({ onTenderChanged, tender }: RealtimeHubOption
         subscription.version = view.version
         deliver(subscription.socket, { type: 'tender-view', view })
       } catch (error) {
-        subscriptions.delete(subscription)
-        console.error('Realtime subscriber delivery failed:', error)
+        closeFailedSubscription(subscription, 'Realtime subscriber delivery failed:', error)
       }
     }))
   }
@@ -58,8 +91,7 @@ export function createRealtimeHub({ onTenderChanged, tender }: RealtimeHubOption
         subscription.version = view.version
         deliver(subscription.socket, { type: 'tender-view', view })
       } catch (error) {
-        subscriptions.delete(subscription)
-        console.error('Realtime subscriber synchronisation failed:', error)
+        closeFailedSubscription(subscription, 'Realtime subscriber synchronisation failed:', error)
       }
     }))
   }
@@ -83,8 +115,8 @@ export function createRealtimeHub({ onTenderChanged, tender }: RealtimeHubOption
         tenderId: input.tenderId,
         version: view.version,
       }
-      subscriptions.add(subscription)
       deliver(input.socket, { type: 'tender-view', view })
+      subscriptions.add(subscription)
       return {
         close: async () => {
           subscriptions.delete(subscription)
