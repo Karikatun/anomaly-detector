@@ -1,12 +1,15 @@
-import { beforeAll, expect, test } from 'bun:test'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
 const websiteRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const publicWebsiteUrl = 'https://anomaly-detector.ru'
 const publicWebappUrl = 'https://app.anomaly-detector.ru'
+const buildOutput = mkdtempSync(join(tmpdir(), 'anomaly-website-test-'))
 const recoveryAnswer = 'Для аккаунта с паролем доступ можно восстановить через активную почту восстановления или сохранённый резервный код. Для аккаунта Яндекс ID вход и восстановление выполняются на стороне Яндекса.'
 const socialImageAlt = 'Экран Разведки Anomaly Detector: выбор сигналов, игроки и Рабочая модель'
 
@@ -19,7 +22,9 @@ const buildEnvironment = ({ analyticsApiUrl, campaignAllowlist } = {}) => {
     ...process.env,
     PUBLIC_WEBSITE_URL: publicWebsiteUrl,
     PUBLIC_WEBAPP_URL: publicWebappUrl,
+    SPLIT_DOMAIN_BUILD_OUT_DIR: buildOutput,
   }
+  delete env.WEBSITE_RELEASE_BUILD
   delete env.PUBLIC_ANALYTICS_API_URL
   delete env.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST
   if (analyticsApiUrl) env.PUBLIC_ANALYTICS_API_URL = analyticsApiUrl
@@ -35,9 +40,13 @@ beforeAll(async () => {
   })
   expect(build.status, build.stderr).toBe(0)
 
-  html = await readFile(resolve(websiteRoot, 'dist/index.html'), 'utf8')
-  robots = await readFile(resolve(websiteRoot, 'dist/robots.txt'), 'utf8')
-  sitemap = await readFile(resolve(websiteRoot, 'dist/sitemap.xml'), 'utf8')
+  html = await readFile(resolve(buildOutput, 'index.html'), 'utf8')
+  robots = await readFile(resolve(buildOutput, 'robots.txt'), 'utf8')
+  sitemap = await readFile(resolve(buildOutput, 'sitemap.xml'), 'utf8')
+})
+
+afterAll(() => {
+  rmSync(buildOutput, { force: true, recursive: true })
 })
 
 test('publishes the approved landing and a bounded tutorial continuation in initial HTML', () => {
@@ -51,6 +60,9 @@ test('publishes the approved landing and a bounded tutorial continuation in init
   expect(html).not.toContain('№1')
   expect(html).not.toContain('Разрешить аналитику')
   expect(html).not.toContain('data-analytics-consent')
+  for (const legalPath of ['/terms', '/privacy', '/personal-data-consent']) {
+    expect(html).toContain(`href="${publicWebappUrl}${legalPath}"`)
+  }
 })
 
 test('renders an equal-choice first-party consent panel only when explicitly enabled', async () => {
@@ -61,7 +73,7 @@ test('renders an equal-choice first-party consent panel only when explicitly ena
     encoding: 'utf8',
   })
   expect(build.status, build.stderr).toBe(0)
-  const enabledHtml = await readFile(resolve(websiteRoot, 'dist/index.html'), 'utf8')
+  const enabledHtml = await readFile(resolve(buildOutput, 'index.html'), 'utf8')
 
   expect(enabledHtml).toContain('data-analytics-consent')
   expect(enabledHtml).toContain('Разрешить аналитику')
@@ -88,7 +100,7 @@ test('publishes complete social metadata backed by a real image asset', async ()
   expect(html).toContain(`<meta name="twitter:image" content="${socialImageUrl}">`)
   expect(html).toContain(`<meta name="twitter:image:alt" content="${socialImageAlt}">`)
 
-  const imagePath = resolve(websiteRoot, 'dist', new URL(socialImageUrl).pathname.slice(1))
+  const imagePath = resolve(buildOutput, new URL(socialImageUrl).pathname.slice(1))
   const image = await readFile(imagePath)
   expect(image.subarray(1, 4).toString()).toBe('PNG')
   expect(image.readUInt32BE(16)).toBe(1440)

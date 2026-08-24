@@ -1,6 +1,15 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 
+import {
+	loadWebsiteReleaseEnvironment,
+	validateWebsiteReleaseEnvironment,
+} from './release-config.mjs';
+
+if (process.env.WEBSITE_RELEASE_BUILD === 'true') {
+	validateWebsiteReleaseEnvironment(loadWebsiteReleaseEnvironment());
+}
+
 // https://astro.build/config
 //
 // Default rendering is static (SSG): every page prerenders to HTML and the
@@ -28,4 +37,8 @@ import { defineConfig } from 'astro/config';
 //      path". Note: built-in per-page ISR is not part of the default
 //      Yandex Cloud static path; use rebuilds or CDN/runtime cache
 //      freshness instead.
-export default defineConfig({});
+export default defineConfig({
+	...(process.env.SPLIT_DOMAIN_BUILD_OUT_DIR
+		? { outDir: process.env.SPLIT_DOMAIN_BUILD_OUT_DIR }
+		: {}),
+});

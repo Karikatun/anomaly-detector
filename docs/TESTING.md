@@ -5,6 +5,7 @@
 - `bun run check:commit` — быстрый локальный gate: tracked secret hygiene, lint, Prisma validation, typecheck, architecture, script/contracts/backend unit/webapp tests.
 - `bun run check:push` — dependency audit, full-history Gitleaks и полный `check`: все тесты, production build, backend Docker smoke и Playwright E2E.
 - `bun run check` — полный локальный поведенческий gate без сетевого dependency audit.
+- `bun run preflight:split-domain` — отдельный воспроизводимый target/rollback gate для подготовленного разделения `anomaly-detector.ru` и `app.anomaly-detector.ru`.
 - `pre-commit` отдельно сканирует staged Git index, поэтому проверяет именно содержимое будущего commit, а не игнорируемый локальный `backend/.env`.
 - GitHub Actions повторяет secret hygiene и tooling contracts независимо от локальных hooks, которые можно обойти через `--no-verify`.
 - `security-static` независимо запускает Gitleaks по Git-истории, Semgrep по versioned high-confidence правилам и Trivy по конфигурации; после Docker smoke Trivy проверяет собранный backend image.
@@ -210,6 +211,56 @@ Playwright artifacts live in `webapp/e2e/.artifacts/` and are not committed. For
 ```bash
 bun run --cwd webapp e2e:ui
 ```
+
+### Split-domain preflight
+
+Run the complete local preflight from the repository root:
+
+```bash
+bun run preflight:split-domain
+```
+
+It first checks the route-derived Caddy policy, backend origin/OAuth contracts,
+release-build guards and generated public links. It then builds the current
+`webapp`/`website` and runs Chromium twice behind an isolated edge on distinct
+`*.anomaly-detector.localhost` hosts with an ephemeral local TLS certificate:
+
+- target: public-root `404`, every registered legacy deep-link temporary
+  redirect with path/query and `Cache-Control: no-store`,
+  player SPA reload, public/player CSP, exact CORS, API callback + player OAuth
+  error return, app-host legal URLs, and a `Secure; HttpOnly; SameSite=None`
+  host-only refresh cookie restricted to `/api/auth`;
+- rollback: root-host SPA/deep-link reload, root CORS/OAuth return,
+  previous app and untrusted-origin CORS rejection, secure refresh/logout,
+  app-to-root recovery redirect and unchanged API-host cookie scope.
+
+The OAuth transport contract additionally mocks successful target and rollback
+callbacks, checks their secure host-only auth cookie, and rejects an in-flight
+callback from the previous origin before transaction side effects. Real provider
+code exchange remains an owner gate.
+
+Each profile gets a unique Compose project, dynamically resolved ports and its
+own static/result directories under `webapp/e2e/.artifacts/`; the runner removes
+ambient database, Compose, URL, port and skip/keep overrides before starting.
+Docker daemon selectors are also removed, and the runner fails closed unless
+the resulting active context uses a local Unix socket; that verified socket is
+then pinned as `DOCKER_HOST` for the complete child run. Its teardown can
+therefore remove only that invocation's local `_test` volume. The final
+release builds use a separate OS temporary directory, clear owner-gated
+analytics flags, verify fixed production origins and reject localhost,
+`0.0.0.0`, IPv6/IPv4 loopback and named `.localhost` origins, then delete the
+test-only artifacts automatically.
+
+The TanStack Router bundle contains its own exact `http://localhost` fallback
+literal for browsers without an origin; the scanner permits that known
+non-endpoint string. Release validators still make both configured API origins
+exact production values, while any localhost path/port or other loopback host
+remains rejected.
+
+The isolated edge reads route families, redirect destinations/status/cache
+policy and headers from the versioned Caddy profiles, but it is not the Caddy
+parser and does not prove public DNS/TLS, provider-side OAuth registration or
+live production headers; those remain release-owner checks.
 
 ## Mobile Maestro E2E
 

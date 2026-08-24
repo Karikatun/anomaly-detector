@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test'
+import type { MiddlewareHandler } from 'hono'
 
 import { createApp } from '../../../app'
 import type { DbClient } from '../../../db'
 import type { AppEnv } from '../../../env'
+import type { AuthService } from '../application/auth-service'
 import { AuthFailure } from '../domain/errors'
 import { toAuthAppError } from './errors'
-import { oauthCallbackErrorCode } from './routes'
+import type { AuthHttpEnv } from './middleware'
+import { createAuthRoutes, oauthCallbackErrorCode } from './routes'
 
 const env: AppEnv = {
   PORT: 3000,
@@ -269,4 +272,82 @@ describe('auth routes', () => {
       'https://web.example.com/?auth_error=cancelled',
     )
   })
+
+  test.each([
+    'https://app.anomaly-detector.ru',
+    'https://anomaly-detector.ru',
+  ])('returns a successful OAuth callback and host-only secure cookie to %s', async (webappUrl) => {
+    let completionCalls = 0
+    const routes = oauthRoutes(webappUrl, async () => {
+      completionCalls += 1
+      return {
+        created: true,
+        refreshToken: 'mock-refresh-token',
+        webappOrigin: webappUrl,
+      }
+    })
+    const response = await routes.request(
+      `/oauth/yandex/callback?code=mock-code&state=${encodeURIComponent(oauthState(webappUrl))}`,
+    )
+
+    expect(completionCalls).toBe(1)
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(`${webappUrl}/?analytics_registration=1`)
+    const cookie = response.headers.get('set-cookie') ?? ''
+    expect(cookie).toContain('anomaly_detector_refresh=mock-refresh-token')
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('Secure')
+    expect(cookie).toContain('SameSite=None')
+    expect(cookie).toContain('Path=/api/auth')
+    expect(cookie).not.toMatch(/(?:^|;)\s*Domain=/i)
+  })
+
+  test('rejects an in-flight OAuth return from the previous split origin before side effects', async () => {
+    let completionCalls = 0
+    const currentOrigin = 'https://anomaly-detector.ru'
+    const routes = oauthRoutes(currentOrigin, async () => {
+      completionCalls += 1
+      throw new Error('stale-origin completion must not run')
+    })
+    const staleState = oauthState('https://app.anomaly-detector.ru')
+    const response = await routes.request(
+      `/oauth/yandex/callback?code=mock-code&state=${encodeURIComponent(staleState)}`,
+    )
+
+    expect(completionCalls).toBe(0)
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(
+      `${currentOrigin}/?auth_error=oauth_failed`,
+    )
+  })
 })
+
+function oauthState(webappOrigin: string) {
+  return `${Buffer.from(webappOrigin).toString('base64url')}::mock-state`
+}
+
+function oauthRoutes(
+  webappUrl: string,
+  completeOAuthSignIn: () => Promise<{
+    created: boolean
+    refreshToken: string
+    webappOrigin: string
+  }>,
+) {
+  const passThrough = (async (_context, next) => {
+    await next()
+  }) as MiddlewareHandler<AuthHttpEnv>
+  const service = { completeOAuthSignIn } as unknown as AuthService
+
+  return createAuthRoutes({
+    authenticatedMutationBudget: passThrough,
+    deviceTokens: {
+      resolve: () => ({ cookieValue: null, deviceId: 'unused-test-device' }),
+    },
+    env,
+    oauthCallbackBaseUrl: 'https://api.anomaly-detector.ru',
+    requireAuth: passThrough,
+    service,
+    webappUrl,
+  })
+}

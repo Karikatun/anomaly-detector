@@ -50,7 +50,10 @@ import { z } from 'zod'
 import type { AppEnv } from '../../../env'
 import { AppError, validationErrorHook } from '../../../http/errors'
 import { clientAddress } from '../../../http/security'
-import type { AuthService } from '../application/auth-service'
+import {
+  oauthWebappOriginFromState,
+  type AuthService,
+} from '../application/auth-service'
 import type { DeviceTokens } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
 import { userDtoFromPrincipal } from '../domain/user'
@@ -1088,8 +1091,14 @@ export function createAuthRoutes({
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- refined by query.error check above
     const { code, state } = query as { code: string; state: string }
     try {
+      trustedOAuthWebappOrigin(oauthWebappOriginFromState(state) ?? '', webappUrl)
       const result = await executeAuth(() =>
-        service.completeOAuthSignIn({ code, state, metadata: requestMetadata(c, env) }),
+        service.completeOAuthSignIn({
+          code,
+          state,
+          metadata: requestMetadata(c, env),
+          webappOrigin: webappUrl,
+        }),
       )
       // Set session cookie and redirect to webapp
       // Note: must set cookie on the response manually because c.redirect()

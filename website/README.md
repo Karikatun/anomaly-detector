@@ -83,8 +83,14 @@ origin and publishes `website/dist` through the Yandex Cloud static-site path:
 ```bash
 PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
 PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
-bun run build:website
+bun run build:website:release
 ```
+
+The release command fails closed on any missing, alternate, path-bearing or
+trailing-slash origin and on ambient analytics API/allowlist values until the
+separate production analytics gate is approved. It validates the same merged
+production environment (including `.env.production`) that Astro builds.
+Ordinary local builds remain configurable for previews.
 
 Follow [the release entrypoint](../docs/DEPLOYMENT.md), the
 [release checklist](../docs/RELEASE_CHECKLIST.md), and the provider-specific
