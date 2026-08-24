@@ -140,6 +140,7 @@ export class TransactionalMailDeliveryService {
       }
       if (!allowed) {
         const released = await this.dependencies.repository.releaseBlocked({
+          deliveryBudgetWindowStartedAt: claim.message.deliveryBudgetWindowStartedAt,
           id: claim.message.id,
           now: deliveryNow,
           workerId,

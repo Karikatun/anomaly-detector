@@ -55,6 +55,7 @@ maybeDescribe('profile statistics API integration', () => {
     await prisma.tender.deleteMany()
     await prisma.authSession.deleteMany()
     await prisma.user.deleteMany()
+    await prisma.authAbuseBucket.deleteMany()
   })
 
   afterAll(async () => {
@@ -204,5 +205,49 @@ maybeDescribe('profile statistics API integration', () => {
 
     const stored = await app.request('/api/profile/tutorial', { headers })
     expect(await stored.json()).toEqual(firstMarker)
+  })
+
+  test('shares the authenticated mutation budget with tutorial completion', async () => {
+    const constrainedApp = createApp({
+      env: { ...env, ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT: 2 },
+      prisma,
+    })
+    const registration = await constrainedApp.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'tutorial-budget-player',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.1',
+        termsAccepted: true,
+        termsVersion: '1.1',
+      }),
+    })
+    const { accessToken } = await registration.json()
+    const headers = { Authorization: `Bearer ${accessToken}` }
+
+    expect((await constrainedApp.request('/api/profile/tutorial/completion', {
+      method: 'PUT',
+      headers,
+    })).status).toBe(200)
+    expect((await constrainedApp.request('/api/profile/tutorial/completion', {
+      method: 'PUT',
+      headers,
+    })).status).toBe(200)
+
+    const limited = await constrainedApp.request('/api/profile/tutorial/completion', {
+      method: 'PUT',
+      headers,
+    })
+    expect(limited.status).toBe(429)
+    expect(limited.headers.get('retry-after')).toBeTruthy()
+    expect(await limited.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many authenticated mutation requests',
+      },
+    })
+    expect((await constrainedApp.request('/api/profile/tutorial', { headers })).status).toBe(200)
   })
 })

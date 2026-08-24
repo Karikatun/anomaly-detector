@@ -42,6 +42,22 @@ test('HttpClient rejects a JSON response for a no-content contract', async () =>
     .rejects.toMatchObject({ code: 'INVALID_RESPONSE', status: 200 })
 })
 
+test('HttpClient preserves a valid Retry-After delay on API errors', async () => {
+  const client = new HttpClient('https://api.example.test')
+  globalThis.fetch = async () => json(
+    { error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
+    429,
+    { 'Retry-After': '17' },
+  )
+
+  await expect(client.request('/resource', z.object({ value: z.string() })))
+    .rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      retryAfterSeconds: 17,
+      status: 429,
+    })
+})
+
 test('AuthApi refreshes and retries authenticated requests with the new access token', async () => {
   const expiredAccessToken = accessTokenFor('user_1', 'expired')
   const freshAccessToken = accessTokenFor('user_1', 'fresh')
@@ -588,11 +604,12 @@ async function waitForEvent(events: string[], event: string) {
   throw new Error(`Timed out waiting for event: ${event}`)
 }
 
-function json(body: unknown, status: number) {
+function json(body: unknown, status: number, headers?: HeadersInit) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       'Content-Type': 'application/json',
+      ...Object.fromEntries(new Headers(headers).entries()),
     },
   })
 }

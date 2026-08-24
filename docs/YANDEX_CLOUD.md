@@ -567,9 +567,19 @@ After deployment, invoke the private cleanup container once with an IAM token an
 
 Keep the Yandex deployment path monolithic by default: the API container should own HTTP routes, auth, persistence, and WebSocket endpoints, while the worker is only a second process for authoritative deadlines. Do not split chat, notifications, or presence into microservices unless the product has a concrete operational reason.
 
-When the backend runs as one container instance, WebSocket connection state can stay inside that process. If the container is horizontally scaled and users connected to different instances must receive the same chat, presence, collaboration, or live-notification events, add Yandex Managed Service for Valkey as a Redis-compatible Pub/Sub broker.
+When the backend runs as one container instance, WebSocket connection state can
+stay inside that process. The current realtime hub detects committed Tender
+changes from another API instance by re-reading each active authorized view
+once per second. This provides eventual recovery during controlled transition
+checks, but adds approximately one PostgreSQL view-read per socket per second;
+do not treat it as the horizontally scaled production target.
 
-Each backend instance should publish domain events to Valkey and subscribe to the channels it needs to deliver events to its own local WebSocket connections. Keep Valkey out of baseline local setup and ordinary request/response APIs; add it only for cross-instance real-time fanout.
+Before adding API replicas with WebSocket traffic, record the active-socket and
+PostgreSQL capacity baseline. Each backend instance should then publish compact
+domain events to Valkey and subscribe to the channels it needs to deliver them
+to local connections, or adopt another grouped fanout backed by equivalent
+evidence. Keep Valkey out of baseline local setup and ordinary request/response
+APIs.
 
 ## Static Webapp And Website
 

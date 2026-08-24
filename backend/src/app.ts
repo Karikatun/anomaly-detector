@@ -77,6 +77,7 @@ export function createApp({
     tenderLifecycleReader: createPersistentTenderLifecycleReader(prisma),
   })
   const profile = createProfileModule({
+    authenticatedMutationBudget: auth.authenticatedMutationBudget,
     completedTenderSummaryReader: createPersistentCompletedTenderSummaryReader(prisma),
     db: prisma,
     requireAuth: auth.requireAuth,

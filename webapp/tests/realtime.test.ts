@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import type { AuthenticatedTransport } from '../src/platform/api'
+import { ApiRequestError, type AuthenticatedTransport } from '../src/platform/api'
 import { TenderRealtimeSession, type RealtimeState } from '../src/features/tender/realtime'
 
 test('stopped realtime session never opens a socket after its ticket arrives', async () => {
@@ -101,6 +101,127 @@ test('an active realtime session reports stale state and schedules recovery afte
   expect(reconnect).not.toBeNull()
 })
 
+test('two tabs stay within the shared ten-ticket budget during continuous failure', async () => {
+  let nowMs = 0
+  const requestTimes: number[] = []
+  const scheduled: Array<{ callback: () => void; dueAtMs: number }> = []
+  const options = () => ({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => new FakeSocket(),
+    onState: () => undefined,
+    scheduleReconnect: (callback: () => void, delayMs: number) => {
+      scheduled.push({ callback, dueAtMs: nowMs + delayMs })
+      return scheduled.length
+    },
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-shared-budget',
+    transport: {
+      request: async () => {
+        requestTimes.push(nowMs)
+        throw new Error('ticket endpoint unavailable')
+      },
+    } as AuthenticatedTransport,
+  })
+  const firstTab = new TenderRealtimeSession(options())
+  const secondTab = new TenderRealtimeSession(options())
+
+  firstTab.start()
+  secondTab.start()
+  await flushMicrotasks()
+
+  while (true) {
+    const nextDueAtMs = Math.min(...scheduled.map((timer) => timer.dueAtMs))
+    if (!Number.isFinite(nextDueAtMs) || nextDueAtMs >= 60_000) break
+
+    nowMs = nextDueAtMs
+    const dueTimers = scheduled.filter((timer) => timer.dueAtMs === nowMs)
+    for (const timer of dueTimers) {
+      scheduled.splice(scheduled.indexOf(timer), 1)
+      timer.callback()
+    }
+    await flushMicrotasks()
+  }
+
+  expect(requestTimes).toEqual([
+    0,
+    0,
+    5_000,
+    5_000,
+    15_000,
+    15_000,
+    35_000,
+    35_000,
+  ])
+  expect(requestTimes).toHaveLength(8)
+})
+
+test('realtime reconnect treats Retry-After as a minimum delay', async () => {
+  const delays: number[] = []
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => new FakeSocket(),
+    onState: () => undefined,
+    scheduleReconnect: (_callback, delayMs) => {
+      delays.push(delayMs)
+      return 1
+    },
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-rate-limited',
+    transport: {
+      request: async () => {
+        throw new ApiRequestError(429, 'RATE_LIMITED', 'Too many requests', 60)
+      },
+    } as AuthenticatedTransport,
+  })
+
+  session.start()
+  await flushMicrotasks()
+
+  expect(delays).toEqual([60_000])
+})
+
+test('successful socket open resets the reconnect backoff', async () => {
+  const delays: number[] = []
+  const callbacks: Array<() => void> = []
+  const sockets: FakeSocket[] = []
+  let requestCount = 0
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => {
+      const socket = new FakeSocket()
+      sockets.push(socket)
+      return socket
+    },
+    onState: () => undefined,
+    scheduleReconnect: (callback, delayMs) => {
+      callbacks.push(callback)
+      delays.push(delayMs)
+      return callbacks.length
+    },
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-reset-backoff',
+    transport: {
+      request: async () => {
+        requestCount += 1
+        if (requestCount === 1) throw new Error('ticket endpoint unavailable')
+        return {
+          expiresAt: '2026-07-25T00:00:00.000Z',
+          ticket: 'ticket-ticket-ticket-ticket-ticket-123',
+        }
+      },
+    } as AuthenticatedTransport,
+  })
+
+  session.start()
+  await flushMicrotasks()
+  callbacks[0]?.()
+  await flushMicrotasks()
+  sockets[0]?.emitOpen()
+  sockets[0]?.emitClose()
+
+  expect(delays).toEqual([5_000, 5_000])
+})
+
 test('realtime session exposes a stable error code for an invalid server message', async () => {
   const states: RealtimeState[] = []
   const socket = new FakeSocket()
@@ -157,4 +278,10 @@ function resolvedTicketTransport() {
       ticket: 'ticket-ticket-ticket-ticket-ticket-123',
     }),
   } as AuthenticatedTransport
+}
+
+async function flushMicrotasks() {
+  await Promise.resolve()
+  await Promise.resolve()
+  await Promise.resolve()
 }

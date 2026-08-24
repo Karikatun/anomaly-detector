@@ -9,6 +9,7 @@ import { createPrismaTutorialProgressRepository } from './infrastructure/prisma-
 import { createProfileRoutes } from './transport/routes'
 
 export function createProfileModule(input: {
+  authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   completedTenderSummaryReader: CompletedTenderSummaryReader
   db: DbClient
   requireAuth: MiddlewareHandler<AuthHttpEnv>
@@ -21,6 +22,7 @@ export function createProfileModule(input: {
   )
   return {
     routes: createProfileRoutes({
+      authenticatedMutationBudget: input.authenticatedMutationBudget,
       requireAuth: input.requireAuth,
       service,
       tutorial,

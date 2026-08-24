@@ -3198,6 +3198,9 @@ maybeDescribe('auth API integration', () => {
         message: 'Too many authenticated mutation requests',
       },
     })
+    expect(await prisma.authAbuseBucket.count({
+      where: { scope: 'room_join' },
+    })).toBe(0)
 
     const player = await prisma.user.findUniqueOrThrow({
       where: { login: 'shared-authenticated-mutation-budget' },
@@ -3247,6 +3250,9 @@ maybeDescribe('auth API integration', () => {
         message: 'Too many authenticated mutation requests',
       },
     })
+    expect(await prisma.authAbuseBucket.count({
+      where: { scope: 'realtime_ticket_issue' },
+    })).toBe(0)
 
     const me = await app.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
