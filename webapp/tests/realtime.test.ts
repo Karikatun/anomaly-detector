@@ -272,7 +272,8 @@ test('realtime reconnect treats Retry-After as a minimum delay', async () => {
   expect(delays).toEqual([60_000])
 })
 
-test('successful socket open resets the reconnect backoff', async () => {
+test('only an authorised Tender view completes recovery and resets the reconnect backoff', async () => {
+  const states: RealtimeState[] = []
   const delays: number[] = []
   const callbacks: Array<() => void> = []
   const sockets: FakeSocket[] = []
@@ -284,7 +285,7 @@ test('successful socket open resets the reconnect backoff', async () => {
       sockets.push(socket)
       return socket
     },
-    onState: () => undefined,
+    onState: (state) => states.push(state),
     scheduleReconnect: (callback, delayMs) => {
       callbacks.push(callback)
       delays.push(delayMs)
@@ -309,12 +310,88 @@ test('successful socket open resets the reconnect backoff', async () => {
   callbacks[0]?.()
   await flushMicrotasks()
   sockets[0]?.emitOpen()
-  sockets[0]?.emitClose()
 
+  expect(states.at(-1)?.connected).toBe(false)
+
+  sockets[0]?.emitClose()
+  callbacks[1]?.()
+  await flushMicrotasks()
+  sockets[1]?.emitOpen()
+  sockets[1]?.emitMessage(tenderViewMessage('tender-reset-backoff', 1))
+
+  expect(states.at(-1)?.connected).toBe(true)
+
+  sockets[1]?.emitClose()
+
+  expect(delays).toEqual([5_000, 10_000, 5_000])
+})
+
+test('realtime session never replaces a newer Tender view with an older frame', async () => {
+  const states: RealtimeState[] = []
+  const socket = new FakeSocket()
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => socket,
+    onState: (state) => states.push(state),
+    scheduleReconnect: () => 1,
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-monotonic-view',
+    transport: resolvedTicketTransport(),
+  })
+
+  session.start()
+  await flushMicrotasks()
+  socket.emitOpen()
+  socket.emitMessage(tenderViewMessage('tender-monotonic-view', 2))
+  socket.emitMessage(tenderViewMessage('tender-monotonic-view', 1))
+
+  expect(states.at(-1)?.tenderView?.version).toBe(2)
+})
+
+test('an equal authorised view completes recovery without replacing the cached Tender state', async () => {
+  const states: RealtimeState[] = []
+  const callbacks: Array<() => void> = []
+  const delays: number[] = []
+  const sockets: FakeSocket[] = []
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: () => {
+      const socket = new FakeSocket()
+      sockets.push(socket)
+      return socket
+    },
+    onState: (state) => states.push(state),
+    scheduleReconnect: (callback, delayMs) => {
+      callbacks.push(callback)
+      delays.push(delayMs)
+      return callbacks.length
+    },
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-equal-recovery',
+    transport: resolvedTicketTransport(),
+  })
+
+  session.start()
+  await flushMicrotasks()
+  sockets[0]?.emitOpen()
+  sockets[0]?.emitMessage(tenderViewMessage('tender-equal-recovery', 2))
+  sockets[0]?.emitClose()
+  callbacks[0]?.()
+  await flushMicrotasks()
+  sockets[1]?.emitOpen()
+
+  expect(states.at(-1)?.connected).toBe(false)
+
+  sockets[1]?.emitMessage(tenderViewMessage('tender-equal-recovery', 2))
+
+  expect(states.at(-1)?.connected).toBe(true)
+  expect(states.at(-1)?.tenderView?.version).toBe(2)
+
+  sockets[1]?.emitClose()
   expect(delays).toEqual([5_000, 5_000])
 })
 
-test('realtime session exposes a stable error code for an invalid server message', async () => {
+test('an invalid server message blocks stale commands and closes the compromised connection', async () => {
   const states: RealtimeState[] = []
   const socket = new FakeSocket()
   const session = new TenderRealtimeSession({
@@ -331,9 +408,12 @@ test('realtime session exposes a stable error code for an invalid server message
   await Promise.resolve()
   await Promise.resolve()
   socket.emitOpen()
+  socket.emitMessage(tenderViewMessage('tender-invalid-message', 1))
   socket.emitMessage('not-json')
 
   expect(states.at(-1)?.error).toBe('invalid-message')
+  expect(states.at(-1)?.connected).toBe(false)
+  expect(socket.readyState).toBe(socket.CLOSED)
 })
 
 class FakeSocket {
@@ -370,6 +450,33 @@ function resolvedTicketTransport() {
       ticket: 'ticket-ticket-ticket-ticket-ticket-123',
     }),
   } as AuthenticatedTransport
+}
+
+function tenderViewMessage(tenderId: string, version: number) {
+  return JSON.stringify({
+    type: 'tender-view',
+    view: {
+      knownSignals: [],
+      phase: 'access-slot-selection',
+      players: [{
+        budget: 5,
+        contractPowerRestriction: 0,
+        playerId: 'player-a',
+        rating: 0,
+      }],
+      privateMeasurements: [],
+      privateRawTelemetrySignals: [],
+      privateSamples: [],
+      privateWorkingModel: { signals: {} },
+      publicContracts: [],
+      publicLaboratoryResults: [],
+      publicTheses: [],
+      round: 1,
+      serverTime: '2026-08-24T12:00:00.000Z',
+      tenderId,
+      version,
+    },
+  })
 }
 
 async function flushMicrotasks() {

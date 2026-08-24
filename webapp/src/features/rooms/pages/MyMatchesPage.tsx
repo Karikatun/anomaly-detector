@@ -204,7 +204,7 @@ export function MatchHistoryList({
               <div className={styles.actionCell} role="cell">
                 {match.tenderId && (!match.tenderForfeited || isComplete) ? (
                   <Button type="button" className={styles.detailsButton} onClick={() => onOpen(match.tenderId!)}>
-                    {t('matches.details')}
+                    {t(isComplete ? 'matches.action.completed' : 'matches.action.active')}
                     <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={1.7} aria-hidden="true" />
                   </Button>
                 ) : (

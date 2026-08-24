@@ -102,13 +102,19 @@ The default runtime shape is a modular monolith: one backend codebase, one datab
 The current production baseline is a Yandex Cloud VM running separate API and worker containers from the same immutable backend image, plus PostgreSQL and Caddy. The target managed topology and migration conditions are documented in [YANDEX_CLOUD.md](YANDEX_CLOUD.md). Keep API, worker, and cron as entrypoints of the same backend workspace; add infrastructure only for a concrete runtime need. Transactional email uses a PostgreSQL outbox drained by the existing worker runtime rather than a new service. Named cron cleanup removes or redacts expired recovery credentials and pending mail, consent-scoped analytics events, feedback content and terminal outbox records according to their owning retention policies.
 
 Tender phase delivery starts in the same backend service. Each instance keeps
-an in-memory registry of its own WebSocket connections. The current hub also
-re-reads the authorized Tender view for every active local subscription once
-per second, so a committed command on another API instance is delivered
-eventually and reconnect always recovers from PostgreSQL. This fallback costs
-approximately one PostgreSQL view-read per socket per second and is intended
-for the single-instance baseline and controlled transition checks, not
-unbounded horizontal scale.
+an in-memory registry of its own WebSocket connections and caps active or
+pending subscriptions at 10 per player per process. An excess connection closes
+with retryable code `4429` and does not evict established sockets; this bounds
+one player's local fanout work but is not a cross-instance quota. The current
+hub also re-reads the authorized Tender view and guards the actual delivery with
+a shared row lock on the exact authenticated session for every active local
+subscription once per second. A committed command on another API instance is
+therefore delivered eventually, session revocation serializes with private
+delivery, and reconnect always recovers from PostgreSQL. The initial view adds
+one indexed active-session precheck; steady-state fallback costs approximately
+one PostgreSQL view-read plus one short locked `AuthSession` transaction per
+socket per second. It is intended for the single-instance baseline and
+controlled transition checks, not unbounded horizontal scale.
 
 Before horizontally scaling production WebSockets, establish a socket/DB
 capacity baseline and add grouped or brokered fanout. Use Yandex Managed Service

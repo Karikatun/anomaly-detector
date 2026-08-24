@@ -73,7 +73,7 @@ export type AuthRepository = {
     refreshTokenHash: string
     refreshTokenFamilyHash: string
     now: Date
-  }): Promise<string | null>
+  }): Promise<{ sessionId: string; userId: string } | null>
   updateUser(input: {
     userId: string
     displayName?: string | null
@@ -338,5 +338,13 @@ export type Clock = {
 }
 
 export type ProjectUser = (user: AuthUserRecord) => UserDto | Promise<UserDto>
-export type LogoutCleanup = (input: { userId: string }) => void | Promise<void>
+export type ActiveSessionPrincipal = {
+  sessionId: string
+  userId: string
+}
+export type ActiveSessionGuard = {
+  isActive(input: ActiveSessionPrincipal): Promise<boolean>
+  runWhileActive(input: ActiveSessionPrincipal, action: () => void): Promise<boolean>
+}
+export type LogoutCleanup = (input: { sessionId: string; userId: string }) => void | Promise<void>
 export type AccountDeletionCleanup = (input: { userId: string }) => void | Promise<void>

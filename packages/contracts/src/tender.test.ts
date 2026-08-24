@@ -435,6 +435,27 @@ describe('Tender contracts', () => {
           outcome: 'awarded',
           playerId: 'player-a',
           ratingAward: 4,
+        }, {
+          conditions: {
+            kind: 'light',
+            ratingReward: 2,
+            requiredPublicResult: 'reflection',
+            targetRole: 'receiver',
+            targetSignal: 'cinder',
+          },
+          contractId: 'round-1-contract-3',
+          evidenceTestIds: ['r1-t1'],
+          evidenceTests: [{
+            playerId: 'player-a',
+            protocol: 'continuous',
+            publicResult: 'transmission_gain',
+            receiverSignal: 'cinder',
+            sourceSignal: 'aster',
+            testId: 'r1-t1',
+          }],
+          outcome: 'failed',
+          playerId: 'player-a',
+          ratingAward: 0,
         }],
         laboratory: [{
           mode: 'deep',
@@ -498,6 +519,11 @@ describe('Tender contracts', () => {
         contracts: [{
           conditions: { kind: 'complex', targetSignal: 'aster' },
           evidenceTests: [{ testId: 'r1-t1' }],
+        }, {
+          conditions: { kind: 'light', targetSignal: 'cinder' },
+          evidenceTests: [{ testId: 'r1-t1' }],
+          outcome: 'failed',
+          ratingAward: 0,
         }],
         laboratory: [{ mode: 'deep', tests: [{ testId: 'r1-t1' }] }],
         priorityPlayerIds: ['player-a'],

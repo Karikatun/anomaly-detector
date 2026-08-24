@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createApp } from '../../../app'
 import { createPrisma } from '../../../db'
 import type { AppEnv } from '../../../env'
+import { createPrismaActiveSessionGuard } from '../../auth'
 import { createTenderModule } from '../index'
 import { createPrismaTenderStore } from '../infrastructure/prisma-tender-store'
 import { createRealtimeHub, type RealtimeHub } from './hub'
@@ -14,9 +15,13 @@ import {
 } from './websocket'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
-const maybeDescribe = databaseUrl ? describe : describe.skip
 
-maybeDescribe('realtime websocket integration', () => {
+if (!databaseUrl) {
+  describe.skip('realtime websocket integration', () => {
+    test('requires TEST_DATABASE_URL', () => undefined)
+  })
+} else {
+describe('realtime websocket integration', () => {
   const env: AppEnv = {
     PORT: 3000,
     DATABASE_URL: databaseUrl!,
@@ -57,6 +62,9 @@ maybeDescribe('realtime websocket integration', () => {
   const ticketStore = createPrismaRealtimeTicketStore(prisma, {
     sessionAbsoluteTtlDays: env.SESSION_ABSOLUTE_TTL_DAYS,
   })
+  const sessionGuard = createPrismaActiveSessionGuard(prisma, {
+    sessionAbsoluteTtlDays: env.SESSION_ABSOLUTE_TTL_DAYS,
+  })
 
   let realtime: RealtimeHub
   const tender = createTenderModule({
@@ -65,8 +73,13 @@ maybeDescribe('realtime websocket integration', () => {
     },
     store: createPrismaTenderStore(prisma),
   })
-  realtime = createRealtimeHub({ tender })
-  const app = createApp({ env, prisma, tender })
+  realtime = createRealtimeHub({ sessionGuard, tender })
+  const app = createApp({
+    env,
+    logoutCleanup: ({ sessionId }) => realtime.closeSession(sessionId),
+    prisma,
+    tender,
+  })
 
   const server = Bun.serve<RealtimeSocketData>({
     port: 0,
@@ -113,6 +126,20 @@ maybeDescribe('realtime websocket integration', () => {
     return (await response.json()) as { ticket: string }
   }
 
+  const login = async (login: string) => {
+    const response = await fetch(`${baseUrl}/api/auth/token/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password: 'password123' }),
+    })
+    expect(response.status).toBe(200)
+    return response.json() as Promise<{
+      accessToken: string
+      refreshToken: string
+      user: { id: string }
+    }>
+  }
+
   const connect = (url: string) => new Promise<{ messages: unknown[]; socket: WebSocket }>((resolve, reject) => {
     const messages: unknown[] = []
     const socket = new WebSocket(url)
@@ -140,6 +167,30 @@ maybeDescribe('realtime websocket integration', () => {
     }
     poll()
   })
+
+  const nextClose = (socket: WebSocket) => new Promise<{ code: number; reason: string }>((resolve) => {
+    socket.addEventListener('close', (event) => {
+      resolve({ code: event.code, reason: event.reason })
+    }, { once: true })
+  })
+
+  const waitForBlockedSessionGuard = async (applicationName: string) => {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt <= 3_000) {
+      const [activity] = await prisma.$queryRaw<Array<{ blocked: boolean }>>`
+        SELECT EXISTS (
+          SELECT 1
+          FROM pg_stat_activity
+          WHERE application_name = ${applicationName}
+            AND wait_event_type = 'Lock'
+            AND query ILIKE '%auth_sessions%'
+        ) AS blocked
+      `
+      if (activity?.blocked) return
+      await Bun.sleep(10)
+    }
+    throw new Error('Timed out waiting for the active-session guard row lock')
+  }
 
   const observeRejectedConnection = (url: string) => new Promise<{
     code: number
@@ -304,6 +355,127 @@ maybeDescribe('realtime websocket integration', () => {
     expect(response.status).toBe(401)
   })
 
+  test('logout closes only its established socket and prevents future private views', async () => {
+    const firstSession = await register('ws-established-logout')
+    const secondSession = await login('ws-established-logout')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: firstSession.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+    const firstTicket = await issueTicket(firstSession.accessToken)
+    const secondTicket = await issueTicket(secondSession.accessToken)
+    const loggedOut = await connect(`${wsUrl}?ticket=${firstTicket.ticket}&tenderId=${tenderId}`)
+    const active = await connect(`${wsUrl}?ticket=${secondTicket.ticket}&tenderId=${tenderId}`)
+    await nextMessage(loggedOut.messages, 0)
+    await nextMessage(active.messages, 0)
+    const loggedOutClose = nextClose(loggedOut.socket)
+
+    const logout = await fetch(`${baseUrl}/api/auth/token/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: firstSession.refreshToken }),
+    })
+    expect(logout.status).toBe(204)
+    await expect(loggedOutClose).resolves.toEqual({ code: 4401, reason: 'Unauthorized' })
+
+    await tender.execute({
+      actorId: firstSession.user.id,
+      commandId: 'established-after-logout',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    await realtime.handleTenderChanged(tenderId)
+
+    expect(loggedOut.messages).toHaveLength(1)
+    expect(await nextMessage(active.messages, 1)).toMatchObject({
+      type: 'tender-view',
+      view: { version: 1 },
+    })
+    active.socket.close()
+  }, 15_000)
+
+  test('does not run delivery after a concurrent session revocation commits', async () => {
+    const account = await register('ws-atomic-revocation')
+    const session = await prisma.authSession.findFirstOrThrow({
+      where: { userId: account.user.id },
+    })
+    const guardApplicationName = `realtime_guard_${crypto.randomUUID()}`
+    const guardDatabaseUrl = new URL(databaseUrl!)
+    guardDatabaseUrl.searchParams.set('application_name', guardApplicationName)
+    const guardPrisma = createPrisma(guardDatabaseUrl.toString())
+    const isolatedSessionGuard = createPrismaActiveSessionGuard(guardPrisma, {
+      sessionAbsoluteTtlDays: env.SESSION_ABSOLUTE_TTL_DAYS,
+    })
+    let markRevocationLocked: () => void = () => undefined
+    const revocationLocked = new Promise<void>((resolve) => {
+      markRevocationLocked = resolve
+    })
+    let releaseRevocation: () => void = () => undefined
+    const revocationReleased = new Promise<void>((resolve) => {
+      releaseRevocation = resolve
+    })
+    const revoking = prisma.$transaction(async (tx) => {
+      await tx.authSession.update({
+        data: { revokedAt: new Date() },
+        where: { id: session.id },
+      })
+      markRevocationLocked()
+      await revocationReleased
+    })
+    await revocationLocked
+    let deliveries = 0
+    const guardedDelivery = isolatedSessionGuard.runWhileActive(
+      { sessionId: session.id, userId: account.user.id },
+      () => { deliveries += 1 },
+    )
+
+    let observationFailure: unknown
+    try {
+      await waitForBlockedSessionGuard(guardApplicationName)
+    } catch (error) {
+      observationFailure = error
+    } finally {
+      releaseRevocation()
+    }
+    const [revocationResult, deliveryResult] = await Promise.allSettled([
+      revoking,
+      guardedDelivery,
+    ])
+    await guardPrisma.$disconnect()
+    if (observationFailure) throw observationFailure
+    if (revocationResult.status === 'rejected') throw revocationResult.reason
+    if (deliveryResult.status === 'rejected') throw deliveryResult.reason
+
+    expect(deliveryResult.value).toBe(false)
+    expect(deliveries).toBe(0)
+  }, 15_000)
+
+  test('closes an established socket when its session expires before synchronisation', async () => {
+    const host = await register('ws-established-expiry')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+    const ticket = await issueTicket(host.accessToken)
+    const connection = await connect(`${wsUrl}?ticket=${ticket.ticket}&tenderId=${tenderId}`)
+    await nextMessage(connection.messages, 0)
+    const closed = nextClose(connection.socket)
+    await prisma.authSession.updateMany({
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+      where: { userId: host.user.id },
+    })
+
+    await realtime.syncActiveTenders()
+
+    await expect(closed).resolves.toEqual({ code: 4401, reason: 'Unauthorized' })
+    expect(connection.messages).toHaveLength(1)
+  }, 15_000)
+
   test('rejects a ticket after its authenticated session expires', async () => {
     const host = await register('ws-expired-session')
     const { tenderId } = await tender.createTender({
@@ -384,3 +556,4 @@ maybeDescribe('realtime websocket integration', () => {
     expect(response.status).toBe(401)
   })
 })
+}

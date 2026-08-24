@@ -606,6 +606,7 @@ export const tenderMessages = {
   'tender.completedTenderPanel.copy.118': 'Место и вклад каждого участника',
   'tender.completedTenderPanel.copy.119': 'Вы',
   'tender.completedTenderPanel.copy.124': '{value1} участников',
+  'tender.completedTenderPanel.contract.failed': 'Заявка не прошла проверку — Рейтинг не начислен',
   'tender.completedTenderPanel.currentPlayerWon': 'Вы победили',
   'tender.completedTenderPanel.correct': 'Верно',
   'tender.completedTenderPanel.incorrect': 'Неверно',

@@ -32,6 +32,7 @@ import { createDeviceTokens } from './infrastructure/device-token'
 import { createPrismaRequestBudget } from '../../security/request-budget'
 import { createAuthenticatedMutationBudget } from './transport/authenticated-mutation-budget'
 import type { RequestBudgetPolicyCatalog } from '../../security/request-budget-policy'
+import { createPrismaActiveSessionGuard } from './infrastructure/prisma-active-session-guard'
 
 type CreateAuthModuleOptions = {
   accountEmailCanonicalizer?: AccountEmailCanonicalizer
@@ -129,5 +130,6 @@ export function createAuthModule({
 
 export type { AuthHttpEnv }
 export { cleanupExpiredAuthRecovery }
-export type { LogoutCleanup, ProjectUser } from './application/ports'
+export { createPrismaActiveSessionGuard }
+export type { ActiveSessionGuard, LogoutCleanup, ProjectUser } from './application/ports'
 export type { AuthenticatedPrincipal } from './domain/user'

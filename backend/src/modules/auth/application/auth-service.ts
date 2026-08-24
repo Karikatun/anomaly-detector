@@ -911,14 +911,14 @@ export class AuthService {
   async logout(refreshToken: string | undefined) {
     if (!refreshToken) return false
 
-    const userId = await this.dependencies.repository.revokeSession({
+    const revokedSession = await this.dependencies.repository.revokeSession({
       refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
       refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
       now: this.dependencies.clock.now(),
     })
-    if (!userId) return false
+    if (!revokedSession) return false
 
-    await this.dependencies.logoutCleanup({ userId })
+    await this.dependencies.logoutCleanup(revokedSession)
     return true
   }
 
