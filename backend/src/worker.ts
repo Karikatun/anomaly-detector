@@ -1,6 +1,10 @@
 import { createBackendRuntime } from './runtime'
 import { createRoomStartModule } from './modules/room'
-import { createMailModule, createRegRuSmtpDelivery } from './modules/mail'
+import {
+  createMailModule,
+  createRegRuSmtpDelivery,
+  type ClaimedMailDeliveryProtectionAlert,
+} from './modules/mail'
 import { createPrismaTenderStore } from './modules/tender'
 import { createTenderModule } from './modules/tender'
 import { createWorkerHealth, type WorkerLoopHealth } from './worker-health'
@@ -76,11 +80,20 @@ export async function runWorker() {
         }),
         intervalMs: runtime.env.MAIL_SMTP_WORKER_INTERVAL_MS,
         label: 'Transactional mail delivery',
-        task: () => mail.outboxDrainer!.drain({
-          limit: 20,
-          now: new Date(),
-          workerId: mailWorkerId,
-        }),
+        task: async () => {
+          const result = await mail.outboxDrainer!.drain({
+            limit: 20,
+            now: new Date(),
+            workerId: mailWorkerId,
+          })
+          const alertDelivery = await mail.outboxDrainer!.dispatchProtectionAlerts({
+            deliver: (alert) => emitMailDeliveryProtectionAlert(alert),
+            limit: 20,
+            now: new Date(),
+            workerId: mailWorkerId,
+          })
+          return { alertDelivery, delivery: result }
+        },
       })
     : null
 
@@ -104,6 +117,29 @@ export async function runWorker() {
   process.on('SIGTERM', () => {
     void shutdown('SIGTERM')
   })
+}
+
+export function emitMailDeliveryProtectionAlert(
+  alert: ClaimedMailDeliveryProtectionAlert,
+  logger: { warn(message: string): void } = console,
+) {
+  if (
+    alert.reason !== 'delivery_budget_exhausted'
+    && alert.reason !== 'delivery_circuit_open'
+  ) throw new Error('Invalid mail delivery protection alert reason')
+  if (!(alert.occurredAt instanceof Date) || Number.isNaN(alert.occurredAt.getTime())) {
+    throw new Error('Invalid mail delivery protection alert timestamp')
+  }
+  if (!(alert.transitionAt instanceof Date) || Number.isNaN(alert.transitionAt.getTime())) {
+    throw new Error('Invalid mail delivery protection alert transition')
+  }
+  logger.warn(JSON.stringify({
+    channel: 'security',
+    occurredAt: alert.occurredAt.toISOString(),
+    reason: alert.reason,
+    transitionAt: alert.transitionAt.toISOString(),
+    type: 'mail_delivery_protection_activated',
+  }))
 }
 
 export function startPollingLoop(input: {

@@ -67,15 +67,43 @@ export type ClaimedTransactionalMail = {
   template: unknown
 }
 
+export type MailDeliveryProtectionAlert = {
+  occurredAt: Date
+  reason: 'delivery_budget_exhausted' | 'delivery_circuit_open'
+}
+
+export type ClaimedMailDeliveryProtectionAlert = MailDeliveryProtectionAlert & {
+  transitionAt: Date
+}
+
+export type MailOutboxFailureState = 'queued' | 'stale_claim' | 'terminal_failure'
+
+export type MailOutboxRecordFailureResult = {
+  protectionAlert?: MailDeliveryProtectionAlert
+  state: MailOutboxFailureState
+}
+
 export type MailOutboxClaimResult =
-  | { kind: 'budget_exhausted' | 'circuit_open' | 'empty' }
+  | { kind: 'budget_exhausted'; protectionAlert?: MailDeliveryProtectionAlert }
+  | { kind: 'circuit_open' | 'empty' }
   | { kind: 'claimed'; message: ClaimedTransactionalMail }
 
 export type MailOutboxRepository = {
+  acknowledgeProtectionAlert(input: {
+    now: Date
+    reason: MailDeliveryProtectionAlert['reason']
+    transitionAt: Date
+    workerId: string
+  }): Promise<boolean>
   claim(input: {
     now: Date
     workerId: string
   }): Promise<MailOutboxClaimResult>
+  claimProtectionAlerts(input: {
+    limit: number
+    now: Date
+    workerId: string
+  }): Promise<ClaimedMailDeliveryProtectionAlert[]>
   recordAccepted(input: {
     id: string
     now: Date
@@ -88,7 +116,7 @@ export type MailOutboxRepository = {
     now: Date
     temporary: boolean
     workerId: string
-  }): Promise<'queued' | 'stale_claim' | 'terminal_failure'>
+  }): Promise<MailOutboxRecordFailureResult>
   releaseBlocked(input: {
     id: string
     now: Date

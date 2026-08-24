@@ -8,6 +8,7 @@ import {
   mailPolicyStatusCommandSchema,
   mailOperationsViewSchema,
   mailPolicyViewSchema,
+  requestBudgetOverviewSchema,
 } from './admin'
 
 describe('adminOverviewSchema', () => {
@@ -133,7 +134,7 @@ describe('mailPolicyViewSchema', () => {
 })
 
 describe('mailOperationsViewSchema', () => {
-  test('accepts only privacy-safe delivery aggregates and suppresses small groups', () => {
+  test('preserves the strict legacy mail shape without the separately versioned anti-abuse view', () => {
     const result = mailOperationsViewSchema.parse({
       currentVersion: 0,
       delivery: {
@@ -164,10 +165,78 @@ describe('mailOperationsViewSchema', () => {
     expect(JSON.stringify(result.delivery)).not.toMatch(/recipient|address|token|code|content/i)
     expect(() => mailOperationsViewSchema.parse({
       ...result,
+      antiAbuse: {
+        groups: [{ exhaustedBudgetKeysAtLeast: 10, surface: 'transactional_mail' }],
+        minimumGroupSize: 10,
+        roundingStep: 10,
+      },
+    })).toThrow()
+    expect(() => mailOperationsViewSchema.parse({
+      ...result,
       delivery: {
         ...result.delivery,
         groups: [{ ...result.delivery.groups[0], requested: 4 }],
       },
+    })).toThrow()
+  })
+})
+
+describe('requestBudgetOverviewSchema', () => {
+  test('allows only rounded lower bounds for broad exhausted groups', () => {
+    const overview = requestBudgetOverviewSchema.parse({
+      groups: [
+        { exhaustedBudgetKeysAtLeast: 10, surface: 'authentication' },
+        { exhaustedBudgetKeysAtLeast: 20, surface: 'room_join' },
+        { exhaustedBudgetKeysAtLeast: 30, surface: 'tender_command' },
+        { exhaustedBudgetKeysAtLeast: 40, surface: 'realtime' },
+      ],
+      minimumGroupSize: 10,
+      roundingStep: 10,
+    })
+
+    expect(overview.groups.map((group) => group.surface)).toEqual([
+      'authentication',
+      'room_join',
+      'tender_command',
+      'realtime',
+    ])
+    for (const exhaustedBudgetKeysAtLeast of [9, 11]) {
+      expect(() => requestBudgetOverviewSchema.parse({
+        groups: [{ exhaustedBudgetKeysAtLeast, surface: 'transactional_mail' }],
+        minimumGroupSize: 10,
+        roundingStep: 10,
+      })).toThrow()
+    }
+    expect(() => requestBudgetOverviewSchema.parse({
+      groups: [{
+        activeBudgetKeys: 10,
+        exhaustedBudgetKeysAtLeast: 10,
+        email: 'person@example.invalid',
+        exhaustedBudgetKeys: 0,
+        ipAddress: '192.0.2.1',
+        keyHash: 'a'.repeat(64),
+        login: 'sensitive-login',
+        requests: 10,
+        scope: 'recovery_email_hour_login',
+        surface: 'authentication',
+        tenderId: '019f8099-7e26-7760-ad08-66d1d66b2722',
+        userId: '019f8099-7e26-7760-ad08-66d1d66b2721',
+      }],
+      minimumGroupSize: 10,
+      roundingStep: 10,
+    })).toThrow()
+    expect(() => requestBudgetOverviewSchema.parse({
+      groups: [{
+        exhaustedBudgetKeysAtLeast: 10,
+        surface: 'authenticated_mutation',
+      }],
+      minimumGroupSize: 10,
+      roundingStep: 10,
+    })).toThrow()
+    expect(() => requestBudgetOverviewSchema.parse({
+      groups: [{ exhaustedBudgetKeysAtLeast: 10, surface: 'authentication' }],
+      minimumGroupSize: 10,
+      roundingStep: 5,
     })).toThrow()
   })
 })

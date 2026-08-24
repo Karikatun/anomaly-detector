@@ -3,7 +3,9 @@ import { z } from 'zod'
 import { deriveAccountEmailConfirmationCode } from './account-email-confirmation-code'
 
 import type {
+  ClaimedMailDeliveryProtectionAlert,
   ClaimedTransactionalMail,
+  MailDeliveryProtectionAlert,
   MailDeliveryPolicy,
   MailOutboxRepository,
   RenderedTransactionalMail,
@@ -56,15 +58,22 @@ export class TransactionalMailDeliveryService {
       blocked: 0,
       budgetExhausted: false,
       circuitOpen: false,
+      protectionAlerts: [] as MailDeliveryProtectionAlert[],
       staleClaims: 0,
       temporaryFailures: 0,
       terminalFailures: 0,
+    }
+    const recordProtectionAlert = (alert?: MailDeliveryProtectionAlert) => {
+      if (!alert) return
+      result.protectionAlerts.push(alert)
+      if (alert.reason === 'delivery_circuit_open') result.circuitOpen = true
     }
 
     for (let processed = 0; processed < limit; processed += 1) {
       const claimNow = this.now(input.now)
       const claim = await this.dependencies.repository.claim({ now: claimNow, workerId })
       if (claim.kind !== 'claimed') {
+        if ('protectionAlert' in claim) recordProtectionAlert(claim.protectionAlert)
         result.budgetExhausted = claim.kind === 'budget_exhausted'
         result.circuitOpen = claim.kind === 'circuit_open'
         break
@@ -83,7 +92,7 @@ export class TransactionalMailDeliveryService {
         requiresNewAddress = prepared.requiresNewAddress
         template = prepared.template
       } catch (error) {
-        const state = await this.dependencies.repository.recordFailure({
+        const failure = await this.dependencies.repository.recordFailure({
           affectsCircuit: false,
           code: error instanceof TransactionalMailRetentionExpired
             ? 'retention_expired'
@@ -93,6 +102,8 @@ export class TransactionalMailDeliveryService {
           temporary: false,
           workerId,
         })
+        recordProtectionAlert(failure.protectionAlert)
+        const state = failure.state
         if (state === 'stale_claim') result.staleClaims += 1
         else result.terminalFailures += 1
         continue
@@ -113,7 +124,7 @@ export class TransactionalMailDeliveryService {
         now: deliveryNow,
         template,
       })) {
-        const state = await this.dependencies.repository.recordFailure({
+        const failure = await this.dependencies.repository.recordFailure({
           affectsCircuit: false,
           code: 'retention_expired',
           id: claim.message.id,
@@ -121,6 +132,8 @@ export class TransactionalMailDeliveryService {
           temporary: false,
           workerId,
         })
+        recordProtectionAlert(failure.protectionAlert)
+        const state = failure.state
         if (state === 'stale_claim') result.staleClaims += 1
         else result.terminalFailures += 1
         continue
@@ -158,7 +171,7 @@ export class TransactionalMailDeliveryService {
         continue
       }
 
-      const state = await this.dependencies.repository.recordFailure({
+      const failure = await this.dependencies.repository.recordFailure({
         affectsCircuit: deliveryResult.kind === 'temporary_failure',
         code: safeFailureCode(deliveryResult.code),
         id: claim.message.id,
@@ -166,9 +179,51 @@ export class TransactionalMailDeliveryService {
         temporary: deliveryResult.kind === 'temporary_failure',
         workerId,
       })
+      recordProtectionAlert(failure.protectionAlert)
+      const state = failure.state
       if (state === 'stale_claim') result.staleClaims += 1
       else if (state === 'queued') result.temporaryFailures += 1
       else result.terminalFailures += 1
+    }
+
+    return result
+  }
+
+  async dispatchProtectionAlerts(input: {
+    deliver(alert: ClaimedMailDeliveryProtectionAlert): Promise<void> | void
+    limit: number
+    now: Date
+    workerId: string
+  }) {
+    const limit = z.number().int().min(1).max(100).parse(input.limit)
+    const workerId = workerIdSchema.parse(input.workerId)
+    const alerts = await this.dependencies.repository.claimProtectionAlerts({
+      limit,
+      now: input.now,
+      workerId,
+    })
+    const result = {
+      claimed: alerts.length,
+      delivered: 0,
+      failed: 0,
+      staleClaims: 0,
+    }
+
+    for (const alert of alerts) {
+      try {
+        await input.deliver(alert)
+      } catch {
+        result.failed += 1
+        continue
+      }
+      const acknowledged = await this.dependencies.repository.acknowledgeProtectionAlert({
+        now: input.now,
+        reason: alert.reason,
+        transitionAt: alert.transitionAt,
+        workerId,
+      })
+      if (acknowledged) result.delivered += 1
+      else result.staleClaims += 1
     }
 
     return result

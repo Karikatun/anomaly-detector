@@ -615,3 +615,17 @@ model MailDeliveryControl {
 
   @@map("mail_delivery_controls")
 }
+
+model MailDeliveryProtectionAlert {
+  reason         String    @db.VarChar(40)
+  transitionAt   DateTime  @map("transition_at")
+  occurredAt     DateTime  @map("occurred_at")
+  deliveredAt    DateTime? @map("delivered_at")
+  leaseExpiresAt DateTime? @map("lease_expires_at")
+  leaseOwner     String?   @map("lease_owner") @db.VarChar(64)
+
+  @@id([reason, transitionAt], map: "mail_delivery_protection_alerts_pkey")
+  @@index([deliveredAt, leaseExpiresAt, occurredAt], map: "mail_delivery_protection_alerts_delivery_idx")
+  @@index([occurredAt], map: "mail_delivery_protection_alerts_occurred_at_idx")
+  @@map("mail_delivery_protection_alerts")
+}

@@ -43,6 +43,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
   beforeEach(async () => {
     await prisma.mailDeliveryAttempt.deleteMany()
     await prisma.mailOutboxMessage.deleteMany()
+    await prisma.mailDeliveryProtectionAlert.deleteMany()
     await prisma.mailDeliveryControl.deleteMany()
   })
 
@@ -511,7 +512,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })).toEqual([{ failureCode: 'retention_expired', outcome: 'terminal_failure' }])
   })
 
-  test('opens one global circuit after provider failures and permits one recovery probe', async () => {
+  test('reopens the global circuit after a failed recovery probe and closes after success', async () => {
     const enqueuer = createEnqueuer()
     for (const suffix of ['20', '21', '22']) {
       await enqueuer.enqueue({ ...request, messageId: `019f8099-7e26-7760-ad08-66d1d66b28${suffix}` })
@@ -544,19 +545,434 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       limit: 3,
       now: scenarioTime(),
       workerId: 'worker-a',
-    })).resolves.toMatchObject({ circuitOpen: true, temporaryFailures: 2 })
+    })).resolves.toMatchObject({
+      circuitOpen: true,
+      protectionAlerts: [{
+        occurredAt: scenarioTime(),
+        reason: 'delivery_circuit_open',
+      }],
+      temporaryFailures: 2,
+    })
     expect(providerCalls).toBe(2)
 
-    providerAvailable = true
+    await expect(service.drain({
+      limit: 1,
+      now: scenarioTime(1),
+      workerId: 'worker-b',
+    })).resolves.toMatchObject({ circuitOpen: true, protectionAlerts: [] })
+
     await expect(service.drain({
       limit: 1,
       now: scenarioTime(60_000),
       workerId: 'worker-b',
-    })).resolves.toMatchObject({ accepted: 1, circuitOpen: false })
+    })).resolves.toMatchObject({
+      circuitOpen: true,
+      protectionAlerts: [{
+        occurredAt: scenarioTime(60_000),
+        reason: 'delivery_circuit_open',
+      }],
+      temporaryFailures: 1,
+    })
+    expect(providerCalls).toBe(3)
+    await expect(service.drain({
+      limit: 1,
+      now: scenarioTime(60_001),
+      workerId: 'worker-c',
+    })).resolves.toMatchObject({ circuitOpen: true, protectionAlerts: [] })
+    expect(providerCalls).toBe(3)
+
+    providerAvailable = true
+    await expect(service.drain({
+      limit: 1,
+      now: scenarioTime(120_000),
+      workerId: 'worker-d',
+    })).resolves.toMatchObject({ accepted: 1, circuitOpen: false, protectionAlerts: [] })
     expect(await prisma.mailDeliveryControl.findUnique({
       where: { id: 'reg_ru' },
       select: { circuitOpenUntil: true, consecutiveFailures: true },
     })).toEqual({ circuitOpenUntil: null, consecutiveFailures: 0 })
+
+    providerAvailable = false
+    await expect(service.drain({
+      limit: 3,
+      now: scenarioTime(121_000),
+      workerId: 'worker-e',
+    })).resolves.toMatchObject({
+      circuitOpen: true,
+      protectionAlerts: [{
+        occurredAt: scenarioTime(121_000),
+        reason: 'delivery_circuit_open',
+      }],
+      temporaryFailures: 2,
+    })
+    expect(await prisma.mailDeliveryProtectionAlert.findMany({
+      orderBy: { occurredAt: 'asc' },
+      select: { occurredAt: true, reason: true, transitionAt: true },
+    })).toEqual([
+      {
+        occurredAt: scenarioTime(),
+        reason: 'delivery_circuit_open',
+        transitionAt: scenarioTime(60_000),
+      },
+      {
+        occurredAt: scenarioTime(60_000),
+        reason: 'delivery_circuit_open',
+        transitionAt: scenarioTime(120_000),
+      },
+      {
+        occurredAt: scenarioTime(121_000),
+        reason: 'delivery_circuit_open',
+        transitionAt: scenarioTime(181_000),
+      },
+    ])
+  })
+
+  test('reopens the circuit after a late in-flight success closes an earlier failure transition', async () => {
+    const enqueuer = createEnqueuer()
+    for (const suffix of ['23', '24', '25', '26', '27', '28']) {
+      await enqueuer.enqueue({ ...request, messageId: `019f8099-7e26-7760-ad08-66d1d66b28${suffix}` })
+    }
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 2,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+    const workerIds = [
+      'worker-prefetch-a',
+      'worker-prefetch-b',
+      'worker-prefetch-c',
+      'worker-prefetch-d',
+      'worker-prefetch-e',
+      'worker-prefetch-f',
+    ]
+    const claims = await Promise.all(workerIds.map((workerId) => repository.claim({
+      now: scenarioTime(),
+      workerId,
+    })))
+    expect(claims.every((claim) => claim.kind === 'claimed')).toBe(true)
+    const claimed = claims.map((claim) => {
+      if (claim.kind !== 'claimed') throw new Error('Expected every prefetched message to be claimed')
+      return claim.message
+    })
+    const recordProviderFailure = (index: number, now: Date) => repository.recordFailure({
+      affectsCircuit: true,
+      code: 'smtp_unavailable',
+      id: claimed[index]!.id,
+      now,
+      temporary: true,
+      workerId: workerIds[index]!,
+    })
+
+    await expect(recordProviderFailure(0, scenarioTime(1))).resolves.toEqual({ state: 'queued' })
+    await expect(recordProviderFailure(1, scenarioTime(1))).resolves.toEqual({
+      protectionAlert: {
+        occurredAt: scenarioTime(1),
+        reason: 'delivery_circuit_open',
+      },
+      state: 'queued',
+    })
+    await expect(repository.recordAccepted({
+      id: claimed[2]!.id,
+      now: scenarioTime(2),
+      workerId: workerIds[2]!,
+    })).resolves.toBe(true)
+    expect(await prisma.mailDeliveryControl.findUniqueOrThrow({
+      where: { id: 'reg_ru' },
+      select: { circuitOpenUntil: true, consecutiveFailures: true },
+    })).toEqual({ circuitOpenUntil: null, consecutiveFailures: 0 })
+
+    await expect(recordProviderFailure(3, scenarioTime(3))).resolves.toEqual({ state: 'queued' })
+    await expect(recordProviderFailure(4, scenarioTime(3))).resolves.toEqual({
+      protectionAlert: {
+        occurredAt: scenarioTime(3),
+        reason: 'delivery_circuit_open',
+      },
+      state: 'queued',
+    })
+    await expect(recordProviderFailure(5, scenarioTime(4))).resolves.toEqual({ state: 'queued' })
+    expect(await prisma.mailDeliveryControl.findUniqueOrThrow({
+      where: { id: 'reg_ru' },
+      select: { circuitOpenUntil: true, consecutiveFailures: true },
+    })).toEqual({
+      circuitOpenUntil: scenarioTime(60_003),
+      consecutiveFailures: 3,
+    })
+    const alerts = await prisma.mailDeliveryProtectionAlert.findMany({
+      orderBy: { occurredAt: 'asc' },
+      select: { occurredAt: true, reason: true, transitionAt: true },
+    })
+    expect(alerts).toEqual([
+      {
+        occurredAt: scenarioTime(1),
+        reason: 'delivery_circuit_open',
+        transitionAt: scenarioTime(60_001),
+      },
+      {
+        occurredAt: scenarioTime(3),
+        reason: 'delivery_circuit_open',
+        transitionAt: scenarioTime(60_003),
+      },
+    ])
+    expect(Object.keys(alerts[1]!).sort()).toEqual(['occurredAt', 'reason', 'transitionAt'])
+    expect(JSON.stringify(alerts)).not.toContain(request.recipient)
+    expect(JSON.stringify(alerts)).not.toContain(request.messageId)
+  })
+
+  test('serializes the delivery-budget edge and emits one safe alert per expired window', async () => {
+    const enqueuer = createEnqueuer()
+    for (const suffix of ['90', '91', '92']) {
+      await enqueuer.enqueue({ ...request, messageId: `019f8099-7e26-7760-ad08-66d1d66b28${suffix}` })
+    }
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 10,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 1,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+    const workerIds = ['worker-edge-a', 'worker-edge-b']
+    const firstWindow = await Promise.all(workerIds.map((workerId) => repository.claim({
+      now: scenarioTime(),
+      workerId,
+    })))
+
+    expect(firstWindow.filter((claim) => claim.kind === 'claimed')).toHaveLength(1)
+    expect(firstWindow.filter((claim) => claim.kind === 'budget_exhausted')).toHaveLength(1)
+    const firstAlert = firstWindow.flatMap((claim) =>
+      claim.kind === 'budget_exhausted' && claim.protectionAlert
+        ? [claim.protectionAlert]
+        : [])
+    expect(firstAlert).toEqual([{
+      occurredAt: scenarioTime(),
+      reason: 'delivery_budget_exhausted',
+    }])
+    expect(Object.keys(firstAlert[0] as object).sort()).toEqual(['occurredAt', 'reason'])
+    expect(JSON.stringify(firstAlert)).not.toContain(request.recipient)
+    expect(JSON.stringify(firstAlert)).not.toContain(request.messageId)
+
+    const claimedIndex = firstWindow.findIndex((claim) => claim.kind === 'claimed')
+    const claimed = firstWindow[claimedIndex]
+    if (claimed?.kind !== 'claimed') throw new Error('Expected one claimed message')
+    await expect(repository.recordAccepted({
+      id: claimed.message.id,
+      now: scenarioTime(1),
+      workerId: workerIds[claimedIndex]!,
+    })).resolves.toBe(true)
+
+    const secondWindow = await Promise.all(workerIds.map((workerId) => repository.claim({
+      now: scenarioTime(60_000),
+      workerId,
+    })))
+    expect(secondWindow.filter((claim) => claim.kind === 'claimed')).toHaveLength(1)
+    expect(secondWindow.filter((claim) => claim.kind === 'budget_exhausted')).toHaveLength(1)
+    expect(secondWindow.flatMap((claim) =>
+      claim.kind === 'budget_exhausted' && claim.protectionAlert
+        ? [claim.protectionAlert]
+        : [])).toEqual([{
+      occurredAt: scenarioTime(60_000),
+      reason: 'delivery_budget_exhausted',
+    }])
+    await expect(repository.claim({
+      now: scenarioTime(60_001),
+      workerId: 'worker-edge-c',
+    })).resolves.toEqual({ kind: 'budget_exhausted' })
+    expect(await prisma.mailDeliveryProtectionAlert.findMany({
+      orderBy: { occurredAt: 'asc' },
+      select: { occurredAt: true, reason: true, transitionAt: true },
+    })).toEqual([
+      {
+        occurredAt: scenarioTime(),
+        reason: 'delivery_budget_exhausted',
+        transitionAt: scenarioTime(),
+      },
+      {
+        occurredAt: scenarioTime(60_000),
+        reason: 'delivery_budget_exhausted',
+        transitionAt: scenarioTime(60_000),
+      },
+    ])
+  })
+
+  test('reclaims an unacknowledged protection alert after logging recovers', async () => {
+    const now = scenarioTime()
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 3,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 1_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+    const service = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
+      delivery: { send: async () => ({ kind: 'accepted' }) },
+      policy: { evaluate: async () => ({ acceptsNewAddress: true, allowsRecoveryDelivery: true }) },
+      repository,
+    })
+    await prisma.mailDeliveryProtectionAlert.create({
+      data: {
+        occurredAt: now,
+        reason: 'delivery_budget_exhausted',
+        transitionAt: now,
+      },
+    })
+
+    await expect(service.dispatchProtectionAlerts({
+      deliver: () => {
+        throw new Error('logging unavailable')
+      },
+      limit: 1,
+      now,
+      workerId: 'alert-worker-a',
+    })).resolves.toEqual({ claimed: 1, delivered: 0, failed: 1, staleClaims: 0 })
+    expect(await prisma.mailDeliveryProtectionAlert.findUniqueOrThrow({
+      where: {
+        reason_transitionAt: { reason: 'delivery_budget_exhausted', transitionAt: now },
+      },
+      select: { deliveredAt: true, leaseExpiresAt: true, leaseOwner: true },
+    })).toEqual({
+      deliveredAt: null,
+      leaseExpiresAt: scenarioTime(1_000),
+      leaseOwner: 'alert-worker-a',
+    })
+
+    await expect(service.dispatchProtectionAlerts({
+      deliver: () => undefined,
+      limit: 1,
+      now: scenarioTime(999),
+      workerId: 'alert-worker-b',
+    })).resolves.toEqual({ claimed: 0, delivered: 0, failed: 0, staleClaims: 0 })
+
+    const delivered: Array<{ occurredAt: Date; reason: string; transitionAt: Date }> = []
+    await expect(service.dispatchProtectionAlerts({
+      deliver: (alert) => {
+        delivered.push(alert)
+      },
+      limit: 1,
+      now: scenarioTime(1_001),
+      workerId: 'alert-worker-b',
+    })).resolves.toEqual({ claimed: 1, delivered: 1, failed: 0, staleClaims: 0 })
+    expect(delivered).toEqual([{
+      occurredAt: now,
+      reason: 'delivery_budget_exhausted',
+      transitionAt: now,
+    }])
+    expect(await prisma.mailDeliveryProtectionAlert.findUniqueOrThrow({
+      where: {
+        reason_transitionAt: { reason: 'delivery_budget_exhausted', transitionAt: now },
+      },
+      select: { deliveredAt: true, leaseExpiresAt: true, leaseOwner: true },
+    })).toEqual({
+      deliveredAt: scenarioTime(1_001),
+      leaseExpiresAt: null,
+      leaseOwner: null,
+    })
+
+    await expect(service.dispatchProtectionAlerts({
+      deliver: () => undefined,
+      limit: 1,
+      now: scenarioTime(2_001),
+      workerId: 'alert-worker-c',
+    })).resolves.toEqual({ claimed: 0, delivered: 0, failed: 0, staleClaims: 0 })
+  })
+
+  test('claims each protection alert once across workers and bounds every batch', async () => {
+    const now = scenarioTime()
+    await prisma.mailDeliveryProtectionAlert.createMany({
+      data: Array.from({ length: 5 }, (_, index) => ({
+        occurredAt: scenarioTime(index),
+        reason: index % 2 === 0 ? 'delivery_budget_exhausted' : 'delivery_circuit_open',
+        transitionAt: scenarioTime(index),
+      })),
+    })
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 3,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 1_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+
+    const concurrentClaims = await Promise.all([
+      repository.claimProtectionAlerts({ limit: 2, now, workerId: 'alert-worker-a' }),
+      repository.claimProtectionAlerts({ limit: 2, now, workerId: 'alert-worker-b' }),
+    ])
+    expect(concurrentClaims[0]).toHaveLength(2)
+    expect(concurrentClaims[1]).toHaveLength(2)
+    const claimedTransitions = concurrentClaims.flat().map((alert) => alert.transitionAt.toISOString())
+    expect(new Set(claimedTransitions).size).toBe(4)
+
+    const remaining = await repository.claimProtectionAlerts({
+      limit: 2,
+      now,
+      workerId: 'alert-worker-c',
+    })
+    expect(remaining).toHaveLength(1)
+    expect(new Set([...claimedTransitions, remaining[0]!.transitionAt.toISOString()]).size).toBe(5)
+    expect(Object.keys(remaining[0]!).sort()).toEqual(['occurredAt', 'reason', 'transitionAt'])
+  })
+
+  test('removes acknowledged alert history after thirty days without dropping pending delivery', async () => {
+    const now = scenarioTime()
+    const retentionCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60_000)
+    await prisma.mailDeliveryProtectionAlert.createMany({
+      data: [
+        {
+          deliveredAt: new Date(retentionCutoff.getTime() - 1),
+          occurredAt: new Date(retentionCutoff.getTime() - 1),
+          reason: 'delivery_budget_exhausted',
+          transitionAt: new Date(retentionCutoff.getTime() - 1),
+        },
+        {
+          occurredAt: new Date(retentionCutoff.getTime() - 2),
+          reason: 'delivery_circuit_open',
+          transitionAt: new Date(retentionCutoff.getTime() - 2),
+        },
+        {
+          deliveredAt: retentionCutoff,
+          occurredAt: retentionCutoff,
+          reason: 'delivery_circuit_open',
+          transitionAt: retentionCutoff,
+        },
+      ],
+    })
+    const enqueuer = createEnqueuer()
+    for (const suffix of ['93', '94']) {
+      await enqueuer.enqueue({ ...request, messageId: `019f8099-7e26-7760-ad08-66d1d66b28${suffix}` })
+    }
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 10,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 1,
+      leaseMs: 30_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+
+    await expect(repository.claim({ now, workerId: 'worker-retention-a' }))
+      .resolves.toMatchObject({ kind: 'claimed' })
+    await expect(repository.claim({ now, workerId: 'worker-retention-b' }))
+      .resolves.toMatchObject({
+        kind: 'budget_exhausted',
+        protectionAlert: { occurredAt: now, reason: 'delivery_budget_exhausted' },
+      })
+    expect(await prisma.mailDeliveryProtectionAlert.findMany({
+      orderBy: { occurredAt: 'asc' },
+      select: { deliveredAt: true, occurredAt: true, reason: true },
+    })).toEqual([
+      {
+        deliveredAt: null,
+        occurredAt: new Date(retentionCutoff.getTime() - 2),
+        reason: 'delivery_circuit_open',
+      },
+      { deliveredAt: retentionCutoff, occurredAt: retentionCutoff, reason: 'delivery_circuit_open' },
+      { deliveredAt: null, occurredAt: now, reason: 'delivery_budget_exhausted' },
+    ])
   })
 
   test('stops at the shared delivery budget and terminally records retry exhaustion', async () => {
@@ -582,7 +998,14 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       limit: 3,
       now: scenarioTime(),
       workerId: 'worker-a',
-    })).resolves.toMatchObject({ accepted: 2, budgetExhausted: true })
+    })).resolves.toMatchObject({
+      accepted: 2,
+      budgetExhausted: true,
+      protectionAlerts: [{
+        occurredAt: scenarioTime(),
+        reason: 'delivery_budget_exhausted',
+      }],
+    })
 
     await expect(acceptedService.drain({
       limit: 1,

@@ -11,6 +11,7 @@ import { z } from 'zod'
 
 import { AppError, validationErrorHook } from '../../../http/errors'
 import type { RequestBudget } from '../../../security/request-budget'
+import type { RequestBudgetPolicy } from '../../../security/request-budget-policy'
 import type { AuthHttpEnv } from '../../auth'
 import type { TenderModule } from '../application/tender-module'
 import { executeTender, executeTenderRead } from './errors'
@@ -49,19 +50,27 @@ const executeTenderCommandRoute = createRoute({
 export function createTenderRoutes(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   commandBudget: RequestBudget
+  commandBudgetPolicy: RequestBudgetPolicy<'tender_command'>
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   tender: TenderModule
 }) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
+  routes.use('*', input.authenticatedMutationBudget)
   routes.use('/:tenderId/commands', async (c, next) => {
     const tenderId = c.req.param('tenderId')
+    if (!tenderResourceIdSchema.safeParse(tenderId).success) {
+      await next()
+      return
+    }
+    await executeTenderRead(() => input.tender.readTenderView({
+      playerId: c.var.user.id,
+      tenderId,
+    }))
     const budget = await input.commandBudget.consume({
       key: `${c.var.user.id}:${tenderId}`,
-      limit: 60,
       now: new Date(),
-      scope: 'tender_command',
-      windowMs: 60_000,
+      policy: input.commandBudgetPolicy,
     })
     if (!budget.allowed) {
       c.header('Retry-After', String(budget.retryAfterSeconds))
@@ -75,7 +84,6 @@ export function createTenderRoutes(input: {
     }
     await next()
   })
-  routes.use('*', input.authenticatedMutationBudget)
   routes.openapi(readTenderRoute, async (c) => c.json(
     await executeTenderRead(() => input.tender.readTenderView({
       playerId: c.var.user.id,

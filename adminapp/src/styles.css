@@ -168,4 +168,6 @@ code { color: #a8c6dd; }
   .mail-summary-grid, .mail-health-details { grid-template-columns: 1fr; }
   .mail-metric { border-right: 0; border-bottom: 1px solid rgba(103, 137, 168, .14); }
   .mail-metric:last-child { border-bottom: 0; }
+  .anti-abuse-table { table-layout: fixed; }
+  .anti-abuse-table th, .anti-abuse-table td { overflow-wrap: anywhere; white-space: normal; }
 }

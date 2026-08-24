@@ -1,6 +1,8 @@
 import type { DbClient } from '../../../db'
 import type { Prisma } from '../../../generated/prisma/client'
 import type {
+  ClaimedMailDeliveryProtectionAlert,
+  MailDeliveryProtectionAlert,
   MailOutboxClaimResult,
   MailOutboxRepository,
   TransactionalMailWriter,
@@ -81,6 +83,7 @@ export function createPrismaTransactionalMailWriter(
 
 const DELIVERY_CONTROL_ID = 'reg_ru'
 const DELIVERY_WINDOW_MS = 60_000
+const PROTECTION_ALERT_RETENTION_MS = 30 * 24 * 60 * 60_000
 
 export type MailOutboxRepositoryOptions = {
   circuitFailureThreshold: number
@@ -96,11 +99,81 @@ export function createPrismaMailOutboxRepository(
   options: MailOutboxRepositoryOptions,
 ): MailOutboxRepository {
   return {
+    acknowledgeProtectionAlert: (input) => acknowledgeProtectionAlert(db, input),
     claim: (input) => claimNext(db, options, input),
+    claimProtectionAlerts: (input) => claimProtectionAlerts(db, options, input),
     recordAccepted: (input) => recordAccepted(db, input),
     recordFailure: (input) => recordFailure(db, options, input),
     releaseBlocked: (input) => releaseBlocked(db, options, input),
   }
+}
+
+async function claimProtectionAlerts(
+  db: DbClient,
+  options: MailOutboxRepositoryOptions,
+  input: { limit: number; now: Date; workerId: string },
+): Promise<ClaimedMailDeliveryProtectionAlert[]> {
+  return db.$transaction(async (tx) => {
+    const selected = await tx.$queryRaw<Array<{
+      occurred_at: Date
+      reason: MailDeliveryProtectionAlert['reason']
+      transition_at: Date
+    }>>`
+      SELECT occurred_at, reason, transition_at
+      FROM mail_delivery_protection_alerts
+      WHERE delivered_at IS NULL
+        AND (lease_expires_at IS NULL OR lease_expires_at <= ${input.now})
+        AND reason IN ('delivery_budget_exhausted', 'delivery_circuit_open')
+      ORDER BY occurred_at ASC, reason ASC, transition_at ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT ${input.limit}
+    `
+    const leaseExpiresAt = new Date(input.now.getTime() + options.leaseMs)
+    for (const alert of selected) {
+      await tx.mailDeliveryProtectionAlert.update({
+        where: {
+          reason_transitionAt: {
+            reason: alert.reason,
+            transitionAt: alert.transition_at,
+          },
+        },
+        data: {
+          leaseExpiresAt,
+          leaseOwner: input.workerId,
+        },
+      })
+    }
+    return selected.map((alert) => ({
+      occurredAt: alert.occurred_at,
+      reason: alert.reason,
+      transitionAt: alert.transition_at,
+    }))
+  })
+}
+
+async function acknowledgeProtectionAlert(
+  db: DbClient,
+  input: {
+    now: Date
+    reason: MailDeliveryProtectionAlert['reason']
+    transitionAt: Date
+    workerId: string
+  },
+) {
+  const acknowledged = await db.mailDeliveryProtectionAlert.updateMany({
+    where: {
+      deliveredAt: null,
+      leaseOwner: input.workerId,
+      reason: input.reason,
+      transitionAt: input.transitionAt,
+    },
+    data: {
+      deliveredAt: input.now,
+      leaseExpiresAt: null,
+      leaseOwner: null,
+    },
+  })
+  return acknowledged.count === 1
 }
 
 async function claimNext(
@@ -123,7 +196,14 @@ async function claimNext(
       return { kind: 'circuit_open' }
     }
     if (control.deliveriesInWindow >= options.deliveryBudgetPerMinute) {
-      return { kind: 'budget_exhausted' }
+      const protectionAlert = await createProtectionAlert(tx, {
+        occurredAt: input.now,
+        reason: 'delivery_budget_exhausted',
+        transitionAt: control.windowStartedAt,
+      })
+      return protectionAlert
+        ? { kind: 'budget_exhausted', protectionAlert }
+        : { kind: 'budget_exhausted' }
     }
 
     const selected = await tx.$queryRaw<Array<{
@@ -266,14 +346,14 @@ async function recordFailure(
     workerId: string
   },
 ) {
-  return db.$transaction<'queued' | 'stale_claim' | 'terminal_failure'>(async (tx) => {
+  return db.$transaction(async (tx) => {
     await ensureAndLockControl(tx, input.now)
     await lockOutboxRow(tx, input.id)
     const message = await tx.mailOutboxMessage.findFirst({
       where: { id: input.id, leaseOwner: input.workerId, state: 'leased' },
       select: { attemptCount: true, id: true },
     })
-    if (!message) return 'stale_claim'
+    if (!message) return { state: 'stale_claim' as const }
 
     const retry = input.temporary && message.attemptCount < options.maxAttempts
     const failureCode = retry ? input.code : input.temporary ? 'retry_exhausted' : input.code
@@ -307,21 +387,38 @@ async function recordFailure(
         outboxId: input.id,
       },
     })
+    let protectionAlert: MailDeliveryProtectionAlert | undefined
     if (input.affectsCircuit) {
       const control = await tx.mailDeliveryControl.update({
         where: { id: DELIVERY_CONTROL_ID },
         data: { consecutiveFailures: { increment: 1 } },
       })
       if (control.consecutiveFailures >= options.circuitFailureThreshold) {
-        await tx.mailDeliveryControl.update({
-          where: { id: DELIVERY_CONTROL_ID },
-          data: {
-            circuitOpenUntil: new Date(input.now.getTime() + options.circuitOpenMs),
-          },
-        })
+        const currentCircuitAlert = control.circuitOpenUntil && control.circuitOpenUntil > input.now
+          ? await tx.mailDeliveryProtectionAlert.findFirst({
+              where: {
+                reason: 'delivery_circuit_open',
+                transitionAt: control.circuitOpenUntil,
+              },
+              select: { reason: true },
+            })
+          : null
+        if (!currentCircuitAlert) {
+          const circuitOpenUntil = new Date(input.now.getTime() + options.circuitOpenMs)
+          await tx.mailDeliveryControl.update({
+            where: { id: DELIVERY_CONTROL_ID },
+            data: { circuitOpenUntil },
+          })
+          protectionAlert = await createProtectionAlert(tx, {
+            occurredAt: input.now,
+            reason: 'delivery_circuit_open',
+            transitionAt: circuitOpenUntil,
+          })
+        }
       }
     }
-    return retry ? 'queued' : 'terminal_failure'
+    const state = retry ? 'queued' as const : 'terminal_failure' as const
+    return protectionAlert ? { protectionAlert, state } : { state }
   })
 }
 
@@ -365,4 +462,27 @@ async function lockOutboxRow(tx: Prisma.TransactionClient, id: string) {
     WHERE id = ${id}::uuid
     FOR UPDATE
   `
+}
+
+async function createProtectionAlert(
+  tx: Prisma.TransactionClient,
+  input: MailDeliveryProtectionAlert & { transitionAt: Date },
+) {
+  const inserted = await tx.mailDeliveryProtectionAlert.createMany({
+    data: input,
+    skipDuplicates: true,
+  })
+  if (inserted.count === 0) return undefined
+  await tx.mailDeliveryProtectionAlert.deleteMany({
+    where: {
+      deliveredAt: { not: null },
+      occurredAt: {
+        lt: new Date(input.occurredAt.getTime() - PROTECTION_ALERT_RETENTION_MS),
+      },
+    },
+  })
+  return {
+    occurredAt: input.occurredAt,
+    reason: input.reason,
+  }
 }

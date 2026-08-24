@@ -312,7 +312,10 @@ export type Passwords = {
 
 export type AuthAbuseProtection = {
   beginLoginAttempt(input: { ipAddress?: string; login: string; now: Date }): Promise<void>
-  recordLoginFailure(input: { login: string; now: Date }): Promise<{ limited: boolean }>
+  recordLoginFailure(input: { login: string; now: Date }): Promise<{
+    limited: boolean
+    retryAfterSeconds?: number
+  }>
   recordLoginSuccess(input: { login: string }): Promise<void>
 }
 

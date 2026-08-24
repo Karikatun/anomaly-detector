@@ -14,18 +14,21 @@ import {
 } from '../../mail'
 import type { AuthRepository } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
-
-const registrationDeviceWindowMs = 180 * 24 * 60 * 60 * 1_000
-const registrationIpWindowMs = 24 * 60 * 60 * 1_000
-const minuteMs = 60 * 1_000
-const hourMs = 60 * minuteMs
-const dayMs = 24 * hourMs
+import {
+  createRequestBudgetPolicyCatalog,
+  type RequestBudgetPolicyCatalog,
+} from '../../../security/request-budget-policy'
 
 export function createPrismaAuthRepository(
   db: DbClient,
   abuseSecret: string,
-  options: { createMessageId?: () => string } = {},
+  options: {
+    createMessageId?: () => string
+    requestBudgetPolicies?: RequestBudgetPolicyCatalog
+  } = {},
 ): AuthRepository {
+  const requestBudgetPolicies = options.requestBudgetPolicies
+    ?? createRequestBudgetPolicyCatalog()
   return {
     findUserById(userId) {
       return db.user.findUnique({ where: { id: userId } })
@@ -74,18 +77,18 @@ export function createPrismaAuthRepository(
               if (input.registration.deviceId) {
                 await consumeRegistrationQuota(tx, {
                   keyHash: quotaKeys.find((quota) => quota.scope === 'registration_device')!.keyHash,
-                  limit: 3,
+                  limit: requestBudgetPolicies.registration_device.limit,
                   now: input.registration.now,
                   scope: 'registration_device',
-                  windowMs: registrationDeviceWindowMs,
+                  windowMs: requestBudgetPolicies.registration_device.windowMs,
                 })
               }
               await consumeRegistrationQuota(tx, {
                 keyHash: quotaKeys.find((quota) => quota.scope === 'registration_ip')!.keyHash,
-                limit: 20,
+                limit: requestBudgetPolicies.registration_ip.limit,
                 now: input.registration.now,
                 scope: 'registration_ip',
-                windowMs: registrationIpWindowMs,
+                windowMs: requestBudgetPolicies.registration_ip.windowMs,
               })
             }
             const user = await tx.user.create({
@@ -582,7 +585,7 @@ export function createPrismaAuthRepository(
         bindingSnapshot.canonicalKey,
         confirmationCode,
       )
-      const quotas = recoveryEmailQuotas(abuseSecret, {
+      const quotas = recoveryEmailQuotas(abuseSecret, requestBudgetPolicies, {
         canonicalKey: bindingSnapshot.canonicalKey,
         ipAddress: input.ipAddress,
         userId: input.userId,
@@ -762,18 +765,13 @@ export function createPrismaAuthRepository(
     },
 
     async reserveRecoveryCodeUseBudget(input) {
-      const quotas = recoveryCodeUseQuotas(abuseSecret, input)
-      return db.$transaction(async (tx) => {
-        const locks = quotas.map((quota) => ({
-          scope: 'recovery-budget',
-          value: `${quota.scope}:${quota.keyHash}`,
-        })).sort((left, right) =>
-          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-        for (const lock of locks) {
-          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-        }
-        return consumeRecoveryCodeUseQuotas(tx, quotas, input.now)
-      })
+      const quotas = recoveryCodeUseQuotas(abuseSecret, requestBudgetPolicies, input)
+      return db.$transaction((tx) => consumeRecoveryRequestQuotasIpFirst(
+        tx,
+        abuseSecret,
+        quotas,
+        input.now,
+      ))
     },
 
     async recoverPasswordWithRecoveryCode(input) {
@@ -831,25 +829,22 @@ export function createPrismaAuthRepository(
       const messageId = options.createMessageId?.() ?? crypto.randomUUID()
       const token = derivePasswordResetToken(abuseSecret, messageId)
       const tokenHash = hashPasswordResetToken(abuseSecret, token)
-      const quotas = passwordResetRequestQuotas(abuseSecret, input)
+      const quotas = passwordResetRequestQuotas(abuseSecret, requestBudgetPolicies, input)
 
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           await db.$transaction(async (tx) => {
-            const locks = [
-              ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
-              ...quotas.map((quota) => ({
-                scope: 'recovery-budget',
-                value: `${quota.scope}:${quota.keyHash}`,
-              })),
-            ].sort((left, right) =>
+            const locks = (snapshot
+              ? [{ scope: 'recovery-user', value: snapshot.id }]
+              : []).sort((left, right) =>
               `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
             for (const lock of locks) {
               await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
             }
 
-            const budgetAvailable = await consumePasswordResetRequestQuotas(
+            const budgetAvailable = await consumeRecoveryRequestQuotasIpFirst(
               tx,
+              abuseSecret,
               quotas,
               input.now,
             )
@@ -1054,7 +1049,7 @@ export function createPrismaAuthRepository(
           },
         },
       })
-      const quotas = recoveryCodeUseQuotas(abuseSecret, input)
+      const quotas = recoveryCodeUseQuotas(abuseSecret, requestBudgetPolicies, input)
       const messageId = options.createMessageId?.() ?? crypto.randomUUID()
       const confirmationCode = deriveAccountEmailConfirmationCode(abuseSecret, messageId)
       const newCodeHash = snapshot
@@ -1073,16 +1068,17 @@ export function createPrismaAuthRepository(
             ? [{ scope: 'account-email', value: snapshot.recoveryEmailBinding.canonicalKey }]
             : []),
           { scope: 'account-email', value: input.newCanonicalKey },
-          ...quotas.map((quota) => ({
-            scope: 'recovery-budget',
-            value: `${quota.scope}:${quota.keyHash}`,
-          })),
         ].sort((left, right) =>
           `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
         for (const lock of locks) {
           await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
         }
-        const budgetAvailable = await consumeRecoveryCodeUseQuotas(tx, quotas, input.now)
+        const budgetAvailable = await consumeRecoveryRequestQuotasIpFirst(
+          tx,
+          abuseSecret,
+          quotas,
+          input.now,
+        )
         const user = await tx.user.findUnique({
           where: { login: input.login },
           select: { id: true, passwordHash: true },
@@ -1178,7 +1174,7 @@ export function createPrismaAuthRepository(
           },
         },
       })
-      const quotas = recoveryCodeUseQuotas(abuseSecret, input)
+      const quotas = recoveryCodeUseQuotas(abuseSecret, requestBudgetPolicies, input)
       return runRetryableAuthTransaction(db, async (tx) => {
         const locks = [
           ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
@@ -1188,16 +1184,17 @@ export function createPrismaAuthRepository(
                 { scope: 'account-email', value: snapshot.recoveryCodeReplacement.newCanonicalKey },
               ]
             : []),
-          ...quotas.map((quota) => ({
-            scope: 'recovery-budget',
-            value: `${quota.scope}:${quota.keyHash}`,
-          })),
         ].sort((left, right) =>
           `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
         for (const lock of locks) {
           await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
         }
-        const budgetAvailable = await consumeRecoveryCodeUseQuotas(tx, quotas, input.now)
+        const budgetAvailable = await consumeRecoveryRequestQuotasIpFirst(
+          tx,
+          abuseSecret,
+          quotas,
+          input.now,
+        )
         const user = await tx.user.findUnique({
           where: { login: input.login },
           select: { id: true, passwordHash: true },
@@ -1295,7 +1292,7 @@ export function createPrismaAuthRepository(
         input.canonicalKey,
         confirmationCode,
       )
-      const quotas = recoveryEmailQuotas(abuseSecret, input)
+      const quotas = recoveryEmailQuotas(abuseSecret, requestBudgetPolicies, input)
 
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
@@ -1420,7 +1417,7 @@ export function createPrismaAuthRepository(
         snapshot.canonicalKey,
         confirmationCode,
       )
-      const quotas = recoveryEmailQuotas(abuseSecret, {
+      const quotas = recoveryEmailQuotas(abuseSecret, requestBudgetPolicies, {
         canonicalKey: snapshot.canonicalKey,
         ipAddress: input.ipAddress,
         userId: input.userId,
@@ -1676,7 +1673,7 @@ export function createPrismaAuthRepository(
         input.newCanonicalKey,
         newCode,
       )
-      const quotas = recoveryEmailReplacementQuotas(abuseSecret, {
+      const quotas = recoveryEmailReplacementQuotas(abuseSecret, requestBudgetPolicies, {
         ipAddress: input.ipAddress,
         newCanonicalKey: input.newCanonicalKey,
         oldCanonicalKey: bindingSnapshot.canonicalKey,
@@ -1840,7 +1837,7 @@ export function createPrismaAuthRepository(
       const messageId = options.createMessageId?.() ?? crypto.randomUUID()
       const code = deriveAccountEmailConfirmationCode(abuseSecret, messageId)
       const codeHash = hashRecoveryEmailCode(abuseSecret, input.userId, canonicalKey, code)
-      const quotas = recoveryEmailQuotas(abuseSecret, {
+      const quotas = recoveryEmailQuotas(abuseSecret, requestBudgetPolicies, {
         canonicalKey,
         ipAddress: input.ipAddress,
         userId: input.userId,
@@ -2366,43 +2363,87 @@ function hashRecoveryCode(secret: string, userId: string, recoveryCode: string) 
 
 function recoveryCodeUseQuotas(
   secret: string,
+  policies: RequestBudgetPolicyCatalog,
   input: { ipAddress?: string; login: string },
 ) {
   const definitions = [
-    ['rec_code_login_hour', input.login, 3, hourMs],
-    ['rec_code_login_day', input.login, 5, dayMs],
-    ['rec_code_ip_hour', input.ipAddress ?? 'unknown', 10, hourMs],
-    ['rec_code_ip_day', input.ipAddress ?? 'unknown', 30, dayMs],
+    ['login', 'rec_code_login_hour', input.login, policies.rec_code_login_hour],
+    ['login', 'rec_code_login_day', input.login, policies.rec_code_login_day],
+    ['ip', 'rec_code_ip_hour', input.ipAddress ?? 'unknown', policies.rec_code_ip_hour],
+    ['ip', 'rec_code_ip_day', input.ipAddress ?? 'unknown', policies.rec_code_ip_day],
   ] as const
-  return definitions.map(([scope, value, limit, windowMs]) => ({
+  return definitions.map(([dimension, scope, value, policy]) => ({
+    dimension,
     keyHash: hashRecoveryBudgetKey(secret, scope, value),
-    limit,
+    limit: policy.limit,
     scope,
-    windowMs,
+    windowMs: policy.windowMs,
   }))
 }
 
 function passwordResetRequestQuotas(
   secret: string,
+  policies: RequestBudgetPolicyCatalog,
   input: { ipAddress?: string; login: string },
 ) {
   const definitions = [
-    ['password_reset_login_hour', input.login, 3, hourMs],
-    ['password_reset_login_day', input.login, 5, dayMs],
-    ['password_reset_ip_hour', input.ipAddress ?? 'unknown', 10, hourMs],
-    ['password_reset_ip_day', input.ipAddress ?? 'unknown', 30, dayMs],
+    ['login', 'password_reset_login_hour', input.login, policies.password_reset_login_hour],
+    ['login', 'password_reset_login_day', input.login, policies.password_reset_login_day],
+    ['ip', 'password_reset_ip_hour', input.ipAddress ?? 'unknown', policies.password_reset_ip_hour],
+    ['ip', 'password_reset_ip_day', input.ipAddress ?? 'unknown', policies.password_reset_ip_day],
   ] as const
-  return definitions.map(([scope, value, limit, windowMs]) => ({
+  return definitions.map(([dimension, scope, value, policy]) => ({
+    dimension,
     keyHash: hashRecoveryBudgetKey(secret, scope, value),
-    limit,
+    limit: policy.limit,
     scope,
-    windowMs,
+    windowMs: policy.windowMs,
   }))
 }
 
-async function consumePasswordResetRequestQuotas(
+type RecoveryRequestQuota = {
+  dimension: 'ip' | 'login'
+  keyHash: string
+  limit: number
+  scope: string
+  windowMs: number
+}
+
+async function consumeRecoveryRequestQuotasIpFirst(
   tx: Prisma.TransactionClient,
-  quotas: ReturnType<typeof passwordResetRequestQuotas>,
+  secret: string,
+  quotas: readonly RecoveryRequestQuota[],
+  now: Date,
+) {
+  const ipQuotas = quotas.filter((quota) => quota.dimension === 'ip')
+  const loginQuotas = quotas.filter((quota) => quota.dimension === 'login')
+  await lockRecoveryRequestQuotas(tx, secret, ipQuotas)
+  if (!await consumeRecoveryRequestQuotaGroup(tx, ipQuotas, now)) return false
+
+  await lockRecoveryRequestQuotas(tx, secret, loginQuotas)
+  return consumeRecoveryRequestQuotaGroup(tx, loginQuotas, now)
+}
+
+async function lockRecoveryRequestQuotas(
+  tx: Prisma.TransactionClient,
+  secret: string,
+  quotas: readonly RecoveryRequestQuota[],
+) {
+  const sorted = [...quotas].sort((left, right) =>
+    `${left.scope}:${left.keyHash}`.localeCompare(`${right.scope}:${right.keyHash}`))
+  for (const quota of sorted) {
+    await lockAuthTransactionKey(
+      tx,
+      secret,
+      'recovery-budget',
+      `${quota.scope}:${quota.keyHash}`,
+    )
+  }
+}
+
+async function consumeRecoveryRequestQuotaGroup(
+  tx: Prisma.TransactionClient,
+  quotas: readonly RecoveryRequestQuota[],
   now: Date,
 ) {
   let available = true
@@ -2439,40 +2480,6 @@ function hashPasswordResetToken(secret: string, token: string) {
     .update('password-reset-token-hash-v1\0')
     .update(token)
     .digest('hex')
-}
-
-async function consumeRecoveryCodeUseQuotas(
-  tx: Prisma.TransactionClient,
-  quotas: ReturnType<typeof recoveryCodeUseQuotas>,
-  now: Date,
-) {
-  let available = true
-  for (const quota of quotas) {
-    const existing = await tx.authAbuseBucket.findUnique({
-      where: { scope_keyHash: { scope: quota.scope, keyHash: quota.keyHash } },
-    })
-    const windowExpired = !existing || existing.expiresAt <= now
-    const count = windowExpired ? 1 : existing.count + 1
-    if (count > quota.limit) available = false
-    const windowStartedAt = windowExpired ? now : existing.windowStartedAt
-    await tx.authAbuseBucket.upsert({
-      where: { scope_keyHash: { scope: quota.scope, keyHash: quota.keyHash } },
-      create: {
-        count: Math.min(count, quota.limit + 1),
-        expiresAt: new Date(windowStartedAt.getTime() + quota.windowMs),
-        keyHash: quota.keyHash,
-        scope: quota.scope,
-        windowStartedAt,
-      },
-      update: {
-        blockedUntil: null,
-        count: Math.min(count, quota.limit + 1),
-        expiresAt: new Date(windowStartedAt.getTime() + quota.windowMs),
-        windowStartedAt,
-      },
-    })
-  }
-  return available
 }
 
 async function cancelOutstandingRecoveryCredentials(
@@ -2537,15 +2544,20 @@ async function consumeRegistrationQuota(
   })
   const windowExpired = !existing || existing.expiresAt <= input.now
   const count = windowExpired ? 1 : existing.count + 1
-  if (count > input.limit) {
-    throw new AuthFailure('registration_limited', 'Registration limit reached. Try again later.')
-  }
   const windowStartedAt = windowExpired ? input.now : existing.windowStartedAt
+  const expiresAt = new Date(windowStartedAt.getTime() + input.windowMs)
+  if (count > input.limit) {
+    throw new AuthFailure(
+      'registration_limited',
+      'Registration limit reached. Try again later.',
+      retryAfterSeconds(expiresAt, input.now),
+    )
+  }
   await tx.authAbuseBucket.upsert({
     where: { scope_keyHash: { scope: input.scope, keyHash: input.keyHash } },
     create: {
       count,
-      expiresAt: new Date(windowStartedAt.getTime() + input.windowMs),
+      expiresAt,
       keyHash: input.keyHash,
       scope: input.scope,
       windowStartedAt,
@@ -2553,7 +2565,7 @@ async function consumeRegistrationQuota(
     update: {
       blockedUntil: null,
       count,
-      expiresAt: new Date(windowStartedAt.getTime() + input.windowMs),
+      expiresAt,
       windowStartedAt,
     },
   })
@@ -2561,27 +2573,30 @@ async function consumeRegistrationQuota(
 
 function recoveryEmailQuotas(
   secret: string,
+  policies: RequestBudgetPolicyCatalog,
   input: { canonicalKey: string; ipAddress?: string; userId: string },
 ) {
   const definitions = [
-    ['rec_email_account_min', input.userId, 1, minuteMs],
-    ['rec_email_account_hour', input.userId, 3, hourMs],
-    ['rec_email_account_day', input.userId, 5, dayMs],
-    ['rec_email_address_min', input.canonicalKey, 1, minuteMs],
-    ['rec_email_address_hour', input.canonicalKey, 3, hourMs],
-    ['rec_email_address_day', input.canonicalKey, 5, dayMs],
-    ['rec_email_ip_hour', input.ipAddress ?? 'unknown', 20, hourMs],
+    ['rec_email_account_min', input.userId, policies.rec_email_account_min, 1],
+    ['rec_email_account_hour', input.userId, policies.rec_email_account_hour, 1],
+    ['rec_email_account_day', input.userId, policies.rec_email_account_day, 1],
+    ['rec_email_address_min', input.canonicalKey, policies.rec_email_address_min, 1],
+    ['rec_email_address_hour', input.canonicalKey, policies.rec_email_address_hour, 1],
+    ['rec_email_address_day', input.canonicalKey, policies.rec_email_address_day, 1],
+    ['rec_email_ip_hour', input.ipAddress ?? 'unknown', policies.rec_email_ip_hour, 1],
   ] as const
-  return definitions.map(([scope, value, limit, windowMs]) => ({
+  return definitions.map(([scope, value, policy, cost]) => ({
+    cost,
     keyHash: hashRecoveryBudgetKey(secret, scope, value),
-    limit,
+    limit: policy.limit,
     scope,
-    windowMs,
+    windowMs: policy.windowMs,
   }))
 }
 
 function recoveryEmailReplacementQuotas(
   secret: string,
+  policies: RequestBudgetPolicyCatalog,
   input: {
     ipAddress?: string
     newCanonicalKey: string
@@ -2590,28 +2605,30 @@ function recoveryEmailReplacementQuotas(
   },
 ) {
   const definitions = [
-    ['rec_email_account_min', input.userId, 1, minuteMs],
-    ['rec_email_account_hour', input.userId, 3, hourMs],
-    ['rec_email_account_day', input.userId, 5, dayMs],
-    ['rec_email_address_min', input.oldCanonicalKey, 1, minuteMs],
-    ['rec_email_address_hour', input.oldCanonicalKey, 3, hourMs],
-    ['rec_email_address_day', input.oldCanonicalKey, 5, dayMs],
-    ['rec_email_address_min', input.newCanonicalKey, 1, minuteMs],
-    ['rec_email_address_hour', input.newCanonicalKey, 3, hourMs],
-    ['rec_email_address_day', input.newCanonicalKey, 5, dayMs],
-    ['rec_email_ip_hour', input.ipAddress ?? 'unknown', 20, hourMs],
+    ['rec_email_account_min', input.userId, policies.rec_email_account_min, 1],
+    ['rec_email_account_hour', input.userId, policies.rec_email_account_hour, 2],
+    ['rec_email_account_day', input.userId, policies.rec_email_account_day, 2],
+    ['rec_email_address_min', input.oldCanonicalKey, policies.rec_email_address_min, 1],
+    ['rec_email_address_hour', input.oldCanonicalKey, policies.rec_email_address_hour, 1],
+    ['rec_email_address_day', input.oldCanonicalKey, policies.rec_email_address_day, 1],
+    ['rec_email_address_min', input.newCanonicalKey, policies.rec_email_address_min, 1],
+    ['rec_email_address_hour', input.newCanonicalKey, policies.rec_email_address_hour, 1],
+    ['rec_email_address_day', input.newCanonicalKey, policies.rec_email_address_day, 1],
+    ['rec_email_ip_hour', input.ipAddress ?? 'unknown', policies.rec_email_ip_hour, 2],
   ] as const
-  return definitions.map(([scope, value, limit, windowMs]) => ({
+  return definitions.map(([scope, value, policy, cost]) => ({
+    cost,
     keyHash: hashRecoveryBudgetKey(secret, scope, value),
-    limit,
+    limit: policy.limit,
     scope,
-    windowMs,
+    windowMs: policy.windowMs,
   }))
 }
 
 async function consumeRecoveryEmailQuota(
   tx: Prisma.TransactionClient,
   input: {
+    cost?: number
     keyHash: string
     limit: number
     now: Date
@@ -2623,14 +2640,17 @@ async function consumeRecoveryEmailQuota(
     where: { scope_keyHash: { scope: input.scope, keyHash: input.keyHash } },
   })
   const windowExpired = !existing || existing.expiresAt <= input.now
-  const count = windowExpired ? 1 : existing.count + 1
+  const cost = input.cost ?? 1
+  const count = windowExpired ? cost : existing.count + cost
+  const windowStartedAt = windowExpired ? input.now : existing.windowStartedAt
+  const expiresAt = new Date(windowStartedAt.getTime() + input.windowMs)
   if (count > input.limit) {
     throw new AuthFailure(
       'recovery_email_limited',
       'Recovery Email request is temporarily unavailable',
+      retryAfterSeconds(expiresAt, input.now),
     )
   }
-  const windowStartedAt = windowExpired ? input.now : existing.windowStartedAt
   await tx.authAbuseBucket.upsert({
     where: { scope_keyHash: { scope: input.scope, keyHash: input.keyHash } },
     create: {
@@ -2647,6 +2667,10 @@ async function consumeRecoveryEmailQuota(
       windowStartedAt,
     },
   })
+}
+
+function retryAfterSeconds(expiresAt: Date, now: Date) {
+  return Math.max(1, Math.ceil((expiresAt.getTime() - now.getTime()) / 1_000))
 }
 
 function hashRecoveryBudgetKey(secret: string, scope: string, value: string) {

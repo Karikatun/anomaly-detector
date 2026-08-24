@@ -170,6 +170,76 @@ TRUSTED_PROXY_CLIENT_IP_POSITION=first
 COOKIE_SECURE=true
 ```
 
+ADR 0013 count overrides are optional. Omitting them keeps these versioned
+defaults and fixed windows; do not tune them without production evidence:
+
+```bash
+ANTI_ABUSE_LOGIN_FAILURE_LIMIT=5              # 15 minutes
+ANTI_ABUSE_LOGIN_IP_LIMIT=30                  # 15 minutes
+ANTI_ABUSE_REGISTRATION_DEVICE_LIMIT=3        # 180 days
+ANTI_ABUSE_REGISTRATION_IP_LIMIT=20           # 1 day
+ANTI_ABUSE_RECOVERY_EMAIL_MINUTE_LIMIT=1
+ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT=3
+ANTI_ABUSE_RECOVERY_EMAIL_DAY_LIMIT=5
+ANTI_ABUSE_RECOVERY_EMAIL_IP_HOUR_LIMIT=20
+ANTI_ABUSE_RECOVERY_LOGIN_HOUR_LIMIT=3
+ANTI_ABUSE_RECOVERY_LOGIN_DAY_LIMIT=5
+ANTI_ABUSE_RECOVERY_LOGIN_IP_HOUR_LIMIT=10
+ANTI_ABUSE_RECOVERY_LOGIN_IP_DAY_LIMIT=30
+ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT=120   # 1 minute
+ANTI_ABUSE_ROOM_JOIN_LIMIT=20                 # 1 minute
+ANTI_ABUSE_TENDER_COMMAND_LIMIT=60            # 1 minute
+ANTI_ABUSE_REALTIME_TICKET_LIMIT=10           # 1 minute
+```
+
+Recovery Email minute/hour/day settings apply independently to the account and
+canonical address; its IP setting is hourly. Recovery-login settings are shared
+by password-recovery requests and Recovery Code checks, with independent login
+and trusted-IP hour/day buckets. Recovery Email hour, day and IP-hour limits
+must be at least `2`, because one replacement reserves messages for both the
+old and new address; the other limits may start at `1`. Values greater than
+`1_000_000` fail startup. Budget keys are domain-separated HMACs under
+`JWT_SECRET`, never raw login/email values. A coordinated `JWT_SECRET` rotation
+moves every budget into a fresh HMAC namespace, including the 180-day
+registration-device and recovery day windows, and separately changes JWT/token
+cryptography. Treat it as a security rollout with explicit compatibility and
+recovery evidence; never rotate the auth secret merely to clear budgets.
+
+For the first release that converts the legacy unkeyed SHA-256 keys of the
+one-minute Room, Tender, authenticated-mutation and realtime budgets to HMAC,
+do not run old and new API revisions at the same time. Stop every old API
+process, wait at least 60 seconds for the longest affected legacy window, and
+only then start the new revision. Rollback uses the same stop, wait and start
+sequence in reverse. PostgreSQL cannot translate the existing rows because the
+raw identity was intentionally never stored; overlapping revisions would use
+two independent namespaces and temporarily double those allowances. Record the
+controlled downtime and the 60-second drain in release and rollback evidence.
+
+Recovery Email has not yet been released to production. Before its first
+cutover, verify that no active bucket from an older cost model exists:
+
+```sql
+SELECT count(*)
+FROM auth_abuse_buckets
+WHERE scope LIKE 'rec_email_%'
+  AND expires_at > now();
+```
+
+The expected count is `0`. If it is not zero, stop the release and design a
+conservative migration or wait for those windows to expire. Do not mix the old
+replacement cost with the new rule: one replacement atomically charges two
+messages against the account hour/day and trusted-IP hour budgets.
+
+Do not roll back to an intermediate image that exposes Recovery Email
+replacement while charging those shared budgets only once per command. It
+remains incompatible after active rows expire because every later replacement
+would again undercount its two messages. Roll forward to a compatible image, or
+block the complete `/api/auth/account-protection/recovery-email/*` contour at
+the trusted ingress until a compatible revision is available. The original
+pre-feature production image is an acceptable rollback target only after
+verifying that these routes are absent. Record the route check and selected
+rollback target in the release evidence.
+
 This is the split-domain target configuration. Until the coordinated cutover,
 the active production `WEBAPP_ORIGIN` and player entry in `CORS_ORIGINS` remain
 the current root origin. `WEBAPP_ORIGIN` is mandatory in production, must be an
@@ -264,12 +334,14 @@ exclusively to `/api/analytics/*`. Never enable credentialed wildcard CORS.
 
 ### Edge abuse-protection profile
 
-Application budgets remain authoritative across API instances: room joins use
-`20 requests / 60 seconds` per user, Tender commands use `60 / 60 seconds` per
-user and Tender, and authenticated mutations use a wider `120 / 60 seconds` per
-user. Edge rules complement these PostgreSQL budgets; they must reject abusive
-traffic before authentication or other expensive application work and must not
-replace application authorization.
+Application budgets remain authoritative across API instances. Their versioned
+defaults are listed with the optional runtime overrides above; this includes
+auth and recovery, Room joins, Tender commands, authenticated mutations and
+realtime-ticket issuance. The one-minute gameplay/generic budgets are keyed by
+user for Room join, authenticated mutation and realtime ticket, and by user plus
+Tender for Tender commands. Edge rules complement these PostgreSQL budgets;
+they must reject abusive traffic before authentication or other expensive
+application work and must not replace application authorization.
 
 Create separate Smart Web Security and Advanced Rate Limiter rules for these
 traffic classes instead of one global threshold:
@@ -622,7 +694,7 @@ return, deep-link reload, API readiness, and unchanged PostgreSQL volume
 identity. The split adds no migration; do not touch PostgreSQL or delete the
 staged release while the rollback decision is open.
 
-Backend security events are emitted as single-line JSON with
+Request-bound backend security events are emitted as single-line JSON with
 `"channel":"security"`, a generated request ID, route, method, stable reason,
 outcome, and timestamp. They intentionally exclude credentials, tokens,
 realtime tickets, login names, and raw request bodies. Route these stdout
@@ -631,11 +703,27 @@ records into Cloud Logging and configure alerts at minimum for:
 - any sustained `exceptional_condition` events;
 - repeated `refresh_token_reused` events;
 - repeated `realtime_ticket_issue_budget` events;
+- any `mail_delivery_protection_activated` event with reason
+  `delivery_budget_exhausted` or `delivery_circuit_open`;
 - sharp increases in `authentication_rejected`,
   `authorization_rejected`, or `PAYLOAD_TOO_LARGE`.
 
 Retain the request ID in API responses and log search results so an incident can
 be correlated without recording sensitive request data.
+
+The mail worker persists each transition once in PostgreSQL and uses an exclusive
+lease so active workers do not claim the same row concurrently. Delivery to the log
+sink is at least once: a crash after log emission but before PostgreSQL acknowledgement
+may repeat the event. The record contains only channel, type, stable reason,
+occurrence time and `transitionAt`; downstream routing must deduplicate by reason plus
+`transitionAt`. Acknowledged rows older than 30 days are pruned lazily on a later
+transition, while pending rows remain durable. During a continuously unavailable
+sink, delivery-budget transitions can add at most one pending row per minute;
+production needs a pending-age/cardinality alarm
+or an explicitly accepted finite dead-letter policy before that becomes a capacity
+risk. This local implementation has not been deployed. Its thresholds have not been
+tuned under production load, and no Yandex Monitoring rule or notification channel
+has been configured for it.
 
 ### Current Monitoring Baseline
 
@@ -680,6 +768,7 @@ and alerts cannot be configured for them:
 - PostgreSQL connection count;
 - WebSocket reconnect rate;
 - auth throttling and exceptional security-event counts;
+- transactional-mail protection-transition counts;
 - active, completed, and early-finished match counts.
 
 Close this gap with one operational metrics endpoint scraped by Unified Agent

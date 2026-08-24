@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { startPollingLoop } from './worker'
+import { emitMailDeliveryProtectionAlert, startPollingLoop } from './worker'
 
 test('worker polling starts immediately and shutdown waits for the active task', async () => {
   let releaseTask!: () => void
@@ -42,4 +42,30 @@ test('worker polling starts immediately and shutdown waits for the active task',
 
   expect(successes).toBe(1)
   expect(stopped).toBe(true)
+})
+
+test('mail protection alert output is allowlisted and exposes logger failure for durable retry', () => {
+  const messages: string[] = []
+  const unsafeInput = {
+    occurredAt: new Date('2026-08-24T08:00:00.000Z'),
+    payload: { token: 'must-not-leak' },
+    reason: 'delivery_budget_exhausted' as const,
+    recipient: 'private@example.test',
+    transitionAt: new Date('2026-08-24T08:01:00.000Z'),
+  }
+
+  expect(() => emitMailDeliveryProtectionAlert(unsafeInput, {
+    warn(message) {
+      messages.push(message)
+      throw new Error('logging unavailable')
+    },
+  })).toThrow('logging unavailable')
+  expect(messages).toHaveLength(1)
+  expect(JSON.parse(messages[0]!)).toEqual({
+    channel: 'security',
+    occurredAt: '2026-08-24T08:00:00.000Z',
+    reason: 'delivery_budget_exhausted',
+    transitionAt: '2026-08-24T08:01:00.000Z',
+    type: 'mail_delivery_protection_activated',
+  })
 })

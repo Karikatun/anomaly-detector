@@ -5,12 +5,14 @@ import type {
   MailPolicyPublishCommand,
   MailPolicyStatusCommand,
   MailOperationsView,
+  RequestBudgetOverview,
 } from '@anomaly-detector/contracts'
 
 import { AdminApiError } from './api'
 import { shouldRetainCommand } from './mail-policy-command-retry'
 
 type MailPolicyScreenProps = {
+  antiAbuse: RequestBudgetOverview | null
   data: MailOperationsView
   onBack: () => void
   onChangeStatus: (command: MailPolicyStatusCommand) => Promise<void>
@@ -24,6 +26,7 @@ type BusyCommand = 'import' | 'publish' | 'reload' | 'status'
 type Feedback = { kind: 'error' | 'success'; message: string }
 
 export function MailPolicyScreen({
+  antiAbuse,
   data,
   onBack,
   onChangeStatus,
@@ -228,6 +231,8 @@ export function MailPolicyScreen({
           )}
         </section>
 
+        <RequestBudgetOverviewPanel antiAbuse={antiAbuse} />
+
         <section className="policy-layout" aria-label="Импорт и активная политика">
           <article className="panel policy-summary-panel">
             <div className="panel-heading">
@@ -398,6 +403,51 @@ export function MailPolicyScreen({
   )
 }
 
+export function RequestBudgetOverviewPanel({
+  antiAbuse,
+}: {
+  antiAbuse: RequestBudgetOverview | null
+}) {
+  return (
+    <section className="panel mail-operations-panel" aria-labelledby="anti-abuse-title">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">PostgreSQL · только чтение · активные окна</p>
+          <h2 id="anti-abuse-title">Anti-abuse budgets</h2>
+        </div>
+      </div>
+      {antiAbuse === null ? (
+        <p className="empty-copy">Агрегат недоступен в этой версии.</p>
+      ) : (
+        <>
+          <p className="empty-copy">
+            Публичные login, registration, password-reset и Recovery Code scopes исключены. Каждая оставшаяся категория включается только от {antiAbuse.minimumGroupSize} исчерпанных budget-ключей; значения округлены вниз с шагом {antiAbuse.roundingStep}. Сами категории, HMAC-ключи и пользовательские идентификаторы не выводятся.
+          </p>
+          {antiAbuse.groups.length === 0 ? (
+            <p className="empty-copy">Нет широких групп, прошедших порог отображения в активных окнах.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="anti-abuse-table">
+                <thead>
+                  <tr><th>Поверхность</th><th>Исчерпанные budget-ключи</th></tr>
+                </thead>
+                <tbody>
+                  {antiAbuse.groups.map((group) => (
+                    <tr key={group.surface}>
+                      <td>{requestBudgetSurfaceLabel(group.surface)}</td>
+                      <td>не менее {group.exhaustedBudgetKeysAtLeast}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
 function DomainDiff({ domains, title }: { domains: string[]; title: string }) {
   if (domains.length === 0) return null
   return (
@@ -462,4 +512,14 @@ function templateKindLabel(kind: MailOperationsView['delivery']['groups'][number
   if (kind === 'account_email_confirmation') return 'Подтверждение почты'
   if (kind === 'password_recovery') return 'Восстановление пароля'
   return 'Security-уведомление'
+}
+
+function requestBudgetSurfaceLabel(
+  surface: RequestBudgetOverview['groups'][number]['surface'],
+) {
+  if (surface === 'authentication') return 'Аутентификация'
+  if (surface === 'transactional_mail') return 'Транзакционная почта'
+  if (surface === 'room_join') return 'Вход в комнату'
+  if (surface === 'tender_command') return 'Команды Тендера'
+  return 'Realtime'
 }

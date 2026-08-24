@@ -134,6 +134,25 @@ export const mailDeliveryOverviewSchema = z.object({
   }).strict(),
 }).strict()
 
+const requestBudgetSurfaceSchema = z.enum([
+  'authentication',
+  'transactional_mail',
+  'room_join',
+  'tender_command',
+  'realtime',
+])
+
+const requestBudgetGroupSchema = z.object({
+  exhaustedBudgetKeysAtLeast: z.number().int().min(10).multipleOf(10),
+  surface: requestBudgetSurfaceSchema,
+}).strict()
+
+export const requestBudgetOverviewSchema = z.object({
+  groups: z.array(requestBudgetGroupSchema).max(5),
+  minimumGroupSize: z.literal(10),
+  roundingStep: z.literal(10),
+}).strict()
+
 export const mailOperationsViewSchema = mailPolicyViewSchema.extend({
   delivery: mailDeliveryOverviewSchema,
 }).strict()
@@ -161,6 +180,8 @@ export const mailPolicyStatusCommandSchema = mailPolicyCommandBaseSchema.extend(
 
 export type MailPolicyView = z.infer<typeof mailPolicyViewSchema>
 export type MailDeliveryOverview = z.infer<typeof mailDeliveryOverviewSchema>
+export type RequestBudgetOverview = z.infer<typeof requestBudgetOverviewSchema>
+export type RequestBudgetSurface = z.infer<typeof requestBudgetSurfaceSchema>
 export type MailOperationsView = z.infer<typeof mailOperationsViewSchema>
 export type MailPolicyEntry = z.infer<typeof mailPolicyEntrySchema>
 export type MailPolicyCanonicalization = z.infer<typeof mailPolicyCanonicalizationSchema>

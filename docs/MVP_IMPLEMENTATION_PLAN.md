@@ -115,14 +115,20 @@ security-сценарий.
    ограниченные retry и состояние окончательного отказа.
 7. [ ] До production проверить SPF, DKIM, DMARC и реальное получение писем на
    каждом Approved Mail Service. SMTP acceptance не называть доставкой в ящик.
-8. [ ] Добавить распределённые PostgreSQL budgets из ADR 0013, HMAC-ключи без
+8. [x] Добавить распределённые PostgreSQL budgets из ADR 0013, HMAC-ключи без
    сырых логинов/email в anti-abuse bucket, общий circuit breaker и alerts.
-   Пороговые значения меняются только по production evidence.
-9. [-] Показать в adminapp read-only агрегаты SMTP/outbox, rate limit,
+   Локально реализованы конфигурируемые пороги с прежними defaults и
+   распределённое transition-only событие защиты SMTP; production tuning,
+   правило Yandex Monitoring и канал уведомлений не выполнялись. Пороговые
+   значения меняются только по production evidence.
+9. [x] Показать в adminapp read-only агрегаты SMTP/outbox, rate limit,
    circuit breaker и свежести реестра без адресов, текста, кодов, токенов и
-   малых раскрывающих групп. SMTP/outbox, circuit breaker и свежесть реестра
-   реализованы; распределённые anti-abuse rate-limit агрегаты остаются в срезе
-   ADR 0013.
+   малых раскрывающих групп. Anti-abuse projection вынесен в отдельный read-only
+   endpoint, полностью исключает публично управляемые login/registration/
+   password-reset/Recovery Code scopes, включает только широкие surface-агрегаты
+   исчерпанных активных окон из authenticated scopes после отдельного порога
+   `k >= 10`, округляет каждый scope вниз до десятков и не возвращает точные
+   запросы, scope, HMAC-ключи или идентичности.
 
 **Gate:** новый password email принимается только из опубликованной версии
 реестра, Yandex ID email синхронизируется без merge, outbox переживает retry и

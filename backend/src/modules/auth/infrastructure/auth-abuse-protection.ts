@@ -4,16 +4,18 @@ import type { DbClient } from '../../../db'
 import type { Prisma } from '../../../generated/prisma/client'
 import type { AuthAbuseProtection } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
+import {
+  createRequestBudgetPolicyCatalog,
+  type RequestBudgetPolicyCatalog,
+} from '../../../security/request-budget-policy'
 
-const loginWindowMs = 15 * 60 * 1_000
-const loginFailureLimit = 5
 const loginBackoffBaseMs = 30 * 1_000
 const loginBackoffMaxMs = 15 * 60 * 1_000
-const loginIpAttemptLimit = 30
 
 export function createPrismaAuthAbuseProtection(
   db: DbClient,
   secret: string,
+  policies: RequestBudgetPolicyCatalog = createRequestBudgetPolicyCatalog(),
 ): AuthAbuseProtection {
   const hashKey = (scope: string, value: string) =>
     createHmac('sha256', secret).update(`auth-abuse:${scope}:${value}`).digest('hex')
@@ -25,34 +27,49 @@ export function createPrismaAuthAbuseProtection(
         where: { scope_keyHash: { scope: 'login_failure', keyHash: loginKeyHash } },
       })
       if (bucket?.blockedUntil && bucket.blockedUntil > now) {
-        throw new AuthFailure('login_throttled', 'Invalid login or password. Try again later.')
+        throw new AuthFailure(
+          'login_throttled',
+          'Invalid login or password. Try again later.',
+          retryAfterSeconds(bucket.blockedUntil, now),
+        )
       }
 
       const ipKeyHash = hashKey('ip', ipAddress)
-      const count = await updateBucket(db, {
+      const ipBucket = await updateBucket(db, {
         keyHash: ipKeyHash,
+        maximumCount: policies.login_ip_attempt.limit + 1,
         now,
         scope: 'login_ip_attempt',
-        windowMs: loginWindowMs,
+        windowMs: policies.login_ip_attempt.windowMs,
       })
-      if (count > loginIpAttemptLimit) {
-        throw new AuthFailure('login_throttled', 'Invalid login or password. Try again later.')
+      if (ipBucket.count > policies.login_ip_attempt.limit) {
+        throw new AuthFailure(
+          'login_throttled',
+          'Invalid login or password. Try again later.',
+          retryAfterSeconds(ipBucket.expiresAt, now),
+        )
       }
     },
 
     async recordLoginFailure({ login, now }) {
-      const count = await updateBucket(db, {
+      const bucket = await updateBucket(db, {
         blockedUntilForCount: (nextCount) => {
-          if (nextCount < loginFailureLimit) return null
-          const multiplier = 2 ** Math.max(0, nextCount - loginFailureLimit)
+          if (nextCount < policies.login_failure.limit) return null
+          const multiplier = 2 ** Math.max(0, nextCount - policies.login_failure.limit)
           return new Date(now.getTime() + Math.min(loginBackoffMaxMs, loginBackoffBaseMs * multiplier))
         },
         keyHash: hashKey('login', login),
+        maximumCount: policies.login_failure.limit + 5,
         now,
         scope: 'login_failure',
-        windowMs: loginWindowMs,
+        windowMs: policies.login_failure.windowMs,
       })
-      return { limited: count > loginFailureLimit }
+      return {
+        limited: bucket.count > policies.login_failure.limit,
+        ...(bucket.blockedUntil
+          ? { retryAfterSeconds: retryAfterSeconds(bucket.blockedUntil, now) }
+          : {}),
+      }
     },
 
     async recordLoginSuccess({ login }) {
@@ -71,6 +88,7 @@ async function updateBucket(
   input: {
     blockedUntilForCount?: (count: number) => Date | null
     keyHash: string
+    maximumCount?: number
     now: Date
     scope: string
     windowMs: number
@@ -81,7 +99,8 @@ async function updateBucket(
       where: { scope_keyHash: { scope: input.scope, keyHash: input.keyHash } },
     })
     const windowExpired = !existing || existing.expiresAt <= input.now
-    const count = windowExpired ? 1 : existing.count + 1
+    const nextCount = windowExpired ? 1 : existing.count + 1
+    const count = Math.min(nextCount, input.maximumCount ?? Number.MAX_SAFE_INTEGER)
     const windowStartedAt = windowExpired ? input.now : existing.windowStartedAt
     const expiresAt = new Date(windowStartedAt.getTime() + input.windowMs)
     const blockedUntil = input.blockedUntilForCount?.(count) ?? null
@@ -103,8 +122,12 @@ async function updateBucket(
         windowStartedAt,
       },
     })
-    return count
+    return { blockedUntil, count, expiresAt }
   })
+}
+
+function retryAfterSeconds(expiresAt: Date, now: Date) {
+  return Math.max(1, Math.ceil((expiresAt.getTime() - now.getTime()) / 1_000))
 }
 
 async function withBucketLock<T>(

@@ -31,6 +31,7 @@ import { cleanupExpiredAuthRecovery } from './infrastructure/prisma-auth-recover
 import { createDeviceTokens } from './infrastructure/device-token'
 import { createPrismaRequestBudget } from '../../security/request-budget'
 import { createAuthenticatedMutationBudget } from './transport/authenticated-mutation-budget'
+import type { RequestBudgetPolicyCatalog } from '../../security/request-budget-policy'
 
 type CreateAuthModuleOptions = {
   accountEmailCanonicalizer?: AccountEmailCanonicalizer
@@ -40,6 +41,7 @@ type CreateAuthModuleOptions = {
   env: AppEnv
   logoutCleanup?: LogoutCleanup
   projectUser?: ProjectUser
+  requestBudgetPolicies: RequestBudgetPolicyCatalog
 }
 
 const systemClock: Clock = {
@@ -57,6 +59,7 @@ export function createAuthModule({
   env,
   logoutCleanup = noLogoutCleanup,
   projectUser = toBaseUserDto,
+  requestBudgetPolicies,
 }: CreateAuthModuleOptions) {
   // Build OAuth provider registry
   const oauthProviders = new OAuthProviderRegistry()
@@ -75,7 +78,11 @@ export function createAuthModule({
       sign: (payload) => signAccessToken(payload, env),
       verify: (token) => verifyAccessToken(token, env),
     },
-    abuseProtection: createPrismaAuthAbuseProtection(db, env.JWT_SECRET),
+    abuseProtection: createPrismaAuthAbuseProtection(
+      db,
+      env.JWT_SECRET,
+      requestBudgetPolicies,
+    ),
     clock,
     logoutCleanup,
     oauthProviders: oauthProviders.hasAny() ? oauthProviders : undefined,
@@ -95,11 +102,12 @@ export function createAuthModule({
       familyHash: (token) => hashRefreshTokenFamily(token, env.JWT_SECRET),
       rotate: (token) => deriveRotatedRefreshToken(token, env.JWT_SECRET),
     },
-    repository: createPrismaAuthRepository(db, env.JWT_SECRET),
+    repository: createPrismaAuthRepository(db, env.JWT_SECRET, { requestBudgetPolicies }),
   })
   const requireAuth = createRequireAuth((accessToken) => service.authenticateAccessToken(accessToken))
   const authenticatedMutationBudget = createAuthenticatedMutationBudget(
-    createPrismaRequestBudget(db),
+    createPrismaRequestBudget(db, env.JWT_SECRET),
+    requestBudgetPolicies.authenticated_mutation,
   )
 
   return {

@@ -6,6 +6,7 @@ import type {
   AdminFeedbackOperator,
   AdminMailPolicyOperator,
   AdminOverviewReader,
+  AdminRequestBudgetOverviewReader,
 } from './application/ports'
 import { createPrismaAdminOverviewReader } from './infrastructure/prisma-admin-overview-reader'
 import { createAdminRoutes } from './transport/routes'
@@ -16,6 +17,7 @@ type CreateAdminModuleInput = {
   authenticate: (accessToken: string | undefined) => Promise<AuthenticatedPrincipal>
   feedback: AdminFeedbackOperator
   mailPolicy: AdminMailPolicyOperator
+  requestBudgetOverviewReader: AdminRequestBudgetOverviewReader
   securityEvents?: SecurityEventLogger
 } & (
   | { db: DbClient; overviewReader?: never }
@@ -41,6 +43,7 @@ export function createAdminModule(input: CreateAdminModuleInput) {
           })
         : undefined,
       overviewReader,
+      requestBudgetOverviewReader: input.requestBudgetOverviewReader,
     }),
   }
 }
