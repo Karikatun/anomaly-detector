@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "build:release": "WEBSITE_RELEASE_BUILD=true bun run build",
     "typecheck": "astro check",
     "test": "bun test tests",
     "preview": "astro preview",

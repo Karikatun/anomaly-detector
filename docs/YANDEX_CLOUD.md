@@ -664,9 +664,12 @@ owns the browser CSP, HSTS, clickjacking protection, content-type protection,
 referrer policy, permissions policy, the player-only SPA fallback, operator
 Basic Auth, API proxy, and `www` redirect. The public root has no SPA fallback:
 unknown paths return `404`. Only the fixed legacy player route families in the
-file redirect to `https://app.anomaly-detector.ru` with their path and query;
-the player host carries an `X-Robots-Tag` noindex policy. Keep these controls in
-the serving layer; HTML `<meta>` tags are not an equivalent replacement.
+file redirect to `https://app.anomaly-detector.ru` with their path and query.
+They remain `temporary` with `Cache-Control: no-store` while immediate rollback
+is open so a browser cannot retain a root → app redirect that would loop with
+app → root rollback. The player host carries an `X-Robots-Tag` noindex policy.
+Keep these controls in the serving layer; HTML `<meta>` tags are not an
+equivalent replacement.
 
 ### Split-domain cutover and rollback
 
@@ -676,16 +679,24 @@ Treat the domain split as one release boundary. Before switching traffic:
    checksums as the immediate rollback set;
 2. stage the exact-release `website/dist`, `webapp/dist`, and `adminapp/dist` in
    separate immutable directories and verify that public artifacts contain no
-   localhost/test origins, secrets, operator output, or private player data;
+   configured localhost/test endpoints, secrets, operator output, or private
+   player data; review the documented TanStack `http://localhost` fallback
+   literal separately;
 3. make TLS and DNS for `app.anomaly-detector.ru` ready without changing the
    public root, then validate the prepared Caddy file against the staged paths;
 4. during the controlled cutover, make the player host reachable, update the
    backend to `WEBAPP_ORIGIN=https://app.anomaly-detector.ru` and transitional
    exact CORS origins, switch the public root to `website`, then remove the old
    root from CORS so the steady state is only player plus operator origins;
-5. verify fixed legacy redirects, unknown-root `404`, player SPA reload,
+5. verify fixed legacy redirects are temporary/non-cacheable and preserve URI,
+   unknown-root `404`, player SPA reload,
    `www`, crawler policy, password auth, cookie refresh/logout, WebSocket
    reconnect, and both OAuth success/error returns before declaring success.
+
+An OAuth callback started against the previous player origin is rejected before
+its transaction is consumed or a session/account is created. During cutover,
+treat that bounded `auth_error` as a safe retry signal; never accept the stale
+origin merely to finish an in-flight provider round trip.
 
 Rollback is coordinated in the reverse direction: restore the retained Caddy
 file and root player artifact together with the previous `WEBAPP_ORIGIN` and
@@ -693,6 +704,16 @@ file and root player artifact together with the previous `WEBAPP_ORIGIN` and
 return, deep-link reload, API readiness, and unchanged PostgreSQL volume
 identity. The split adds no migration; do not touch PostgreSQL or delete the
 staged release while the rollback decision is open.
+
+[`deploy/yandex/Caddyfile.split-domain-rollback.example`](../deploy/yandex/Caddyfile.split-domain-rollback.example)
+is the versioned immediate-rollback shape: it restores the player SPA and
+noindex policy on the root, keeps API/operator boundaries, and temporarily
+returns requests from the staged app host to the root with path/query intact and
+without caching. The target's matching no-store temporary redirects are part of
+this recovery contract. Promote them to permanent only as a separate
+owner-controlled Caddy change after the rollback window is explicitly closed.
+It is a template for the retained pre-cutover roots and values, not evidence
+that the live Caddy file or static checksums were captured.
 
 Request-bound backend security events are emitted as single-line JSON with
 `"channel":"security"`, a generated request ID, route, method, stable reason,
@@ -800,7 +821,7 @@ bun run --cwd webapp build:release
 VITE_API_URL=https://api.anomaly-detector.ru bun run build:adminapp
 PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
 PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
-bun run build:website
+bun run build:website:release
 ```
 
 The webapp and adminapp API values are embedded at build time and must point to the
@@ -826,21 +847,29 @@ omit canonical and `og:url` metadata. `PUBLIC_WEBAPP_URL` is the exact player
 app origin used by the landing CTA and legal links; it must be set for a
 production website build.
 
+Before creating owner-supplied release artifacts, run
+`bun run preflight:split-domain`. It builds test-only legal fixtures in an
+isolated temporary directory, verifies them, and removes them automatically;
+build owner artifacts separately afterward with the approved legal values and
+exact release SHA shown above.
+
 For the prepared ADR 0014 target, `PUBLIC_WEBSITE_URL` remains
 `https://anomaly-detector.ru` and `PUBLIC_WEBAPP_URL` is exactly
 `https://app.anomaly-detector.ru`. These build values do not prove that the
 target routing is already deployed.
 
-Only after issues #2 and #31 are accepted, add
-`VITE_ANALYTICS_ENABLED=true` to the complete webapp release-build command above
-and enable the website client in the same exact-SHA release:
+The prepared `build:release` guards reject all client analytics flags so an
+ambient shell or `.env.production` cannot enable collection accidentally. Only
+after issues #2 and #31 are accepted, change those guards and their tests in a
+separate reviewed release, then add `VITE_ANALYTICS_ENABLED=true` to the complete
+webapp command and enable the website client in the same exact-SHA release:
 
 ```bash
 PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
 PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
 PUBLIC_ANALYTICS_API_URL=https://api.anomaly-detector.ru \
 PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST='<reviewed-safe-slugs>' \
-bun run build:website
+bun run build:website:release
 ```
 
 Omitting these client variables is the supported disabled state: the landing

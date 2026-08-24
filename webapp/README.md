@@ -59,6 +59,14 @@ release. It must contain the exact 40-character commit SHA. The Feedback Report
 form includes it only as bounded technical context; an invalid or missing value
 is sent as `null`, never replaced with a branch, short SHA or mutable tag.
 
+`bun run build:release` fails closed unless both API values are exactly
+`https://api.anomaly-detector.ru`, the SHA is lowercase and 40 characters, and
+all four public legal values are non-empty. The prepared release guard also
+rejects `VITE_ANALYTICS_ENABLED` until the separate production analytics gate
+is approved. Use `bun run preflight:split-domain` from the repository root for
+the isolated target/rollback browser gate; its temporary legal fixtures are
+removed automatically and are not publishable operator details.
+
 ## Deployment
 
 Production deployment builds `webapp/dist` with the concrete public API origins and publishes it through the Yandex Cloud static-site path with `index.html` as the SPA fallback. Start with the shared [release entrypoint](../docs/DEPLOYMENT.md) and follow [the Yandex Cloud runbook](../docs/YANDEX_CLOUD.md).

@@ -9,6 +9,8 @@ const envKeys = [
   'DATABASE_URL',
   'E2E_BACKEND_PORT',
   'E2E_BACKEND_URL',
+  'E2E_EDGE_PORT',
+  'E2E_EDGE_URL',
   'E2E_WEB_PORT',
   'E2E_WEB_URL',
   'E2E_WEBSITE_PORT',
@@ -63,6 +65,18 @@ test('e2eBackendEnv preserves an explicitly configured JWT secret', () => {
   const env = e2eBackendEnv()
 
   expect(env.JWT_SECRET).toBe(process.env.JWT_SECRET)
+})
+
+test('e2eBackendEnv permits an explicit secure-cookie OAuth profile', () => {
+  const env = e2eBackendEnv({
+    COOKIE_SECURE: 'true',
+    YANDEX_OAUTH_CLIENT_ID: 'split-domain-client',
+    YANDEX_OAUTH_CLIENT_SECRET: 'split-domain-secret',
+  })
+
+  expect(env.COOKIE_SECURE).toBe('true')
+  expect(env.YANDEX_OAUTH_CLIENT_ID).toBe('split-domain-client')
+  expect(env.YANDEX_OAUTH_CLIENT_SECRET).toBe('split-domain-secret')
 })
 
 test('portFromUrl handles postgres aliases and defaults', () => {
@@ -143,6 +157,8 @@ test('applyE2ePortEnv overwrites a stale postgres test port with the planned por
     backendPort: 50001,
     backendUrl: 'http://127.0.0.1:50001',
     databaseUrl: 'postgresql://superuser:superpassword@localhost:54330/anomaly_detector_test?schema=public',
+    edgePort: 64001,
+    edgeUrl: 'http://127.0.0.1:64001',
     postgresTestPort: 54330,
     webPort: 55001,
     webUrl: 'http://127.0.0.1:55001',
@@ -158,4 +174,5 @@ test('applyE2ePortEnv overwrites a stale postgres test port with the planned por
   expect(process.env.TEST_DATABASE_URL).toBe(plan.databaseUrl)
   expect(process.env.DATABASE_URL).toBe(plan.databaseUrl)
   expect(process.env.E2E_WEBSITE_URL).toBe(plan.websiteUrl)
+  expect(process.env.E2E_EDGE_URL).toBe(plan.edgeUrl)
 })

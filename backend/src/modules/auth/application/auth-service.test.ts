@@ -11,6 +11,8 @@ const user = {
   locale: 'ru',
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
 }
+const oauthWebappOrigin = 'https://app.example.ru'
+const oauthState = `${Buffer.from(oauthWebappOrigin).toString('base64url')}::state`
 
 const unconfiguredRepositoryMethod = (name: keyof AuthRepository) => async (): Promise<never> => {
   throw new Error(`AuthRepository.${name} is not configured for this scenario`)
@@ -373,12 +375,22 @@ test('consumes an OAuth transaction before provider exchange and rejects replay'
   await expect(service.completeOAuthSignIn({
     code: 'authorization-code',
     metadata: {},
-    state: 'state',
+    state: oauthState,
+    webappOrigin: 'https://anomaly-detector.ru',
+  })).rejects.toMatchObject({ kind: 'oauth_transaction_invalid' })
+  expect(exchangeCalls).toBe(0)
+
+  await expect(service.completeOAuthSignIn({
+    code: 'authorization-code',
+    metadata: {},
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
   })).resolves.toMatchObject({ accessToken: 'access-token', created: true })
   await expect(service.completeOAuthSignIn({
     code: 'authorization-code',
     metadata: {},
-    state: 'state',
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
   })).rejects.toMatchObject({ kind: 'oauth_transaction_invalid' })
   expect(exchangeCalls).toBe(1)
 })
@@ -433,7 +445,8 @@ test('completes Yandex sign-in atomically with a canonical Account Email candida
   await expect(service.completeOAuthSignIn({
     code: 'authorization-code',
     metadata: { ipAddress: '203.0.113.10' },
-    state: 'state',
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
   })).resolves.toMatchObject({ accessToken: 'access-token' })
   expect(completionInput).toMatchObject({
     accountEmail: {
@@ -479,7 +492,8 @@ test('refuses to create an OAuth user without a separately confirmed legal accep
   await expect(service.completeOAuthSignIn({
     code: 'authorization-code',
     metadata: {},
-    state: 'state',
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
   })).rejects.toMatchObject({ kind: 'oauth_registration_consent_required' })
 })
 
@@ -524,7 +538,12 @@ test('limits a provider display name before creating an OAuth user', async () =>
     }),
   })
 
-  await service.completeOAuthSignIn({ code: 'authorization-code', metadata: {}, state: 'state' })
+  await service.completeOAuthSignIn({
+    code: 'authorization-code',
+    metadata: {},
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
+  })
 
   expect(createdDisplayName).toBe('Очень длинное имя по')
   expect(createdDisplayName?.length).toBe(20)

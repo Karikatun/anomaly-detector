@@ -49,6 +49,7 @@
     "build:adminapp": "bun run --cwd adminapp build",
     "build:webapp": "bun run --cwd webapp build",
     "build:website": "bun run --cwd website build",
+    "build:website:release": "bun run --cwd website build:release",
     "build:backend": "bun run --cwd backend build",
     "lint": "bun run --cwd webapp lint && bun run --cwd adminapp lint",
     "prisma:validate": "bun run --cwd backend prisma:validate",
@@ -80,6 +81,7 @@
     "smoke:backend:docker": "bun run --cwd backend smoke:docker",
     "drill:postgres:backup-restore": "bun scripts/postgres-backup-restore-drill.mjs",
     "e2e:webapp": "bun run --cwd webapp e2e",
+    "preflight:split-domain": "bun scripts/split-domain-preflight.mjs",
     "check:commit": "bun run security:secrets && bun run lint && bun run prisma:validate && bun run typecheck && bun run architecture:check && bun run test:deploy && bun run test:tooling && bun run test:contracts && bun run test:adminapp && bun run test:backend:unit && bun run test:webapp && bun run test:website",
     "check:push": "bun run security:dependencies && bun run security:gitleaks && bun run check",
     "check": "bun run security:secrets && bun run lint && bun run prisma:validate && bun run typecheck && bun run architecture:check && bun run test && bun run build && bun run smoke:backend:docker && bun run e2e:webapp"

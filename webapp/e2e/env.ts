@@ -13,6 +13,8 @@ export const preferredWebPort =
   55000 + (Number.parseInt(repositoryHash.slice(0, 6), 16) % 5000)
 export const preferredWebsitePort =
   60000 + (Number.parseInt(repositoryHash.slice(6, 12), 16) % 4000)
+export const preferredEdgePort =
+  64000 + (Number.parseInt(repositoryHash.slice(0, 6), 16) % 400)
 export const composeProjectName =
   process.env.COMPOSE_PROJECT_NAME ?? `anomaly-detector-${repositoryHash}`
 export const defaultPostgresTestPort =
@@ -23,6 +25,8 @@ export const defaultWebPort =
   process.env.E2E_WEB_PORT ?? String(preferredWebPort)
 export const defaultWebsitePort =
   process.env.E2E_WEBSITE_PORT ?? String(preferredWebsitePort)
+export const defaultEdgePort =
+  process.env.E2E_EDGE_PORT ?? String(preferredEdgePort)
 export const defaultDatabaseUrl = `postgresql://superuser:superpassword@localhost:${defaultPostgresTestPort}/anomaly_detector_test?schema=public`
 export const defaultE2eJwtSecret = 'web-e2e-secret-at-least-thirty-two-characters'
 
@@ -34,14 +38,14 @@ export function e2eBackendEnv(extra: NodeJS.ProcessEnv = {}) {
     ...extra,
     NODE_ENV: 'test',
     JWT_SECRET: jwtSecret,
-    COOKIE_SECURE: 'false',
+    COOKIE_SECURE: extra.COOKIE_SECURE ?? 'false',
     AUTH_RATE_LIMIT_MAX: '1000',
     TRUST_PROXY: 'true',
     TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-e2e-client-ip',
-    YANDEX_OAUTH_CLIENT_ID: '',
-    YANDEX_OAUTH_CLIENT_SECRET: '',
-    VK_OAUTH_CLIENT_ID: '',
-    VK_OAUTH_CLIENT_SECRET: '',
+    YANDEX_OAUTH_CLIENT_ID: extra.YANDEX_OAUTH_CLIENT_ID ?? '',
+    YANDEX_OAUTH_CLIENT_SECRET: extra.YANDEX_OAUTH_CLIENT_SECRET ?? '',
+    VK_OAUTH_CLIENT_ID: extra.VK_OAUTH_CLIENT_ID ?? '',
+    VK_OAUTH_CLIENT_SECRET: extra.VK_OAUTH_CLIENT_SECRET ?? '',
   }
 }
 

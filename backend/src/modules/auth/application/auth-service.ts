@@ -130,7 +130,15 @@ export class AuthService {
     code: string
     state: string
     metadata: SessionMetadata
+    webappOrigin: string
   }) {
+    const webappOrigin = oauthWebappOriginFromState(input.state)
+    if (webappOrigin !== input.webappOrigin) {
+      throw new AuthFailure(
+        'oauth_transaction_invalid',
+        'OAuth transaction return origin is invalid or stale',
+      )
+    }
     const oauthProviders = this.dependencies.oauthProviders
     if (!oauthProviders) {
       throw new AuthFailure('oauth_not_configured', 'OAuth sign-in is not configured')
@@ -185,8 +193,6 @@ export class AuthService {
         'Legal acceptance is required to create an account',
       )
     }
-
-    const webappOrigin = decodeWebappOrigin(input.state) ?? ''
 
     const response = await this.sessionResponse(completed.user, completed.session.id, refreshToken)
     return { ...response, created: completed.created === true, webappOrigin }
@@ -1048,7 +1054,7 @@ function encodeWebappOrigin(origin: string) {
   return Buffer.from(origin).toString('base64url')
 }
 
-function decodeWebappOrigin(state: string) {
+export function oauthWebappOriginFromState(state: string) {
   const parts = state.split('::')
   if (parts.length < 2) return null
   try {

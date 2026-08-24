@@ -1,5 +1,6 @@
 import { createServer } from 'node:net'
 import {
+  preferredEdgePort,
   preferredBackendPort,
   preferredPostgresTestPort,
   preferredWebPort,
@@ -11,6 +12,8 @@ export type PortPlan = {
   backendPort: number
   backendUrl: string
   databaseUrl: string
+  edgePort: number
+  edgeUrl: string
   postgresTestPort: number
   webPort: number
   webUrl: string
@@ -18,7 +21,9 @@ export type PortPlan = {
   websiteUrl: string
 }
 
-export async function resolveE2ePorts(): Promise<PortPlan> {
+export async function resolveE2ePorts(
+  options: { reserveEdge?: boolean } = {},
+): Promise<PortPlan> {
   const reservedPorts = new Set<number>()
   const explicitDatabaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL
   const explicitPostgresPort = explicitDatabaseUrl
@@ -35,6 +40,10 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
   const explicitWebsiteUrlPort = parsePortValue(
     portFromUrl(process.env.E2E_WEBSITE_URL),
     process.env.E2E_WEBSITE_URL ?? 'E2E_WEBSITE_URL',
+  )
+  const explicitEdgeUrlPort = parsePortValue(
+    portFromUrl(process.env.E2E_EDGE_URL),
+    process.env.E2E_EDGE_URL ?? 'E2E_EDGE_URL',
   )
   const postgresTestPort = explicitPostgresPort
     ? reservePort(explicitPostgresPort, reservedPorts)
@@ -64,9 +73,19 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
         preferredPort: preferredWebsitePort,
         reservedPorts,
       })
+  const edgePort = explicitEdgeUrlPort
+    ? reservePort(explicitEdgeUrlPort, reservedPorts)
+    : options.reserveEdge
+      ? await resolvePort({
+        envName: 'E2E_EDGE_PORT',
+        preferredPort: preferredEdgePort,
+        reservedPorts,
+      })
+      : preferredEdgePort
   const backendUrl = process.env.E2E_BACKEND_URL ?? `http://127.0.0.1:${backendPort}`
   const webUrl = process.env.E2E_WEB_URL ?? `http://127.0.0.1:${webPort}`
   const websiteUrl = process.env.E2E_WEBSITE_URL ?? `http://127.0.0.1:${websitePort}`
+  const edgeUrl = process.env.E2E_EDGE_URL ?? `http://127.0.0.1:${edgePort}`
   const databaseUrl =
     explicitDatabaseUrl
     ?? `postgresql://superuser:superpassword@localhost:${postgresTestPort}/anomaly_detector_test?schema=public`
@@ -75,6 +94,8 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
     backendPort,
     backendUrl,
     databaseUrl,
+    edgePort,
+    edgeUrl,
     postgresTestPort,
     webPort,
     webUrl,
@@ -91,6 +112,8 @@ export function applyE2ePortEnv(plan: PortPlan) {
   process.env.E2E_WEB_URL ??= plan.webUrl
   process.env.E2E_WEBSITE_PORT ??= String(plan.websitePort)
   process.env.E2E_WEBSITE_URL ??= plan.websiteUrl
+  process.env.E2E_EDGE_PORT ??= String(plan.edgePort)
+  process.env.E2E_EDGE_URL ??= plan.edgeUrl
   process.env.TEST_DATABASE_URL = plan.databaseUrl
   process.env.DATABASE_URL = plan.databaseUrl
 }

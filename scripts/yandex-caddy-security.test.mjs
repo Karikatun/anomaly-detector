@@ -2,26 +2,23 @@ import { expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { siteBlock } from '../webapp/e2e/split-domain-caddy-policy.mjs'
+
 const caddyfile = readFileSync(
   resolve(import.meta.dirname, '../deploy/yandex/Caddyfile.example'),
   'utf8',
 )
+const webappRoutes = readFileSync(
+  resolve(import.meta.dirname, '../webapp/src/routes.tsx'),
+  'utf8',
+)
+const rollbackCaddyfile = readFileSync(
+  resolve(import.meta.dirname, '../deploy/yandex/Caddyfile.split-domain-rollback.example'),
+  'utf8',
+)
 
-function siteBlock(hostname) {
-  const start = caddyfile.indexOf(`${hostname} {`)
-  if (start === -1) return ''
-
-  let depth = 0
-  for (let index = caddyfile.indexOf('{', start); index < caddyfile.length; index += 1) {
-    if (caddyfile[index] === '{') depth += 1
-    if (caddyfile[index] === '}') depth -= 1
-    if (depth === 0) return caddyfile.slice(start, index + 1)
-  }
-  return ''
-}
-
-const publicSite = siteBlock('anomaly-detector.ru')
-const playerSite = siteBlock('app.anomaly-detector.ru')
+const publicSite = siteBlock(caddyfile, 'anomaly-detector.ru')
+const playerSite = siteBlock(caddyfile, 'app.anomaly-detector.ru')
 
 test('Yandex VM Caddy config serves the public website without a private SPA fallback', () => {
   expect(publicSite).toContain('root * {$ANOMALY_WEBSITE_ROOT}')
@@ -41,21 +38,23 @@ test('Yandex VM Caddy config permits the public site to call only the first-part
 })
 
 test('Yandex VM Caddy config redirects only fixed legacy player route families', () => {
-  for (const route of [
-    '/app',
-    '/profile',
-    '/rooms',
-    '/rooms/*',
-    '/tenders/*',
-    '/tutorial',
-    '/privacy',
-    '/personal-data-consent',
-    '/terms',
-  ]) {
-    expect(publicSite).toContain(route)
-  }
+  const configuredRoutes = publicSite
+    .match(/@legacyPlayerRoutes\s*{\s*path\s+([^\n]+)\s*}/)?.[1]
+    ?.trim()
+    .split(/\s+/)
+    .sort()
+  const registeredPlayerRoutes = [...webappRoutes.matchAll(/\bpath:\s*'([^']+)'/g)]
+    .map(([, route]) => route)
+    .filter((route) => route !== '/')
+    .map((route) => route.replace(/\$[^/]+/g, '*'))
+    .sort()
+
+  expect(configuredRoutes).toEqual(registeredPlayerRoutes)
   expect(publicSite).toContain(
-    'redir @legacyPlayerRoutes https://app.anomaly-detector.ru{uri} permanent',
+    'header @legacyPlayerRoutes Cache-Control "no-store"',
+  )
+  expect(publicSite).toContain(
+    'redir @legacyPlayerRoutes https://app.anomaly-detector.ru{uri} temporary',
   )
   expect(caddyfile).toContain(
     'redir https://anomaly-detector.ru{uri} permanent',
@@ -104,4 +103,20 @@ test('Yandex VM Caddy config protects the separate operator application before s
   expect(caddyfile).toContain('{$ANOMALY_ADMIN_USER} {$ANOMALY_ADMIN_PASSWORD_HASH}')
   expect(caddyfile).toContain('root * {$ANOMALY_ADMIN_ROOT}')
   expect(caddyfile).toContain('X-Robots-Tag "noindex, nofollow, noarchive"')
+})
+
+test('split-domain rollback restores the root player SPA without touching API storage', () => {
+  const rollbackRoot = siteBlock(rollbackCaddyfile, 'anomaly-detector.ru')
+  const rollbackPlayer = siteBlock(rollbackCaddyfile, 'app.anomaly-detector.ru')
+
+  expect(rollbackRoot).toContain('root * {$ANOMALY_WEBAPP_ROOT}')
+  expect(rollbackRoot).not.toContain('{$ANOMALY_WEBSITE_ROOT}')
+  expect(rollbackRoot).toContain('try_files {path} /index.html')
+  expect(rollbackRoot).toContain('X-Robots-Tag "noindex, nofollow, noarchive"')
+  expect(rollbackPlayer).toContain(
+    'redir https://anomaly-detector.ru{uri} temporary',
+  )
+  expect(rollbackPlayer).toContain('header Cache-Control "no-store"')
+  expect(rollbackCaddyfile).toContain('reverse_proxy api:3000')
+  expect(rollbackCaddyfile).not.toMatch(/postgres|docker\s+(?:down|rm)|volume\s+(?:rm|prune)/i)
 })
