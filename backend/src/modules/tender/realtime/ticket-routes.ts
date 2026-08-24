@@ -27,6 +27,7 @@ export function createRealtimeTicketRoutes(input: {
 }) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
+  routes.use('*', input.authenticatedMutationBudget)
   routes.use('/tickets', async (c, next) => {
     const result = await input.issueBudget.consume({
       key: c.var.user.id,
@@ -45,7 +46,6 @@ export function createRealtimeTicketRoutes(input: {
     }
     await next()
   })
-  routes.use('*', input.authenticatedMutationBudget)
   routes.openapi(createRealtimeTicketRoute, async (c) => {
     const now = new Date()
     const ticket = `${crypto.randomUUID()}${crypto.randomUUID()}`

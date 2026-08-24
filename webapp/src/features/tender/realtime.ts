@@ -5,7 +5,7 @@ import {
 } from '@anomaly-detector/contracts'
 import { useCallback, useEffect, useState } from 'react'
 
-import type { AuthenticatedTransport } from '@/platform/api'
+import { ApiRequestError, type AuthenticatedTransport } from '@/platform/api'
 import { getApiBaseUrl } from '@/platform/api/api-base-url'
 
 export type RealtimeState = {
@@ -44,11 +44,15 @@ const disconnectedState = (): RealtimeState => ({
   tenderView: null,
 })
 
+const RECONNECT_BASE_DELAY_MS = 5_000
+const RECONNECT_MAX_DELAY_MS = 30_000
+
 export class TenderRealtimeSession {
   private readonly options: RealtimeSessionOptions
   private state = disconnectedState()
   private socket: RealtimeSocket | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private reconnectAttempt = 0
   private generation = 0
   private connecting = false
   private started = false
@@ -106,6 +110,7 @@ export class TenderRealtimeSession {
 
       socket.onopen = () => {
         if (!this.owns(socket)) return
+        this.reconnectAttempt = 0
         this.updateState({ connected: true, error: null })
       }
 
@@ -128,13 +133,13 @@ export class TenderRealtimeSession {
         this.updateState({ connected: false })
         this.scheduleReconnect()
       }
-    } catch {
+    } catch (error) {
       if (this.stopped || generation !== this.generation) return
       this.updateState({
         connected: false,
         error: 'ticket-failed',
       })
-      this.scheduleReconnect()
+      this.scheduleReconnect(error)
     } finally {
       if (generation === this.generation) {
         this.connecting = false
@@ -165,12 +170,22 @@ export class TenderRealtimeSession {
     this.options.onState(this.state)
   }
 
-  private scheduleReconnect() {
+  private scheduleReconnect(error?: unknown) {
     if (this.stopped || this.reconnectTimer) return
+
+    const reconnectDelayMs = Math.min(
+      RECONNECT_BASE_DELAY_MS * (2 ** this.reconnectAttempt),
+      RECONNECT_MAX_DELAY_MS,
+    )
+    this.reconnectAttempt += 1
+    const retryAfterMs = error instanceof ApiRequestError && error.retryAfterSeconds !== null
+      ? error.retryAfterSeconds * 1_000
+      : 0
+
     this.reconnectTimer = this.options.scheduleReconnect(() => {
       this.reconnectTimer = null
       void this.connect()
-    }, 5_000)
+    }, Math.max(reconnectDelayMs, retryAfterMs))
   }
 
   private clearReconnect() {

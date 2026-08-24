@@ -1054,6 +1054,108 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })
   })
 
+  test('does not spend the SMTP delivery budget on policy-blocked mail', async () => {
+    const enqueuer = createEnqueuer()
+    const blockedMessageId = '019f8099-7e26-7760-ad08-66d1d66b2841'
+    const recoveryMessageId = '019f8099-7e26-7760-ad08-66d1d66b2842'
+    await enqueuer.enqueue({
+      ...request,
+      messageId: blockedMessageId,
+      template: {
+        addressRole: 'account',
+        expiresAt: scenarioTime(15 * 60_000),
+        kind: 'account_email_confirmation',
+      },
+    })
+    await enqueuer.enqueue({
+      ...request,
+      messageId: recoveryMessageId,
+      template: {
+        expiresAt: scenarioTime(15 * 60_000),
+        kind: 'password_recovery',
+        recoveryUrl: 'https://anomaly-detector.ru/recover/password',
+      },
+    })
+    const sent: RenderedTransactionalMail[] = []
+    const service = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
+      delivery: {
+        send: async (message) => {
+          sent.push(message)
+          return { kind: 'accepted' }
+        },
+      },
+      policy: {
+        evaluate: async () => ({ acceptsNewAddress: false, allowsRecoveryDelivery: true }),
+      },
+      repository: createPrismaMailOutboxRepository(prisma, {
+        circuitFailureThreshold: 10,
+        circuitOpenMs: 60_000,
+        deliveryBudgetPerMinute: 1,
+        leaseMs: 30_000,
+        maxAttempts: 3,
+        retryBaseMs: 1_000,
+      }),
+    })
+
+    await expect(service.drain({
+      limit: 2,
+      now: scenarioTime(),
+      workerId: 'worker-policy-budget',
+    })).resolves.toMatchObject({
+      accepted: 1,
+      blocked: 1,
+      budgetExhausted: false,
+    })
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.messageId).toBe(`<${recoveryMessageId}@anomaly-detector.ru>`)
+    expect(await prisma.mailDeliveryControl.findUniqueOrThrow({
+      where: { id: 'reg_ru' },
+      select: { deliveriesInWindow: true },
+    })).toEqual({ deliveriesInWindow: 1 })
+  })
+
+  test('does not refund a policy-blocked reservation into a newer delivery window', async () => {
+    const enqueuer = createEnqueuer()
+    for (const suffix of ['43', '44']) {
+      await enqueuer.enqueue({
+        ...request,
+        messageId: `019f8099-7e26-7760-ad08-66d1d66b28${suffix}`,
+      })
+    }
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 10,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 1,
+      leaseMs: 120_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+    const firstWindowClaim = await repository.claim({
+      now: scenarioTime(),
+      workerId: 'worker-window-old',
+    })
+    expect(firstWindowClaim.kind).toBe('claimed')
+    if (firstWindowClaim.kind !== 'claimed') throw new Error('Expected a claimed message')
+    const secondWindowAt = scenarioTime(60_000)
+    await expect(repository.claim({
+      now: secondWindowAt,
+      workerId: 'worker-window-new',
+    })).resolves.toMatchObject({ kind: 'claimed' })
+
+    await expect(repository.releaseBlocked({
+      deliveryBudgetWindowStartedAt:
+        firstWindowClaim.message.deliveryBudgetWindowStartedAt,
+      id: firstWindowClaim.message.id,
+      now: secondWindowAt,
+      workerId: 'worker-window-old',
+    })).resolves.toBe(true)
+    expect(await prisma.mailDeliveryControl.findUniqueOrThrow({
+      where: { id: 'reg_ru' },
+      select: { deliveriesInWindow: true, windowStartedAt: true },
+    })).toEqual({ deliveriesInWindow: 1, windowStartedAt: secondWindowAt })
+  })
+
   test('leases one message to one worker and recovers an expired worker lease', async () => {
     const enqueuer = createEnqueuer()
     await enqueuer.enqueue({ ...request, messageId: '019f8099-7e26-7760-ad08-66d1d66b2850' })

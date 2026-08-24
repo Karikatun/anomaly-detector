@@ -295,10 +295,16 @@ restart, а оператор видит безопасный diff и состо�
    именованный cron уже покрывает новые recovery-артефакты, outbox, аналитику и
    feedback, но его production invocation/log evidence остаётся частью #21
    ([#21](https://github.com/Karikatun/anomaly-detector/issues/21)).
-6. [ ] Провести production-like abuse/performance validation для auth, mail,
+6. [-] Провести production-like abuse/performance validation для auth, mail,
    feedback, Argon2id, rooms, Tender, WebSocket и reconnect
    ([#19](https://github.com/Karikatun/anomaly-detector/issues/19),
-   [#20](https://github.com/Karikatun/anomaly-detector/issues/20)).
+   [#20](https://github.com/Karikatun/anomaly-detector/issues/20)). Локально
+   проверены auth/Argon2id, transactional-mail budgets, Room, Tender, два
+   realtime listener и multi-tab reconnect; измерения и production evidence
+   boundary зафиксированы в
+   [аудите distributed anti-abuse budgets](audits/2026-08-24-distributed-abuse-performance.md).
+   Feedback, реальный SMTP, ALB/SWS, Managed PostgreSQL и production metrics
+   остаются открытыми, поэтому пункт не завершён.
 7. [~] Платные ALB/SWS остаются отложенными по бюджету до роста трафика,
    подтверждённых атак или отдельного бюджета ([#25](https://github.com/Karikatun/anomaly-detector/issues/25)).
    PostgreSQL application budgets обязательны независимо от edge-защиты.

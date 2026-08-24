@@ -416,6 +416,41 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     })
   })
 
+  test('replays one receipt when the same command reaches separate PostgreSQL pools concurrently', async () => {
+    const secondPrisma = createPrisma(databaseUrl!)
+    try {
+      const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+      const secondModule = createTenderModule({ store: createPrismaTenderStore(secondPrisma) })
+      const { tenderId } = await firstModule.createTender({
+        players: [
+          { id: 'player-a', tiePriority: 1 },
+          { id: 'player-b', tiePriority: 2 },
+        ],
+      })
+      const command = {
+        actorId: 'player-a',
+        commandId: 'concurrent-command-a-1',
+        slot: 1,
+        tenderId,
+        type: 'request-access-slot' as const,
+      }
+
+      const receipts = await Promise.all(Array.from({ length: 20 }, (_, index) => (
+        (index % 2 === 0 ? firstModule : secondModule).execute(command)
+      )))
+
+      expect(receipts).toEqual(Array.from({ length: 20 }, () => ({ tenderId, version: 1 })))
+      expect(await prisma.tenderCommand.count({ where: { tenderId } })).toBe(1)
+      expect(await prisma.tenderAuditEvent.count({ where: { tenderId } })).toBe(1)
+      expect(await prisma.tender.findUniqueOrThrow({
+        where: { id: tenderId },
+        select: { version: true },
+      })).toEqual({ version: 1 })
+    } finally {
+      await secondPrisma.$disconnect()
+    }
+  }, 15_000)
+
   test('restores a player-owned Working Model through a new PostgreSQL store adapter', async () => {
     const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
     const { tenderId } = await firstModule.createTender({

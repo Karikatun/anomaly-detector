@@ -59,6 +59,7 @@ export type TransactionalMailDelivery = {
 export type ClaimedTransactionalMail = {
   attemptCount: number
   createdAt: Date
+  deliveryBudgetWindowStartedAt: Date
   id: string
   messageId: string
   providerMessageId: string
@@ -118,6 +119,7 @@ export type MailOutboxRepository = {
     workerId: string
   }): Promise<MailOutboxRecordFailureResult>
   releaseBlocked(input: {
+    deliveryBudgetWindowStartedAt: Date
     id: string
     now: Date
     workerId: string

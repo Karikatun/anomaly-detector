@@ -280,6 +280,7 @@ async function claimNext(
       message: {
         attemptCount: message.attemptCount,
         createdAt: message.createdAt,
+        deliveryBudgetWindowStartedAt: control.windowStartedAt,
         id: message.id,
         messageId: message.messageId,
         providerMessageId: message.providerMessageId,
@@ -425,20 +426,43 @@ async function recordFailure(
 async function releaseBlocked(
   db: DbClient,
   options: MailOutboxRepositoryOptions,
-  input: { id: string; now: Date; workerId: string },
+  input: {
+    deliveryBudgetWindowStartedAt: Date
+    id: string
+    now: Date
+    workerId: string
+  },
 ) {
-  const result = await db.mailOutboxMessage.updateMany({
-    where: { id: input.id, leaseOwner: input.workerId, state: 'leased' },
-    data: {
-      attemptCount: { decrement: 1 },
-      availableAt: new Date(input.now.getTime() + options.circuitOpenMs),
-      lastFailureCode: 'mail_service_blocked',
-      leaseExpiresAt: null,
-      leaseOwner: null,
-      state: 'queued',
-    },
+  return db.$transaction(async (tx) => {
+    await ensureAndLockControl(tx, input.now)
+    await lockOutboxRow(tx, input.id)
+    const message = await tx.mailOutboxMessage.findFirst({
+      where: { id: input.id, leaseOwner: input.workerId, state: 'leased' },
+      select: { id: true },
+    })
+    if (!message) return false
+
+    await tx.mailOutboxMessage.update({
+      where: { id: input.id },
+      data: {
+        attemptCount: { decrement: 1 },
+        availableAt: new Date(input.now.getTime() + options.circuitOpenMs),
+        lastFailureCode: 'mail_service_blocked',
+        leaseExpiresAt: null,
+        leaseOwner: null,
+        state: 'queued',
+      },
+    })
+    await tx.mailDeliveryControl.updateMany({
+      where: {
+        deliveriesInWindow: { gt: 0 },
+        id: DELIVERY_CONTROL_ID,
+        windowStartedAt: input.deliveryBudgetWindowStartedAt,
+      },
+      data: { deliveriesInWindow: { decrement: 1 } },
+    })
+    return true
   })
-  return result.count === 1
 }
 
 async function ensureAndLockControl(tx: Prisma.TransactionClient, now: Date) {

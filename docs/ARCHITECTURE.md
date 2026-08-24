@@ -101,9 +101,20 @@ The default runtime shape is a modular monolith: one backend codebase, one datab
 
 The current production baseline is a Yandex Cloud VM running separate API and worker containers from the same immutable backend image, plus PostgreSQL and Caddy. The target managed topology and migration conditions are documented in [YANDEX_CLOUD.md](YANDEX_CLOUD.md). Keep API, worker, and cron as entrypoints of the same backend workspace; add infrastructure only for a concrete runtime need. Transactional email uses a PostgreSQL outbox drained by the existing worker runtime rather than a new service. Named cron cleanup removes or redacts expired recovery credentials and pending mail, consent-scoped analytics events, feedback content and terminal outbox records according to their owning retention policies.
 
-Tender phase delivery starts in the same backend service. A single instance can keep an in-memory registry of its own WebSocket connections. Once the backend runs multiple instances, in-memory fanout is no longer enough: participants in one Tender may connect to different instances. At that point, add managed Redis-compatible Pub/Sub so each instance can publish compact domain-event identifiers and deliver them to its local sockets.
+Tender phase delivery starts in the same backend service. Each instance keeps
+an in-memory registry of its own WebSocket connections. The current hub also
+re-reads the authorized Tender view for every active local subscription once
+per second, so a committed command on another API instance is delivered
+eventually and reconnect always recovers from PostgreSQL. This fallback costs
+approximately one PostgreSQL view-read per socket per second and is intended
+for the single-instance baseline and controlled transition checks, not
+unbounded horizontal scale.
 
-Use Yandex Managed Service for Valkey only when horizontal scaling and cross-instance WebSocket delivery are actually required; it is not part of the current single-VM baseline or local setup.
+Before horizontally scaling production WebSockets, establish a socket/DB
+capacity baseline and add grouped or brokered fanout. Use Yandex Managed Service
+for Valkey when compact cross-instance delivery must replace per-socket
+PostgreSQL polling; it is not part of the current single-VM baseline or local
+setup.
 
 Valkey Pub/Sub is only a fanout mechanism. Keep durable Tender state and audit-relevant events in PostgreSQL, publish compact event identifiers only after commits, and make clients recover by reconnecting and refetching the authorized API view after missed realtime messages.
 
