@@ -19,6 +19,8 @@ import {
   type RequestBudgetPolicyCatalog,
 } from '../../../security/request-budget-policy'
 
+const NIL_UUID = '00000000-0000-0000-0000-000000000000'
+
 export function createPrismaAuthRepository(
   db: DbClient,
   abuseSecret: string,
@@ -652,6 +654,7 @@ export function createPrismaAuthRepository(
         }
         await requireRecoveryEmailPolicy(tx, {
           canonicalKey: binding.canonicalKey,
+          now: input.now,
           providerValue: binding.providerValue,
           requirement: 'delivery',
         })
@@ -739,6 +742,7 @@ export function createPrismaAuthRepository(
         }
         await requireRecoveryEmailPolicy(tx, {
           canonicalKey: binding.canonicalKey,
+          now: input.now,
           providerValue: binding.providerValue,
           requirement: 'delivery',
         })
@@ -774,6 +778,85 @@ export function createPrismaAuthRepository(
         quotas,
         input.now,
       ))
+    },
+
+    async reserveRecoveryEmailPolicyBudget(input) {
+      const quotas = recoveryEmailPolicyQuotas(
+        abuseSecret,
+        requestBudgetPolicies,
+        input,
+      )
+      await db.$transaction(async (tx) => {
+        const locks = quotas.map((quota) => ({
+          scope: 'recovery-budget',
+          value: `${quota.scope}:${quota.keyHash}`,
+        })).sort((left, right) =>
+          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
+        for (const lock of locks) {
+          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
+        }
+        for (const quota of quotas) {
+          await consumeRecoveryEmailQuota(tx, { ...quota, now: input.now })
+        }
+      })
+    },
+
+    async verifyRecoveryCodeEmailPolicyProbe(input) {
+      const snapshot = await db.user.findUnique({
+        where: { login: input.login },
+        select: { id: true },
+      })
+      return runRetryableAuthTransaction(db, async (tx) => {
+        await lockAuthTransactionKey(
+          tx,
+          abuseSecret,
+          'recovery-user',
+          snapshot?.id ?? `missing:${input.login}`,
+        )
+        const user = await tx.user.findUnique({
+          where: { login: input.login },
+          select: { id: true, passwordHash: true },
+        })
+        const lookupUserId = user?.id ?? NIL_UUID
+        const [binding, replacement] = await Promise.all([
+          tx.recoveryEmailBinding.findUnique({ where: { userId: lookupUserId } }),
+          tx.recoveryCodeEmailReplacement.findUnique({ where: { userId: lookupUserId } }),
+        ])
+        const candidateValid = Boolean(
+          snapshot
+          && user?.passwordHash
+          && user.id === snapshot.id
+          && binding
+          && replacement
+          && binding.canonicalKey === replacement.oldCanonicalKey
+          && binding.providerValue === replacement.oldProviderValue
+          && replacement.newExpiresAt > input.now
+          && replacement.newAttemptCount < 5,
+        )
+        let codeValid = false
+        if (candidateValid && user && replacement) {
+          const presentedHash = hashRecoveryEmailCode(
+            abuseSecret,
+            user.id,
+            replacement.newCanonicalKey,
+            input.code,
+          )
+          codeValid = codeHashesEqual(replacement.newCodeHash, presentedHash)
+        } else {
+          performDummyRecoveryEmailCodeComparison(abuseSecret, input.login, input.code)
+        }
+        await tx.recoveryCodeEmailReplacement.updateMany({
+          where: {
+            id: candidateValid && !codeValid && replacement ? replacement.id : NIL_UUID,
+          },
+          data: { newAttemptCount: { increment: 1 } },
+        })
+        if (!codeValid || !replacement) return null
+        return {
+          canonicalKey: replacement.newCanonicalKey,
+          providerValue: replacement.newProviderValue,
+        }
+      })
     },
 
     async recoverPasswordWithRecoveryCode(input) {
@@ -864,23 +947,12 @@ export function createPrismaAuthRepository(
               },
             })
             const binding = user?.recoveryEmailBinding
-            const policyProbe = binding ?? {
-              canonicalKey: 'password-reset-probe@invalid.example',
-              providerValue: 'password-reset-probe@invalid.example',
-            }
-            let policyAvailable = true
-            try {
-              await requireRecoveryEmailPolicy(tx, {
-                ...policyProbe,
-                requirement: 'delivery',
-              })
-            } catch (error) {
-              if (!(error instanceof AuthFailure)) throw error
-              policyAvailable = false
-            }
             const previous = await tx.passwordResetCredential.findUnique({
-              where: { userId: user?.id ?? '00000000-0000-0000-0000-000000000000' },
+              where: { userId: user?.id ?? NIL_UUID },
             })
+            // A confirmed custom domain can move between approved providers. The public
+            // request queues by binding ownership; the worker makes the fresh DNS/policy
+            // decision immediately before SMTP without exposing it as a timing oracle.
             const eligible = Boolean(
               budgetAvailable
               && snapshot
@@ -888,12 +960,11 @@ export function createPrismaAuthRepository(
               && user.passwordHash
               && binding
               && binding.activatesAt <= input.now
-              && user.identities.length === 0
-              && policyAvailable,
+              && user.identities.length === 0,
             )
             if (!eligible || !user || !binding) {
-              // Preserve a comparable policy/read path for every public result without
-              // creating a credential or outbox side effect for an ineligible account.
+              // Preserve a comparable credential/outbox read path for every public result
+              // without creating a side effect for an ineligible account.
               await Promise.all([
                 tx.passwordResetCredential.findUnique({
                   where: { tokenHash },
@@ -998,18 +1069,6 @@ export function createPrismaAuthRepository(
               return false
             }
 
-            let notificationAllowed = false
-            try {
-              await requireRecoveryEmailPolicy(tx, {
-                canonicalKey: binding.canonicalKey,
-                providerValue: binding.providerValue,
-                requirement: 'delivery',
-              })
-              notificationAllowed = true
-            } catch (error) {
-              if (!(error instanceof AuthFailure)) throw error
-            }
-
             await cancelOutstandingRecoveryCredentials(tx, credential.userId, input.now)
             await consumeRecoveryCodeSet(tx, credential.userId, input.now)
             await tx.user.update({
@@ -1020,17 +1079,15 @@ export function createPrismaAuthRepository(
               where: { revokedAt: null, userId: credential.userId },
               data: { revokedAt: input.now },
             })
-            if (notificationAllowed) {
-              await createTransactionalMailRequester(tx, abuseSecret).enqueue({
-                messageId: notificationMessageId,
-                recipient: binding.providerValue,
-                template: {
-                  event: 'password_changed',
-                  kind: 'security_notification',
-                  occurredAt: input.now,
-                },
-              })
-            }
+            await createTransactionalMailRequester(tx, abuseSecret).enqueue({
+              messageId: notificationMessageId,
+              recipient: binding.providerValue,
+              template: {
+                event: 'password_changed',
+                kind: 'security_notification',
+                occurredAt: input.now,
+              },
+            })
             return true
           })
         } catch (error) {
@@ -1051,7 +1108,6 @@ export function createPrismaAuthRepository(
           },
         },
       })
-      const quotas = recoveryCodeUseQuotas(abuseSecret, requestBudgetPolicies, input)
       const messageId = options.createMessageId?.() ?? crypto.randomUUID()
       const confirmationCode = deriveAccountEmailConfirmationCode(abuseSecret, messageId)
       const newCodeHash = snapshot
@@ -1075,17 +1131,11 @@ export function createPrismaAuthRepository(
         for (const lock of locks) {
           await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
         }
-        const budgetAvailable = await consumeRecoveryRequestQuotasIpFirst(
-          tx,
-          abuseSecret,
-          quotas,
-          input.now,
-        )
         const user = await tx.user.findUnique({
           where: { login: input.login },
           select: { id: true, passwordHash: true },
         })
-        if (!budgetAvailable || !snapshot || !user?.passwordHash || user.id !== snapshot.id) {
+        if (!snapshot || !user?.passwordHash || user.id !== snapshot.id) {
           performDummyRecoveryCodeComparison(abuseSecret, input.login, input.recoveryCode)
           return null
         }
@@ -1109,6 +1159,7 @@ export function createPrismaAuthRepository(
         try {
           policy = await requireRecoveryEmailPolicy(tx, {
             canonicalKey: input.newCanonicalKey,
+            now: input.now,
             providerValue: input.newProviderValue,
             requirement: 'new_address',
           })
@@ -1176,7 +1227,6 @@ export function createPrismaAuthRepository(
           },
         },
       })
-      const quotas = recoveryCodeUseQuotas(abuseSecret, requestBudgetPolicies, input)
       return runRetryableAuthTransaction(db, async (tx) => {
         const locks = [
           ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
@@ -1191,17 +1241,11 @@ export function createPrismaAuthRepository(
         for (const lock of locks) {
           await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
         }
-        const budgetAvailable = await consumeRecoveryRequestQuotasIpFirst(
-          tx,
-          abuseSecret,
-          quotas,
-          input.now,
-        )
         const user = await tx.user.findUnique({
           where: { login: input.login },
           select: { id: true, passwordHash: true },
         })
-        if (!budgetAvailable || !snapshot || !user?.passwordHash || user.id !== snapshot.id) {
+        if (!snapshot || !user?.passwordHash || user.id !== snapshot.id) {
           return null
         }
         const replacement = await tx.recoveryCodeEmailReplacement.findUnique({
@@ -1224,6 +1268,7 @@ export function createPrismaAuthRepository(
         try {
           policy = await requireRecoveryEmailPolicy(tx, {
             canonicalKey: replacement.newCanonicalKey,
+            now: input.now,
             providerValue: replacement.newProviderValue,
             requirement: 'new_address',
           })
@@ -1268,6 +1313,7 @@ export function createPrismaAuthRepository(
             cancellationSessionIds: [],
             canonicalKey: policy.canonicalKey,
             policyVersion: policy.policyVersion,
+            providerId: policy.providerId,
             providerValue: policy.providerValue,
             requestedAt: replacement.requestedAt,
           },
@@ -1294,7 +1340,11 @@ export function createPrismaAuthRepository(
         input.canonicalKey,
         confirmationCode,
       )
-      const quotas = recoveryEmailQuotas(abuseSecret, requestBudgetPolicies, input)
+      const quotas = recoveryEmailAddressQuotas(
+        abuseSecret,
+        requestBudgetPolicies,
+        input.canonicalKey,
+      )
 
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
@@ -1522,6 +1572,13 @@ export function createPrismaAuthRepository(
               return 'invalid' as const
             }
 
+            const policy = await requireRecoveryEmailPolicy(tx, {
+              canonicalKey: challenge.canonicalKey,
+              now: input.now,
+              providerValue: challenge.providerValue,
+              requirement: 'new_address',
+            })
+
             const presentedHash = hashRecoveryEmailCode(
               abuseSecret,
               input.userId,
@@ -1555,9 +1612,10 @@ export function createPrismaAuthRepository(
               data: {
                 activatesAt: input.activatesAt,
                 cancellationSessionIds: challenge.cancellationSessionIds,
-                canonicalKey: challenge.canonicalKey,
-                providerValue: challenge.providerValue,
-                policyVersion: challenge.policyVersion,
+                canonicalKey: policy.canonicalKey,
+                providerId: policy.providerId,
+                providerValue: policy.providerValue,
+                policyVersion: policy.policyVersion,
                 requestedAt: challenge.requestedAt,
                 userId: input.userId,
               },
@@ -1675,11 +1733,9 @@ export function createPrismaAuthRepository(
         input.newCanonicalKey,
         newCode,
       )
-      const quotas = recoveryEmailReplacementQuotas(abuseSecret, requestBudgetPolicies, {
-        ipAddress: input.ipAddress,
+      const quotas = recoveryEmailReplacementAddressQuotas(abuseSecret, requestBudgetPolicies, {
         newCanonicalKey: input.newCanonicalKey,
         oldCanonicalKey: bindingSnapshot.canonicalKey,
-        userId: input.userId,
       })
 
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1737,11 +1793,13 @@ export function createPrismaAuthRepository(
             }
             await requireRecoveryEmailPolicy(tx, {
               canonicalKey: binding.canonicalKey,
+              now: input.now,
               providerValue: binding.providerValue,
               requirement: 'delivery',
             })
             const newAddressPolicy = await requireRecoveryEmailPolicy(tx, {
               canonicalKey: input.newCanonicalKey,
+              now: input.now,
               providerValue: input.newProviderValue,
               requirement: 'new_address',
             })
@@ -1894,6 +1952,7 @@ export function createPrismaAuthRepository(
             }
             await requireRecoveryEmailPolicy(tx, {
               canonicalKey,
+              now: input.now,
               providerValue: input.factor === 'old'
                 ? replacement.oldProviderValue
                 : replacement.newProviderValue,
@@ -2014,11 +2073,13 @@ export function createPrismaAuthRepository(
             }
             await requireRecoveryEmailPolicy(tx, {
               canonicalKey: replacement.oldCanonicalKey,
+              now: input.now,
               providerValue: replacement.oldProviderValue,
               requirement: 'delivery',
             })
             const newAddressPolicy = await requireRecoveryEmailPolicy(tx, {
               canonicalKey: replacement.newCanonicalKey,
+              now: input.now,
               providerValue: replacement.newProviderValue,
               requirement: 'new_address',
             })
@@ -2130,6 +2191,7 @@ export function createPrismaAuthRepository(
                 cancellationSessionIds: [],
                 canonicalKey: replacement.newCanonicalKey,
                 policyVersion: newAddressPolicy.policyVersion,
+                providerId: newAddressPolicy.providerId,
                 providerValue: newAddressPolicy.providerValue,
                 requestedAt: replacement.requestedAt,
               },
@@ -2273,11 +2335,12 @@ async function requireRecoveryEmailPolicy(
   transaction: Prisma.TransactionClient,
   input: {
     canonicalKey: string
+    now: Date
     providerValue: string
     requirement: 'delivery' | 'new_address'
   },
 ) {
-  const policy = await evaluateTransactionalAccountEmail(transaction, input.providerValue)
+  const policy = await evaluateTransactionalAccountEmail(transaction, input.providerValue, input.now)
   const allowed = input.requirement === 'new_address'
     ? policy?.acceptsNewAddress
     : policy?.allowsRecoveryDelivery
@@ -2351,6 +2414,15 @@ function performDummyRecoveryCodeComparison(
   recoveryCode: string,
 ) {
   const presentedHash = hashRecoveryCode(secret, identity, recoveryCode)
+  codeHashesEqual('0'.repeat(64), presentedHash)
+}
+
+function performDummyRecoveryEmailCodeComparison(
+  secret: string,
+  identity: string,
+  code: string,
+) {
+  const presentedHash = hashRecoveryEmailCode(secret, identity, identity, code)
   codeHashesEqual('0'.repeat(64), presentedHash)
 }
 
@@ -2596,27 +2668,65 @@ function recoveryEmailQuotas(
   }))
 }
 
-function recoveryEmailReplacementQuotas(
+function recoveryEmailPolicyQuotas(
   secret: string,
   policies: RequestBudgetPolicyCatalog,
   input: {
     ipAddress?: string
-    newCanonicalKey: string
-    oldCanonicalKey: string
+    operation: 'replacement' | 'start'
     userId: string
   },
 ) {
+  const deliveryCost = input.operation === 'replacement' ? 2 : 1
   const definitions = [
     ['rec_email_account_min', input.userId, policies.rec_email_account_min, 1],
-    ['rec_email_account_hour', input.userId, policies.rec_email_account_hour, 2],
-    ['rec_email_account_day', input.userId, policies.rec_email_account_day, 2],
+    ['rec_email_account_hour', input.userId, policies.rec_email_account_hour, deliveryCost],
+    ['rec_email_account_day', input.userId, policies.rec_email_account_day, deliveryCost],
+    ['rec_email_ip_hour', input.ipAddress ?? 'unknown', policies.rec_email_ip_hour, deliveryCost],
+  ] as const
+  return definitions.map(([scope, value, policy, cost]) => ({
+    cost,
+    keyHash: hashRecoveryBudgetKey(secret, scope, value),
+    limit: policy.limit,
+    scope,
+    windowMs: policy.windowMs,
+  }))
+}
+
+function recoveryEmailAddressQuotas(
+  secret: string,
+  policies: RequestBudgetPolicyCatalog,
+  canonicalKey: string,
+) {
+  const definitions = [
+    ['rec_email_address_min', canonicalKey, policies.rec_email_address_min, 1],
+    ['rec_email_address_hour', canonicalKey, policies.rec_email_address_hour, 1],
+    ['rec_email_address_day', canonicalKey, policies.rec_email_address_day, 1],
+  ] as const
+  return definitions.map(([scope, value, policy, cost]) => ({
+    cost,
+    keyHash: hashRecoveryBudgetKey(secret, scope, value),
+    limit: policy.limit,
+    scope,
+    windowMs: policy.windowMs,
+  }))
+}
+
+function recoveryEmailReplacementAddressQuotas(
+  secret: string,
+  policies: RequestBudgetPolicyCatalog,
+  input: {
+    newCanonicalKey: string
+    oldCanonicalKey: string
+  },
+) {
+  const definitions = [
     ['rec_email_address_min', input.oldCanonicalKey, policies.rec_email_address_min, 1],
     ['rec_email_address_hour', input.oldCanonicalKey, policies.rec_email_address_hour, 1],
     ['rec_email_address_day', input.oldCanonicalKey, policies.rec_email_address_day, 1],
     ['rec_email_address_min', input.newCanonicalKey, policies.rec_email_address_min, 1],
     ['rec_email_address_hour', input.newCanonicalKey, policies.rec_email_address_hour, 1],
     ['rec_email_address_day', input.newCanonicalKey, policies.rec_email_address_day, 1],
-    ['rec_email_ip_hour', input.ipAddress ?? 'unknown', policies.rec_email_ip_hour, 2],
   ] as const
   return definitions.map(([scope, value, policy, cost]) => ({
     cost,

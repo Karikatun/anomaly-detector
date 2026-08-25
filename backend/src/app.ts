@@ -17,7 +17,7 @@ import { createAuthModule, type AuthHttpEnv, type LogoutCleanup } from './module
 import { createAnalyticsModule } from './modules/analytics'
 import { createAdminModule } from './modules/admin'
 import { createFeedbackModule } from './modules/feedback'
-import { createMailModule, type MailServiceCandidateSource } from './modules/mail'
+import { createMailModule, type MxResolver } from './modules/mail'
 import { createProfileModule } from './modules/profile'
 import { createRoomModule } from './modules/room'
 import {
@@ -40,7 +40,7 @@ type CreateAppOptions = {
   logoutCleanup?: LogoutCleanup
   prisma: DbClient
   securityEvents?: SecurityEventLogger
-  mailPolicySource?: MailServiceCandidateSource
+  mailMxResolver?: MxResolver
   operationalMetrics?: OperationalMetrics
   tender?: TenderModule
 }
@@ -48,7 +48,7 @@ type CreateAppOptions = {
 export function createApp({
   env,
   logoutCleanup,
-  mailPolicySource,
+  mailMxResolver,
   operationalMetrics,
   prisma,
   securityEvents = consoleSecurityEventLogger,
@@ -66,7 +66,7 @@ export function createApp({
       configured: env.MAIL_SMTP_ENABLED,
       deliveryBudgetPerMinute: env.MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE,
     },
-    source: mailPolicySource,
+    mxResolver: mailMxResolver,
   })
   const auth = createAuthModule({
     accountDeletionCleanup: ({ userId }) => tender.anonymizeParticipant(userId),

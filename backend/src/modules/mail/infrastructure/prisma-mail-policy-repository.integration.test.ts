@@ -1,249 +1,320 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createPrisma } from '../../../db'
+import { APPROVED_MAIL_PROVIDER_CATALOG } from '../application/approved-mail-provider-catalog'
 import { MailPolicyService } from '../application/mail-policy-service'
 import { MailPolicyFailure } from '../domain/errors'
 import { evaluateTransactionalAccountEmail } from './prisma-account-email-policy'
-import { createPrismaMailPolicyRepository } from './prisma-mail-policy-repository'
+import {
+  cleanupExpiredMailDomainAssessments,
+  createPrismaMailPolicyRepository,
+} from './prisma-mail-policy-repository'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl ? describe : describe.skip
 
-maybeDescribe('Prisma mail policy repository', () => {
+maybeDescribe('Prisma mail provider policy repository', () => {
   if (!databaseUrl) return
 
   const prisma = createPrisma(databaseUrl)
   const repository = createPrismaMailPolicyRepository(prisma)
   const actorId = '019f8099-7e26-7760-ad08-66d1d66b2718'
+  const now = new Date('2026-08-25T12:00:00.000Z')
 
   beforeEach(async () => {
+    await prisma.mailDomainAssessment.deleteMany()
     await prisma.mailPolicyAuditEvent.deleteMany()
     await prisma.mailPolicyCommand.deleteMany()
     await prisma.mailPolicyEntry.deleteMany()
     await prisma.mailPolicyVersion.deleteMany()
-    await prisma.mailRegistryCandidate.deleteMany()
-    await prisma.mailRegistryImport.deleteMany()
   })
 
   afterAll(async () => {
     await prisma.$disconnect()
   })
 
-  test('imports reviewed candidates and publishes an immutable first policy version', async () => {
-    const imported = await repository.commitImport({
+  test('syncs the reviewed catalog as one immutable audited policy version', async () => {
+    const synced = await repository.syncCatalog({
       actorId,
-      candidates: [{
-        evidence: 'service_description_mentions_mail',
-        registryEntryId: '1-PP',
-        serviceDomain: 'mail.yandex.ru',
-      }],
-      checksum: 'a'.repeat(64),
+      catalog: APPROVED_MAIL_PROVIDER_CATALOG,
       commandId: '019f8099-7e26-7760-ad08-66d1d66b2719',
       expectedVersion: 0,
-      fingerprint: 'b'.repeat(64),
-      sourceDate: '2026-08-20',
-      sourceUrl: 'https://rkn.gov.ru/opendata/7705846236-InformationDistributor/data.xml',
+      fingerprint: 'a'.repeat(64),
     })
-    expect(imported).toMatchObject({ kind: 'committed', receipt: { kind: 'import_succeeded' } })
 
-    const afterImport = await repository.readView(new Date('2026-08-22T12:00:00.000Z'))
-    const candidate = afterImport.lastSuccessfulImport?.candidates[0]
-    expect(afterImport).toMatchObject({
-      currentVersion: 0,
-      lastSuccessfulImport: {
-        diff: { added: ['mail.yandex.ru'], removed: [], unchangedCount: 0 },
-      },
-      publishedPolicy: null,
-    })
-    expect(candidate).toBeDefined()
-
-    const published = await repository.publish({
-      actorId,
-      additions: [{
-        canonicalization: {
-          ignoreDots: false,
-          localPartCaseInsensitive: true,
-          stripPlusTag: false,
-        },
-        emailDomain: 'yandex.ru',
-        sourceCandidateId: candidate!.id,
-      }],
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
-      expectedVersion: 0,
-      fingerprint: 'c'.repeat(64),
-    })
-    expect(published).toEqual({ kind: 'committed', receipt: { kind: 'policy_published', version: 1 } })
-    await expect(repository.evaluate('yandex.ru')).resolves.toEqual({
+    expect(synced).toEqual({ kind: 'committed', receipt: { kind: 'catalog_synced', version: 1 } })
+    await expect(repository.evaluate('yandex.ru', now)).resolves.toMatchObject({
       acceptsNewAddress: true,
       allowsRecoveryDelivery: true,
-      canonicalization: {
-        ignoreDots: false,
-        localPartCaseInsensitive: true,
-        stripPlusTag: false,
-      },
+      catalogVersion: 1,
+      providerId: 'yandex',
+      requiresMxAssessment: false,
+      source: 'public_domain',
       state: 'approved',
       version: 1,
     })
 
-    const view = await repository.readView(new Date('2026-08-22T12:00:00.000Z'))
+    const view = await repository.readView(now, APPROVED_MAIL_PROVIDER_CATALOG)
     expect(view).toMatchObject({
+      availableCatalog: {
+        diff: { addedProviderIds: [], changedProviderIds: [], removedProviderIds: [] },
+        version: 1,
+      },
       currentVersion: 1,
       publishedPolicy: {
-        entries: [{ emailDomain: 'yandex.ru', reason: null, state: 'approved' }],
+        catalogVersion: 1,
         version: 1,
       },
     })
-    expect(await prisma.mailPolicyAuditEvent.count()).toBe(2)
-    expect(await prisma.mailPolicyCommand.count()).toBe(2)
+    expect(view.publishedPolicy?.providers.map(({ providerId }) => providerId)).toEqual(
+      APPROVED_MAIL_PROVIDER_CATALOG.providers.map(({ providerId }) => providerId),
+    )
+    expect(await prisma.mailPolicyAuditEvent.count()).toBe(1)
+    expect(await prisma.mailPolicyCommand.count()).toBe(1)
   })
 
-  test('serializes concurrent publication, replays one command, and applies status semantics', async () => {
-    let sourceCalls = 0
-    const service = new MailPolicyService({
-      clock: { now: () => new Date('2026-08-22T12:00:00.000Z') },
-      repository,
-      source: {
-        load: async () => {
-          sourceCalls += 1
-          return {
-            candidates: [{
-              evidence: 'service_description_mentions_mail' as const,
-              registryEntryId: '1-PP',
-              serviceDomain: 'mail.yandex.ru',
-            }],
-            checksum: 'd'.repeat(64),
-            sourceDate: '2026-08-20',
-            sourceUrl: 'https://rkn.gov.ru/opendata/7705846236-InformationDistributor/data.xml',
-          }
+  test('uses only a fresh catalog-matched MX assessment for a custom domain', async () => {
+    await syncFirstPolicy(repository, actorId)
+    await expect(repository.evaluate('anomaly-detector.ru', now)).resolves.toMatchObject({
+      acceptsNewAddress: false,
+      catalogVersion: 1,
+      requiresMxAssessment: true,
+      state: 'unlisted',
+    })
+
+    await repository.storeAssessment({
+      catalogVersion: 1,
+      checkedAt: now,
+      emailDomain: 'anomaly-detector.ru',
+      expiresAt: new Date(now.getTime() + 60_000),
+      failureCode: null,
+      mxFingerprint: 'b'.repeat(64),
+      outcome: 'allowed',
+      providerId: 'reg_ru',
+    })
+    await expect(repository.evaluate('anomaly-detector.ru', now)).resolves.toMatchObject({
+      acceptsNewAddress: true,
+      allowsRecoveryDelivery: true,
+      providerId: 'reg_ru',
+      requiresMxAssessment: false,
+      source: 'mx',
+      state: 'approved',
+    })
+    await expect(prisma.$transaction((transaction) => evaluateTransactionalAccountEmail(
+      transaction,
+      'Owner@anomaly-detector.ru',
+      now,
+    ))).resolves.toMatchObject({
+      acceptsNewAddress: true,
+      canonicalKey: 'Owner@anomaly-detector.ru',
+      policyVersion: 1,
+      providerId: 'reg_ru',
+    })
+
+    const afterExpiry = new Date(now.getTime() + 60_001)
+    await expect(repository.evaluate('anomaly-detector.ru', afterExpiry)).resolves.toMatchObject({
+      acceptsNewAddress: false,
+      requiresMxAssessment: true,
+      state: 'unlisted',
+    })
+  })
+
+  test('deletes expired domain assessments in bounded batches and preserves fresh rows', async () => {
+    await prisma.mailDomainAssessment.createMany({
+      data: [
+        {
+          catalogVersion: 1,
+          checkedAt: new Date(now.getTime() - 120_000),
+          emailDomain: 'oldest-private-domain.ru',
+          expiresAt: new Date(now.getTime() - 60_000),
+          outcome: 'denied',
         },
-      },
+        {
+          catalogVersion: 1,
+          checkedAt: new Date(now.getTime() - 60_000),
+          emailDomain: 'boundary-private-domain.ru',
+          expiresAt: now,
+          outcome: 'retry',
+        },
+        {
+          catalogVersion: 1,
+          checkedAt: now,
+          emailDomain: 'fresh-private-domain.ru',
+          expiresAt: new Date(now.getTime() + 60_000),
+          outcome: 'allowed',
+          providerId: 'reg_ru',
+        },
+      ],
+    })
+
+    await expect(cleanupExpiredMailDomainAssessments(prisma, now, { limit: 1 }))
+      .resolves.toEqual({ count: 1 })
+    expect(await prisma.mailDomainAssessment.findMany({
+      orderBy: { emailDomain: 'asc' },
+      select: { emailDomain: true },
+    })).toEqual([
+      { emailDomain: 'boundary-private-domain.ru' },
+      { emailDomain: 'fresh-private-domain.ru' },
+    ])
+
+    await expect(cleanupExpiredMailDomainAssessments(prisma, now, { limit: 1 }))
+      .resolves.toEqual({ count: 1 })
+    await expect(cleanupExpiredMailDomainAssessments(prisma, now, { limit: 1 }))
+      .resolves.toEqual({ count: 0 })
+    expect(await prisma.mailDomainAssessment.findMany({
+      select: { emailDomain: true },
+    })).toEqual([{ emailDomain: 'fresh-private-domain.ru' }])
+  })
+
+  test('drains more than one expired assessment batch in one maintenance run', async () => {
+    await prisma.mailDomainAssessment.createMany({
+      data: Array.from({ length: 501 }, (_, index) => ({
+        catalogVersion: 1,
+        checkedAt: new Date(now.getTime() - 120_000),
+        emailDomain: `expired-${index}.private-domain.ru`,
+        expiresAt: new Date(now.getTime() - 60_000),
+        outcome: 'denied',
+      })),
+    })
+
+    await expect(cleanupExpiredMailDomainAssessments(prisma, now))
+      .resolves.toEqual({ count: 501 })
+    expect(await prisma.mailDomainAssessment.count()).toBe(0)
+  })
+
+  test('replays one sync command and serializes provider status changes', async () => {
+    const service = new MailPolicyService({
+      clock: { now: () => now },
+      mxResolver: { resolve: async () => ({ kind: 'no_mx' }) },
+      repository,
     })
     const operator = {
-      authenticatedAt: new Date('2026-08-22T11:55:00.000Z'),
+      authenticatedAt: new Date(now.getTime() - 60_000),
       id: actorId,
     }
-    const importCommand = {
+    const sync = {
       commandId: '019f8099-7e26-7760-ad08-66d1d66b2721',
       expectedVersion: 0,
     }
-    await service.importCandidates(importCommand, operator)
-    await service.importCandidates(importCommand, operator)
-    expect(sourceCalls).toBe(1)
-    const candidateId = (await service.read()).lastSuccessfulImport!.candidates[0].id
-    const canonicalization = {
-      ignoreDots: false,
-      localPartCaseInsensitive: false,
-      stripPlusTag: false,
-    }
-    const publishYandex = {
-      additions: [{ canonicalization, emailDomain: 'yandex.ru', sourceCandidateId: candidateId }],
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2722',
-      expectedVersion: 0,
-    }
-    const publishYa = {
-      additions: [{ canonicalization, emailDomain: 'ya.ru', sourceCandidateId: candidateId }],
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2723',
-      expectedVersion: 0,
-    }
+    await service.syncCatalog(sync, operator)
+    await service.syncCatalog(sync, operator)
+    expect(await prisma.mailPolicyVersion.count()).toBe(1)
+
     const results = await Promise.allSettled([
-      service.publish(publishYandex, operator),
-      service.publish(publishYa, operator),
+      service.changeStatus({
+        commandId: '019f8099-7e26-7760-ad08-66d1d66b2722',
+        expectedVersion: 1,
+        providerId: 'yandex',
+        reason: 'Подтверждённый security-инцидент',
+        state: 'blocked',
+      }, operator),
+      service.changeStatus({
+        commandId: '019f8099-7e26-7760-ad08-66d1d66b2723',
+        expectedVersion: 1,
+        providerId: 'vk_mail',
+        reason: 'Новые привязки временно остановлены',
+        state: 'deprecated',
+      }, operator),
     ])
-    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
-    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1)
-    expect(results.find((result) => result.status === 'rejected')).toMatchObject({
+    expect(results.filter(({ status }) => status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter(({ status }) => status === 'rejected')).toHaveLength(1)
+    expect(results.find(({ status }) => status === 'rejected')).toMatchObject({
       reason: { kind: 'version_conflict' },
     })
+    expect(await prisma.mailPolicyVersion.count()).toBe(2)
 
-    const successfulCommand = results[0].status === 'fulfilled' ? publishYandex : publishYa
-    const publishedDomain = successfulCommand.additions[0].emailDomain
-    await service.publish(successfulCommand, operator)
-    expect((await service.read()).currentVersion).toBe(1)
-    await expect(service.publish({
-      ...successfulCommand,
-      additions: [{ ...successfulCommand.additions[0], emailDomain: 'other.ru' }],
-    }, operator)).rejects.toMatchObject({ kind: 'command_conflict' } satisfies Partial<MailPolicyFailure>)
-
-    await service.changeStatus({
+    await expect(service.changeStatus({
       commandId: '019f8099-7e26-7760-ad08-66d1d66b2724',
-      emailDomain: publishedDomain,
-      expectedVersion: 1,
-      reason: 'Новые привязки остановлены оператором',
-      state: 'deprecated',
-    }, operator)
-    await expect(service.evaluate(publishedDomain)).resolves.toMatchObject({
-      acceptsNewAddress: false,
-      allowsRecoveryDelivery: true,
-      state: 'deprecated',
-      version: 2,
-    })
-    await service.changeStatus({
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2725',
-      emailDomain: publishedDomain,
       expectedVersion: 2,
-      reason: 'Подтверждённый security-инцидент',
+      providerId: 'unknown',
+      reason: 'Неизвестный провайдер',
       state: 'blocked',
-    }, operator)
-    await expect(service.evaluate(publishedDomain)).resolves.toMatchObject({
-      acceptsNewAddress: false,
-      allowsRecoveryDelivery: false,
-      state: 'blocked',
-      version: 3,
-    })
-    expect(await prisma.mailPolicyAuditEvent.count()).toBe(4)
+    }, operator)).rejects.toMatchObject({ kind: 'provider_not_found' } satisfies Partial<MailPolicyFailure>)
   })
 
-  test('holds the published policy stable until an owning account transaction commits', async () => {
-    const imported = await prisma.mailRegistryImport.create({
-      data: {
-        actorId,
-        addedDomains: ['mail.example.ru'],
-        checksum: '7'.repeat(64),
-        outcome: 'succeeded',
-        removedDomains: [],
-        sourceDate: '2026-08-22',
-        sourceUrl: 'https://rkn.gov.ru/opendata/7705846236-InformationDistributor/data.xml',
-        unchangedCount: 0,
-        candidates: {
-          create: {
-            evidence: 'service_description_mentions_mail',
-            registryEntryId: 'policy-lock-PP',
-            serviceDomain: 'mail.example.ru',
-          },
-        },
-      },
-      include: { candidates: true },
+  test('preserves the latest blocked state across catalog removal and re-addition', async () => {
+    await syncFirstPolicy(repository, actorId)
+    await repository.changeStatus({
+      actorId,
+      commandId: crypto.randomUUID(),
+      expectedVersion: 1,
+      fingerprint: '1'.repeat(64),
+      providerId: 'reg_ru',
+      reason: 'Новые адреса временно остановлены',
+      state: 'deprecated',
     })
-    await prisma.mailPolicyVersion.create({
-      data: {
-        publishedBy: actorId,
-        version: 1,
-        entries: {
-          create: {
-            emailDomain: 'example.ru',
-            ignoreDots: false,
-            localPartCaseInsensitive: true,
-            sourceCandidateId: imported.candidates[0]!.id,
-            state: 'approved',
-            stripPlusTag: false,
-          },
-        },
-      },
+    await repository.changeStatus({
+      actorId,
+      commandId: crypto.randomUUID(),
+      expectedVersion: 2,
+      fingerprint: '2'.repeat(64),
+      providerId: 'reg_ru',
+      reason: 'Подтверждённый инцидент не снят',
+      state: 'blocked',
+    })
+    await prisma.mailPolicyAuditEvent.updateMany({
+      data: { occurredAt: new Date('2026-08-22T12:00:00.000Z') },
+      where: { kind: 'mail_policy_provider_status_changed' },
+    })
+    const withoutRegRu = {
+      providers: APPROVED_MAIL_PROVIDER_CATALOG.providers.filter(
+        ({ providerId }) => providerId !== 'reg_ru',
+      ),
+      version: 2,
+    }
+    await repository.syncCatalog({
+      actorId,
+      catalog: withoutRegRu,
+      commandId: crypto.randomUUID(),
+      expectedVersion: 3,
+      fingerprint: '3'.repeat(64),
+    })
+    await repository.syncCatalog({
+      actorId,
+      catalog: { ...APPROVED_MAIL_PROVIDER_CATALOG, version: 3 },
+      commandId: crypto.randomUUID(),
+      expectedVersion: 4,
+      fingerprint: '4'.repeat(64),
+    })
+    await repository.storeAssessment({
+      catalogVersion: 3,
+      checkedAt: now,
+      emailDomain: 'readded-provider.ru',
+      expiresAt: new Date(now.getTime() + 60_000),
+      failureCode: null,
+      mxFingerprint: '4'.repeat(64),
+      outcome: 'allowed',
+      providerId: 'reg_ru',
+    })
+
+    await expect(repository.evaluate('readded-provider.ru', now)).resolves.toMatchObject({
+      acceptsNewAddress: false,
+      allowsRecoveryDelivery: false,
+      providerId: 'reg_ru',
+      state: 'blocked',
+      version: 5,
+    })
+  })
+
+  test('holds policy publication behind an owning account transaction', async () => {
+    await syncFirstPolicy(repository, actorId)
+    await repository.storeAssessment({
+      catalogVersion: 1,
+      checkedAt: now,
+      emailDomain: 'company.ru',
+      expiresAt: new Date(now.getTime() + 60_000),
+      failureCode: null,
+      mxFingerprint: 'c'.repeat(64),
+      outcome: 'allowed',
+      providerId: 'yandex',
     })
 
     let releaseOwnerTransaction!: () => void
-    const ownerTransactionReleased = new Promise<void>((resolve) => {
-      releaseOwnerTransaction = resolve
-    })
+    const ownerTransactionReleased = new Promise<void>((resolve) => { releaseOwnerTransaction = resolve })
     let ownerPolicyRead!: () => void
-    const ownerPolicyReadPromise = new Promise<void>((resolve) => {
-      ownerPolicyRead = resolve
-    })
+    const ownerPolicyReadPromise = new Promise<void>((resolve) => { ownerPolicyRead = resolve })
     const ownerTransaction = prisma.$transaction(async (transaction) => {
-      const decision = await evaluateTransactionalAccountEmail(
-        transaction,
-        'Player@example.ru',
-      )
+      const decision = await evaluateTransactionalAccountEmail(transaction, 'Player@company.ru', now)
       ownerPolicyRead()
       await ownerTransactionReleased
       return decision
@@ -253,9 +324,9 @@ maybeDescribe('Prisma mail policy repository', () => {
     const statusChange = repository.changeStatus({
       actorId,
       commandId: '019f8099-7e26-7760-ad08-66d1d66b2750',
-      emailDomain: 'example.ru',
       expectedVersion: 1,
-      fingerprint: '8'.repeat(64),
+      fingerprint: 'd'.repeat(64),
+      providerId: 'yandex',
       reason: 'Новые привязки приостановлены',
       state: 'deprecated',
     })
@@ -271,145 +342,28 @@ maybeDescribe('Prisma mail policy repository', () => {
 
     await expect(ownerTransaction).resolves.toMatchObject({
       acceptsNewAddress: true,
-      canonicalKey: 'player@example.ru',
       policyVersion: 1,
+      providerId: 'yandex',
     })
     await expect(statusChange).resolves.toEqual({
       kind: 'committed',
       receipt: { kind: 'status_changed', version: 2 },
     })
   })
-
-  test('records failed and suspicious imports while preserving the last-known-good policy', async () => {
-    const baselineCandidates = Array.from({ length: 10 }, (_, index) => ({
-      evidence: 'service_description_mentions_mail' as const,
-      registryEntryId: `${index + 1}-PP`,
-      serviceDomain: `mail${index}.example.ru`,
-    }))
-    await repository.commitImport({
-      actorId,
-      candidates: baselineCandidates,
-      checksum: 'e'.repeat(64),
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2730',
-      expectedVersion: 0,
-      fingerprint: 'f'.repeat(64),
-      sourceDate: '2026-08-20',
-      sourceUrl: 'https://rkn.gov.ru/opendata/7705846236-InformationDistributor/data.xml',
-    })
-    const baseline = await repository.readView(new Date('2026-08-22T12:00:00.000Z'))
-    await repository.publish({
-      actorId,
-      additions: [{
-        canonicalization: {
-          ignoreDots: false,
-          localPartCaseInsensitive: false,
-          stripPlusTag: false,
-        },
-        emailDomain: 'example.ru',
-        sourceCandidateId: baseline.lastSuccessfulImport!.candidates[0].id,
-      }],
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2731',
-      expectedVersion: 0,
-      fingerprint: '1'.repeat(64),
-    })
-
-    let sourceMode: 'removal' | 'failure' = 'removal'
-    const service = new MailPolicyService({
-      clock: { now: () => new Date('2026-08-22T12:00:00.000Z') },
-      repository,
-      source: {
-        load: async () => {
-          if (sourceMode === 'failure') throw Object.assign(new Error('source down'), { code: 'source_unavailable' })
-          return {
-            candidates: baselineCandidates.slice(0, 5),
-            checksum: '2'.repeat(64),
-            sourceDate: '2026-08-21',
-            sourceUrl: 'https://rkn.gov.ru/opendata/7705846236-InformationDistributor/data-next.xml',
-          }
-        },
-      },
-    })
-    const operator = {
-      authenticatedAt: new Date('2026-08-22T11:55:00.000Z'),
-      id: actorId,
-    }
-    await expect(service.importCandidates({
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2732',
-      expectedVersion: 1,
-    }, operator)).rejects.toMatchObject({ kind: 'suspicious_mass_removal' })
-    let view = await service.read()
-    expect(view).toMatchObject({
-      currentVersion: 1,
-      latestAttempt: { failureCode: 'suspicious_mass_removal', outcome: 'rejected' },
-      publishedPolicy: { version: 1 },
-    })
-    expect(view.lastSuccessfulImport?.candidates).toHaveLength(10)
-
-    sourceMode = 'failure'
-    await expect(service.importCandidates({
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2733',
-      expectedVersion: 1,
-    }, operator)).rejects.toMatchObject({ kind: 'source_import_failed' })
-    view = await service.read()
-    expect(view).toMatchObject({
-      currentVersion: 1,
-      latestAttempt: { failureCode: 'source_unavailable', outcome: 'failed' },
-      publishedPolicy: { version: 1 },
-    })
-    expect(view.lastSuccessfulImport?.candidates).toHaveLength(10)
-  })
-
-  test('rejects a publication beyond the bounded policy projection without advancing the version', async () => {
-    const candidates = Array.from({ length: 101 }, (_, index) => ({
-      evidence: 'service_description_mentions_mail' as const,
-      registryEntryId: `${index + 1}-PP`,
-      serviceDomain: `mail${index}.example.ru`,
-    }))
-    await repository.commitImport({
-      actorId,
-      candidates,
-      checksum: '3'.repeat(64),
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2740',
-      expectedVersion: 0,
-      fingerprint: '4'.repeat(64),
-      sourceDate: '2026-08-22',
-      sourceUrl: 'https://rkn.gov.ru/opendata/7705846236-InformationDistributor/data.xml',
-    })
-    const imported = await repository.readView(new Date('2026-08-22T12:00:00.000Z'))
-    const canonicalization = {
-      ignoreDots: false,
-      localPartCaseInsensitive: false,
-      stripPlusTag: false,
-    }
-    const initial = await repository.publish({
-      actorId,
-      additions: imported.lastSuccessfulImport!.candidates.slice(0, 100).map((candidate, index) => ({
-        canonicalization,
-        emailDomain: `approved${index}.example.ru`,
-        sourceCandidateId: candidate.id,
-      })),
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2741',
-      expectedVersion: 0,
-      fingerprint: '5'.repeat(64),
-    })
-    expect(initial).toMatchObject({ kind: 'committed', receipt: { version: 1 } })
-
-    const overflow = await repository.publish({
-      actorId,
-      additions: [{
-        canonicalization,
-        emailDomain: 'overflow.example.ru',
-        sourceCandidateId: imported.lastSuccessfulImport!.candidates[100].id,
-      }],
-      commandId: '019f8099-7e26-7760-ad08-66d1d66b2742',
-      expectedVersion: 1,
-      fingerprint: '6'.repeat(64),
-    })
-
-    expect(overflow).toEqual({ kind: 'policy_limit_exceeded' })
-    expect((await repository.readView(new Date('2026-08-22T12:00:00.000Z'))).currentVersion).toBe(1)
-  })
 })
+
+async function syncFirstPolicy(
+  repository: ReturnType<typeof createPrismaMailPolicyRepository>,
+  actorId: string,
+) {
+  await repository.syncCatalog({
+    actorId,
+    catalog: APPROVED_MAIL_PROVIDER_CATALOG,
+    commandId: crypto.randomUUID(),
+    expectedVersion: 0,
+    fingerprint: 'f'.repeat(64),
+  })
+}
 
 async function waitForAdvisoryLockWaiter(prisma: ReturnType<typeof createPrisma>) {
   for (let attempt = 0; attempt < 100; attempt += 1) {

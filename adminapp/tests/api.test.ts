@@ -3,6 +3,11 @@ import { expect, test } from 'bun:test'
 import { AdminApi, AdminApiError } from '../src/api'
 
 const mailOperationsView = {
+  availableCatalog: {
+    diff: { addedProviderIds: [], changedProviderIds: [], removedProviderIds: [] },
+    providers: [],
+    version: 1,
+  },
   currentVersion: 0,
   delivery: {
     budget: { limitPerMinute: 60, usedInWindow: 0, windowStartedAt: null },
@@ -12,12 +17,10 @@ const mailOperationsView = {
     lastSmtpSuccessAt: null,
     outbox: { leased: 0, oldestQueuedAt: null, queued: 0 },
     provider: 'reg_ru',
-    registryLastSuccessfulImportAt: null,
+    catalogLastSyncedAt: null,
     totals: { requested: 0, smtpAccepted: 0, temporaryFailures: 0, terminalFailures: 0 },
   },
   generatedAt: '2026-08-22T12:00:00.000Z',
-  latestAttempt: null,
-  lastSuccessfulImport: null,
   publishedPolicy: null,
 }
 const antiAbuseOverview = {
@@ -134,24 +137,11 @@ test('uses the authenticated narrow mail-policy endpoints without generic mutati
     antiAbuse: antiAbuseOverview,
     mailPolicy: mailOperationsView,
   })
-  await expect(api.importMailPolicy({ commandId, expectedVersion: 0 })).resolves.toEqual(mailOperationsView)
-  await expect(api.publishMailPolicy({
-    additions: [{
-      canonicalization: {
-        ignoreDots: false,
-        localPartCaseInsensitive: false,
-        stripPlusTag: false,
-      },
-      emailDomain: 'yandex.ru',
-      sourceCandidateId: '019f8099-7e26-7760-ad08-66d1d66b2751',
-    }],
-    commandId,
-    expectedVersion: 0,
-  })).resolves.toEqual(mailOperationsView)
+  await expect(api.syncMailPolicyCatalog({ commandId, expectedVersion: 0 })).resolves.toEqual(mailOperationsView)
   await expect(api.changeMailPolicyStatus({
     commandId,
-    emailDomain: 'yandex.ru',
     expectedVersion: 1,
+    providerId: 'yandex',
     reason: 'Security-инцидент',
     state: 'blocked',
   })).resolves.toEqual(mailOperationsView)
@@ -159,8 +149,7 @@ test('uses the authenticated narrow mail-policy endpoints without generic mutati
   expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
     { method: 'GET', url: '/api/operations/mail-policy' },
     { method: 'GET', url: '/api/operations/mail-policy/anti-abuse' },
-    { method: 'POST', url: '/api/operations/mail-policy/import' },
-    { method: 'POST', url: '/api/operations/mail-policy/publish' },
+    { method: 'POST', url: '/api/operations/mail-policy/sync' },
     { method: 'POST', url: '/api/operations/mail-policy/status' },
   ])
   expect(requests[2].body).toEqual({ commandId, expectedVersion: 0 })
@@ -198,7 +187,7 @@ test('keeps the mail screen available only for a missing rollback-era anti-abuse
   )
 })
 
-test('does not probe anti-abuse after the concealed legacy mail endpoint', async () => {
+test('does not probe anti-abuse when the primary mail-policy endpoint is concealed', async () => {
   const urls: string[] = []
   const api = new AdminApi('', async (input) => {
     const url = String(input)

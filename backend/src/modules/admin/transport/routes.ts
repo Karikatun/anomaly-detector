@@ -11,8 +11,7 @@ import {
   feedbackRejectCommandSchema,
   feedbackResolveCommandSchema,
   feedbackTakeCommandSchema,
-  mailPolicyImportCommandSchema,
-  mailPolicyPublishCommandSchema,
+  mailPolicySyncCommandSchema,
   mailPolicyStatusCommandSchema,
   mailOperationsViewSchema,
   requestBudgetOverviewSchema,
@@ -122,15 +121,9 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
     return feedbackCommandResponse(c, input.feedback.deleteContact(command, operator(c), reportId(c)))
   })
 
-  routes.post('/mail-policy/import', async (c) => {
-    const command = mailPolicyImportCommandSchema.parse(await c.req.json())
-    const result = await executeMailPolicy(() => input.mailPolicy.importCandidates(command, operator(c)))
-    return c.json(mailOperationsViewSchema.parse(result))
-  })
-
-  routes.post('/mail-policy/publish', async (c) => {
-    const command = mailPolicyPublishCommandSchema.parse(await c.req.json())
-    const result = await executeMailPolicy(() => input.mailPolicy.publish(command, operator(c)))
+  routes.post('/mail-policy/sync', async (c) => {
+    const command = mailPolicySyncCommandSchema.parse(await c.req.json())
+    const result = await executeMailPolicy(() => input.mailPolicy.syncCatalog(command, operator(c)))
     return c.json(mailOperationsViewSchema.parse(result))
   })
 

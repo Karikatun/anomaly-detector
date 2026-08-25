@@ -42,15 +42,18 @@ export function canonicalizeAccountEmailWithDecision(
 }
 
 export function createAccountEmailCanonicalizer(policy: {
-  evaluate(emailDomain: string): Promise<MailPolicyDecision>
+  evaluate(emailDomain: string, options?: { forceMxRefresh?: boolean }): Promise<MailPolicyDecision>
 }) {
   return {
     async canonicalize(value: string): Promise<ApprovedAccountEmail | null> {
       const result = await canonicalizeWithPolicy(value, policy)
       return result ? result.email : null
     },
-    async canonicalizeForRecovery(value: string) {
-      const result = await canonicalizeWithPolicy(value, policy)
+    async canonicalizeForRecovery(
+      value: string,
+      options: { forceMxRefresh?: boolean } = { forceMxRefresh: true },
+    ) {
+      const result = await canonicalizeWithPolicy(value, policy, options)
       if (!result?.decision.acceptsNewAddress) return null
       return {
         ...result.email,
@@ -58,17 +61,22 @@ export function createAccountEmailCanonicalizer(policy: {
       }
     },
     evaluate: (emailDomain: string) => policy.evaluate(normalizeEmailDomain(emailDomain)),
+    evaluateFresh: (emailDomain: string) => policy.evaluate(
+      normalizeEmailDomain(emailDomain),
+      { forceMxRefresh: true },
+    ),
   }
 }
 
 async function canonicalizeWithPolicy(
   value: string,
-  policy: { evaluate(emailDomain: string): Promise<MailPolicyDecision> },
+  policy: { evaluate(emailDomain: string, options?: { forceMxRefresh?: boolean }): Promise<MailPolicyDecision> },
+  options?: { forceMxRefresh?: boolean },
 ) {
   const parsed = parseEmailAddress(value)
   if (!parsed) return null
 
-  const decision = await policy.evaluate(parsed.domain)
+  const decision = await policy.evaluate(parsed.domain, options)
   const email = canonicalizeAccountEmailWithDecision(value, decision)
   if (!email) return null
 

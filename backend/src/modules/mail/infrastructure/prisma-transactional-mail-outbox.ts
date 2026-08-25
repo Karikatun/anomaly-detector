@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import type { DbClient } from '../../../db'
 import type { Prisma } from '../../../generated/prisma/client'
 import type {
@@ -84,6 +86,7 @@ export function createPrismaTransactionalMailWriter(
 const DELIVERY_CONTROL_ID = 'reg_ru'
 const DELIVERY_WINDOW_MS = 60_000
 const PROTECTION_ALERT_RETENTION_MS = 30 * 24 * 60 * 60_000
+const policyProviderIdSchema = z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9_]{0,63}$/)
 
 export type MailOutboxRepositoryOptions = {
   circuitFailureThreshold: number
@@ -100,12 +103,34 @@ export function createPrismaMailOutboxRepository(
 ): MailOutboxRepository {
   return {
     acknowledgeProtectionAlert: (input) => acknowledgeProtectionAlert(db, input),
+    assignPolicyProvider: (input) => assignPolicyProvider(db, input),
     claim: (input) => claimNext(db, options, input),
     claimProtectionAlerts: (input) => claimProtectionAlerts(db, options, input),
     recordAccepted: (input) => recordAccepted(db, input),
     recordFailure: (input) => recordFailure(db, options, input),
     releaseBlocked: (input) => releaseBlocked(db, options, input),
   }
+}
+
+async function assignPolicyProvider(
+  db: DbClient,
+  input: { id: string; providerId: string; workerId: string },
+) {
+  const providerId = policyProviderIdSchema.parse(input.providerId)
+  return db.$transaction(async (tx) => {
+    await lockOutboxRow(tx, input.id)
+    const message = await tx.mailOutboxMessage.findFirst({
+      where: { id: input.id, leaseOwner: input.workerId, state: 'leased' },
+      select: { policyProviderId: true },
+    })
+    if (!message) return false
+    if (message.policyProviderId) return true
+    await tx.mailOutboxMessage.update({
+      where: { id: input.id },
+      data: { policyProviderId: providerId },
+    })
+    return true
+  })
 }
 
 async function claimProtectionAlerts(

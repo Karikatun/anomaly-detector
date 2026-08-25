@@ -284,13 +284,15 @@ and verify all of the following on the exact release image:
 - an occupied canonical address produces the non-disclosing conflict state but
   does not block sign-in or merge accounts.
 
-The published mail-service policy supplies only service-specific alias rules.
-An unlisted Yandex address remains a provider attribute with an exact local part
-and lowercase/IDNA domain, but is not thereby approved for local recovery
-delivery. Do not add global dot removal, plus-tag stripping, or local-part case
-folding.
+The published reviewed mail-provider catalog supplies exact public address
+domains, provider-specific alias rules and complete MX profiles for eligible
+custom `.ru`/`.рф` domains. An MX match identifies only the first receiving
+provider; it does not prove later forwarding or final storage. An unlisted
+Yandex address remains a provider attribute with an exact local part and
+lowercase/IDNA domain, but is not thereby approved for local recovery delivery.
+Do not add global dot removal, plus-tag stripping, or local-part case folding.
 
-Leave `ADMIN_USER_IDS` empty to disable the operator surface. When enabled, use immutable user UUIDs from the intended operators' profiles. The current implementation is read-only; the approved MVP adds only the audited commands listed in ADR 0011. Build and serve `adminapp` only from the separately protected `ops.anomaly-detector.ru` host; never include it in the player `webapp` output. Backend authorization and identical `404` responses remain mandatory behind the edge check.
+Leave `ADMIN_USER_IDS` empty to disable the operator surface. When enabled, use immutable user UUIDs from the intended operators' profiles. The system overview remains read-only; the implemented mail-policy surface adds only the audited catalog `/sync` and provider `/status` commands defined by ADR 0011 and ADR 0017. Build and serve `adminapp` only from the separately protected `ops.anomaly-detector.ru` host; never include it in the player `webapp` output. Backend authorization and identical `404` responses remain mandatory behind the edge check.
 
 Yandex Application Load Balancer places the source client address first in
 `X-Forwarded-For`. Validate this in the production-like smoke test before relying on IP
@@ -479,6 +481,13 @@ contract allows the attempt and configured retries to continue only until the or
 delivery deadline; the cancelled credential is already unusable, and terminal handling
 or deadline cleanup redacts the row.
 
+When the fresh pre-SMTP policy check identifies a provider, the worker records that
+stable classification identifier on the leased outbox row. The delivery overview
+groups by this event-time identifier rather than the current domain assessment, so
+later DNS changes or assessment cleanup do not rewrite historical attribution. This
+identifier remains technical outbox metadata until the configured terminal-retention
+deadline of at most 30 days, then is removed by the next daily cleanup.
+
 For provider outage or suspected credential compromise, set `MAIL_SMTP_ENABLED=false`
 and restart only the worker. Queued rows remain in PostgreSQL. Rotate the credential in
 Lockbox, verify TLS and a controlled message under issue #36, then re-enable the worker;
@@ -515,7 +524,16 @@ Do not run `prisma migrate dev` in production and do not hand-write Prisma migra
 
 ## Maintenance Cleanup Timer
 
-Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, expired Feedback Reports (180 days for `new`/`in_review`, 30 days after terminal or transferred status), expired 30-day analytics journeys with their raw events, analytics daily aggregates older than 13 months, expired recovery challenges and reset credentials, pending credential mail at its own `expiresAt`, security notifications pending for seven days, and accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. A two-sided Recovery Email replacement keeps its still-valid side and redacts only the expired side's code derivative; the row is removed when both sides expire. Pending-mail redaction and recovery cleanup run in one PostgreSQL transaction. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, expired mail-domain assessments, expired Feedback Reports (180 days for `new`/`in_review`, 30 days after terminal or transferred status), expired 30-day analytics journeys with their raw events, analytics daily aggregates older than 13 months, expired recovery challenges and reset credentials, pending credential mail at its own `expiresAt`, security notifications pending for seven days, and accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. A two-sided Recovery Email replacement keeps its still-valid side and redacts only the expired side's code derivative; the row is removed when both sides expire. Pending-mail redaction and recovery cleanup run in one PostgreSQL transaction. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+
+Custom-domain assessment stores one row per normalized domain with the
+classification outcome, bounded failure code when present, matched provider
+identifier, SHA-256 fingerprint of the complete normalized MX RRset when DNS
+returned one, and checked/expiry timestamps; it does not persist raw MX records.
+Retry assessments expire after 30 seconds and allowed or denied assessments
+after five minutes. Rechecking a domain updates that row rather than appending
+MX history. The next daily cleanup removes an expired row, normally adding no
+more than 24 hours after its TTL.
 
 `MAIL_OUTBOX_RETENTION_DAYS` defaults to 30 and is schema-bounded to at most 30.
 That value is the terminal-metadata deletion-eligibility deadline; the next daily
@@ -567,7 +585,7 @@ yc serverless trigger create timer \
   --retry-interval 30s
 ```
 
-After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired waiting rooms; cleaned ... expired recovery artifacts and ... expired pending mail records; removed ... terminal mail outbox records, ... expired analytics aggregates.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
+After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired waiting rooms, and ... expired mail-domain assessments; cleaned ... expired recovery artifacts and ... expired pending mail records; removed ... terminal mail outbox records, ... expired analytics aggregates.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
 
 ## Real-Time Pub/Sub
 

@@ -4,6 +4,7 @@ import { cleanupAnalyticsData } from './modules/analytics'
 import { cleanupExpiredAuthRecovery } from './modules/auth'
 import { cleanupFeedbackReports } from './modules/feedback'
 import {
+  cleanupExpiredMailDomainAssessments,
   cleanupExpiredPendingMailOutbox,
   cleanupTerminalMailOutbox,
 } from './modules/mail'
@@ -51,7 +52,7 @@ const cleanupMaintenance: CronTask = async ({ env, prisma }, now) => {
   const mailOutboxCutoff = new Date(
     now.getTime() - env.MAIL_OUTBOX_RETENTION_DAYS * dayMs,
   )
-  const [sessions, abuseBuckets, oauthTransactions, realtimeTickets, waitingRooms, recoveryAndPendingMail, mailOutbox, feedback, analytics] = await Promise.all([
+  const [sessions, abuseBuckets, oauthTransactions, realtimeTickets, waitingRooms, mailDomainAssessments, recoveryAndPendingMail, mailOutbox, feedback, analytics] = await Promise.all([
     prisma.authSession.deleteMany({
       where: {
         OR: [
@@ -76,13 +77,14 @@ const cleanupMaintenance: CronTask = async ({ env, prisma }, now) => {
         status: 'waiting',
       },
     }),
+    cleanupExpiredMailDomainAssessments(prisma, now),
     cleanupRecoveryAndPendingMail(prisma, now),
     cleanupTerminalMailOutbox(prisma, mailOutboxCutoff),
     cleanupFeedbackReports(prisma, now),
     cleanupAnalyticsData(prisma, now),
   ])
   console.log(
-    `Cron maintenance:cleanup removed ${sessions.count} stale sessions, ${abuseBuckets.count} expired abuse buckets, ${oauthTransactions.count} OAuth transactions, ${realtimeTickets.count} realtime tickets, ${waitingRooms.count} expired waiting rooms; cleaned ${recoveryAndPendingMail.recovery} expired recovery artifacts and ${recoveryAndPendingMail.pendingMail} expired pending mail records; removed ${mailOutbox.count} terminal mail outbox records, ${feedback.count} expired feedback reports, ${analytics.journeys} expired analytics journeys, and ${analytics.aggregates} expired analytics aggregates.`,
+    `Cron maintenance:cleanup removed ${sessions.count} stale sessions, ${abuseBuckets.count} expired abuse buckets, ${oauthTransactions.count} OAuth transactions, ${realtimeTickets.count} realtime tickets, ${waitingRooms.count} expired waiting rooms, and ${mailDomainAssessments.count} expired mail-domain assessments; cleaned ${recoveryAndPendingMail.recovery} expired recovery artifacts and ${recoveryAndPendingMail.pendingMail} expired pending mail records; removed ${mailOutbox.count} terminal mail outbox records, ${feedback.count} expired feedback reports, ${analytics.journeys} expired analytics journeys, and ${analytics.aggregates} expired analytics aggregates.`,
   )
 }
 

@@ -1,7 +1,9 @@
 import type {
-  MailPolicyEntry,
+  MailPolicyCanonicalization,
   MailPolicyView,
 } from '@anomaly-detector/contracts'
+
+import type { MailProviderCatalog } from './approved-mail-provider-catalog'
 
 export type Clock = {
   now(): Date
@@ -12,27 +14,10 @@ export type MailPolicyOperator = {
   id: string
 }
 
-export type ImportedMailServiceCandidate = {
-  evidence: 'service_description_mentions_mail'
-  registryEntryId: string
-  serviceDomain: string
+export type MailPolicyCommandReceipt = {
+  kind: 'catalog_synced' | 'status_changed'
+  version: number
 }
-
-export type ImportedMailServiceCandidates = {
-  candidates: ImportedMailServiceCandidate[]
-  checksum: string
-  sourceDate: string
-  sourceUrl: string
-}
-
-export type MailServiceCandidateSource = {
-  load(): Promise<ImportedMailServiceCandidates>
-}
-
-export type MailPolicyCommandReceipt =
-  | { failureCode: string; kind: 'import_failed' | 'import_rejected' }
-  | { importId: string; kind: 'import_succeeded' }
-  | { kind: 'policy_published' | 'status_changed'; version: number }
 
 export type StoredMailPolicyCommand = {
   fingerprint: string
@@ -41,56 +26,53 @@ export type StoredMailPolicyCommand = {
 
 export type MailPolicyCommitResult =
   | ({ kind: 'command_exists' } & StoredMailPolicyCommand)
-  | { kind: 'candidate_not_found' }
+  | { kind: 'catalog_version_conflict' }
   | { kind: 'committed'; receipt: MailPolicyCommandReceipt }
-  | { kind: 'domain_already_exists' }
-  | { kind: 'domain_not_found' }
-  | { kind: 'policy_limit_exceeded' }
+  | { kind: 'provider_not_found' }
   | { kind: 'version_conflict' }
 
 export type MailPolicyDecision = {
   acceptsNewAddress: boolean
   allowsRecoveryDelivery: boolean
-  canonicalization: MailPolicyEntry['canonicalization'] | null
-  state: MailPolicyEntry['state'] | 'unlisted'
+  canonicalization: MailPolicyCanonicalization | null
+  catalogVersion: number | null
+  providerId: string | null
+  requiresMxAssessment: boolean
+  source?: 'mx' | 'public_domain'
+  state: 'approved' | 'deprecated' | 'blocked' | 'unlisted'
   version: number
+}
+
+export type MailDomainAssessment = {
+  catalogVersion: number
+  checkedAt: Date
+  emailDomain: string
+  expiresAt: Date
+  failureCode: string | null
+  mxFingerprint: string | null
+  outcome: 'allowed' | 'denied' | 'retry'
+  providerId: string | null
 }
 
 export type MailPolicyRepository = {
   changeStatus(input: {
     actorId: string
     commandId: string
-    emailDomain: string
     expectedVersion: number
     fingerprint: string
+    providerId: string
     reason: string
     state: 'blocked' | 'deprecated'
   }): Promise<MailPolicyCommitResult>
-  commitImport(input: ImportedMailServiceCandidates & {
-    actorId: string
-    commandId: string
-    expectedVersion: number
-    fingerprint: string
-  }): Promise<MailPolicyCommitResult>
-  commitImportFailure(input: {
-    actorId: string
-    commandId: string
-    expectedVersion: number
-    failureCode: string
-    fingerprint: string
-  }): Promise<MailPolicyCommitResult>
-  evaluate(emailDomain: string): Promise<MailPolicyDecision>
+  evaluate(emailDomain: string, now: Date): Promise<MailPolicyDecision>
   findCommand(commandId: string): Promise<StoredMailPolicyCommand | null>
-  publish(input: {
+  readView(now: Date, availableCatalog: MailProviderCatalog): Promise<MailPolicyView>
+  storeAssessment(input: MailDomainAssessment): Promise<void>
+  syncCatalog(input: {
     actorId: string
-    additions: Array<{
-      canonicalization: MailPolicyEntry['canonicalization']
-      emailDomain: string
-      sourceCandidateId: string
-    }>
+    catalog: MailProviderCatalog
     commandId: string
     expectedVersion: number
     fingerprint: string
   }): Promise<MailPolicyCommitResult>
-  readView(now: Date): Promise<MailPolicyView>
 }

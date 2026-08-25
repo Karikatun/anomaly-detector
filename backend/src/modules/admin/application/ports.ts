@@ -11,8 +11,7 @@ import type {
   FeedbackRejectCommand,
   FeedbackResolveCommand,
   FeedbackTakeCommand,
-  MailPolicyImportCommand,
-  MailPolicyPublishCommand,
+  MailPolicySyncCommand,
   MailPolicyStatusCommand,
   MailOperationsView,
   RequestBudgetOverview,
@@ -37,9 +36,8 @@ type AdminOperator = {
 
 export type AdminMailPolicyOperator = {
   changeStatus(command: MailPolicyStatusCommand, operator: AdminOperator): Promise<MailOperationsView>
-  importCandidates(command: MailPolicyImportCommand, operator: AdminOperator): Promise<MailOperationsView>
-  publish(command: MailPolicyPublishCommand, operator: AdminOperator): Promise<MailOperationsView>
   read(): Promise<MailOperationsView>
+  syncCatalog(command: MailPolicySyncCommand, operator: AdminOperator): Promise<MailOperationsView>
 }
 
 export type AdminFeedbackOperator = {

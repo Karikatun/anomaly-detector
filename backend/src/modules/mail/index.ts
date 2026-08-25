@@ -7,11 +7,19 @@ import type {
   TransactionalMailDelivery,
 } from './application/transactional-mail-ports'
 import { TransactionalMailService } from './application/transactional-mail-service'
-import type { Clock, MailServiceCandidateSource } from './application/ports'
+import type { MxResolver } from './application/mail-domain-classifier'
+import type { Clock } from './application/ports'
 import { createAccountEmailCanonicalizer } from './application/approved-account-email'
-import { createPrismaMailPolicyRepository } from './infrastructure/prisma-mail-policy-repository'
-import { evaluateTransactionalAccountEmail } from './infrastructure/prisma-account-email-policy'
+import {
+  cleanupExpiredMailDomainAssessments,
+  createPrismaMailPolicyRepository,
+} from './infrastructure/prisma-mail-policy-repository'
+import {
+  evaluateTransactionalAccountEmail,
+  evaluateTransactionalMailProvider,
+} from './infrastructure/prisma-account-email-policy'
 import { createPrismaMailDeliveryOverviewReader } from './infrastructure/prisma-mail-delivery-overview-reader'
+import { NodeMxResolver } from './infrastructure/node-mx-resolver'
 import {
   cleanupExpiredPendingMailOutbox,
   cleanupTerminalMailOutbox,
@@ -23,7 +31,6 @@ import {
   type MailOutboxRepositoryOptions,
 } from './infrastructure/prisma-transactional-mail-outbox'
 import { RegRuSmtpDelivery, type RegRuSmtpConfig } from './infrastructure/reg-ru-smtp-delivery'
-import { RknMailServiceCandidateSource } from './infrastructure/rkn-mail-service-candidate-source'
 
 export function createMailModule(input: {
   clock?: Clock
@@ -35,19 +42,19 @@ export function createMailModule(input: {
     configured: boolean
     deliveryBudgetPerMinute: number
   }
-  source?: MailServiceCandidateSource
+  mxResolver?: MxResolver
 }) {
   const clock = input.clock ?? { now: () => new Date() }
   const service = new MailPolicyService({
     clock,
+    mxResolver: input.mxResolver ?? new NodeMxResolver(),
     repository: createPrismaMailPolicyRepository(input.db),
-    source: input.source ?? new RknMailServiceCandidateSource(),
   })
   const accountEmailCanonicalizer = createAccountEmailCanonicalizer({
-    evaluate: (emailDomain: string) => service.evaluate(emailDomain),
+    evaluate: (emailDomain, options) => service.evaluate(emailDomain, options),
   })
   const policy: MailDeliveryPolicy = {
-    evaluate: (emailDomain: string) => service.evaluate(emailDomain),
+    evaluate: (emailDomain, options) => service.evaluate(emailDomain, options),
   }
   const outboxDrainer = input.delivery && input.deliveryOptions
     ? new TransactionalMailDeliveryService({
@@ -75,11 +82,9 @@ export function createMailModule(input: {
   const operatorPolicy = {
     changeStatus: async (...args: Parameters<typeof service.changeStatus>) =>
       readOperationsView(await service.changeStatus(...args)),
-    importCandidates: async (...args: Parameters<typeof service.importCandidates>) =>
-      readOperationsView(await service.importCandidates(...args)),
-    publish: async (...args: Parameters<typeof service.publish>) =>
-      readOperationsView(await service.publish(...args)),
     read: async () => readOperationsView(await service.read()),
+    syncCatalog: async (...args: Parameters<typeof service.syncCatalog>) =>
+      readOperationsView(await service.syncCatalog(...args)),
   }
   return {
     accountEmailCanonicalizer,
@@ -105,14 +110,16 @@ export function createRegRuSmtpDelivery(config: RegRuSmtpConfig) {
 
 export {
   cancelQueuedTransactionalMail,
+  cleanupExpiredMailDomainAssessments,
   cleanupExpiredPendingMailOutbox,
   cleanupTerminalMailOutbox,
 }
 export { evaluateTransactionalAccountEmail }
+export { evaluateTransactionalMailProvider }
 export { deriveAccountEmailConfirmationCode } from './application/account-email-confirmation-code'
 export { derivePasswordResetToken } from './application/password-reset-token'
 
-export type { MailServiceCandidateSource } from './application/ports'
+export type { MxResolver } from './application/mail-domain-classifier'
 export type { ClaimedMailDeliveryProtectionAlert } from './application/transactional-mail-ports'
 export type { TransactionalMailRequest } from './application/transactional-mail-service'
 export { executeMailPolicy } from './transport/errors'

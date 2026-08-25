@@ -29,8 +29,8 @@ One of a user-held set of single-use secrets issued after a Recovery Email becom
 _Avoid_: email code, support code, backup password, administrator reset
 
 **Approved Mail Service**:
-A mail provider and its accepted address domains published by an administrator after reviewing candidates imported from an official registry. An approved service accepts new addresses, a deprecated service serves existing addresses only, and a manually blocked service also suspends recovery delivery because of a recorded legal or security incident.
-_Avoid_: Russian domain, RKN-approved email, permanent whitelist
+A reviewed mail provider published from the versioned product catalog with exact public address domains and complete MX profiles for eligible custom `.ru`/`.рф` domains. An approved service accepts new addresses, a deprecated service serves existing addresses only, and a manually blocked service also suspends recovery delivery because of a recorded legal or security incident.
+_Avoid_: Russian domain, RKN-approved email, MX-approved address, permanent whitelist
 
 **Feedback Report**:
 A user-submitted error report or product suggestion stored in the product-controlled support queue. It is not automatically published to the issue tracker, linked to an account, or sent to the Account Email.

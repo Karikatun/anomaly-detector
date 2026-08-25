@@ -32,6 +32,8 @@ describe('runCronTask', () => {
     const recoveryCodeReissueCalls: unknown[] = []
     const recoveryCodeEmailReplacementCalls: unknown[] = []
     const passwordResetCredentialCalls: unknown[] = []
+    const mailDomainAssessmentFindCalls: unknown[] = []
+    const mailDomainAssessmentDeleteCalls: unknown[] = []
     let transactionAttempts = 0
     const prismaModels = {
       recoveryEmailChallenge: {
@@ -151,6 +153,16 @@ describe('runCronTask', () => {
             return { count: 7 }
           },
         },
+        mailDomainAssessment: {
+          findMany: async (input: unknown) => {
+            mailDomainAssessmentFindCalls.push(input)
+            return [{ emailDomain: 'expired-private-domain.ru' }]
+          },
+          deleteMany: async (input: unknown) => {
+            mailDomainAssessmentDeleteCalls.push(input)
+            return { count: 1 }
+          },
+        },
         tenderRoom: {
           deleteMany: async (input: unknown) => {
             roomCalls.push(input)
@@ -267,6 +279,21 @@ describe('runCronTask', () => {
     }])
     expect(passwordResetCredentialCalls).toEqual([{
       where: { expiresAt: { lte: now } },
+    }])
+    expect(mailDomainAssessmentFindCalls).toEqual([{
+      orderBy: [
+        { expiresAt: 'asc' },
+        { emailDomain: 'asc' },
+      ],
+      select: { emailDomain: true },
+      take: 500,
+      where: { expiresAt: { lte: now } },
+    }])
+    expect(mailDomainAssessmentDeleteCalls).toEqual([{
+      where: {
+        emailDomain: { in: ['expired-private-domain.ru'] },
+        expiresAt: { lte: now },
+      },
     }])
     expect(feedbackCalls).toEqual([{
       where: {

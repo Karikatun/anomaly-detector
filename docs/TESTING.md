@@ -42,8 +42,9 @@ matrix at contract/backend integration level:
   revocation;
 - generic reset responses across missing, password, no-email, Yandex-only and
   rate-limited accounts;
-- Approved Mail Service version conflicts, idempotent operator commands,
-  last-known-good import, outbox retry/restart and blocked-provider behavior;
+- reviewed Approved Mail Service catalog conflicts, idempotent sync/status
+  commands, last-known-good policy, exact MX-profile classification and fresh
+  rechecks, outbox retry/restart and blocked-provider behavior;
 - analytics consent/refusal/revocation and retention without cross-use of
   security data;
 - Feedback Report authorization, safe projection, rate limits, workflow
