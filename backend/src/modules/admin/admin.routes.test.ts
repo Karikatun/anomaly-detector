@@ -22,6 +22,11 @@ const overview = {
 }
 
 const mailPolicyView = {
+  availableCatalog: {
+    diff: { addedProviderIds: [], changedProviderIds: [], removedProviderIds: [] },
+    providers: [],
+    version: 1,
+  },
   currentVersion: 0,
   delivery: {
     budget: { limitPerMinute: 60, usedInWindow: 0, windowStartedAt: null },
@@ -31,20 +36,17 @@ const mailPolicyView = {
     lastSmtpSuccessAt: null,
     outbox: { leased: 0, oldestQueuedAt: null, queued: 0 },
     provider: 'reg_ru' as const,
-    registryLastSuccessfulImportAt: null,
+    catalogLastSyncedAt: null,
     totals: { requested: 0, smtpAccepted: 0, temporaryFailures: 0, terminalFailures: 0 },
   },
   generatedAt: '2026-08-03T12:00:00.000Z',
-  latestAttempt: null,
-  lastSuccessfulImport: null,
   publishedPolicy: null,
 }
 
 const mailPolicy = {
   changeStatus: async () => mailPolicyView,
-  importCandidates: async () => mailPolicyView,
-  publish: async () => mailPolicyView,
   read: async () => mailPolicyView,
+  syncCatalog: async () => mailPolicyView,
 }
 
 const antiAbuse = {
@@ -196,7 +198,7 @@ test('returns the privacy-safe request-budget projection only from its separate 
   expect(JSON.stringify(body)).not.toMatch(/scope|keyHash|login|email|ip|userId|tenderId/i)
 })
 
-test('keeps every legacy mail endpoint response exact and anti-abuse-free', async () => {
+test('keeps the catalog mail endpoints exact and removes the legacy RKN mutations', async () => {
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
     authenticate: async () => admin,
@@ -210,33 +212,16 @@ test('keeps every legacy mail endpoint response exact and anti-abuse-free', asyn
     module.routes.request('/mail-policy', {
       headers: { Authorization: 'Bearer admin-token' },
     }),
-    module.routes.request('/mail-policy/import', {
+    module.routes.request('/mail-policy/sync', {
       body: JSON.stringify({ commandId, expectedVersion: 0 }),
-      headers: { Authorization: 'Bearer admin-token', 'Content-Type': 'application/json' },
-      method: 'POST',
-    }),
-    module.routes.request('/mail-policy/publish', {
-      body: JSON.stringify({
-        additions: [{
-          canonicalization: {
-            ignoreDots: false,
-            localPartCaseInsensitive: false,
-            stripPlusTag: false,
-          },
-          emailDomain: 'yandex.ru',
-          sourceCandidateId: '019f8099-7e26-7760-ad08-66d1d66b2721',
-        }],
-        commandId,
-        expectedVersion: 0,
-      }),
       headers: { Authorization: 'Bearer admin-token', 'Content-Type': 'application/json' },
       method: 'POST',
     }),
     module.routes.request('/mail-policy/status', {
       body: JSON.stringify({
         commandId,
-        emailDomain: 'yandex.ru',
         expectedVersion: 1,
+        providerId: 'yandex',
         reason: 'Security-инцидент',
         state: 'blocked',
       }),
@@ -248,6 +233,14 @@ test('keeps every legacy mail endpoint response exact and anti-abuse-free', asyn
   for (const response of await Promise.all(requests)) {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual(mailPolicyView)
+  }
+  for (const path of ['/mail-policy/import', '/mail-policy/publish']) {
+    const response = await module.routes.request(path, {
+      body: JSON.stringify({ commandId, expectedVersion: 0 }),
+      headers: { Authorization: 'Bearer admin-token', 'Content-Type': 'application/json' },
+      method: 'POST',
+    })
+    expect(response.status).toBe(404)
   }
 })
 
@@ -332,7 +325,7 @@ test('does not conceal an overview read failure as an access denial', async () =
   expect(response.status).toBe(500)
 })
 
-test('passes a bounded import command and authenticated operator to the mail policy owner', async () => {
+test('passes a bounded catalog sync command and authenticated operator to the mail policy owner', async () => {
   let received: unknown
   const module = createAdminModule({
     adminUserIds: new Set([admin.id]),
@@ -340,7 +333,7 @@ test('passes a bounded import command and authenticated operator to the mail pol
     feedback,
     mailPolicy: {
       ...mailPolicy,
-      importCandidates: async (command, operator) => {
+      syncCatalog: async (command, operator) => {
         received = { command, operator }
         return mailPolicyView
       },
@@ -349,7 +342,7 @@ test('passes a bounded import command and authenticated operator to the mail pol
     requestBudgetOverviewReader,
   })
 
-  const response = await module.routes.request('/mail-policy/import', {
+  const response = await module.routes.request('/mail-policy/sync', {
     body: JSON.stringify({
       commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
       expectedVersion: 0,

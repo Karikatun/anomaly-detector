@@ -14,8 +14,7 @@ import {
   feedbackResolveCommandSchema,
   feedbackTakeCommandSchema,
   loginRequestSchema,
-  mailPolicyImportCommandSchema,
-  mailPolicyPublishCommandSchema,
+  mailPolicySyncCommandSchema,
   mailPolicyStatusCommandSchema,
   mailOperationsViewSchema,
   requestBudgetOverviewSchema,
@@ -30,8 +29,7 @@ import {
   type FeedbackResolveCommand,
   type FeedbackTakeCommand,
   type LoginRequest,
-  type MailPolicyImportCommand,
-  type MailPolicyPublishCommand,
+  type MailPolicySyncCommand,
   type MailPolicyStatusCommand,
   type MailOperationsView,
   type RequestBudgetOverview,
@@ -190,12 +188,8 @@ export class AdminApi {
     )
   }
 
-  async importMailPolicy(input: MailPolicyImportCommand): Promise<MailOperationsView> {
-    return this.mailPolicyCommand('/api/operations/mail-policy/import', mailPolicyImportCommandSchema.parse(input))
-  }
-
-  async publishMailPolicy(input: MailPolicyPublishCommand): Promise<MailOperationsView> {
-    return this.mailPolicyCommand('/api/operations/mail-policy/publish', mailPolicyPublishCommandSchema.parse(input))
+  async syncMailPolicyCatalog(input: MailPolicySyncCommand): Promise<MailOperationsView> {
+    return this.mailPolicyCommand('/api/operations/mail-policy/sync', mailPolicySyncCommandSchema.parse(input))
   }
 
   async changeMailPolicyStatus(input: MailPolicyStatusCommand): Promise<MailOperationsView> {

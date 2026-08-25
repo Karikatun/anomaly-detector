@@ -3,8 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   adminOverviewQuerySchema,
   adminOverviewSchema,
-  mailPolicyImportCommandSchema,
-  mailPolicyPublishCommandSchema,
+  mailPolicySyncCommandSchema,
   mailPolicyStatusCommandSchema,
   mailOperationsViewSchema,
   mailPolicyViewSchema,
@@ -56,85 +55,78 @@ describe('adminOverviewSchema', () => {
 })
 
 describe('mailPolicyViewSchema', () => {
-  test('accepts a bounded candidate snapshot without registry personal data', () => {
+  test('accepts a bounded reviewed provider catalog without registry candidates', () => {
     const result = mailPolicyViewSchema.parse({
+      availableCatalog: {
+        diff: {
+          addedProviderIds: ['reg_ru'],
+          changedProviderIds: [],
+          removedProviderIds: [],
+        },
+        providers: [{
+          customDomain: {
+            allowedZones: ['ru', 'xn--p1ai'],
+            mxExchanges: ['mx1.hosting.reg.ru', 'mx2.hosting.reg.ru'],
+          },
+          displayName: 'REG.RU',
+          evidenceUrl: 'https://help.reg.ru/support/hosting/example',
+          providerId: 'reg_ru',
+          publicDomains: [],
+        }],
+        version: 1,
+      },
       currentVersion: 0,
       generatedAt: '2026-08-22T10:00:00.000Z',
-      latestAttempt: {
-        checksum: 'a'.repeat(64),
-        failureCode: null,
-        finishedAt: '2026-08-22T09:59:00.000Z',
-        id: '019f8099-7e26-7760-ad08-66d1d66b2718',
-        outcome: 'succeeded',
-        sourceDate: '2026-08-20',
-        sourceUrl: 'https://rkn.gov.ru/opendata/7705846236-InformationDistributor/data.xml',
-      },
-      lastSuccessfulImport: {
-        candidates: [{
-          evidence: 'service_description_mentions_mail',
-          id: '019f8099-7e26-7760-ad08-66d1d66b2719',
-          registryEntryId: '1-PP',
-          serviceDomain: 'mail.yandex.ru',
-        }],
-        diff: {
-          added: ['mail.yandex.ru'],
-          removed: [],
-          unchangedCount: 0,
-        },
-        importId: '019f8099-7e26-7760-ad08-66d1d66b2718',
-      },
       publishedPolicy: null,
     })
 
-    expect(result.lastSuccessfulImport?.candidates).toHaveLength(1)
-    expect(JSON.stringify(result)).not.toContain('distributorEmail')
-    expect(JSON.stringify(result)).not.toContain('distributorName')
+    expect(result.availableCatalog.providers).toHaveLength(1)
+    expect(JSON.stringify(result)).not.toMatch(/registry|candidate|distributor/i)
+    expect(() => mailPolicyViewSchema.parse({
+      ...result,
+      latestAttempt: null,
+    })).toThrow()
+    expect(() => mailPolicyViewSchema.parse({
+      ...result,
+      availableCatalog: {
+        ...result.availableCatalog,
+        providers: [{
+          ...result.availableCatalog.providers[0],
+          customDomain: {
+            allowedZones: ['ru'],
+            mxExchanges: Array.from({ length: 9 }, (_, index) => `mx${index}.example.ru`),
+          },
+        }],
+      },
+    })).toThrow()
   })
 
-  test('bounds the three explicit mutation commands and rejects generic states', () => {
+  test('bounds provider catalog sync and status commands', () => {
     const commandId = '019f8099-7e26-7760-ad08-66d1d66b2720'
-    expect(mailPolicyImportCommandSchema.parse({ commandId, expectedVersion: 0 })).toEqual({
+    expect(mailPolicySyncCommandSchema.parse({ commandId, expectedVersion: 0 })).toEqual({
       commandId,
       expectedVersion: 0,
     })
-    expect(mailPolicyPublishCommandSchema.parse({
-      additions: [{
-        canonicalization: {
-          ignoreDots: false,
-          localPartCaseInsensitive: false,
-          stripPlusTag: false,
-        },
-        emailDomain: 'yandex.ru',
-        sourceCandidateId: '019f8099-7e26-7760-ad08-66d1d66b2719',
-      }],
-      commandId,
-      expectedVersion: 0,
-    }).additions).toHaveLength(1)
     expect(mailPolicyStatusCommandSchema.parse({
       commandId,
-      emailDomain: 'yandex.ru',
       expectedVersion: 1,
+      providerId: 'yandex',
       reason: 'Подтверждённый security-инцидент',
       state: 'blocked',
     }).state).toBe('blocked')
 
     expect(() => mailPolicyStatusCommandSchema.parse({
       commandId,
-      emailDomain: 'yandex.ru',
       expectedVersion: 1,
+      providerId: 'yandex',
       reason: 'Вернуть разрешение',
       state: 'approved',
-    })).toThrow()
-    expect(() => mailPolicyPublishCommandSchema.parse({
-      additions: [],
-      commandId,
-      expectedVersion: 0,
     })).toThrow()
   })
 })
 
 describe('mailOperationsViewSchema', () => {
-  test('preserves the strict legacy mail shape without the separately versioned anti-abuse view', () => {
+  test('keeps the mail overview strict without the separately versioned anti-abuse view', () => {
     const result = mailOperationsViewSchema.parse({
       currentVersion: 0,
       delivery: {
@@ -143,7 +135,7 @@ describe('mailOperationsViewSchema', () => {
         configured: true,
         groups: [{
           requested: 12,
-          service: 'mail.yandex.ru',
+          providerId: 'yandex',
           smtpAccepted: 10,
           templateKind: 'account_email_confirmation',
           temporaryFailures: 2,
@@ -152,12 +144,19 @@ describe('mailOperationsViewSchema', () => {
         lastSmtpSuccessAt: '2026-08-22T12:01:00.000Z',
         outbox: { leased: 1, oldestQueuedAt: '2026-08-22T11:59:00.000Z', queued: 2 },
         provider: 'reg_ru',
-        registryLastSuccessfulImportAt: '2026-08-22T10:00:00.000Z',
+        catalogLastSyncedAt: '2026-08-22T10:00:00.000Z',
         totals: { requested: 12, smtpAccepted: 10, temporaryFailures: 2, terminalFailures: 0 },
       },
       generatedAt: '2026-08-22T12:02:00.000Z',
-      latestAttempt: null,
-      lastSuccessfulImport: null,
+      availableCatalog: {
+        diff: {
+          addedProviderIds: [],
+          changedProviderIds: [],
+          removedProviderIds: [],
+        },
+        providers: [],
+        version: 1,
+      },
       publishedPolicy: null,
     })
 

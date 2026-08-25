@@ -162,6 +162,17 @@ export type AuthRepository = {
     login: string
     now: Date
   }): Promise<boolean>
+  reserveRecoveryEmailPolicyBudget(input: {
+    ipAddress?: string
+    now: Date
+    operation: 'replacement' | 'start'
+    userId: string
+  }): Promise<void>
+  verifyRecoveryCodeEmailPolicyProbe(input: {
+    code: string
+    login: string
+    now: Date
+  }): Promise<{ canonicalKey: string; providerValue: string } | null>
   recoverPasswordWithRecoveryCode(input: {
     login: string
     newPasswordHash: string
@@ -181,6 +192,7 @@ export type AuthRepository = {
     token: string
   }): Promise<boolean>
   startRecoveryEmailWithRecoveryCode(input: {
+    budgetReserved: true
     expiresAt: Date
     ipAddress?: string
     login: string
@@ -191,6 +203,7 @@ export type AuthRepository = {
   }): Promise<{ expiresAt: Date; providerValue: string } | null>
   confirmRecoveryEmailWithRecoveryCode(input: {
     activatesAt: Date
+    budgetReserved: true
     code: string
     ipAddress?: string
     login: string
@@ -203,6 +216,7 @@ export type AuthRepository = {
     ipAddress?: string
     now: Date
     policyVersion: number
+    policyBudgetReserved: true
     providerValue: string
     sessionId: string
     userId: string
@@ -231,6 +245,7 @@ export type AuthRepository = {
     newCanonicalKey: string
     newProviderValue: string
     now: Date
+    policyBudgetReserved: true
     sessionId: string
     userId: string
   }): Promise<void>
@@ -261,12 +276,18 @@ export type AccountEmailCanonicalizer = {
     canonicalKey: string
     providerValue: string
   } | null>
-  canonicalizeForRecovery?(value: string): Promise<{
+  canonicalizeForRecovery?(value: string, options?: { forceMxRefresh?: boolean }): Promise<{
     canonicalKey: string
     policyVersion: number
     providerValue: string
   } | null>
   evaluate?(emailDomain: string): Promise<{
+    acceptsNewAddress: boolean
+    allowsRecoveryDelivery: boolean
+    state: 'approved' | 'blocked' | 'deprecated' | 'unlisted'
+    version: number
+  }>
+  evaluateFresh?(emailDomain: string): Promise<{
     acceptsNewAddress: boolean
     allowsRecoveryDelivery: boolean
     state: 'approved' | 'blocked' | 'deprecated' | 'unlisted'

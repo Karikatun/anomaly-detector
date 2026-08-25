@@ -1,13 +1,9 @@
 export type MailPolicyFailureKind =
-  | 'candidate_not_found'
+  | 'catalog_version_conflict'
   | 'command_conflict'
-  | 'domain_already_exists'
-  | 'domain_not_found'
   | 'invalid_domain'
-  | 'policy_limit_exceeded'
+  | 'provider_not_found'
   | 'recent_authentication_required'
-  | 'source_import_failed'
-  | 'suspicious_mass_removal'
   | 'version_conflict'
 
 export class MailPolicyFailure extends Error {

@@ -4,10 +4,10 @@ import type { MailPolicyDecision } from './ports'
 import { createAccountEmailCanonicalizer } from './approved-account-email'
 
 test('keeps the provider value separate from service-specific canonicalization', async () => {
-  const evaluatedDomains: string[] = []
-  const policy: { evaluate(emailDomain: string): Promise<MailPolicyDecision> } = {
-    evaluate: async (emailDomain) => {
-      evaluatedDomains.push(emailDomain)
+  const evaluations: Array<{ emailDomain: string; forceMxRefresh?: boolean }> = []
+  const policy = {
+    evaluate: async (emailDomain: string, options?: { forceMxRefresh?: boolean }): Promise<MailPolicyDecision> => {
+      evaluations.push({ emailDomain, forceMxRefresh: options?.forceMxRefresh })
       return {
         acceptsNewAddress: true,
         allowsRecoveryDelivery: true,
@@ -16,6 +16,9 @@ test('keeps the provider value separate from service-specific canonicalization',
           localPartCaseInsensitive: true,
           stripPlusTag: true,
         },
+        catalogVersion: 1,
+        providerId: 'yandex',
+        requiresMxAssessment: false,
         state: 'approved',
         version: 4,
       }
@@ -33,9 +36,9 @@ test('keeps the provider value separate from service-specific canonicalization',
       policyVersion: 4,
       providerValue: 'First.Last+campaign@xn--d1acpjx3f.xn--p1ai',
     })
-  expect(evaluatedDomains).toEqual([
-    'xn--d1acpjx3f.xn--p1ai',
-    'xn--d1acpjx3f.xn--p1ai',
+  expect(evaluations).toEqual([
+    { emailDomain: 'xn--d1acpjx3f.xn--p1ai', forceMxRefresh: undefined },
+    { emailDomain: 'xn--d1acpjx3f.xn--p1ai', forceMxRefresh: true },
   ])
 })
 
@@ -49,6 +52,9 @@ test('never removes dots or plus aliases without a published service rule', asyn
         localPartCaseInsensitive: false,
         stripPlusTag: false,
       },
+      catalogVersion: 1,
+      providerId: 'example',
+      requiresMxAssessment: false,
       state: 'approved',
       version: 1,
     }),
@@ -66,6 +72,9 @@ test('keeps an unpublished provider address without inventing alias rules', asyn
       acceptsNewAddress: false,
       allowsRecoveryDelivery: false,
       canonicalization: null,
+      catalogVersion: null,
+      providerId: null,
+      requiresMxAssessment: false,
       state: 'unlisted',
       version: 0,
     }),

@@ -64,12 +64,11 @@ maybeDescribe('concealed operations API integration', () => {
     await prisma.analyticsEvent.deleteMany()
     await prisma.analyticsJourney.deleteMany()
     await prisma.analyticsDailyAggregate.deleteMany()
+    await prisma.mailDomainAssessment.deleteMany()
     await prisma.mailPolicyAuditEvent.deleteMany()
     await prisma.mailPolicyCommand.deleteMany()
     await prisma.mailPolicyEntry.deleteMany()
     await prisma.mailPolicyVersion.deleteMany()
-    await prisma.mailRegistryCandidate.deleteMany()
-    await prisma.mailRegistryImport.deleteMany()
     await prisma.tenderRoom.deleteMany()
     await prisma.tender.deleteMany()
     await prisma.authSession.deleteMany()
@@ -152,37 +151,21 @@ maybeDescribe('concealed operations API integration', () => {
     expect(JSON.stringify(openApi)).not.toContain('/api/operations')
   })
 
-  test('allows only a recently authenticated operator to import and publish a reviewed policy', async () => {
+  test('allows only a recently authenticated operator to sync the reviewed provider catalog', async () => {
     const bootstrapApp = createApp({ env: baseEnv, prisma })
     const administrator = await register(bootstrapApp, 'mail-policy-admin')
     const player = await register(bootstrapApp, 'mail-policy-player')
-    let sourceCalls = 0
     const app = createApp({
       env: { ...baseEnv, ADMIN_USER_IDS: [administrator.user.id] },
-      mailPolicySource: {
-        load: async () => {
-          sourceCalls += 1
-          return {
-            candidates: [{
-              evidence: 'service_description_mentions_mail',
-              registryEntryId: '1-PP',
-              serviceDomain: 'mail.yandex.ru',
-            }],
-            checksum: 'a'.repeat(64),
-            sourceDate: '2026-08-20',
-            sourceUrl: 'https://rkn.gov.ru/opendata/7705846236-InformationDistributor/data.xml',
-          }
-        },
-      },
       prisma,
     })
-    const importBody = JSON.stringify({
+    const syncBody = JSON.stringify({
       commandId: '019f8099-7e26-7760-ad08-66d1d66b2740',
       expectedVersion: 0,
     })
     for (const authorization of [undefined, `Bearer ${player.accessToken}`]) {
-      const denied = await app.request('/api/operations/mail-policy/import', {
-        body: importBody,
+      const denied = await app.request('/api/operations/mail-policy/sync', {
+        body: syncBody,
         headers: {
           ...(authorization ? { Authorization: authorization } : {}),
           'Content-Type': 'application/json',
@@ -191,46 +174,40 @@ maybeDescribe('concealed operations API integration', () => {
       })
       expect(denied.status).toBe(404)
     }
-    expect(sourceCalls).toBe(0)
+    expect(await prisma.mailPolicyVersion.count()).toBe(0)
 
-    const importedResponse = await app.request('/api/operations/mail-policy/import', {
-      body: importBody,
+    const syncedResponse = await app.request('/api/operations/mail-policy/sync', {
+      body: syncBody,
       headers: {
         Authorization: `Bearer ${administrator.accessToken}`,
         'Content-Type': 'application/json',
       },
       method: 'POST',
     })
-    expect(importedResponse.status).toBe(200)
-    expect(importedResponse.headers.get('cache-control')).toBe('no-store')
-    const imported = mailOperationsViewSchema.parse(await importedResponse.json())
-    expect(sourceCalls).toBe(1)
-
-    const publishedResponse = await app.request('/api/operations/mail-policy/publish', {
-      body: JSON.stringify({
-        additions: [{
-          canonicalization: {
-            ignoreDots: false,
-            localPartCaseInsensitive: true,
-            stripPlusTag: false,
-          },
-          emailDomain: 'yandex.ru',
-          sourceCandidateId: imported.lastSuccessfulImport!.candidates[0].id,
-        }],
-        commandId: '019f8099-7e26-7760-ad08-66d1d66b2741',
-        expectedVersion: 0,
-      }),
-      headers: {
-        Authorization: `Bearer ${administrator.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
-    })
-    expect(publishedResponse.status).toBe(200)
-    expect(mailOperationsViewSchema.parse(await publishedResponse.json())).toMatchObject({
+    expect(syncedResponse.status).toBe(200)
+    expect(syncedResponse.headers.get('cache-control')).toBe('no-store')
+    const synced = mailOperationsViewSchema.parse(await syncedResponse.json())
+    expect(synced).toMatchObject({
       currentVersion: 1,
-      publishedPolicy: { entries: [{ emailDomain: 'yandex.ru', state: 'approved' }] },
+      publishedPolicy: {
+        catalogVersion: 1,
+      },
     })
+    expect(synced.publishedPolicy?.providers.map(({ providerId, state }) => ({ providerId, state })))
+      .toEqual(expect.arrayContaining([
+        { providerId: 'reg_ru', state: 'approved' },
+        { providerId: 'yandex', state: 'approved' },
+      ]))
+    for (const path of ['/api/operations/mail-policy/import', '/api/operations/mail-policy/publish']) {
+      expect((await app.request(path, {
+        body: syncBody,
+        headers: {
+          Authorization: `Bearer ${administrator.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })).status).toBe(404)
+    }
 
     await prisma.authSession.updateMany({
       where: { userId: administrator.user.id },
@@ -239,8 +216,8 @@ maybeDescribe('concealed operations API integration', () => {
     const staleResponse = await app.request('/api/operations/mail-policy/status', {
       body: JSON.stringify({
         commandId: '019f8099-7e26-7760-ad08-66d1d66b2742',
-        emailDomain: 'yandex.ru',
         expectedVersion: 1,
+        providerId: 'yandex',
         reason: 'Security-инцидент',
         state: 'blocked',
       }),

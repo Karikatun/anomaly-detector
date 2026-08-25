@@ -110,11 +110,16 @@ export class TransactionalMailDeliveryService {
       }
 
       let allowed = false
+      let providerId: string | null = null
       try {
-        const decision = await this.dependencies.policy.evaluate(claim.message.recipientDomain)
+        const decision = await this.dependencies.policy.evaluate(
+          claim.message.recipientDomain,
+          { forceMxRefresh: true },
+        )
         allowed = requiresNewAddress
           ? decision.acceptsNewAddress
           : decision.allowsRecoveryDelivery
+        providerId = decision.providerId ?? null
       } catch {
         allowed = false
       }
@@ -137,6 +142,17 @@ export class TransactionalMailDeliveryService {
         if (state === 'stale_claim') result.staleClaims += 1
         else result.terminalFailures += 1
         continue
+      }
+      if (providerId) {
+        const assigned = await this.dependencies.repository.assignPolicyProvider({
+          id: claim.message.id,
+          providerId,
+          workerId,
+        })
+        if (!assigned) {
+          result.staleClaims += 1
+          continue
+        }
       }
       if (!allowed) {
         const released = await this.dependencies.repository.releaseBlocked({

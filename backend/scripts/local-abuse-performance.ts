@@ -9,7 +9,7 @@ import {
   passwordHashNeedsRehash,
   verifyPassword,
 } from '../src/modules/auth/infrastructure/passwords'
-import { derivePasswordResetToken } from '../src/modules/mail'
+import { createMailModule, derivePasswordResetToken } from '../src/modules/mail'
 import { TransactionalMailDeliveryService } from '../src/modules/mail/application/transactional-mail-delivery-service'
 import {
   createPrismaMailOutboxRepository,
@@ -800,43 +800,20 @@ async function validateRecoveryCodePasswordReset(apiInstances: ApiInstance[], pr
 }
 
 async function ensureApprovedMailService(prisma: DbClient) {
-  if (await prisma.mailPolicyVersion.count() > 0) return
-  const sourceImport = await prisma.mailRegistryImport.create({
-    data: {
-      actorId: crypto.randomUUID(),
-      addedDomains: ['mail.ru'],
-      checksum: 'a'.repeat(64),
-      outcome: 'succeeded',
-      removedDomains: [],
-      sourceDate: '2026-08-25',
-      sourceUrl: 'https://example.test/registry.xml',
-      unchangedCount: 0,
-    },
+  const policy = createMailModule({ db: prisma }).operatorPolicy
+  const current = await policy.read()
+  const synced = await policy.syncCatalog({
+    commandId: crypto.randomUUID(),
+    expectedVersion: current.currentVersion,
+  }, {
+    authenticatedAt: new Date(),
+    id: crypto.randomUUID(),
   })
-  const candidate = await prisma.mailRegistryCandidate.create({
-    data: {
-      evidence: 'service_description_mentions_mail',
-      importId: sourceImport.id,
-      registryEntryId: 'local-benchmark-mail-service',
-      serviceDomain: 'mail.ru',
-    },
-  })
-  await prisma.mailPolicyVersion.create({
-    data: {
-      entries: {
-        create: {
-          emailDomain: 'mail.ru',
-          ignoreDots: false,
-          localPartCaseInsensitive: true,
-          sourceCandidateId: candidate.id,
-          state: 'approved',
-          stripPlusTag: false,
-        },
-      },
-      publishedBy: crypto.randomUUID(),
-      version: 1,
-    },
-  })
+  const vkMail = synced.publishedPolicy?.providers.find(({ providerId }) =>
+    providerId === 'vk_mail')
+  if (!vkMail || vkMail.state !== 'approved') {
+    throw new Error('Reviewed mail catalog must approve VK Mail for the local benchmark')
+  }
 }
 
 async function seedRecoveryEmail(prisma: DbClient, userId: string, value: string) {
@@ -846,6 +823,7 @@ async function seedRecoveryEmail(prisma: DbClient, userId: string, value: string
       cancellationSessionIds: [],
       canonicalKey: value.toLowerCase(),
       policyVersion: 1,
+      providerId: 'vk_mail',
       providerValue: value,
       requestedAt: new Date(Date.now() - 86_400_000),
       userId,

@@ -45,6 +45,9 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     await prisma.mailOutboxMessage.deleteMany()
     await prisma.mailDeliveryProtectionAlert.deleteMany()
     await prisma.mailDeliveryControl.deleteMany()
+    await prisma.mailDomainAssessment.deleteMany({
+      where: { emailDomain: 'outbox-attribution.ru' },
+    })
   })
 
   afterAll(async () => {
@@ -1077,6 +1080,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       },
     })
     const sent: RenderedTransactionalMail[] = []
+    const policyChecks: Array<{ emailDomain: string; forceMxRefresh?: boolean }> = []
     const service = new TransactionalMailDeliveryService({
       confirmationCodeSecret,
       delivery: {
@@ -1086,7 +1090,10 @@ maybeDescribe('Prisma transactional mail outbox', () => {
         },
       },
       policy: {
-        evaluate: async () => ({ acceptsNewAddress: false, allowsRecoveryDelivery: true }),
+        evaluate: async (emailDomain, options) => {
+          policyChecks.push({ emailDomain, forceMxRefresh: options?.forceMxRefresh })
+          return { acceptsNewAddress: false, allowsRecoveryDelivery: true }
+        },
       },
       repository: createPrismaMailOutboxRepository(prisma, {
         circuitFailureThreshold: 10,
@@ -1109,6 +1116,10 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })
     expect(sent).toHaveLength(1)
     expect(sent[0]?.messageId).toBe(`<${recoveryMessageId}@anomaly-detector.ru>`)
+    expect(policyChecks).toEqual([
+      { emailDomain: 'yandex.ru', forceMxRefresh: true },
+      { emailDomain: 'yandex.ru', forceMxRefresh: true },
+    ])
     expect(await prisma.mailDeliveryControl.findUniqueOrThrow({
       where: { id: 'reg_ru' },
       select: { deliveriesInWindow: true },
@@ -1302,7 +1313,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     )
   })
 
-  test('suppresses small service groups from the operator delivery projection', async () => {
+  test('suppresses small provider groups from the operator delivery projection', async () => {
     const enqueuer = createEnqueuer()
     for (const suffix of ['70', '71', '72', '73']) {
       await enqueuer.enqueue({
@@ -1330,13 +1341,86 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })
     view = await reader.read(scenarioTime())
     expect(view.groups).toEqual([{
+      providerId: 'other',
       requested: 5,
-      service: 'other',
       smtpAccepted: 0,
       templateKind: 'account_email_confirmation',
       temporaryFailures: 0,
       terminalFailures: 0,
     }])
+  })
+
+  test('keeps the provider attribution captured by the delivery worker after MX assessment changes', async () => {
+    const enqueuer = createEnqueuer()
+    for (const suffix of ['75', '76', '77', '78', '79']) {
+      await enqueuer.enqueue({
+        ...request,
+        messageId: `019f8099-7e26-7760-ad08-66d1d66b28${suffix}`,
+        recipient: 'owner@outbox-attribution.ru',
+      })
+    }
+    const service = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
+      delivery: { send: async () => ({ kind: 'accepted' }) },
+      policy: {
+        evaluate: async () => ({
+          acceptsNewAddress: true,
+          allowsRecoveryDelivery: true,
+          providerId: 'reg_ru',
+        }),
+      },
+      repository: createPrismaMailOutboxRepository(prisma, {
+        circuitFailureThreshold: 3,
+        circuitOpenMs: 60_000,
+        deliveryBudgetPerMinute: 20,
+        leaseMs: 30_000,
+        maxAttempts: 3,
+        retryBaseMs: 1_000,
+      }),
+    })
+
+    await expect(service.drain({
+      limit: 5,
+      now: scenarioTime(),
+      workerId: 'worker-provider-attribution',
+    })).resolves.toMatchObject({ accepted: 5 })
+
+    await prisma.mailDomainAssessment.create({
+      data: {
+        catalogVersion: 1,
+        checkedAt: scenarioTime(1),
+        emailDomain: 'outbox-attribution.ru',
+        expiresAt: scenarioTime(5 * 60_000),
+        outcome: 'allowed',
+        providerId: 'yandex',
+      },
+    })
+    await prisma.mailDomainAssessment.delete({
+      where: { emailDomain: 'outbox-attribution.ru' },
+    })
+
+    const stored = await prisma.$queryRaw<Array<{ policy_provider_id: string | null }>>`
+      SELECT policy_provider_id
+      FROM mail_outbox_messages
+      WHERE recipient_domain = 'outbox-attribution.ru'
+      ORDER BY message_id
+    `
+    expect(stored).toEqual(Array.from({ length: 5 }, () => ({
+      policy_provider_id: 'reg_ru',
+    })))
+
+    const reader = createPrismaMailDeliveryOverviewReader(prisma, {
+      configured: true,
+      deliveryBudgetPerMinute: 60,
+    })
+    expect((await reader.read(scenarioTime())).groups).toContainEqual({
+      providerId: 'reg_ru',
+      requested: 5,
+      smtpAccepted: 5,
+      templateKind: 'account_email_confirmation',
+      temporaryFailures: 0,
+      terminalFailures: 0,
+    })
   })
 
   test('cleanup removes only terminal outbox records after retention', async () => {

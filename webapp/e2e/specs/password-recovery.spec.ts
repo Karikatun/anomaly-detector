@@ -2,7 +2,10 @@ import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 
 import { createPrisma, type DbClient } from '../../../backend/src/db'
-import { derivePasswordResetToken } from '../../../backend/src/modules/mail'
+import {
+  createMailModule,
+  derivePasswordResetToken,
+} from '../../../backend/src/modules/mail'
 import { defaultDatabaseUrl, defaultE2eJwtSecret } from '../env'
 import { expect, registerBrowserUser, test } from '../helpers/test'
 
@@ -41,6 +44,7 @@ test('requests a generic link, resets once, rejects the old session, and require
         cancellationSessionIds: [],
         canonicalKey: `${login}@mail.ru`,
         policyVersion: 1,
+        providerId: 'vk_mail',
         providerValue: `${login}@mail.ru`,
         requestedAt: new Date(Date.now() - 86_400_000),
         userId: user.id,
@@ -138,41 +142,17 @@ async function expectNoAxeViolations(page: Page) {
 }
 
 async function seedApprovedMailService(prisma: DbClient, emailDomain: string) {
-  const sourceImport = await prisma.mailRegistryImport.create({
-    data: {
-      actorId: crypto.randomUUID(),
-      addedDomains: [emailDomain],
-      checksum: 'b'.repeat(64),
-      outcome: 'succeeded',
-      removedDomains: [],
-      sourceDate: '2026-08-23',
-      sourceUrl: 'https://example.test/e2e-registry.xml',
-      unchangedCount: 0,
-    },
+  const policy = createMailModule({ db: prisma }).operatorPolicy
+  const current = await policy.read()
+  const synced = await policy.syncCatalog({
+    commandId: crypto.randomUUID(),
+    expectedVersion: current.currentVersion,
+  }, {
+    authenticatedAt: new Date(),
+    id: crypto.randomUUID(),
   })
-  const candidate = await prisma.mailRegistryCandidate.create({
-    data: {
-      evidence: 'service_description_mentions_mail',
-      importId: sourceImport.id,
-      registryEntryId: `e2e-${crypto.randomUUID()}`,
-      serviceDomain: emailDomain,
-    },
-  })
-  const latest = await prisma.mailPolicyVersion.findFirst({ orderBy: { version: 'desc' } })
-  await prisma.mailPolicyVersion.create({
-    data: {
-      publishedBy: crypto.randomUUID(),
-      version: (latest?.version ?? 0) + 1,
-      entries: {
-        create: {
-          emailDomain,
-          ignoreDots: false,
-          localPartCaseInsensitive: true,
-          sourceCandidateId: candidate.id,
-          state: 'approved',
-          stripPlusTag: false,
-        },
-      },
-    },
-  })
+  if (!synced.publishedPolicy?.providers.some((provider) =>
+    provider.publicDomains.some((domain) => domain.emailDomain === emailDomain))) {
+    throw new Error(`Reviewed mail catalog does not include ${emailDomain}`)
+  }
 }

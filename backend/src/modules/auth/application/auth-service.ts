@@ -395,7 +395,7 @@ export class AuthService {
     if (challenge) {
       const canCancel = sessionId !== undefined
         && challenge.cancellationSessionIds.includes(sessionId)
-      if (!await this.recoveryDeliveryAllowed(challenge.providerValue)) {
+      if (!await this.recoveryDeliveryAllowed(challenge.providerValue, { forceMxRefresh: false })) {
         return {
           accountProtection: {
             blockedStage: 'pending_code',
@@ -452,7 +452,7 @@ export class AuthService {
     const canCancel = coolingOff
       && sessionId !== undefined
       && binding.cancellationSessionIds.includes(sessionId)
-    if (!await this.recoveryDeliveryAllowed(binding.providerValue)) {
+    if (!await this.recoveryDeliveryAllowed(binding.providerValue, { forceMxRefresh: false })) {
       return {
         accountProtection: {
           blockedStage: coolingOff ? 'cooling_off' : 'active',
@@ -496,12 +496,28 @@ export class AuthService {
       throw new AuthFailure('recovery_password_invalid', 'Current password is invalid')
     }
 
+    const now = this.dependencies.clock.now()
+    const record = await this.dependencies.repository.readAccountProtection(input.userId)
+    if (record?.hasYandexIdentity || record?.recoveryEmailBinding) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    if (record?.recoveryEmailChallenge) {
+      throw new AuthFailure(
+        'recovery_email_pending',
+        'Recovery Email confirmation is already pending',
+      )
+    }
+    await this.dependencies.repository.reserveRecoveryEmailPolicyBudget({
+      ipAddress: input.ipAddress,
+      now,
+      operation: 'start',
+      userId: input.userId,
+    })
     const candidate = await this.dependencies.accountEmailCanonicalizer
       ?.canonicalizeForRecovery?.(input.email)
     if (!candidate) {
       throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
     }
-    const now = this.dependencies.clock.now()
     await this.dependencies.repository.startRecoveryEmail({
       canonicalKey: candidate.canonicalKey,
       expectedPasswordHash: user.passwordHash,
@@ -509,6 +525,7 @@ export class AuthService {
       ipAddress: input.ipAddress,
       now,
       policyVersion: candidate.policyVersion,
+      policyBudgetReserved: true,
       providerValue: candidate.providerValue,
       sessionId: input.sessionId,
       userId: input.userId,
@@ -615,6 +632,12 @@ export class AuthService {
     ) {
       throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
     }
+    await this.dependencies.repository.reserveRecoveryEmailPolicyBudget({
+      ipAddress: input.ipAddress,
+      now,
+      operation: 'replacement',
+      userId: input.userId,
+    })
     const candidate = await this.dependencies.accountEmailCanonicalizer
       ?.canonicalizeForRecovery?.(input.email)
     if (!candidate || candidate.canonicalKey === await this.canonicalRecoveryKey(binding.providerValue)) {
@@ -628,6 +651,7 @@ export class AuthService {
       newCanonicalKey: candidate.canonicalKey,
       newProviderValue: candidate.providerValue,
       now,
+      policyBudgetReserved: true,
       sessionId: input.sessionId,
       userId: input.userId,
     })
@@ -767,6 +791,11 @@ export class AuthService {
     if (!await this.dependencies.passwords.verify(input.password, user.passwordHash)) {
       throw new AuthFailure('recovery_password_invalid', 'Current password is invalid')
     }
+    const protection = await this.dependencies.repository.readAccountProtection(input.userId)
+    if (!protection?.recoveryEmailBinding
+      || !await this.recoveryDeliveryAllowed(protection.recoveryEmailBinding.providerValue)) {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
     const now = this.dependencies.clock.now()
     const challenge = await this.dependencies.repository.startRecoveryCodeReissue({
       expectedPasswordHash: user.passwordHash,
@@ -792,6 +821,11 @@ export class AuthService {
     sessionId: string
     userId: string
   }) {
+    const protection = await this.dependencies.repository.readAccountProtection(input.userId)
+    if (!protection?.recoveryEmailBinding
+      || !await this.recoveryDeliveryAllowed(protection.recoveryEmailBinding.providerValue)) {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
     const recoveryCodes = createRecoveryCodeSet()
     const result = await this.dependencies.repository.confirmRecoveryCodeReissue({
       code: input.code,
@@ -866,11 +900,18 @@ export class AuthService {
     login: string
     recoveryCode: string
   }) {
+    const now = this.dependencies.clock.now()
+    const budgetAvailable = await this.dependencies.repository.reserveRecoveryCodeUseBudget({
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+    })
+    if (!budgetAvailable) return { outcome: 'accepted' as const }
     const candidate = await this.dependencies.accountEmailCanonicalizer
       ?.canonicalizeForRecovery?.(input.email)
     if (!candidate) return { outcome: 'accepted' as const }
-    const now = this.dependencies.clock.now()
     const result = await this.dependencies.repository.startRecoveryEmailWithRecoveryCode({
+      budgetReserved: true,
       expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
       ipAddress: input.ipAddress,
       login: input.login,
@@ -893,8 +934,23 @@ export class AuthService {
     login: string
   }) {
     const now = this.dependencies.clock.now()
+    const budgetAvailable = await this.dependencies.repository.reserveRecoveryCodeUseBudget({
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+    })
+    if (!budgetAvailable) return { outcome: 'accepted' as const }
+    const probe = await this.dependencies.repository.verifyRecoveryCodeEmailPolicyProbe({
+      code: input.code,
+      login: input.login,
+      now,
+    })
+    if (!probe || !await this.recoveryNewAddressAllowed(probe.providerValue, probe.canonicalKey)) {
+      return { outcome: 'accepted' as const }
+    }
     const result = await this.dependencies.repository.confirmRecoveryEmailWithRecoveryCode({
       activatesAt: new Date(now.getTime() + RECOVERY_EMAIL_COOLING_OFF_MS),
+      budgetReserved: true,
       code: input.code,
       ipAddress: input.ipAddress,
       login: input.login,
@@ -982,8 +1038,14 @@ export class AuthService {
     }
   }
 
-  private async recoveryDeliveryAllowed(providerValue: string) {
-    const evaluate = this.dependencies.accountEmailCanonicalizer?.evaluate
+  private async recoveryDeliveryAllowed(
+    providerValue: string,
+    options: { forceMxRefresh?: boolean } = { forceMxRefresh: true },
+  ) {
+    const canonicalizer = this.dependencies.accountEmailCanonicalizer
+    const evaluate = options.forceMxRefresh
+      ? canonicalizer?.evaluateFresh ?? canonicalizer?.evaluate
+      : canonicalizer?.evaluate
     if (!evaluate) return false
     const separator = providerValue.lastIndexOf('@')
     if (separator <= 0) return false
@@ -992,13 +1054,17 @@ export class AuthService {
 
   private async canonicalRecoveryKey(providerValue: string) {
     const candidate = await this.dependencies.accountEmailCanonicalizer
-      ?.canonicalizeForRecovery?.(providerValue)
+      ?.canonicalizeForRecovery?.(providerValue, { forceMxRefresh: false })
     return candidate?.canonicalKey ?? null
   }
 
-  private async recoveryNewAddressAllowed(providerValue: string, canonicalKey: string) {
+  private async recoveryNewAddressAllowed(
+    providerValue: string,
+    canonicalKey: string,
+    options: { forceMxRefresh?: boolean } = { forceMxRefresh: true },
+  ) {
     const candidate = await this.dependencies.accountEmailCanonicalizer
-      ?.canonicalizeForRecovery?.(providerValue)
+      ?.canonicalizeForRecovery?.(providerValue, options)
     return candidate?.canonicalKey === canonicalKey
   }
 
@@ -1014,8 +1080,15 @@ export class AuthService {
     if (input.expiresAt <= input.now) status = 'expired'
     else if (input.requirement === 'new_address'
       ? !input.canonicalKey
-        || !await this.recoveryNewAddressAllowed(input.providerValue, input.canonicalKey)
-      : !await this.recoveryDeliveryAllowed(input.providerValue)) status = 'service_blocked'
+        || !await this.recoveryNewAddressAllowed(
+          input.providerValue,
+          input.canonicalKey,
+          { forceMxRefresh: false },
+        )
+      : !await this.recoveryDeliveryAllowed(
+        input.providerValue,
+        { forceMxRefresh: false },
+      )) status = 'service_blocked'
     else if (input.confirmedAt) status = 'confirmed'
     else status = 'pending'
     return {

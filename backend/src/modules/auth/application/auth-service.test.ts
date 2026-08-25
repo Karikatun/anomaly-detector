@@ -50,6 +50,8 @@ const defaultAuthRepository: AuthRepository = {
   requestPasswordReset: unconfiguredRepositoryMethod('requestPasswordReset'),
   completePasswordReset: unconfiguredRepositoryMethod('completePasswordReset'),
   reserveRecoveryCodeUseBudget: unconfiguredRepositoryMethod('reserveRecoveryCodeUseBudget'),
+  reserveRecoveryEmailPolicyBudget: unconfiguredRepositoryMethod('reserveRecoveryEmailPolicyBudget'),
+  verifyRecoveryCodeEmailPolicyProbe: unconfiguredRepositoryMethod('verifyRecoveryCodeEmailPolicyProbe'),
   startRecoveryEmailWithRecoveryCode: unconfiguredRepositoryMethod('startRecoveryEmailWithRecoveryCode'),
   confirmRecoveryEmailWithRecoveryCode: unconfiguredRepositoryMethod('confirmRecoveryEmailWithRecoveryCode'),
 }
@@ -649,6 +651,129 @@ test('rejects an exhausted Recovery Code budget before expensive password hashin
   })).resolves.toEqual({ outcome: 'accepted' })
   expect(passwordHashCalls).toBe(0)
   expect(recoveryCalls).toBe(0)
+})
+
+test('rejects an exhausted Recovery Code budget before resolving a replacement email domain', async () => {
+  let canonicalizationCalls = 0
+  let startCalls = 0
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    accountEmailCanonicalizer: {
+      canonicalize: async () => null,
+      canonicalizeForRecovery: async () => {
+        canonicalizationCalls += 1
+        return null
+      },
+      evaluate: async () => ({
+        acceptsNewAddress: false,
+        allowsRecoveryDelivery: false,
+        canonicalization: null,
+        catalogVersion: null,
+        providerId: null,
+        requiresMxAssessment: false,
+        state: 'unlisted',
+        version: 0,
+      }),
+    },
+    clock: { now: () => new Date('2026-08-25T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      reserveRecoveryCodeUseBudget: async () => false,
+      startRecoveryEmailWithRecoveryCode: async () => {
+        startCalls += 1
+        return null
+      },
+    }),
+  })
+
+  await expect(service.startRecoveryEmailWithRecoveryCode({
+    email: 'attacker-domain.ru',
+    ipAddress: '198.51.100.91',
+    login: 'unknown-user',
+    recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+  })).resolves.toEqual({ outcome: 'accepted' })
+  expect(canonicalizationCalls).toBe(0)
+  expect(startCalls).toBe(0)
+})
+
+test('verifies a Recovery Email confirmation code before resolving its custom domain', async () => {
+  let canonicalizationCalls = 0
+  let confirmCalls = 0
+  const probeInputs: unknown[] = []
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    accountEmailCanonicalizer: {
+      canonicalize: async () => null,
+      canonicalizeForRecovery: async () => {
+        canonicalizationCalls += 1
+        return {
+          canonicalKey: 'Owner@custom-domain.ru',
+          policyVersion: 1,
+          providerId: 'reg_ru',
+          providerValue: 'Owner@custom-domain.ru',
+        }
+      },
+      evaluate: async () => ({
+        acceptsNewAddress: false,
+        allowsRecoveryDelivery: false,
+        canonicalization: null,
+        catalogVersion: null,
+        providerId: null,
+        requiresMxAssessment: false,
+        state: 'unlisted',
+        version: 0,
+      }),
+    },
+    clock: { now: () => new Date('2026-08-25T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      reserveRecoveryCodeUseBudget: async () => true,
+      verifyRecoveryCodeEmailPolicyProbe: async (input) => {
+        probeInputs.push(input)
+        return input.code === '123456'
+          ? {
+              canonicalKey: 'Owner@custom-domain.ru',
+              providerValue: 'Owner@custom-domain.ru',
+            }
+          : null
+      },
+      confirmRecoveryEmailWithRecoveryCode: async () => {
+        confirmCalls += 1
+        return {
+          activatesAt: new Date('2026-08-26T12:00:00.000Z'),
+          providerValue: 'Owner@custom-domain.ru',
+        }
+      },
+    }),
+  })
+
+  await expect(service.confirmRecoveryEmailWithRecoveryCode({
+    code: '000000',
+    login: 'user',
+  })).resolves.toEqual({ outcome: 'accepted' })
+  await expect(service.confirmRecoveryEmailWithRecoveryCode({
+    code: '123456',
+    login: 'user',
+  })).resolves.toMatchObject({ outcome: 'completed' })
+
+  expect(probeInputs).toEqual([
+    expect.objectContaining({ code: '000000', login: 'user' }),
+    expect.objectContaining({ code: '123456', login: 'user' }),
+  ])
+  expect(canonicalizationCalls).toBe(1)
+  expect(confirmCalls).toBe(1)
 })
 
 test('deleteAccount removes identity links only after Tender history is anonymised', async () => {

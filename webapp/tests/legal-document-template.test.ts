@@ -122,7 +122,7 @@ test('keeps published legal revisions aligned with the implemented personal-data
   expect(mailBasis).toContain('не более 7 дней')
   expect(mailBasis).toContain('не начинает новую SMTP-отправку')
   expect(mailBasis).toContain('worker до отмены уже арендовал запись')
-  expect(mailBasis).toContain('подлежащими удалению через 30 дней')
+  expect(mailBasis).toContain('подлежащими удалению не позднее чем через 30 дней')
 
   const feedbackBasis = privacy.slice(
     privacy.indexOf('### 4.9.'),

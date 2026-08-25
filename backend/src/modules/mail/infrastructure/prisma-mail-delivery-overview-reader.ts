@@ -6,7 +6,7 @@ import {
 import type { DbClient } from '../../../db'
 
 type RawDeliveryGroup = {
-  recipient_domain: string
+  provider_id: string
   requested: number
   smtp_accepted: number
   template_kind: string
@@ -15,8 +15,8 @@ type RawDeliveryGroup = {
 }
 
 type SafeDeliveryGroup = {
+  providerId: string
   requested: number
-  service: string
   smtpAccepted: number
   templateKind: RawDeliveryGroup['template_kind']
   temporaryFailures: number
@@ -38,8 +38,7 @@ export function createPrismaMailDeliveryOverviewReader(
         attemptGroups,
         oldestQueued,
         requested,
-        registryImport,
-        currentPolicy,
+        catalogSync,
         rawGroups,
       ] = await Promise.all([
         db.mailDeliveryControl.findUnique({ where: { id: 'reg_ru' } }),
@@ -51,25 +50,14 @@ export function createPrismaMailDeliveryOverviewReader(
           select: { createdAt: true },
         }),
         db.mailOutboxMessage.count(),
-        db.mailRegistryImport.findFirst({
-          where: { outcome: 'succeeded' },
-          orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
-          select: { finishedAt: true },
-        }),
-        db.mailPolicyVersion.findFirst({
-          orderBy: { version: 'desc' },
-          include: {
-            entries: {
-              select: {
-                emailDomain: true,
-                sourceCandidate: { select: { serviceDomain: true } },
-              },
-            },
-          },
+        db.mailPolicyAuditEvent.findFirst({
+          where: { kind: { in: ['mail_provider_catalog_synced', 'mail_provider_catalog_sync_unchanged'] } },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+          select: { occurredAt: true },
         }),
         db.$queryRaw<RawDeliveryGroup[]>`
           SELECT
-            m.recipient_domain,
+            COALESCE(m.policy_provider_id, 'other') AS provider_id,
             m.template_kind,
             COUNT(DISTINCT m.id)::int AS requested,
             COUNT(a.id) FILTER (WHERE a.outcome = 'smtp_accepted')::int AS smtp_accepted,
@@ -77,20 +65,14 @@ export function createPrismaMailDeliveryOverviewReader(
             COUNT(a.id) FILTER (WHERE a.outcome = 'terminal_failure')::int AS terminal_failures
           FROM mail_outbox_messages m
           LEFT JOIN mail_delivery_attempts a ON a.outbox_id = m.id
-          GROUP BY m.recipient_domain, m.template_kind
-          ORDER BY m.template_kind, m.recipient_domain
+          GROUP BY COALESCE(m.policy_provider_id, 'other'), m.template_kind
+          ORDER BY m.template_kind, provider_id
         `,
       ])
 
       const stateCounts = new Map(stateGroups.map((group) => [group.state, group._count._all]))
       const attemptCounts = new Map(attemptGroups.map((group) => [group.outcome, group._count._all]))
-      const serviceByEmailDomain = new Map(
-        currentPolicy?.entries.map((entry) => [
-          entry.emailDomain,
-          entry.sourceCandidate.serviceDomain,
-        ]) ?? [],
-      )
-      const grouped = combineSafeGroups(rawGroups, serviceByEmailDomain)
+      const grouped = combineSafeGroups(rawGroups)
       const circuitOpen = Boolean(
         options.configured
         && control?.circuitOpenUntil
@@ -121,7 +103,7 @@ export function createPrismaMailDeliveryOverviewReader(
           queued: stateCounts.get('queued') ?? 0,
         },
         provider: 'reg_ru',
-        registryLastSuccessfulImportAt: registryImport?.finishedAt.toISOString() ?? null,
+        catalogLastSyncedAt: catalogSync?.occurredAt.toISOString() ?? null,
         totals: {
           requested,
           smtpAccepted: attemptCounts.get('smtp_accepted') ?? 0,
@@ -135,15 +117,14 @@ export function createPrismaMailDeliveryOverviewReader(
 
 function combineSafeGroups(
   rawGroups: RawDeliveryGroup[],
-  serviceByEmailDomain: ReadonlyMap<string, string>,
 ) {
   const exact = new Map<string, SafeDeliveryGroup>()
   for (const group of rawGroups) {
-    const service = serviceByEmailDomain.get(group.recipient_domain) ?? 'other'
-    const key = `${group.template_kind}\u0000${service}`
+    const providerId = group.provider_id
+    const key = `${group.template_kind}\u0000${providerId}`
     const current = exact.get(key) ?? {
+      providerId,
       requested: 0,
-      service,
       smtpAccepted: 0,
       templateKind: group.template_kind,
       temporaryFailures: 0,
@@ -164,8 +145,8 @@ function combineSafeGroups(
       continue
     }
     const current = suppressed.get(group.templateKind) ?? {
+      providerId: 'other',
       requested: 0,
-      service: 'other',
       smtpAccepted: 0,
       templateKind: group.templateKind,
       temporaryFailures: 0,
@@ -182,6 +163,6 @@ function combineSafeGroups(
   }
   return visible
     .sort((left, right) => left.templateKind.localeCompare(right.templateKind)
-      || left.service.localeCompare(right.service))
+      || left.providerId.localeCompare(right.providerId))
     .slice(0, 50)
 }

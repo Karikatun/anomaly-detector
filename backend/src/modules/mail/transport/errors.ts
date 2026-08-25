@@ -12,9 +12,6 @@ export async function executeMailPolicy<T>(operation: () => Promise<T>): Promise
     if (error.kind === 'invalid_domain') {
       throw new AppError(400, 'BAD_REQUEST', error.message)
     }
-    if (error.kind === 'source_import_failed') {
-      throw new AppError(502, 'INTERNAL_ERROR', 'Mail registry source is unavailable')
-    }
     throw new AppError(409, 'CONFLICT', error.message)
   }
 }

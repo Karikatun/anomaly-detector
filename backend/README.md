@@ -59,7 +59,7 @@ Keep an explicit username and password in Prisma connection URLs even on local n
 
 `ADMIN_USER_IDS` is an optional comma-separated allowlist of immutable user UUIDs for the separate operator application. Empty means that nobody has access. The backend returns the same `404 NOT_FOUND` to anonymous and ordinary authenticated users and does not publish operator routes in OpenAPI. Obtain an operator UUID from that user's profile and configure it only in backend runtime env; changing a login or display name does not change access. The separate Caddy-host is an additional edge boundary, not a replacement for this backend check.
 
-The operator overview remains read-only. Approved Mail Service policy exposes a safe read projection plus narrow audited `/import`, `/publish`, and `/status` commands; those policy mutations require a recent authenticated session. A separate read-only `/api/operations/mail-policy/anti-abuse` endpoint preserves the existing mail command-response contract. It returns only broad active-window lower bounds from authenticated-account scopes; public login, registration, password-reset and Recovery Code scopes are excluded from the query. A remaining scope contributes only after at least ten keys reach its limit, and each scope is rounded down to a multiple of ten before the surface rollup. Scope names, exact request totals, HMAC hashes and user, login, email, IP, Room or Tender identities are never returned. This is operational coarsening for the trusted allowlisted operator boundary, not a differential-privacy guarantee against a compromised operator controlling many accounts. Feedback Report processing has its own protected queue and only take, resolve, reject, record-sanitized-GitHub-number, and delete-contact commands. Both command sets require an allowlisted operator UUID, an optimistic version precondition, an idempotent `commandId`, and immutable audit. Feedback source text and authorship cannot be edited, and no command publishes an external issue or sends mail automatically.
+The operator overview remains read-only. Approved Mail Service policy exposes a safe read projection plus narrow audited `/sync` and `/status` commands. `/sync` atomically applies the bundled reviewed provider catalog; it does not import candidates from RKN or discover providers from DNS. Both policy mutations require a recent authenticated session, an allowlisted operator UUID, an optimistic version precondition, an idempotent `commandId`, and immutable audit. A separate read-only `/api/operations/mail-policy/anti-abuse` endpoint preserves the existing mail command-response contract. It returns only broad active-window lower bounds from authenticated-account scopes; public login, registration, password-reset and Recovery Code scopes are excluded from the query. A remaining scope contributes only after at least ten keys reach its limit, and each scope is rounded down to a multiple of ten before the surface rollup. Scope names, exact request totals, HMAC hashes and user, login, email, IP, Room or Tender identities are never returned. This is operational coarsening for the trusted allowlisted operator boundary, not a differential-privacy guarantee against a compromised operator controlling many accounts. Feedback Report processing has its own protected queue and only take, resolve, reject, record-sanitized-GitHub-number, and delete-contact commands. Feedback commands use the same operator boundary. Feedback source text and authorship cannot be edited, and no command publishes an external issue or sends mail automatically.
 
 `COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production also requires `WEBAPP_ORIGIN`: one origin-only HTTPS URL for the player application, included in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
 
@@ -77,7 +77,7 @@ Recovery Email has not yet been published to production, so its first release as
 
 Do not roll this release back to an intermediate image that still exposes Recovery Email replacement but charges those shared budgets once per command. That image is not budget-compatible even after current rows expire. Roll forward to a compatible image, or block the complete `/api/auth/account-protection/recovery-email/*` contour at the trusted ingress until a compatible revision is running. A rollback to the pre-feature production image is safe only because those routes are absent; record that route check in rollback evidence.
 
-`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `maintenance:cleanup` daily to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`; the same task removes expired abuse buckets, unfinished OAuth transactions, one-time realtime tickets, waiting rooms older than 24 hours, expired Feedback Reports, and terminal mail outbox rows. `auth:sessions:cleanup` remains a backwards-compatible alias for the same maintenance task.
+`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `maintenance:cleanup` daily to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`; the same task removes expired abuse buckets, unfinished OAuth transactions, one-time realtime tickets, waiting rooms older than 24 hours, expired mail-domain assessments, expired Feedback Reports, and terminal mail outbox rows. `auth:sessions:cleanup` remains a backwards-compatible alias for the same maintenance task.
 
 Yandex Object Storage env is optional. Leave `YANDEX_STORAGE_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
 
@@ -121,8 +121,8 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 - `GET /health/live`
 - `GET /health/ready`
 
-The remaining approved but not yet implemented Public MVP extensions are specified in
-ADRs 0005–0016 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). The main
+The approved Public MVP extensions and their completion status are specified in
+ADRs 0005–0017 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). The main
 remaining product slice is consent-scoped funnel analytics; production mail,
 domain, legal and release verification remain separate owner-operated gates.
 Do not add env keys or advertise endpoints in this README until their
@@ -152,10 +152,23 @@ edit source content. `maintenance:cleanup` deletes `new`/`in_review` reports at
 protection state. A Yandex-managed address is masked by the server; conflict and
 unavailable states contain no address. The full provider value and the separate
 canonical uniqueness key remain private persistence fields. Domains are
-lowercased and IDNA-normalised. Dot, plus-tag, and local-part case rules are
-applied only from the published service policy; an unlisted Yandex address is
-still retained as a provider attribute without inventing alias rules or making
-it eligible for local recovery delivery.
+lowercased and IDNA-normalised. Exact public domains and provider-specific local
+part rules come only from the published reviewed catalog. A custom `.ru`/`.рф`
+domain is eligible only while its complete current MX set exactly matches one
+published `approved` provider; unavailable DNS remains retryable, while an
+absent, unknown or mixed profile fails closed. Recovery checks force a fresh MX
+assessment, and the delivery worker repeats it before SMTP. An unlisted Yandex
+address is still retained as a provider attribute without inventing alias rules
+or making it eligible for local recovery delivery.
+
+Each custom-domain assessment is one row keyed by the normalized domain. It
+stores the classification outcome, a bounded failure code when present, the
+matched provider identifier when any, a SHA-256 fingerprint of the complete
+normalized MX RRset when DNS returned one, and checked/expiry timestamps; raw
+MX records are not persisted. Retry assessments expire after 30 seconds and
+allowed or denied assessments after five minutes. A repeated check updates the
+same row. Daily `maintenance:cleanup` removes expired rows, normally within 24
+hours after their assessment TTL.
 
 A password account can voluntarily start its first Recovery Email protection
 through the four recovery-email commands above. The first request verifies the
@@ -188,7 +201,12 @@ disabled by default. Confirmation codes are derived only at delivery from a
 domain-separated HMAC and are never stored in the outbox payload. Logical
 request fingerprints are keyed HMAC values, and
 accepted or terminal rows immediately redact the recipient and secret-bearing
-template payload. The shared PostgreSQL SMTP delivery budget and circuit breaker
+template payload. When the delivery policy identifies a provider, the worker
+records that stable classification identifier on the outbox row before SMTP; it
+is not retroactively reassigned when the domain assessment changes or expires.
+The identifier remains only as technical outbox metadata and follows the
+configured terminal-retention deadline of at most 30 days plus the next daily
+cleanup. The shared PostgreSQL SMTP delivery budget and circuit breaker
 persist each protection transition once. Workers claim those rows with an exclusive
 lease and deliver a safe structured event at least once before acknowledging it. The
 event contains only an allowlisted reason, occurrence time and stable transition time;

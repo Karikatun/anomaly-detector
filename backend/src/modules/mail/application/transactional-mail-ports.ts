@@ -96,6 +96,11 @@ export type MailOutboxRepository = {
     transitionAt: Date
     workerId: string
   }): Promise<boolean>
+  assignPolicyProvider(input: {
+    id: string
+    providerId: string
+    workerId: string
+  }): Promise<boolean>
   claim(input: {
     now: Date
     workerId: string
@@ -127,8 +132,9 @@ export type MailOutboxRepository = {
 }
 
 export type MailDeliveryPolicy = {
-  evaluate(emailDomain: string): Promise<{
+  evaluate(emailDomain: string, options: { forceMxRefresh: true }): Promise<{
     acceptsNewAddress: boolean
     allowsRecoveryDelivery: boolean
+    providerId?: string | null
   }>
 }

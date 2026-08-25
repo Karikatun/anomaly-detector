@@ -78,10 +78,12 @@ screen:
 - `auth` owns Account Email uniqueness, Yandex ID email synchronisation,
   Recovery Email state, password reset, Recovery Code, sessions and recovery
   anti-abuse policy;
-- a transactional-mail context owns Approved Mail Service versions,
-  provider-specific canonicalisation, operator publication commands, outbox and
-  the REG.RU delivery adapter; auth requests messages through a narrow port and
-  never imports the SMTP provider;
+- a transactional-mail context owns reviewed Approved Mail Service catalog
+  versions, exact public address domains, complete MX profiles for eligible
+  custom `.ru`/`.рф` domains, provider-specific canonicalisation, automatic
+  domain classification, operator sync/status commands, outbox and the REG.RU
+  delivery adapter; auth requests messages through a narrow port and never
+  imports the SMTP provider;
 - an analytics context owns consent-scoped journey events, retention and
   aggregate projections; it never consumes security telemetry as product data;
 - a feedback context owns Feedback Report intake, retention and operator

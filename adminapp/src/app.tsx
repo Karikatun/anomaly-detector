@@ -191,10 +191,9 @@ export default function App() {
         data={state.mailPolicy}
         onBack={() => setView('overview')}
         onChangeStatus={(command) => executeMailCommand(() => api.changeMailPolicyStatus(command))}
-        onImport={(command) => executeMailCommand(() => api.importMailPolicy(command))}
         onLogout={() => void logout()}
-        onPublish={(command) => executeMailCommand(() => api.publishMailPolicy(command))}
         onReload={reloadMailPolicy}
+        onSyncCatalog={(command) => executeMailCommand(() => api.syncMailPolicyCatalog(command))}
       />
     )
   }

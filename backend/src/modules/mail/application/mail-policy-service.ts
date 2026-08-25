@@ -1,88 +1,117 @@
 import { createHash } from 'node:crypto'
-import { domainToASCII } from 'node:url'
 
 import type {
-  MailPolicyImportCommand,
-  MailPolicyPublishCommand,
   MailPolicyStatusCommand,
+  MailPolicySyncCommand,
   MailPolicyView,
 } from '@anomaly-detector/contracts'
 
 import { MailPolicyFailure } from '../domain/errors'
+import {
+  APPROVED_MAIL_PROVIDER_CATALOG,
+} from './approved-mail-provider-catalog'
+import {
+  classifyMailDomain,
+  normalizeMailDomain,
+  type MxResolution,
+  type MxResolver,
+} from './mail-domain-classifier'
 import type {
   Clock,
   MailPolicyCommitResult,
   MailPolicyOperator,
   MailPolicyRepository,
   MailPolicyCommandReceipt,
-  MailServiceCandidateSource,
   StoredMailPolicyCommand,
 } from './ports'
 
 const RECENT_AUTHENTICATION_MS = 10 * 60 * 1_000
 const AUTHENTICATION_CLOCK_SKEW_MS = 30 * 1_000
+const ASSESSMENT_TTL_MS = 5 * 60 * 1_000
+const RETRY_ASSESSMENT_TTL_MS = 30 * 1_000
 
 export class MailPolicyService {
+  private readonly assessmentRefreshes = new Map<string, Promise<void>>()
+
   constructor(private readonly dependencies: {
     clock: Clock
+    mxResolver: MxResolver
     repository: MailPolicyRepository
-    source: MailServiceCandidateSource
   }) {}
 
   read(): Promise<MailPolicyView> {
-    return this.dependencies.repository.readView(this.dependencies.clock.now())
+    return this.dependencies.repository.readView(
+      this.dependencies.clock.now(),
+      APPROVED_MAIL_PROVIDER_CATALOG,
+    )
   }
 
-  evaluate(emailDomain: string) {
-    return this.dependencies.repository.evaluate(normalizeEmailDomain(emailDomain))
+  async evaluate(emailDomainInput: string, options: { forceMxRefresh?: boolean } = {}) {
+    const emailDomain = normalizeEmailDomain(emailDomainInput)
+    const now = this.dependencies.clock.now()
+    const current = await this.dependencies.repository.evaluate(emailDomain, now)
+    if (current.source === 'public_domain') return current
+
+    const catalogIsPublished = current.catalogVersion === APPROVED_MAIL_PROVIDER_CATALOG.version
+    if (!catalogIsPublished && !options.forceMxRefresh) {
+      return current
+    }
+    if (catalogIsPublished && !current.requiresMxAssessment && !options.forceMxRefresh) {
+      return current
+    }
+
+    await this.refreshAssessment(emailDomain, now, options.forceMxRefresh === true)
+    return this.dependencies.repository.evaluate(emailDomain, now)
   }
 
-  async importCandidates(command: MailPolicyImportCommand, operator: MailPolicyOperator) {
-    this.requireRecentAuthentication(operator.authenticatedAt)
-    const fingerprint = fingerprintOf({ type: 'import', expectedVersion: command.expectedVersion })
-    const existing = await this.dependencies.repository.findCommand(command.commandId)
-    if (existing) return this.resolveExisting(existing, fingerprint)
+  private async refreshAssessment(emailDomain: string, now: Date, forceMxRefresh: boolean) {
+    const existing = this.assessmentRefreshes.get(emailDomain)
+    if (existing) return existing
 
-    let imported
-    try {
-      imported = await this.dependencies.source.load()
-    } catch (error) {
-      const result = await this.dependencies.repository.commitImportFailure({
-        actorId: operator.id,
-        commandId: command.commandId,
-        expectedVersion: command.expectedVersion,
-        failureCode: sourceFailureCode(error),
-        fingerprint,
+    const refresh = (async () => {
+      if (!forceMxRefresh) {
+        const latest = await this.dependencies.repository.evaluate(emailDomain, now)
+        if (!latest.requiresMxAssessment) return
+      }
+      await this.resolveAndStoreAssessment(emailDomain, now)
+    })()
+      .finally(() => {
+        if (this.assessmentRefreshes.get(emailDomain) === refresh) {
+          this.assessmentRefreshes.delete(emailDomain)
+        }
       })
-      return this.resolveCommit(result, fingerprint)
-    }
-    return this.resolveCommit(await this.dependencies.repository.commitImport({
-      ...imported,
-      actorId: operator.id,
-      commandId: command.commandId,
-      expectedVersion: command.expectedVersion,
-      fingerprint,
-    }), fingerprint)
+    this.assessmentRefreshes.set(emailDomain, refresh)
+    return refresh
   }
 
-  async publish(command: MailPolicyPublishCommand, operator: MailPolicyOperator) {
+  private async resolveAndStoreAssessment(emailDomain: string, now: Date) {
+    const mx = await this.dependencies.mxResolver.resolve(emailDomain)
+    const classification = classifyMailDomain({ emailDomain, mx })
+    const retry = classification.kind === 'retry'
+    await this.dependencies.repository.storeAssessment({
+      catalogVersion: APPROVED_MAIL_PROVIDER_CATALOG.version,
+      checkedAt: now,
+      emailDomain,
+      expiresAt: new Date(now.getTime() + (retry ? RETRY_ASSESSMENT_TTL_MS : ASSESSMENT_TTL_MS)),
+      failureCode: classification.kind === 'allowed' ? null : classification.reason,
+      mxFingerprint: fingerprintMx(mx),
+      outcome: classification.kind === 'allowed' ? 'allowed' : classification.kind,
+      providerId: classification.kind === 'allowed' ? classification.providerId : null,
+    })
+  }
+
+  async syncCatalog(command: MailPolicySyncCommand, operator: MailPolicyOperator) {
     this.requireRecentAuthentication(operator.authenticatedAt)
-    const additions = command.additions
-      .map((addition) => ({
-        ...addition,
-        emailDomain: normalizeEmailDomain(addition.emailDomain),
-      }))
-      .sort((left, right) => left.emailDomain.localeCompare(right.emailDomain)
-        || left.sourceCandidateId.localeCompare(right.sourceCandidateId))
-    if (new Set(additions.map((addition) => addition.emailDomain)).size !== additions.length) {
-      throw new MailPolicyFailure('domain_already_exists', 'Published mail domains must be unique')
-    }
-    const fingerprint = fingerprintOf({ additions, expectedVersion: command.expectedVersion, type: 'publish' })
+    const fingerprint = fingerprintOf({
+      catalogVersion: APPROVED_MAIL_PROVIDER_CATALOG.version,
+      expectedVersion: command.expectedVersion,
+      type: 'sync-catalog',
+    })
     const existing = await this.dependencies.repository.findCommand(command.commandId)
     if (existing) return this.resolveExisting(existing, fingerprint)
-    return this.resolveCommit(await this.dependencies.repository.publish({
+    return this.resolveCommit(await this.dependencies.repository.syncCatalog({
       actorId: operator.id,
-      additions,
+      catalog: APPROVED_MAIL_PROVIDER_CATALOG,
       commandId: command.commandId,
       expectedVersion: command.expectedVersion,
       fingerprint,
@@ -91,10 +120,9 @@ export class MailPolicyService {
 
   async changeStatus(command: MailPolicyStatusCommand, operator: MailPolicyOperator) {
     this.requireRecentAuthentication(operator.authenticatedAt)
-    const emailDomain = normalizeEmailDomain(command.emailDomain)
     const normalized = {
-      emailDomain,
       expectedVersion: command.expectedVersion,
+      providerId: command.providerId,
       reason: command.reason.trim(),
       state: command.state,
       type: 'change-status',
@@ -105,9 +133,9 @@ export class MailPolicyService {
     return this.resolveCommit(await this.dependencies.repository.changeStatus({
       actorId: operator.id,
       commandId: command.commandId,
-      emailDomain: normalized.emailDomain,
       expectedVersion: normalized.expectedVersion,
       fingerprint,
+      providerId: normalized.providerId,
       reason: normalized.reason,
       state: normalized.state,
     }), fingerprint)
@@ -135,56 +163,29 @@ export class MailPolicyService {
     if (result.kind === 'version_conflict') {
       throw new MailPolicyFailure('version_conflict', 'Mail policy version changed before the command committed')
     }
-    if (result.kind === 'candidate_not_found') {
-      throw new MailPolicyFailure('candidate_not_found', 'Selected registry candidate is unavailable')
+    if (result.kind === 'catalog_version_conflict') {
+      throw new MailPolicyFailure('catalog_version_conflict', 'Mail provider catalog version must advance when definitions change')
     }
-    if (result.kind === 'domain_already_exists') {
-      throw new MailPolicyFailure('domain_already_exists', 'Mail policy already contains the domain')
-    }
-    if (result.kind === 'domain_not_found') {
-      throw new MailPolicyFailure('domain_not_found', 'Mail policy domain was not found')
-    }
-    if (result.kind === 'policy_limit_exceeded') {
-      throw new MailPolicyFailure('policy_limit_exceeded', 'Mail policy entry limit was reached')
+    if (result.kind === 'provider_not_found') {
+      throw new MailPolicyFailure('provider_not_found', 'Mail provider was not found in the current policy')
     }
     return this.resolveReceipt(result.receipt)
   }
 
-  private async resolveReceipt(receipt: MailPolicyCommandReceipt) {
-    if (receipt.kind === 'import_failed') {
-      throw new MailPolicyFailure('source_import_failed', 'Mail registry import failed closed')
-    }
-    if (receipt.kind === 'import_rejected') {
-      throw new MailPolicyFailure('suspicious_mass_removal', 'Mail registry import was rejected as suspicious')
-    }
-    return this.dependencies.repository.readView(this.dependencies.clock.now())
+  private async resolveReceipt(_receipt: MailPolicyCommandReceipt) {
+    return this.read()
   }
 }
 
 export function normalizeEmailDomain(value: string) {
-  const ascii = domainToASCII(value.trim().replace(/\.$/, '')).toLowerCase()
-  const labels = ascii.split('.')
-  if (
-    ascii.length < 1
-    || ascii.length > 253
-    || labels.length < 2
-    || labels.some((label) => label.length < 1
-      || label.length > 63
-      || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))
-  ) {
-    throw new MailPolicyFailure('invalid_domain', 'Mail domain is invalid')
-  }
-  return ascii
+  return normalizeMailDomain(value)
 }
 
 function fingerprintOf(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
 
-function sourceFailureCode(error: unknown) {
-  if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string') {
-    const code = error.code.slice(0, 64)
-    if (/^[a-z0-9_]+$/.test(code)) return code
-  }
-  return 'source_unavailable'
+function fingerprintMx(mx: MxResolution) {
+  if (mx.kind !== 'resolved') return null
+  return fingerprintOf([...mx.exchanges].map((value) => value.trim().toLowerCase()).sort())
 }
