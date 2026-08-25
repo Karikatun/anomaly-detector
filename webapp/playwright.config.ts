@@ -8,7 +8,26 @@ const frontendRoot = fileURLToPath(new URL('.', import.meta.url))
 const repositoryRoot = resolve(frontendRoot, '..')
 const backendRoot = resolve(repositoryRoot, 'backend')
 const websiteRoot = resolve(repositoryRoot, 'website')
+const maxE2eWorkers = 4
 
+function resolveE2eWorkers(env: NodeJS.ProcessEnv) {
+  const value = env.E2E_WORKERS
+  let workers = 2
+  if (value !== undefined) {
+    if (!/^[1-9]\d*$/.test(value)) {
+      throw new Error(`E2E_WORKERS must be an integer from 1 to ${maxE2eWorkers}`)
+    }
+
+    workers = Number(value)
+    if (!Number.isSafeInteger(workers) || workers > maxE2eWorkers) {
+      throw new Error(`E2E_WORKERS must be an integer from 1 to ${maxE2eWorkers}`)
+    }
+  }
+
+  return env.UX_AUDIT_DIR ? 1 : workers
+}
+
+const e2eWorkers = resolveE2eWorkers(process.env)
 const portPlan = await resolveE2ePorts()
 applyE2ePortEnv(portPlan)
 
@@ -50,7 +69,7 @@ export default defineConfig({
     timeout: 15_000,
   },
   fullyParallel: false,
-  workers: 1,
+  workers: e2eWorkers,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'e2e/.artifacts/report' }]],
