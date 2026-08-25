@@ -8,4 +8,5 @@ export type AuthenticatedTransport = {
     schema: TSchema,
     options?: HttpRequestOptions,
   ): Promise<z.infer<TSchema>>
+  requestNoContent(path: string, options?: HttpRequestOptions): Promise<void>
 }
