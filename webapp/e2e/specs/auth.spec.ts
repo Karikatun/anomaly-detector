@@ -528,6 +528,7 @@ test('shows masked Yandex protection and a non-disclosing email conflict state',
 test('keeps Recovery Email optional and completes its protected cooling-off flow', async ({ page }) => {
   await registerBrowserUser(page, 'Восстановление E2E', 'recovery-protection')
   let state: Record<string, unknown> = { state: 'password_unprotected' }
+  let startAttempts = 0
   const mutationBodies: unknown[] = []
   const analyticsEvents: string[] = []
   page.on('request', (request) => {
@@ -546,6 +547,20 @@ test('keeps Recovery Email optional and completes its protected cooling-off flow
     mutationBodies.push(route.request().postDataJSON())
     const pathname = new URL(route.request().url()).pathname
     if (pathname.endsWith('/start')) {
+      startAttempts += 1
+      if (startAttempts === 1) {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: {
+              code: 'BAD_REQUEST',
+              message: 'Recovery Email is unavailable',
+            },
+          }),
+        })
+        return
+      }
       state = {
         canCancel: true,
         codeExpiresAt: '2030-08-22T15:15:00.000Z',
@@ -590,6 +605,11 @@ test('keeps Recovery Email optional and completes its protected cooling-off flow
   await page.getByLabel('Почта восстановления').fill('player@mail.ru')
   await page.getByLabel('Текущий пароль').fill(e2ePassword)
   await page.getByRole('button', { name: 'Отправить код' }).click()
+  await expect(startDialog.getByRole('alert')).toHaveText(
+    'Этот адрес сейчас нельзя использовать. Причина скрыта для защиты аккаунтов.',
+  )
+  await expect(startDialog).not.toContainText('Recovery Email is unavailable')
+  await page.getByRole('button', { name: 'Отправить код' }).click()
   const codeDialog = page.getByRole('dialog', { name: 'Подтвердить почту' })
   await expect(codeDialog).toBeVisible()
   await expect(codeDialog).toContainText('p***@mail.ru')
@@ -607,6 +627,7 @@ test('keeps Recovery Email optional and completes its protected cooling-off flow
   await cancelDialog.getByRole('button', { name: 'Отменить защиту' }).click()
   await expect(page.getByText('Почта восстановления пока не настроена.')).toBeVisible()
   expect(mutationBodies).toEqual([
+    { email: 'player@mail.ru', password: e2ePassword },
     { email: 'player@mail.ru', password: e2ePassword },
     { code: '123456' },
     {},

@@ -610,7 +610,9 @@ function recoveryEmailErrorMessage(
       return t('profile.protection.errorCancelSession')
     }
     if (error.status === 429) return t('profile.protection.errorLimited')
-    if (error.status === 409) return t('profile.protection.errorUnavailable')
+    if (error.status === 400 || error.status === 409) {
+      return t('profile.protection.errorUnavailable')
+    }
   }
   return t('profile.protection.errorGeneric')
 }
