@@ -32,3 +32,18 @@ test('room refresh reads current state without repeating the join mutation', asy
     path: '/api/rooms/019be000-0000-7000-8000-000000000001',
   }])
 })
+
+test('leaving a waiting room accepts the successful no-content response', async () => {
+  const roomId = '019be000-0000-7000-8000-000000000001'
+  const api = new RoomsApi({
+    request: async () => {
+      throw new Error('Expected a JSON response')
+    },
+    requestNoContent: async (path, options) => {
+      expect(path).toBe(`/api/rooms/${roomId}/leave`)
+      expect(options?.method).toBe('POST')
+    },
+  } as AuthenticatedTransport)
+
+  await expect(api.leave(roomId)).resolves.toBeUndefined()
+})

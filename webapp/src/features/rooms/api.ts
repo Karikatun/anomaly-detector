@@ -10,7 +10,6 @@ import {
   type RoomView,
   type SetRoomReadyRequest,
 } from '@anomaly-detector/contracts'
-import { z } from 'zod'
 
 import type { AuthenticatedTransport } from '@/platform/api'
 
@@ -52,11 +51,9 @@ export class RoomsApi {
   }
 
   leave(roomId: string): Promise<void> {
-    return this.transport
-      .request(`/api/rooms/${roomId}/leave`, z.undefined(), {
-        method: 'POST',
-      })
-      .then(() => undefined)
+    return this.transport.requestNoContent(`/api/rooms/${roomId}/leave`, {
+      method: 'POST',
+    })
   }
 
   setReady(roomId: string, input: SetRoomReadyRequest): Promise<RoomView> {
