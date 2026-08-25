@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { registerBrowserUser } from '../helpers/test'
+import { e2ePassword, registerBrowserUser, uniqueLogin } from '../helpers/test'
 
 const origins = splitDomainOrigins()
 const legacyPlayerPaths = [
@@ -103,11 +103,28 @@ test('keeps the public root outside credentialed CORS and fixes both OAuth retur
   expect(page.url()).toBe(`${origins.app}/?auth_error=cancelled`)
 })
 
-test('keeps the secure refresh cookie host-only on the API auth path', async ({ page, context }) => {
+test('continues the public CTA into tutorial and keeps the secure refresh cookie host-only', async ({ page, context }) => {
+  await page.goto(origins.root)
+  const tutorialLink = page.getByRole('link', { name: 'Пройти обучение' }).first()
+  await expect(tutorialLink).toHaveAttribute('href', `${origins.app}/?continue=tutorial`)
+  await tutorialLink.click()
+  await expect(page).toHaveURL(`${origins.app}/?continue=tutorial`)
+  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true }))
+    .toHaveAttribute('aria-selected', 'true')
+
   const registrationResponse = page.waitForResponse((response) =>
     response.url() === `${origins.api}/api/auth/register`
       && response.request().method() === 'POST')
-  await registerBrowserUser(page, 'Split domain E2E', 'split-domain-target')
+  await page.getByLabel('Имя').fill('Split domain E2E')
+  await page.getByLabel('Логин').fill(uniqueLogin('split-domain-target'))
+  await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
+  await page.getByRole('checkbox', { name: 'Я даю согласие на обработку персональных данных' }).check()
+  await page.getByRole('checkbox', { name: 'Я принимаю Пользовательское соглашение' }).check()
+  await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
+  await expect(page).toHaveURL(`${origins.app}/tutorial`)
+  await expect(page.getByRole('dialog', {
+    name: 'Добро пожаловать на исследовательскую станцию',
+  })).toBeVisible()
 
   const response = await registrationResponse
   const parsedCookies = (await response.headerValues('set-cookie')).map(parseSetCookie)

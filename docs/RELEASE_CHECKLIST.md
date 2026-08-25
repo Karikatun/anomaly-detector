@@ -92,8 +92,13 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 - [ ] If SSH, VM image, host OS, firewall, network, or Security Groups changed,
       the applicable external ssh-audit, perimeter review, and Lynis host audit
       have current evidence or an explicit blocked/risk decision.
-- [ ] Monitoring shows API/worker health, disk and PostgreSQL-volume free space,
-      memory, restarts, and configured alerts; current values are recorded.
+- [ ] Unified Agent privately scrapes API `:3002/metrics` and worker
+      `:3001/metrics`; the public API returns `404` for `/metrics`. Monitoring
+      shows API availability/`5xx`/latency, worker staleness, overdue and
+      lifecycle Tender counts, realtime reconnect/close rates, auth/security and
+      mail-protection transitions, plus disk, PostgreSQL-volume, memory,
+      container-restart and PostgreSQL-connection collectors. Mandatory alerts
+      and current values are recorded.
 - [ ] Active and rollback artifacts remain recoverable after exact-name cleanup.
 
 ## Release Record

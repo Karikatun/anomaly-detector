@@ -12,6 +12,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "scripts/local-abuse-performance.ts",
     "prisma.config.ts"
   ]
 }

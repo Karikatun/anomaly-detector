@@ -3,7 +3,7 @@ import { e2ePassword, expect, registerBrowserUser, test } from '../helpers/test'
 // Authentication journeys handle passwords and one-time credentials; keep them out of CI artifacts.
 test.use({ screenshot: 'off', trace: 'off', video: 'off' })
 
-test('submits registration once and queues its optional analytics event', async ({ page }) => {
+test('submits registration once and queues its optional analytics event', async ({ browserName, page }) => {
   let analyticsRequests = 0
   let registrationRequests = 0
   const analyticsOutcome = new Promise<string>((resolve) => {
@@ -31,7 +31,14 @@ test('submits registration once and queues its optional analytics event', async 
 
   expect(analyticsRequests).toBe(1)
   expect(registrationRequests).toBe(1)
-  expect(await analyticsOutcome).toBe('finished')
+  const outcome = await analyticsOutcome
+  if (browserName === 'firefox') {
+    // Firefox reports a successfully queued sendBeacon request as aborted once
+    // it stops tracking the response. The backend request is still issued once.
+    expect(['finished', 'failed: NS_BINDING_ABORTED']).toContain(outcome)
+  } else {
+    expect(outcome).toBe('finished')
+  }
 })
 
 test('shows the primary sign-in paths immediately and exposes accurate auth headings', async ({ page }) => {

@@ -11,6 +11,9 @@ describe('loadEnv', () => {
     })
 
     expect(env.PORT).toBe(3000)
+    expect(env.OPERATIONAL_METRICS_HOST).toBeUndefined()
+    expect(env.OPERATIONAL_METRICS_PORT).toBeUndefined()
+    expect(env.WORKER_HEALTH_HOST).toBeUndefined()
     expect(env.WORKER_HEALTH_PORT).toBeUndefined()
     expect(env.ACCESS_TOKEN_TTL_SECONDS).toBe(900)
     expect(env.REFRESH_REUSE_GRACE_SECONDS).toBe(10)
@@ -76,14 +79,55 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...baseEnv, ADMIN_USER_IDS: 'operator' })).toThrow('ADMIN_USER_IDS')
   })
 
-  test('accepts a dedicated worker health port', () => {
-    const env = loadEnv({
+  test('accepts only a bounded worker health listener configuration', () => {
+    const baseEnv = {
       DATABASE_URL: 'postgresql://localhost/test',
       JWT_SECRET: '12345678901234567890123456789012',
+    }
+    const env = loadEnv({
+      ...baseEnv,
+      WORKER_HEALTH_HOST: '0.0.0.0',
       WORKER_HEALTH_PORT: '3001',
     })
 
+    expect(env.WORKER_HEALTH_HOST).toBe('0.0.0.0')
     expect(env.WORKER_HEALTH_PORT).toBe(3001)
+    expect(() => loadEnv({ ...baseEnv, WORKER_HEALTH_HOST: 'localhost' }))
+      .toThrow('WORKER_HEALTH_HOST')
+    expect(() => loadEnv({ ...baseEnv, WORKER_HEALTH_PORT: '65536' }))
+      .toThrow('WORKER_HEALTH_PORT')
+  })
+
+  test('accepts only a distinct bounded private operational metrics port', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+      PORT: '3000',
+    }
+
+    expect(loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '3002' }).OPERATIONAL_METRICS_PORT)
+      .toBe(3002)
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '0' }))
+      .toThrow('OPERATIONAL_METRICS_PORT')
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '65536' }))
+      .toThrow('OPERATIONAL_METRICS_PORT')
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '3000' }))
+      .toThrow('OPERATIONAL_METRICS_PORT')
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '3001' }))
+      .toThrow('OPERATIONAL_METRICS_PORT')
+  })
+
+  test('binds local metrics to loopback unless the container runtime opts into all interfaces', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+
+    expect(loadEnv(baseEnv).OPERATIONAL_METRICS_HOST).toBeUndefined()
+    expect(loadEnv({ ...baseEnv, OPERATIONAL_METRICS_HOST: '0.0.0.0' }).OPERATIONAL_METRICS_HOST)
+      .toBe('0.0.0.0')
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_HOST: 'localhost' }))
+      .toThrow('OPERATIONAL_METRICS_HOST')
   })
 
   test('enables transactional SMTP only with a complete protected configuration', () => {

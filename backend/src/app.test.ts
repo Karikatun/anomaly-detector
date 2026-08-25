@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test'
 import type { DbClient } from './db'
 import { loadEnv } from './env'
 import { createApp } from './app'
+import { createOperationalMetrics } from './operational-metrics'
 import type { SecurityEvent } from './security/events'
 
 const env = loadEnv({
@@ -27,6 +28,27 @@ test('liveness is process-only while readiness checks the database', async () =>
 
   expect((await app.request('/health/live')).status).toBe(200)
   expect((await app.request('/health/ready')).status).toBe(503)
+})
+
+test('keeps metrics off the public API while the private collector observes API outcomes', async () => {
+  const times = [1_000, 1_125, 1_250]
+  const operationalMetrics = createOperationalMetrics({ now: () => times.shift() ?? 1_250 })
+  const app = createApp({
+    env,
+    operationalMetrics,
+    prisma: { $queryRaw: async () => [{ '?column?': 1 }] } as unknown as DbClient,
+  })
+
+  const publicMetrics = await app.request('/metrics')
+  const missingApiRoute = await app.request('/api/not-a-real-route')
+  const privateMetrics = await operationalMetrics.fetch(new Request('http://collector/metrics'))
+  const body = await privateMetrics.text()
+
+  expect(publicMetrics.status).toBe(404)
+  expect(missingApiRoute.status).toBe(404)
+  expect(privateMetrics.status).toBe(200)
+  expect(body).toContain('anomaly_detector_api_requests_total{status_class="4xx"} 1')
+  expect(body).toContain('anomaly_detector_api_request_duration_seconds_sum 0.125')
 })
 
 test('CORS preflight allows the standard mutation methods exposed by the client transport', async () => {

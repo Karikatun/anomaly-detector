@@ -17,7 +17,7 @@
     "e2e:split-domain:target": "bun e2e/run-split-domain.mjs target",
     "e2e:split-domain:rollback": "bun e2e/run-split-domain.mjs rollback",
     "e2e:ui": "playwright test --ui",
-    "e2e:install": "playwright install chromium",
+    "e2e:install": "playwright install chromium firefox",
     "ui": "shadcn",
     "ui:add": "shadcn add",
     "ui:info": "shadcn info"

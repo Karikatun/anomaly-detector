@@ -3,9 +3,14 @@ import type { TenderView } from '@anomaly-detector/contracts'
 
 import { ApiRequestError } from '@/platform/api'
 import type { TranslationKey } from '@/platform/i18n'
-import type { TenderCommandInput } from './commands'
+import {
+  TenderCommandOutcomeUnknownError,
+  type TenderCommandInput,
+} from './commands'
 
-type CommandFeedbackView = Pick<TenderView, 'privateTheses' | 'publicTheses' | 'version'>
+type CommandFeedbackView = Pick<TenderView, 'privateTheses' | 'publicTheses' | 'version'> & {
+  players?: Array<Pick<TenderView['players'][number], 'playerId' | 'requestedAccessSlot'>>
+}
 
 type CommandErrorContext = {
   actorId: string
@@ -51,8 +56,31 @@ const acceptedThesisIsVisible = ({
   )
 )
 
+const acceptedAccessSlotIsVisible = ({
+  actorId,
+  command,
+  latestView,
+  startingView,
+}: Omit<CommandErrorContext, 'error'>) => {
+  if (
+    command.type !== 'request-access-slot'
+    || startingView === null
+    || startingView === undefined
+    || latestView === null
+    || latestView === undefined
+    || latestView.version <= startingView.version
+  ) return false
+
+  const startingSlot = startingView.players?.find((player) => player.playerId === actorId)?.requestedAccessSlot
+  const latestSlot = latestView.players?.find((player) => player.playerId === actorId)?.requestedAccessSlot
+  return startingSlot !== command.slot && latestSlot === command.slot
+}
+
 export function getTenderCommandErrorKey(context: CommandErrorContext): TranslationKey | null {
-  if (acceptedThesisIsVisible(context)) return null
+  if (acceptedThesisIsVisible(context) || acceptedAccessSlotIsVisible(context)) return null
+  if (context.error instanceof TenderCommandOutcomeUnknownError) {
+    return 'tender.command.reconciling'
+  }
   if (context.error instanceof ApiRequestError && context.error.code === 'TENDER_DEADLINE_EXPIRED') {
     return 'tender.command.deadlineExpired'
   }

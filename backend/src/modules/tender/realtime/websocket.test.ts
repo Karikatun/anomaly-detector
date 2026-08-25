@@ -36,6 +36,7 @@ const alwaysActiveSessionGuard: RealtimeSessionGuard = {
 
 test('closes an operational subscription failure as a retryable internal error', async () => {
   const closeEvents: Array<{ code: number; reason: string }> = []
+  const telemetryEvents: string[] = []
   const privateFailureDetail = 'database connection details must not reach logs or the client'
   const tender = {
     ...createTenderModule(),
@@ -48,7 +49,9 @@ test('closes an operational subscription failure as a retryable internal error',
     close: (code: number, reason: string) => { closeEvents.push({ code, reason }) },
     data: {
       closed: false,
+      metricsConnected: false,
       playerId: 'player-a',
+      reconnect: true,
       sessionId: 'session-a',
       tenderId: '00000000-0000-4000-8000-000000000001',
     },
@@ -57,14 +60,88 @@ test('closes an operational subscription failure as a retryable internal error',
 
   const consoleError = spyOn(console, 'error').mockImplementation(() => undefined)
   try {
-    await createRealtimeWebSocketHandlers({ hub }).open(websocket)
+    await createRealtimeWebSocketHandlers({
+      hub,
+      telemetry: {
+        closed: () => telemetryEvents.push('closed'),
+        connected: () => telemetryEvents.push('connected'),
+      },
+    }).open(websocket)
 
     expect(closeEvents).toEqual([{ code: 1011, reason: 'Internal error' }])
+    expect(telemetryEvents).toEqual([])
     expect(consoleError).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain(privateFailureDetail)
   } finally {
     consoleError.mockRestore()
   }
+})
+
+test('records reconnect and close telemetry only after an authorised subscription succeeds', async () => {
+  const events: Array<{ kind: 'connected'; reconnect: boolean } | { closeCode: number; kind: 'closed' }> = []
+  const hub = {
+    subscribe: async () => ({ close: async () => undefined }),
+  } as unknown as RealtimeHub
+  const websocket = {
+    close: () => undefined,
+    data: {
+      closed: false,
+      metricsConnected: false,
+      playerId: 'player-a',
+      reconnect: true,
+      sessionId: 'session-a',
+      tenderId: validTenderId,
+    },
+    send: () => undefined,
+  } as unknown as ServerWebSocket<RealtimeSocketData>
+  const handlers = createRealtimeWebSocketHandlers({
+    hub,
+    telemetry: {
+      closed: (closeCode) => events.push({ closeCode, kind: 'closed' }),
+      connected: (reconnect) => events.push({ kind: 'connected', reconnect }),
+    },
+  })
+
+  await handlers.open(websocket)
+  await handlers.close(websocket, 4401)
+  await handlers.close(websocket, 4401)
+
+  expect(events).toEqual([
+    { kind: 'connected', reconnect: true },
+    { closeCode: 4401, kind: 'closed' },
+  ])
+})
+
+test('parses only the bounded reconnect marker into upgraded socket telemetry data', async () => {
+  const upgradedData: RealtimeSocketData[] = []
+  const server = {
+    upgrade: (_request: Request, options: { data: RealtimeSocketData }) => {
+      upgradedData.push(options.data)
+      return true
+    },
+  } as unknown as Server<RealtimeSocketData>
+  const store: RealtimeTicketStore = {
+    consume: async () => ({
+      kind: 'consumed',
+      sessionId: 'session-a',
+      userId: 'player-a',
+    }),
+  }
+
+  await upgradeRealtimeWebSocket({
+    hub: {} as RealtimeHub,
+    request: new Request(`${upgradeRequest('ticket').url}&reconnect=1`),
+    server,
+    ticketStore: store,
+  })
+  await upgradeRealtimeWebSocket({
+    hub: {} as RealtimeHub,
+    request: new Request(`${upgradeRequest('ticket').url}&reconnect=private-user-input`),
+    server,
+    ticketStore: store,
+  })
+
+  expect(upgradedData.map((data) => data.reconnect)).toEqual([true, false])
 })
 
 test.each([
@@ -108,15 +185,20 @@ test.each([
   }
 })
 
-test('keeps an unknown realtime ticket as an unlogged authentication failure', async () => {
+test('keeps an unknown realtime ticket before socket upgrade and telemetry', async () => {
+  let upgradeCalls = 0
   const consoleError = spyOn(console, 'error').mockImplementation(() => undefined)
   try {
     const response = await upgradeRealtimeWebSocket({
       hub: {} as RealtimeHub,
       request: upgradeRequest('unknown-ticket'),
-      server: asRealtimeServer(() => true),
+      server: asRealtimeServer(() => {
+        upgradeCalls += 1
+        return true
+      }),
       ticketStore: { consume: async () => ({ kind: 'not_found' }) },
     })
+    expect(upgradeCalls).toBe(0)
 
     expect(response.status).toBe(401)
     expect(await response.json()).toEqual({

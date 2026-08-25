@@ -150,6 +150,7 @@ export function RecoveryEmailReplacementControl({
 
   return (
     <section
+      id="account-protection"
       ref={sectionRef}
       className={`${styles.protectionSection} ${state.state === 'password_replacing' ? styles.replacementSection : ''}`}
       aria-labelledby="profile-protection-title"

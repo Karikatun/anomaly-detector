@@ -1,31 +1,43 @@
 # Tender Module And Audit Log
 
-The Tender Module is the sole application seam for Tender creation, player commands, participant-scoped views, and due-time advancement. It owns room lifecycle, Anomaly Configuration, phase rules, timers, Rating, and audit events behind `createTender`, `execute`, `readTenderView`, and `advanceDueTenders`; HTTP and realtime adapters do not implement game rules.
+The Tender Module is the sole application seam for Tender creation, player commands, participant-scoped views, command receipt reconciliation, account cleanup, and due-time advancement. It owns room lifecycle, Anomaly Configuration, phase rules, timers, Rating, and audit events; HTTP and realtime adapters do not implement game rules.
 
 The public module index composes adapters and exports the facade. The injected
 application service orchestrates commands and deadlines through `TenderStore`;
 it does not import database clients or concrete stores. Independently changing
 rules such as Contract eligibility, phase timing, final ranking, and access-slot
 resolution are pure domain modules. Audit and cross-context read models are
-separate application projections. This keeps the four-operation facade stable
-without making its public index the owner of policy.
+separate application projections. This keeps the facade explicit without making
+its public index the owner of policy.
 
 PostgreSQL stores current Tender state as the write model, while an append-only audit log records accepted commands and resolved events for deterministic participant replays. This is deliberately not event sourcing: the audit log exists for fairness, explanation, and recovery, without making every application read path reconstruct state from events.
 
 ## Public Interface
 
-The public application interface consists of exactly four asynchronous methods:
+The public application interface consists of explicit asynchronous operations:
 
 ```ts
 type TenderModule = {
   createTender(input: CreateTender): Promise<{ tenderId: TenderId }>
   execute(command: TenderCommand): Promise<CommandReceipt>
+  findCommandReceipt(command: TenderCommand): Promise<CommandReceipt | undefined>
   readTenderView(query: TenderViewQuery): Promise<TenderView>
+  readTenderPlacement(query: TenderViewQuery): Promise<number | undefined>
   advanceDueTenders(input: { now: Date; limit: number }): Promise<AdvanceResult>
+  anonymizeParticipant(playerId: string): Promise<void>
 }
 ```
 
 `TenderCommand` always contains a `commandId`, `tenderId`, and authenticated `actorId`, followed by a discriminated command payload. `commandId` supports idempotent retry and audit correlation. `execute` returns only an acceptance receipt and the resulting Tender version; realtime transport obtains a separately projected view for each participant and does not receive another participant's private data as a command result.
+
+`findCommandReceipt` validates the same command schema, participant identity,
+and exact persisted fingerprint without executing game rules. The HTTP adapter
+uses it after authentication and the generic mutation budget, but before the
+Tender-specific command budget, so a lost accepted response can recover its
+receipt with the same `commandId` instead of being rejected as a new command.
+An absent receipt does not prove that an earlier ambiguous request cannot still
+commit, so the player client retains and retries the exact envelope until a
+receipt is returned.
 
 `TenderViewQuery` contains `tenderId` and the authenticated participant identity. `readTenderView` is the only read path for a live Tender, so it applies the participant's visibility rules before returning public state and authorised private data.
 
@@ -39,7 +51,9 @@ Each backend process permits at most 10 active or pending realtime subscriptions
 
 Known one-time-ticket authentication failures remain concealed `401` responses. Unexpected ticket-store or WebSocket-upgrade exceptions return a generic `503`, emit one context-only server log, and never log the ticket or internal exception detail. After upgrade, an unexpected subscription or read failure emits one context-only log and closes with `1011` so the client reconnects and refetches its authorised view. Clients keep the formerly overloaded `4403` retryable during rolling deployment and rollback; old/new pairs may reconnect until both sides have drained, but they do not turn an operational failure into a permanent access denial. A failed established subscription is removed and closed, while other subscribers continue independently; disconnect or logout during initial subscription must also release any late-created subscription without sending its pending view.
 
-The initial in-memory implementation establishes this public interface for TDD. Milestone 1 replaces its storage with PostgreSQL and an audit log without changing the interface shape.
+The in-memory and PostgreSQL adapters implement the same application interface
+so receipt reconciliation, privacy, and lifecycle behavior stay covered at both
+test and runtime boundaries.
 
 Cross-context reads do not expand this command/view facade. Tender separately
 implements consumer-shaped read ports composed in the application root:

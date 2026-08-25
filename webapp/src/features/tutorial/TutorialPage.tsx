@@ -20,6 +20,7 @@ import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
 import {
   ProfileApi,
+  useAccountProtectionQuery,
   useCompleteTutorialMutation,
 } from '@/features/profile'
 import {
@@ -142,6 +143,10 @@ function TutorialContent() {
   const [state, setState] = useState(() => loadTutorialSession(sessionStorage, playerId))
   const [completionSaveStatus, setCompletionSaveStatus] = useState<'idle' | 'pending' | 'saved' | 'error'>(
     () => state.step === 'complete' ? 'error' : 'idle',
+  )
+  const accountProtection = useAccountProtectionQuery(
+    profileApi,
+    state.step === 'complete' && completionSaveStatus === 'saved',
   )
   const [commandError, setCommandError] = useState<string | null>(null)
   const [thesisFeedback, setThesisFeedback] = useState<NonNullable<TutorialAdvanceResult['thesisFeedback']> | null>(null)
@@ -315,8 +320,12 @@ function TutorialContent() {
   if (state.step === 'complete') {
     const completionSaved = completionSaveStatus === 'saved'
     const completionFailed = completionSaveStatus === 'error'
+    const showAccountProtectionInvitation = completionSaved
+      && accountProtection.isSuccess
+      && !accountProtection.isFetching
+      && accountProtection.data.accountProtection.state === 'password_unprotected'
     return (
-      <TutorialStateCard showExpeditionBackground={false}>
+      <TutorialStateCard alignCardToTop showExpeditionBackground={false}>
         <CardHeader>
           <CardTitle>
             {t(completionSaved
@@ -354,6 +363,36 @@ function TutorialContent() {
               <Button variant="outline" onClick={() => void navigate({ to: '/' })}>{t('tutorial.complete.home')}</Button>
               <Button variant="ghost" onClick={restart}>{t('tutorial.complete.repeat')}</Button>
             </div>
+          )}
+          {showAccountProtectionInvitation && (
+            <section
+              className={styles.accountProtectionInvitation}
+              aria-labelledby="tutorial-account-protection-title"
+            >
+              <div className={styles.accountProtectionCopy}>
+                <Typography
+                  as="h2"
+                  id="tutorial-account-protection-title"
+                  variant="h6"
+                >
+                  {t('tutorial.complete.accountProtection.title')}
+                </Typography>
+                <Typography tone="muted">
+                  {t('tutorial.complete.accountProtection.description')}
+                </Typography>
+                <Typography variant="bodySm" className={styles.accountProtectionWarning}>
+                  {t('tutorial.complete.accountProtection.warning')}
+                </Typography>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className={styles.accountProtectionAction}
+                onClick={() => void navigate({ to: '/profile', hash: 'account-protection' })}
+              >
+                {t('tutorial.complete.accountProtection.action')}
+              </Button>
+            </section>
           )}
           <CreateRoomDialog open={createRoomOpen} onOpenChange={setCreateRoomOpen} />
         </CardContent>
@@ -879,14 +918,16 @@ function TutorialTooltip({ index, step, tooltipProps }: TooltipRenderProps) {
 }
 
 function TutorialStateCard({
+  alignCardToTop = false,
   children,
   showExpeditionBackground = true,
 }: {
+  alignCardToTop?: boolean
   children: React.ReactNode
   showExpeditionBackground?: boolean
 }) {
   return (
-    <section className={styles.statePage}>
+    <section className={`${styles.statePage} ${alignCardToTop ? styles.statePageTopAligned : ''}`}>
       {showExpeditionBackground && <ExpeditionBackground />}
       <Card className={styles.stateCard}>{children}</Card>
     </section>

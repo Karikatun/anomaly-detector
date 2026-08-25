@@ -235,6 +235,31 @@ test('accepts dueAt - 1 ms, rejects dueAt and dueAt + 1 ms, and keeps an idempot
   })).rejects.toMatchObject({ kind: 'tender_deadline_expired' })
 })
 
+test('finds only the exact persisted command receipt before spending a command budget', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  const command = {
+    actorId: 'player-a',
+    commandId: 'slot-a-receipt',
+    slot: 1,
+    tenderId,
+    type: 'request-access-slot' as const,
+  }
+
+  expect(await tender.findCommandReceipt(command)).toBeUndefined()
+  const receipt = await tender.execute(command)
+  expect(await tender.findCommandReceipt(command)).toEqual(receipt)
+  await expect(tender.findCommandReceipt({ ...command, slot: 2 }))
+    .rejects.toMatchObject({ kind: 'duplicate_command_conflict' })
+  await expect(tender.findCommandReceipt({ ...command, actorId: 'outsider' }))
+    .rejects.toMatchObject({ kind: 'player_not_in_tender' })
+})
+
 test('abandons a Tender five seconds after every player explicitly leaves and cancels when one resumes', async () => {
   let now = new Date('2026-07-26T12:00:00.000Z')
   const tender = createTenderModule({ now: () => now })

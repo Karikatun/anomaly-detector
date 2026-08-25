@@ -20,8 +20,9 @@ export const profileQueryKeys = {
   tutorial: () => [...profileQueryKeys.all, 'tutorial'] as const,
 }
 
-export function useAccountProtectionQuery(api: ProfileApi) {
+export function useAccountProtectionQuery(api: ProfileApi, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: profileQueryKeys.accountProtection(),
     queryFn: () => api.getAccountProtection(),
   })

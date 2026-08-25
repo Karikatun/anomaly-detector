@@ -3048,7 +3048,7 @@ maybeDescribe('auth API integration', () => {
       prisma,
       securityEvents: { emit: (event) => securityEvents.push(event) },
     })
-    const submitCommand = (targetApp: typeof app) => targetApp.request(
+    const submitCommand = (targetApp: typeof app, command: Record<string, unknown>) => targetApp.request(
       `/api/tenders/${tenderId}/commands`,
       {
         method: 'POST',
@@ -3056,22 +3056,45 @@ maybeDescribe('auth API integration', () => {
           Authorization: `Bearer ${player.accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          actorId: player.user.id,
-          commandId: 'shared-budget-command',
-          slot: 3,
-          tenderId,
-          type: 'request-access-slot',
-        }),
+        body: JSON.stringify(command),
       },
     )
+    const acceptedCommand = {
+      actorId: player.user.id,
+      commandId: 'shared-budget-command',
+      slot: 3,
+      tenderId,
+      type: 'request-access-slot',
+    }
+    expect((await submitCommand(app, acceptedCommand)).status).toBe(200)
 
-    for (let attempt = 1; attempt <= 59; attempt += 1) {
-      const response = await submitCommand(attempt % 2 === 0 ? app : secondApp)
+    for (let attempt = 1; attempt <= 58; attempt += 1) {
+      const response = await submitCommand(attempt % 2 === 0 ? app : secondApp, {
+        actorId: player.user.id,
+        commandId: `shared-budget-working-model-${attempt}`,
+        tenderId,
+        type: 'update-working-model',
+        workingModel: { signals: { aster: { note: `Budget probe ${attempt}` } } },
+      })
       expect(response.status).toBe(200)
     }
 
-    const boundary = await Promise.all([submitCommand(app), submitCommand(secondApp)])
+    const boundary = await Promise.all([
+      submitCommand(app, {
+        actorId: player.user.id,
+        commandId: 'shared-budget-boundary-a',
+        tenderId,
+        type: 'update-working-model',
+        workingModel: { signals: { aster: { note: 'Boundary A' } } },
+      }),
+      submitCommand(secondApp, {
+        actorId: player.user.id,
+        commandId: 'shared-budget-boundary-b',
+        tenderId,
+        type: 'update-working-model',
+        workingModel: { signals: { aster: { note: 'Boundary B' } } },
+      }),
+    ])
     expect(boundary.map((response) => response.status).sort()).toEqual([200, 429])
     const limited = boundary.find((response) => response.status === 429)!
     expect(limited.status).toBe(429)
@@ -3093,11 +3116,23 @@ maybeDescribe('auth API integration', () => {
     expect(securityEvents.filter((event) => event.reason === 'tender_command_budget'))
       .toHaveLength(1)
 
+    const replayed = await submitCommand(secondApp, acceptedCommand)
+    expect(replayed.status).toBe(200)
+    expect(await replayed.json()).toEqual({ tenderId, version: 1 })
+    expect(securityEvents.filter((event) => event.reason === 'tender_command_budget'))
+      .toHaveLength(1)
+
     await prisma.authAbuseBucket.updateMany({
       data: { expiresAt: new Date(Date.now() - 1) },
       where: { scope: 'tender_command' },
     })
-    expect((await submitCommand(secondApp)).status).toBe(200)
+    expect((await submitCommand(secondApp, {
+      actorId: player.user.id,
+      commandId: 'shared-budget-after-expiry',
+      tenderId,
+      type: 'update-working-model',
+      workingModel: { signals: { aster: { note: 'After expiry' } } },
+    })).status).toBe(200)
 
     const opponentCommand = await app.request(`/api/tenders/${tenderId}/commands`, {
       method: 'POST',

@@ -11,9 +11,12 @@ services:
       - "${BACKEND_ENV_FILE:-/run/anomaly-detector/backend.env}"
     environment:
       NODE_ENV: production
+      OPERATIONAL_METRICS_HOST: "0.0.0.0"
+      OPERATIONAL_METRICS_PORT: "3002"
       PORT: "3000"
     ports:
       - "3000:3000"
+      - "127.0.0.1:3002:3002"
     healthcheck:
       test:
         [
@@ -44,6 +47,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      WORKER_HEALTH_HOST: "0.0.0.0"
       WORKER_HEALTH_PORT: "3001"
     ports:
       - "3001:3001"

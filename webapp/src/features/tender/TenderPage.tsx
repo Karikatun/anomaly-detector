@@ -53,6 +53,8 @@ import { TenderTerminalState } from './components/TenderTerminalState'
 import { TenderResearchDialog } from './components/TenderResearchDialog'
 import { TenderHeaderFrame } from './components/TenderHeaderFrame'
 import {
+  shouldReconcileTenderCommandError,
+  TenderCommandOutcomeUnknownError,
   useTenderCommands,
   type TenderCommandInput,
 } from './commands'
@@ -60,9 +62,7 @@ import {
   useRealtimeTender,
   type RealtimeErrorCode,
 } from './realtime'
-import {
-  getTenderCommandErrorKey,
-} from './tender-command-feedback'
+import { getTenderCommandErrorKey } from './tender-command-feedback'
 import {
   createExclusiveActionGate,
   sequentialTurnKey,
@@ -372,7 +372,11 @@ function TenderContent() {
   const queryClient = useQueryClient()
 
   const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
-  const { execute } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
+  const {
+    commandPending,
+    execute,
+    outcomeUnknown,
+  } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
   const [commandError, setCommandError] = useState<{ message: string; version: number } | null>(null)
   const [resuming, setResuming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -394,10 +398,19 @@ function TenderContent() {
   const lastConnectedFocusRef = useRef<HTMLElement | null>(null)
   const reconnectRestoreFocusRef = useRef<HTMLElement | null>(null)
   const wasConnectedRef = useRef(connected)
+  const wasOutcomeUnknownRef = useRef(false)
 
   useLayoutEffect(() => {
     latestTenderViewRef.current = tenderView
   }, [tenderView])
+
+  useEffect(() => {
+    const wasOutcomeUnknown = wasOutcomeUnknownRef.current
+    wasOutcomeUnknownRef.current = outcomeUnknown
+    if (wasOutcomeUnknown && !outcomeUnknown) {
+      setCommandError(null)
+    }
+  }, [outcomeUnknown])
 
   useEffect(() => {
     if (!connected) return
@@ -469,6 +482,7 @@ function TenderContent() {
   }, [queryClient, tenderView?.phase, tenderId])
 
   useEffect(() => {
+    if (outcomeUnknown) return
     if (!shouldResumeTender({
       connected,
       hasLeft: tenderView?.hasLeft ?? false,
@@ -483,7 +497,7 @@ function TenderContent() {
         resumingTenderIdRef.current = null
       })
       .finally(() => setResuming(false))
-  }, [connected, execute, tenderId, tenderView?.hasLeft])
+  }, [connected, execute, outcomeUnknown, tenderId, tenderView?.hasLeft])
 
   const remainingSeconds = useSynchronizedCountdown(
     tenderView?.dueAt,
@@ -519,9 +533,6 @@ function TenderContent() {
         try {
           await execute(command)
         } catch (err) {
-          if (err instanceof ApiRequestError && err.code === 'TENDER_EVIDENCE_UNAVAILABLE') {
-            retry()
-          }
           const messageKey = getTenderCommandErrorKey({
             actorId: auth.user?.id ?? '',
             command,
@@ -530,6 +541,13 @@ function TenderContent() {
             startingView,
           })
           if (messageKey === null) return
+          if (
+            (!(err instanceof TenderCommandOutcomeUnknownError)
+              && shouldReconcileTenderCommandError(err))
+            || (err instanceof ApiRequestError && err.code === 'TENDER_EVIDENCE_UNAVAILABLE')
+          ) {
+            retry()
+          }
           setCommandError({
             message: t(messageKey),
             version: latestTenderViewRef.current?.version ?? startingView?.version ?? 0,
@@ -617,7 +635,9 @@ function TenderContent() {
   }
 
   const phase = phaseLabels[tenderView.phase] ?? tenderView.phase
-  const currentCommandError = visibleCommandError(commandError, tenderView.version)
+  const currentCommandError = outcomeUnknown
+    ? commandError?.message ?? t('tender.command.reconciling')
+    : visibleCommandError(commandError, tenderView.version)
   const myPlayer = tenderView.players.find((p) => p.playerId === auth.user?.id)
   const mySlot = myPlayer?.accessSlot
   const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
@@ -632,6 +652,7 @@ function TenderContent() {
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
   const isPowerAllocation = tenderView.phase === 'power-allocation'
   const isComplete = tenderView.phase === 'complete'
+  const mutationLocked = submitting || commandPending || outcomeUnknown
   const contextMenuVisibility = getPhaseContextMenuVisibility(tenderView.phase)
   const hasPendingAction = isAccessSlotSelection
     ? myPlayer?.requestedAccessSlot === undefined
@@ -804,7 +825,7 @@ function TenderContent() {
             className={styles.leaveAction}
             aria-label={t('nav.leaveMatch')}
             title={t('nav.leaveMatch')}
-            disabled={!connected || submitting || resuming || tenderView.hasLeft}
+            disabled={!connected || mutationLocked || resuming || tenderView.hasLeft}
             onClick={() => {
               if (tenderView.phase === 'complete') {
                 void collapseMatch()
@@ -830,10 +851,10 @@ function TenderContent() {
                 <DialogClose asChild>
                   <Button type="button" variant="outline">{t('tender.exit.cancel')}</Button>
                 </DialogClose>
-                <Button type="button" variant="outline" onClick={() => void collapseMatch()}>
+                  <Button type="button" variant="outline" disabled={mutationLocked} onClick={() => void collapseMatch()}>
                   {t('tender.exit.collapse')}
                 </Button>
-                <Button type="button" variant="destructive" onClick={() => void forfeitMatch()}>
+                <Button type="button" variant="destructive" disabled={mutationLocked} onClick={() => void forfeitMatch()}>
                   {t('tender.exit.forfeit')}
                 </Button>
               </DialogFooter>
@@ -886,8 +907,8 @@ function TenderContent() {
             )}
             <PhasePanel
               view={tenderView}
-              disabled={submitting || !connected}
-              pending={submitting}
+              disabled={mutationLocked || !connected}
+              pending={mutationLocked}
               error={currentCommandError}
               onCommand={handleCommand}
               onSaveWorkingModel={saveWorkingModel}
@@ -921,7 +942,7 @@ function TenderContent() {
               )}
               {contextMenuVisibility.workingModel && (
                 <WorkingModelWorkspace
-                  disabled={!connected}
+                  disabled={!connected || mutationLocked}
                   knownSignals={tenderView.privateSamples}
                   model={tenderView.privateWorkingModel}
                   onSave={saveWorkingModel}

@@ -13,9 +13,11 @@ const portPlan = await resolveE2ePorts()
 applyE2ePortEnv(portPlan)
 
 const backendPort = portPlan.backendPort
+const operationalMetricsPort = portPlan.operationalMetricsPort
 const frontendPort = portPlan.webPort
 const backendUrl = portPlan.backendUrl
 const frontendUrl = portPlan.webUrl
+const workerHealthPort = portPlan.workerHealthPort
 const websitePort = portPlan.websitePort
 const websiteUrl = portPlan.websiteUrl
 const databaseUrl = portPlan.databaseUrl
@@ -30,7 +32,9 @@ const backendEnv = normalizeEnv(e2eBackendEnv({
   ANALYTICS_ENABLED: 'true',
   ANALYTICS_ORIGINS: [frontendUrl, websiteUrl].join(','),
   ANALYTICS_CAMPAIGN_ALLOWLIST: 'e2e_launch',
+  OPERATIONAL_METRICS_PORT: String(operationalMetricsPort),
   PORT: String(backendPort),
+  WORKER_HEALTH_PORT: String(workerHealthPort),
   DATABASE_URL: databaseUrl,
   CORS_ORIGINS: [frontendUrl, 'http://localhost:5173'].join(','),
   WEBAPP_ORIGIN: frontendUrl,
@@ -60,6 +64,10 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
     },
   ],
   webServer: [

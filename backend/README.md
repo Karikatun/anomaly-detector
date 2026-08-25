@@ -47,7 +47,7 @@ On Windows PowerShell, use `Copy-Item backend/.env.example backend/.env` instead
 
 Copy `backend/.env.example` to `backend/.env` for local development. The example `DATABASE_URL` matches the Docker Compose `postgres` service documented in [../docs/LOCAL_DATABASE.md](../docs/LOCAL_DATABASE.md): database `anomaly_detector`, user `superuser`, password `superpassword`, host port `54329`.
 
-`bun run dev` performs a port preflight before starting the API and worker. It gracefully stops stale listeners owned by this backend workspace on `PORT` and `WORKER_HEALTH_PORT` (defaults `3000` and `3001`). It refuses to stop a listener whose process belongs to another workspace, so a port collision remains visible instead of terminating an unrelated application.
+`bun run dev` performs a port preflight before starting the API and worker. It gracefully stops stale listeners owned by this backend workspace on `PORT`, `WORKER_HEALTH_PORT` (defaults `3000` and `3001`), and configured `OPERATIONAL_METRICS_PORT`. It refuses to stop a listener whose process belongs to another workspace, so a port collision remains visible instead of terminating an unrelated application.
 
 The example `TEST_DATABASE_URL` matches the Docker Compose `postgres_test` service: database `anomaly_detector_test`, user `superuser`, password `superpassword`, manual host port `54330`. Automated runners may replace the port with a repository-derived value so parallel checkouts do not collide.
 
@@ -84,7 +84,7 @@ Yandex Object Storage env is optional. Leave `YANDEX_STORAGE_*` blank until the 
 The backend is one workspace with one Prisma schema and one Dockerfile, but it has separate runtime entrypoints:
 
 - API: `bun run start:api`, backed by `src/index.ts`.
-- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases, scheduled Room starts, and the PostgreSQL transactional-mail outbox. `bun run dev` starts both API and worker locally; production runs them as separate processes. The worker serves internal `/health/live` and `/health/ready` endpoints on `WORKER_HEALTH_PORT` or `PORT + 1`; readiness requires recent successful passes from the two base loops and, when SMTP is enabled, the mail-delivery loop.
+- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases, scheduled Room starts, and the PostgreSQL transactional-mail outbox. `bun run dev` starts both API and worker locally; production runs them as separate processes. The worker serves internal `/health/live`, `/health/ready`, and `/metrics` endpoints on `WORKER_HEALTH_PORT` or `PORT + 1`; `WORKER_HEALTH_HOST` defaults to loopback. Readiness requires recent successful passes from the two base loops and, when SMTP is enabled, the mail-delivery loop.
 - Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, `maintenance:cleanup`, and the backwards-compatible `auth:sessions:cleanup` alias.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
