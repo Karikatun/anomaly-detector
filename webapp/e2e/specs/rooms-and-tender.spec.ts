@@ -135,6 +135,13 @@ async function expectFullyInViewport(locator: Locator) {
   })).toBe(true)
 }
 
+async function waitForAnimationsToFinish(locator: Locator) {
+  await locator.evaluate(async (element) => {
+    await Promise.all(element.getAnimations({ subtree: true }).map((animation) =>
+      animation.finished.catch(() => undefined)))
+  })
+}
+
 async function readRoomJoinCode(page: Page) {
   const code = (await page.getByTestId('room-join-code').textContent())?.trim()
   if (!code) throw new Error('Room join code is missing from the lobby')
@@ -747,6 +754,7 @@ test('lets a player collapse and return, then permanently forfeit the match', as
     await page.keyboard.press('Shift+Tab')
     await expect(reconnectButton).toBeFocused()
     await expect(leaveMatchButton).toBeDisabled()
+    await waitForAnimationsToFinish(reconnectDialog)
     const reconnectAxe = await new AxeBuilder({ page })
       .include('[role="alertdialog"]')
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
