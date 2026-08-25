@@ -1,12 +1,17 @@
 # Anomaly Detector: актуальный план до Production MVP
 
-Документ содержит только незавершённую работу до публичного Production MVP.
-Фактическое поведение определяется кодом и тестами, устойчивые продуктовые и
-архитектурные решения — [GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIEF.md),
+Документ сохраняет как незавершённые release gates, так и локально принятые
+вертикальные срезы, когда они нужны для трассировки пути до публичного
+Production MVP. Фактическое поведение определяется кодом и тестами, устойчивые
+продуктовые и архитектурные решения —
+[GAME_DESIGN_BRIEF.md](GAME_DESIGN_BRIEF.md),
 [ARCHITECTURE.md](ARCHITECTURE.md), [CONTEXT.md](../CONTEXT.md) и ADR в
 `docs/adr/`.
 
-**Статусы:** `[-]` начато частично, `[ ]` не начато, `[~]` отложено.
+**Статусы:** `[x]` локальная реализация и автоматизированная приёмка завершены,
+`[-]` выполнена только часть среза или остаётся внешний gate, `[ ]` не начато,
+`[~]` отложено. `[x]` не означает, что GitHub Issue закрыта, изменение
+опубликовано или production acceptance пройдена.
 
 ## Результат MVP
 
@@ -164,6 +169,12 @@ restart, а оператор видит безопасный diff и состо�
    со старым аккаунтом. Для первой привязки и замены Recovery Email операторский
    override отсутствует, а удаление атомарно очищает email,
    challenge/replacement/binding, Recovery Code и остальные recovery credentials.
+8. [x] После первого завершённого обучения показывать только незащищённому
+   password-аккаунту необязательное предложение перейти к карточке защиты и
+   прямо предупреждать, что без подтверждённой почты самостоятельное
+   восстановление невозможно. Ошибка чтения состояния, Yandex ID и уже
+   защищённый password-аккаунт не получают вводящую в заблуждение подсказку;
+   создание Tender, главное меню и повтор обучения остаются доступны.
 
 **Gate:** интеграционные concurrency-тесты доказывают uniqueness, atomic consume,
 отмену старой доверенной сессией, обе стороны замены, конфликт Yandex email и
@@ -264,12 +275,27 @@ restart, а оператор видит безопасный diff и состо�
 
 Новые приоритеты не отменяют безопасность игрового ядра и production readiness:
 
-1. [-] Завершить participant-only audit/replay и mobile/desktop release matrix
-   ([#9](https://github.com/Karikatun/anomaly-detector/issues/9),
-   [#23](https://github.com/Karikatun/anomaly-detector/issues/23)).
-2. [ ] Провести реальные Tender для 2, 3 и 4 игроков и полный Public MVP Journey
-   в контролируемом тесте ([#24](https://github.com/Karikatun/anomaly-detector/issues/24)).
-3. [-] Завершить legal readiness ([#2](https://github.com/Karikatun/anomaly-detector/issues/2)):
+1. [x] Завершить participant-only audit/replay
+   ([#9](https://github.com/Karikatun/anomaly-detector/issues/9)). Локальные
+   contract/backend/browser tests доказывают полный пятираундовый audit,
+   восстановление исторических событий, fail-closed несовместимость, доступ
+   только участникам и сокрытие существующего Tender от постороннего игрока.
+2. [-] Завершить оставшуюся mobile/desktop release matrix
+   ([#23](https://github.com/Karikatun/anomaly-detector/issues/23)). Локальная
+   автоматизированная матрица включает Chromium и Firefox, desktop, compact и
+   mobile viewport, reconnect/focus, completed audit, History и
+   `historical_data_incompatible`; ключевые состояния проверены также
+   сохранёнными render-артефактами и axe. Остаются физические актуальные iOS
+   Safari и Android Chrome, экранная клавиатура, переключение сети и ручная
+   приёмка на реальных устройствах.
+3. [ ] Провести реальные Tender для 2, 3 и 4 игроков и полный Public MVP Journey
+   в контролируемом тесте
+   ([#24](https://github.com/Karikatun/anomaly-detector/issues/24)). Автоматически
+   backend завершает все пять раундов для 2, 3 и 4 игроков; browser E2E отдельно
+   доказывает полный двухпользовательский Tender и четырёхпользовательское
+   раннее завершение с responsive audit. Реальные участники и единый полный
+   Public MVP Journey для этой приёмки ещё не проверены.
+4. [-] Завершить legal readiness ([#2](https://github.com/Karikatun/anomaly-detector/issues/2)):
    - обновить privacy policy, отдельные consent и terms одновременно с
      фактическими полями/обработчиками, а не заранее;
    - включить Account Email, recovery, transactional mail, consent analytics и
@@ -289,23 +315,35 @@ restart, а оператор видит безопасный diff и состо�
    OWNER также ограничил recovery-артефакты их сроком действия, а ожидающие
    security notifications — 7 днями; атомарный cleanup и PostgreSQL race/
    rollback tests реализованы локально, но ещё не опубликованы в production.
-4. [-] Проверить support и `no-reply` mailbox, incident ownership, SPF/DKIM/DMARC,
+5. [-] Проверить support и `no-reply` mailbox, incident ownership, SPF/DKIM/DMARC,
    retention и восстановление доступа оператора к REG.RU.
-5. [-] Повторить migration, backup/restore, health, alerting и rollback drill;
-   именованный cron уже покрывает новые recovery-артефакты, outbox, аналитику и
-   feedback, но его production invocation/log evidence остаётся частью #21
-   ([#21](https://github.com/Karikatun/anomaly-detector/issues/21)).
-6. [-] Провести production-like abuse/performance validation для auth, mail,
+6. [-] Повторить migration, backup/restore, health, alerting и rollback drill
+   ([#21](https://github.com/Karikatun/anomaly-detector/issues/21)). Локальный
+   изолированный backup/restore drill воспроизводимо проверяет migration set и
+   synthetic recovery point, отклоняет удалённый Docker context и публикует
+   структурированное evidence только после подтверждённого `down -v`.
+   Именованный cron уже покрывает recovery-артефакты, outbox, аналитику и
+   feedback. Production backup identifier, Managed PostgreSQL restore,
+   фактический RPO/RTO, worker invocation/log evidence и настроенные alerts
+   остаются owner gate.
+7. [-] Провести production-like abuse/performance validation для auth, mail,
    feedback, Argon2id, rooms, Tender, WebSocket и reconnect
    ([#19](https://github.com/Karikatun/anomaly-detector/issues/19),
-   [#20](https://github.com/Karikatun/anomaly-detector/issues/20)). Локально
-   проверены auth/Argon2id, transactional-mail budgets, Room, Tender, два
-   realtime listener и multi-tab reconnect; измерения и production evidence
-   boundary зафиксированы в
+   [#20](https://github.com/Karikatun/anomaly-detector/issues/20)). Versioned
+   локальный benchmark в изолированной `_test` PostgreSQL проверяет 18 сценариев:
+   auth и shared NAT, generic authenticated budget, Feedback, Room, Tender,
+   fake SMTP, realtime ticket/invalid churn/cross-instance/cap, Argon2id new,
+   wrong, unknown и rehash, email reset и Recovery Code reset. Browser E2E
+   отдельно проверяет multi-tab reconnect и reconciliation потерянного ответа
+   команды. Граница локальных измерений и production evidence зафиксирована в
    [аудите distributed anti-abuse budgets](audits/2026-08-24-distributed-abuse-performance.md).
-   Feedback, реальный SMTP, ALB/SWS, Managed PostgreSQL и production metrics
-   остаются открытыми, поэтому пункт не завершён.
-7. [~] Платные ALB/SWS остаются отложенными по бюджету до роста трафика,
+   Локальный private Prometheus endpoint уже публикует bounded API, security,
+   realtime, Tender, worker и mail-protection signals без идентификаторов и
+   приватного текста. Реальный SMTP, ALB/SWS, Managed PostgreSQL, несколько
+   OS/process instances, production CPU/RSS/latency, Unified Agent scrape,
+   dashboards, runtime collectors, настройка порогов и alerts на целевой
+   инфраструктуре остаются внешней приёмкой, поэтому пункт не завершён.
+8. [~] Платные ALB/SWS остаются отложенными по бюджету до роста трафика,
    подтверждённых атак или отдельного бюджета ([#25](https://github.com/Karikatun/anomaly-detector/issues/25)).
    PostgreSQL application budgets обязательны независимо от edge-защиты.
 
@@ -324,10 +362,30 @@ production acceptance. «Гипотеза MVP проверена» — нако�
 
 ## GitHub tracking
 
-GitHub Issues остаются источником delivery-состояния. Issue
-[#18](https://github.com/Karikatun/anomaly-detector/issues/18) переносится из
-post-MVP в MVP; [#20](https://github.com/Karikatun/anomaly-detector/issues/20)
-расширяется утверждённым account-recovery scope. Новые вертикальные срезы
-лендинга, mail policy, profile protection, feedback и analytics должны быть
-разложены на independently-grabbable Issues перед реализацией; этот документ не
-выдаёт отсутствие таких Issues за начатую разработку.
+GitHub Issues остаются источником remote delivery-состояния; локальный `[x]` не
+закрывает Issue автоматически. Текущий repository evidence распределён так:
+
+- локальная реализация и автоматизированная приёмка завершены для Approved Mail
+  Service ([#33](https://github.com/Karikatun/anomaly-detector/issues/33)),
+  transactional outbox
+  ([#34](https://github.com/Karikatun/anomaly-detector/issues/34)), Yandex
+  Account Email ([#35](https://github.com/Karikatun/anomaly-detector/issues/35)),
+  первой Recovery Email
+  ([#37](https://github.com/Karikatun/anomaly-detector/issues/37)), её замены
+  ([#38](https://github.com/Karikatun/anomaly-detector/issues/38)), Recovery Code
+  ([#39](https://github.com/Karikatun/anomaly-detector/issues/39)),
+  самостоятельного восстановления пароля
+  ([#40](https://github.com/Karikatun/anomaly-detector/issues/40)), Feedback
+  Report ([#41](https://github.com/Karikatun/anomaly-detector/issues/41)) и
+  consent-scoped analytics
+  ([#42](https://github.com/Karikatun/anomaly-detector/issues/42));
+- реальная почтовая инфраструктура и доставляемость остаются внешним owner gate
+  [#36](https://github.com/Karikatun/anomaly-detector/issues/36): mailbox и
+  incident ownership, доступ к REG.RU, SPF/DKIM/DMARC, controlled SMTP и
+  получение письма каждым Approved Mail Service. Локальные SMTP doubles и
+  outbox tests этот gate не закрывают.
+
+Issue [#18](https://github.com/Karikatun/anomaly-detector/issues/18) входит в
+MVP, а [#20](https://github.com/Karikatun/anomaly-detector/issues/20) включает
+утверждённый account-recovery scope. Их оставшиеся production-like критерии
+учтены выше среди release blockers.

@@ -14,3 +14,10 @@ export async function stopServerGracefully(server: StoppableServer, gracePeriodM
   if (timeout) clearTimeout(timeout)
   if (timedOut) await server.stop(true)
 }
+
+export async function stopServersGracefully(
+  servers: StoppableServer[],
+  gracePeriodMs: number,
+) {
+  await Promise.all(servers.map((server) => stopServerGracefully(server, gracePeriodMs)))
+}

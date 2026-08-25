@@ -6,12 +6,13 @@
 - `bun run check:push` — dependency audit, full-history Gitleaks и полный `check`: все тесты, production build, backend Docker smoke и Playwright E2E.
 - `bun run check` — полный локальный поведенческий gate без сетевого dependency audit.
 - `bun run preflight:split-domain` — отдельный воспроизводимый target/rollback gate для подготовленного разделения `anomaly-detector.ru` и `app.anomaly-detector.ru`.
+- `bun run benchmark:local-abuse` — отдельный local-only benchmark для distributed abuse boundaries, Feedback, realtime cap и Argon/recovery; он создаёт invocation-scoped `*_test` PostgreSQL и публикует secret-free JSON только после удаления временного volume.
 - `pre-commit` отдельно сканирует staged Git index, поэтому проверяет именно содержимое будущего commit, а не игнорируемый локальный `backend/.env`.
 - GitHub Actions повторяет secret hygiene и tooling contracts независимо от локальных hooks, которые можно обойти через `--no-verify`.
 - `security-static` независимо запускает Gitleaks по Git-истории, Semgrep по versioned high-confidence правилам и Trivy по конфигурации; после Docker smoke Trivy проверяет собранный backend image.
 - `security-dynamic.yml` запускает активный ZAP API scan только вручную или по расписанию, на временном backend и отдельной `_test` базе.
 
-Для полной проверки нужны Bun, Docker и установленный Chromium для версии Playwright из `webapp`.
+Для полной проверки нужны Bun, Docker и установленные Chromium и Firefox для версии Playwright из `webapp`.
 
 The goal of this project's tests is to show future agents where behavior should be verified and how to keep E2E broad enough to protect valuable behavior without turning it into exhaustive matrices.
 
@@ -138,6 +139,15 @@ The integration and Docker smoke runners refuse database names that do not end w
 
 The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created. The image remains under `anomaly-detector-backend:smoke` long enough for the following Trivy image scan.
 
+Operational metrics use focused unit tests for Prometheus formatting, bounded
+labels, `5xx` observation through the error handler, worker staleness, reconnect
+classification and mail transitions. Tender aggregate counts are also exercised
+against PostgreSQL by the Tender integration suite. Docker smoke is the runtime
+boundary: the public API port must return `404` for `/metrics`, while the
+separately loopback-published collector port must return the aggregate
+`anomaly_detector_api_up` series. Never weaken that isolation to simplify a
+scrape test.
+
 `bun run security:zap` is an active security test, not a normal local smoke. It
 creates and later destroys only its isolated `_test` database, filters the
 account-delete operation from the generated OpenAPI document, and writes
@@ -165,7 +175,9 @@ bun run seed:test-users
 
 ## Webapp E2E
 
-Playwright is configured in `webapp/playwright.config.ts`.
+Playwright is configured in `webapp/playwright.config.ts`. The default command
+runs the critical browser journeys in both Chromium and Firefox; use
+`--project=chromium` or `--project=firefox` only for narrow diagnosis.
 
 First-time setup:
 

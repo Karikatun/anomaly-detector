@@ -7,7 +7,10 @@ import { expect, registerBrowserUser, test } from '../helpers/test'
 
 const uxAuditDirectory = process.env.UX_AUDIT_DIR
 
-test('keeps feedback voluntary and submits only approved fields with a copyable receipt', async ({ page }) => {
+test('keeps feedback voluntary and submits only approved fields with a copyable receipt', async ({
+  browserName,
+  page,
+}) => {
   await registerBrowserUser(page, 'Автор обращения', 'feedback')
 
   const feedbackMenu = page.getByRole('button', { name: 'СООБЩИТЬ О ПРОБЛЕМЕ ИЛИ ИДЕЕ' })
@@ -71,7 +74,11 @@ test('keeps feedback voluntary and submits only approved fields with a copyable 
     problemSolved,
     replyEmail: 'feedback-player@example.com',
     technicalContext: {
-      browserClass: 'chromium',
+      browserClass: browserName === 'firefox'
+        ? 'firefox'
+        : browserName === 'webkit'
+          ? 'safari'
+          : 'chromium',
       buildSha: 'e'.repeat(40),
       deviceClass: 'mobile',
       errorId: null,
@@ -81,11 +88,15 @@ test('keeps feedback voluntary and submits only approved fields with a copyable 
   expect(JSON.stringify(submittedBody)).not.toMatch(/fullUrl|ipAddress|rawLogs|cookies|tenderState|userAgent/i)
 
   await auditCheckpoint(page, 'feedback-receipt-mobile')
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  if (browserName === 'chromium') {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  }
   await page.getByRole('button', { name: 'Скопировать номер' }).click()
   await expect(page.getByRole('status')).toHaveText('Номер скопирован.')
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()))
-    .toBe(await publicNumber.textContent())
+  if (browserName === 'chromium') {
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(await publicNumber.textContent())
+  }
 
   await page.getByRole('button', { name: 'Вернуться в меню' }).click()
   await expect(page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' })).toBeVisible()

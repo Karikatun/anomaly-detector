@@ -6,8 +6,8 @@ describe('worker health', () => {
   test('is not ready until every polling loop has completed successfully', () => {
     let now = 1_000
     const health = createWorkerHealth({ now: () => now })
-    const tender = health.registerLoop({ intervalMs: 2_000, label: 'Tender advancement' })
-    const room = health.registerLoop({ intervalMs: 250, label: 'Room start' })
+    const tender = health.registerLoop({ intervalMs: 2_000, label: 'Tender advancement', metricKey: 'tender_advancement' })
+    const room = health.registerLoop({ intervalMs: 250, label: 'Room start', metricKey: 'room_start' })
 
     expect(health.snapshot().ready).toBe(false)
 
@@ -23,7 +23,7 @@ describe('worker health', () => {
   test('becomes unavailable after a failure and recovers after the next success', () => {
     let now = 1_000
     const health = createWorkerHealth({ now: () => now })
-    const loop = health.registerLoop({ intervalMs: 1_000, label: 'Tender advancement' })
+    const loop = health.registerLoop({ intervalMs: 1_000, label: 'Tender advancement', metricKey: 'tender_advancement' })
 
     loop.started()
     loop.succeeded()
@@ -39,6 +39,7 @@ describe('worker health', () => {
           consecutiveFailures: 1,
           label: 'Tender advancement',
           lastError: 'database unavailable',
+          metricKey: 'tender_advancement',
         },
       ],
     })
@@ -61,7 +62,7 @@ describe('worker health', () => {
   test('becomes unavailable when a loop heartbeat is stale', () => {
     let now = 1_000
     const health = createWorkerHealth({ now: () => now, staleMultiplier: 3 })
-    const loop = health.registerLoop({ intervalMs: 1_000, label: 'Tender advancement' })
+    const loop = health.registerLoop({ intervalMs: 1_000, label: 'Tender advancement', metricKey: 'tender_advancement' })
 
     loop.started()
     loop.succeeded()
@@ -75,7 +76,7 @@ describe('worker health', () => {
 
   test('serves liveness and readiness responses without exposing errors', async () => {
     const health = createWorkerHealth({ now: () => 1_000 })
-    const loop = health.registerLoop({ intervalMs: 1_000, label: 'Tender advancement' })
+    const loop = health.registerLoop({ intervalMs: 1_000, label: 'Tender advancement', metricKey: 'tender_advancement' })
 
     expect((await health.fetch(new Request('http://worker/health/live'))).status).toBe(200)
     expect((await health.fetch(new Request('http://worker/health/ready'))).status).toBe(503)
@@ -87,5 +88,21 @@ describe('worker health', () => {
     expect(response.status).toBe(503)
     expect(await response.json()).toEqual({ status: 'unavailable' })
     expect((await health.fetch(new Request('http://worker/unknown'))).status).toBe(404)
+  })
+
+  test('requires unique bounded metric keys so Prometheus labels cannot become user input', () => {
+    const health = createWorkerHealth()
+    health.registerLoop({ intervalMs: 1_000, label: 'First', metricKey: 'stable_loop' })
+
+    expect(() => health.registerLoop({
+      intervalMs: 1_000,
+      label: 'Second',
+      metricKey: 'stable_loop',
+    })).toThrow('already registered')
+    expect(() => health.registerLoop({
+      intervalMs: 1_000,
+      label: 'Invalid',
+      metricKey: 'not valid',
+    })).toThrow('metric key')
   })
 })

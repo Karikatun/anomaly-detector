@@ -5,6 +5,7 @@ type WorkerLoopState = {
   lastError: string | null
   lastStartedAt: number | null
   lastSucceededAt: number | null
+  metricKey: string
   running: boolean
 }
 
@@ -35,12 +36,17 @@ export function createWorkerHealth({
   function registerLoop({
     intervalMs,
     label,
+    metricKey,
   }: {
     intervalMs: number
     label: string
+    metricKey: string
   }): WorkerLoopHealth {
-    if (loops.has(label)) {
-      throw new Error(`Worker health loop "${label}" is already registered`)
+    if (!/^[a-z][a-z0-9_]{0,63}$/.test(metricKey)) {
+      throw new Error('Worker health metric key must be a bounded snake_case identifier')
+    }
+    if (loops.has(metricKey)) {
+      throw new Error(`Worker health loop metric key "${metricKey}" is already registered`)
     }
 
     const state: WorkerLoopState = {
@@ -50,9 +56,10 @@ export function createWorkerHealth({
       lastError: null,
       lastStartedAt: null,
       lastSucceededAt: null,
+      metricKey,
       running: false,
     }
-    loops.set(label, state)
+    loops.set(metricKey, state)
 
     return {
       failed(error) {

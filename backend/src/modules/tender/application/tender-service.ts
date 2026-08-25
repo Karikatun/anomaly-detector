@@ -97,6 +97,24 @@ export function createTenderService({
   }
 
   const fingerprint = (command: TenderCommand) => JSON.stringify(command)
+  const parseCommand = (commandInput: TenderCommand) => {
+    const parsedCommand = tenderCommandSchema.safeParse(commandInput)
+    if (!parsedCommand.success) {
+      throw new TenderFailure('invalid_tender_command', 'Tender command is invalid')
+    }
+    return parsedCommand.data
+  }
+  const findCommandReceipt = async (commandInput: TenderCommand) => {
+    const command = parseCommand(commandInput)
+    const tender = await readTender(command.tenderId)
+    readPlayer(tender, command.actorId)
+    const previousCommand = tender.processedCommands[command.commandId]
+    if (!previousCommand) return undefined
+    if (previousCommand.fingerprint !== fingerprint(command)) {
+      throw new TenderFailure('duplicate_command_conflict', `Command ${command.commandId} conflicts with its first use`)
+    }
+    return previousCommand.receipt
+  }
   const isActivePlayer = (tender: StoredTender, playerId: string) =>
     tender.forfeitedAtByPlayer[playerId] === undefined
   const activePlayers = (tender: StoredTender) => tender.players
@@ -510,11 +528,7 @@ export function createTenderService({
     },
 
     async execute(commandInput: TenderCommand): Promise<CommandReceipt> {
-      const parsedCommand = tenderCommandSchema.safeParse(commandInput)
-      if (!parsedCommand.success) {
-        throw new TenderFailure('invalid_tender_command', 'Tender command is invalid')
-      }
-      const command = parsedCommand.data
+      const command = parseCommand(commandInput)
       const tender = await readTender(command.tenderId)
       const player = readPlayer(tender, command.actorId)
       const commandFingerprint = fingerprint(command)
@@ -1351,6 +1365,8 @@ export function createTenderService({
         tender,
       })
     },
+
+    findCommandReceipt,
 
     async readTenderPlacement(query: TenderViewQuery): Promise<number | undefined> {
       const parsedQuery = tenderViewQuerySchema.safeParse(query)

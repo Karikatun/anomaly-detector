@@ -57,16 +57,21 @@ export function createTenderRoutes(input: {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
   routes.use('*', input.authenticatedMutationBudget)
-  routes.use('/:tenderId/commands', async (c, next) => {
-    const tenderId = c.req.param('tenderId')
-    if (!tenderResourceIdSchema.safeParse(tenderId).success) {
-      await next()
-      return
-    }
+  routes.openapi(readTenderRoute, async (c) => c.json(
     await executeTenderRead(() => input.tender.readTenderView({
       playerId: c.var.user.id,
-      tenderId,
-    }))
+      tenderId: c.req.valid('param').tenderId,
+    })),
+    200,
+  ))
+  routes.openapi(executeTenderCommandRoute, async (c) => {
+    const command = c.req.valid('json')
+    const tenderId = c.req.valid('param').tenderId
+    if (command.actorId !== c.var.user.id || command.tenderId !== tenderId) {
+      throw new AppError(403, 'FORBIDDEN', 'Tender command identity does not match this request')
+    }
+    const replayedReceipt = await executeTender(() => input.tender.findCommandReceipt(command))
+    if (replayedReceipt) return c.json(replayedReceipt, 200)
     const budget = await input.commandBudget.consume({
       key: `${c.var.user.id}:${tenderId}`,
       now: new Date(),
@@ -81,21 +86,6 @@ export function createTenderRoutes(input: {
         undefined,
         'tender_command_budget',
       )
-    }
-    await next()
-  })
-  routes.openapi(readTenderRoute, async (c) => c.json(
-    await executeTenderRead(() => input.tender.readTenderView({
-      playerId: c.var.user.id,
-      tenderId: c.req.valid('param').tenderId,
-    })),
-    200,
-  ))
-  routes.openapi(executeTenderCommandRoute, async (c) => {
-    const command = c.req.valid('json')
-    const tenderId = c.req.valid('param').tenderId
-    if (command.actorId !== c.var.user.id || command.tenderId !== tenderId) {
-      throw new AppError(403, 'FORBIDDEN', 'Tender command identity does not match this request')
     }
     return c.json(await executeTender(() => input.tender.execute(command)), 200)
   })

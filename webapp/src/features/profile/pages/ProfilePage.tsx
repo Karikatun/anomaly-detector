@@ -148,7 +148,11 @@ function AccountProtectionContent({
 
   if (protection.isPending) {
     return (
-      <section className={styles.protectionSection} aria-labelledby="profile-protection-title">
+      <section
+        id="account-protection"
+        className={styles.protectionSection}
+        aria-labelledby="profile-protection-title"
+      >
         <Typography as="h2" id="profile-protection-title" className={styles.protectionTitle}>
           {t('profile.protection.title')}
         </Typography>
@@ -161,7 +165,11 @@ function AccountProtectionContent({
 
   if (protection.isError) {
     return (
-      <section className={styles.protectionSection} aria-labelledby="profile-protection-title">
+      <section
+        id="account-protection"
+        className={styles.protectionSection}
+        aria-labelledby="profile-protection-title"
+      >
         <div className={styles.protectionCopy}>
           <Typography as="h2" id="profile-protection-title" className={styles.protectionTitle}>
             {t('profile.protection.title')}
@@ -242,6 +250,7 @@ function AccountProtectionContent({
 
   return (
     <section
+      id="account-protection"
       ref={sectionRef}
       className={styles.protectionSection}
       aria-labelledby="profile-protection-title"

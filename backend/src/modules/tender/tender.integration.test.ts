@@ -4,6 +4,7 @@ import { createPrisma } from '../../db'
 import { createTenderModule } from './index'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 import { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
+import { createPrismaTenderOperationalStateReader } from './infrastructure/prisma-tender-operational-state'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl
@@ -63,6 +64,39 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       completionReason: 'all_players_left',
       phase: 'complete',
       winnerPlayerIds: [],
+    })
+  })
+
+  test('reads overdue and lifecycle metrics from persisted Tender state without player data', async () => {
+    const now = new Date('2026-08-25T10:00:00.000Z')
+    await prisma.tender.createMany({
+      data: [
+        {
+          dueAt: new Date('2026-08-25T10:01:00.000Z'),
+          phase: 'access-slot-selection',
+          state: {},
+          version: 1,
+        },
+        {
+          dueAt: new Date('2026-08-25T09:59:00.000Z'),
+          phase: 'reconnaissance',
+          state: {},
+          version: 1,
+        },
+        { phase: 'complete', state: {}, version: 1 },
+        {
+          phase: 'complete',
+          state: { completionReason: 'last_active_player' },
+          version: 1,
+        },
+      ],
+    })
+
+    await expect(createPrismaTenderOperationalStateReader(prisma).read(now)).resolves.toEqual({
+      active: 2,
+      completed: 2,
+      earlyFinished: 1,
+      overdue: 1,
     })
   })
 

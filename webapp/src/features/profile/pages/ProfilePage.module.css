@@ -138,6 +138,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 1.5rem;
+  scroll-margin-block: var(--space-4);
   padding: 1.25rem clamp(1.5rem, 3vw, 2.25rem);
   border-top: 1px solid rgba(42, 82, 117, .44);
   background: rgba(4, 17, 29, .72);

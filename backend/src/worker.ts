@@ -7,7 +7,11 @@ import {
 } from './modules/mail'
 import { createPrismaTenderStore } from './modules/tender'
 import { createTenderModule } from './modules/tender'
-import { createWorkerHealth, type WorkerLoopHealth } from './worker-health'
+import { createOperationalMetrics, type OperationalMetrics } from './operational-metrics'
+import {
+  createWorkerHealth,
+  type WorkerLoopHealth,
+} from './worker-health'
 
 export async function runWorker() {
   const runtime = createBackendRuntime()
@@ -39,10 +43,14 @@ export async function runWorker() {
       })
     : null
   const health = createWorkerHealth()
+  const operationalMetrics = createOperationalMetrics({
+    runtime: 'worker',
+    workerHealth: health.snapshot,
+  })
   const healthPort = runtime.env.WORKER_HEALTH_PORT ?? runtime.env.PORT + 1
   const healthServer = Bun.serve({
-    fetch: health.fetch,
-    hostname: '0.0.0.0',
+    fetch: createWorkerHttpFetch({ health, operationalMetrics }),
+    hostname: runtime.env.WORKER_HEALTH_HOST ?? '127.0.0.1',
     port: healthPort,
   })
 
@@ -53,6 +61,7 @@ export async function runWorker() {
     health: health.registerLoop({
       intervalMs: 2_000,
       label: 'Tender advancement',
+      metricKey: 'tender_advancement',
     }),
     intervalMs: 2_000,
     label: 'Tender advancement',
@@ -66,6 +75,7 @@ export async function runWorker() {
     health: health.registerLoop({
       intervalMs: 250,
       label: 'Room start',
+      metricKey: 'room_start',
     }),
     intervalMs: 250,
     label: 'Room start',
@@ -77,6 +87,7 @@ export async function runWorker() {
         health: health.registerLoop({
           intervalMs: runtime.env.MAIL_SMTP_WORKER_INTERVAL_MS,
           label: 'Transactional mail delivery',
+          metricKey: 'transactional_mail_delivery',
         }),
         intervalMs: runtime.env.MAIL_SMTP_WORKER_INTERVAL_MS,
         label: 'Transactional mail delivery',
@@ -85,6 +96,10 @@ export async function runWorker() {
             limit: 20,
             now: new Date(),
             workerId: mailWorkerId,
+          })
+          recordMailProtectionTransitions({
+            observe: operationalMetrics.observe,
+            protectionAlerts: result.protectionAlerts,
           })
           const alertDelivery = await mail.outboxDrainer!.dispatchProtectionAlerts({
             deliver: (alert) => emitMailDeliveryProtectionAlert(alert),
@@ -117,6 +132,29 @@ export async function runWorker() {
   process.on('SIGTERM', () => {
     void shutdown('SIGTERM')
   })
+}
+
+export function createWorkerHttpFetch(input: {
+  health: ReturnType<typeof createWorkerHealth>
+  operationalMetrics: OperationalMetrics
+}) {
+  return (request: Request) => new URL(request.url).pathname === '/metrics'
+    ? input.operationalMetrics.fetch(request)
+    : input.health.fetch(request)
+}
+
+export function recordMailProtectionTransitions(input: {
+  observe: OperationalMetrics['observe']
+  protectionAlerts: Array<{
+    reason: 'delivery_budget_exhausted' | 'delivery_circuit_open'
+  }>
+}) {
+  for (const alert of input.protectionAlerts) {
+    input.observe({
+      kind: 'mail_protection_transition',
+      reason: alert.reason,
+    })
+  }
 }
 
 export function emitMailDeliveryProtectionAlert(

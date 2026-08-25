@@ -6,6 +6,7 @@ import type { DbClient } from './db'
 import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { clientAddress, createApiBodyLimit, createAuthSecurity } from './http/security'
+import type { OperationalMetrics } from './operational-metrics'
 import { createPrismaRequestBudget } from './security/request-budget'
 import {
   createRequestBudgetPolicyCatalog,
@@ -40,6 +41,7 @@ type CreateAppOptions = {
   prisma: DbClient
   securityEvents?: SecurityEventLogger
   mailPolicySource?: MailServiceCandidateSource
+  operationalMetrics?: OperationalMetrics
   tender?: TenderModule
 }
 
@@ -47,10 +49,14 @@ export function createApp({
   env,
   logoutCleanup,
   mailPolicySource,
+  operationalMetrics,
   prisma,
   securityEvents = consoleSecurityEventLogger,
   tender: providedTender,
 }: CreateAppOptions) {
+  const observedSecurityEvents = operationalMetrics
+    ? operationalMetrics.wrapSecurityEvents(securityEvents)
+    : securityEvents
   const requestBudgetPolicies = createRequestBudgetPolicyCatalog(env)
   const requestBudget = createPrismaRequestBudget(prisma, env.JWT_SECRET)
   const tender = providedTender ?? createPersistentTenderModule(prisma)
@@ -115,7 +121,7 @@ export function createApp({
       prisma,
       requestBudgetPolicyEntries(requestBudgetPolicies),
     ),
-    securityEvents,
+    securityEvents: observedSecurityEvents,
   })
   const app = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
@@ -123,7 +129,8 @@ export function createApp({
 
   app.use(secureHeaders({ crossOriginResourcePolicy: 'cross-origin' }))
   app.use('*', createSecurityRequestContext())
-  app.use('*', createApiBodyLimit(env.AUTH_BODY_LIMIT_BYTES, securityEvents))
+  if (operationalMetrics) app.use('/api/*', operationalMetrics.apiRequestMiddleware)
+  app.use('*', createApiBodyLimit(env.AUTH_BODY_LIMIT_BYTES, observedSecurityEvents))
   app.use(
     '*',
     cors({
@@ -149,7 +156,7 @@ export function createApp({
   for (const middleware of createAuthSecurity({
     rateLimitMax: env.AUTH_RATE_LIMIT_MAX,
     rateLimitWindowSeconds: env.AUTH_RATE_LIMIT_WINDOW_SECONDS,
-    securityEvents,
+    securityEvents: observedSecurityEvents,
     trustProxy: env.TRUST_PROXY,
     trustedProxyClientIpHeader: env.TRUSTED_PROXY_CLIENT_IP_HEADER,
     trustedProxyClientIpPosition: env.TRUSTED_PROXY_CLIENT_IP_POSITION,
@@ -214,7 +221,7 @@ export function createApp({
   })
 
   app.notFound((c) => c.json(errorResponse('NOT_FOUND', 'Route not found'), 404))
-  app.onError((error, c) => handleError(error, c, securityEvents))
+  app.onError((error, c) => handleError(error, c, observedSecurityEvents))
 
   return app
 }

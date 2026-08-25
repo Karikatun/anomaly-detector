@@ -104,7 +104,8 @@ export default async function globalSetup() {
   const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? defaultDatabaseUrl
   const databaseName = new URL(databaseUrl).pathname.replace(/^\//, '')
   const backendPort = Number(process.env.E2E_BACKEND_PORT)
-  const workerHealthPort = backendPort + 1
+  const operationalMetricsPort = Number(process.env.OPERATIONAL_METRICS_PORT)
+  const workerHealthPort = Number(process.env.WORKER_HEALTH_PORT)
 
   if (!databaseName.endsWith('_test') && process.env.E2E_ALLOW_NON_TEST_DATABASE !== '1') {
     throw new Error(
@@ -117,6 +118,7 @@ export default async function globalSetup() {
 
   const env = composeEnv(e2eBackendEnv({
     DATABASE_URL: databaseUrl,
+    OPERATIONAL_METRICS_PORT: String(operationalMetricsPort),
     PORT: String(backendPort),
     TEST_DATABASE_URL: databaseUrl,
     WORKER_HEALTH_PORT: String(workerHealthPort),

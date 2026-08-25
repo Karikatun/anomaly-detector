@@ -20,6 +20,8 @@ const containerName =
   process.env.BACKEND_DOCKER_SMOKE_CONTAINER ??
   `anomaly-detector-backend-smoke-${repositoryHash}-${process.pid}`
 const hostPort = process.env.BACKEND_DOCKER_SMOKE_PORT ?? String(await findOpenPort())
+let metricsHostPort = process.env.BACKEND_DOCKER_SMOKE_METRICS_PORT ?? String(await findOpenPort())
+while (metricsHostPort === hostPort) metricsHostPort = String(await findOpenPort())
 const networkName = `${composeProjectName}_default`
 const composeArgs = ['compose', '-p', composeProjectName]
 const databaseUrlForHost =
@@ -163,6 +165,21 @@ async function smokeAuthApi() {
   process.stdout.write('Backend Docker DB-backed auth smoke passed\n')
 }
 
+async function smokePrivateMetricsBoundary() {
+  const publicResponse = await fetch(`http://127.0.0.1:${hostPort}/metrics`)
+  if (publicResponse.status !== 404) {
+    throw new Error(`Public API unexpectedly exposed metrics with HTTP ${publicResponse.status}`)
+  }
+
+  const privateResponse = await fetch(`http://127.0.0.1:${metricsHostPort}/metrics`)
+  const body = await privateResponse.text()
+  if (!privateResponse.ok || !body.includes('anomaly_detector_api_up 1')) {
+    throw new Error(`Private operational metrics failed with HTTP ${privateResponse.status}`)
+  }
+
+  process.stdout.write('Backend private operational metrics boundary passed\n')
+}
+
 try {
   run('docker', [...composeArgs, 'up', '-d', 'postgres_test'], { env: dockerEnv })
   await waitForComposePostgres()
@@ -195,8 +212,14 @@ try {
     networkName,
     '-p',
     `127.0.0.1:${hostPort}:3000`,
+    '-p',
+    `127.0.0.1:${metricsHostPort}:3002`,
     '-e',
     'PORT=3000',
+    '-e',
+    'OPERATIONAL_METRICS_HOST=0.0.0.0',
+    '-e',
+    'OPERATIONAL_METRICS_PORT=3002',
     '-e',
     `DATABASE_URL=${databaseUrlForContainer}`,
     '-e',
@@ -211,6 +234,7 @@ try {
   ])
 
   await waitForHealth()
+  await smokePrivateMetricsBoundary()
   await smokeAuthApi()
 } finally {
   spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' })

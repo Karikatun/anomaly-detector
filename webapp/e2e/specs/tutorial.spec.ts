@@ -28,6 +28,12 @@ const tasks = {
   helpDesktop: 'Теперь разберёмся, что означает «Отражение». Откройте «Трактовку анализов» в верхней части экрана.',
 } as const
 
+const accountProtectionInvitation = {
+  action: 'К ЗАЩИТЕ АККАУНТА',
+  title: 'Необязательно: защитите аккаунт',
+  warning: 'Без подтверждённой почты самостоятельное восстановление доступа невозможно.',
+} as const
+
 function captureRuntimeErrors(page: Page) {
   const errors: string[] = []
   page.on('console', (message) => {
@@ -180,6 +186,63 @@ async function startTutorial(page: Parameters<typeof registerBrowserUser>[0]) {
   await expect(page.locator('[data-tutorial-access-slot][data-selected]')).toHaveCount(0)
   await expect(page.getByText('Слот: 5', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+}
+
+async function openSavedCompletionWithAccountProtection(
+  page: Page,
+  accountProtection: Record<string, unknown>,
+  responseStatus = 200,
+  responseGate?: Promise<void>,
+) {
+  await startTutorial(page)
+  await page.route('**/api/auth/account-protection', async (route) => {
+    await responseGate
+    await route.fulfill({
+      contentType: 'application/json',
+      status: responseStatus,
+      body: JSON.stringify(responseStatus === 200
+        ? { accountProtection }
+        : { error: { code: 'UNAVAILABLE', message: 'Temporary failure' } }),
+    })
+  })
+  await page.evaluate(() => {
+    const key = 'anomaly-detector:tutorial-session'
+    const serialized = sessionStorage.getItem(key)
+    if (!serialized) throw new Error('Tutorial session is unavailable')
+    const state = JSON.parse(serialized) as { step: string }
+    state.step = 'complete'
+    sessionStorage.setItem(key, JSON.stringify(state))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Сохранить отметку' }).click()
+  await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+}
+
+async function elementBox(locator: Locator) {
+  const box = await locator.boundingBox()
+  expect(box).not.toBeNull()
+  return box!
+}
+
+function expectBoxWithinViewport(
+  box: { x: number; y: number; width: number; height: number },
+  viewport: { width: number; height: number },
+) {
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.y).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height)
+}
+
+function expectStableBox(
+  before: { x: number; y: number; width: number; height: number },
+  after: { x: number; y: number; width: number; height: number },
+  tolerance = 2,
+) {
+  expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(tolerance)
 }
 
 async function continueInformationStep(page: Parameters<typeof registerBrowserUser>[0], task: string) {
@@ -673,7 +736,25 @@ async function expectSpotlightMatchesTarget(
     if (!target || !spotlightPath) return Number.POSITIVE_INFINITY
 
     const targetRect = target.getBoundingClientRect()
-    const spotlightRect = spotlightPath.getBoundingClientRect()
+    const spotlightBox = spotlightPath.getBBox()
+    const matrix = spotlightPath.getScreenCTM()
+    if (!matrix) return Number.POSITIVE_INFINITY
+    const transform = (x: number, y: number) => ({
+      x: matrix.a * x + matrix.c * y + matrix.e,
+      y: matrix.b * x + matrix.d * y + matrix.f,
+    })
+    const corners = [
+      transform(spotlightBox.x, spotlightBox.y),
+      transform(spotlightBox.x + spotlightBox.width, spotlightBox.y),
+      transform(spotlightBox.x, spotlightBox.y + spotlightBox.height),
+      transform(spotlightBox.x + spotlightBox.width, spotlightBox.y + spotlightBox.height),
+    ]
+    const spotlightRect = {
+      bottom: Math.max(...corners.map((corner) => corner.y)),
+      left: Math.min(...corners.map((corner) => corner.x)),
+      right: Math.max(...corners.map((corner) => corner.x)),
+      top: Math.min(...corners.map((corner) => corner.y)),
+    }
     const expectedPadding = 8
     return Math.max(
       Math.abs(spotlightRect.left - (targetRect.left - expectedPadding)),
@@ -730,16 +811,34 @@ async function captureVisibleSpotlightMismatchDuringStepChange(
           ).find((path) => path.getAttribute('stroke') === '#38bdf8')
           if (target && spotlightPath) {
             const targetRect = target.getBoundingClientRect()
-            const spotlightRect = spotlightPath.getBoundingClientRect()
+            const spotlightBox = spotlightPath.getBBox()
+            const matrix = spotlightPath.getScreenCTM()
             const spotlightStyle = getComputedStyle(spotlightPath)
             const opacity = Number(spotlightStyle.opacity)
             const visible = spotlightStyle.visibility !== 'hidden' && opacity > .05
-            const mismatch = Math.max(
-              Math.abs(spotlightRect.left - (targetRect.left - 8)),
-              Math.abs(spotlightRect.top - (targetRect.top - 8)),
-              Math.abs(spotlightRect.right - (targetRect.right + 8)),
-              Math.abs(spotlightRect.bottom - (targetRect.bottom + 8)),
-            )
+            const mismatch = (() => {
+              if (!matrix) return Number.POSITIVE_INFINITY
+              const transform = (x: number, y: number) => ({
+                x: matrix.a * x + matrix.c * y + matrix.e,
+                y: matrix.b * x + matrix.d * y + matrix.f,
+              })
+              const corners = [
+                transform(spotlightBox.x, spotlightBox.y),
+                transform(spotlightBox.x + spotlightBox.width, spotlightBox.y),
+                transform(spotlightBox.x, spotlightBox.y + spotlightBox.height),
+                transform(spotlightBox.x + spotlightBox.width, spotlightBox.y + spotlightBox.height),
+              ]
+              const left = Math.min(...corners.map((corner) => corner.x))
+              const top = Math.min(...corners.map((corner) => corner.y))
+              const right = Math.max(...corners.map((corner) => corner.x))
+              const bottom = Math.max(...corners.map((corner) => corner.y))
+              return Math.max(
+                Math.abs(left - (targetRect.left - 8)),
+                Math.abs(top - (targetRect.top - 8)),
+                Math.abs(right - (targetRect.right + 8)),
+                Math.abs(bottom - (targetRect.bottom + 8)),
+              )
+            })()
             if (visible && mismatch > 1) {
               mismatches.push(mismatch)
             }
@@ -1201,6 +1300,17 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
   await expect(page.getByText('В настоящем Тендере будет пять раундов', { exact: false })).toBeVisible()
   await expect(page.getByText('Лёгкому Контракту нужен один подходящий опыт', { exact: false })).toBeVisible()
+  const protectionInvitation = page.getByRole('region', {
+    name: accountProtectionInvitation.title,
+  })
+  await expect(protectionInvitation).toContainText(accountProtectionInvitation.warning)
+  await expect(protectionInvitation.getByRole('button', {
+    name: accountProtectionInvitation.action,
+  })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeEnabled()
+  await expectNoAxeViolations(page)
   const finalBackgrounds = await page.evaluate(() => ({
     app: getComputedStyle(document.body, '::before').backgroundImage,
     tutorial: [...document.querySelectorAll<HTMLElement>('*')].filter((element) => (
@@ -1210,17 +1320,139 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   expect(finalBackgrounds.app).toContain('/assets/body-background.webp')
   expect(finalBackgrounds.tutorial, 'completion must not render the tutorial-specific expedition background').toBe(0)
 
-  await page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' }).click()
+  const accountProtectionAction = protectionInvitation.getByRole('button', {
+    name: accountProtectionInvitation.action,
+  })
+  await focusByTab(page, accountProtectionAction)
+  await expectVisibleFocus(accountProtectionAction)
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/profile\/?#account-protection$/)
+  const accountProtectionCard = page.locator('#account-protection')
+  await expect(accountProtectionCard.getByRole('heading', { name: 'Защита аккаунта' })).toBeVisible()
+  await expect.poll(async () => accountProtectionCard.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return rect.top >= 0 && rect.bottom <= window.innerHeight
+  }), {
+    message: 'the Profile account-protection card must be visible after the tutorial CTA',
+  }).toBe(true)
+  await expect(page.getByRole('button', { name: 'Добавить почту' })).toBeVisible()
+  await page.getByRole('button', { name: 'Назад' }).click()
   await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeVisible()
-  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
-  await expect(
-    page.getByText('Сыграно матчей').locator('..').getByText('0', { exact: true }),
-  ).toBeVisible()
   await expect.poll(() => analyticsEvents).toContain('tutorial_complete')
   expect(runtimeErrors).toEqual([])
 })
 
-test('completes the full tutorial on mobile with each action clear of the coach', async ({ page }) => {
+test('keeps completion actions available when account protection lookup fails', async ({ page }) => {
+  await registerBrowserUser(page, 'Ученик без статуса защиты', 'tutorial-protection-unavailable')
+  await openSavedCompletionWithAccountProtection(page, {}, 503)
+
+  await expect(page.getByRole('region', { name: accountProtectionInvitation.title })).toHaveCount(0)
+  await expect(page.getByText(accountProtectionInvitation.title, { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeEnabled()
+})
+
+test('keeps the primary completion action stable while account protection loads on mobile', async ({ page }) => {
+  const viewport = { width: 390, height: 844 }
+  await page.setViewportSize(viewport)
+  await registerBrowserUser(page, 'Ученик с задержкой защиты', 'tutorial-protection-delayed')
+
+  let releaseAccountProtectionResponse!: () => void
+  const responseGate = new Promise<void>((resolve) => {
+    releaseAccountProtectionResponse = resolve
+  })
+  const accountProtectionRequest = page.waitForRequest('**/api/auth/account-protection')
+  await Promise.all([
+    openSavedCompletionWithAccountProtection(
+      page,
+      { state: 'password_unprotected' },
+      200,
+      responseGate,
+    ),
+    accountProtectionRequest,
+  ])
+
+  const createTenderAction = page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })
+  const protectionInvitation = page.getByRole('region', {
+    name: accountProtectionInvitation.title,
+  })
+  await expect(createTenderAction).toBeVisible()
+  await expect(protectionInvitation).toHaveCount(0)
+  const beforeResponse = await elementBox(createTenderAction)
+  expectBoxWithinViewport(beforeResponse, viewport)
+
+  releaseAccountProtectionResponse()
+  await expect(protectionInvitation).toContainText(accountProtectionInvitation.warning)
+  const afterResponse = await elementBox(createTenderAction)
+  const invitationBox = await elementBox(protectionInvitation)
+  expectBoxWithinViewport(afterResponse, viewport)
+  expectStableBox(beforeResponse, afterResponse)
+  expect(invitationBox.y).toBeGreaterThanOrEqual(afterResponse.y + afterResponse.height)
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await expectTouchTargetsMeetMinimum(page)
+  await expectNoAxeViolations(page)
+})
+
+for (const scenario of [
+  {
+    accountProtection: {
+      maskedAccountEmail: 'y***@yandex.ru',
+      state: 'yandex_managed',
+    },
+    name: 'Yandex-managed account',
+  },
+  {
+    accountProtection: {
+      maskedAccountEmail: 'p***@mail.ru',
+      recoveryCodes: 'available',
+      state: 'password_active',
+    },
+    name: 'protected password account',
+  },
+] as const) {
+  test(`does not show the Recovery Email invitation to a ${scenario.name}`, async ({ page }) => {
+    await registerBrowserUser(page, `Ученик ${scenario.name}`, `tutorial-no-invite-${scenario.accountProtection.state}`)
+    await openSavedCompletionWithAccountProtection(page, scenario.accountProtection)
+
+    await expect(page.getByRole('region', { name: accountProtectionInvitation.title })).toHaveCount(0)
+    await expect(page.getByText(accountProtectionInvitation.title, { exact: true })).toHaveCount(0)
+    await expect(page.getByText(accountProtectionInvitation.warning, { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', {
+      name: accountProtectionInvitation.action,
+    })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeEnabled()
+  })
+}
+
+for (const viewport of [
+  { height: 900, label: '1440x900', slug: '1440', width: 1440 },
+  { height: 768, label: '1024x768', slug: '1024', width: 1024 },
+] as const) {
+  test(`keeps completion actions available with the account protection invitation at ${viewport.label}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+    await registerBrowserUser(page, `Ученик ${viewport.slug}`, `tutorial-protect-${viewport.slug}`)
+    await openSavedCompletionWithAccountProtection(page, { state: 'password_unprotected' })
+
+    const protectionInvitation = page.getByRole('region', {
+      name: accountProtectionInvitation.title,
+    })
+    await expect(protectionInvitation).toContainText(accountProtectionInvitation.warning)
+    await expect(page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeEnabled()
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await expectTouchTargetsMeetMinimum(page)
+    await expectNoAxeViolations(page)
+  })
+}
+
+test('completes the full tutorial on mobile with each action clear of the coach', async ({
+  browserName,
+  page,
+}) => {
   test.setTimeout(120_000)
   page.setDefaultTimeout(15_000)
   await page.setViewportSize({ width: 390, height: 844 })
@@ -1470,13 +1702,37 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeHidden()
   await expect(page.getByRole('alert')).toContainText('отметку об обучении пока не удалось сохранить')
   expect(completionAttempts).toBe(1)
-  expect(runtimeErrors).toEqual([
-    'console: Failed to load resource: the server responded with a status of 503 (Service Unavailable)',
-  ])
+  expect(runtimeErrors).toEqual(browserName === 'firefox'
+    ? []
+    : ['console: Failed to load resource: the server responded with a status of 503 (Service Unavailable)'])
   runtimeErrors.length = 0
   await page.unroute('**/api/profile/tutorial/completion')
   await page.getByRole('button', { name: 'Сохранить отметку' }).click()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+  const mobileProtectionInvitation = page.getByRole('region', {
+    name: accountProtectionInvitation.title,
+  })
+  await expect(mobileProtectionInvitation).toContainText(accountProtectionInvitation.warning)
+  await expect(mobileProtectionInvitation.getByRole('button', {
+    name: accountProtectionInvitation.action,
+  })).toBeEnabled()
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await expectTouchTargetsMeetMinimum(page)
+  await expectNoAxeViolations(page)
+  await mobileProtectionInvitation.getByRole('button', {
+    name: accountProtectionInvitation.action,
+  }).click()
+  await expect(page).toHaveURL(/\/profile\/?#account-protection$/)
+  const mobileProtectionHeading = page.locator('#account-protection').getByRole('heading', {
+    name: 'Защита аккаунта',
+  })
+  await expect(mobileProtectionHeading).toBeVisible()
+  await expect.poll(async () => mobileProtectionHeading.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return rect.top >= 0 && rect.bottom <= window.innerHeight
+  }), {
+    message: 'the Profile account-protection heading must be visible after the mobile tutorial CTA',
+  }).toBe(true)
   expect(runtimeErrors).toEqual([])
 })
 
@@ -1512,8 +1768,10 @@ test('blocks a direct tutorial entry while the player has an active room', async
   await page.getByLabel('Количество игроков').selectOption('2')
   await page.getByRole('button', { name: 'Создать команду' }).click()
   await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)
+  await expect(page.getByRole('heading', { name: 'Лобби' })).toBeVisible()
 
   await page.goto('/tutorial')
+  await expect(page).toHaveURL('/tutorial')
   await expect(page.getByText('Сначала завершите активный Тендер', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Вернуться в матч' }).click()
   await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)

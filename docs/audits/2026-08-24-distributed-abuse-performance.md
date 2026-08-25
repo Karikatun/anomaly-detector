@@ -19,13 +19,68 @@ realtime hub и Prisma pool, но в одном OS process. Docker Desktop: clie
 memory. SMTP был только fake provider: измерено admission/lease/budget
 поведение, не сеть REG.RU и не получение письма в ящик.
 
-Драйвер находился в `.scratch`, отказывался работать с БД без суффикса
+Исторический драйвер находился в `.scratch`, отказывался работать с БД без суффикса
 `_test`, не сохранял access/refresh/realtime tickets, room codes, login/email,
 HMAC keys или request bodies и не входит в product diff. Сценарий был повторён
 после исправлений с одинаковыми status boundaries и без неожиданных `5xx`.
 Это локальный baseline и нижняя доказанная граница, не production SLO и не
 capacity ceiling для ALB, Managed PostgreSQL или отдельного multi-process
 deployment.
+
+С 2026-08-25 воспроизводимый преемник находится в
+`backend/scripts/local-abuse-performance.ts` и запускается только через:
+
+```bash
+bun run benchmark:local-abuse
+```
+
+При уже загруженном PostgreSQL image ориентир для developer laptop — 30–90 s;
+первый image pull может занять несколько минут. Workload намеренно включает 30
+одновременных Argon2id login и 100 invalid-ticket запросов, поэтому его запускают
+отдельно от других локальных load/E2E прогонов и только при достаточном запасе
+CPU/RAM.
+
+Runner очищает inherited Docker/Compose/database/provider selectors, инспектирует
+Docker context без caller overrides и принимает только local Unix socket. Он
+создаёт invocation-scoped Compose project с динамическим loopback port, сам
+формирует URL БД `anomaly_detector_test`, отключает SMTP и не обращается к live
+provider. Успешный JSON с `scope: "local_isolated"` и
+`artifactRetention: "ephemeral_cleanup_confirmed"` появляется только после
+подтверждённого `docker compose down -v`; raw Docker/driver stderr, credentials,
+login/email, пароли, hashes, tickets, Recovery Codes и reset tokens в evidence
+не попадают.
+
+Versioned manifest сохраняет прежние локально измеримые auth/mutation/Room/
+Tender/fake-mail/realtime boundaries и добавляет отсутствовавшие проверки:
+
+- Feedback: concurrent границы `5/account/day` и `20/trusted IP/day`;
+- realtime: отдельные ticket budget и invalid-ticket churn, cross-pool update и
+  reconnect snapshot, затем ровно десять активных subscriptions одного игрока
+  в одном process; одиннадцатая закрывается `4429`, исходные десять остаются
+  открыты, один sync выполняет десять view reads;
+- Argon2id: новый hash, wrong-password verify и unknown-account fallback без
+  раскрытия существования account, opportunistic rehash, email password reset и
+  Recovery Code password reset. Для трёх повторов каждого primitive evidence
+  включает latency percentiles, process CPU и sampled process RSS; это локальная
+  нижняя граница процесса, а не peak RSS/CPU production VM.
+
+Версионированный runner отдельно запущен 2026-08-25 на текущем локальном
+checkout: `18/18` сценариев завершились с `assertionsPassed: true` за `6.931 s`.
+Он подтвердил `5×401 + 1×429` для wrong-password, `30×200 + 1×429` для общего
+NAT, `5×201 + 1×429` и `20×201 + 1×429` для двух Feedback boundaries,
+`20×404 + 1×429` для Room, `60×200 + 1×429` для Tender, `10×201 + 1×429` для
+realtime tickets, `100×401` invalid tickets одновременно с `20×200` readiness,
+cross-pool Tender version `1`, process-local cap `10` и close code `4429` для
+одиннадцатого socket. Fake SMTP принял `60`, оставил одну запись в очереди и
+создал один protection alert; email/Recovery Code password reset отозвали прежние
+sessions и одноразовые credentials. Cleanup временного Compose project и volume
+подтверждён до публикации итогового JSON.
+
+Локальный Argon2id sample текущего запуска: new-hash p50 `40.65 ms`, wrong verify
+p50 `39.90 ms`, unknown-account fallback p50 `39.56 ms`, opportunistic rehash
+`60.85 ms`. Эти три повтора и sampled process RSS не являются production
+capacity/SLO. Основные таблицы ниже сохраняют исторический baseline 2026-08-24,
+чтобы не смешивать измерения разных checkout и окружений.
 
 ## Зафиксированные пределы
 
@@ -71,7 +126,8 @@ deliveries за 291.10 ms (206.11 admission/s). Эти throughput values изм�
 После закрытия соединения новый ticket был выдан другим listener, а reconnect
 на соседний listener получил authoritative Tender version `1` за 8.49 ms.
 
-На ramp из 50 idle sockets:
+На историческом, выполненном до введения process-local cap, ramp из 50 idle
+sockets:
 
 - все 50 получили greeting; p50 25.99 ms, p95 26.64 ms;
 - за 3.202 s выполнено 150 `readTenderView`, или 46.84 read/s;
@@ -80,9 +136,11 @@ deliveries за 291.10 ms (206.11 admission/s). Эти throughput values изм�
   process RSS на 851,968 bytes после forced GC, но абсолютный RSS общей Bun/
   Prisma нагрузки нестабилен и не является per-socket memory estimate.
 
-Текущий sync-loop делает примерно один authorized PostgreSQL view-read на
-активный socket в секунду. Доказано только 50 одновременных idle connections;
-линейный DB cost не разрешает объявлять больший production socket limit.
+Измерение подтвердило примерно один authorized PostgreSQL view-read на активный
+socket в секунду, но baseline 50 sockets больше не описывает достижимое состояние
+одного игрока: текущий process-local cap равен 10. Versioned runner проверяет
+bounded стоимость `10 reads/sync` для одного игрока; aggregate стоимость по
+разным игрокам остаётся линейной и не разрешает объявлять production capacity.
 
 Одновременно со 100 invalid handshakes все 20 readiness probes остались `200`
 (p95 19.86 ms), а application ticket-budget rows не изменились. Это доказывает
@@ -161,6 +219,8 @@ DAST: NOT RUN — production attack запрещён, а локальный driv
 
 ## Validation
 
+- Versioned `bun run benchmark:local-abuse`: PASS, `18/18`, secret-free JSON
+  опубликован только после `ephemeral_cleanup_confirmed`.
 - Production-like two-listener driver: PASS два раза после fixes, без `5xx` и
   timeout; финальные числа приведены выше.
 - Full backend PostgreSQL integration: PASS, 153 tests, 1447 assertions.
@@ -192,8 +252,9 @@ DAST: NOT RUN — production attack запрещён, а локальный driv
 - Не проверены ALB trusted-client-IP propagation, Smart Web Security, TLS/
   idle timeout, Managed PostgreSQL pool/lock waits, отдельные OS processes,
   production CPU/RSS, mobile network switching и provider SMTP latency.
-- Feedback входит в общий roadmap item, но не в пользовательский scope этого
-  запуска; его отдельный abuse/performance baseline остаётся открытым.
+- Feedback не входил в исторический запуск 2026-08-24. Versioned rerun
+  2026-08-25 подтвердил account/IP boundaries и локальные p95 `32.18 ms` /
+  `70.20 ms`; это не production capacity и не разрешение менять defaults.
 - Reconnect evidence ограничено двумя tabs и continuous ticket failure:
   массовый синхронный reconnect, manual retry и rapid WebSocket
   open→immediate-close отдельно не нагружались; jitter пока отсутствует.

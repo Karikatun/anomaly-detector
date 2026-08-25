@@ -58,7 +58,10 @@ const analyticsCampaignListSchema = z
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(3000),
-  WORKER_HEALTH_PORT: z.coerce.number().int().positive().optional(),
+  OPERATIONAL_METRICS_HOST: z.enum(['127.0.0.1', '0.0.0.0']).optional(),
+  OPERATIONAL_METRICS_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+  WORKER_HEALTH_HOST: z.enum(['127.0.0.1', '0.0.0.0']).optional(),
+  WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   ADMIN_USER_IDS: uuidListSchema,
@@ -137,6 +140,7 @@ const envSchema = z.object({
 }).superRefine((env, ctx) => {
   validateJwtSecret(env, ctx)
   validateProductionRuntime(env, ctx)
+  validateOperationalMetricsPort(env, ctx)
   validateCorsOrigins(env, ctx)
   validateWebappOrigin(env, ctx)
   validateAnalyticsEnv(env, ctx)
@@ -202,6 +206,20 @@ function validateProductionRuntime(env: z.infer<typeof envSchema>, ctx: z.Refine
       code: 'custom',
       path: ['COOKIE_SECURE'],
       message: 'COOKIE_SECURE must be true in production',
+    })
+  }
+}
+
+function validateOperationalMetricsPort(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  const workerHealthPort = env.WORKER_HEALTH_PORT ?? env.PORT + 1
+  if (
+    env.OPERATIONAL_METRICS_PORT === env.PORT
+    || env.OPERATIONAL_METRICS_PORT === workerHealthPort
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['OPERATIONAL_METRICS_PORT'],
+      message: 'OPERATIONAL_METRICS_PORT must differ from API and worker health ports',
     })
   }
 }

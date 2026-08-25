@@ -52,6 +52,13 @@ settings.
   a verified rollback path.
 - Security controls must not be weakened to make a test, release, demo, or
   integration pass.
+- Operational metrics are available only through private runtime listeners.
+  Public API ingress must return `404` for `/metrics`; metric labels are bounded
+  application enums and must not contain routes, object/player/session/request
+  identifiers, credentials, personal data, provider payloads, or error text.
+  Client-declared telemetry such as the realtime reconnect marker must remain a
+  corroborated trend signal and must never control authentication, limits, or
+  recovery decisions.
 
 `bun run security:secrets` scans tracked repository content. The staged scan in
 the pre-commit hook checks the exact future commit without printing a detected

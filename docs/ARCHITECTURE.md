@@ -101,6 +101,17 @@ The default runtime shape is a modular monolith: one backend codebase, one datab
 
 The current production baseline is a Yandex Cloud VM running separate API and worker containers from the same immutable backend image, plus PostgreSQL and Caddy. The target managed topology and migration conditions are documented in [YANDEX_CLOUD.md](YANDEX_CLOUD.md). Keep API, worker, and cron as entrypoints of the same backend workspace; add infrastructure only for a concrete runtime need. Transactional email uses a PostgreSQL outbox drained by the existing worker runtime rather than a new service. Named cron cleanup removes or redacts expired recovery credentials and pending mail, consent-scoped analytics events, feedback content and terminal outbox records according to their owning retention policies.
 
+Operational metrics stay inside this runtime shape. The public API composition
+root observes API outcomes and bounded security/realtime events, while a
+separate configured listener exposes only aggregate Prometheus text. The public
+API app has no metrics route. Worker loop health remains owned by
+`worker-health.ts` and is rendered on the existing private health listener;
+Tender lifecycle/deadline gauges come from a read-only aggregate in Tender's
+persistence boundary, and mail transition counters are recorded from newly
+persisted outbox protection transitions. Metrics never become a product
+contract, carry object/player identifiers, or influence authorization and game
+state. Runtime collectors and provider alerts remain deployment concerns.
+
 Tender phase delivery starts in the same backend service. Each instance keeps
 an in-memory registry of its own WebSocket connections and caps active or
 pending subscriptions at 10 per player per process. An excess connection closes

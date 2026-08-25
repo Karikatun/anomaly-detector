@@ -6,6 +6,7 @@
   padding: 1rem;
   place-items: center;
 }
+.statePageTopAligned { place-items: start center; }
 
 .stateCard {
   position: relative;
@@ -14,6 +15,21 @@
 }
 .stateLoading { display: flex; min-height: 6rem; align-items: center; justify-content: center; gap: var(--space-3); }
 .stateContent, .completeContent { display: grid; gap: 1rem; }
+.accountProtectionInvitation {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--warning) 42%, transparent);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+.accountProtectionCopy { display: grid; gap: var(--space-2); }
+.accountProtectionWarning {
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--warning);
+  color: color-mix(in srgb, var(--warning) 82%, var(--foreground));
+}
+.accountProtectionAction { width: fit-content; white-space: normal; }
 .completeActions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .saveError { display: grid; gap: .75rem; padding: .9rem; border: 1px solid rgba(248, 113, 113, .5); border-radius: .6rem; }
 

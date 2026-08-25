@@ -57,6 +57,7 @@ export class TenderRealtimeSession {
   private reconnectAttempt = 0
   private generation = 0
   private connecting = false
+  private socketAttempted = false
   private started = false
   private stopped = false
 
@@ -104,10 +105,12 @@ export class TenderRealtimeSession {
       )
       if (this.stopped || generation !== this.generation) return
 
-      const wsUrl = this.options.apiBaseUrl.replace(/^http/, 'ws')
-      const socket = this.options.createSocket(
-        `${wsUrl}/api/realtime/ws?ticket=${encodeURIComponent(ticketResponse.ticket)}&tenderId=${encodeURIComponent(this.options.tenderId)}`,
-      )
+      const wsUrl = new URL('/api/realtime/ws', this.options.apiBaseUrl.replace(/^http/, 'ws'))
+      wsUrl.searchParams.set('ticket', ticketResponse.ticket)
+      wsUrl.searchParams.set('tenderId', this.options.tenderId)
+      if (this.socketAttempted) wsUrl.searchParams.set('reconnect', '1')
+      this.socketAttempted = true
+      const socket = this.options.createSocket(wsUrl.toString())
       this.socket = socket
 
       socket.onmessage = (event) => {
@@ -205,6 +208,25 @@ export class TenderRealtimeSession {
   }
 }
 
+export function deferRealtimeSessionStart<TTimer>(
+  session: Pick<TenderRealtimeSession, 'start' | 'stop'>,
+  scheduler: {
+    cancel(timer: TTimer): void
+    schedule(callback: () => void): TTimer
+  },
+) {
+  let active = true
+  const timer = scheduler.schedule(() => {
+    if (!active) return
+    session.start()
+  })
+  return () => {
+    active = false
+    scheduler.cancel(timer)
+    session.stop()
+  }
+}
+
 export function useRealtimeTender(transport: AuthenticatedTransport, tenderId: string) {
   const [state, setState] = useState<RealtimeState>(disconnectedState)
   const [attempt, setAttempt] = useState(0)
@@ -219,9 +241,10 @@ export function useRealtimeTender(transport: AuthenticatedTransport, tenderId: s
       tenderId,
       transport,
     })
-    session.start()
-
-    return () => session.stop()
+    return deferRealtimeSessionStart<ReturnType<typeof globalThis.setTimeout>>(session, {
+      cancel: (timer) => globalThis.clearTimeout(timer),
+      schedule: (callback) => globalThis.setTimeout(callback, 0),
+    })
   }, [attempt, tenderId, transport])
 
   const retry = useCallback(() => {

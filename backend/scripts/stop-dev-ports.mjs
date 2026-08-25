@@ -5,9 +5,14 @@ import { fileURLToPath } from 'node:url'
 const backendRoot = await realpath(fileURLToPath(new URL('..', import.meta.url)))
 const apiPort = positivePort(Bun.env.PORT, 3000)
 const workerPort = positivePort(Bun.env.WORKER_HEALTH_PORT, apiPort + 1)
+const operationalMetricsPort = optionalPort(Bun.env.OPERATIONAL_METRICS_PORT)
 const listeners = []
 
-for (const port of new Set([apiPort, workerPort])) {
+for (const port of new Set([
+  apiPort,
+  workerPort,
+  ...(operationalMetricsPort === undefined ? [] : [operationalMetricsPort]),
+])) {
   for (const pid of listenerPids(port)) listeners.push({ pid, port })
 }
 
@@ -40,6 +45,11 @@ function positivePort(value, fallback) {
     throw new Error(`Invalid development port: ${value}`)
   }
   return port
+}
+
+function optionalPort(value) {
+  if (value === undefined || value === '') return undefined
+  return positivePort(value, 0)
 }
 
 function listenerPids(port) {

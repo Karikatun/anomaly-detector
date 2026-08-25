@@ -10,10 +10,17 @@ import { consumeRealtimeTicket, type RealtimeTicketStore } from './tickets'
 
 export type RealtimeSocketData = {
   closed: boolean
+  metricsConnected: boolean
   playerId: string
+  reconnect: boolean
   sessionId: string
   tenderId: string
   closeSubscription?: () => Promise<void>
+}
+
+export type RealtimeTelemetry = {
+  closed(closeCode: number): void
+  connected(reconnect: boolean): void
 }
 
 const knownTicketFailure = (failure: unknown): failure is RealtimeFailure =>
@@ -33,6 +40,7 @@ const unavailableRealtimeResponse = (context: string) => {
 
 export function createRealtimeWebSocketHandlers(input: {
   hub: RealtimeHub
+  telemetry?: RealtimeTelemetry
 }) {
   return {
     async open(ws: ServerWebSocket<RealtimeSocketData>) {
@@ -59,6 +67,12 @@ export function createRealtimeWebSocketHandlers(input: {
           return
         }
         pending.closeSubscription = () => subscription.close()
+        pending.metricsConnected = true
+        try {
+          input.telemetry?.connected(pending.reconnect)
+        } catch {
+          // Operational telemetry must never change an authorised connection.
+        }
       } catch (failure) {
         if (pending.closed) return
         const failureClose = resolveRealtimeFailureClose(failure)
@@ -68,9 +82,17 @@ export function createRealtimeWebSocketHandlers(input: {
         ws.close(failureClose.code, failureClose.reason)
       }
     },
-    async close(ws: ServerWebSocket<RealtimeSocketData>) {
+    async close(ws: ServerWebSocket<RealtimeSocketData>, closeCode = 1006) {
       const pending = ws.data
       pending.closed = true
+      if (pending.metricsConnected) {
+        pending.metricsConnected = false
+        try {
+          input.telemetry?.closed(closeCode)
+        } catch {
+          // Operational telemetry must never change socket cleanup.
+        }
+      }
       const closeSubscription = pending.closeSubscription
       pending.closeSubscription = undefined
       await closeSubscription?.()
@@ -113,7 +135,9 @@ export async function upgradeRealtimeWebSocket(input: {
     const upgraded = input.server.upgrade(input.request, {
       data: {
         closed: false,
+        metricsConnected: false,
         playerId: principal.userId,
+        reconnect: url.searchParams.get('reconnect') === '1',
         sessionId: principal.sessionId,
         tenderId,
       },

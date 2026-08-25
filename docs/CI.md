@@ -26,9 +26,9 @@ The job installs dependencies from `bun.lock` and runs:
 
 ### `e2e`
 
-The job installs the Chromium revision owned by the locked `webapp` Playwright
-workspace and runs `bun run e2e:webapp` through the real browser/backend/test
-database stack.
+The job installs the Chromium and Firefox revisions owned by the locked
+`webapp` Playwright workspace and runs `bun run e2e:webapp` through both browser
+projects against the real backend/test-database stack.
 
 All three jobs are required because local hooks can be bypassed, static and
 supply-chain scans do not replace behavioral tests, and `checks` does not

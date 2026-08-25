@@ -72,8 +72,8 @@ async function expectWorkingModelTableToStayStillWhileSaving(page: Page) {
   await expect(savingStatus).toBeVisible()
   const during = await table.boundingBox()
   expect(during).not.toBeNull()
-  expect(during!.y).toBe(before!.y)
-  expect(during!.height).toBe(before!.height)
+  expect(Math.abs(during!.y - before!.y)).toBeLessThanOrEqual(0.1)
+  expect(Math.abs(during!.height - before!.height)).toBeLessThanOrEqual(0.1)
 
   await expect(savingStatus).toBeHidden()
   await page.unrouteAll({ behavior: 'wait' })

@@ -71,6 +71,7 @@ export const tenderMessages = {
   'tender.command.evidenceUnavailable': 'Выбранное доказательство уже недоступно. Проверьте обновлённые данные и повторите.',
   'tender.command.laboratoryPairAlreadyResearched': 'Вы уже исследовали эту направленную пару. Выберите другую.',
   'tender.command.conflict': 'Время действия истекло или ход уже завершён. Проверьте текущее состояние игры.',
+  'tender.command.reconciling': 'Ответ сервера потерян. Сверяем состояние матча — не повторяйте действие.',
   'tender.command.fallback': 'Не удалось выполнить действие. Обновите состояние матча и попробуйте ещё раз.',
   'tender.lab.mode.aria': 'Режим лабораторного исследования',
   'tender.lab.mode.deep': 'Глубокое',

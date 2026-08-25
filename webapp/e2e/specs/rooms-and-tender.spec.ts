@@ -3,6 +3,8 @@ import AxeBuilder from '@axe-core/playwright'
 import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { createPrisma } from '../../../backend/src/db'
+import { defaultDatabaseUrl } from '../env'
 import { expect, registerBrowserUser, test } from '../helpers/test'
 
 const uxAuditDirectory = process.env.UX_AUDIT_DIR
@@ -196,6 +198,17 @@ async function expectSynchronizedTimers(first: Page, second: Page) {
     }
     return Math.abs(toSeconds(await firstTimer.textContent()) - toSeconds(await secondTimer.textContent()))
   }).toBeLessThanOrEqual(1)
+}
+
+async function disconnectTrackedTenderSockets(page: Page) {
+  await page.evaluate(() => {
+    const controlledWindow = window as Window & { __e2eWebSockets?: WebSocket[] }
+    const openSockets = controlledWindow.__e2eWebSockets?.filter(
+      (socket) => socket.readyState === WebSocket.OPEN && socket.url.includes('/api/realtime/ws'),
+    ) ?? []
+    if (openSockets.length === 0) throw new Error('No open Tender WebSocket to disconnect')
+    for (const socket of openSockets) socket.close(4001, 'E2E disconnect')
+  })
 }
 
 async function chooseAccessSlot(page: Page, slot: number) {
@@ -561,9 +574,99 @@ test('requires every lobby player to be ready before enabling the match start', 
   }
 })
 
+test('reconciles an accepted access-slot command after its response is lost', async ({ browser, page }) => {
+  test.setTimeout(60_000)
+  await registerBrowserUser(page, 'Хост сверки E2E', 'ambiguous-command-host')
+  const webOrigin = new URL(page.url()).origin
+  const guestContext = await browser.newContext({ baseURL: webOrigin })
+  const guestPage = await guestContext.newPage()
+
+  try {
+    await registerBrowserUser(guestPage, 'Гость сверки E2E', 'ambiguous-command-guest', webOrigin)
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await page.getByLabel('Количество игроков').selectOption('2')
+    await page.getByRole('button', { name: 'Создать команду' }).click()
+    const roomJoinCode = await readRoomJoinCode(page)
+
+    await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
+    await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
+    await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Начать игру' }).click()
+    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+
+    let committedStatus: number | undefined
+    const attemptedCommandIds: string[] = []
+    await page.route('**/api/tenders/*/commands', async (route) => {
+      const command = route.request().postDataJSON() as { commandId?: string; type?: string } | null
+      if (command?.type !== 'request-access-slot') {
+        await route.continue()
+        return
+      }
+      if (command.commandId) attemptedCommandIds.push(command.commandId)
+      if (attemptedCommandIds.length === 2) {
+        await route.fulfill({
+          status: 429,
+          contentType: 'application/json',
+          headers: { 'Retry-After': '1' },
+          body: JSON.stringify({
+            error: { code: 'RATE_LIMITED', message: 'E2E same-command retry limit' },
+          }),
+        })
+        return
+      }
+      if (attemptedCommandIds.length > 2) {
+        await route.continue()
+        return
+      }
+      const committedResponse = await route.fetch()
+      committedStatus = committedResponse.status()
+      await expect(page.getByRole('button', { name: 'Выбор принят — ожидаем игроков' })).toBeDisabled()
+      await route.abort('failed')
+    })
+    const failedCommand = page.waitForEvent('requestfailed', (request) => {
+      const command = request.postDataJSON() as { type?: string } | null
+      return request.method() === 'POST'
+        && request.url().endsWith('/commands')
+        && command?.type === 'request-access-slot'
+    })
+
+    await page.getByRole('button', { name: /^Слот доступа 1:/ }).click()
+    await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
+    await failedCommand
+    expect(committedStatus).toBe(200)
+    await expect.poll(() => attemptedCommandIds.length).toBe(2)
+    expect(new Set(attemptedCommandIds).size).toBe(1)
+
+    await expect(page.getByRole('alert')).toContainText(
+      'Ответ сервера потерян. Сверяем состояние матча — не повторяйте действие.',
+    )
+    await expect(page.getByRole('button', { name: 'Выйти из матча' })).toBeDisabled()
+    await page.reload()
+    await expect(page.getByRole('heading', { name: headings.access })).toBeVisible()
+    await expect(page.getByRole('alert')).toContainText(
+      'Ответ сервера потерян. Сверяем состояние матча — не повторяйте действие.',
+    )
+    await expect(page.getByRole('button', { name: 'Выйти из матча' })).toBeDisabled()
+    await expect.poll(() => attemptedCommandIds.length).toBe(3)
+    expect(new Set(attemptedCommandIds).size).toBe(1)
+    await expect(page.getByRole('button', { name: 'Выбор принят — ожидаем игроков' })).toBeDisabled()
+    await expect(page.getByRole('status')).toContainText('Слот 1: Аварийный зафиксирован и остаётся секретным.')
+    await expect(page.getByRole('button', { name: 'Выйти из матча' })).toBeEnabled()
+    await expect(page.getByText(
+      'Не удалось выполнить действие. Обновите состояние матча и попробуйте ещё раз.',
+      { exact: true },
+    )).toHaveCount(0)
+  } finally {
+    await guestContext.close()
+  }
+})
+
 test('lets a player collapse and return, then permanently forfeit the match', async ({ browser, page }) => {
   test.setTimeout(120_000)
-  await page.addInitScript(() => {
+  await page.context().addInitScript(() => {
     const controlledWindow = window as Window & { __e2eWebSockets: WebSocket[] }
     const NativeWebSocket = window.WebSocket
     controlledWindow.__e2eWebSockets = []
@@ -585,6 +688,7 @@ test('lets a player collapse and return, then permanently forfeit the match', as
   const webOrigin = new URL(page.url()).origin
   const guestContext = await browser.newContext({ baseURL: webOrigin })
   const guestPage = await guestContext.newPage()
+  let mirrorPage: Page | undefined
 
   try {
     await registerBrowserUser(guestPage, 'Гость выхода E2E', 'leave-guest', webOrigin)
@@ -602,6 +706,10 @@ test('lets a player collapse and return, then permanently forfeit the match', as
     await page.getByRole('button', { name: 'Начать игру' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    mirrorPage = await page.context().newPage()
+    await mirrorPage.goto(page.url())
+    await expect(mirrorPage.getByRole('heading', { name: headings.access })).toBeVisible()
+    await expect(mirrorPage.getByText('На связи', { exact: true })).toBeVisible()
 
     await page.setViewportSize({ width: 1440, height: 900 })
     const leaveMatchButton = page.locator('button[aria-label="Выйти из матча"]')
@@ -616,19 +724,24 @@ test('lets a player collapse and return, then permanently forfeit the match', as
         body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'E2E reconnect hold' } }),
       })
     })
-    await page.evaluate(() => {
-      const controlledWindow = window as Window & { __e2eWebSockets?: WebSocket[] }
-      const openSockets = controlledWindow.__e2eWebSockets?.filter(
-        (socket) => socket.readyState === WebSocket.OPEN && socket.url.includes('/api/realtime/ws'),
-      ) ?? []
-      if (openSockets.length === 0) throw new Error('No open Tender WebSocket to disconnect')
-      for (const socket of openSockets) socket.close(4001, 'E2E disconnect')
+    await mirrorPage.route('**/api/realtime/tickets', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'E2E reconnect hold' } }),
+      })
     })
+    await disconnectTrackedTenderSockets(page)
+    await disconnectTrackedTenderSockets(mirrorPage)
     const reconnectDialog = page.getByRole('alertdialog', { name: 'Связь с сервером прервана' })
     const reconnectButton = reconnectDialog.getByRole('button', { name: 'Переподключиться' })
+    const mirrorReconnectDialog = mirrorPage.getByRole('alertdialog', { name: 'Связь с сервером прервана' })
+    const mirrorReconnectButton = mirrorReconnectDialog.getByRole('button', { name: 'Переподключиться' })
     await expect(exitDialog).toHaveCount(0)
     await expect(reconnectDialog).toBeVisible()
     await expect(reconnectButton).toBeFocused()
+    await expect(mirrorReconnectDialog).toBeVisible()
+    await expect(mirrorReconnectButton).toBeFocused()
     await page.keyboard.press('Tab')
     await expect(reconnectButton).toBeFocused()
     await page.keyboard.press('Shift+Tab')
@@ -641,11 +754,22 @@ test('lets a player collapse and return, then permanently forfeit the match', as
     expect(reconnectAxe.violations.map((violation) => violation.id)).toEqual([])
     await captureViewportCheckpoint(page, 'reconnect-overlay-desktop-1440x900')
 
-    await page.unroute('**/api/realtime/tickets')
-    await reconnectButton.click()
+    await Promise.all([
+      page.unroute('**/api/realtime/tickets'),
+      mirrorPage.unroute('**/api/realtime/tickets'),
+    ])
+    await Promise.all([
+      reconnectButton.click(),
+      mirrorReconnectButton.click(),
+    ])
     const primaryContent = page.locator('[data-tender-primary-content]')
+    const mirrorPrimaryContent = mirrorPage.locator('[data-tender-primary-content]')
     await expect(primaryContent).toBeFocused()
+    await expect(mirrorPrimaryContent).toBeFocused()
     await expect(page.getByText('На связи', { exact: true })).toBeVisible()
+    await expect(mirrorPage.getByText('На связи', { exact: true })).toBeVisible()
+    await mirrorPage.close()
+    mirrorPage = undefined
 
     await page.setViewportSize({ width: 390, height: 844 })
     const firstAccessSlot = page.getByRole('button', { name: /^Слот доступа 1:/ })
@@ -657,14 +781,7 @@ test('lets a player collapse and return, then permanently forfeit the match', as
         body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'E2E reconnect hold' } }),
       })
     })
-    await page.evaluate(() => {
-      const controlledWindow = window as Window & { __e2eWebSockets?: WebSocket[] }
-      const openSockets = controlledWindow.__e2eWebSockets?.filter(
-        (socket) => socket.readyState === WebSocket.OPEN && socket.url.includes('/api/realtime/ws'),
-      ) ?? []
-      if (openSockets.length === 0) throw new Error('No open Tender WebSocket to disconnect')
-      for (const socket of openSockets) socket.close(4001, 'E2E disconnect')
-    })
+    await disconnectTrackedTenderSockets(page)
     await expect(reconnectDialog).toBeVisible()
     await expect(reconnectButton).toBeFocused()
     await captureViewportCheckpoint(page, 'reconnect-overlay-mobile-390x844')
@@ -726,7 +843,10 @@ test('lets a player collapse and return, then permanently forfeit the match', as
     await expect(page.locator('details[data-audit-section="full-audit"] > summary')).toBeVisible()
     await captureViewportCheckpoint(page, 'forfeited-participant-audit-mobile-390x844')
   } finally {
-    await guestContext.close()
+    await Promise.all([
+      guestContext.close(),
+      mirrorPage?.close(),
+    ])
   }
 })
 
@@ -807,21 +927,24 @@ test('keeps a four-player completed leaderboard compact after an early finish', 
 test('explains a completed Tender and conceals its participant audit from outsiders', async ({ browser, page }) => {
   test.setTimeout(90_000)
   page.setDefaultTimeout(12_000)
+  const prisma = createPrisma(
+    process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? defaultDatabaseUrl,
+  )
   const hostName = 'Оставшийся участник аудита E2E'
   const guestName = 'Выбывший участник аудита E2E'
   const runtimeIssues: string[] = []
-
-  await page.setViewportSize({ width: 390, height: 844 })
-  collectRuntimeIssues(runtimeIssues, 'host', page)
-  const hostSession = await registerBrowserUserWithApiAccess(page, hostName, 'issue-nine-host')
-  const webOrigin = new URL(page.url()).origin
-  const guestContext = await browser.newContext({
-    baseURL: webOrigin,
-    viewport: { width: 390, height: 844 },
-  })
+  let guestContext: BrowserContext | undefined
   let outsiderContext: BrowserContext | undefined
 
   try {
+    await page.setViewportSize({ width: 390, height: 844 })
+    collectRuntimeIssues(runtimeIssues, 'host', page)
+    const hostSession = await registerBrowserUserWithApiAccess(page, hostName, 'issue-nine-host')
+    const webOrigin = new URL(page.url()).origin
+    guestContext = await browser.newContext({
+      baseURL: webOrigin,
+      viewport: { width: 390, height: 844 },
+    })
     const guestPage = await guestContext.newPage()
     collectRuntimeIssues(runtimeIssues, 'guest', guestPage)
     await registerBrowserUser(guestPage, guestName, 'issue-nine-guest', webOrigin)
@@ -944,6 +1067,37 @@ test('explains a completed Tender and conceals its participant audit from outsid
       '19-issue-9-completed-audit-mobile-390x844',
     )
 
+    await prisma.tenderAuditEvent.update({
+      where: { tenderId_sequence: { sequence: 1, tenderId } },
+      data: {
+        kind: 'power_allocated',
+        payload: {},
+      },
+    })
+    const incompatibleResponse = await page.context().request.get(
+      `${hostSession.apiOrigin}/api/tenders/${tenderId}`,
+      { headers: { Authorization: `Bearer ${hostSession.accessToken}` } },
+    )
+    expect(incompatibleResponse.status()).toBe(200)
+    const incompatibleView = await incompatibleResponse.json() as Record<string, unknown>
+    expect(incompatibleView.phase).toBe('complete')
+    expect(incompatibleView).not.toHaveProperty('audit')
+    expect(incompatibleView).not.toHaveProperty('auditUnavailableReason')
+
+    await page.reload()
+    await expect(page.getByRole('heading', { name: 'Итоговый аудит недоступен' })).toBeVisible()
+    await expect(page.getByText(
+      'Сохранённые данные этого матча нельзя безопасно восстановить в текущей версии. Неполный аудит не показывается.',
+    )).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Повторить' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'В Историю матчей' })).toBeVisible()
+    await expect(page.locator('[data-audit-section]')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText('historical_data_incompatible')
+    await auditCheckpoint(
+      page,
+      '19b-issue-9-historical-audit-terminal-mobile-390x844',
+    )
+
     outsiderContext = await browser.newContext({
       baseURL: webOrigin,
       viewport: { width: 390, height: 844 },
@@ -1014,8 +1168,9 @@ test('explains a completed Tender and conceals its participant audit from outsid
     expect(runtimeIssues).toEqual([])
   } finally {
     await Promise.all([
-      guestContext.close(),
+      guestContext?.close(),
       outsiderContext?.close(),
+      prisma.$disconnect(),
     ])
   }
 })
@@ -1101,7 +1256,11 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
   }
 })
 
-test('two players complete every Tender stage and receive each realtime phase transition', async ({ browser, page }) => {
+test('two players complete every Tender stage and receive each realtime phase transition', async ({
+  browser,
+  browserName,
+  page,
+}) => {
   test.setTimeout(300_000)
   page.setDefaultTimeout(15_000)
   await page.setViewportSize({ width: 1440, height: 900 })
@@ -1122,6 +1281,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
   const guestPage = await guestContext.newPage()
   guestPage.setDefaultTimeout(15_000)
   const runtimeIssues: string[] = []
+  let expectedCommandAbort = false
   const collectRuntimeIssues = (source: string) => {
     const currentPage = source === 'host' ? page : guestPage
     currentPage.on('pageerror', (error) => runtimeIssues.push(`${source}: pageerror: ${error.message}`))
@@ -1130,11 +1290,26 @@ test('two players complete every Tender stage and receive each realtime phase tr
       const resourceUrl = message.location().url
       const expectedInjectedFailure = resourceUrl.endsWith('/api/auth/refresh')
         || /\/api\/tenders\/[0-9a-f-]+\/commands$/.test(resourceUrl)
+        || /\/api\/tenders\/[0-9a-f-]+\/commands/.test(message.text())
       if (!expectedInjectedFailure) runtimeIssues.push(`${source}: console: ${message.text()}`)
     })
     currentPage.on('requestfailed', (request) => {
+      const requestPath = new URL(request.url()).pathname
+      const expectedFirefoxBeaconRelease = browserName === 'firefox'
+        && request.method() === 'POST'
+        && requestPath === '/api/analytics/events'
+        && request.failure()?.errorText === 'NS_BINDING_ABORTED'
+      if (expectedFirefoxBeaconRelease) return
+      const expectedAmbiguousCommandAbort = source === 'host'
+        && expectedCommandAbort
+        && request.method() === 'POST'
+        && /\/api\/tenders\/[0-9a-f-]+\/commands$/.test(requestPath)
+      if (expectedAmbiguousCommandAbort) {
+        expectedCommandAbort = false
+        return
+      }
       runtimeIssues.push(
-        `${source}: requestfailed: ${request.method()} ${new URL(request.url()).pathname} (${request.failure()?.errorText ?? 'unknown failure'})`,
+        `${source}: requestfailed: ${request.method()} ${requestPath} (${request.failure()?.errorText ?? 'unknown failure'})`,
       )
     })
   }
@@ -1217,27 +1392,28 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await auditCheckpoint(page, '01-access-slot-desktop-1440x900')
     await auditCheckpoint(guestPage, '02-access-slot-mobile-390x844')
 
-    let rejectFirstCommand = true
+    const attemptedAccessCommands: Array<Record<string, unknown>> = []
     await page.route('**/api/tenders/*/commands', async (route) => {
-      if (rejectFirstCommand) {
-        await route.fulfill({
-          status: 503,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Команда временно недоступна' } }),
-        })
+      const command = route.request().postDataJSON() as Record<string, unknown> | null
+      if (command?.type !== 'request-access-slot') {
+        await route.continue()
+        return
+      }
+      attemptedAccessCommands.push(command)
+      if (attemptedAccessCommands.length === 1) {
+        const committedResponse = await route.fetch()
+        expect(committedResponse.status()).toBe(200)
+        expectedCommandAbort = true
+        await route.abort('failed')
         return
       }
       await route.continue()
     })
     await page.getByRole('button', { name: /^Слот доступа 1:/ }).click()
     await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
-    await expect(page.getByRole('alert')).toContainText(
-      'Не удалось выполнить действие. Обновите состояние матча и попробуйте ещё раз.',
-    )
-    await expect(page.getByRole('alert')).not.toContainText('Команда временно недоступна')
-    await expect(page.getByRole('button', { name: 'Подтвердить выбор' })).toBeEnabled()
-    rejectFirstCommand = false
-    await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
+    await expect.poll(() => attemptedAccessCommands.length).toBe(2)
+    expect(attemptedAccessCommands[0]?.commandId).toBe(attemptedAccessCommands[1]?.commandId)
+    expect(attemptedAccessCommands[0]).toEqual(attemptedAccessCommands[1])
     await expect(page.getByRole('button', { name: 'Выбор принят — ожидаем игроков' })).toBeDisabled()
     await expect(page.getByRole('status')).toContainText('Слот 1: Аварийный зафиксирован и остаётся секретным.')
     await expectPhase(guestPage, headings.access)

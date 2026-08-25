@@ -16,6 +16,10 @@ const rollbackCaddyfile = readFileSync(
   resolve(import.meta.dirname, '../deploy/yandex/Caddyfile.split-domain-rollback.example'),
   'utf8',
 )
+const runtimeCompose = readFileSync(
+  resolve(import.meta.dirname, '../deploy/yandex/backend-runtime.compose.yaml.example'),
+  'utf8',
+)
 
 const publicSite = siteBlock(caddyfile, 'anomaly-detector.ru')
 const playerSite = siteBlock(caddyfile, 'app.anomaly-detector.ru')
@@ -85,6 +89,20 @@ test('Yandex VM Caddy config permits only the production API realtime origins', 
 test('Yandex VM Caddy config proxies the API through the Compose network', () => {
   expect(caddyfile).toContain('reverse_proxy api:3000')
   expect(caddyfile).not.toContain('reverse_proxy 127.0.0.1:3000')
+})
+
+test('Yandex runtime publishes API metrics on host loopback only', () => {
+  expect(runtimeCompose).toContain('OPERATIONAL_METRICS_HOST: "0.0.0.0"')
+  expect(runtimeCompose).toContain('OPERATIONAL_METRICS_PORT: "3002"')
+  expect(runtimeCompose).toContain('"127.0.0.1:3002:3002"')
+  expect(runtimeCompose).not.toMatch(/^\s*-\s*"3002:3002"\s*$/m)
+})
+
+test('Yandex runtime exposes worker health only to the private VM security-group boundary', () => {
+  expect(runtimeCompose).toContain('WORKER_HEALTH_HOST: "0.0.0.0"')
+  expect(runtimeCompose).toContain('WORKER_HEALTH_PORT: "3001"')
+  expect(runtimeCompose).toMatch(/^\s*-\s*"3001:3001"\s*$/m)
+  expect(runtimeCompose).not.toContain('"127.0.0.1:3001:3001"')
 })
 
 test('Yandex VM Caddy config caches only fingerprinted player assets as immutable', () => {

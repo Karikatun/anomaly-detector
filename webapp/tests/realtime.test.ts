@@ -1,7 +1,35 @@
 import { expect, test } from 'bun:test'
 
 import { ApiRequestError, type AuthenticatedTransport } from '../src/platform/api'
-import { TenderRealtimeSession, type RealtimeState } from '../src/features/tender/realtime'
+import {
+  deferRealtimeSessionStart,
+  TenderRealtimeSession,
+  type RealtimeState,
+} from '../src/features/tender/realtime'
+
+test('cancels the development StrictMode setup before it spends a realtime ticket', () => {
+  let starts = 0
+  let stops = 0
+  let scheduled: (() => void) | undefined
+  let cancelled = false
+  const cleanup = deferRealtimeSessionStart({
+    start: () => { starts += 1 },
+    stop: () => { stops += 1 },
+  }, {
+    cancel: () => { cancelled = true },
+    schedule: (callback) => {
+      scheduled = callback
+      return 1
+    },
+  })
+
+  cleanup()
+  scheduled?.()
+
+  expect(cancelled).toBeTrue()
+  expect(starts).toBe(0)
+  expect(stops).toBe(1)
+})
 
 test('stopped realtime session never opens a socket after its ticket arrives', async () => {
   let resolveTicket!: (value: { expiresAt: string; ticket: string }) => void
@@ -99,6 +127,39 @@ test('an active realtime session reports stale state and schedules recovery afte
 
   expect(states.at(-1)?.connected).toBe(false)
   expect(reconnect).not.toBeNull()
+})
+
+test('marks only a socket attempt after the first one as reconnect telemetry', async () => {
+  const callbacks: Array<() => void> = []
+  const openedUrls: string[] = []
+  const sockets: FakeSocket[] = []
+  const session = new TenderRealtimeSession({
+    apiBaseUrl: 'https://api.test',
+    createSocket: (url) => {
+      openedUrls.push(url)
+      const socket = new FakeSocket()
+      sockets.push(socket)
+      return socket
+    },
+    onState: () => undefined,
+    scheduleReconnect: (callback) => {
+      callbacks.push(callback)
+      return callbacks.length
+    },
+    cancelReconnect: () => undefined,
+    tenderId: 'tender-reconnect-metric',
+    transport: resolvedTicketTransport(),
+  })
+
+  session.start()
+  await flushMicrotasks()
+  sockets[0]?.emitClose()
+  callbacks[0]?.()
+  await flushMicrotasks()
+
+  expect(openedUrls).toHaveLength(2)
+  expect(new URL(openedUrls[0]!).searchParams.has('reconnect')).toBeFalse()
+  expect(new URL(openedUrls[1]!).searchParams.get('reconnect')).toBe('1')
 })
 
 test('a dedicated concealed Tender rejection becomes terminal and does not reconnect', async () => {

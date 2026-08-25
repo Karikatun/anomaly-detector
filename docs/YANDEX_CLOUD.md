@@ -120,8 +120,11 @@ starts both processes from the committed
 definition:
 
 - API: `bun run start:api`, public to the load balancer on port `3000`;
+- API metrics: `GET /metrics` on host-loopback port `3002`, never on public
+  ingress;
 - worker: `bun run start:worker`, no public application routes;
-- worker health: `GET /health/live` and `GET /health/ready` on private port `3001`;
+- worker health and metrics: `GET /health/live`, `GET /health/ready` and
+  `GET /metrics` on private port `3001`;
 - both containers: `restart: always`, the same immutable image and production env.
 
 Do not combine API and worker into one process. A failed worker must be visible even when
@@ -146,7 +149,10 @@ Production env must include:
 ```bash
 NODE_ENV=production
 PORT=3000
+WORKER_HEALTH_HOST=0.0.0.0
 WORKER_HEALTH_PORT=3001
+OPERATIONAL_METRICS_HOST=0.0.0.0
+OPERATIONAL_METRICS_PORT=3002
 DATABASE_URL=postgresql://...
 JWT_SECRET=<64-or-more-hex-characters>
 ADMIN_USER_IDS=<comma-separated-operator-user-uuids>
@@ -789,29 +795,53 @@ the account notification settings. Until that account is created or connected,
 the alert remains visible in Monitoring but does not notify a person.
 
 Do not treat the dashboard as the complete P0 observability contract yet. The
-current application does not publish the following metrics, so truthful graphs
-and alerts cannot be configured for them:
+application now has a local Prometheus exposition contract at the exact
+`/metrics` path, with separate scrape targets for the two runtime processes:
 
-- API availability, `5xx` rate, and request latency;
-- worker last successful cycle timestamp;
-- overdue Tender count;
-- container restart count;
-- PostgreSQL connection count;
-- WebSocket reconnect rate;
-- auth throttling and exceptional security-event counts;
-- transactional-mail protection-transition counts;
-- active, completed, and early-finished match counts.
+- API target: `http://127.0.0.1:3002/metrics`. The API process starts this
+  listener only when `OPERATIONAL_METRICS_PORT` is configured. The versioned
+  Compose baseline sets `OPERATIONAL_METRICS_HOST=0.0.0.0` inside its isolated
+  container but publishes the port on host loopback only. Direct host
+  development keeps the default `127.0.0.1` bind. The public API listener and
+  API hostname intentionally return `404` for `/metrics`;
+- worker target: `http://127.0.0.1:3001/metrics` on the existing private worker
+  health listener. The versioned Compose baseline sets
+  `WORKER_HEALTH_HOST=0.0.0.0` inside the container and publishes `3001` on the
+  VM so the private instance-group health checker can reach it; the VM security
+  group must allow only the documented health-check and operations sources.
+  Direct host development defaults to a loopback listener. Port `3001` must
+  remain outside public ingress and must never be an ALB backend.
 
-Close this gap with one operational metrics endpoint scraped by Unified Agent
-in Prometheus format. Instrument the owning application and worker paths rather
-than deriving business state from fragile log text. Caddy or the API request
-boundary should own HTTP status/latency metrics; the worker health module should
-own its last-success timestamps; the Tender persistence boundary should own
-overdue and match-state counts; realtime should own reconnects; auth/security
-events should increment stable reason-labelled counters. Add container and
-PostgreSQL runtime collectors separately. Only then create the remaining
-mandatory alerts: API unavailable, worker stale, growing `5xx`, and any overdue
-Tender.
+The API target publishes `anomaly_detector_api_up`, bounded status-class request
+counters, a request-latency histogram, aggregate overdue and lifecycle Tender
+gauges, authorised realtime initial/reconnect and close counters, and bounded
+auth/security event categories. The worker target publishes each registered
+loop's last successful Unix timestamp, staleness and consecutive failures, plus
+newly persisted transactional-mail protection transitions. Reconnect is a
+telemetry-only `reconnect=1` marker produced after the first socket attempt in a
+client lifecycle and counted only after ticket consumption and authorised
+Tender subscription succeed; it has no authentication, authorization, rate-limit
+or recovery effect. Because the marker remains client-declared, an authenticated
+client can skew this bounded counter within the existing ticket budget. Use it
+as a trend corroborated by close, availability, and security signals, never as
+standalone incident evidence or an enforcement input.
+
+Every label comes from a fixed application enum. The exposition contains no
+route, object ID, player/session/request identifier, credential, provider detail
+or error text. Counter state is process-local and may reset on restart, as
+Prometheus counters normally do. Tender gauges come from one aggregate
+PostgreSQL query at scrape time; a failed query makes the private API target
+return `503` instead of publishing a plausible stale snapshot. Transactional-mail
+counts increment from the owning drain result only when the repository reports a
+new durable protection transition, not from retryable log delivery.
+
+This is local implementation evidence, not deployment evidence. Unified Agent
+scrape configuration, dashboard panels, notification routing and mandatory
+alerts for API unavailable, worker stale, growing `5xx`, and any overdue Tender
+remain owner-controlled Yandex changes. Container restart counts and PostgreSQL
+connection counts still require runtime collectors rather than application log
+parsing. None of those external collectors, graphs or alerts has been configured
+or verified by this repository change.
 
 Deploy `webapp` and fully prerendered `website` output as static websites in Yandex Object Storage. Keep `adminapp` out of public website buckets: in the current VM topology Caddy serves it from the protected operator hostname. Once `website` uses SSR/on-demand rendering or Astro server islands, that surface needs an Astro adapter and must move to a Serverless Container runtime instead of static hosting. When server islands appear on cached pages or rolling deploys, generate a stable key with `astro create-key` and configure `ASTRO_KEY` as a secret in both build and runtime environments. Never commit it, expose it as `PUBLIC_*`, print it in logs, or bake it into static output.
 

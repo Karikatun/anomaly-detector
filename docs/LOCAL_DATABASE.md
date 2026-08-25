@@ -88,6 +88,18 @@ record and Prisma migration history. It always removes only the temporary projec
 created. It does not read, modify, dump, or restore the normal development and test
 databases.
 
+Before creating that project, the drill removes inherited Docker and Compose selectors,
+inspects the active Docker context without caller overrides, and fails unless the context
+uses a local Unix socket. It then pins both the repository `docker-compose.yml` and that
+inspected socket for every Compose command, including cleanup. A successful run emits
+one bounded JSON evidence record only after `docker compose down -v` succeeds. The
+record includes `scope: "local_isolated"`,
+`artifactRetention: "ephemeral_cleanup_confirmed"`, start/end time, duration, dump
+format, synthetic recovery point and the verified probe/migration counts; it does not
+include environment values, the socket path, credentials, or an operator identity.
+Cleanup failure suppresses successful evidence, exits non-zero, and prints only a
+bounded exit-code diagnostic rather than Docker output.
+
 This local drill proves the repository procedure. Before production, repeat the recovery
 exercise against a production-like Yandex Managed PostgreSQL cluster and record the
 backup identifier, restore target, start/end time, recovery point, validation result, and
