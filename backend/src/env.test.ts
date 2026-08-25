@@ -10,6 +10,7 @@ describe('loadEnv', () => {
       CORS_ORIGINS: 'http://localhost:5173, http://localhost:8081',
     })
 
+    expect(env.API_HOST).toBe('0.0.0.0')
     expect(env.PORT).toBe(3000)
     expect(env.OPERATIONAL_METRICS_HOST).toBeUndefined()
     expect(env.OPERATIONAL_METRICS_PORT).toBeUndefined()
@@ -77,6 +78,21 @@ describe('loadEnv', () => {
     ])
 
     expect(() => loadEnv({ ...baseEnv, ADMIN_USER_IDS: 'operator' })).toThrow('ADMIN_USER_IDS')
+  })
+
+  test('accepts only an IPv4 address for the public API listener', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+
+    for (const host of ['0.0.0.0', '127.0.0.1', '10.0.0.8', '172.16.0.8', '192.168.1.8']) {
+      expect(loadEnv({ ...baseEnv, API_HOST: host }).API_HOST).toBe(host)
+    }
+
+    for (const host of ['localhost', 'api.example.com', '127.0.0', '256.0.0.1']) {
+      expect(() => loadEnv({ ...baseEnv, API_HOST: host })).toThrow('API_HOST')
+    }
   })
 
   test('accepts only a bounded worker health listener configuration', () => {

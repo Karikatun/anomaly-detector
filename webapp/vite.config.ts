@@ -11,12 +11,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
-  const environment = loadEnv(mode, __dirname, '')
+  const environmentDirectory = process.env.LOCAL_MVP_ENV_DIR ?? __dirname
+  const environment = loadEnv(mode, environmentDirectory, '')
   if (command === 'build' && environment.WEBAPP_RELEASE_BUILD === 'true') {
     validateWebappReleaseEnvironment(environment)
   }
 
   return {
+    envDir: environmentDirectory,
     server: {
       host: '0.0.0.0',
       headers: {

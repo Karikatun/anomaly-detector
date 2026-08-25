@@ -98,6 +98,7 @@ describe('storageConfigFromEnv', () => {
   test('returns null until Yandex Object Storage is configured', () => {
     expect(
       storageConfigFromEnv({
+        API_HOST: '0.0.0.0',
         PORT: 3000,
         DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
         JWT_SECRET: '12345678901234567890123456789012',

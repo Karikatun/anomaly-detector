@@ -49,6 +49,8 @@ Copy `backend/.env.example` to `backend/.env` for local development. The example
 
 `bun run dev` performs a port preflight before starting the API and worker. It gracefully stops stale listeners owned by this backend workspace on `PORT`, `WORKER_HEALTH_PORT` (defaults `3000` and `3001`), and configured `OPERATIONAL_METRICS_PORT`. It refuses to stop a listener whose process belongs to another workspace, so a port collision remains visible instead of terminating an unrelated application.
 
+`API_HOST` is the public API listener's IPv4 bind address and defaults to `0.0.0.0`, preserving container and production reachability. Set `API_HOST=127.0.0.1` for a deliberately local-only host process such as an isolated acceptance harness. DNS hostnames and malformed IPv4 values fail startup validation.
+
 The example `TEST_DATABASE_URL` matches the Docker Compose `postgres_test` service: database `anomaly_detector_test`, user `superuser`, password `superpassword`, manual host port `54330`. Automated runners may replace the port with a repository-derived value so parallel checkouts do not collide.
 
 Keep an explicit username and password in Prisma connection URLs even on local native PostgreSQL installs. Peer-auth style URLs without a user can make Prisma schema-engine commands such as `migrate dev`, `migrate deploy`, and `db push` fail with an unhelpful generic engine error.

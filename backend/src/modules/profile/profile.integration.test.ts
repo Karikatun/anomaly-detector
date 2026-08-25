@@ -13,6 +13,7 @@ maybeDescribe('profile statistics API integration', () => {
 
   const prisma = createPrisma(databaseUrl)
   const env: AppEnv = {
+    API_HOST: '0.0.0.0',
     ACCESS_TOKEN_TTL_SECONDS: 60,
     ANALYTICS_CAMPAIGN_ALLOWLIST: [],
     ANALYTICS_ENABLED: false,

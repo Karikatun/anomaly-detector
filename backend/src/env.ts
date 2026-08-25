@@ -57,6 +57,7 @@ const analyticsCampaignListSchema = z
 
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
+  API_HOST: z.ipv4().default('0.0.0.0'),
   PORT: z.coerce.number().int().positive().default(3000),
   OPERATIONAL_METRICS_HOST: z.enum(['127.0.0.1', '0.0.0.0']).optional(),
   OPERATIONAL_METRICS_PORT: z.coerce.number().int().min(1).max(65_535).optional(),

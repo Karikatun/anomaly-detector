@@ -17,6 +17,7 @@ maybeDescribe('feedback API integration', () => {
 
   const prisma = createPrisma(databaseUrl)
   const baseEnv: AppEnv = {
+    API_HOST: '0.0.0.0',
     ACCESS_TOKEN_TTL_SECONDS: 60,
     ADMIN_USER_IDS: [],
     ANALYTICS_ENABLED: false,

@@ -48,6 +48,7 @@ const app = createApp({
 })
 
 const server = Bun.serve<RealtimeSocketData>({
+  hostname: runtime.env.API_HOST,
   port: runtime.env.PORT,
   fetch(request, server) {
     const url = new URL(request.url)

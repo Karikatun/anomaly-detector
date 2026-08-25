@@ -38,6 +38,9 @@ if (process.env.WEBSITE_RELEASE_BUILD === 'true') {
 //      Yandex Cloud static path; use rebuilds or CDN/runtime cache
 //      freshness instead.
 export default defineConfig({
+	...(process.env.LOCAL_MVP_ENV_DIR
+		? { vite: { envDir: process.env.LOCAL_MVP_ENV_DIR } }
+		: {}),
 	...(process.env.SPLIT_DOMAIN_BUILD_OUT_DIR
 		? { outDir: process.env.SPLIT_DOMAIN_BUILD_OUT_DIR }
 		: {}),

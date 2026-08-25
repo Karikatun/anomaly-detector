@@ -23,6 +23,7 @@ if (!databaseUrl) {
 } else {
 describe('realtime websocket integration', () => {
   const env: AppEnv = {
+    API_HOST: '0.0.0.0',
     PORT: 3000,
     DATABASE_URL: databaseUrl!,
     JWT_SECRET: '12345678901234567890123456789012',
