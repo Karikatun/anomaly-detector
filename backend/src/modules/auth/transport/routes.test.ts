@@ -11,6 +11,7 @@ import type { AuthHttpEnv } from './middleware'
 import { createAuthRoutes, oauthCallbackErrorCode } from './routes'
 
 const env: AppEnv = {
+  API_HOST: '0.0.0.0',
   PORT: 3000,
   DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
   JWT_SECRET: 'test-route-secret-at-least-thirty-two-chars-123',

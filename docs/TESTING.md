@@ -7,6 +7,7 @@
 - `bun run check` — полный локальный поведенческий gate без сетевого dependency audit.
 - `bun run preflight:split-domain` — отдельный воспроизводимый target/rollback gate для подготовленного разделения `anomaly-detector.ru` и `app.anomaly-detector.ru`.
 - `bun run benchmark:local-abuse` — отдельный local-only benchmark для distributed abuse boundaries, Feedback, realtime cap и Argon/recovery; он создаёт invocation-scoped `*_test` PostgreSQL и публикует secret-free JSON только после удаления временного volume.
+- `bun run acceptance:mvp --players 2|3|4` — отдельный local-only harness для контролируемого человеческого прогона Public MVP Journey и штатного Tender; протокол и границы результата описаны в [LOCAL_MVP_ACCEPTANCE.md](LOCAL_MVP_ACCEPTANCE.md).
 - `pre-commit` отдельно сканирует staged Git index, поэтому проверяет именно содержимое будущего commit, а не игнорируемый локальный `backend/.env`.
 - GitHub Actions повторяет secret hygiene и tooling contracts независимо от локальных hooks, которые можно обойти через `--no-verify`.
 - `security-static` независимо запускает Gitleaks по Git-истории, Semgrep по versioned high-confidence правилам и Trivy по конфигурации; после Docker smoke Trivy проверяет собранный backend image.
@@ -157,6 +158,12 @@ to a shared or production environment.
 `.github/workflows/ci.yml` runs static security, typecheck, deployment/script tests, contract tests, webapp client tests, backend tests, image vulnerability scanning, and the webapp Playwright smoke flow on pushes to `main` and `master` plus pull requests.
 
 ## Локальные игроки для ручной проверки
+
+Для контролируемого прогона с реальными группами используйте
+[local-only acceptance harness](LOCAL_MVP_ACCEPTANCE.md), а не стабильные
+учётные записи ниже. Harness создаёт чистый invocation-scoped test volume;
+участники регистрируют disposable accounts через реальный UI, а volume целиком
+удаляется до сохранения обезличенной сводки.
 
 После запуска локального backend подготовьте две стабильные синтетические учётные записи:
 
