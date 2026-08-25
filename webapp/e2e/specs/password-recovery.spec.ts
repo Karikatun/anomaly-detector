@@ -1,13 +1,13 @@
 import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 
-import { createPrisma, type DbClient } from '../../../backend/src/db'
+import { createPrisma } from '../../../backend/src/db'
 import {
-  createMailModule,
   derivePasswordResetToken,
 } from '../../../backend/src/modules/mail'
 import { defaultDatabaseUrl, defaultE2eJwtSecret } from '../env'
-import { expect, registerBrowserUser, test } from '../helpers/test'
+import { expect, nextE2eClientIp, registerBrowserUser, test } from '../helpers/test'
+import { passwordRecoveryRecipient } from '../password-recovery-isolation'
 
 // Passwords and the one-time token must never enter screenshots, traces, or video artifacts.
 test.use({ screenshot: 'off', trace: 'off', video: 'off' })
@@ -19,7 +19,7 @@ test('requests a generic link, resets once, rejects the old session, and require
   const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? defaultDatabaseUrl
   const prisma = createPrisma(databaseUrl)
   const recoveryContext = await browser.newContext({
-    extraHTTPHeaders: { 'x-e2e-client-ip': '198.18.20.40' },
+    extraHTTPHeaders: { 'x-e2e-client-ip': nextE2eClientIp() },
   })
   const recoveryPage = await recoveryContext.newPage()
   const unexpectedOrigins: string[] = []
@@ -36,16 +36,16 @@ test('requests a generic link, resets once, rejects the old session, and require
 
   try {
     const { login } = await registerBrowserUser(page, 'Email link recovery', 'password-link')
+    const recipient = passwordRecoveryRecipient(login)
     const user = await prisma.user.findUniqueOrThrow({ where: { login }, select: { id: true } })
-    await seedApprovedMailService(prisma, 'mail.ru')
     await prisma.recoveryEmailBinding.create({
       data: {
         activatesAt: new Date(Date.now() - 60_000),
         cancellationSessionIds: [],
-        canonicalKey: `${login}@mail.ru`,
+        canonicalKey: recipient,
         policyVersion: 1,
         providerId: 'vk_mail',
-        providerValue: `${login}@mail.ru`,
+        providerValue: recipient,
         requestedAt: new Date(Date.now() - 86_400_000),
         userId: user.id,
       },
@@ -78,16 +78,19 @@ test('requests a generic link, resets once, rejects the old session, and require
 
     const message = await prisma.mailOutboxMessage.findFirstOrThrow({
       orderBy: { createdAt: 'desc' },
-      where: { templateKind: 'password_recovery' },
+      where: { recipient, templateKind: 'password_recovery' },
     })
     const token = derivePasswordResetToken(
       process.env.JWT_SECRET ?? defaultE2eJwtSecret,
       message.messageId,
     )
-    await recoveryPage.goto(`/recover/password#token=${token}`)
+    await recoveryPage.evaluate((value) => {
+      window.location.hash = `token=${value}`
+    }, token)
+    await expect.poll(() => new URL(recoveryPage.url()).hash === '').toBe(true)
     await expect(recoveryPage).toHaveURL(/\/recover\/password$/)
     await expect(recoveryPage.getByRole('heading', { name: 'Новый пароль' })).toBeVisible()
-    await expect(recoveryPage.locator('body')).not.toContainText(token)
+    expect(await pageContains(recoveryPage, token)).toBe(false)
     expect(analyticsRequests).toBe(0)
     expect(await prisma.passwordResetCredential.count({ where: { userId: user.id } })).toBe(1)
     await expectNoAxeViolations(recoveryPage)
@@ -107,7 +110,7 @@ test('requests a generic link, resets once, rejects the old session, and require
     await expect(recoveryPage.getByRole('status')).toContainText('Пароль изменён')
     await expect(recoveryPage.getByRole('link', { name: 'Войти с новым паролем' }))
       .toBeVisible()
-    await expect(recoveryPage.locator('body')).not.toContainText(token)
+    expect(await pageContains(recoveryPage, token)).toBe(false)
     expect(await prisma.passwordResetCredential.count({ where: { userId: user.id } })).toBe(0)
     expect(await prisma.authSession.count({
       where: { revokedAt: null, userId: user.id },
@@ -141,18 +144,7 @@ async function expectNoAxeViolations(page: Page) {
   }))).toEqual([])
 }
 
-async function seedApprovedMailService(prisma: DbClient, emailDomain: string) {
-  const policy = createMailModule({ db: prisma }).operatorPolicy
-  const current = await policy.read()
-  const synced = await policy.syncCatalog({
-    commandId: crypto.randomUUID(),
-    expectedVersion: current.currentVersion,
-  }, {
-    authenticatedAt: new Date(),
-    id: crypto.randomUUID(),
-  })
-  if (!synced.publishedPolicy?.providers.some((provider) =>
-    provider.publicDomains.some((domain) => domain.emailDomain === emailDomain))) {
-    throw new Error(`Reviewed mail catalog does not include ${emailDomain}`)
-  }
+function pageContains(page: Page, value: string) {
+  return page.locator('body').evaluate((body, candidate) =>
+    body.textContent?.includes(candidate) === true, value)
 }

@@ -1,4 +1,4 @@
-import { e2ePassword, expect, registerBrowserUser, test } from '../helpers/test'
+import { e2ePassword, expect, registerBrowserUser, test, uniqueLogin } from '../helpers/test'
 
 // Authentication journeys handle passwords and one-time credentials; keep them out of CI artifacts.
 test.use({ screenshot: 'off', trace: 'off', video: 'off' })
@@ -121,7 +121,7 @@ test('continues a landing registration into tutorial and ignores unknown destina
   await expect(page).toHaveURL(new URL('/?continue=tutorial', webappUrl).toString())
   await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
 
-  const login = `landing-tutorial-${Date.now()}`
+  const login = uniqueLogin('landing-tutorial')
   await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
   await page.getByLabel('Имя').fill('Исследователь лендинга')
@@ -198,7 +198,7 @@ test('submits registration as a native form when Enter is pressed from any field
   await page.goto('/')
   await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
 
-  const login = `native-form-${Date.now()}`
+  const login = uniqueLogin('native-form')
   await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
   await page.getByLabel('Имя').fill('Нативная форма')

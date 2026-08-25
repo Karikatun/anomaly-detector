@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
 import { createConnection } from 'node:net'
+import { createPrisma } from '../../backend/src/db'
 import {
   composeEnv,
   composeProjectName,
@@ -8,6 +9,10 @@ import {
   e2eBackendEnv,
   repositoryRoot,
 } from './env'
+import {
+  ensurePasswordRecoveryMailPolicy,
+  shouldEnsurePasswordRecoveryMailPolicy,
+} from './password-recovery-isolation'
 
 const composeArgs = ['compose', '-p', composeProjectName]
 
@@ -137,6 +142,15 @@ export default async function globalSetup() {
     } catch (error) {
       if (attempt === 3) throw error
       await new Promise((resolveWait) => setTimeout(resolveWait, 1_000))
+    }
+  }
+
+  if (shouldEnsurePasswordRecoveryMailPolicy(process.env)) {
+    const prisma = createPrisma(databaseUrl)
+    try {
+      await ensurePasswordRecoveryMailPolicy(prisma)
+    } finally {
+      await prisma.$disconnect()
     }
   }
 

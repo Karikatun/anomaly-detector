@@ -3,14 +3,37 @@ import { expect, type Page } from '@playwright/test'
 export { expect, test } from '@playwright/test'
 
 export const e2ePassword = 'password123'
-let e2eClientIpSuffix = 1
+const e2eClientIpSuffixByWorkerIndex = new Map<number, number>()
+const maximumE2eWorkerIndex = 511
+const maximumE2eClientIpSuffix = 254
 
-function nextE2eClientIp() {
-  const suffix = e2eClientIpSuffix
-  e2eClientIpSuffix += 1
-  const thirdOctet = Math.floor((suffix - 1) / 254)
-  const fourthOctet = ((suffix - 1) % 254) + 1
-  return `198.18.${thirdOctet}.${fourthOctet}`
+export function nextE2eClientIp() {
+  const workerIndex = readWorkerIndex()
+  if (!Number.isInteger(workerIndex) || workerIndex < 0 || workerIndex > maximumE2eWorkerIndex) {
+    throw new RangeError(
+      `E2E worker index must be an integer from 0 through ${maximumE2eWorkerIndex}`,
+    )
+  }
+
+  const suffix = (e2eClientIpSuffixByWorkerIndex.get(workerIndex) ?? 0) + 1
+  if (suffix > maximumE2eClientIpSuffix) {
+    throw new RangeError(`E2E worker ${workerIndex} exhausted its synthetic client IP pool`)
+  }
+  e2eClientIpSuffixByWorkerIndex.set(workerIndex, suffix)
+
+  const secondOctet = 18 + Math.floor(workerIndex / 256)
+  const thirdOctet = workerIndex % 256
+  return `198.${secondOctet}.${thirdOctet}.${suffix}`
+}
+
+function readWorkerIndex() {
+  const value = process.env.TEST_WORKER_INDEX ?? process.env.TEST_PARALLEL_INDEX ?? '0'
+  if (!/^\d+$/.test(value)) {
+    throw new RangeError(
+      `E2E worker index must be an integer from 0 through ${maximumE2eWorkerIndex}`,
+    )
+  }
+  return Number(value)
 }
 
 export function uniqueLogin(prefix = 'web-e2e') {

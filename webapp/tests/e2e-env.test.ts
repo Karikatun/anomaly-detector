@@ -62,6 +62,12 @@ test('e2eBackendEnv keeps auth rate limiting out of the browser smoke-test budge
   expect(env.AUTH_RATE_LIMIT_MAX).toBe('1000')
 })
 
+test('e2eBackendEnv disables SMTP even when the caller has it enabled', () => {
+  const env = e2eBackendEnv({ MAIL_SMTP_ENABLED: 'true' })
+
+  expect(env.MAIL_SMTP_ENABLED).toBe('false')
+})
+
 test('e2eBackendEnv preserves an explicitly configured JWT secret', () => {
   process.env.JWT_SECRET = 'explicit-web-e2e-secret-at-least-thirty-two-chars'
 

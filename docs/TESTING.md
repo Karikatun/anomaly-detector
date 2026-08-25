@@ -207,7 +207,9 @@ The webapp E2E flow:
 - uses `TEST_DATABASE_URL` as the primary database URL, then passes that value to the backend as `DATABASE_URL` inside the test run;
 - starts the backend on `E2E_BACKEND_PORT`, which defaults to a repository-derived port;
 - starts the deadline worker after migrations and stops only that worker when Playwright finishes;
+- publishes the reviewed mail catalog once before browser workers and forces SMTP delivery off so recovery E2E never contacts an external mail provider;
 - starts Vite on `E2E_WEB_PORT`, which defaults to a repository-derived port;
+- runs spec files through two workers by default while keeping tests inside each spec ordered;
 - stops its `postgres_test` compose project and removes the test volume after the run unless `E2E_KEEP_DOCKER=1` is set;
 - runs the browser authentication journey: contract-backed registration/profile validation, transient session recovery, retryable logout/profile failures, protected profile, logout, and login;
 - verifies that lobby refresh uses a read-only request, exposes stale/error state, and recovers on demand;
@@ -220,11 +222,18 @@ TEST_DATABASE_URL="postgresql://superuser:superpassword@localhost:<test-port>/an
 POSTGRES_TEST_PORT=<test-port>
 E2E_BACKEND_PORT=<backend-port>
 E2E_WEB_PORT=<web-port>
+E2E_WORKERS=2
 E2E_SKIP_DOCKER=1
 E2E_KEEP_DOCKER=1
 ```
 
 By default, Playwright computes `POSTGRES_TEST_PORT` from the absolute repository path and refuses to run against a database that does not use the `_test` suffix. This prevents E2E from accidentally writing to development or production data. Use `DATABASE_URL` only as a low-level override; `TEST_DATABASE_URL` is the documented test entry point.
+
+`E2E_WORKERS` may override the default only with an integer from 1 through 4.
+The bound keeps browser concurrency controlled because every worker shares the
+same local backend, deadline worker and test database. Runs with `UX_AUDIT_DIR`
+always use one worker so browser projects cannot overwrite shared screenshots
+and audit files. The split-domain preflight also remains single-worker.
 
 Playwright artifacts live in `webapp/e2e/.artifacts/` and are not committed. For interactive debugging:
 
