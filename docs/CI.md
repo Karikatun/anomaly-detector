@@ -26,9 +26,9 @@ The job installs dependencies from `bun.lock` and runs:
 
 ### `e2e`
 
-The job installs the Chromium revision owned by the locked `webapp` Playwright
-workspace and runs `bun run e2e:webapp` through the real browser/backend/test
-database stack.
+The job installs the Chromium and Firefox revisions owned by the locked
+`webapp` Playwright workspace and runs `bun run e2e:webapp` through both browser
+projects against the real backend/test-database stack.
 
 All three jobs are required because local hooks can be bypassed, static and
 supply-chain scans do not replace behavioral tests, and `checks` does not
@@ -45,7 +45,8 @@ builds a separate backend image and sends mutating attack payloads.
 
 ## Branch Protection
 
-Configure a GitHub ruleset for every active release branch:
+Use `dev` as the default branch for external contributions. Configure a GitHub
+ruleset for every active release branch, including `master`:
 
 1. require a pull request when the team's delivery process uses PR review;
 2. require the current `security-static`, `checks`, and `e2e` status checks before merge;
@@ -54,6 +55,13 @@ Configure a GitHub ruleset for every active release branch:
    out, or failed;
 5. limit bypass to named emergency maintainers and audit every use;
 6. protect branch deletion and force pushes.
+
+The repository-owned `Enforce master PR access` workflow closes a pull request
+to `master` when its author does not have GitHub `write`, `maintain`, or `admin`
+permission. It does not check out or execute pull-request code. This is a
+routing control: GitHub itself still allows a public-repository user to create
+such a PR. Contributors should target `dev`; maintainers decide which `dev`
+changes are promoted to `master`.
 
 A workflow file does not enforce merge policy by itself. The ruleset in GitHub
 must name the actual current job checks. After renaming, adding, splitting, or
@@ -67,6 +75,7 @@ authorization.
 bun run check:commit
 bun run check:push
 bun run check
+bun run security:dependencies
 bun run security:gitleaks
 bun run security:semgrep
 bun run security:trivy:config
@@ -78,8 +87,8 @@ it is destructive only to the isolated `_test` database it creates.
 
 - pre-commit scans the staged index for secrets and runs `check:commit`;
 - commit-msg enforces the repository's Conventional Commit format;
-- pre-push runs the full `check`, including integration, build, Docker smoke,
-  and browser E2E.
+- pre-push runs the dependency audit, full-history Gitleaks and the full
+  `check`, including integration, build, Docker smoke, and browser E2E.
 
 Use local checks for fast feedback, but treat green required remote checks on
 the exact release commit as the publication boundary.

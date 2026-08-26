@@ -26,6 +26,9 @@ test('renders operational data without mutation controls', () => {
       }}
       isRefreshing={false}
       onLogout={() => undefined}
+      onOpenAnalytics={() => undefined}
+      onOpenFeedback={() => undefined}
+      onOpenMailPolicy={() => undefined}
       onPageChange={() => undefined}
       onRefresh={() => undefined}
     />,
@@ -33,6 +36,9 @@ test('renders operational data without mutation controls', () => {
 
   expect(html).toContain('Системный обзор')
   expect(html).toContain('Все пользователи')
+  expect(html).toContain('Политика почты')
+  expect(html).toContain('Обратная связь')
+  expect(html).toContain('Путь MVP')
   expect(html).toContain('Ожидают игроков')
   expect(html).toContain('Идут сейчас')
   expect(html).toContain('Завершены')

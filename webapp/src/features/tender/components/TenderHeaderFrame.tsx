@@ -9,6 +9,7 @@ function HeaderArea({ children, className }: { children: ReactNode; className: s
 export function TenderHeaderFrame({
   actions,
   ariaLabel,
+  completed = false,
   headerRef,
   info,
   meta,
@@ -16,6 +17,7 @@ export function TenderHeaderFrame({
 }: {
   actions: ReactNode
   ariaLabel: string
+  completed?: boolean
   headerRef?: Ref<HTMLElement>
   info: ReactNode
   meta: ReactNode
@@ -25,6 +27,7 @@ export function TenderHeaderFrame({
     <header
       ref={headerRef}
       aria-label={ariaLabel}
+      data-completed={completed || undefined}
       className={`${styles.header} sticky top-0 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-xl border bg-background/95 px-3 py-2 shadow-sm backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:px-5 sm:py-3`}
     >
       <HeaderArea className={`${styles.headerInfo} grid min-w-0 gap-0.5`}>{info}</HeaderArea>

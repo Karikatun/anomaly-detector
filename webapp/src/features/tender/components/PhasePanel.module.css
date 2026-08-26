@@ -856,6 +856,7 @@
 
 .laboratoryModeSwitch button {
   position: relative;
+  overflow: hidden;
   display: grid;
   justify-items: start;
   align-content: start;
@@ -1378,17 +1379,6 @@
   box-shadow: 0 0 .65rem color-mix(in srgb, var(--warning) 60%, transparent);
 }
 
-.reconnectBackdrop {
-  position: fixed;
-  z-index: var(--layer-system);
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgba(0, 7, 16, .76);
-  backdrop-filter: blur(.32rem);
-}
-
 .reconnectDialog {
   display: grid;
   width: min(100%, 27rem);
@@ -1490,6 +1480,13 @@
     box-shadow: none;
   }
 
+  .finalFooter {
+    position: sticky;
+    bottom: env(safe-area-inset-bottom, 0px);
+    grid-template-columns: minmax(0, 42rem);
+    justify-content: end;
+  }
+
   .selectionSummary {
     justify-content: flex-start;
   }
@@ -1538,17 +1535,12 @@
   .finalWorkspace {
     grid-template-columns: minmax(0, 1fr) minmax(17rem, .38fr);
     gap: .85rem;
-    height: max(32rem, calc(100dvh - var(--tender-sticky-header-height, 4.5rem) - 11rem));
-    max-height: 52rem;
-    align-items: stretch;
+    align-items: start;
   }
 
   .finalWorkspace > .surface,
   .finalSidebar {
     min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
   }
 
   .finalModelHead {

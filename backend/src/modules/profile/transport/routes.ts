@@ -53,16 +53,22 @@ const completeTutorialRoute = createRoute({
       content: { 'application/json': { schema: apiErrorSchema } },
       description: 'Authentication required',
     },
+    429: {
+      content: { 'application/json': { schema: apiErrorSchema } },
+      description: 'Authenticated mutation rate limited',
+    },
   },
 })
 
 export function createProfileRoutes(input: {
+  authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   service: ProfileStatisticsService
   tutorial: TutorialProgressService
 }) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
+  routes.use('*', input.authenticatedMutationBudget)
   routes.openapi(statisticsRoute, async (c) =>
     c.json(await input.service.read(c.var.user.id), 200))
   routes.openapi(tutorialRoute, async (c) =>

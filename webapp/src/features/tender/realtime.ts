@@ -5,7 +5,7 @@ import {
 } from '@anomaly-detector/contracts'
 import { useCallback, useEffect, useState } from 'react'
 
-import type { AuthenticatedTransport } from '@/platform/api'
+import { ApiRequestError, type AuthenticatedTransport } from '@/platform/api'
 import { getApiBaseUrl } from '@/platform/api/api-base-url'
 
 export type RealtimeState = {
@@ -15,6 +15,7 @@ export type RealtimeState = {
 }
 
 export type RealtimeErrorCode =
+  | 'access-denied'
   | 'connection-failed'
   | 'ticket-failed'
   | 'invalid-message'
@@ -44,13 +45,19 @@ const disconnectedState = (): RealtimeState => ({
   tenderView: null,
 })
 
+const RECONNECT_BASE_DELAY_MS = 5_000
+const RECONNECT_MAX_DELAY_MS = 30_000
+const CONCEALED_TENDER_CLOSE_CODE = 4404
+
 export class TenderRealtimeSession {
   private readonly options: RealtimeSessionOptions
   private state = disconnectedState()
   private socket: RealtimeSocket | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private reconnectAttempt = 0
   private generation = 0
   private connecting = false
+  private socketAttempted = false
   private started = false
   private stopped = false
 
@@ -98,20 +105,17 @@ export class TenderRealtimeSession {
       )
       if (this.stopped || generation !== this.generation) return
 
-      const wsUrl = this.options.apiBaseUrl.replace(/^http/, 'ws')
-      const socket = this.options.createSocket(
-        `${wsUrl}/api/realtime/ws?ticket=${encodeURIComponent(ticketResponse.ticket)}&tenderId=${encodeURIComponent(this.options.tenderId)}`,
-      )
+      const wsUrl = new URL('/api/realtime/ws', this.options.apiBaseUrl.replace(/^http/, 'ws'))
+      wsUrl.searchParams.set('ticket', ticketResponse.ticket)
+      wsUrl.searchParams.set('tenderId', this.options.tenderId)
+      if (this.socketAttempted) wsUrl.searchParams.set('reconnect', '1')
+      this.socketAttempted = true
+      const socket = this.options.createSocket(wsUrl.toString())
       this.socket = socket
-
-      socket.onopen = () => {
-        if (!this.owns(socket)) return
-        this.updateState({ connected: true, error: null })
-      }
 
       socket.onmessage = (event) => {
         if (!this.owns(socket)) return
-        this.handleMessage(event)
+        this.handleMessage(event, socket)
       }
 
       socket.onerror = () => {
@@ -122,19 +126,27 @@ export class TenderRealtimeSession {
         })
       }
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (!this.owns(socket)) return
         this.socket = null
+        if (event.code === CONCEALED_TENDER_CLOSE_CODE) {
+          this.updateState({
+            connected: false,
+            error: 'access-denied',
+            tenderView: null,
+          })
+          return
+        }
         this.updateState({ connected: false })
         this.scheduleReconnect()
       }
-    } catch {
+    } catch (error) {
       if (this.stopped || generation !== this.generation) return
       this.updateState({
         connected: false,
         error: 'ticket-failed',
       })
-      this.scheduleReconnect()
+      this.scheduleReconnect(error)
     } finally {
       if (generation === this.generation) {
         this.connecting = false
@@ -142,16 +154,22 @@ export class TenderRealtimeSession {
     }
   }
 
-  private handleMessage(event: MessageEvent<string>) {
+  private handleMessage(event: MessageEvent<string>, socket: RealtimeSocket) {
     try {
       const message = realtimeServerMessageSchema.parse(JSON.parse(event.data)) as RealtimeServerMessage
       if (message.type === 'tender-view') {
-        this.updateState({ tenderView: message.view })
+        if (
+          this.state.tenderView
+          && message.view.version < this.state.tenderView.version
+        ) return
+        this.reconnectAttempt = 0
+        this.updateState({ connected: true, error: null, tenderView: message.view })
       } else {
         this.updateState({ error: 'server-error' })
       }
     } catch {
-      this.updateState({ error: 'invalid-message' })
+      this.updateState({ connected: false, error: 'invalid-message' })
+      socket.close()
     }
   }
 
@@ -165,18 +183,47 @@ export class TenderRealtimeSession {
     this.options.onState(this.state)
   }
 
-  private scheduleReconnect() {
+  private scheduleReconnect(error?: unknown) {
     if (this.stopped || this.reconnectTimer) return
+
+    const reconnectDelayMs = Math.min(
+      RECONNECT_BASE_DELAY_MS * (2 ** this.reconnectAttempt),
+      RECONNECT_MAX_DELAY_MS,
+    )
+    this.reconnectAttempt += 1
+    const retryAfterMs = error instanceof ApiRequestError && error.retryAfterSeconds !== null
+      ? error.retryAfterSeconds * 1_000
+      : 0
+
     this.reconnectTimer = this.options.scheduleReconnect(() => {
       this.reconnectTimer = null
       void this.connect()
-    }, 5_000)
+    }, Math.max(reconnectDelayMs, retryAfterMs))
   }
 
   private clearReconnect() {
     if (!this.reconnectTimer) return
     this.options.cancelReconnect(this.reconnectTimer)
     this.reconnectTimer = null
+  }
+}
+
+export function deferRealtimeSessionStart<TTimer>(
+  session: Pick<TenderRealtimeSession, 'start' | 'stop'>,
+  scheduler: {
+    cancel(timer: TTimer): void
+    schedule(callback: () => void): TTimer
+  },
+) {
+  let active = true
+  const timer = scheduler.schedule(() => {
+    if (!active) return
+    session.start()
+  })
+  return () => {
+    active = false
+    scheduler.cancel(timer)
+    session.stop()
   }
 }
 
@@ -187,16 +234,17 @@ export function useRealtimeTender(transport: AuthenticatedTransport, tenderId: s
   useEffect(() => {
     const session = new TenderRealtimeSession({
       apiBaseUrl: getApiBaseUrl(),
-      cancelReconnect: clearTimeout,
+      cancelReconnect: (timer) => globalThis.clearTimeout(timer),
       createSocket: (url) => new WebSocket(url),
       onState: setState,
-      scheduleReconnect: setTimeout,
+      scheduleReconnect: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
       tenderId,
       transport,
     })
-    session.start()
-
-    return () => session.stop()
+    return deferRealtimeSessionStart<ReturnType<typeof globalThis.setTimeout>>(session, {
+      cancel: (timer) => globalThis.clearTimeout(timer),
+      schedule: (callback) => globalThis.setTimeout(callback, 0),
+    })
   }, [attempt, tenderId, transport])
 
   const retry = useCallback(() => {

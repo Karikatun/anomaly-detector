@@ -17,23 +17,34 @@ import { Typography } from '@/components/ui/typography'
 import { Label } from '@/components/ui/label'
 import { useI18n } from '@/platform/i18n'
 import { useAuth } from '../use-auth'
+import { capturePostAuthContinuation } from '../post-auth-continuation'
 import styles from './AuthForm.module.css'
 import { LoginForm } from './LoginForm'
 
 export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode }) {
   const { t } = useI18n()
   const auth = useAuth()
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<'login' | 'register'>(() => {
+    if (typeof window === 'undefined') return 'login'
+    return capturePostAuthContinuation(sessionStorage, new URL(window.location.href)) === 'tutorial'
+      ? 'register'
+      : 'login'
+  })
   const [oauthConsentOpen, setOauthConsentOpen] = useState(() => {
     if (typeof window === 'undefined') return false
     return new URL(window.location.href).searchParams.get('auth_error') === 'oauth_registration_consent_required'
   })
+  const [oauthCallbackFailed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const error = new URL(window.location.href).searchParams.get('auth_error')
+    return error !== null && error !== 'oauth_registration_consent_required'
+  })
   useEffect(() => {
     const url = new URL(window.location.href)
-    if (url.searchParams.get('auth_error') === 'oauth_registration_consent_required') {
+    if (url.searchParams.has('auth_error')) {
       url.searchParams.delete('auth_error')
-      window.history.replaceState(window.history.state, '', url)
     }
+    window.history.replaceState(window.history.state, '', url)
   }, [])
   const [oauthBusy, setOauthBusy] = useState(false)
   const [oauthPrivacyConsent, setOauthPrivacyConsent] = useState(false)
@@ -53,6 +64,11 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
         </header>
 
         <div className={styles.content}>
+          {oauthCallbackFailed && (
+            <Typography role="alert" tone="destructive" className={styles.oauthCallbackError}>
+              {t('auth.oauthCallback.failed')}
+            </Typography>
+          )}
           <div className={styles.modeTabs} role="tablist" aria-label={t('auth.mode.label')}>
             <Button
               id="auth-login-tab"

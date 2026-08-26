@@ -435,6 +435,27 @@ describe('Tender contracts', () => {
           outcome: 'awarded',
           playerId: 'player-a',
           ratingAward: 4,
+        }, {
+          conditions: {
+            kind: 'light',
+            ratingReward: 2,
+            requiredPublicResult: 'reflection',
+            targetRole: 'receiver',
+            targetSignal: 'cinder',
+          },
+          contractId: 'round-1-contract-3',
+          evidenceTestIds: ['r1-t1'],
+          evidenceTests: [{
+            playerId: 'player-a',
+            protocol: 'continuous',
+            publicResult: 'transmission_gain',
+            receiverSignal: 'cinder',
+            sourceSignal: 'aster',
+            testId: 'r1-t1',
+          }],
+          outcome: 'failed',
+          playerId: 'player-a',
+          ratingAward: 0,
         }],
         laboratory: [{
           mode: 'deep',
@@ -498,6 +519,11 @@ describe('Tender contracts', () => {
         contracts: [{
           conditions: { kind: 'complex', targetSignal: 'aster' },
           evidenceTests: [{ testId: 'r1-t1' }],
+        }, {
+          conditions: { kind: 'light', targetSignal: 'cinder' },
+          evidenceTests: [{ testId: 'r1-t1' }],
+          outcome: 'failed',
+          ratingAward: 0,
         }],
         laboratory: [{ mode: 'deep', tests: [{ testId: 'r1-t1' }] }],
         priorityPlayerIds: ['player-a'],
@@ -534,6 +560,63 @@ describe('Tender contracts', () => {
       publicLaboratoryResults: [],
       ratingBreakdownByPlayer: {},
       ruleset: 'tender-v2',
+    }).success).toBe(false)
+  })
+
+  test('keeps complete audit omission backward compatible and rejects active audit exposure', () => {
+    const activeView = {
+      knownSignals: [],
+      phase: 'access-slot-selection' as const,
+      players: [{ budget: 2, contractPowerRestriction: 0, playerId: 'player-a', rating: 0 }],
+      privateMeasurements: [],
+      privateRawTelemetrySignals: [],
+      privateSamples: [],
+      privateWorkingModel: { signals: {} },
+      publicContracts: [],
+      publicLaboratoryResults: [],
+      publicTheses: [],
+      round: 1,
+      serverTime: '2026-07-26T12:00:00.000Z',
+      tenderId: 'tender-1',
+      version: 1,
+    }
+    const audit = {
+      anomalyConfiguration: {
+        seed: 'seed-1',
+        signals: {
+          aster: { fieldType: 'inertial' as const, polarity: 'positive' as const },
+          boreal: { fieldType: 'inertial' as const, polarity: 'negative' as const },
+          cinder: { fieldType: 'electromagnetic' as const, polarity: 'positive' as const },
+          delta: { fieldType: 'electromagnetic' as const, polarity: 'negative' as const },
+          eclipse: { fieldType: 'phase' as const, polarity: 'positive' as const },
+          ferro: { fieldType: 'phase' as const, polarity: 'negative' as const },
+        },
+      },
+      completionReason: 'standard' as const,
+      finalScientificModelsByPlayer: {},
+      forfeitedAtByPlayer: {},
+      placementByPlayer: {},
+      privateMeasurementsByPlayer: {},
+      privateThesesByPlayer: {},
+      publicLaboratoryResults: [],
+      ratingBreakdownByPlayer: {},
+      rounds: [],
+      ruleset: 'tender-v2' as const,
+    }
+
+    expect(tenderViewSchema.safeParse(activeView).success).toBe(true)
+    expect(tenderViewSchema.safeParse({ ...activeView, audit }).success).toBe(false)
+    expect(tenderViewSchema.safeParse({
+      ...activeView,
+      auditUnavailableReason: 'historical_data_incompatible',
+    }).success).toBe(false)
+
+    const completedView = { ...activeView, phase: 'complete' as const }
+    expect(tenderViewSchema.safeParse({ ...completedView, audit }).success).toBe(true)
+    expect(tenderViewSchema.safeParse(completedView).success).toBe(true)
+    expect(tenderViewSchema.safeParse({
+      ...completedView,
+      auditUnavailableReason: 'historical_data_incompatible',
     }).success).toBe(false)
   })
 })

@@ -24,16 +24,26 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 ## Source And Quality
 
 - [ ] `origin`, release branch, upstream, and full commit SHA are recorded.
+- [ ] Applicable audit contours from [AUDIT_GUIDE.md](AUDIT_GUIDE.md) are
+      recorded; every required, blocked, and not-applicable check has evidence
+      or a reason and residual risk.
 - [ ] Worktree is clean; the release commit is pushed and not ahead, behind, or
       diverged from its expected upstream.
 - [ ] `bun run check` passed on the exact release commit.
+- [ ] `bun run preflight:split-domain` passed; its isolated temporary release
+      artifacts were removed automatically and owner-approved artifacts were
+      built separately.
 - [ ] Mandatory GitHub Actions checks `checks` and `e2e` are green for that exact
       commit; branch protection did not rely on a manual bypass.
 - [ ] Dependency audit and tracked/staged secret hygiene passed without exposing
       findings in logs.
 - [ ] Backend image uses the full release SHA or immutable digest; static builds
-      have recorded SHA-256 checksums and contain no localhost/test origins,
-      secrets, or private data.
+      have recorded SHA-256 checksums and contain no configured localhost/test
+      endpoints, secrets, or private data; the documented TanStack
+      `http://localhost` fallback literal was reviewed separately.
+- [ ] Trivy scanned that exact backend image with the repository-owned pinned
+      runner; the deployed API and worker image ID/digest will be compared with
+      the scanned artifact after the switch.
 
 ## Data And Rollback
 
@@ -49,6 +59,9 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
       identity is confirmed. No broad image, container, or volume prune is used.
 - [ ] Rollback trigger, operator, command sequence, data consequences, and
       forward-fix alternative are understood before switching traffic.
+- [ ] Legacy root redirects remain temporary with `Cache-Control: no-store`
+      while immediate rollback is open; any later permanent promotion is a
+      separately validated owner change.
 
 ## Runtime And Public Verification
 
@@ -57,17 +70,35 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
       neither container is crash-looping.
 - [ ] Public API readiness returns the documented status through HTTPS; worker
       health and service ports remain private.
-- [ ] Webapp and website return expected checksums; SPA route refresh, canonical
-      redirect, and public assets work.
+- [ ] Webapp and website return expected checksums; the public root serves the
+      website and returns `404` for unknown paths, while player route refreshes
+      use only the player-host SPA fallback.
+- [ ] `www` redirects to the public root; every fixed legacy player route keeps
+      its path/query while moving temporarily and without caching to the player
+      host; no arbitrary redirect target is accepted.
+- [ ] Public canonical/robots/sitemap values contain no player/operator routes;
+      the player host returns the release `X-Robots-Tag` noindex policy.
 - [ ] CORS accepts only expected production origins; authentication cookies,
       refresh, logout, WebSocket ticketing, and reconnect work from the public
       player origin.
+- [ ] `WEBAPP_ORIGIN` equals the player origin and is present in CORS; the public
+      website is absent from credentialed CORS, OAuth rejects every other
+      browser return origin, and provider success/error callbacks return to the
+      player host while the registered callback remains on the API host.
 - [ ] Adminapp is absent from public buckets, returns `401` without edge auth,
       and still enforces backend UUID allowlisting after edge authentication.
 - [ ] Recent API, worker, PostgreSQL, Caddy, and system logs contain no new fatal,
       unhandled, migration, auth, or repeated reconnect errors.
-- [ ] Monitoring shows API/worker health, disk and PostgreSQL-volume free space,
-      memory, restarts, and configured alerts; current values are recorded.
+- [ ] If SSH, VM image, host OS, firewall, network, or Security Groups changed,
+      the applicable external ssh-audit, perimeter review, and Lynis host audit
+      have current evidence or an explicit blocked/risk decision.
+- [ ] Unified Agent privately scrapes API `:3002/metrics` and worker
+      `:3001/metrics`; the public API returns `404` for `/metrics`. Monitoring
+      shows API availability/`5xx`/latency, worker staleness, overdue and
+      lifecycle Tender counts, realtime reconnect/close rates, auth/security and
+      mail-protection transitions, plus disk, PostgreSQL-volume, memory,
+      container-restart and PostgreSQL-connection collectors. Mandatory alerts
+      and current values are recorded.
 - [ ] Active and rollback artifacts remain recoverable after exact-name cleanup.
 
 ## Release Record

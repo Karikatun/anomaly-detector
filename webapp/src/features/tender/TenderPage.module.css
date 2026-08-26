@@ -10,6 +10,24 @@
   z-index: var(--layer-system);
 }
 
+.page[data-reconnecting] .header {
+  z-index: var(--layer-sticky);
+}
+
+.header[data-completed] {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.header[data-completed] .headerTimer,
+.header[data-completed] .headerMeta {
+  display: none;
+}
+
+.completedReferenceAction {
+  width: 2.75rem;
+  min-height: 2.75rem;
+}
+
 .content {
   display: flex;
   min-width: 0;
@@ -121,5 +139,38 @@
 
   .leaveAction span {
     font-size: .75rem;
+  }
+
+  .header[data-completed] {
+    grid-template-areas: "info actions";
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .header[data-completed] .headerActions {
+    display: flex;
+    grid-area: actions;
+  }
+
+  .header[data-completed] .helpAction,
+  .header[data-completed] .completedReferenceAction,
+  .header[data-completed] .leaveAction {
+    width: 2.75rem;
+    min-height: 2.75rem;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .header[data-completed] .helpAction span,
+  .header[data-completed] .leaveAction span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 }

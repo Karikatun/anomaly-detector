@@ -13,12 +13,27 @@ maybeDescribe('profile statistics API integration', () => {
 
   const prisma = createPrisma(databaseUrl)
   const env: AppEnv = {
+    API_HOST: '0.0.0.0',
     ACCESS_TOKEN_TTL_SECONDS: 60,
+    ANALYTICS_CAMPAIGN_ALLOWLIST: [],
+    ANALYTICS_ENABLED: false,
+    ANALYTICS_ORIGINS: [],
     AUTH_BODY_LIMIT_BYTES: 64 * 1024,
     AUTH_RATE_LIMIT_MAX: 60,
     AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
     COOKIE_SECURE: false,
+    MAIL_SMTP_ENABLED: false,
+    MAIL_SMTP_TIMEOUT_MS: 10_000,
+    MAIL_SMTP_MAX_ATTEMPTS: 5,
+    MAIL_SMTP_RETRY_BASE_SECONDS: 30,
+    MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD: 5,
+    MAIL_SMTP_CIRCUIT_OPEN_SECONDS: 300,
+    MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE: 60,
+    MAIL_SMTP_LEASE_SECONDS: 60,
+    MAIL_SMTP_WORKER_INTERVAL_MS: 1_000,
+    MAIL_OUTBOX_RETENTION_DAYS: 30,
     CORS_ORIGINS: ['http://localhost:5173'],
+    WEBAPP_ORIGIN: 'http://localhost:5173',
     DATABASE_URL: databaseUrl,
     JWT_SECRET: '12345678901234567890123456789012',
     ADMIN_USER_IDS: [],
@@ -41,6 +56,7 @@ maybeDescribe('profile statistics API integration', () => {
     await prisma.tender.deleteMany()
     await prisma.authSession.deleteMany()
     await prisma.user.deleteMany()
+    await prisma.authAbuseBucket.deleteMany()
   })
 
   afterAll(async () => {
@@ -55,9 +71,9 @@ maybeDescribe('profile statistics API integration', () => {
         login: 'profile-player',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken, user } = await registration.json()
@@ -164,9 +180,9 @@ maybeDescribe('profile statistics API integration', () => {
         login: 'tutorial-player',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
     const { accessToken } = await registration.json()
@@ -190,5 +206,49 @@ maybeDescribe('profile statistics API integration', () => {
 
     const stored = await app.request('/api/profile/tutorial', { headers })
     expect(await stored.json()).toEqual(firstMarker)
+  })
+
+  test('shares the authenticated mutation budget with tutorial completion', async () => {
+    const constrainedApp = createApp({
+      env: { ...env, ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT: 2 },
+      prisma,
+    })
+    const registration = await constrainedApp.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'tutorial-budget-player',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.1',
+        termsAccepted: true,
+        termsVersion: '1.1',
+      }),
+    })
+    const { accessToken } = await registration.json()
+    const headers = { Authorization: `Bearer ${accessToken}` }
+
+    expect((await constrainedApp.request('/api/profile/tutorial/completion', {
+      method: 'PUT',
+      headers,
+    })).status).toBe(200)
+    expect((await constrainedApp.request('/api/profile/tutorial/completion', {
+      method: 'PUT',
+      headers,
+    })).status).toBe(200)
+
+    const limited = await constrainedApp.request('/api/profile/tutorial/completion', {
+      method: 'PUT',
+      headers,
+    })
+    expect(limited.status).toBe(429)
+    expect(limited.headers.get('retry-after')).toBeTruthy()
+    expect(await limited.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many authenticated mutation requests',
+      },
+    })
+    expect((await constrainedApp.request('/api/profile/tutorial', { headers })).status).toBe(200)
   })
 })

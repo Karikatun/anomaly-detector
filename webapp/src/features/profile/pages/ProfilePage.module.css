@@ -133,6 +133,280 @@
   width: min(100%, 42rem);
 }
 
+.protectionSection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.5rem;
+  scroll-margin-block: var(--space-4);
+  padding: 1.25rem clamp(1.5rem, 3vw, 2.25rem);
+  border-top: 1px solid rgba(42, 82, 117, .44);
+  background: rgba(4, 17, 29, .72);
+}
+
+.protectionCopy {
+  display: grid;
+  min-width: 0;
+  gap: .3rem;
+}
+
+.protectionTitle {
+  color: #dceaf5;
+  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+  font-weight: 560;
+}
+
+.protectionDescription,
+.protectionNote {
+  color: #849db3;
+  font-size: .9rem;
+}
+
+.protectionNote {
+  color: #a9bfd1;
+}
+
+.protectionFeedback {
+  margin-top: .25rem;
+  color: #b8d9c9;
+  font-size: .86rem;
+}
+
+.protectionControlColumn {
+  display: grid;
+  justify-items: end;
+  gap: .65rem;
+}
+
+.protectionState {
+  display: grid;
+  min-width: min(100%, 14rem);
+  justify-items: end;
+  gap: .3rem;
+  padding: .75rem 1rem;
+  border: 1px solid rgba(73, 133, 172, .42);
+  border-radius: var(--radius-panel);
+  background: rgba(8, 30, 47, .72);
+  text-align: right;
+}
+
+.protectionState[data-tone='managed'] {
+  border-color: rgba(72, 167, 146, .48);
+  background: rgba(8, 43, 40, .64);
+}
+
+.protectionState[data-tone='attention'] {
+  border-color: rgba(211, 153, 73, .5);
+  background: rgba(54, 32, 8, .58);
+}
+
+.protectionLabel {
+  color: #c9dbe9;
+  font-size: .78rem;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.protectionValue {
+  color: #f0f7fb;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+}
+
+.protectionActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .45rem;
+}
+
+.recoveryCodeControl {
+  display: flex;
+  min-width: min(100%, 18rem);
+  align-items: center;
+  justify-content: flex-end;
+  gap: .65rem;
+}
+
+.recoveryCodeStatus {
+  max-width: 15rem;
+  color: #94adbf;
+  font-size: .78rem;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.recoveryCodeSheet {
+  width: min(calc(100% - 2rem), 35rem);
+  max-width: 35rem;
+}
+
+.recoveryCodeList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .55rem .85rem;
+  padding: 1rem 1rem 1rem 3rem;
+  border: 1px solid rgba(73, 133, 172, .4);
+  border-radius: var(--radius-panel);
+  color: #839daf;
+  background: rgba(1, 12, 22, .76);
+}
+
+.recoveryCodeList code {
+  color: #ecf5fb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .83rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .025em;
+  white-space: nowrap;
+}
+
+.recoveryCodeExportActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+}
+
+.recoveryCodeSavedConfirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: .7rem;
+  padding: .8rem;
+  border: 1px solid rgba(94, 147, 185, .32);
+  border-radius: var(--radius-control);
+  color: #bdcdda;
+  background: rgba(8, 30, 47, .55);
+  font-size: .82rem;
+  line-height: 1.45;
+}
+
+.recoveryCodeSavedConfirmation :global([data-slot='checkbox']) {
+  flex: none;
+  margin-top: .1rem;
+}
+
+.replacementSection {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.replacementControl {
+  display: grid;
+  width: 100%;
+  justify-items: end;
+  gap: .75rem;
+}
+
+.replacementFactors {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.replacementFactor {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: .55rem;
+  padding: 1rem;
+  border: 1px solid rgba(211, 153, 73, .44);
+  border-radius: var(--radius-panel);
+  background: rgba(36, 25, 11, .56);
+}
+
+.replacementFactor[data-status='confirmed'] {
+  border-color: rgba(72, 167, 146, .48);
+  background: rgba(8, 43, 40, .6);
+}
+
+.replacementFactor[data-status='expired'],
+.replacementFactor[data-status='service_blocked'] {
+  border-color: rgba(190, 91, 91, .45);
+  background: rgba(46, 15, 20, .52);
+}
+
+.replacementFactorHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.replacementFactorName {
+  color: #dceaf5;
+  font-size: .9rem;
+  font-weight: 560;
+}
+
+.replacementFactorStatus {
+  color: #c6a976;
+  font-size: .7rem;
+  letter-spacing: .04em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.replacementFactor[data-status='confirmed'] .replacementFactorStatus {
+  color: #86cbb6;
+}
+
+.replacementFactor[data-status='expired'] .replacementFactorStatus,
+.replacementFactor[data-status='service_blocked'] .replacementFactorStatus {
+  color: #e7a0a0;
+}
+
+.replacementFactorValue {
+  overflow-wrap: anywhere;
+  color: #f0f7fb;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+}
+
+.replacementFactorNote {
+  color: #91a9bf;
+  font-size: .8rem;
+}
+
+.replacementFactorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-top: .2rem;
+}
+
+.protectionDialog {
+  border: 1px solid rgba(73, 133, 172, .42);
+  background: #07111c;
+}
+
+.protectionForm {
+  display: grid;
+  gap: 1rem;
+}
+
+.protectionField {
+  display: grid;
+  gap: .45rem;
+  color: #b8cad8;
+  font-size: .88rem;
+}
+
+.protectionField input {
+  height: 2.75rem;
+  border-color: rgba(87, 144, 186, .54);
+  color: #f5f9fd;
+  background: rgba(2, 15, 28, .82);
+}
+
+.protectionField input[inputmode='numeric'] {
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .2em;
+}
+
 .nameControls {
   display: flex;
   align-items: center;
@@ -496,6 +770,67 @@
     font-size: 1.25rem;
   }
 
+  .protectionSection {
+    grid-template-columns: 1fr;
+    gap: .9rem;
+    padding: 1rem;
+  }
+
+  .protectionState {
+    width: 100%;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .protectionControlColumn {
+    width: 100%;
+    justify-items: stretch;
+  }
+
+  .protectionActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .protectionActions button {
+    width: 100%;
+  }
+
+  .recoveryCodeControl {
+    display: grid;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .recoveryCodeControl button,
+  .recoveryCodeExportActions button {
+    width: 100%;
+  }
+
+  .recoveryCodeStatus {
+    max-width: none;
+    text-align: left;
+  }
+
+  .recoveryCodeList {
+    grid-template-columns: 1fr;
+  }
+
+  .recoveryCodeExportActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .replacementFactors {
+    grid-template-columns: 1fr;
+  }
+
+  .replacementControl > button,
+  .replacementFactorActions,
+  .replacementFactorActions button {
+    width: 100%;
+  }
+
   .summary {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -599,5 +934,41 @@
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
     animation: none;
+  }
+}
+
+@media print {
+  :global(body:has(.recoveryCodeSheet)) * {
+    visibility: hidden;
+  }
+
+  .recoveryCodeSheet,
+  .recoveryCodeSheet * {
+    visibility: visible;
+  }
+
+  .recoveryCodeSheet {
+    position: fixed;
+    inset: 1cm;
+    width: auto;
+    max-width: none;
+    color: #000;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .recoveryCodeList {
+    color: #333;
+    background: #fff;
+  }
+
+  .recoveryCodeList code {
+    color: #000;
+  }
+
+  .recoveryCodeExportActions,
+  .recoveryCodeSavedConfirmation,
+  .recoveryCodeSheet :global([data-slot='dialog-footer']) {
+    display: none;
   }
 }

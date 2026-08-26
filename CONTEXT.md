@@ -4,6 +4,38 @@ The shared language for the competitive research game in `docs/GAME_DESIGN_BRIEF
 
 ## Identity And Abuse Protection
 
+**Public MVP Journey**:
+The measurable path in which a person discovers Anomaly Detector through public search or an AI agent, understands its value, registers, reaches First Player Value, and is then invited to confirm a Recovery Email for optional self-service access restoration.
+_Avoid_: landing funnel, registration funnel, website visit
+
+**First Player Value**:
+Completion of the solo tutorial, where a new player experiences the core deduction loop before entering a standard multiplayer Tender.
+_Avoid_: registration, first login, page view
+
+**MVP Initiator**:
+The primary Russian-speaking player who enjoys board games, science fiction, and logical deduction, learns the game through the solo tutorial, and then brings one to three acquaintances into a standard Tender.
+_Avoid_: casual gamer, ready-made group, all gamers
+
+**Account Email**:
+A confirmed email address obtained from Yandex ID or verified directly by a password-account owner. One normalised Account Email belongs to at most one active account, may change independently of an external identity, and never identifies or links accounts by itself.
+_Avoid_: contact email, login email, account identifier
+
+**Recovery Email**:
+The optional recovery role of an Account Email on a password account. It enables self-service password recovery without becoming a login, marketing contact, or gameplay-notification channel; a Yandex ID account is recovered through Yandex.
+_Avoid_: user email, Yandex recovery email, login email
+
+**Recovery Code**:
+One of a user-held set of single-use secrets issued after a Recovery Email becomes active. It can recover a password account or replace an unavailable old Recovery Email without granting support or administrators an account-takeover path.
+_Avoid_: email code, support code, backup password, administrator reset
+
+**Approved Mail Service**:
+A reviewed mail provider published from the versioned product catalog with exact public address domains and complete MX profiles for eligible custom `.ru`/`.рф` domains. An approved service accepts new addresses, a deprecated service serves existing addresses only, and a manually blocked service also suspends recovery delivery because of a recorded legal or security incident.
+_Avoid_: Russian domain, RKN-approved email, MX-approved address, permanent whitelist
+
+**Feedback Report**:
+A user-submitted error report or product suggestion stored in the product-controlled support queue. It is not automatically published to the issue tracker, linked to an account, or sent to the Account Email.
+_Avoid_: GitHub issue, support email, review, telemetry event
+
 **Anti-Abuse Device Token**:
 A random, signed browser cookie used only to enforce the password-registration quota. It is not an account credential, does not use browser or hardware fingerprinting, and is stored server-side only as an HMAC-derived key.
 _Avoid_: device fingerprint, trusted device, device identity

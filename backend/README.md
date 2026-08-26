@@ -39,7 +39,7 @@ bun run --cwd backend prisma:deploy
 
 On Windows PowerShell, use `Copy-Item backend/.env.example backend/.env` instead of `cp`. Workspace aliases are also available from the repository root: `bun run dev:backend`, `bun run build:backend`, `bun run typecheck:backend`, and `bun run test:backend`.
 
-`bun run test:integration` starts `postgres_test` from `../docker-compose.yml`, applies Prisma migrations to `anomaly_detector_test`, and runs DB-backed auth, operator-access, Room, Tender, and realtime tests. If Docker is managed separately, set `TEST_SKIP_DOCKER=1` and `TEST_DATABASE_URL`. The test database name must end with `_test` unless `TEST_ALLOW_NON_TEST_DATABASE=1` is set intentionally.
+`bun run test:integration` starts `postgres_test` from `../docker-compose.yml`, applies Prisma migrations to `anomaly_detector_test`, and runs DB-backed auth, operator-access, Feedback Report, Room, Tender, and realtime tests. If Docker is managed separately, set `TEST_SKIP_DOCKER=1` and `TEST_DATABASE_URL`. The test database name must end with `_test` unless `TEST_ALLOW_NON_TEST_DATABASE=1` is set intentionally.
 
 `bun run smoke:docker` builds the backend Docker image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created.
 
@@ -47,7 +47,9 @@ On Windows PowerShell, use `Copy-Item backend/.env.example backend/.env` instead
 
 Copy `backend/.env.example` to `backend/.env` for local development. The example `DATABASE_URL` matches the Docker Compose `postgres` service documented in [../docs/LOCAL_DATABASE.md](../docs/LOCAL_DATABASE.md): database `anomaly_detector`, user `superuser`, password `superpassword`, host port `54329`.
 
-`bun run dev` performs a port preflight before starting the API and worker. It gracefully stops stale listeners owned by this backend workspace on `PORT` and `WORKER_HEALTH_PORT` (defaults `3000` and `3001`). It refuses to stop a listener whose process belongs to another workspace, so a port collision remains visible instead of terminating an unrelated application.
+`bun run dev` performs a port preflight before starting the API and worker. It gracefully stops stale listeners owned by this backend workspace on `PORT`, `WORKER_HEALTH_PORT` (defaults `3000` and `3001`), and configured `OPERATIONAL_METRICS_PORT`. It refuses to stop a listener whose process belongs to another workspace, so a port collision remains visible instead of terminating an unrelated application.
+
+`API_HOST` is the public API listener's IPv4 bind address and defaults to `0.0.0.0`, preserving container and production reachability. Set `API_HOST=127.0.0.1` for a deliberately local-only host process such as an isolated acceptance harness. DNS hostnames and malformed IPv4 values fail startup validation.
 
 The example `TEST_DATABASE_URL` matches the Docker Compose `postgres_test` service: database `anomaly_detector_test`, user `superuser`, password `superpassword`, manual host port `54330`. Automated runners may replace the port with a repository-derived value so parallel checkouts do not collide.
 
@@ -55,15 +57,27 @@ Keep an explicit username and password in Prisma connection URLs even on local n
 
 `JWT_SECRET` must be at least 32 characters locally. Production accepts the 64-or-more-character hexadecimal output of `openssl rand -hex 32`; do not use the `.env.example` placeholder, repeated characters, or human phrases.
 
-`ADMIN_USER_IDS` is an optional comma-separated allowlist of immutable user UUIDs for the separate read-only operator application. Empty means that nobody has access. The backend returns the same `404 NOT_FOUND` to anonymous and ordinary authenticated users and does not publish the route in OpenAPI. Obtain an operator UUID from that user's profile and configure it only in backend runtime env; changing a login or display name does not change access. The separate Caddy-host is an additional edge boundary, not a replacement for this backend check.
+`ADMIN_USER_IDS` is an optional comma-separated allowlist of immutable user UUIDs for the separate operator application. Empty means that nobody has access. The backend returns the same `404 NOT_FOUND` to anonymous and ordinary authenticated users and does not publish operator routes in OpenAPI. Obtain an operator UUID from that user's profile and configure it only in backend runtime env; changing a login or display name does not change access. The separate Caddy-host is an additional edge boundary, not a replacement for this backend check.
 
-`COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
+The operator overview remains read-only. Approved Mail Service policy exposes a safe read projection plus narrow audited `/sync` and `/status` commands. `/sync` atomically applies the bundled reviewed provider catalog; it does not import candidates from RKN or discover providers from DNS. Both policy mutations require a recent authenticated session, an allowlisted operator UUID, an optimistic version precondition, an idempotent `commandId`, and immutable audit. A separate read-only `/api/operations/mail-policy/anti-abuse` endpoint preserves the existing mail command-response contract. It returns only broad active-window lower bounds from authenticated-account scopes; public login, registration, password-reset and Recovery Code scopes are excluded from the query. A remaining scope contributes only after at least ten keys reach its limit, and each scope is rounded down to a multiple of ten before the surface rollup. Scope names, exact request totals, HMAC hashes and user, login, email, IP, Room or Tender identities are never returned. This is operational coarsening for the trusted allowlisted operator boundary, not a differential-privacy guarantee against a compromised operator controlling many accounts. Feedback Report processing has its own protected queue and only take, resolve, reject, record-sanitized-GitHub-number, and delete-contact commands. Feedback commands use the same operator boundary. Feedback source text and authorship cannot be edited, and no command publishes an external issue or sends mail automatically.
 
-When enabling Yandex ID or VK ID, set both provider credentials and `OAUTH_CALLBACK_BASE_URL` to the public API origin, for example `https://api.example.com`. The server derives the provider callback as `/api/auth/oauth/<provider>/callback`; it never accepts a callback URL from the browser. The post-login `webappOrigin` must exactly match an origin in `CORS_ORIGINS`.
+`COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production also requires `WEBAPP_ORIGIN`: one origin-only HTTPS URL for the player application, included in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
 
-Auth writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind the documented Yandex Application Load Balancer path, set `TRUST_PROXY=true`, use `x-forwarded-for` as `TRUSTED_PROXY_CLIENT_IP_HEADER`, and select the first value. Before horizontally scaling, keep shared PostgreSQL auth buckets and add an edge/WAF layer for request-rate protection.
+When enabling Yandex ID or VK ID, set both provider credentials and `OAUTH_CALLBACK_BASE_URL` to the public API origin, for example `https://api.example.com`. The server derives the provider callback as `/api/auth/oauth/<provider>/callback`; it never accepts a callback URL from the browser. The browser-supplied post-login `webappOrigin` must exactly match `WEBAPP_ORIGIN`; another CORS-allowed surface such as the operator app cannot become an OAuth return target. The Yandex application must grant email-address access: the backend requests `login:email`, validates the bounded `default_email` response, and synchronises it on every Yandex sign-in. The immutable provider subject remains the identity. Matching email never links or merges accounts, and a conflict does not block the already-linked Yandex sign-in. Only the masked protection projection is returned to the player.
 
-`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `maintenance:cleanup` daily to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`; the same task removes expired abuse buckets, unfinished OAuth transactions, one-time realtime tickets, and waiting rooms older than 24 hours. `auth:sessions:cleanup` remains a backwards-compatible alias for the same maintenance task.
+Auth writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind the documented Yandex Application Load Balancer path, set `TRUST_PROXY=true`, use `x-forwarded-for` as `TRUSTED_PROXY_CLIENT_IP_HEADER`, and select the first value. PostgreSQL budgets are authoritative across API instances for auth, transactional-mail requests, Room join, Tender commands, authenticated mutations and realtime-ticket issuance; an edge/WAF layer remains a complementary pre-authentication control.
+
+The optional `ANTI_ABUSE_*_LIMIT` settings override counts while keeping the fixed ADR 0013 windows. Defaults are `ANTI_ABUSE_LOGIN_FAILURE_LIMIT=5` and `ANTI_ABUSE_LOGIN_IP_LIMIT=30` per 15 minutes; `ANTI_ABUSE_REGISTRATION_DEVICE_LIMIT=3` per 180 days and `ANTI_ABUSE_REGISTRATION_IP_LIMIT=20` per day; `ANTI_ABUSE_RECOVERY_EMAIL_MINUTE_LIMIT=1`, `ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT=3`, and `ANTI_ABUSE_RECOVERY_EMAIL_DAY_LIMIT=5` per account and canonical address plus `ANTI_ABUSE_RECOVERY_EMAIL_IP_HOUR_LIMIT=20` per trusted IP; `ANTI_ABUSE_RECOVERY_LOGIN_HOUR_LIMIT=3` and `ANTI_ABUSE_RECOVERY_LOGIN_DAY_LIMIT=5` per normalized login plus `ANTI_ABUSE_RECOVERY_LOGIN_IP_HOUR_LIMIT=10` and `ANTI_ABUSE_RECOVERY_LOGIN_IP_DAY_LIMIT=30` per trusted IP; and one-minute `ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT=120`, `ANTI_ABUSE_ROOM_JOIN_LIMIT=20`, `ANTI_ABUSE_TENDER_COMMAND_LIMIT=60`, and `ANTI_ABUSE_REALTIME_TICKET_LIMIT=10`. The last four are keyed respectively by user, user, user plus Tender, and user. Recovery Email hour, day and IP-hour limits must be at least `2`, because one replacement command atomically reserves messages for both the old and new address; other overrides may start at `1`. Values greater than `1_000_000` fail validation. Change these values only from production evidence.
+
+Budget identities are domain-separated HMACs under `JWT_SECRET`; raw login and email values are not stored in `AuthAbuseBucket`. A coordinated `JWT_SECRET` rotation moves every budget into a fresh HMAC namespace, including the 180-day registration-device and recovery day windows, and separately changes JWT/token cryptography. Treat rotation as a security rollout with explicit compatibility and recovery evidence; never use it as a budget reset or tuning mechanism.
+
+The first release that replaces the legacy unkeyed SHA-256 namespace for the one-minute Room, Tender, authenticated-mutation and realtime budgets must not overlap old and new API processes. Stop every old API process, wait at least 60 seconds for the longest affected legacy window to expire, and only then start the new image. A rollback follows the same stop, wait and start sequence in reverse. The database cannot safely translate those rows because it intentionally has no raw identity from which to derive the HMAC; a mixed rollout would therefore enforce two independent budgets and temporarily double the allowance.
+
+Recovery Email has not yet been published to production, so its first release assumes no active `rec_email_*` buckets created by an older cost model. Verify that invariant before the cutover. If active rows exist, stop the release and define a conservative migration or window drain instead of treating them as compatible: replacement now atomically charges the account hour/day and trusted-IP hour budgets for both queued messages.
+
+Do not roll this release back to an intermediate image that still exposes Recovery Email replacement but charges those shared budgets once per command. That image is not budget-compatible even after current rows expire. Roll forward to a compatible image, or block the complete `/api/auth/account-protection/recovery-email/*` contour at the trusted ingress until a compatible revision is running. A rollback to the pre-feature production image is safe only because those routes are absent; record that route check in rollback evidence.
+
+`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `maintenance:cleanup` daily to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`; the same task removes expired abuse buckets, unfinished OAuth transactions, one-time realtime tickets, waiting rooms older than 24 hours, expired mail-domain assessments, expired Feedback Reports, and terminal mail outbox rows. `auth:sessions:cleanup` remains a backwards-compatible alias for the same maintenance task.
 
 Yandex Object Storage env is optional. Leave `YANDEX_STORAGE_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
 
@@ -72,7 +86,7 @@ Yandex Object Storage env is optional. Leave `YANDEX_STORAGE_*` blank until the 
 The backend is one workspace with one Prisma schema and one Dockerfile, but it has separate runtime entrypoints:
 
 - API: `bun run start:api`, backed by `src/index.ts`.
-- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases and scheduled Room starts. `bun run dev` starts both API and worker locally; production runs them as separate processes. The worker serves internal `/health/live` and `/health/ready` endpoints on `WORKER_HEALTH_PORT` or `PORT + 1`; readiness requires recent successful passes from both polling loops.
+- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases, scheduled Room starts, and the PostgreSQL transactional-mail outbox. `bun run dev` starts both API and worker locally; production runs them as separate processes. The worker serves internal `/health/live`, `/health/ready`, and `/metrics` endpoints on `WORKER_HEALTH_PORT` or `PORT + 1`; `WORKER_HEALTH_HOST` defaults to loopback. Readiness requires recent successful passes from the two base loops and, when SMTP is enabled, the mail-delivery loop.
 - Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, `maintenance:cleanup`, and the backwards-compatible `auth:sessions:cleanup` alias.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
@@ -89,6 +103,15 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `GET /api/auth/me`
+- `GET /api/auth/account-protection`
+- `POST /api/auth/account-protection/recovery-email/start`
+- `POST /api/auth/account-protection/recovery-email/resend`
+- `POST /api/auth/account-protection/recovery-email/confirm`
+- `POST /api/auth/account-protection/recovery-email/cancel`
+- `POST /api/auth/account-protection/recovery-email/replacement/start`
+- `POST /api/auth/account-protection/recovery-email/replacement/resend`
+- `POST /api/auth/account-protection/recovery-email/replacement/confirm`
+- `POST /api/auth/account-protection/recovery-email/replacement/cancel`
 - `POST /api/auth/logout`
 - `POST /api/auth/token/register`
 - `POST /api/auth/token/login`
@@ -97,6 +120,115 @@ Production deployment uses Yandex Cloud. Start with the shared [release entrypoi
 - `GET /openapi.json`
 - `GET /health/live`
 - `GET /health/ready`
+
+The approved Public MVP extensions and their completion status are specified in
+ADRs 0005–0017 and [the MVP plan](../docs/MVP_IMPLEMENTATION_PLAN.md). The main
+remaining product slice is consent-scoped funnel analytics; production mail,
+domain, legal and release verification remain separate owner-operated gates.
+Do not add env keys or advertise endpoints in this README until their
+implementation and contracts exist; when they do, document every new key here,
+in `.env.example`, the Yandex runbook and production setup without exposing
+values.
+
+## Feedback API
+
+- `POST /api/feedback` — authenticated strict intake; returns only a public
+  receipt number and exposes no player read route.
+- `GET /api/operations/feedback` — allowlisted operator queue, concealed from
+  ordinary users and omitted from OpenAPI.
+- `POST /api/operations/feedback/:reportId/take`
+- `POST /api/operations/feedback/:reportId/resolve`
+- `POST /api/operations/feedback/:reportId/reject`
+- `POST /api/operations/feedback/:reportId/github-issue`
+- `POST /api/operations/feedback/:reportId/contact/delete`
+
+The intake stores only bounded source fields and safe coarse technical context.
+Account linkage and reply contact are separate voluntary values; account and
+trusted-IP daily budget identities are HMAC-derived. Operator commands cannot
+edit source content. `maintenance:cleanup` deletes `new`/`in_review` reports at
+180 days and terminal or transferred reports 30 days after that event.
+
+`GET /api/auth/account-protection` exposes only the current account's bounded
+protection state. A Yandex-managed address is masked by the server; conflict and
+unavailable states contain no address. The full provider value and the separate
+canonical uniqueness key remain private persistence fields. Domains are
+lowercased and IDNA-normalised. Exact public domains and provider-specific local
+part rules come only from the published reviewed catalog. A custom `.ru`/`.рф`
+domain is eligible only while its complete current MX set exactly matches one
+published `approved` provider; unavailable DNS remains retryable, while an
+absent, unknown or mixed profile fails closed. Recovery checks force a fresh MX
+assessment, and the delivery worker repeats it before SMTP. An unlisted Yandex
+address is still retained as a provider attribute without inventing alias rules
+or making it eligible for local recovery delivery.
+
+Each custom-domain assessment is one row keyed by the normalized domain. It
+stores the classification outcome, a bounded failure code when present, the
+matched provider identifier when any, a SHA-256 fingerprint of the complete
+normalized MX RRset when DNS returned one, and checked/expiry timestamps; raw
+MX records are not persisted. Retry assessments expire after 30 seconds and
+allowed or denied assessments after five minutes. A repeated check updates the
+same row. Daily `maintenance:cleanup` removes expired rows, normally within 24
+hours after their assessment TTL.
+
+A password account can voluntarily start its first Recovery Email protection
+through the four recovery-email commands above. The first request verifies the
+current password and a published Approved Mail Service policy, sends a 15-minute
+code with at most five confirmation attempts, and activates only after a
+24-hour cooling-off period. Only sessions that existed when the request was
+created may cancel it; cancellation revokes newer sessions. The API returns only
+the masked address and bounded state. The full provider value, canonical key,
+HMAC code derivative and HMAC abuse-budget keys remain private persistence
+fields. Yandex-managed accounts cannot enter this password flow.
+
+An active Recovery Email is replaced only after the owner re-enters the current
+password and independently confirms 15-minute codes sent to the old and new
+masked addresses. Each factor has its own five-attempt counter and resend
+identity. The old binding remains authoritative until one PostgreSQL transaction
+verifies both factors, rechecks the current Approved Mail Service policy and
+uniqueness, updates the binding, revokes every other session, clears outstanding
+Recovery Email challenges and queues a security notification. `deprecated`
+services remain valid for delivery to the old address but cannot become the new
+binding; `blocked` services fail closed. Only the initiating session can manage
+or abandon a pending replacement, and no support/operator override exists.
+
+The `mail` context now exposes a narrow internal requester for exactly three
+templates: Account Email confirmation, password recovery and security
+notification. Callers create it from the owning Prisma transaction; the module
+does not expose an unbound requester, so the product state change and logical
+mail request commit or roll back together. The existing worker drains the
+request through the protected REG.RU SMTP adapter. Delivery remains
+disabled by default. Confirmation codes are derived only at delivery from a
+domain-separated HMAC and are never stored in the outbox payload. Logical
+request fingerprints are keyed HMAC values, and
+accepted or terminal rows immediately redact the recipient and secret-bearing
+template payload. When the delivery policy identifies a provider, the worker
+records that stable classification identifier on the outbox row before SMTP; it
+is not retroactively reassigned when the domain assessment changes or expires.
+The identifier remains only as technical outbox metadata and follows the
+configured terminal-retention deadline of at most 30 days plus the next daily
+cleanup. The shared PostgreSQL SMTP delivery budget and circuit breaker
+persist each protection transition once. Workers claim those rows with an exclusive
+lease and deliver a safe structured event at least once before acknowledging it. The
+event contains only an allowlisted reason, occurrence time and stable transition time;
+it contains no recipient, template payload, code, token or message identity. A crash
+after logging but before acknowledgement can repeat the same event, so downstream
+consumers deduplicate by reason plus transition time. Acknowledged history older than
+30 days is pruned lazily on a later transition; pending rows remain durable. A
+continuously unavailable log sink can add at most one delivery-budget transition per
+minute and therefore still needs an
+operator-owned capacity alarm or finite dead-letter policy before production scale.
+Production log routing, Monitoring rules/channels and threshold tuning remain
+deployment gates.
+`MAIL_SMTP_ENABLED`, `MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`,
+`MAIL_SMTP_TLS_MODE`, `MAIL_SMTP_USERNAME`, `MAIL_SMTP_PASSWORD`,
+`MAIL_SMTP_FROM`, `MAIL_SMTP_REPLY_TO`, `MAIL_SMTP_TIMEOUT_MS`,
+`MAIL_SMTP_MAX_ATTEMPTS`, `MAIL_SMTP_RETRY_BASE_SECONDS`,
+`MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD`, `MAIL_SMTP_CIRCUIT_OPEN_SECONDS`,
+`MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE`, `MAIL_SMTP_LEASE_SECONDS`,
+`MAIL_SMTP_WORKER_INTERVAL_MS` and `MAIL_OUTBOX_RETENTION_DAYS` are documented
+with safe empty/default values in `.env.example`; production secret placement,
+verification and recovery procedures live in the Yandex runbook. The configured
+lease must be longer than the SMTP timeout.
 
 Личная игровая статистика доступна авторизованному пользователю через `GET /api/profile/statistics`. Сервер рассчитывает её по завершённым совместимым партиям и журналу принятых игровых действий; формулы закреплены в [../docs/GAME_DESIGN_BRIEF.md](../docs/GAME_DESIGN_BRIEF.md).
 

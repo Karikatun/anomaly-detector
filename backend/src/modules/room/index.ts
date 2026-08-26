@@ -1,6 +1,7 @@
 import type { DbClient } from '../../db'
 import type { MiddlewareHandler } from 'hono'
 import { createPrismaRequestBudget } from '../../security/request-budget'
+import type { RequestBudgetPolicy } from '../../security/request-budget-policy'
 import type { AuthHttpEnv } from '../auth'
 import type { TenderModule } from '../tender'
 import type { TenderLifecycleReader } from './application/ports'
@@ -13,7 +14,9 @@ import { createRoomRoutes } from './transport/routes'
 export function createRoomModule(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   db: DbClient
+  joinBudgetPolicy: RequestBudgetPolicy<'room_join'>
   requireAuth: MiddlewareHandler<AuthHttpEnv>
+  requestBudgetSecret: string
   tender: Pick<TenderModule, 'readTenderPlacement'>
   tenderLifecycleReader: TenderLifecycleReader
 }) {
@@ -30,7 +33,8 @@ export function createRoomModule(input: {
   return {
     routes: createRoomRoutes({
       authenticatedMutationBudget: input.authenticatedMutationBudget,
-      joinBudget: createPrismaRequestBudget(input.db),
+      joinBudget: createPrismaRequestBudget(input.db, input.requestBudgetSecret),
+      joinBudgetPolicy: input.joinBudgetPolicy,
       requireAuth: input.requireAuth,
       service,
     }),

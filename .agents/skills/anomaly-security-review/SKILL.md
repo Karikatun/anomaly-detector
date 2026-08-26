@@ -1,24 +1,48 @@
 ---
 name: anomaly-security-review
-description: Review Anomaly Detector changes and architecture for concrete security threats, authorization gaps, IDOR, replay, race conditions, unsafe input, data exposure, denial of service, and recovery failures. Use for threat modeling or security review requests and whenever work changes authentication, sessions, OAuth, permissions, player privacy, operator access, cryptography, rate limits, audit events, personal data, storage, production network boundaries, migrations, backup or restore, or legal and security copy.
+description: Review Anomaly Detector changes and architecture for concrete security threats, authorization gaps, IDOR, replay, race conditions, unsafe input, data exposure, denial of service, and recovery failures. Use for threat modeling or security review requests and whenever work changes authentication, sessions, OAuth, permissions, player privacy, operator access, cryptography, rate limits, audit events, personal data, storage, production network boundaries, migrations, backup or restore, legal and security copy, or the repository rules and skills that route security checks.
 ---
 
 # Anomaly Security Review
 
 Produce an evidence-backed threat review for this repository. Treat scanners as leads and tests as boundary evidence; never infer security from a green tool alone.
 
+## Select The Review Mode Automatically
+
+Choose the mode from the actual diff and reachable behavior; do not ask the user to select it and do not downgrade because a full review is inconvenient.
+
+- **Full:** mandatory when the change materially affects authentication, authorization, player privacy, operator access, cryptography, rate limits, audit events, a trust boundary, recovery, a migration that changes access or existing persisted data, or the repository rule/skill that decides whether and how these security checks run. Trace the full vertical boundary and complete all three matrices below.
+- **Targeted:** use for a storage, schema-only migration, backup/restore, or other data-lifecycle change outside the full-mode triggers. Scope matrix rows to the affected persistence, compatibility, atomicity, recovery, deletion, projection, and logging risks.
+- **Semantic:** use for security/legal copy or a mechanical rename, formatting, comment, type-only, or equivalent change only after proving it does not alter an entry point, input/output, permission, control, query, persistence, logging, data exposure, or recovery behavior. Verify that the wording matches the implemented product contract; do not complete the matrices.
+
+When the evidence does not prove the narrower boundary, select `full`. Report the selected mode and the evidence that justifies it.
+
 ## Workflow
 
 1. Read `SECURITY.md`, `docs/ARCHITECTURE.md`, `docs/TESTING.md`, the applicable `AGENTS.md`, owning module, shared contracts, migrations, and directly coupled clients.
-2. Identify the exact revision and scope. Preserve unrelated changes and keep vulnerability details out of public issues, logs, screenshots, and ordinary chat.
-3. State the protected data, action, resource, or invariant. Enumerate unauthenticated user, outsider, participant, owner, operator, background worker, and external provider where applicable.
-4. Trace each entry point through request validation, authentication, application authorization, transaction or persistence, projection or serialization, client consumption, audit logging, and retry or recovery.
-5. Draw only the relevant trust boundaries. Apply STRIDE to each crossing and state a concrete attacker action and impact; discard checklist-only threats without a plausible path.
-6. Complete the actor-resource and concurrency matrices below. Use `references/review-template.md` when writing a durable review.
-7. Select the smallest evidence set that can prove the boundary. Run targeted tests before broader scanners or suites.
-8. Report confirmed findings, rejected hypotheses, residual risks, and coverage gaps separately. Never label an unvalidated suspicion as a vulnerability.
+2. Identify the exact revision and scope, then select `full`, `targeted`, or `semantic` from the rules above. Preserve unrelated changes and keep vulnerability details out of public issues, logs, screenshots, and ordinary chat.
+3. State the protected data, action, resource, or invariant. In `full`, enumerate unauthenticated user, outsider, participant, owner, operator, background worker, and external provider where applicable.
+4. Trace each affected entry point through request validation, authentication, application authorization, transaction or persistence, projection or serialization, client consumption, audit logging, and retry or recovery. A `targeted` review limits this trace to the affected data lifecycle; a `semantic` review proves these paths are unchanged.
+5. In `full`, draw every relevant trust boundary, apply STRIDE to each crossing, and state a concrete attacker action and impact. In `targeted`, inspect only concrete storage/migration/data-lifecycle threats. Discard checklist-only threats without a plausible path.
+6. Apply the matrices according to the selected mode. Use `references/review-template.md` when writing a durable review.
+7. For every material security diff, automatically run the adopted differential pass below after the base review. The completed pilot in `docs/agents/security-agent-pilot.md` is evidence for this permanent technique, not a classification to repeat.
+8. Select the smallest evidence set that can prove the boundary. Run targeted tests before broader scanners or suites.
+9. Report the mode, confirmed findings, rejected hypotheses, residual risks, and coverage gaps separately. Never label an unvalidated suspicion as a vulnerability.
 
-## Required Matrices
+## Adopted Differential Pass
+
+For a diff that changes a security control, protected action or data, entry point, trust crossing, persistence behavior, or recovery invariant:
+
+1. inspect Git history for removed, moved, or weakened validation, permission, transaction, privacy, and recovery controls;
+2. map blast radius through producers, consumers, public entry points, background work, projections, and persisted data;
+3. search neighboring routes, use cases, workers, serializers, migrations, and clients for variants of the same missing or misplaced control;
+4. independently try to refute every candidate finding with reachability evidence, an existing control, a test, or runtime behavior before reporting it.
+
+Do not add a tool, dependency, external scan, hosted workflow, new permission, or private-code transfer for this pass. It changes review coverage, not the finding bar or safety boundary.
+
+## Review Matrices
+
+In `full`, complete all three matrices; when a matrix has no subject in the reviewed scope, record that fact once instead of silently pruning it. In `targeted`, record only rows that can be affected by the selected storage, migration, or data-lifecycle scope and explain any material coverage gap. In `semantic`, do not manufacture matrix entries; retain the proof that no security boundary changed.
 
 For every object identifier, test or inspect:
 
@@ -50,6 +74,8 @@ For every external input and stored payload, test or inspect:
 
 ## Tool Routing
 
+For `full`, run the repository-owned static checks below; the exact-image and active-DAST checks still require their stated artifact, environment, and authorization. For `targeted` and `semantic`, select only commands whose documented surface intersects the bounded review and report any applicable omitted check as `NOT RUN` with residual risk. A narrower review mode never removes a check required by the repository's release or CI gate.
+
 - Run `bun run security:gitleaks` for Git-history secret detection and retain only exact fingerprint exceptions for proven test fixtures.
 - Run `bun run security:semgrep` for versioned high-confidence source rules. Inspect the complete source-to-sink path before reporting.
 - Run `bun run security:trivy:config` for Docker and infrastructure configuration. After building the exact backend image, run `bun run security:trivy:image <image>`.
@@ -73,4 +99,4 @@ Do not report generic hardening advice as a vulnerability. Do not publish exploi
 
 ## Completion Contract
 
-Lead with the highest-impact result. Include `Primary signal status`, exact secondary checks, unresolved hypotheses, residual risk, and whether active DAST was run. State explicitly when no finding was proved or when coverage is incomplete.
+Lead with the highest-impact result. Include the automatically selected review mode, `Primary signal status`, exact secondary checks, unresolved hypotheses, residual risk, and whether active DAST was run. For a material security diff, state that the adopted differential pass ran and summarize history/blast-radius/neighbor/refutation coverage. State explicitly when no finding was proved or when coverage is incomplete.

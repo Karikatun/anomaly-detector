@@ -1,18 +1,26 @@
 import { describe, expect, test } from 'bun:test'
+import type { MiddlewareHandler } from 'hono'
 
 import { createApp } from '../../../app'
 import type { DbClient } from '../../../db'
 import type { AppEnv } from '../../../env'
+import type { AuthService } from '../application/auth-service'
 import { AuthFailure } from '../domain/errors'
 import { toAuthAppError } from './errors'
-import { oauthCallbackErrorCode } from './routes'
+import type { AuthHttpEnv } from './middleware'
+import { createAuthRoutes, oauthCallbackErrorCode } from './routes'
 
 const env: AppEnv = {
+  API_HOST: '0.0.0.0',
   PORT: 3000,
   DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
   JWT_SECRET: 'test-route-secret-at-least-thirty-two-chars-123',
   ADMIN_USER_IDS: [],
-  CORS_ORIGINS: ['https://web.example.com'],
+  ANALYTICS_ENABLED: false,
+  ANALYTICS_ORIGINS: [],
+  ANALYTICS_CAMPAIGN_ALLOWLIST: [],
+  CORS_ORIGINS: ['https://ops.example.com', 'https://web.example.com'],
+  WEBAPP_ORIGIN: 'https://web.example.com',
   ACCESS_TOKEN_TTL_SECONDS: 60,
   REFRESH_TOKEN_TTL_DAYS: 30,
   REFRESH_REUSE_GRACE_SECONDS: 10,
@@ -25,6 +33,16 @@ const env: AppEnv = {
   TRUST_PROXY: true,
   TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-forwarded-for',
   COOKIE_SECURE: true,
+  MAIL_SMTP_ENABLED: false,
+  MAIL_SMTP_TIMEOUT_MS: 10_000,
+  MAIL_SMTP_MAX_ATTEMPTS: 5,
+  MAIL_SMTP_RETRY_BASE_SECONDS: 30,
+  MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD: 5,
+  MAIL_SMTP_CIRCUIT_OPEN_SECONDS: 300,
+  MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE: 60,
+  MAIL_SMTP_LEASE_SECONDS: 60,
+  MAIL_SMTP_WORKER_INTERVAL_MS: 1_000,
+  MAIL_OUTBOX_RETENTION_DAYS: 30,
   YANDEX_STORAGE_UPLOAD_MAX_BYTES: 10 * 1024 * 1024,
   YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS: 900,
   YANDEX_STORAGE_DOWNLOAD_URL_TTL_SECONDS: 300,
@@ -74,6 +92,14 @@ describe('auth routes', () => {
     expect(oauthCallbackErrorCode(new Error('provider failed'))).toBe('oauth_failed')
   })
 
+  test('conceals an occupied email behind the generic OAuth callback failure', () => {
+    const failure = new AuthFailure(
+      'oauth_account_email_conflict',
+      'message must not disclose the other account',
+    )
+    expect(oauthCallbackErrorCode(toAuthAppError(failure))).toBe('oauth_failed')
+  })
+
   test('limits auth request bodies before validation or password work', async () => {
     const app = createApp({ env: { ...env, AUTH_BODY_LIMIT_BYTES: 32 }, prisma: {} as DbClient })
     const response = await app.request('/api/auth/register', {
@@ -97,9 +123,9 @@ describe('auth routes', () => {
         login: 'legal-user',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: false,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     })
 
@@ -219,6 +245,14 @@ describe('auth routes', () => {
     expect(untrustedOrigin.status).toBe(403)
     expect((await untrustedOrigin.json()).error.code).toBe('FORBIDDEN')
 
+    const nonPlayerCorsOrigin = await app.request('/api/auth/oauth/yandex/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webappOrigin: 'https://ops.example.com' }),
+    })
+    expect(nonPlayerCorsOrigin.status).toBe(403)
+    expect((await nonPlayerCorsOrigin.json()).error.code).toBe('FORBIDDEN')
+
     const callerProvidedCallback = await app.request('/api/auth/oauth/yandex/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -227,4 +261,94 @@ describe('auth routes', () => {
     expect(callerProvidedCallback.status).toBe(400)
     expect((await callerProvidedCallback.json()).error.code).toBe('VALIDATION_ERROR')
   })
+
+  test('returns OAuth provider errors to the configured player origin', async () => {
+    const app = createApp({ env, prisma: {} as DbClient })
+    const response = await app.request(
+      '/api/auth/oauth/yandex/callback?error=access_denied&error_description=cancelled&state=state-123',
+    )
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(
+      'https://web.example.com/?auth_error=cancelled',
+    )
+  })
+
+  test.each([
+    'https://app.anomaly-detector.ru',
+    'https://anomaly-detector.ru',
+  ])('returns a successful OAuth callback and host-only secure cookie to %s', async (webappUrl) => {
+    let completionCalls = 0
+    const routes = oauthRoutes(webappUrl, async () => {
+      completionCalls += 1
+      return {
+        created: true,
+        refreshToken: 'mock-refresh-token',
+        webappOrigin: webappUrl,
+      }
+    })
+    const response = await routes.request(
+      `/oauth/yandex/callback?code=mock-code&state=${encodeURIComponent(oauthState(webappUrl))}`,
+    )
+
+    expect(completionCalls).toBe(1)
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(`${webappUrl}/?analytics_registration=1`)
+    const cookie = response.headers.get('set-cookie') ?? ''
+    expect(cookie).toContain('anomaly_detector_refresh=mock-refresh-token')
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('Secure')
+    expect(cookie).toContain('SameSite=None')
+    expect(cookie).toContain('Path=/api/auth')
+    expect(cookie).not.toMatch(/(?:^|;)\s*Domain=/i)
+  })
+
+  test('rejects an in-flight OAuth return from the previous split origin before side effects', async () => {
+    let completionCalls = 0
+    const currentOrigin = 'https://anomaly-detector.ru'
+    const routes = oauthRoutes(currentOrigin, async () => {
+      completionCalls += 1
+      throw new Error('stale-origin completion must not run')
+    })
+    const staleState = oauthState('https://app.anomaly-detector.ru')
+    const response = await routes.request(
+      `/oauth/yandex/callback?code=mock-code&state=${encodeURIComponent(staleState)}`,
+    )
+
+    expect(completionCalls).toBe(0)
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(
+      `${currentOrigin}/?auth_error=oauth_failed`,
+    )
+  })
 })
+
+function oauthState(webappOrigin: string) {
+  return `${Buffer.from(webappOrigin).toString('base64url')}::mock-state`
+}
+
+function oauthRoutes(
+  webappUrl: string,
+  completeOAuthSignIn: () => Promise<{
+    created: boolean
+    refreshToken: string
+    webappOrigin: string
+  }>,
+) {
+  const passThrough = (async (_context, next) => {
+    await next()
+  }) as MiddlewareHandler<AuthHttpEnv>
+  const service = { completeOAuthSignIn } as unknown as AuthService
+
+  return createAuthRoutes({
+    authenticatedMutationBudget: passThrough,
+    deviceTokens: {
+      resolve: () => ({ cookieValue: null, deviceId: 'unused-test-device' }),
+    },
+    env,
+    oauthCallbackBaseUrl: 'https://api.anomaly-detector.ru',
+    requireAuth: passThrough,
+    service,
+    webappUrl,
+  })
+}

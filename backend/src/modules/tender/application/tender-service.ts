@@ -9,8 +9,17 @@ import type {
   TenderView,
   TenderViewQuery,
 } from '@anomaly-detector/contracts'
-import { createTenderSchema, tenderCommandSchema, tenderViewQuerySchema } from '@anomaly-detector/contracts'
-import { createParticipantAuditRounds } from './audit-view'
+import {
+  createTenderSchema,
+  tenderAuditViewSchema,
+  tenderCommandSchema,
+  tenderViewQuerySchema,
+} from '@anomaly-detector/contracts'
+import {
+  assertCurrentParticipantAuditSemantics,
+  createParticipantAuditRounds,
+  hasParticipantAuditSemantics,
+} from './audit-view'
 import {
   createFinalScientificModelAuditByPlayer,
   createRatingBreakdownByPlayer,
@@ -19,8 +28,10 @@ import type { TenderModule } from './tender-module'
 import type {
   PendingTenderAuditEvent,
   StoredTender,
+  StoredTenderAuditEvent,
   TenderStore,
 } from './tender-store'
+import { TenderAuditEventDecodeError } from './tender-audit-event'
 import { resolveAccessSlots, rotateTiePriority } from '../domain/access-slots'
 import { createAnomalyConfiguration, resolvePublicResult, signalIds, type SignalId } from '../domain/anomaly-configuration'
 import { createRoundContracts } from '../domain/contracts'
@@ -86,6 +97,24 @@ export function createTenderService({
   }
 
   const fingerprint = (command: TenderCommand) => JSON.stringify(command)
+  const parseCommand = (commandInput: TenderCommand) => {
+    const parsedCommand = tenderCommandSchema.safeParse(commandInput)
+    if (!parsedCommand.success) {
+      throw new TenderFailure('invalid_tender_command', 'Tender command is invalid')
+    }
+    return parsedCommand.data
+  }
+  const findCommandReceipt = async (commandInput: TenderCommand) => {
+    const command = parseCommand(commandInput)
+    const tender = await readTender(command.tenderId)
+    readPlayer(tender, command.actorId)
+    const previousCommand = tender.processedCommands[command.commandId]
+    if (!previousCommand) return undefined
+    if (previousCommand.fingerprint !== fingerprint(command)) {
+      throw new TenderFailure('duplicate_command_conflict', `Command ${command.commandId} conflicts with its first use`)
+    }
+    return previousCommand.receipt
+  }
   const isActivePlayer = (tender: StoredTender, playerId: string) =>
     tender.forfeitedAtByPlayer[playerId] === undefined
   const activePlayers = (tender: StoredTender) => tender.players
@@ -499,11 +528,7 @@ export function createTenderService({
     },
 
     async execute(commandInput: TenderCommand): Promise<CommandReceipt> {
-      const parsedCommand = tenderCommandSchema.safeParse(commandInput)
-      if (!parsedCommand.success) {
-        throw new TenderFailure('invalid_tender_command', 'Tender command is invalid')
-      }
-      const command = parsedCommand.data
+      const command = parseCommand(commandInput)
       const tender = await readTender(command.tenderId)
       const player = readPlayer(tender, command.actorId)
       const commandFingerprint = fingerprint(command)
@@ -1341,6 +1366,8 @@ export function createTenderService({
       })
     },
 
+    findCommandReceipt,
+
     async readTenderPlacement(query: TenderViewQuery): Promise<number | undefined> {
       const parsedQuery = tenderViewQuerySchema.safeParse(query)
       if (!parsedQuery.success) {
@@ -1365,9 +1392,51 @@ export function createTenderService({
         throw new TenderFailure('player_forfeited', 'Player permanently forfeited this Tender')
       }
       const activePlayerId = activePlayerIdForView(tender)
-      const auditEvents = tender.phase === 'complete'
-        ? await store.readAuditEvents(tenderId)
-        : undefined
+      let auditEvents: StoredTenderAuditEvent[] | undefined
+      if (tender.phase === 'complete') {
+        try {
+          auditEvents = await store.readAuditEvents(tenderId)
+        } catch (error) {
+          if (
+            !(error instanceof TenderAuditEventDecodeError)
+            || error.kind !== 'historical_incompatible'
+          ) throw error
+        }
+      }
+      let completedAudit: TenderView['audit']
+      if (auditEvents !== undefined) {
+        const createAuditProjection = (events: StoredTenderAuditEvent[]) => ({
+          anomalyConfiguration: tender.anomalyConfiguration,
+          completionReason: tender.completionReason ?? 'standard',
+          finalScientificModelsByPlayer: createFinalScientificModelAuditByPlayer(tender),
+          forfeitedAtByPlayer: tender.forfeitedAtByPlayer,
+          placementByPlayer: createPlacementByPlayer(tender),
+          privateThesesByPlayer: tender.privateThesesByPlayer,
+          privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
+          privateTelemetryByPlayer: tender.privateMeasurementsByPlayer,
+          publicLaboratoryResults: tender.publicLaboratoryResults,
+          publicScientificJournal: tender.publicScientificJournal,
+          ratingBreakdownByPlayer: createRatingBreakdownByPlayer(tender, events),
+          rounds: createParticipantAuditRounds(tender, events),
+          ruleset: tender.ruleset,
+        })
+        const hasIncompatibleHistoricalEvent = auditEvents.some((event) =>
+          event.formatVersion === 0 && !hasParticipantAuditSemantics(event),
+        )
+        assertCurrentParticipantAuditSemantics(tender, auditEvents)
+        if (!hasIncompatibleHistoricalEvent) {
+          try {
+            const projectedAudit = tenderAuditViewSchema.safeParse(createAuditProjection(auditEvents))
+            if (!projectedAudit.success) throw projectedAudit.error
+            completedAudit = projectedAudit.data
+          } catch (error) {
+            if (
+              !(error instanceof TenderAuditEventDecodeError)
+              || error.kind !== 'historical_incompatible'
+            ) throw error
+          }
+        }
+      }
       const tiePriorities = Object.fromEntries(
         rotateTiePriority(tender.players, tender.round).map((candidate) => [candidate.id, candidate.tiePriority]),
       )
@@ -1535,23 +1604,7 @@ export function createTenderService({
         privateWorkingModel: tender.privateWorkingModelsByPlayer[player.id] ?? { signals: {} },
         publicTheses: tender.ruleset === 'tender-v2' ? [] : tender.publicTheses,
         ...(tender.phase === 'complete' ? { winnerPlayerIds: tender.winnerPlayerIds } : {}),
-        ...(tender.phase === 'complete' ? {
-          audit: {
-            anomalyConfiguration: tender.anomalyConfiguration,
-            completionReason: tender.completionReason ?? 'standard',
-            finalScientificModelsByPlayer: createFinalScientificModelAuditByPlayer(tender),
-            forfeitedAtByPlayer: tender.forfeitedAtByPlayer,
-            placementByPlayer: createPlacementByPlayer(tender),
-            privateThesesByPlayer: tender.privateThesesByPlayer,
-            privateMeasurementsByPlayer: tender.privateMeasurementsByPlayer,
-            privateTelemetryByPlayer: tender.privateMeasurementsByPlayer,
-            publicLaboratoryResults: tender.publicLaboratoryResults,
-            publicScientificJournal: tender.publicScientificJournal,
-            ratingBreakdownByPlayer: createRatingBreakdownByPlayer(tender, auditEvents!),
-            rounds: createParticipantAuditRounds(tender, auditEvents!),
-            ruleset: tender.ruleset,
-          },
-        } : {}),
+        ...(completedAudit ? { audit: completedAudit } : {}),
       }
     },
 

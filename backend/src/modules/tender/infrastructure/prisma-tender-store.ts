@@ -370,26 +370,27 @@ export function createPrismaTenderStore(db: DbClient): TenderStore {
     async commit(change: TenderCommit): Promise<TenderCommitResult> {
       try {
         return await db.$transaction<TenderCommitResult>(async (tx) => {
-          if (change.command && change.commandId) try {
-            await tx.tenderCommand.create({
+          if (change.command && change.commandId) {
+            const inserted = await tx.tenderCommand.createMany({
               data: {
                 tenderId: change.tenderId,
                 commandId: change.commandId,
                 fingerprint: change.command.fingerprint,
                 receipt: change.command.receipt as Prisma.InputJsonValue,
               },
+              skipDuplicates: true,
             })
-          } catch (error) {
-            if (!isUniqueConstraintError(error)) throw error
-            const command = await tx.tenderCommand.findUniqueOrThrow({
-              where: {
-                tenderId_commandId: {
-                  tenderId: change.tenderId,
-                  commandId: change.commandId,
+            if (inserted.count === 0) {
+              const command = await tx.tenderCommand.findUniqueOrThrow({
+                where: {
+                  tenderId_commandId: {
+                    tenderId: change.tenderId,
+                    commandId: change.commandId,
+                  },
                 },
-              },
-            })
-            return { kind: 'command_exists', command: toStoredCommand(command) }
+              })
+              return { kind: 'command_exists', command: toStoredCommand(command) }
+            }
           }
 
           const updated = await tx.tender.updateMany({
@@ -478,8 +479,4 @@ class TenderVersionConflict extends Error {}
 function earliestDeadline(tender: { abandonmentDueAt: Date | null; dueAt: Date | null }) {
   const deadlines = [tender.dueAt, tender.abandonmentDueAt].filter((value): value is Date => value !== null)
   return new Date(Math.min(...deadlines.map((deadline) => deadline.getTime())))
-}
-
-function isUniqueConstraintError(error: unknown) {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002'
 }

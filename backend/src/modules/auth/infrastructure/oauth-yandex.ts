@@ -22,6 +22,7 @@ export function createYandexOAuthProvider(config: YandexOAuthConfig): OAuthProvi
       url.searchParams.set('response_type', 'code')
       url.searchParams.set('client_id', config.clientId)
       url.searchParams.set('redirect_uri', redirectUri)
+      url.searchParams.set('scope', 'login:email')
       url.searchParams.set('code_challenge', codeChallenge)
       url.searchParams.set('code_challenge_method', 'S256')
       url.searchParams.set('state', state)
@@ -49,7 +50,11 @@ export function createYandexOAuthProvider(config: YandexOAuthConfig): OAuthProvi
         throw new Error(`Yandex token exchange failed: ${response.status}`)
       }
 
-      const data = tokenResponseSchema.parse(await response.json())
+      const data = await parseProviderJson(
+        response,
+        tokenResponseSchema,
+        'Yandex token exchange returned an invalid response',
+      )
 
       if (data.error) {
         throw new Error('Yandex token exchange returned an error')
@@ -74,9 +79,14 @@ export function createYandexOAuthProvider(config: YandexOAuthConfig): OAuthProvi
         throw new Error(`Yandex user info failed: ${response.status}`)
       }
 
-      const data = userInfoResponseSchema.parse(await response.json())
+      const data = await parseProviderJson(
+        response,
+        userInfoResponseSchema,
+        'Yandex user info returned an invalid response',
+      )
 
       return {
+        accountEmail: data.default_email ?? null,
         displayName: data.display_name ?? data.real_name ?? null,
         providerSubject: data.id,
       }
@@ -85,15 +95,56 @@ export function createYandexOAuthProvider(config: YandexOAuthConfig): OAuthProvi
 }
 
 const tokenResponseSchema = z.object({
-  access_token: z.string().min(1),
-  error: z.string().optional(),
+  access_token: z.string().min(1).max(4_096),
+  error: z.string().max(128).optional(),
 })
 
 const userInfoResponseSchema = z.object({
-  id: z.string().min(1),
-  display_name: z.string().optional(),
-  real_name: z.string().optional(),
+  id: z.string().min(1).max(256),
+  display_name: z.string().max(512).optional(),
+  real_name: z.string().max(512).optional(),
+  default_email: z.string().min(3).max(320).optional(),
 })
+
+const providerResponseMaxBytes = 16 * 1_024
+
+async function parseProviderJson<T>(
+  response: Response,
+  schema: z.ZodType<T>,
+  invalidResponseMessage: string,
+): Promise<T> {
+  try {
+    const declaredLength = Number(response.headers.get('content-length'))
+    if (Number.isFinite(declaredLength) && declaredLength > providerResponseMaxBytes) {
+      throw new Error('response too large')
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('response body missing')
+    const chunks: Uint8Array[] = []
+    let totalBytes = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      totalBytes += value.byteLength
+      if (totalBytes > providerResponseMaxBytes) {
+        await reader.cancel()
+        throw new Error('response too large')
+      }
+      chunks.push(value)
+    }
+
+    const body = new Uint8Array(totalBytes)
+    let offset = 0
+    for (const chunk of chunks) {
+      body.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return schema.parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)))
+  } catch {
+    throw new Error(invalidResponseMessage)
+  }
+}
 
 async function providerFetch(
   fetcher: NonNullable<YandexOAuthConfig['fetcher']>,

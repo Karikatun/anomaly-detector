@@ -139,7 +139,7 @@ export class AuthApi {
     return this.authCoordinator(async () => {
       if (!this.isSessionEpochCurrent(this.sessionEpoch)) return null
 
-      await this.performAuthenticatedNoContentRequest('/api/auth/account', {
+      await this.requestAuthenticatedNoContent('/api/auth/account', {
         method: 'DELETE',
       })
       const sessionEvent = publishBrowserSessionState('cleared')
@@ -170,7 +170,7 @@ export class AuthApi {
 
   async updateProfile(input: UpdateProfileRequest): Promise<void> {
     const payload = updateProfileSchema.parse(input)
-    await this.performAuthenticatedNoContentRequest('/api/auth/profile', {
+    await this.requestAuthenticatedNoContent('/api/auth/profile', {
       method: 'PATCH',
       body: payload,
     })
@@ -191,9 +191,9 @@ export class AuthApi {
     )
   }
 
-  private performAuthenticatedNoContentRequest(
+  requestAuthenticatedNoContent(
     path: string,
-    options: HttpRequestOptions,
+    options: HttpRequestOptions = {},
   ): Promise<void> {
     return this.performAuthenticated(
       (headers) => this.http.requestNoContent(path, { ...options, headers }),

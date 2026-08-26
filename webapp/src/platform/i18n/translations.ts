@@ -1,5 +1,6 @@
 import { appMessages } from './messages/app'
 import { authMessages } from './messages/auth'
+import { feedbackMessages } from './messages/feedback'
 import { legalMessages } from './messages/legal'
 import { profileMessages } from './messages/profile'
 import { roomsMessages } from './messages/rooms'
@@ -11,6 +12,7 @@ import { tutorialMessages } from './messages/tutorial'
 export const messages = {
   ...appMessages,
   ...authMessages,
+  ...feedbackMessages,
   ...legalMessages,
   ...profileMessages,
   ...roomsMessages,

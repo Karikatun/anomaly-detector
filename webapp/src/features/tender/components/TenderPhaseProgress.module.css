@@ -117,7 +117,7 @@
   align-items: center;
   justify-items: start;
   gap: var(--space-3);
-  color: rgba(189, 207, 220, .42);
+  color: rgba(189, 207, 220, .64);
 }
 
 .connector {

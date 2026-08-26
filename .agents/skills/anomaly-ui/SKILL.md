@@ -11,9 +11,11 @@ Preserve the existing product while making the smallest coherent improvement. Tr
 
 1. Read root `AGENTS.md` and the affected module's `AGENTS.md`.
 2. Read `docs/DESIGN_SYSTEM.md` and the applicable states in `docs/UX_CHECKLIST.md`.
-3. For foundation, styling-system, or cross-screen consistency work, also read `docs/UI_FOUNDATION_AUDIT.md`.
-4. Inspect the current rendered screen, adjacent screens, shared primitives, tokens, and directly coupled behavior before editing.
-5. Preserve working flows and product semantics. Trace behavioral UI bugs through route/layout, orchestration, state or handler, contract/API, and persistence to the owning layer.
+3. For substantial UI/UX work, automatically define the player goal, primary action, server-accepted result, applicable failure/recovery states, and primary rendered signal. Do not require a pilot status or user reminder.
+4. Create a stable CUJ/evidence matrix only for a new or materially redesigned critical flow, as defined by `docs/UX_CHECKLIST.md`; do not add that ceremony to a local fix or incremental existing flow.
+5. For foundation, styling-system, or cross-screen consistency work, also read `docs/UI_FOUNDATION_AUDIT.md`.
+6. Inspect the current rendered screen, adjacent screens, shared primitives, tokens, and directly coupled behavior before editing.
+7. Preserve working flows and product semantics. Trace behavioral UI bugs through route/layout, orchestration, state or handler, contract/API, and persistence to the owning layer.
 
 ## Preserve Product Direction
 
@@ -56,9 +58,10 @@ For gameplay stages, prioritize:
 ## Validate The Rendered Result
 
 1. Run the application without disturbing unrelated processes.
-2. Inspect the affected flow and relevant loading, empty, error, success, disabled, retry, and recovery states.
-3. Inspect desktop and mobile at the applicable required sizes.
-4. Run the quick UI QA and relevant state matrix from `docs/UX_CHECKLIST.md`.
-5. Fix visible regressions before completing the task.
+2. Inspect the actual affected flow and relevant loading, empty, error, success, disabled, waiting, retry, and recovery states; prove the server-accepted result where behavior crosses the client boundary.
+3. Inspect desktop and mobile at the applicable required sizes, plus the supported intermediate viewport when it can expose a distinct composition or height constraint.
+4. Exercise keyboard order, visible focus, focus trapping/return where applicable, and recovery after the relevant failure or interruption.
+5. Run the quick UI QA and relevant state matrix from `docs/UX_CHECKLIST.md`.
+6. Fix visible regressions in the owning layer and repeat the same rendered path before completing the task.
 
-Do not declare a substantial UI task complete because code compiles. Report which sizes and states were actually rendered. Do not add automated assertions for cosmetic CSS details; use stable E2E only for meaningful behavior.
+Do not declare a substantial UI task complete because code compiles, E2E is green, axe reports no violation, or screenshots exist. Report which sizes, states, focus path, and recovery path were actually rendered. Keep cognitive/usability judgment separate from automation, and do not claim real-player comprehension without real-player evidence. Do not add automated assertions for cosmetic CSS details; use stable E2E only for meaningful behavior.

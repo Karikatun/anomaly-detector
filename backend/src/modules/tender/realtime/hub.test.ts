@@ -1,20 +1,362 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 
+import { TenderFailure } from '../domain/errors'
 import { createTenderModule } from '../index'
 import { createInMemoryTenderStore } from '../infrastructure/in-memory-tender-store'
-import { createRealtimeHub, type RealtimeSocket } from './hub'
+import {
+  createRealtimeHub as createConfiguredRealtimeHub,
+  type RealtimeSocket,
+} from './hub'
 
 const players = [{ id: 'player-a', tiePriority: 1 }, { id: 'player-b', tiePriority: 2 }]
 
-const collectSocket = () => {
-  const messages: string[] = []
-  const socket: RealtimeSocket = {
-    send: (message) => { messages.push(message) },
+type RealtimeHubOptions = Parameters<typeof createConfiguredRealtimeHub>[0]
+type IsSessionActive = RealtimeHubOptions['sessionGuard']['isActive']
+
+const createRealtimeHub = (
+  input: Omit<RealtimeHubOptions, 'sessionGuard'> & { isSessionActive?: IsSessionActive },
+) => {
+  const { isSessionActive = async () => true, ...options } = input
+  const hub = createConfiguredRealtimeHub({
+    ...options,
+    sessionGuard: {
+      isActive: isSessionActive,
+      runWhileActive: async (principal, action) => {
+        if (!await isSessionActive(principal)) return false
+        action()
+        return true
+      },
+    },
+  })
+  return {
+    ...hub,
+    subscribe(subscription: Omit<Parameters<typeof hub.subscribe>[0], 'sessionId'> & {
+      sessionId?: string
+    }) {
+      const {
+        sessionId = `session-${subscription.playerId}`,
+        ...rest
+      } = subscription
+      return hub.subscribe({ ...rest, sessionId })
+    },
   }
-  return { messages, socket }
+}
+
+const collectSocket = () => {
+  const closeEvents: Array<{ code: number; reason: string }> = []
+  const messages: string[] = []
+  const socket = {
+    close: (code: number, reason: string) => { closeEvents.push({ code, reason }) },
+    send: (message) => { messages.push(message) },
+  } satisfies RealtimeSocket
+  return { closeEvents, messages, socket }
+}
+
+const exerciseConcurrentFailedReads = async (failure: Error) => {
+  const baseTender = createTenderModule()
+  const { tenderId } = await baseTender.createTender({ players })
+  let failPlayerARead = false
+  let failedReads = 0
+  let markBothReadsStarted = () => {}
+  const bothReadsStarted = new Promise<void>((resolve) => {
+    markBothReadsStarted = resolve
+  })
+  let releaseFailedReads = () => {}
+  const failedReadsReleased = new Promise<void>((resolve) => {
+    releaseFailedReads = resolve
+  })
+  const tender = {
+    ...baseTender,
+    async readTenderView(input: Parameters<typeof baseTender.readTenderView>[0]) {
+      if (failPlayerARead && input.playerId === 'player-a') {
+        failedReads += 1
+        if (failedReads === 2) markBothReadsStarted()
+        await failedReadsReleased
+        throw failure
+      }
+      return baseTender.readTenderView(input)
+    },
+  }
+  const hub = createRealtimeHub({ tender })
+  const failed = collectSocket()
+  const healthy = collectSocket()
+  await hub.subscribe({ playerId: 'player-a', socket: failed.socket, tenderId })
+  await hub.subscribe({ playerId: 'player-b', socket: healthy.socket, tenderId })
+  await baseTender.execute({
+    actorId: 'player-a',
+    commandId: 'command-concurrent-read-failure',
+    slot: 1,
+    tenderId,
+    type: 'request-access-slot',
+  })
+  failPlayerARead = true
+
+  const publishing = hub.handleTenderChanged(tenderId)
+  const synchronising = hub.syncActiveTenders()
+  await bothReadsStarted
+  releaseFailedReads()
+  await Promise.all([publishing, synchronising])
+
+  return { failed, failedReads, healthy, hub, tenderId }
 }
 
 describe('realtime hub', () => {
+  test('delivers every private view inside the active-session critical section', async () => {
+    const tender = createTenderModule()
+    const { tenderId } = await tender.createTender({ players })
+    let insideActiveSession = false
+    const sentInsideGuard: boolean[] = []
+    const hub = createConfiguredRealtimeHub({
+      sessionGuard: {
+        isActive: async () => true,
+        runWhileActive: async (_principal, deliver) => {
+          insideActiveSession = true
+          try {
+            deliver()
+            return true
+          } finally {
+            insideActiveSession = false
+          }
+        },
+      },
+      tender,
+    })
+    const socket: RealtimeSocket = {
+      close: () => undefined,
+      send: () => { sentInsideGuard.push(insideActiveSession) },
+    }
+
+    await hub.subscribe({
+      playerId: 'player-a',
+      sessionId: 'session-a',
+      socket,
+      tenderId,
+    })
+    await tender.execute({
+      actorId: 'player-a',
+      commandId: 'guarded-private-delivery',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    await hub.syncActiveTenders()
+
+    expect(sentInsideGuard).toEqual([true, true])
+  })
+
+  test('does not deliver a view rejected by the final exact-session guard', async () => {
+    const baseTender = createTenderModule()
+    const { tenderId } = await baseTender.createTender({ players })
+    let guardedDeliveries = 0
+    let viewReads = 0
+    const hub = createConfiguredRealtimeHub({
+      sessionGuard: {
+        isActive: async () => true,
+        runWhileActive: async (_principal, deliver) => {
+          guardedDeliveries += 1
+          if (guardedDeliveries > 1) return false
+          deliver()
+          return true
+        },
+      },
+      tender: {
+        ...baseTender,
+        async readTenderView(input) {
+          viewReads += 1
+          return baseTender.readTenderView(input)
+        },
+      },
+    })
+    const subscriber = collectSocket()
+    await hub.subscribe({
+      playerId: 'player-a',
+      sessionId: 'session-a',
+      socket: subscriber.socket,
+      tenderId,
+    })
+    await baseTender.execute({
+      actorId: 'player-a',
+      commandId: 'guard-rejects-after-read',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+
+    await hub.syncActiveTenders()
+
+    expect({ guardedDeliveries, viewReads }).toEqual({ guardedDeliveries: 2, viewReads: 2 })
+    expect(subscriber.messages).toHaveLength(1)
+    expect(subscriber.closeEvents).toEqual([{ code: 4401, reason: 'Unauthorized' }])
+  })
+
+  test('rejects an inactive exact session before reading a private Tender view', async () => {
+    const baseTender = createTenderModule()
+    const { tenderId } = await baseTender.createTender({ players })
+    let viewReads = 0
+    const hub = createRealtimeHub({
+      isSessionActive: async (principal) => {
+        expect(principal).toEqual({ sessionId: 'session-a', userId: 'player-a' })
+        return false
+      },
+      tender: {
+        ...baseTender,
+        async readTenderView(input) {
+          viewReads += 1
+          return baseTender.readTenderView(input)
+        },
+      },
+    })
+    const subscriber = collectSocket()
+
+    await expect(hub.subscribe({
+      playerId: 'player-a',
+      sessionId: 'session-a',
+      socket: subscriber.socket,
+      tenderId,
+    })).rejects.toMatchObject({ kind: 'realtime_session_invalid' })
+    expect(viewReads).toBe(0)
+    expect(subscriber.messages).toEqual([])
+  })
+
+  test('closes only the logged-out session while another session for the same player remains live', async () => {
+    const tender = createTenderModule()
+    const { tenderId } = await tender.createTender({ players })
+    const hub = createRealtimeHub({ isSessionActive: async () => true, tender })
+    const loggedOut = collectSocket()
+    const active = collectSocket()
+    await hub.subscribe({
+      playerId: 'player-a',
+      sessionId: 'session-logged-out',
+      socket: loggedOut.socket,
+      tenderId,
+    })
+    await hub.subscribe({
+      playerId: 'player-a',
+      sessionId: 'session-active',
+      socket: active.socket,
+      tenderId,
+    })
+
+    await hub.closeSession('session-logged-out')
+    await tender.execute({
+      actorId: 'player-a',
+      commandId: 'session-scoped-close',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    await hub.handleTenderChanged(tenderId)
+
+    expect(loggedOut.closeEvents).toEqual([{ code: 4401, reason: 'Unauthorized' }])
+    expect(loggedOut.messages).toHaveLength(1)
+    expect(active.closeEvents).toEqual([])
+    expect(active.messages).toHaveLength(2)
+  })
+
+  test('caps active subscriptions per player without evicting existing sockets or growing sync work', async () => {
+    const baseTender = createTenderModule()
+    const { tenderId } = await baseTender.createTender({ players })
+    let sessionChecks = 0
+    let viewReads = 0
+    const hub = createRealtimeHub({
+      isSessionActive: async () => {
+        sessionChecks += 1
+        return true
+      },
+      tender: {
+        ...baseTender,
+        async readTenderView(input) {
+          viewReads += 1
+          return baseTender.readTenderView(input)
+        },
+      },
+    })
+    const activeSockets = Array.from({ length: 10 }, collectSocket)
+    const activeSubscriptions = []
+    for (const [index, subscriber] of activeSockets.entries()) {
+      activeSubscriptions.push(await hub.subscribe({
+        playerId: 'player-a',
+        sessionId: `session-${index}`,
+        socket: subscriber.socket,
+        tenderId,
+      }))
+    }
+    const overflow = collectSocket()
+
+    await expect(hub.subscribe({
+      playerId: 'player-a',
+      sessionId: 'session-overflow',
+      socket: overflow.socket,
+      tenderId,
+    })).rejects.toMatchObject({ kind: 'realtime_subscription_limit' })
+    expect(overflow.messages).toEqual([])
+
+    await baseTender.execute({
+      actorId: 'player-a',
+      commandId: 'bounded-subscription-work',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    await hub.handleTenderChanged(tenderId)
+    expect(activeSockets.every((subscriber) => subscriber.messages.length === 2)).toBe(true)
+
+    sessionChecks = 0
+    viewReads = 0
+    await hub.syncActiveTenders()
+    expect({ sessionChecks, viewReads }).toEqual({ sessionChecks: 10, viewReads: 10 })
+
+    await activeSubscriptions[0]?.close()
+    const replacement = collectSocket()
+    await expect(hub.subscribe({
+      playerId: 'player-a',
+      sessionId: 'session-replacement',
+      socket: replacement.socket,
+      tenderId,
+    })).resolves.toBeDefined()
+    expect(replacement.messages).toHaveLength(1)
+  })
+
+  test('does not deliver an initial view when logout races a stale session validation', async () => {
+    const tender = createTenderModule()
+    const { tenderId } = await tender.createTender({ players })
+    let validationCount = 0
+    let markSecondValidationStarted: () => void = () => undefined
+    const secondValidationStarted = new Promise<void>((resolve) => {
+      markSecondValidationStarted = resolve
+    })
+    let releaseSecondValidation: () => void = () => undefined
+    const secondValidationReleased = new Promise<void>((resolve) => {
+      releaseSecondValidation = resolve
+    })
+    const hub = createRealtimeHub({
+      async isSessionActive() {
+        validationCount += 1
+        if (validationCount === 2) {
+          markSecondValidationStarted()
+          await secondValidationReleased
+        }
+        return true
+      },
+      tender,
+    })
+    const subscriber = collectSocket()
+
+    const subscribing = hub.subscribe({
+      playerId: 'player-a',
+      sessionId: 'session-racing-logout',
+      socket: subscriber.socket,
+      tenderId,
+    })
+    await secondValidationStarted
+    hub.closeSession('session-racing-logout')
+    releaseSecondValidation()
+
+    await expect(subscribing).rejects.toMatchObject({ kind: 'realtime_session_invalid' })
+    expect(subscriber.closeEvents).toEqual([{ code: 4401, reason: 'Unauthorized' }])
+    expect(subscriber.messages).toEqual([])
+  })
+
   test('sends the current participant Tender view on subscribe', async () => {
     const tender = createTenderModule()
     const { tenderId } = await tender.createTender({ players })
@@ -123,6 +465,171 @@ describe('realtime hub', () => {
     })
   })
 
+  test('does not resend an unchanged Tender view during periodic synchronisation', async () => {
+    const tender = createTenderModule()
+    const { tenderId } = await tender.createTender({ players })
+    const hub = createRealtimeHub({ tender })
+    const subscriber = collectSocket()
+    await hub.subscribe({ playerId: 'player-a', socket: subscriber.socket, tenderId })
+
+    await hub.syncActiveTenders()
+
+    expect(subscriber.messages).toHaveLength(1)
+  })
+
+  test('never delivers an older Tender view after a concurrent newer synchronisation', async () => {
+    const baseTender = createTenderModule()
+    const { tenderId } = await baseTender.createTender({ players })
+    let delayNextRead = false
+    let markDelayedReadStarted: () => void = () => undefined
+    const delayedReadStarted = new Promise<void>((resolve) => {
+      markDelayedReadStarted = resolve
+    })
+    let releaseDelayedRead: () => void = () => undefined
+    const delayedReadReleased = new Promise<void>((resolve) => {
+      releaseDelayedRead = resolve
+    })
+    const tender = {
+      ...baseTender,
+      async readTenderView(input: Parameters<typeof baseTender.readTenderView>[0]) {
+        const view = await baseTender.readTenderView(input)
+        if (delayNextRead) {
+          delayNextRead = false
+          markDelayedReadStarted()
+          await delayedReadReleased
+        }
+        return view
+      },
+    }
+    const hub = createRealtimeHub({ tender })
+    const subscriber = collectSocket()
+    await hub.subscribe({ playerId: 'player-a', socket: subscriber.socket, tenderId })
+    await baseTender.execute({
+      actorId: 'player-a',
+      commandId: 'concurrent-version-1',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    delayNextRead = true
+
+    const delayedPublish = hub.handleTenderChanged(tenderId)
+    await delayedReadStarted
+    await baseTender.execute({
+      actorId: 'player-b',
+      commandId: 'concurrent-version-2',
+      slot: 2,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    await hub.syncActiveTenders()
+    releaseDelayedRead()
+    await delayedPublish
+
+    expect(subscriber.messages.map((message) => JSON.parse(message).view.version))
+      .toEqual([0, 2])
+  })
+
+  test.each([
+    {
+      name: 'local publish',
+      notify: (hub: ReturnType<typeof createRealtimeHub>, tenderId: string) => hub.handleTenderChanged(tenderId),
+    },
+    {
+      name: 'periodic synchronisation',
+      notify: (hub: ReturnType<typeof createRealtimeHub>, _tenderId: string) => hub.syncActiveTenders(),
+    },
+  ])('closes a failed $name subscription for retry while other subscribers keep receiving updates', async ({ notify }) => {
+    const baseTender = createTenderModule()
+    const { tenderId } = await baseTender.createTender({ players })
+    let failPlayerARead = false
+    const tender = {
+      ...baseTender,
+      async readTenderView(input: Parameters<typeof baseTender.readTenderView>[0]) {
+        if (failPlayerARead && input.playerId === 'player-a') {
+          throw new Error('transient database read failure')
+        }
+        return baseTender.readTenderView(input)
+      },
+    }
+    const hub = createRealtimeHub({ tender })
+    const failed = collectSocket()
+    const healthy = collectSocket()
+    await hub.subscribe({ playerId: 'player-a', socket: failed.socket, tenderId })
+    await hub.subscribe({ playerId: 'player-b', socket: healthy.socket, tenderId })
+
+    await baseTender.execute({
+      actorId: 'player-a',
+      commandId: 'command-player-a',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    failPlayerARead = true
+    await notify(hub, tenderId)
+
+    expect(failed.closeEvents).toEqual([{ code: 1011, reason: 'Internal error' }])
+    expect(healthy.closeEvents).toEqual([])
+    expect(healthy.messages).toHaveLength(2)
+
+    await baseTender.execute({
+      actorId: 'player-b',
+      commandId: 'command-player-b',
+      slot: 2,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    await notify(hub, tenderId)
+
+    expect(failed.closeEvents).toHaveLength(1)
+    expect(healthy.closeEvents).toEqual([])
+    expect(healthy.messages).toHaveLength(3)
+  })
+
+  test.each([
+    'tender_not_found',
+    'player_not_in_tender',
+    'player_forfeited',
+  ] as const)('closes concurrent established %s once without reporting an error', async (kind) => {
+    const consoleError = spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const result = await exerciseConcurrentFailedReads(
+        new TenderFailure(kind, 'private failure detail'),
+      )
+
+      expect(result.failedReads).toBe(2)
+      expect(result.failed.closeEvents).toEqual([{ code: 4404, reason: 'Unavailable' }])
+      expect(result.healthy.closeEvents).toEqual([])
+      expect(result.healthy.messages.length).toBeGreaterThanOrEqual(2)
+      expect(consoleError).not.toHaveBeenCalled()
+
+      await result.hub.handleTenderChanged(result.tenderId)
+      expect(result.failed.closeEvents).toHaveLength(1)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  test('closes and reports a concurrent established operational failure once', async () => {
+    const consoleError = spyOn(console, 'error').mockImplementation(() => undefined)
+    const operationalFailure = new Error('transient database read failure')
+    try {
+      const result = await exerciseConcurrentFailedReads(operationalFailure)
+
+      expect(result.failedReads).toBe(2)
+      expect(result.failed.closeEvents).toEqual([{ code: 1011, reason: 'Internal error' }])
+      expect(result.healthy.closeEvents).toEqual([])
+      expect(result.healthy.messages.length).toBeGreaterThanOrEqual(2)
+      expect(consoleError).toHaveBeenCalledTimes(1)
+      expect(consoleError.mock.calls[0]?.[1]).toBe(operationalFailure)
+
+      await result.hub.handleTenderChanged(result.tenderId)
+      expect(result.failed.closeEvents).toHaveLength(1)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
   test('waits for an active synchronisation before the sync loop stops', async () => {
     const baseTender = createTenderModule()
     const { tenderId } = await baseTender.createTender({ players })
@@ -178,12 +685,60 @@ describe('realtime hub', () => {
     expect(messages).toHaveLength(1)
   })
 
+  test('never delivers a pending Tender view after the subscription closes', async () => {
+    const baseTender = createTenderModule()
+    const { tenderId } = await baseTender.createTender({ players })
+    let blockNextRead = false
+    let markReadStarted: () => void = () => undefined
+    const readStarted = new Promise<void>((resolve) => {
+      markReadStarted = resolve
+    })
+    let releaseRead: () => void = () => undefined
+    const readReleased = new Promise<void>((resolve) => {
+      releaseRead = resolve
+    })
+    const tender = {
+      ...baseTender,
+      async readTenderView(input: Parameters<typeof baseTender.readTenderView>[0]) {
+        const view = await baseTender.readTenderView(input)
+        if (blockNextRead) {
+          blockNextRead = false
+          markReadStarted()
+          await readReleased
+        }
+        return view
+      },
+    }
+    const hub = createRealtimeHub({ tender })
+    const subscriber = collectSocket()
+    const subscription = await hub.subscribe({ playerId: 'player-a', socket: subscriber.socket, tenderId })
+    await baseTender.execute({
+      actorId: 'player-a',
+      commandId: 'pending-after-close',
+      slot: 1,
+      tenderId,
+      type: 'request-access-slot',
+    })
+    blockNextRead = true
+
+    const publishing = hub.handleTenderChanged(tenderId)
+    await readStarted
+    await subscription.close()
+    releaseRead()
+    await publishing
+
+    expect(subscriber.messages).toHaveLength(1)
+  })
+
   test('isolates a failed socket without blocking healthy subscribers', async () => {
     const tender = createTenderModule()
     const { tenderId } = await tender.createTender({ players })
     const hub = createRealtimeHub({ tender })
+    let brokenSendAttempts = 0
     const brokenSocket: RealtimeSocket = {
+      close: () => undefined,
       send: () => {
+        brokenSendAttempts += 1
         throw new Error('socket closed during send')
       },
     }
@@ -196,7 +751,16 @@ describe('realtime hub', () => {
     const healthy = collectSocket()
     await hub.subscribe({ playerId: 'player-b', socket: healthy.socket, tenderId })
 
+    await tender.execute({
+      actorId: 'player-b',
+      commandId: 'healthy-after-broken-socket',
+      slot: 2,
+      tenderId,
+      type: 'request-access-slot',
+    })
+
     await expect(hub.handleTenderChanged(tenderId)).resolves.toBeUndefined()
+    expect(brokenSendAttempts).toBe(1)
     expect(healthy.messages).toHaveLength(2)
   })
 

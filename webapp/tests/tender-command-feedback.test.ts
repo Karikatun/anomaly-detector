@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test'
 
-import type { TenderCommandInput } from '../src/features/tender/commands'
+import {
+  TenderCommandOutcomeUnknownError,
+  type TenderCommandInput,
+} from '../src/features/tender/commands'
 import {
   getTenderCommandErrorKey,
   getWaitingForTurnDescription,
@@ -78,6 +81,44 @@ test('an accepted private Thesis wins over a stale invalid-state response', () =
       privateTheses: [],
     },
   })).toBeNull()
+})
+
+test('an accepted access slot wins when realtime races a lost command response', () => {
+  expect(getTenderCommandErrorKey({
+    actorId: 'player-a',
+    command: { type: 'request-access-slot', slot: 1 },
+    error: new TypeError('Failed to fetch'),
+    latestView: {
+      version: 11,
+      players: [{ playerId: 'player-a', requestedAccessSlot: 1 }],
+      publicTheses: [],
+    },
+    startingView: {
+      version: 10,
+      players: [{ playerId: 'player-a' }],
+      publicTheses: [],
+    },
+  })).toBeNull()
+})
+
+test('an unresolved retry asks for reconciliation without inviting a new command', () => {
+  expect(getTenderCommandErrorKey({
+    actorId: 'player-a',
+    command: { type: 'request-access-slot', slot: 1 },
+    error: new TenderCommandOutcomeUnknownError(
+      new ApiRequestError(429, 'RATE_LIMITED', 'Try later'),
+    ),
+    latestView: {
+      version: 10,
+      players: [{ playerId: 'player-a' }],
+      publicTheses: [],
+    },
+    startingView: {
+      version: 10,
+      players: [{ playerId: 'player-a' }],
+      publicTheses: [],
+    },
+  })).toBe('tender.command.reconciling')
 })
 
 test('an expired Tender command uses a specific localized message', () => {

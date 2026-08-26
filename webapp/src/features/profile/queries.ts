@@ -1,4 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type {
+  ConfirmRecoveryEmailReplacementRequest,
+  ConfirmRecoveryEmailRequest,
+  ConfirmRecoveryCodeReissueRequest,
+  ResendRecoveryEmailReplacementRequest,
+  StartRecoveryEmailReplacementRequest,
+  StartRecoveryEmailRequest,
+  StartRecoveryCodeReissueRequest,
+} from '@anomaly-detector/contracts'
 
 import { sessionQueryKeys } from '@/platform/query'
 
@@ -6,8 +15,154 @@ import type { ProfileApi } from './api'
 
 export const profileQueryKeys = {
   all: [...sessionQueryKeys.all, 'profile'] as const,
+  accountProtection: () => [...profileQueryKeys.all, 'account-protection'] as const,
   statistics: () => [...profileQueryKeys.all, 'statistics'] as const,
   tutorial: () => [...profileQueryKeys.all, 'tutorial'] as const,
+}
+
+export function useAccountProtectionQuery(api: ProfileApi, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: profileQueryKeys.accountProtection(),
+    queryFn: () => api.getAccountProtection(),
+  })
+}
+
+export function useStartRecoveryEmailMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: StartRecoveryEmailRequest) => api.startRecoveryEmail(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useResendRecoveryEmailMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.resendRecoveryEmail(),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useConfirmRecoveryEmailMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ConfirmRecoveryEmailRequest) => api.confirmRecoveryEmail(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useCancelRecoveryEmailMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.cancelRecoveryEmail(),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useStartRecoveryEmailReplacementMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: StartRecoveryEmailReplacementRequest) =>
+      api.startRecoveryEmailReplacement(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
+  })
+}
+
+export function useResendRecoveryEmailReplacementMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ResendRecoveryEmailReplacementRequest) =>
+      api.resendRecoveryEmailReplacement(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
+  })
+}
+
+export function useConfirmRecoveryEmailReplacementMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ConfirmRecoveryEmailReplacementRequest) =>
+      api.confirmRecoveryEmailReplacement(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
+  })
+}
+
+export function useCancelRecoveryEmailReplacementMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.cancelRecoveryEmailReplacement(),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(profileQueryKeys.accountProtection(), result),
+  })
+}
+
+export function useIssueRecoveryCodesMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    gcTime: 0,
+    mutationFn: () => api.issueRecoveryCodes(),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
+  })
+}
+
+export function useStartRecoveryCodeReissueMutation(api: ProfileApi) {
+  return useMutation({
+    mutationFn: (input: StartRecoveryCodeReissueRequest) => api.startRecoveryCodeReissue(input),
+  })
+}
+
+export function useConfirmRecoveryCodeReissueMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    gcTime: 0,
+    mutationFn: (input: ConfirmRecoveryCodeReissueRequest) =>
+      api.confirmRecoveryCodeReissue(input),
+    onError: () => queryClient.invalidateQueries({
+      queryKey: profileQueryKeys.accountProtection(),
+    }),
+    onSuccess: (result) => queryClient.setQueryData(
+      profileQueryKeys.accountProtection(),
+      { accountProtection: result.accountProtection },
+    ),
+  })
 }
 
 export function useTutorialProgressQuery(api: ProfileApi) {

@@ -7,14 +7,38 @@ import { applyE2ePortEnv, resolveE2ePorts } from './e2e/ports'
 const frontendRoot = fileURLToPath(new URL('.', import.meta.url))
 const repositoryRoot = resolve(frontendRoot, '..')
 const backendRoot = resolve(repositoryRoot, 'backend')
+const websiteRoot = resolve(repositoryRoot, 'website')
+const maxE2eWorkers = 4
 
+function resolveE2eWorkers(env: NodeJS.ProcessEnv) {
+  const value = env.E2E_WORKERS
+  let workers = 2
+  if (value !== undefined) {
+    if (!/^[1-9]\d*$/.test(value)) {
+      throw new Error(`E2E_WORKERS must be an integer from 1 to ${maxE2eWorkers}`)
+    }
+
+    workers = Number(value)
+    if (!Number.isSafeInteger(workers) || workers > maxE2eWorkers) {
+      throw new Error(`E2E_WORKERS must be an integer from 1 to ${maxE2eWorkers}`)
+    }
+  }
+
+  return env.UX_AUDIT_DIR ? 1 : workers
+}
+
+const e2eWorkers = resolveE2eWorkers(process.env)
 const portPlan = await resolveE2ePorts()
 applyE2ePortEnv(portPlan)
 
 const backendPort = portPlan.backendPort
+const operationalMetricsPort = portPlan.operationalMetricsPort
 const frontendPort = portPlan.webPort
 const backendUrl = portPlan.backendUrl
 const frontendUrl = portPlan.webUrl
+const workerHealthPort = portPlan.workerHealthPort
+const websitePort = portPlan.websitePort
+const websiteUrl = portPlan.websiteUrl
 const databaseUrl = portPlan.databaseUrl
 
 function normalizeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -24,9 +48,15 @@ function normalizeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 }
 
 const backendEnv = normalizeEnv(e2eBackendEnv({
+  ANALYTICS_ENABLED: 'true',
+  ANALYTICS_ORIGINS: [frontendUrl, websiteUrl].join(','),
+  ANALYTICS_CAMPAIGN_ALLOWLIST: 'e2e_launch',
+  OPERATIONAL_METRICS_PORT: String(operationalMetricsPort),
   PORT: String(backendPort),
+  WORKER_HEALTH_PORT: String(workerHealthPort),
   DATABASE_URL: databaseUrl,
   CORS_ORIGINS: [frontendUrl, 'http://localhost:5173'].join(','),
+  WEBAPP_ORIGIN: frontendUrl,
 }))
 
 export default defineConfig({
@@ -39,7 +69,7 @@ export default defineConfig({
     timeout: 15_000,
   },
   fullyParallel: false,
-  workers: 1,
+  workers: e2eWorkers,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'e2e/.artifacts/report' }]],
@@ -53,6 +83,10 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
     },
   ],
   webServer: [
@@ -72,8 +106,28 @@ export default defineConfig({
       env: normalizeEnv({
         ...process.env,
         VITE_API_URL: backendUrl,
+        VITE_ANALYTICS_ENABLED: 'true',
+        VITE_AGENTATION_ENABLED: process.env.UX_AUDIT_DIR ? 'true' : 'false',
+        VITE_BUILD_SHA: process.env.VITE_BUILD_SHA ?? 'e'.repeat(40),
       }),
       url: frontendUrl,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+    {
+      name: 'website',
+      command: `bun run dev --ignore-lock --host 127.0.0.1 --port ${websitePort}`,
+      cwd: websiteRoot,
+      env: normalizeEnv({
+        ...process.env,
+        // Playwright owns this process; disable Astro's agent-only background daemon.
+        ASTRO_DEV_BACKGROUND: '0',
+        PUBLIC_WEBSITE_URL: websiteUrl,
+        PUBLIC_WEBAPP_URL: frontendUrl,
+        PUBLIC_ANALYTICS_API_URL: backendUrl,
+        PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'e2e_launch',
+      }),
+      url: websiteUrl,
       reuseExistingServer: false,
       timeout: 120_000,
     },

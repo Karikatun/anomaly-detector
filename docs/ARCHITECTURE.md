@@ -1,6 +1,6 @@
 # Product Modules Architecture
 
-Anomaly Detector uses shared contracts, a modular-monolith backend, one player CSR browser app (`webapp`), one isolated read-only operator CSR app (`adminapp`), and one Astro static public site (`website`). The runnable mobile app lives on the `mobile` branch and extends the same product contracts when mobile work is active.
+Anomaly Detector uses shared contracts, a modular-monolith backend, one player CSR browser app (`webapp`), one isolated operator CSR app (`adminapp`), and one Astro static public site (`website`). The operator app is read-only by default and exposes only explicitly listed audited commands for mail policy and Feedback Report workflow. The runnable mobile app lives on the `mobile` branch and extends the same product contracts when mobile work is active.
 
 The approach is **progressive DDD-lite**. Product contexts get explicit ownership and dependency direction without forcing every context to have every layer. Add a `domain` directory only when the feature has real policies, calculations, or state transitions. Do not add empty layers, generic/base repositories, CQRS, event sourcing, or extra services as architecture decoration.
 
@@ -72,15 +72,68 @@ clock owns both `serverTime` and scheduled-start calculations.
 
 Routes stay thin and translate HTTP into application calls and application failures into the stable API error shape. Do not put business rules into Hono handlers, UI clients, or child components.
 
+For the approved Public MVP Journey, ownership is split by policy rather than by
+screen:
+
+- `auth` owns Account Email uniqueness, Yandex ID email synchronisation,
+  Recovery Email state, password reset, Recovery Code, sessions and recovery
+  anti-abuse policy;
+- a transactional-mail context owns reviewed Approved Mail Service catalog
+  versions, exact public address domains, complete MX profiles for eligible
+  custom `.ru`/`.рф` domains, provider-specific canonicalisation, automatic
+  domain classification, operator sync/status commands, outbox and the REG.RU
+  delivery adapter; auth requests messages through a narrow port and never
+  imports the SMTP provider;
+- an analytics context owns consent-scoped journey events, retention and
+  aggregate projections; it never consumes security telemetry as product data;
+- a feedback context owns Feedback Report intake, retention and operator
+  workflow; it never publishes directly to GitHub or reuses Account Email;
+- the admin context authorises the operator and composes safe projections, but
+  does not become a generic CRUD owner for auth, mail, analytics or feedback.
+
+These boundaries are implemented for the current mail, analytics and feedback
+MVP slices. The analytics context is composed only when `ANALYTICS_ENABLED` is
+explicitly enabled; disabled deployments expose neither its player routes nor
+its operator projection. The ADRs do not justify empty folders or placeholder
+services.
+
 ## Runtime Shape And Real-Time
 
 The default runtime shape is a modular monolith: one backend codebase, one database, shared contracts, and clear feature boundaries inside the repository. The backend can expose separate API, worker, and cron entrypoints while still sharing Prisma schema, env validation, services, and contracts. Do not add queues, brokers, or extra infrastructure until the product has a concrete need that the monolith cannot meet clearly.
 
-The current production baseline is a Yandex Cloud VM running separate API and worker containers from the same immutable backend image, plus PostgreSQL and Caddy. The target managed topology and migration conditions are documented in [YANDEX_CLOUD.md](YANDEX_CLOUD.md). Keep API, worker, and cron as entrypoints of the same backend workspace; add infrastructure only for a concrete runtime need.
+The current production baseline is a Yandex Cloud VM running separate API and worker containers from the same immutable backend image, plus PostgreSQL and Caddy. The target managed topology and migration conditions are documented in [YANDEX_CLOUD.md](YANDEX_CLOUD.md). Keep API, worker, and cron as entrypoints of the same backend workspace; add infrastructure only for a concrete runtime need. Transactional email uses a PostgreSQL outbox drained by the existing worker runtime rather than a new service. Named cron cleanup removes or redacts expired recovery credentials and pending mail, consent-scoped analytics events, feedback content and terminal outbox records according to their owning retention policies.
 
-Tender phase delivery starts in the same backend service. A single instance can keep an in-memory registry of its own WebSocket connections. Once the backend runs multiple instances, in-memory fanout is no longer enough: participants in one Tender may connect to different instances. At that point, add managed Redis-compatible Pub/Sub so each instance can publish compact domain-event identifiers and deliver them to its local sockets.
+Operational metrics stay inside this runtime shape. The public API composition
+root observes API outcomes and bounded security/realtime events, while a
+separate configured listener exposes only aggregate Prometheus text. The public
+API app has no metrics route. Worker loop health remains owned by
+`worker-health.ts` and is rendered on the existing private health listener;
+Tender lifecycle/deadline gauges come from a read-only aggregate in Tender's
+persistence boundary, and mail transition counters are recorded from newly
+persisted outbox protection transitions. Metrics never become a product
+contract, carry object/player identifiers, or influence authorization and game
+state. Runtime collectors and provider alerts remain deployment concerns.
 
-Use Yandex Managed Service for Valkey only when horizontal scaling and cross-instance WebSocket delivery are actually required; it is not part of the current single-VM baseline or local setup.
+Tender phase delivery starts in the same backend service. Each instance keeps
+an in-memory registry of its own WebSocket connections and caps active or
+pending subscriptions at 10 per player per process. An excess connection closes
+with retryable code `4429` and does not evict established sockets; this bounds
+one player's local fanout work but is not a cross-instance quota. The current
+hub also re-reads the authorized Tender view and guards the actual delivery with
+a shared row lock on the exact authenticated session for every active local
+subscription once per second. A committed command on another API instance is
+therefore delivered eventually, session revocation serializes with private
+delivery, and reconnect always recovers from PostgreSQL. The initial view adds
+one indexed active-session precheck; steady-state fallback costs approximately
+one PostgreSQL view-read plus one short locked `AuthSession` transaction per
+socket per second. It is intended for the single-instance baseline and
+controlled transition checks, not unbounded horizontal scale.
+
+Before horizontally scaling production WebSockets, establish a socket/DB
+capacity baseline and add grouped or brokered fanout. Use Yandex Managed Service
+for Valkey when compact cross-instance delivery must replace per-socket
+PostgreSQL polling; it is not part of the current single-VM baseline or local
+setup.
 
 Valkey Pub/Sub is only a fanout mechanism. Keep durable Tender state and audit-relevant events in PostgreSQL, publish compact event identifiers only after commits, and make clients recover by reconnecting and refetching the authorized API view after missed realtime messages.
 
@@ -96,9 +149,16 @@ Auth v1 is custom JWT-based auth:
 
 Refresh-token rotation updates the credential atomically inside one logical session, preserving already-issued access tokens for other tabs. The immediately previous refresh credential is accepted only during a short race-tolerance window; replay after that window revokes the session as potentially compromised. `/api/auth/me` checks both the JWT and the active database session, including its absolute lifetime.
 
+The approved recovery extension keeps email separate from identity. Yandex ID's
+provider subject is immutable and matching email never merges accounts. New
+password-account email, replacement and reset are separate atomic operations
+with hashed one-time credentials, distributed attempt budgets, explicit expiry
+and session revocation. Support and operator routes have no capability to set an
+Account Email or bypass a recovery factor.
+
 ## Frontend
 
-The browser surfaces have explicit product roles. `website` is the public, indexable Astro site and currently contains the static Anomaly Detector landing page. `webapp` is the interactive player application and owns authentication, profile, rooms, Tender, tutorial, history, rules, and legal routes. `adminapp` is a separately built read-only operator surface protected at the edge and again by backend allowlisting; it must never be published as part of the player or public website.
+The browser surfaces have explicit product roles. `website` is the public, indexable Astro site on `anomaly-detector.ru`. `webapp` is the interactive player application on `app.anomaly-detector.ru` and owns authentication, profile, rooms, Tender, tutorial, history, rules, feedback and legal routes. `adminapp` is a separately built operator surface on `ops.anomaly-detector.ru`, protected at the edge and again by backend allowlisting; it must never be published as part of the player or public website. The current deployment still serves webapp from the root host until the coordinated migration in ADR 0014 is released.
 
 The webapp follows these client rules:
 
@@ -155,9 +215,13 @@ ready -> submitting -> accepted
 The Tender page follows the humble-object boundary: React owns composition,
 refs and visual overlay state, while command exclusivity, resume eligibility,
 turn-focus decisions and stale-error visibility live in a pure page controller.
-The completed-match component renders a pure audit presentation model for
-ranking, winners and rating entries. These seams are tested without mounting
-the full page; realtime and multiplayer recovery remain protected by E2E.
+The completed-match component renders a pure audit presentation model around
+the server-authoritative placement and winners; it does not recompute ranking
+in the client. Explanatory factors come from stable completed-view state, with
+v1 correct public Theses and unique fully-correct v2 Signals derived from the
+audit so rolling rollback does not change their meaning. These seams are tested
+without mounting the full page; realtime and multiplayer recovery remain
+protected by E2E.
 
 New i18n messages use semantic keys that name feature, state and role (for
 example, `tender.completed.summary.title`). Existing `*.copy.NNN` keys form a
@@ -176,6 +240,13 @@ Auth in `src/features/auth` is the client golden path: its API adapter owns auth
 Do not create a new form, query, auth, or API abstraction until the existing pattern stops solving the current problem.
 
 `website` prerenders to static HTML by default. Keep the landing and other anonymous public content static until a real request-specific requirement justifies an Astro runtime adapter. SEO-critical content must be present in initial HTML, including title, description, canonical URL, social preview metadata, and the actual public product copy. The public site does not own player authentication or duplicate interactive game flows from `webapp`.
+
+The website sends the visitor to the app with a bounded tutorial continuation
+intent. It may count unrelated aggregate views without client identity. A
+30-day first-party journey identifier and cross-surface funnel events require a
+separate affirmative analytics choice; refusal is a fully supported path. The
+password-reset page loads neither this analytics client nor third-party
+resources.
 
 If a future website route needs authenticated or personalized data, define its privacy and caching contract before implementation. Shared CDN caching is only for anonymous, public-equivalent HTML; personalized responses use `private` or `no-store` unless a reviewed `Vary` strategy proves otherwise.
 

@@ -10,19 +10,57 @@ describe('loadEnv', () => {
       CORS_ORIGINS: 'http://localhost:5173, http://localhost:8081',
     })
 
+    expect(env.API_HOST).toBe('0.0.0.0')
     expect(env.PORT).toBe(3000)
+    expect(env.OPERATIONAL_METRICS_HOST).toBeUndefined()
+    expect(env.OPERATIONAL_METRICS_PORT).toBeUndefined()
+    expect(env.WORKER_HEALTH_HOST).toBeUndefined()
     expect(env.WORKER_HEALTH_PORT).toBeUndefined()
     expect(env.ACCESS_TOKEN_TTL_SECONDS).toBe(900)
     expect(env.REFRESH_REUSE_GRACE_SECONDS).toBe(10)
     expect(env.SESSION_ABSOLUTE_TTL_DAYS).toBe(90)
     expect(env.COOKIE_SECURE).toBe(false)
+    expect(env.ANALYTICS_ENABLED).toBe(false)
+    expect(env.ANALYTICS_ORIGINS).toEqual([])
+    expect(env.ANALYTICS_CAMPAIGN_ALLOWLIST).toEqual([])
     expect(env.ADMIN_USER_IDS).toEqual([])
     expect(env.CORS_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:8081'])
+    expect(env.WEBAPP_ORIGIN).toBe('http://localhost:5173')
     expect(env.YANDEX_STORAGE_REGION).toBeUndefined()
     expect(env.YANDEX_STORAGE_UPLOAD_MAX_BYTES).toBe(10 * 1024 * 1024)
     expect(env.YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS).toBe(900)
     expect(env.YANDEX_STORAGE_DOWNLOAD_URL_TTL_SECONDS).toBe(300)
     expect(env.YANDEX_STORAGE_PUBLIC_CACHE_CONTROL).toBe('public, max-age=31536000, immutable')
+  })
+
+  test('parses bounded anti-abuse policy overrides without changing defaults implicitly', () => {
+    const base = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+    const env = loadEnv({
+      ...base,
+      ANTI_ABUSE_LOGIN_FAILURE_LIMIT: '7',
+      ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT: '4',
+      ANTI_ABUSE_TENDER_COMMAND_LIMIT: '80',
+    })
+
+    expect(env.ANTI_ABUSE_LOGIN_FAILURE_LIMIT).toBe(7)
+    expect(env.ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT).toBe(4)
+    expect(env.ANTI_ABUSE_TENDER_COMMAND_LIMIT).toBe(80)
+    expect(env.ANTI_ABUSE_ROOM_JOIN_LIMIT).toBeUndefined()
+    expect(() => loadEnv({ ...base, ANTI_ABUSE_LOGIN_FAILURE_LIMIT: '0' }))
+      .toThrow('ANTI_ABUSE_LOGIN_FAILURE_LIMIT')
+    expect(() => loadEnv({ ...base, ANTI_ABUSE_ROOM_JOIN_LIMIT: '1000001' }))
+      .toThrow('ANTI_ABUSE_ROOM_JOIN_LIMIT')
+    for (const key of [
+      'ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT',
+      'ANTI_ABUSE_RECOVERY_EMAIL_DAY_LIMIT',
+      'ANTI_ABUSE_RECOVERY_EMAIL_IP_HOUR_LIMIT',
+    ] as const) {
+      expect(() => loadEnv({ ...base, [key]: '1' })).toThrow(key)
+      expect(() => loadEnv({ ...base, [key]: '2' })).not.toThrow()
+    }
   })
 
   test('parses and validates the administrator UUID allowlist', () => {
@@ -42,14 +80,127 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...baseEnv, ADMIN_USER_IDS: 'operator' })).toThrow('ADMIN_USER_IDS')
   })
 
-  test('accepts a dedicated worker health port', () => {
-    const env = loadEnv({
+  test('accepts only an IPv4 address for the public API listener', () => {
+    const baseEnv = {
       DATABASE_URL: 'postgresql://localhost/test',
       JWT_SECRET: '12345678901234567890123456789012',
+    }
+
+    for (const host of ['0.0.0.0', '127.0.0.1', '10.0.0.8', '172.16.0.8', '192.168.1.8']) {
+      expect(loadEnv({ ...baseEnv, API_HOST: host }).API_HOST).toBe(host)
+    }
+
+    for (const host of ['localhost', 'api.example.com', '127.0.0', '256.0.0.1']) {
+      expect(() => loadEnv({ ...baseEnv, API_HOST: host })).toThrow('API_HOST')
+    }
+  })
+
+  test('accepts only a bounded worker health listener configuration', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+    const env = loadEnv({
+      ...baseEnv,
+      WORKER_HEALTH_HOST: '0.0.0.0',
       WORKER_HEALTH_PORT: '3001',
     })
 
+    expect(env.WORKER_HEALTH_HOST).toBe('0.0.0.0')
     expect(env.WORKER_HEALTH_PORT).toBe(3001)
+    expect(() => loadEnv({ ...baseEnv, WORKER_HEALTH_HOST: 'localhost' }))
+      .toThrow('WORKER_HEALTH_HOST')
+    expect(() => loadEnv({ ...baseEnv, WORKER_HEALTH_PORT: '65536' }))
+      .toThrow('WORKER_HEALTH_PORT')
+  })
+
+  test('accepts only a distinct bounded private operational metrics port', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+      PORT: '3000',
+    }
+
+    expect(loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '3002' }).OPERATIONAL_METRICS_PORT)
+      .toBe(3002)
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '0' }))
+      .toThrow('OPERATIONAL_METRICS_PORT')
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '65536' }))
+      .toThrow('OPERATIONAL_METRICS_PORT')
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '3000' }))
+      .toThrow('OPERATIONAL_METRICS_PORT')
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_PORT: '3001' }))
+      .toThrow('OPERATIONAL_METRICS_PORT')
+  })
+
+  test('binds local metrics to loopback unless the container runtime opts into all interfaces', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+
+    expect(loadEnv(baseEnv).OPERATIONAL_METRICS_HOST).toBeUndefined()
+    expect(loadEnv({ ...baseEnv, OPERATIONAL_METRICS_HOST: '0.0.0.0' }).OPERATIONAL_METRICS_HOST)
+      .toBe('0.0.0.0')
+    expect(() => loadEnv({ ...baseEnv, OPERATIONAL_METRICS_HOST: 'localhost' }))
+      .toThrow('OPERATIONAL_METRICS_HOST')
+  })
+
+  test('enables transactional SMTP only with a complete protected configuration', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+    expect(loadEnv(baseEnv).MAIL_SMTP_ENABLED).toBe(false)
+    expect(() => loadEnv({
+      ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+    })).toThrow('MAIL_SMTP_USERNAME')
+    expect(() => loadEnv({
+      ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_FROM: 'no-reply@anomaly-detector.ru',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+      MAIL_SMTP_PASSWORD: 'smtp-password-must-not-leak',
+      MAIL_SMTP_PORT: '465',
+      MAIL_SMTP_REPLY_TO: 'support@anomaly-detector.ru',
+      MAIL_SMTP_TLS_MODE: 'plain',
+      MAIL_SMTP_USERNAME: 'no-reply@anomaly-detector.ru',
+    })).toThrow('MAIL_SMTP_TLS_MODE')
+    expect(() => loadEnv({
+      ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_FROM: 'no-reply@anomaly-detector.ru',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+      MAIL_SMTP_LEASE_SECONDS: '60',
+      MAIL_SMTP_PASSWORD: 'smtp-password-must-not-leak',
+      MAIL_SMTP_PORT: '465',
+      MAIL_SMTP_REPLY_TO: 'support@anomaly-detector.ru',
+      MAIL_SMTP_TIMEOUT_MS: '60000',
+      MAIL_SMTP_TLS_MODE: 'implicit_tls',
+      MAIL_SMTP_USERNAME: 'no-reply@anomaly-detector.ru',
+    })).toThrow('MAIL_SMTP_LEASE_SECONDS')
+    expect(() => loadEnv({
+      ...baseEnv,
+      MAIL_OUTBOX_RETENTION_DAYS: '31',
+    })).toThrow('MAIL_OUTBOX_RETENTION_DAYS')
+
+    const env = loadEnv({
+      ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_FROM: 'no-reply@anomaly-detector.ru',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+      MAIL_SMTP_PASSWORD: 'smtp-password-must-not-leak',
+      MAIL_SMTP_PORT: '465',
+      MAIL_SMTP_REPLY_TO: 'support@anomaly-detector.ru',
+      MAIL_SMTP_TLS_MODE: 'implicit_tls',
+      MAIL_SMTP_USERNAME: 'no-reply@anomaly-detector.ru',
+    })
+    expect(env.MAIL_SMTP_ENABLED).toBe(true)
+    expect(env.MAIL_SMTP_TLS_MODE).toBe('implicit_tls')
+    expect(env.MAIL_SMTP_MAX_ATTEMPTS).toBe(5)
+    expect(env.MAIL_OUTBOX_RETENTION_DAYS).toBe(30)
   })
 
   test('allows both local browser clients by default', () => {
@@ -60,6 +211,68 @@ describe('loadEnv', () => {
 
     expect(env.CORS_ORIGINS).toContain('http://localhost:5173')
     expect(env.CORS_ORIGINS).toContain('http://localhost:5174')
+  })
+
+  test('enables first-party analytics only for explicit bounded origins and campaigns', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+      CORS_ORIGINS: 'http://localhost:5173',
+      WEBAPP_ORIGIN: 'http://localhost:5173',
+    }
+
+    expect(() => loadEnv({ ...baseEnv, ANALYTICS_ENABLED: 'true' }))
+      .toThrow('ANALYTICS_ORIGINS')
+    expect(() => loadEnv({
+      ...baseEnv,
+      ANALYTICS_ENABLED: 'true',
+      ANALYTICS_ORIGINS: '*,http://localhost:5173',
+    })).toThrow('ANALYTICS_ORIGINS')
+    expect(() => loadEnv({
+      ...baseEnv,
+      ANALYTICS_ENABLED: 'true',
+      ANALYTICS_ORIGINS: 'http://localhost:5174',
+    })).toThrow('WEBAPP_ORIGIN')
+    expect(() => loadEnv({
+      ...baseEnv,
+      ANALYTICS_CAMPAIGN_ALLOWLIST: 'launch_ru,contains@email',
+      ANALYTICS_ENABLED: 'true',
+      ANALYTICS_ORIGINS: 'http://localhost:5173,http://localhost:5174',
+    })).toThrow('ANALYTICS_CAMPAIGN_ALLOWLIST')
+
+    const env = loadEnv({
+      ...baseEnv,
+      ANALYTICS_CAMPAIGN_ALLOWLIST: 'launch_ru, PARTNER-1',
+      ANALYTICS_ENABLED: 'true',
+      ANALYTICS_ORIGINS: 'http://localhost:5174,http://localhost:5173',
+    })
+    expect(env.ANALYTICS_ENABLED).toBe(true)
+    expect(env.ANALYTICS_ORIGINS).toEqual([
+      'http://localhost:5174',
+      'http://localhost:5173',
+    ])
+    expect(env.ANALYTICS_CAMPAIGN_ALLOWLIST).toEqual(['launch_ru', 'partner-1'])
+  })
+
+  test('requires HTTPS analytics origins in production', () => {
+    const productionBase = {
+      ANALYTICS_ENABLED: 'true',
+      COOKIE_SECURE: 'true',
+      CORS_ORIGINS: 'https://app.example.com',
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '01'.repeat(32),
+      NODE_ENV: 'production',
+      WEBAPP_ORIGIN: 'https://app.example.com',
+    }
+
+    expect(() => loadEnv({
+      ...productionBase,
+      ANALYTICS_ORIGINS: 'https://app.example.com,http://public.example.com',
+    })).toThrow('ANALYTICS_ORIGINS')
+    expect(() => loadEnv({
+      ...productionBase,
+      ANALYTICS_ORIGINS: 'https://app.example.com,https://public.example.com',
+    })).not.toThrow()
   })
 
   test('requires complete Yandex Object Storage configuration when storage is enabled', () => {
@@ -129,6 +342,7 @@ describe('loadEnv', () => {
       JWT_SECRET: '0123456789abcdef'.repeat(4),
       COOKIE_SECURE: 'true',
       CORS_ORIGINS: 'https://web.example.com',
+      WEBAPP_ORIGIN: 'https://web.example.com',
     }
 
     expect(() => loadEnv(productionBase)).not.toThrow()
@@ -137,6 +351,37 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...productionBase, COOKIE_SECURE: 'false' })).toThrow('COOKIE_SECURE')
     expect(() => loadEnv({ ...productionBase, CORS_ORIGINS: 'http://web.example.com' }))
       .toThrow('CORS_ORIGINS')
+  })
+
+  test('requires one explicit trusted player origin in production-like runtimes', () => {
+    const productionBase = {
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/anomaly_detector',
+      JWT_SECRET: '01'.repeat(32),
+      COOKIE_SECURE: 'true',
+      CORS_ORIGINS: 'https://ops.example.com,https://app.example.com',
+    }
+
+    expect(() => loadEnv(productionBase)).toThrow('WEBAPP_ORIGIN')
+
+    const env = loadEnv({
+      ...productionBase,
+      WEBAPP_ORIGIN: 'https://app.example.com',
+    })
+    expect(env.WEBAPP_ORIGIN).toBe('https://app.example.com')
+
+    expect(() => loadEnv({
+      ...productionBase,
+      WEBAPP_ORIGIN: 'https://app.example.com/tutorial',
+    })).toThrow('WEBAPP_ORIGIN')
+    expect(() => loadEnv({
+      ...productionBase,
+      WEBAPP_ORIGIN: 'https://public.example.com',
+    })).toThrow('WEBAPP_ORIGIN')
+    expect(() => loadEnv({
+      ...productionBase,
+      WEBAPP_ORIGIN: 'http://app.example.com',
+    })).toThrow('WEBAPP_ORIGIN')
   })
 
   test('rejects unsafe production CORS origins', () => {

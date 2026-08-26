@@ -13,6 +13,20 @@
   .board { padding-block: 1rem !important; }
 }
 
+@media (min-width: 48rem) and (max-width: 68rem) {
+  .board[data-tutorial-action-pinned]:not([data-tutorial-phase='final-scientific-model']) [data-tutorial-action-container]:has([data-tutorial-confirm-ready='true']) {
+    position: fixed;
+    inset: auto 22rem .75rem 1.25rem;
+  }
+}
+
+@media (min-width: 68.001rem) and (max-width: 90rem) {
+  .board[data-tutorial-action-pinned]:not([data-tutorial-phase='final-scientific-model']) [data-tutorial-action-container]:has([data-tutorial-confirm-ready='true']) {
+    position: fixed;
+    inset: auto 26rem .75rem 1.25rem;
+  }
+}
+
 @media (max-width: 47.999rem) {
   .directInterpretation { display: none; }
   .board { padding-bottom: calc(100dvh + 1rem) !important; }
@@ -28,6 +42,6 @@
     z-index: 101;
   }
   [data-tutorial-highlight='working-model'] [data-tutorial-working-model-trigger] {
-    margin-top: 3rem;
+    margin-top: calc(3rem + var(--space-2));
   }
 }

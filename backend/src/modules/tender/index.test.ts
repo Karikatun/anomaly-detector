@@ -2,7 +2,11 @@ import { expect, test } from 'bun:test'
 
 import { createTenderModule } from './index'
 import { createParticipantAuditRounds } from './application/audit-view'
-import { decodeTenderAuditEvent } from './application/tender-audit-event'
+import {
+  decodeTenderAuditEvent,
+  TenderAuditEventDecodeError,
+} from './application/tender-audit-event'
+import type { StoredTenderAuditEvent } from './application/tender-store'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 
 const legacyAuditEvents = (events: Parameters<typeof decodeTenderAuditEvent>[0][]) =>
@@ -38,6 +42,7 @@ test('keeps consecutive all-timeout rounds separate in the participant audit', (
     privateMeasurementsByPlayer: {},
     privateThesesByPlayer: {},
     publicScientificJournal: [],
+    publicTheses: [],
     round: 3,
   } as never, events)
 
@@ -54,6 +59,7 @@ test('projects automatic operational skips with player-facing reasons into the a
     privateMeasurementsByPlayer: {},
     privateThesesByPlayer: {},
     publicScientificJournal: [],
+    publicTheses: [],
     round: 1,
   } as never, legacyAuditEvents([
     {
@@ -91,6 +97,7 @@ test('projects round priority and complete Contract evidence into the participan
     privateThesesByPlayer: {},
     publicFinalContract: {},
     publicScientificJournal: [journalEntry],
+    publicTheses: [],
     round: 2,
   } as never, legacyAuditEvents([
     {
@@ -226,6 +233,31 @@ test('accepts dueAt - 1 ms, rejects dueAt and dueAt + 1 ms, and keeps an idempot
     tenderId,
     type: 'request-access-slot',
   })).rejects.toMatchObject({ kind: 'tender_deadline_expired' })
+})
+
+test('finds only the exact persisted command receipt before spending a command budget', async () => {
+  const tender = createTenderModule()
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  const command = {
+    actorId: 'player-a',
+    commandId: 'slot-a-receipt',
+    slot: 1,
+    tenderId,
+    type: 'request-access-slot' as const,
+  }
+
+  expect(await tender.findCommandReceipt(command)).toBeUndefined()
+  const receipt = await tender.execute(command)
+  expect(await tender.findCommandReceipt(command)).toEqual(receipt)
+  await expect(tender.findCommandReceipt({ ...command, slot: 2 }))
+    .rejects.toMatchObject({ kind: 'duplicate_command_conflict' })
+  await expect(tender.findCommandReceipt({ ...command, actorId: 'outsider' }))
+    .rejects.toMatchObject({ kind: 'player_not_in_tender' })
 })
 
 test('abandons a Tender five seconds after every player explicitly leaves and cancels when one resumes', async () => {
@@ -1197,6 +1229,17 @@ test('does not return a Tender view to a non-player', async () => {
   await expect(tender.readTenderView({ tenderId, playerId: 'player-c' })).rejects.toMatchObject({
     kind: 'player_not_in_tender',
   })
+
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'complete-before-outsider-audit-read',
+    tenderId,
+    type: 'forfeit-tender',
+  })
+
+  await expect(tender.readTenderView({ tenderId, playerId: 'player-c' })).rejects.toMatchObject({
+    kind: 'player_not_in_tender',
+  })
 })
 
 test('anonymises a deleted participant in every Tender view', async () => {
@@ -1254,6 +1297,281 @@ test('does not expose the post-match audit before the Tender is complete', async
   expect(completedView.audit).not.toHaveProperty('events')
   expect(completedView.audit?.rounds).toEqual(expect.any(Array))
   expect(JSON.stringify(completedView.audit)).not.toContain('Private draft.')
+})
+
+test('fails closed only for incompatible historical participant audit events', async () => {
+  const persistedStore = createInMemoryTenderStore()
+  let auditReadError: Error | undefined
+  const store = {
+    ...persistedStore,
+    readAuditEvents: async (tenderId: string) => {
+      if (auditReadError) throw auditReadError
+      return persistedStore.readAuditEvents(tenderId)
+    },
+  }
+  const tender = createTenderModule({ store })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'forfeit-a-1',
+    tenderId,
+    type: 'forfeit-tender',
+  })
+
+  auditReadError = new TenderAuditEventDecodeError(
+    'Unsupported historical event',
+    'historical_incompatible',
+  )
+  const unavailableView = await tender.readTenderView({ tenderId, playerId: 'player-b' })
+  expect(unavailableView).toMatchObject({
+    phase: 'complete',
+  })
+  expect(unavailableView).not.toHaveProperty('audit')
+  expect(unavailableView).not.toHaveProperty('auditUnavailableReason')
+
+  const operationalError = new Error('database unavailable')
+  auditReadError = operationalError
+  await expect(tender.readTenderView({ tenderId, playerId: 'player-b' })).rejects.toBe(operationalError)
+})
+
+test('omits the completed audit when only the legacy part of mixed history breaks projection', async () => {
+  const persistedStore = createInMemoryTenderStore()
+  const incompatibleLegacyEvent = {
+    actorId: 'player-a',
+    formatVersion: 0,
+    kind: 'power_allocated',
+    payload: {
+      allocation: { reviewer: 4 },
+      playerId: 'player-a',
+    },
+    sequence: 2,
+  } as unknown as StoredTenderAuditEvent
+  expect(incompatibleLegacyEvent.formatVersion).toBe(0)
+
+  const tender = createTenderModule({
+    store: {
+      ...persistedStore,
+      readAuditEvents: async (tenderId: string) => [
+        ...await persistedStore.readAuditEvents(tenderId),
+        incompatibleLegacyEvent,
+      ],
+    },
+  })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'forfeit-a-legacy-audit',
+    tenderId,
+    type: 'forfeit-tender',
+  })
+
+  const view = await tender.readTenderView({ tenderId, playerId: 'player-b' })
+
+  expect(view).toMatchObject({
+    phase: 'complete',
+    winnerPlayerIds: ['player-b'],
+  })
+  expect(view).not.toHaveProperty('audit')
+  expect(view).not.toHaveProperty('auditUnavailableReason')
+})
+
+test('does not let incompatible legacy history mask locally provable current corruption', async () => {
+  const readWithCurrentEvent = async (currentEvent: StoredTenderAuditEvent) => {
+    const persistedStore = createInMemoryTenderStore()
+    const incompatibleLegacyEvent = {
+      actorId: 'player-a',
+      formatVersion: 0,
+      kind: 'power_allocated',
+      payload: {
+        allocation: { reviewer: 4 },
+        playerId: 'player-a',
+      },
+      sequence: 2,
+    } as unknown as StoredTenderAuditEvent
+    const tender = createTenderModule({
+      store: {
+        ...persistedStore,
+        readAuditEvents: async (tenderId: string) => [
+          ...await persistedStore.readAuditEvents(tenderId),
+          incompatibleLegacyEvent,
+          currentEvent,
+        ],
+      },
+    })
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    await tender.execute({
+      actorId: 'player-a',
+      commandId: 'forfeit-a-mixed-current-audit',
+      tenderId,
+      type: 'forfeit-tender',
+    })
+    return tender.readTenderView({ tenderId, playerId: 'player-b' })
+  }
+
+  const actorlessCurrentEvent = decodeTenderAuditEvent({
+    commandId: 'actorless-current-access',
+    kind: 'access_slot_requested',
+    payload: {
+      data: { playerId: 'player-a', slot: 1 },
+      formatVersion: 1,
+    },
+    sequence: 3,
+  })
+  await expect(readWithCurrentEvent(actorlessCurrentEvent))
+    .rejects.toMatchObject({ kind: 'current_corruption' })
+
+  const unprovedCurrentAward = decodeTenderAuditEvent({
+    actorId: 'player-a',
+    commandId: 'unproved-current-award',
+    kind: 'contract_bid_assessed',
+    payload: {
+      data: {
+        awarded: true,
+        awardedToPlayerId: 'player-a',
+        contractId: 'round-1-contract-1',
+        corporateTrustByPlayer: { 'player-a': 1, 'player-b': 0 },
+        evidenceTestIds: [],
+        playerId: 'player-a',
+        ratingAward: 3,
+        ratingByPlayer: { 'player-a': 3, 'player-b': 0 },
+      },
+      formatVersion: 1,
+    },
+    sequence: 3,
+  })
+  await expect(readWithCurrentEvent(unprovedCurrentAward))
+    .rejects.toMatchObject({ kind: 'current_corruption' })
+})
+
+test('does not blame valid legacy history for a current projection failure', async () => {
+  const persistedStore = createInMemoryTenderStore()
+  const validLegacyEvent = decodeTenderAuditEvent({
+    kind: 'access_slots_resolved',
+    payload: { accessSlots: { 'player-a': 1, 'player-b': 2 } },
+    sequence: 2,
+  })
+  const incompatibleCurrentEvent = {
+    actorId: 'player-a',
+    formatVersion: 1,
+    kind: 'power_allocated',
+    payload: {
+      allocation: { reviewer: 4 },
+      playerId: 'player-a',
+    },
+    sequence: 3,
+  } as unknown as StoredTenderAuditEvent
+  const tender = createTenderModule({
+    store: {
+      ...persistedStore,
+      readAuditEvents: async (tenderId: string) => [
+        ...await persistedStore.readAuditEvents(tenderId),
+        validLegacyEvent,
+        incompatibleCurrentEvent,
+      ],
+    },
+  })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'forfeit-a-current-projection-corruption',
+    tenderId,
+    type: 'forfeit-tender',
+  })
+
+  await expect(tender.readTenderView({ tenderId, playerId: 'player-b' }))
+    .rejects.toMatchObject({ name: 'ZodError' })
+})
+
+test('omits the completed audit when a legacy event is missing its participant semantics', async () => {
+  const persistedStore = createInMemoryTenderStore()
+  const tender = createTenderModule({
+    store: {
+      ...persistedStore,
+      readAuditEvents: async (tenderId: string) => [
+        ...await persistedStore.readAuditEvents(tenderId),
+        decodeTenderAuditEvent({
+          actorId: 'player-a',
+          kind: 'power_allocated',
+          payload: {},
+          sequence: 2,
+        }),
+      ],
+    },
+  })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'forfeit-a-semantic-legacy-audit',
+    tenderId,
+    type: 'forfeit-tender',
+  })
+
+  const view = await tender.readTenderView({ tenderId, playerId: 'player-b' })
+
+  expect(view).toMatchObject({
+    phase: 'complete',
+    winnerPlayerIds: ['player-b'],
+  })
+  expect(view).not.toHaveProperty('audit')
+  expect(view).not.toHaveProperty('auditUnavailableReason')
+})
+
+test('does not mask a malformed current participant audit event as historical incompatibility', async () => {
+  const persistedStore = createInMemoryTenderStore()
+  const tender = createTenderModule({
+    store: {
+      ...persistedStore,
+      readAuditEvents: async (tenderId: string) => [
+        ...await persistedStore.readAuditEvents(tenderId),
+        decodeTenderAuditEvent({
+          actorId: 'player-a',
+          kind: 'power_allocated',
+          payload: { data: {}, formatVersion: 1 },
+          sequence: 2,
+        }),
+      ],
+    },
+  })
+  const { tenderId } = await tender.createTender({
+    players: [
+      { id: 'player-a', tiePriority: 1 },
+      { id: 'player-b', tiePriority: 2 },
+    ],
+  })
+  await tender.execute({
+    actorId: 'player-a',
+    commandId: 'forfeit-a-current-audit-corruption',
+    tenderId,
+    type: 'forfeit-tender',
+  })
+
+  await expect(tender.readTenderView({ tenderId, playerId: 'player-b' }))
+    .rejects.toBeInstanceOf(TenderAuditEventDecodeError)
 })
 
 test('stores a player-owned Working Model without exposing it to other players', async () => {

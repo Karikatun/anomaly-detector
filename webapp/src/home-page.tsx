@@ -1,4 +1,4 @@
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link, Navigate, useNavigate } from '@tanstack/react-router'
 import {
   Add01Icon,
   File01Icon,
@@ -17,9 +17,12 @@ import { Typography } from '@/components/ui/typography'
 import {
   AuthForm,
   AuthSessionGate,
+  capturePostAuthContinuation,
+  consumePostAuthContinuation,
   useAuth,
   useLogoutAction,
 } from '@/features/auth'
+import { captureFeedbackOrigin } from '@/features/feedback'
 import {
   ProfileApi,
   useTutorialProgressQuery,
@@ -56,6 +59,10 @@ function AuthenticatedHome({
   displayName: string
 }) {
   const navigate = useNavigate()
+  const [continuationPath] = useState(() => {
+    capturePostAuthContinuation(sessionStorage, new URL(window.location.href))
+    return consumePostAuthContinuation(sessionStorage)
+  })
   const auth = useAuth()
   const { t } = useI18n()
   const logoutAction = useLogoutAction()
@@ -65,6 +72,8 @@ function AuthenticatedHome({
   const profileApi = useMemo(() => new ProfileApi(auth.transport), [auth.transport])
   const currentMatch = useCurrentMatchQuery(roomsApi)
   const tutorialProgress = useTutorialProgressQuery(profileApi)
+
+  if (continuationPath) return <Navigate to={continuationPath} replace />
 
   const returnToCurrentMatch = () => {
     const match = currentMatch.data
@@ -185,6 +194,15 @@ function AuthenticatedHome({
             title={t('nav.profile').toUpperCase()}
             icon={UserCircleIcon}
             onClick={() => void navigate({ to: '/profile' })}
+          />
+          <MenuCard
+            accent="plain"
+            title={t('feedback.menu')}
+            icon={File01Icon}
+            onClick={() => {
+              captureFeedbackOrigin(sessionStorage, window.location.pathname)
+              void navigate({ to: '/feedback' })
+            }}
           />
           <RulesReferenceDialog
             triggerVariant="ghost"

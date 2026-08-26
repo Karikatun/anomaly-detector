@@ -11,6 +11,7 @@ import { z } from 'zod'
 
 import { AppError, validationErrorHook } from '../../../http/errors'
 import type { RequestBudget } from '../../../security/request-budget'
+import type { RequestBudgetPolicy } from '../../../security/request-budget-policy'
 import type { AuthHttpEnv } from '../../auth'
 import type { TenderModule } from '../application/tender-module'
 import { executeTender, executeTenderRead } from './errors'
@@ -49,32 +50,12 @@ const executeTenderCommandRoute = createRoute({
 export function createTenderRoutes(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   commandBudget: RequestBudget
+  commandBudgetPolicy: RequestBudgetPolicy<'tender_command'>
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   tender: TenderModule
 }) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
-  routes.use('/:tenderId/commands', async (c, next) => {
-    const tenderId = c.req.param('tenderId')
-    const budget = await input.commandBudget.consume({
-      key: `${c.var.user.id}:${tenderId}`,
-      limit: 60,
-      now: new Date(),
-      scope: 'tender_command',
-      windowMs: 60_000,
-    })
-    if (!budget.allowed) {
-      c.header('Retry-After', String(budget.retryAfterSeconds))
-      throw new AppError(
-        429,
-        'RATE_LIMITED',
-        'Too many Tender command requests',
-        undefined,
-        'tender_command_budget',
-      )
-    }
-    await next()
-  })
   routes.use('*', input.authenticatedMutationBudget)
   routes.openapi(readTenderRoute, async (c) => c.json(
     await executeTenderRead(() => input.tender.readTenderView({
@@ -88,6 +69,23 @@ export function createTenderRoutes(input: {
     const tenderId = c.req.valid('param').tenderId
     if (command.actorId !== c.var.user.id || command.tenderId !== tenderId) {
       throw new AppError(403, 'FORBIDDEN', 'Tender command identity does not match this request')
+    }
+    const replayedReceipt = await executeTender(() => input.tender.findCommandReceipt(command))
+    if (replayedReceipt) return c.json(replayedReceipt, 200)
+    const budget = await input.commandBudget.consume({
+      key: `${c.var.user.id}:${tenderId}`,
+      now: new Date(),
+      policy: input.commandBudgetPolicy,
+    })
+    if (!budget.allowed) {
+      c.header('Retry-After', String(budget.retryAfterSeconds))
+      throw new AppError(
+        429,
+        'RATE_LIMITED',
+        'Too many Tender command requests',
+        undefined,
+        'tender_command_budget',
+      )
     }
     return c.json(await executeTender(() => input.tender.execute(command)), 200)
   })

@@ -14,6 +14,7 @@ import { z } from 'zod'
 
 import { AppError, validationErrorHook } from '../../../http/errors'
 import type { RequestBudget } from '../../../security/request-budget'
+import type { RequestBudgetPolicy } from '../../../security/request-budget-policy'
 import type { TenderRoomService } from '../application/room-service'
 import type { AuthHttpEnv } from '../../auth'
 import { executeRoom } from './errors'
@@ -132,18 +133,18 @@ const cancelRoomStartRoute = createRoute({
 export function createRoomRoutes(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   joinBudget: RequestBudget
+  joinBudgetPolicy: RequestBudgetPolicy<'room_join'>
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   service: TenderRoomService
 }) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
+  routes.use('*', input.authenticatedMutationBudget)
   routes.use('/join', async (c, next) => {
     const budget = await input.joinBudget.consume({
       key: c.var.user.id,
-      limit: 20,
       now: new Date(),
-      scope: 'room_join',
-      windowMs: 60_000,
+      policy: input.joinBudgetPolicy,
     })
     if (!budget.allowed) {
       c.header('Retry-After', String(budget.retryAfterSeconds))
@@ -157,7 +158,6 @@ export function createRoomRoutes(input: {
     }
     await next()
   })
-  routes.use('*', input.authenticatedMutationBudget)
   routes.openapi(listMatchesRoute, async (c) => c.json({ matches: await executeRoom(() => input.service.listMatches(c.var.user.id)) }, 200))
   routes.openapi(currentMatchRoute, async (c) => c.json({
     match: await executeRoom(() => input.service.getCurrentMatch(c.var.user.id)),

@@ -5,6 +5,10 @@ import type { DbClient } from '../../db'
 import type { AuthHttpEnv } from '../auth'
 import { createProfileModule } from './index'
 
+const authenticatedMutationBudget = createMiddleware<AuthHttpEnv>(async (_c, next) => {
+  await next()
+})
+
 test('returns authenticated player statistics from compatible completed matches', async () => {
   const db = {} as DbClient
   const requireAuth = createMiddleware<AuthHttpEnv>(async (c, next) => {
@@ -20,6 +24,7 @@ test('returns authenticated player statistics from compatible completed matches'
     await next()
   })
   const profile = createProfileModule({
+    authenticatedMutationBudget,
     completedTenderSummaryReader: {
       listCompletedMatches: async () => [{
         excludeFromPerformanceAverages: false,
@@ -81,6 +86,7 @@ test('reads and idempotently records the authenticated player tutorial completio
     await next()
   })
   const profile = createProfileModule({
+    authenticatedMutationBudget,
     completedTenderSummaryReader: { listCompletedMatches: async () => [] },
     db,
     requireAuth,

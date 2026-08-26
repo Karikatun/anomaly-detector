@@ -3,13 +3,17 @@
 ## Repository quality gates
 
 - `bun run check:commit` — быстрый локальный gate: tracked secret hygiene, lint, Prisma validation, typecheck, architecture, script/contracts/backend unit/webapp tests.
-- `bun run check:push` и `bun run check` — полный gate: все тесты, production build, backend Docker smoke и Playwright E2E.
+- `bun run check:push` — dependency audit, full-history Gitleaks и полный `check`: все тесты, production build, backend Docker smoke и Playwright E2E.
+- `bun run check` — полный локальный поведенческий gate без сетевого dependency audit.
+- `bun run preflight:split-domain` — отдельный воспроизводимый target/rollback gate для подготовленного разделения `anomaly-detector.ru` и `app.anomaly-detector.ru`.
+- `bun run benchmark:local-abuse` — отдельный local-only benchmark для distributed abuse boundaries, Feedback, realtime cap и Argon/recovery; он создаёт invocation-scoped `*_test` PostgreSQL и публикует secret-free JSON только после удаления временного volume.
+- `bun run acceptance:mvp --players 2|3|4` — отдельный local-only harness для контролируемого человеческого прогона Public MVP Journey и штатного Tender; протокол и границы результата описаны в [LOCAL_MVP_ACCEPTANCE.md](LOCAL_MVP_ACCEPTANCE.md).
 - `pre-commit` отдельно сканирует staged Git index, поэтому проверяет именно содержимое будущего commit, а не игнорируемый локальный `backend/.env`.
 - GitHub Actions повторяет secret hygiene и tooling contracts независимо от локальных hooks, которые можно обойти через `--no-verify`.
 - `security-static` независимо запускает Gitleaks по Git-истории, Semgrep по versioned high-confidence правилам и Trivy по конфигурации; после Docker smoke Trivy проверяет собранный backend image.
 - `security-dynamic.yml` запускает активный ZAP API scan только вручную или по расписанию, на временном backend и отдельной `_test` базе.
 
-Для полной проверки нужны Bun, Docker и установленный Chromium для версии Playwright из `webapp`.
+Для полной проверки нужны Bun, Docker и установленные Chromium и Firefox для версии Playwright из `webapp`.
 
 The goal of this project's tests is to show future agents where behavior should be verified and how to keep E2E broad enough to protect valuable behavior without turning it into exhaustive matrices.
 
@@ -21,6 +25,35 @@ The goal of this project's tests is to show future agents where behavior should 
 - Mobile Maestro: lives on the `mobile` branch with the runnable Expo app.
 
 Client E2E should cover valuable user journeys, including non-happy-path states that protect real product behavior, when they can stay stable. Important edge cases must be covered at some automated level; choosing integration, contract, or unit coverage instead of E2E is not permission to skip them. Negative validation matrices, combinatorial edge cases, concurrency, and pure rules belong in unit/integration tests.
+
+### Public MVP Journey coverage
+
+When the approved MVP slices are implemented, use one representative browser
+journey for landing CTA → registration → tutorial completion → Recovery Email
+offer and a separate reset-password journey. Keep the exhaustive security
+matrix at contract/backend integration level:
+
+- Account Email canonicalisation, uniqueness, Yandex sync without merge, and
+  deleted-account reuse;
+- code/token expiry, attempt budgets, atomic consume, resend invalidation,
+  replacement requiring both factors, cooling-off cancellation and concurrent
+  requests;
+- Recovery Code issuance, hashing, one-time use and global session/recovery
+  revocation;
+- generic reset responses across missing, password, no-email, Yandex-only and
+  rate-limited accounts;
+- reviewed Approved Mail Service catalog conflicts, idempotent sync/status
+  commands, last-known-good policy, exact MX-profile classification and fresh
+  rechecks, outbox retry/restart and blocked-provider behavior;
+- analytics consent/refusal/revocation and retention without cross-use of
+  security data;
+- Feedback Report authorization, safe projection, rate limits, workflow
+  concurrency and scheduled deletion.
+
+Website acceptance separately inspects generated initial HTML, metadata,
+structured data, robots/sitemap, links, assets and responsive rendering. A
+successful website build does not prove the cross-domain continuation or that
+private app routes are excluded from indexing.
 
 ## Choosing Test Level
 
@@ -108,6 +141,15 @@ The integration and Docker smoke runners refuse database names that do not end w
 
 The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created. The image remains under `anomaly-detector-backend:smoke` long enough for the following Trivy image scan.
 
+Operational metrics use focused unit tests for Prometheus formatting, bounded
+labels, `5xx` observation through the error handler, worker staleness, reconnect
+classification and mail transitions. Tender aggregate counts are also exercised
+against PostgreSQL by the Tender integration suite. Docker smoke is the runtime
+boundary: the public API port must return `404` for `/metrics`, while the
+separately loopback-published collector port must return the aggregate
+`anomaly_detector_api_up` series. Never weaken that isolation to simplify a
+scrape test.
+
 `bun run security:zap` is an active security test, not a normal local smoke. It
 creates and later destroys only its isolated `_test` database, filters the
 account-delete operation from the generated OpenAPI document, and writes
@@ -117,6 +159,12 @@ to a shared or production environment.
 `.github/workflows/ci.yml` runs static security, typecheck, deployment/script tests, contract tests, webapp client tests, backend tests, image vulnerability scanning, and the webapp Playwright smoke flow on pushes to `main` and `master` plus pull requests.
 
 ## Локальные игроки для ручной проверки
+
+Для контролируемого прогона с реальными группами используйте
+[local-only acceptance harness](LOCAL_MVP_ACCEPTANCE.md), а не стабильные
+учётные записи ниже. Harness создаёт чистый invocation-scoped test volume;
+участники регистрируют disposable accounts через реальный UI, а volume целиком
+удаляется до сохранения обезличенной сводки.
 
 После запуска локального backend подготовьте две стабильные синтетические учётные записи:
 
@@ -135,7 +183,9 @@ bun run seed:test-users
 
 ## Webapp E2E
 
-Playwright is configured in `webapp/playwright.config.ts`.
+Playwright is configured in `webapp/playwright.config.ts`. The default command
+runs the critical browser journeys in both Chromium and Firefox; use
+`--project=chromium` or `--project=firefox` only for narrow diagnosis.
 
 First-time setup:
 
@@ -157,7 +207,9 @@ The webapp E2E flow:
 - uses `TEST_DATABASE_URL` as the primary database URL, then passes that value to the backend as `DATABASE_URL` inside the test run;
 - starts the backend on `E2E_BACKEND_PORT`, which defaults to a repository-derived port;
 - starts the deadline worker after migrations and stops only that worker when Playwright finishes;
+- publishes the reviewed mail catalog once before browser workers and forces SMTP delivery off so recovery E2E never contacts an external mail provider;
 - starts Vite on `E2E_WEB_PORT`, which defaults to a repository-derived port;
+- runs spec files through two workers by default while keeping tests inside each spec ordered;
 - stops its `postgres_test` compose project and removes the test volume after the run unless `E2E_KEEP_DOCKER=1` is set;
 - runs the browser authentication journey: contract-backed registration/profile validation, transient session recovery, retryable logout/profile failures, protected profile, logout, and login;
 - verifies that lobby refresh uses a read-only request, exposes stale/error state, and recovers on demand;
@@ -170,17 +222,74 @@ TEST_DATABASE_URL="postgresql://superuser:superpassword@localhost:<test-port>/an
 POSTGRES_TEST_PORT=<test-port>
 E2E_BACKEND_PORT=<backend-port>
 E2E_WEB_PORT=<web-port>
+E2E_WORKERS=2
 E2E_SKIP_DOCKER=1
 E2E_KEEP_DOCKER=1
 ```
 
 By default, Playwright computes `POSTGRES_TEST_PORT` from the absolute repository path and refuses to run against a database that does not use the `_test` suffix. This prevents E2E from accidentally writing to development or production data. Use `DATABASE_URL` only as a low-level override; `TEST_DATABASE_URL` is the documented test entry point.
 
+`E2E_WORKERS` may override the default only with an integer from 1 through 4.
+The bound keeps browser concurrency controlled because every worker shares the
+same local backend, deadline worker and test database. Runs with `UX_AUDIT_DIR`
+always use one worker so browser projects cannot overwrite shared screenshots
+and audit files. The split-domain preflight also remains single-worker.
+
 Playwright artifacts live in `webapp/e2e/.artifacts/` and are not committed. For interactive debugging:
 
 ```bash
 bun run --cwd webapp e2e:ui
 ```
+
+### Split-domain preflight
+
+Run the complete local preflight from the repository root:
+
+```bash
+bun run preflight:split-domain
+```
+
+It first checks the route-derived Caddy policy, backend origin/OAuth contracts,
+release-build guards and generated public links. It then builds the current
+`webapp`/`website` and runs Chromium twice behind an isolated edge on distinct
+`*.anomaly-detector.localhost` hosts with an ephemeral local TLS certificate:
+
+- target: public-root `404`, every registered legacy deep-link temporary
+  redirect with path/query and `Cache-Control: no-store`,
+  player SPA reload, public/player CSP, exact CORS, API callback + player OAuth
+  error return, app-host legal URLs, and a `Secure; HttpOnly; SameSite=None`
+  host-only refresh cookie restricted to `/api/auth`;
+- rollback: root-host SPA/deep-link reload, root CORS/OAuth return,
+  previous app and untrusted-origin CORS rejection, secure refresh/logout,
+  app-to-root recovery redirect and unchanged API-host cookie scope.
+
+The OAuth transport contract additionally mocks successful target and rollback
+callbacks, checks their secure host-only auth cookie, and rejects an in-flight
+callback from the previous origin before transaction side effects. Real provider
+code exchange remains an owner gate.
+
+Each profile gets a unique Compose project, dynamically resolved ports and its
+own static/result directories under `webapp/e2e/.artifacts/`; the runner removes
+ambient database, Compose, URL, port and skip/keep overrides before starting.
+Docker daemon selectors are also removed, and the runner fails closed unless
+the resulting active context uses a local Unix socket; that verified socket is
+then pinned as `DOCKER_HOST` for the complete child run. Its teardown can
+therefore remove only that invocation's local `_test` volume. The final
+release builds use a separate OS temporary directory, clear owner-gated
+analytics flags, verify fixed production origins and reject localhost,
+`0.0.0.0`, IPv6/IPv4 loopback and named `.localhost` origins, then delete the
+test-only artifacts automatically.
+
+The TanStack Router bundle contains its own exact `http://localhost` fallback
+literal for browsers without an origin; the scanner permits that known
+non-endpoint string. Release validators still make both configured API origins
+exact production values, while any localhost path/port or other loopback host
+remains rejected.
+
+The isolated edge reads route families, redirect destinations/status/cache
+policy and headers from the versioned Caddy profiles, but it is not the Caddy
+parser and does not prove public DNS/TLS, provider-side OAuth registration or
+live production headers; those remain release-owner checks.
 
 ## Mobile Maestro E2E
 

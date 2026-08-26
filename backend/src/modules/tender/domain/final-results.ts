@@ -9,6 +9,7 @@ import type { SignalId } from './anomaly-configuration'
 type FinalResultState = {
   budgetByPlayer: Record<string, number>
   certifiedSignalsByPlayer: Record<string, SignalId[]>
+  corporateTrustByPlayer: Record<string, number>
   forfeitedAtByPlayer: Record<string, string>
   players: TenderPlayer[]
   publicTheses: PublicThesis[]
@@ -20,34 +21,65 @@ const correctThesisCount = (tender: FinalResultState, playerId: string) => tende
   ? (tender.certifiedSignalsByPlayer[playerId] ?? []).length
   : tender.publicTheses.filter((thesis) => thesis.playerId === playerId && thesis.correct).length
 
-const compareFinalPlayers = (tender: FinalResultState, left: TenderPlayer, right: TenderPlayer) => {
+export const createFinalStandingByPlayer = (tender: FinalResultState) => Object.fromEntries(
+  tender.players.map((player) => [
+    player.id,
+    {
+      corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,
+      correctTheses: correctThesisCount(tender, player.id),
+      rating: tender.ratingByPlayer[player.id] ?? 0,
+      remainingBudget: tender.budgetByPlayer[player.id] ?? 0,
+    },
+  ]),
+)
+
+type FinalStandingByPlayer = ReturnType<typeof createFinalStandingByPlayer>
+
+const compareRankedStandings = (
+  standings: FinalStandingByPlayer,
+  leftPlayerId: string,
+  rightPlayerId: string,
+) => standings[rightPlayerId]!.rating - standings[leftPlayerId]!.rating
+  || standings[rightPlayerId]!.correctTheses - standings[leftPlayerId]!.correctTheses
+  || standings[rightPlayerId]!.remainingBudget - standings[leftPlayerId]!.remainingBudget
+
+const compareFinalPlayers = (
+  tender: FinalResultState,
+  standings: FinalStandingByPlayer,
+  left: TenderPlayer,
+  right: TenderPlayer,
+) => {
   const leftForfeitedAt = tender.forfeitedAtByPlayer[left.id]
   const rightForfeitedAt = tender.forfeitedAtByPlayer[right.id]
   if (Boolean(leftForfeitedAt) !== Boolean(rightForfeitedAt)) return leftForfeitedAt ? 1 : -1
   if (leftForfeitedAt && rightForfeitedAt) {
     return Date.parse(rightForfeitedAt) - Date.parse(leftForfeitedAt)
   }
-  return (tender.ratingByPlayer[right.id] ?? 0) - (tender.ratingByPlayer[left.id] ?? 0)
-    || correctThesisCount(tender, right.id) - correctThesisCount(tender, left.id)
-    || (tender.budgetByPlayer[right.id] ?? 0) - (tender.budgetByPlayer[left.id] ?? 0)
+  return compareRankedStandings(standings, left.id, right.id)
 }
 
-export const createPlacementByPlayer = (tender: FinalResultState) => Object.fromEntries(
-  tender.players.map((player) => [
-    player.id,
-    1 + tender.players.filter((candidate) => compareFinalPlayers(tender, candidate, player) < 0).length,
-  ]),
-)
+export const createPlacementByPlayer = (tender: FinalResultState) => {
+  const standings = createFinalStandingByPlayer(tender)
+  return Object.fromEntries(
+    tender.players.map((player) => [
+      player.id,
+      1 + tender.players.filter((candidate) =>
+        compareFinalPlayers(tender, standings, candidate, player) < 0,
+      ).length,
+    ]),
+  )
+}
 
 export const resolveWinnerPlayerIds = (tender: FinalResultState) => {
   const eligiblePlayers = tender.players.filter((player) => tender.forfeitedAtByPlayer[player.id] === undefined)
   if (eligiblePlayers.length === 0) return []
-  const highestRating = Math.max(...eligiblePlayers.map((player) => tender.ratingByPlayer[player.id] ?? 0))
-  const ratingLeaders = eligiblePlayers.filter((player) => (tender.ratingByPlayer[player.id] ?? 0) === highestRating)
-  const highestThesisCount = Math.max(...ratingLeaders.map((player) => correctThesisCount(tender, player.id)))
-  const thesisLeaders = ratingLeaders.filter((player) => correctThesisCount(tender, player.id) === highestThesisCount)
-  const highestBudget = Math.max(...thesisLeaders.map((player) => tender.budgetByPlayer[player.id] ?? 0))
-  return thesisLeaders
-    .filter((player) => (tender.budgetByPlayer[player.id] ?? 0) === highestBudget)
+  const standings = createFinalStandingByPlayer(tender)
+  const leader = eligiblePlayers.reduce((currentLeader, candidate) =>
+    compareRankedStandings(standings, candidate.id, currentLeader.id) < 0
+      ? candidate
+      : currentLeader,
+  )
+  return eligiblePlayers
+    .filter((player) => compareRankedStandings(standings, player.id, leader.id) === 0)
     .map((player) => player.id)
 }
