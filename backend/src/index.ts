@@ -1,6 +1,8 @@
 import { createApp } from './app'
+import { createPrismaActiveSessionGuard } from './modules/auth'
 import {
   createPrismaRealtimeTicketStore,
+  createPrismaTenderOperationalStateReader,
   createPrismaTenderStore,
   createRealtimeHub,
   createRealtimeWebSocketHandlers,
@@ -10,13 +12,20 @@ import {
   type RealtimeSocketData,
 } from './modules/tender'
 import { createBackendRuntime } from './runtime'
-import { stopServerGracefully } from './shutdown'
+import { createOperationalMetrics } from './operational-metrics'
+import { stopServersGracefully } from './shutdown'
 
 const runtime = createBackendRuntime()
 const ticketStore = createPrismaRealtimeTicketStore(runtime.prisma, {
   sessionAbsoluteTtlDays: runtime.env.SESSION_ABSOLUTE_TTL_DAYS,
 })
+const sessionGuard = createPrismaActiveSessionGuard(runtime.prisma, {
+  sessionAbsoluteTtlDays: runtime.env.SESSION_ABSOLUTE_TTL_DAYS,
+})
 const tenderStore = createPrismaTenderStore(runtime.prisma)
+const operationalMetrics = createOperationalMetrics({
+  tenderStateReader: createPrismaTenderOperationalStateReader(runtime.prisma),
+})
 
 let realtime: RealtimeHub
 const tender = createTenderModule({
@@ -26,13 +35,20 @@ const tender = createTenderModule({
   },
   store: tenderStore,
 })
-realtime = createRealtimeHub({ tender })
+realtime = createRealtimeHub({ sessionGuard, tender })
 
 const stopRealtimeSyncLoop = realtime.startSyncLoop()
 
-const app = createApp({ env: runtime.env, prisma: runtime.prisma, tender })
+const app = createApp({
+  env: runtime.env,
+  logoutCleanup: ({ sessionId }) => realtime.closeSession(sessionId),
+  operationalMetrics,
+  prisma: runtime.prisma,
+  tender,
+})
 
 const server = Bun.serve<RealtimeSocketData>({
+  hostname: runtime.env.API_HOST,
   port: runtime.env.PORT,
   fetch(request, server) {
     const url = new URL(request.url)
@@ -41,10 +57,27 @@ const server = Bun.serve<RealtimeSocketData>({
     }
     return app.fetch(request)
   },
-  websocket: createRealtimeWebSocketHandlers({ hub: realtime }),
+  websocket: createRealtimeWebSocketHandlers({
+    hub: realtime,
+    telemetry: {
+      closed: (closeCode) => operationalMetrics.observe({ closeCode, kind: 'realtime_closed' }),
+      connected: (reconnect) => operationalMetrics.observe({ kind: 'realtime_connected', reconnect }),
+    },
+  }),
 })
 
+const operationalMetricsServer = runtime.env.OPERATIONAL_METRICS_PORT
+  ? Bun.serve({
+      fetch: operationalMetrics.fetch,
+      hostname: runtime.env.OPERATIONAL_METRICS_HOST ?? '127.0.0.1',
+      port: runtime.env.OPERATIONAL_METRICS_PORT,
+    })
+  : null
+
 console.log(`Backend listening on ${server.url}`)
+if (operationalMetricsServer) {
+  console.log(`Operational metrics listening on private port ${operationalMetricsServer.port}`)
+}
 
 let shuttingDown = false
 
@@ -54,7 +87,10 @@ async function shutdown(signal: string) {
 
   console.log(`Backend received ${signal}; shutting down`)
   await stopRealtimeSyncLoop()
-  await stopServerGracefully(server, runtime.env.SHUTDOWN_GRACE_SECONDS * 1000)
+  await stopServersGracefully(
+    [server, ...(operationalMetricsServer ? [operationalMetricsServer] : [])],
+    runtime.env.SHUTDOWN_GRACE_SECONDS * 1000,
+  )
   await runtime.close()
 }
 

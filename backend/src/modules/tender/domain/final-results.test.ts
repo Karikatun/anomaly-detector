@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test'
 
-import { createPlacementByPlayer, resolveWinnerPlayerIds } from './final-results'
+import {
+  createFinalStandingByPlayer,
+  createPlacementByPlayer,
+  resolveWinnerPlayerIds,
+} from './final-results'
 
 const players = [
   { id: 'alpha', tiePriority: 1 },
@@ -15,6 +19,7 @@ const createState = () => ({
     beta: ['aster' as const],
     gamma: ['aster' as const],
   },
+  corporateTrustByPlayer: { alpha: 1, beta: 2, gamma: 3 },
   forfeitedAtByPlayer: { gamma: '2026-07-29T12:00:00.000Z' },
   players,
   publicTheses: [],
@@ -31,4 +36,16 @@ test('assigns shared places and ranks forfeited players after active players', (
   state.budgetByPlayer.alpha = 3
 
   expect(createPlacementByPlayer(state)).toEqual({ alpha: 1, beta: 1, gamma: 3 })
+})
+
+test('uses the authoritative final standing and keeps a shared win on full ranking equality', () => {
+  const state = createState()
+  state.budgetByPlayer.alpha = 3
+
+  expect(createFinalStandingByPlayer(state)).toEqual({
+    alpha: { corporateTrust: 1, correctTheses: 1, rating: 10, remainingBudget: 3 },
+    beta: { corporateTrust: 2, correctTheses: 1, rating: 10, remainingBudget: 3 },
+    gamma: { corporateTrust: 3, correctTheses: 1, rating: 100, remainingBudget: 99 },
+  })
+  expect(resolveWinnerPlayerIds(state)).toEqual(['alpha', 'beta'])
 })

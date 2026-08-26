@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { stopServerGracefully } from './shutdown'
+import { stopServerGracefully, stopServersGracefully } from './shutdown'
 
 test('stopServerGracefully lets in-flight work finish before forcing shutdown', async () => {
   const calls: boolean[] = []
@@ -25,4 +25,15 @@ test('stopServerGracefully force closes only after the grace period', async () =
 
   await stopServerGracefully(server, 1)
   expect(calls).toEqual([false, true])
+})
+
+test('stopServersGracefully closes public and private listeners together', async () => {
+  const calls: string[] = []
+
+  await stopServersGracefully([
+    { stop: async () => { calls.push('public') } },
+    { stop: async () => { calls.push('private') } },
+  ], 100)
+
+  expect(calls.sort()).toEqual(['private', 'public'])
 })

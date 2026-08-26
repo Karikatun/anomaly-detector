@@ -1,4 +1,10 @@
-import { displayNameMaxLength, type LoginRequest, type RegisterPayload } from '@anomaly-detector/contracts'
+import {
+  displayNameMaxLength,
+  type AccountProtectionResponse,
+  type LoginRequest,
+  type RecoveryEmailReplacementCommandResponse,
+  type RegisterPayload,
+} from '@anomaly-detector/contracts'
 
 import { AuthFailure } from '../domain/errors'
 import type { OAuthProviderId } from '../domain/oauth'
@@ -7,6 +13,7 @@ import type { AuthUserRecord, AuthenticatedPrincipal } from '../domain/user'
 import { userDtoFromPrincipal } from '../domain/user'
 import type {
   AccountDeletionCleanup,
+  AccountEmailCanonicalizer,
   AccessTokens,
   AuthAbuseProtection,
   AuthRepository,
@@ -20,12 +27,14 @@ import type {
 
 type AuthServiceDependencies = {
   accountDeletionCleanup?: AccountDeletionCleanup
+  accountEmailCanonicalizer?: AccountEmailCanonicalizer
   accessTokens: AccessTokens
   abuseProtection?: AuthAbuseProtection
   clock: Clock
   logoutCleanup: LogoutCleanup
   oauthProviders?: OAuthProviderRegistry
   passwords: Passwords
+  passwordResetUrl?: string
   projectUser: ProjectUser
   refreshTokenTtlDays: number
   refreshReuseGraceSeconds: number
@@ -36,6 +45,8 @@ type AuthServiceDependencies = {
 
 const ACCOUNT_DELETION_RECENT_AUTH_MS = 10 * 60 * 1_000
 const AUTHENTICATION_CLOCK_SKEW_MS = 60 * 1_000
+const RECOVERY_EMAIL_CODE_TTL_MS = 15 * 60 * 1_000
+const RECOVERY_EMAIL_COOLING_OFF_MS = 24 * 60 * 60 * 1_000
 
 export class AuthService {
   constructor(private readonly dependencies: AuthServiceDependencies) {}
@@ -119,7 +130,15 @@ export class AuthService {
     code: string
     state: string
     metadata: SessionMetadata
+    webappOrigin: string
   }) {
+    const webappOrigin = oauthWebappOriginFromState(input.state)
+    if (webappOrigin !== input.webappOrigin) {
+      throw new AuthFailure(
+        'oauth_transaction_invalid',
+        'OAuth transaction return origin is invalid or stale',
+      )
+    }
     const oauthProviders = this.dependencies.oauthProviders
     if (!oauthProviders) {
       throw new AuthFailure('oauth_not_configured', 'OAuth sign-in is not configured')
@@ -143,60 +162,40 @@ export class AuthService {
     const userInfo = await provider.getUserInfo(tokenResult.accessToken)
     const providerSubject = userInfo.providerSubject || tokenResult.providerSubject
 
-    // Store the user identity
-    let existingUser = await this.dependencies.repository.findUserByIdentity({
-      provider: transaction.provider,
-      subject: providerSubject,
-    })
-
     const now = this.dependencies.clock.now()
     const refreshToken = this.dependencies.refreshTokens.create()
-
-    let session: { id: string }
-    let user: import('../domain/user').AuthUserRecord
-
-    if (existingUser) {
-      user = existingUser
-      const createdSession = await this.dependencies.repository.createSession({
-        userId: existingUser.id,
-        refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
-        refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
-        expiresAt: this.refreshExpiresAt(now),
-        metadata: input.metadata,
-      })
-      session = createdSession
-    } else {
-      if (!transaction.legalAcceptance) {
-        throw new AuthFailure(
-          'oauth_registration_consent_required',
-          'Legal acceptance is required to create an account',
-        )
-      }
-      const created = await this.dependencies.repository.createOAuthUserWithSession({
-        user: {
+    const accountEmail = await this.canonicalizeProviderAccountEmail(userInfo.accountEmail)
+    const completed = await this.dependencies.repository.completeOAuthSignIn({
+      accountEmail: accountEmail
+        ? { kind: 'candidate', ...accountEmail }
+        : { kind: 'unavailable' },
+      identity: {
+        provider: transaction.provider,
+        subject: providerSubject,
+      },
+      ...(transaction.legalAcceptance ? {
+        newUser: {
           login: oauthLogin(transaction.provider),
           displayName: normalizeProviderDisplayName(userInfo.displayName),
           legalAcceptance: transaction.legalAcceptance,
         },
-        identity: {
-          provider: transaction.provider,
-          subject: providerSubject,
-        },
-        session: {
-          refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
-          refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
-          expiresAt: this.refreshExpiresAt(now),
-          metadata: input.metadata,
-        },
-      })
-      user = created.user
-      session = created.session
+      } : {}),
+      session: {
+        refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
+        refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
+        expiresAt: this.refreshExpiresAt(now),
+        metadata: input.metadata,
+      },
+    })
+    if (!completed) {
+      throw new AuthFailure(
+        'oauth_registration_consent_required',
+        'Legal acceptance is required to create an account',
+      )
     }
 
-    const webappOrigin = decodeWebappOrigin(input.state) ?? ''
-
-    const response = await this.sessionResponse(user, session.id, refreshToken)
-    return { ...response, webappOrigin }
+    const response = await this.sessionResponse(completed.user, completed.session.id, refreshToken)
+    return { ...response, created: completed.created === true, webappOrigin }
   }
 
   async login(input: LoginRequest, metadata: SessionMetadata) {
@@ -206,7 +205,7 @@ export class AuthService {
       login: input.login,
       now,
     })
-    const user = await this.dependencies.repository.findUserByLogin(input.login)
+    let user = await this.dependencies.repository.findUserByLogin(input.login)
     const passwordMatches = await this.dependencies.passwords.verify(
       input.password,
       user?.passwordHash,
@@ -217,18 +216,26 @@ export class AuthService {
         now,
       })
       if (failure?.limited) {
-        throw new AuthFailure('login_throttled', 'Invalid login or password. Try again later.')
+        throw new AuthFailure(
+          'login_throttled',
+          'Invalid login or password. Try again later.',
+          failure.retryAfterSeconds,
+        )
       }
       throw new AuthFailure('invalid_credentials', 'Invalid login or password')
     }
 
     if (this.dependencies.passwords.needsRehash(user.passwordHash)) {
       const nextPasswordHash = await this.dependencies.passwords.hash(input.password)
-      await this.dependencies.repository.updatePasswordHash({
+      const updated = await this.dependencies.repository.updatePasswordHash({
         userId: user.id,
         currentPasswordHash: user.passwordHash,
         nextPasswordHash,
       })
+      if (!updated) {
+        throw new AuthFailure('invalid_credentials', 'Invalid login or password')
+      }
+      user = { ...user, passwordHash: nextPasswordHash }
     }
 
     await this.dependencies.abuseProtection?.recordLoginSuccess({ login: input.login })
@@ -356,17 +363,618 @@ export class AuthService {
     return { user: userDtoFromPrincipal(await this.authenticateAccessToken(accessToken)) }
   }
 
+  async getAccountProtection(
+    userId: string,
+    sessionId?: string,
+  ): Promise<AccountProtectionResponse> {
+    const record = await this.dependencies.repository.readAccountProtection(userId)
+    if (!record) {
+      throw new AuthFailure('session_invalid', 'Session is invalid or expired')
+    }
+    if (
+      record.hasYandexIdentity
+      &&
+      record.accountEmailState === 'yandex_managed'
+      && record.accountEmailProviderValue
+    ) {
+      return {
+        accountProtection: {
+          maskedAccountEmail: maskAccountEmail(record.accountEmailProviderValue),
+          state: 'yandex_managed',
+        },
+      }
+    }
+    if (record.hasYandexIdentity && record.accountEmailState === 'yandex_conflict') {
+      return { accountProtection: { state: 'yandex_conflict' } }
+    }
+    if (record.hasYandexIdentity) {
+      return { accountProtection: { state: 'yandex_unavailable' } }
+    }
+
+    const challenge = record.recoveryEmailChallenge
+    if (challenge) {
+      const canCancel = sessionId !== undefined
+        && challenge.cancellationSessionIds.includes(sessionId)
+      if (!await this.recoveryDeliveryAllowed(challenge.providerValue, { forceMxRefresh: false })) {
+        return {
+          accountProtection: {
+            blockedStage: 'pending_code',
+            canCancel,
+            maskedAccountEmail: maskAccountEmail(challenge.providerValue),
+            state: 'password_service_blocked',
+          },
+        }
+      }
+      return {
+        accountProtection: {
+          canCancel,
+          codeExpiresAt: challenge.expiresAt.toISOString(),
+          maskedAccountEmail: maskAccountEmail(challenge.providerValue),
+          state: 'password_pending_code',
+        },
+      }
+    }
+
+    const replacement = record.recoveryEmailReplacement
+    if (replacement) {
+      const now = this.dependencies.clock.now()
+      const [oldAddress, newAddress] = await Promise.all([
+        this.recoveryEmailReplacementAddress({
+          confirmedAt: replacement.oldConfirmedAt,
+          expiresAt: replacement.oldExpiresAt,
+          now,
+          providerValue: replacement.oldProviderValue,
+          requirement: 'delivery',
+        }),
+        this.recoveryEmailReplacementAddress({
+          canonicalKey: replacement.newCanonicalKey,
+          confirmedAt: replacement.newConfirmedAt,
+          expiresAt: replacement.newExpiresAt,
+          now,
+          providerValue: replacement.newProviderValue,
+          requirement: 'new_address',
+        }),
+      ])
+      return {
+        accountProtection: {
+          canManage: sessionId === replacement.requestingSessionId,
+          newAddress,
+          oldAddress,
+          state: 'password_replacing',
+        },
+      }
+    }
+
+    const binding = record.recoveryEmailBinding
+    if (!binding) return { accountProtection: { state: 'password_unprotected' } }
+
+    const coolingOff = binding.activatesAt > this.dependencies.clock.now()
+    const canCancel = coolingOff
+      && sessionId !== undefined
+      && binding.cancellationSessionIds.includes(sessionId)
+    if (!await this.recoveryDeliveryAllowed(binding.providerValue, { forceMxRefresh: false })) {
+      return {
+        accountProtection: {
+          blockedStage: coolingOff ? 'cooling_off' : 'active',
+          canCancel,
+          maskedAccountEmail: maskAccountEmail(binding.providerValue),
+          state: 'password_service_blocked',
+        },
+      }
+    }
+    if (coolingOff) {
+      return {
+        accountProtection: {
+          activatesAt: binding.activatesAt.toISOString(),
+          canCancel,
+          maskedAccountEmail: maskAccountEmail(binding.providerValue),
+          state: 'password_cooling_off',
+        },
+      }
+    }
+    return {
+      accountProtection: {
+        maskedAccountEmail: maskAccountEmail(binding.providerValue),
+        recoveryCodes: recoveryCodeState(record.recoveryCodeSet),
+        state: 'password_active',
+      },
+    }
+  }
+
+  async startRecoveryEmail(input: {
+    email: string
+    ipAddress?: string
+    password: string
+    sessionId: string
+    userId: string
+  }): Promise<AccountProtectionResponse> {
+    const user = await this.dependencies.repository.findUserById(input.userId)
+    if (!user?.passwordHash) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    if (!await this.dependencies.passwords.verify(input.password, user.passwordHash)) {
+      throw new AuthFailure('recovery_password_invalid', 'Current password is invalid')
+    }
+
+    const now = this.dependencies.clock.now()
+    const record = await this.dependencies.repository.readAccountProtection(input.userId)
+    if (record?.hasYandexIdentity || record?.recoveryEmailBinding) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    if (record?.recoveryEmailChallenge) {
+      throw new AuthFailure(
+        'recovery_email_pending',
+        'Recovery Email confirmation is already pending',
+      )
+    }
+    await this.dependencies.repository.reserveRecoveryEmailPolicyBudget({
+      ipAddress: input.ipAddress,
+      now,
+      operation: 'start',
+      userId: input.userId,
+    })
+    const candidate = await this.dependencies.accountEmailCanonicalizer
+      ?.canonicalizeForRecovery?.(input.email)
+    if (!candidate) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    await this.dependencies.repository.startRecoveryEmail({
+      canonicalKey: candidate.canonicalKey,
+      expectedPasswordHash: user.passwordHash,
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      now,
+      policyVersion: candidate.policyVersion,
+      policyBudgetReserved: true,
+      providerValue: candidate.providerValue,
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    return this.getAccountProtection(input.userId, input.sessionId)
+  }
+
+  async resendRecoveryEmail(input: {
+    ipAddress?: string
+    sessionId: string
+    userId: string
+  }): Promise<AccountProtectionResponse> {
+    const record = await this.dependencies.repository.readAccountProtection(input.userId)
+    const challenge = record?.recoveryEmailChallenge
+    if (!record || record.hasYandexIdentity || !challenge) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    if (!await this.recoveryDeliveryAllowed(challenge.providerValue)) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    const now = this.dependencies.clock.now()
+    await this.dependencies.repository.resendRecoveryEmail({
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      now,
+      userId: input.userId,
+    })
+    return this.getAccountProtection(input.userId, input.sessionId)
+  }
+
+  async confirmRecoveryEmail(input: {
+    code: string
+    sessionId: string
+    userId: string
+  }): Promise<AccountProtectionResponse> {
+    const record = await this.dependencies.repository.readAccountProtection(input.userId)
+    const challenge = record?.recoveryEmailChallenge
+    if (challenge && !await this.recoveryDeliveryAllowed(challenge.providerValue)) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    const now = this.dependencies.clock.now()
+    const result = await this.dependencies.repository.confirmRecoveryEmail({
+      activatesAt: new Date(now.getTime() + RECOVERY_EMAIL_COOLING_OFF_MS),
+      code: input.code,
+      now,
+      userId: input.userId,
+    })
+    if (result === 'invalid') {
+      throw new AuthFailure(
+        'recovery_code_invalid',
+        'Confirmation code is invalid or expired',
+      )
+    }
+    return this.getAccountProtection(input.userId, input.sessionId)
+  }
+
+  async cancelRecoveryEmail(input: {
+    sessionId: string
+    userId: string
+  }): Promise<AccountProtectionResponse> {
+    const result = await this.dependencies.repository.cancelRecoveryEmail({
+      now: this.dependencies.clock.now(),
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    if (result === 'forbidden') {
+      throw new AuthFailure(
+        'recovery_cancellation_forbidden',
+        'This session cannot cancel Recovery Email protection',
+      )
+    }
+    if (result === 'unavailable') {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    return this.getAccountProtection(input.userId, input.sessionId)
+  }
+
+  async startRecoveryEmailReplacement(input: {
+    email: string
+    ipAddress?: string
+    password: string
+    sessionId: string
+    userId: string
+  }): Promise<RecoveryEmailReplacementCommandResponse> {
+    const user = await this.dependencies.repository.findUserById(input.userId)
+    if (!user?.passwordHash) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    if (!await this.dependencies.passwords.verify(input.password, user.passwordHash)) {
+      throw new AuthFailure('recovery_password_invalid', 'Current password is invalid')
+    }
+
+    const now = this.dependencies.clock.now()
+    const record = await this.dependencies.repository.readAccountProtection(input.userId)
+    const binding = record?.recoveryEmailBinding
+    if (
+      !record
+      || record.hasYandexIdentity
+      || record.recoveryEmailChallenge
+      || record.recoveryEmailReplacement
+      || !binding
+      || binding.activatesAt > now
+      || !await this.recoveryDeliveryAllowed(binding.providerValue)
+    ) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    await this.dependencies.repository.reserveRecoveryEmailPolicyBudget({
+      ipAddress: input.ipAddress,
+      now,
+      operation: 'replacement',
+      userId: input.userId,
+    })
+    const candidate = await this.dependencies.accountEmailCanonicalizer
+      ?.canonicalizeForRecovery?.(input.email)
+    if (!candidate || candidate.canonicalKey === await this.canonicalRecoveryKey(binding.providerValue)) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+
+    await this.dependencies.repository.startRecoveryEmailReplacement({
+      expectedPasswordHash: user.passwordHash,
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      newCanonicalKey: candidate.canonicalKey,
+      newProviderValue: candidate.providerValue,
+      now,
+      policyBudgetReserved: true,
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    return {
+      ...(await this.getAccountProtection(input.userId, input.sessionId)),
+      replacement: {
+        currentSession: 'active',
+        otherSessions: 'unchanged',
+        status: 'pending',
+      },
+    }
+  }
+
+  async resendRecoveryEmailReplacement(input: {
+    factor: 'new' | 'old'
+    ipAddress?: string
+    sessionId: string
+    userId: string
+  }): Promise<RecoveryEmailReplacementCommandResponse> {
+    const record = await this.dependencies.repository.readAccountProtection(input.userId)
+    const replacement = record?.recoveryEmailReplacement
+    const providerValue = input.factor === 'old'
+      ? replacement?.oldProviderValue
+      : replacement?.newProviderValue
+    const addressAllowed = providerValue && replacement && (input.factor === 'old'
+      ? await this.recoveryDeliveryAllowed(providerValue)
+      : await this.recoveryNewAddressAllowed(providerValue, replacement.newCanonicalKey))
+    if (!addressAllowed) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    const now = this.dependencies.clock.now()
+    await this.dependencies.repository.resendRecoveryEmailReplacement({
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      factor: input.factor,
+      ipAddress: input.ipAddress,
+      now,
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    return {
+      ...(await this.getAccountProtection(input.userId, input.sessionId)),
+      replacement: {
+        currentSession: 'active',
+        otherSessions: 'unchanged',
+        status: 'pending',
+      },
+    }
+  }
+
+  async confirmRecoveryEmailReplacement(input: {
+    code: string
+    factor: 'new' | 'old'
+    sessionId: string
+    userId: string
+  }): Promise<RecoveryEmailReplacementCommandResponse> {
+    const record = await this.dependencies.repository.readAccountProtection(input.userId)
+    const replacement = record?.recoveryEmailReplacement
+    const providerValue = input.factor === 'old'
+      ? replacement?.oldProviderValue
+      : replacement?.newProviderValue
+    const addressAllowed = providerValue && replacement && (input.factor === 'old'
+      ? await this.recoveryDeliveryAllowed(providerValue)
+      : await this.recoveryNewAddressAllowed(providerValue, replacement.newCanonicalKey))
+    if (!addressAllowed) {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    const result = await this.dependencies.repository.confirmRecoveryEmailReplacement({
+      code: input.code,
+      factor: input.factor,
+      now: this.dependencies.clock.now(),
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    if (result === 'invalid') {
+      throw new AuthFailure('recovery_code_invalid', 'Confirmation code is invalid or expired')
+    }
+    return {
+      ...(await this.getAccountProtection(input.userId, input.sessionId)),
+      replacement: {
+        currentSession: 'active',
+        otherSessions: result === 'completed' ? 'revoked' : 'unchanged',
+        status: result === 'completed' ? 'completed' : 'pending',
+      },
+    }
+  }
+
+  async cancelRecoveryEmailReplacement(input: {
+    sessionId: string
+    userId: string
+  }): Promise<AccountProtectionResponse> {
+    const result = await this.dependencies.repository.cancelRecoveryEmailReplacement({
+      now: this.dependencies.clock.now(),
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    if (result === 'forbidden') {
+      throw new AuthFailure(
+        'recovery_replacement_forbidden',
+        'This session cannot cancel the pending Recovery Email replacement',
+      )
+    }
+    if (result === 'unavailable') {
+      throw new AuthFailure('recovery_email_unavailable', 'Recovery Email is unavailable')
+    }
+    return this.getAccountProtection(input.userId, input.sessionId)
+  }
+
+  async issueRecoveryCodes(input: {
+    sessionId: string
+    userId: string
+  }) {
+    const recoveryCodes = createRecoveryCodeSet()
+    const result = await this.dependencies.repository.issueRecoveryCodes({
+      codes: recoveryCodes,
+      now: this.dependencies.clock.now(),
+      userId: input.userId,
+    })
+    if (result !== 'issued') {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    return {
+      ...(await this.getAccountProtection(input.userId, input.sessionId)),
+      recoveryCodes,
+    }
+  }
+
+  async startRecoveryCodeReissue(input: {
+    ipAddress?: string
+    password: string
+    sessionId: string
+    userId: string
+  }) {
+    const user = await this.dependencies.repository.findUserById(input.userId)
+    if (!user?.passwordHash) {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    if (!await this.dependencies.passwords.verify(input.password, user.passwordHash)) {
+      throw new AuthFailure('recovery_password_invalid', 'Current password is invalid')
+    }
+    const protection = await this.dependencies.repository.readAccountProtection(input.userId)
+    if (!protection?.recoveryEmailBinding
+      || !await this.recoveryDeliveryAllowed(protection.recoveryEmailBinding.providerValue)) {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    const now = this.dependencies.clock.now()
+    const challenge = await this.dependencies.repository.startRecoveryCodeReissue({
+      expectedPasswordHash: user.passwordHash,
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      now,
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    if (!challenge) {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    return {
+      challenge: {
+        codeExpiresAt: challenge.expiresAt.toISOString(),
+        maskedAccountEmail: maskAccountEmail(challenge.providerValue),
+      },
+    }
+  }
+
+  async confirmRecoveryCodeReissue(input: {
+    code: string
+    sessionId: string
+    userId: string
+  }) {
+    const protection = await this.dependencies.repository.readAccountProtection(input.userId)
+    if (!protection?.recoveryEmailBinding
+      || !await this.recoveryDeliveryAllowed(protection.recoveryEmailBinding.providerValue)) {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    const recoveryCodes = createRecoveryCodeSet()
+    const result = await this.dependencies.repository.confirmRecoveryCodeReissue({
+      code: input.code,
+      codes: recoveryCodes,
+      now: this.dependencies.clock.now(),
+      sessionId: input.sessionId,
+      userId: input.userId,
+    })
+    if (result === 'invalid') {
+      throw new AuthFailure('recovery_code_invalid', 'Confirmation code is invalid or expired')
+    }
+    if (result !== 'issued') {
+      throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
+    }
+    return {
+      ...(await this.getAccountProtection(input.userId, input.sessionId)),
+      recoveryCodes,
+    }
+  }
+
+  async recoverPasswordWithRecoveryCode(input: {
+    ipAddress?: string
+    login: string
+    newPassword: string
+    recoveryCode: string
+  }) {
+    const now = this.dependencies.clock.now()
+    const budgetAvailable = await this.dependencies.repository.reserveRecoveryCodeUseBudget({
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+    })
+    if (!budgetAvailable) return { outcome: 'accepted' as const }
+    const newPasswordHash = await this.dependencies.passwords.hash(input.newPassword)
+    const completed = await this.dependencies.repository.recoverPasswordWithRecoveryCode({
+      login: input.login,
+      newPasswordHash,
+      now,
+      recoveryCode: input.recoveryCode,
+    })
+    return { outcome: completed ? 'completed' as const : 'accepted' as const }
+  }
+
+  async requestPasswordReset(input: { ipAddress?: string; login: string }) {
+    if (!this.dependencies.passwordResetUrl) {
+      throw new Error('Password reset URL is not configured')
+    }
+    const now = this.dependencies.clock.now()
+    await this.dependencies.repository.requestPasswordReset({
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+      recoveryUrl: this.dependencies.passwordResetUrl,
+    })
+    return { outcome: 'accepted' as const }
+  }
+
+  async completePasswordReset(input: { newPassword: string; token: string }) {
+    const newPasswordHash = await this.dependencies.passwords.hash(input.newPassword)
+    const completed = await this.dependencies.repository.completePasswordReset({
+      newPasswordHash,
+      now: this.dependencies.clock.now(),
+      token: input.token,
+    })
+    return { outcome: completed ? 'completed' as const : 'accepted' as const }
+  }
+
+  async startRecoveryEmailWithRecoveryCode(input: {
+    email: string
+    ipAddress?: string
+    login: string
+    recoveryCode: string
+  }) {
+    const now = this.dependencies.clock.now()
+    const budgetAvailable = await this.dependencies.repository.reserveRecoveryCodeUseBudget({
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+    })
+    if (!budgetAvailable) return { outcome: 'accepted' as const }
+    const candidate = await this.dependencies.accountEmailCanonicalizer
+      ?.canonicalizeForRecovery?.(input.email)
+    if (!candidate) return { outcome: 'accepted' as const }
+    const result = await this.dependencies.repository.startRecoveryEmailWithRecoveryCode({
+      budgetReserved: true,
+      expiresAt: new Date(now.getTime() + RECOVERY_EMAIL_CODE_TTL_MS),
+      ipAddress: input.ipAddress,
+      login: input.login,
+      newCanonicalKey: candidate.canonicalKey,
+      newProviderValue: candidate.providerValue,
+      now,
+      recoveryCode: input.recoveryCode,
+    })
+    if (!result) return { outcome: 'accepted' as const }
+    return {
+      codeExpiresAt: result.expiresAt.toISOString(),
+      maskedAccountEmail: maskAccountEmail(result.providerValue),
+      outcome: 'pending' as const,
+    }
+  }
+
+  async confirmRecoveryEmailWithRecoveryCode(input: {
+    code: string
+    ipAddress?: string
+    login: string
+  }) {
+    const now = this.dependencies.clock.now()
+    const budgetAvailable = await this.dependencies.repository.reserveRecoveryCodeUseBudget({
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+    })
+    if (!budgetAvailable) return { outcome: 'accepted' as const }
+    const probe = await this.dependencies.repository.verifyRecoveryCodeEmailPolicyProbe({
+      code: input.code,
+      login: input.login,
+      now,
+    })
+    if (!probe || !await this.recoveryNewAddressAllowed(probe.providerValue, probe.canonicalKey)) {
+      return { outcome: 'accepted' as const }
+    }
+    const result = await this.dependencies.repository.confirmRecoveryEmailWithRecoveryCode({
+      activatesAt: new Date(now.getTime() + RECOVERY_EMAIL_COOLING_OFF_MS),
+      budgetReserved: true,
+      code: input.code,
+      ipAddress: input.ipAddress,
+      login: input.login,
+      now,
+    })
+    if (!result) return { outcome: 'accepted' as const }
+    return {
+      activatesAt: result.activatesAt.toISOString(),
+      maskedAccountEmail: maskAccountEmail(result.providerValue),
+      outcome: 'completed' as const,
+    }
+  }
+
   async logout(refreshToken: string | undefined) {
     if (!refreshToken) return false
 
-    const userId = await this.dependencies.repository.revokeSession({
+    const revokedSession = await this.dependencies.repository.revokeSession({
       refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
       refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
       now: this.dependencies.clock.now(),
     })
-    if (!userId) return false
+    if (!revokedSession) return false
 
-    await this.dependencies.logoutCleanup({ userId })
+    await this.dependencies.logoutCleanup(revokedSession)
     return true
   }
 
@@ -398,6 +1006,7 @@ export class AuthService {
     const now = this.dependencies.clock.now()
     const refreshToken = this.dependencies.refreshTokens.create()
     const session = await this.dependencies.repository.createSession({
+      expectedPasswordHash: user.passwordHash!,
       userId: user.id,
       refreshTokenHash: this.dependencies.refreshTokens.hash(refreshToken),
       refreshTokenFamilyHash: this.dependencies.refreshTokens.familyHash(refreshToken),
@@ -417,6 +1026,75 @@ export class AuthService {
         sessionId,
       }),
       refreshToken,
+    }
+  }
+
+  private async canonicalizeProviderAccountEmail(value: string | null | undefined) {
+    if (!value || !this.dependencies.accountEmailCanonicalizer) return null
+    try {
+      return await this.dependencies.accountEmailCanonicalizer.canonicalize(value)
+    } catch {
+      return null
+    }
+  }
+
+  private async recoveryDeliveryAllowed(
+    providerValue: string,
+    options: { forceMxRefresh?: boolean } = { forceMxRefresh: true },
+  ) {
+    const canonicalizer = this.dependencies.accountEmailCanonicalizer
+    const evaluate = options.forceMxRefresh
+      ? canonicalizer?.evaluateFresh ?? canonicalizer?.evaluate
+      : canonicalizer?.evaluate
+    if (!evaluate) return false
+    const separator = providerValue.lastIndexOf('@')
+    if (separator <= 0) return false
+    return (await evaluate(providerValue.slice(separator + 1))).allowsRecoveryDelivery
+  }
+
+  private async canonicalRecoveryKey(providerValue: string) {
+    const candidate = await this.dependencies.accountEmailCanonicalizer
+      ?.canonicalizeForRecovery?.(providerValue, { forceMxRefresh: false })
+    return candidate?.canonicalKey ?? null
+  }
+
+  private async recoveryNewAddressAllowed(
+    providerValue: string,
+    canonicalKey: string,
+    options: { forceMxRefresh?: boolean } = { forceMxRefresh: true },
+  ) {
+    const candidate = await this.dependencies.accountEmailCanonicalizer
+      ?.canonicalizeForRecovery?.(providerValue, options)
+    return candidate?.canonicalKey === canonicalKey
+  }
+
+  private async recoveryEmailReplacementAddress(input: {
+    canonicalKey?: string
+    confirmedAt: Date | null
+    expiresAt: Date
+    now: Date
+    providerValue: string
+    requirement: 'delivery' | 'new_address'
+  }) {
+    let status: 'confirmed' | 'expired' | 'pending' | 'service_blocked'
+    if (input.expiresAt <= input.now) status = 'expired'
+    else if (input.requirement === 'new_address'
+      ? !input.canonicalKey
+        || !await this.recoveryNewAddressAllowed(
+          input.providerValue,
+          input.canonicalKey,
+          { forceMxRefresh: false },
+        )
+      : !await this.recoveryDeliveryAllowed(
+        input.providerValue,
+        { forceMxRefresh: false },
+      )) status = 'service_blocked'
+    else if (input.confirmedAt) status = 'confirmed'
+    else status = 'pending'
+    return {
+      codeExpiresAt: input.expiresAt.toISOString(),
+      maskedAccountEmail: maskAccountEmail(input.providerValue),
+      status,
     }
   }
 
@@ -449,7 +1127,7 @@ function encodeWebappOrigin(origin: string) {
   return Buffer.from(origin).toString('base64url')
 }
 
-function decodeWebappOrigin(state: string) {
+export function oauthWebappOriginFromState(state: string) {
   const parts = state.split('::')
   if (parts.length < 2) return null
   try {
@@ -461,4 +1139,32 @@ function decodeWebappOrigin(state: string) {
 
 function oauthLogin(provider: OAuthProviderId) {
   return `oauth-${provider}-${crypto.randomUUID().replaceAll('-', '')}`
+}
+
+function maskAccountEmail(value: string) {
+  const separator = value.lastIndexOf('@')
+  const localPart = value.slice(0, separator)
+  const domain = value.slice(separator + 1)
+  return `${Array.from(localPart)[0] ?? '*'}***@${domain}`
+}
+
+function recoveryCodeState(
+  set: { activeCodeCount: number; consumedAt: Date | null } | null | undefined,
+) {
+  if (!set) return 'not_issued' as const
+  return set.consumedAt === null && set.activeCodeCount > 0
+    ? 'available' as const
+    : 'consumed' as const
+}
+
+function createRecoveryCodeSet() {
+  const codes = new Set<string>()
+  while (codes.size < 8) {
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    const compact = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase()
+    codes.add(compact.match(/.{4}/g)!.join('-'))
+  }
+  return [...codes]
 }

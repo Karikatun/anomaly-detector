@@ -46,6 +46,10 @@ export function createPersistentTenderLifecycleReader(db: DbClient) {
 }
 
 export type { TenderModule } from './application/tender-module'
+export type {
+  TenderOperationalState,
+  TenderOperationalStateReader,
+} from './application/tender-operational-state'
 
 export { createTenderRoutes } from './transport/routes'
 export { createRealtimeTicketRoutes } from './realtime/ticket-routes'
@@ -53,6 +57,7 @@ export { createRealtimeHub, type RealtimeHub } from './realtime/hub'
 export { createPrismaRealtimeTicketIssuer } from './realtime/prisma-realtime-ticket-issuer'
 export { createPrismaRealtimeTicketStore } from './realtime/prisma-realtime-ticket-store'
 export { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
+export { createPrismaTenderOperationalStateReader } from './infrastructure/prisma-tender-operational-state'
 export {
   createRealtimeWebSocketHandlers,
   upgradeRealtimeWebSocket,

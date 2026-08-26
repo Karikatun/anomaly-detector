@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
 import { createConnection } from 'node:net'
+import { createPrisma } from '../../backend/src/db'
 import {
   composeEnv,
   composeProjectName,
@@ -8,6 +9,10 @@ import {
   e2eBackendEnv,
   repositoryRoot,
 } from './env'
+import {
+  ensurePasswordRecoveryMailPolicy,
+  shouldEnsurePasswordRecoveryMailPolicy,
+} from './password-recovery-isolation'
 
 const composeArgs = ['compose', '-p', composeProjectName]
 
@@ -104,7 +109,8 @@ export default async function globalSetup() {
   const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? defaultDatabaseUrl
   const databaseName = new URL(databaseUrl).pathname.replace(/^\//, '')
   const backendPort = Number(process.env.E2E_BACKEND_PORT)
-  const workerHealthPort = backendPort + 1
+  const operationalMetricsPort = Number(process.env.OPERATIONAL_METRICS_PORT)
+  const workerHealthPort = Number(process.env.WORKER_HEALTH_PORT)
 
   if (!databaseName.endsWith('_test') && process.env.E2E_ALLOW_NON_TEST_DATABASE !== '1') {
     throw new Error(
@@ -117,6 +123,7 @@ export default async function globalSetup() {
 
   const env = composeEnv(e2eBackendEnv({
     DATABASE_URL: databaseUrl,
+    OPERATIONAL_METRICS_PORT: String(operationalMetricsPort),
     PORT: String(backendPort),
     TEST_DATABASE_URL: databaseUrl,
     WORKER_HEALTH_PORT: String(workerHealthPort),
@@ -135,6 +142,15 @@ export default async function globalSetup() {
     } catch (error) {
       if (attempt === 3) throw error
       await new Promise((resolveWait) => setTimeout(resolveWait, 1_000))
+    }
+  }
+
+  if (shouldEnsurePasswordRecoveryMailPolicy(process.env)) {
+    const prisma = createPrisma(databaseUrl)
+    try {
+      await ensurePasswordRecoveryMailPolicy(prisma)
+    } finally {
+      await prisma.$disconnect()
     }
   }
 

@@ -1,8 +1,9 @@
 # Yandex Cloud Production
 
 Anomaly Detector uses this runbook for its Russian public test and production
-environment. The application is publicly reachable, but the first test launch has no
-marketing campaign: links are distributed directly to known testers.
+environment. The first release validates the Public MVP Journey; begin with a
+controlled cohort before expanding acquisition, even though the public landing is
+indexable.
 
 ## Service Map
 
@@ -23,13 +24,33 @@ marketing campaign: links are distributed directly to known testers.
 - Real-time Pub/Sub: Yandex Managed Service for Valkey only when horizontally scaled WebSocket features need cross-instance fanout.
 - CLI: Yandex Cloud CLI, `yc`.
 
-## Confirmed Public Hosts
+## Public Hosts
+
+Current pre-migration routing:
 
 - Webapp: `https://anomaly-detector.ru`.
 - API and WebSocket: `https://api.anomaly-detector.ru`.
 - Redirect only: `https://www.anomaly-detector.ru` to `https://anomaly-detector.ru`.
 - Support: `support@anomaly-detector.ru`; do not publish legal/support pages until
   inbound and outbound delivery has been verified.
+
+Approved Production MVP routing from ADR 0014:
+
+- Public website: `https://anomaly-detector.ru`.
+- Player webapp: `https://app.anomaly-detector.ru`.
+- API and WebSocket: `https://api.anomaly-detector.ru`.
+- Operator app: `https://ops.anomaly-detector.ru`.
+- Redirect only: `https://www.anomaly-detector.ru` to the public website.
+
+Do not treat the target map as already deployed. Move it in one release with
+address-specific redirects for old player routes and coordinated DNS/TLS, CDN,
+CORS, OAuth callback/post-login origin, cookies, CSP, legal links, monitoring
+and rollback. Verify authentication and the old deep links before switching
+DNS.
+
+The versioned Caddy and runtime examples are prepared for this target map, but
+production remains on the pre-migration map until the owner completes the
+coordinated cutover and verification. Do not reload only one prepared component.
 
 The DNS zone is currently hosted by REG.RU. Before cutover, lower the affected records'
 TTL, preserve mail records, and replace only the web/API address records with the
@@ -99,8 +120,11 @@ starts both processes from the committed
 definition:
 
 - API: `bun run start:api`, public to the load balancer on port `3000`;
+- API metrics: `GET /metrics` on host-loopback port `3002`, never on public
+  ingress;
 - worker: `bun run start:worker`, no public application routes;
-- worker health: `GET /health/live` and `GET /health/ready` on private port `3001`;
+- worker health and metrics: `GET /health/live`, `GET /health/ready` and
+  `GET /metrics` on private port `3001`;
 - both containers: `restart: always`, the same immutable image and production env.
 
 Do not combine API and worker into one process. A failed worker must be visible even when
@@ -115,20 +139,28 @@ API:    GET http://<instance>:3000/health/ready
 Worker: GET http://<instance>:3001/health/ready
 ```
 
-The worker readiness endpoint stays unavailable until both deadline loops complete
-successfully. It becomes unavailable after a loop error or stale heartbeat and recovers
-after the next successful pass.
+The worker readiness endpoint stays unavailable until every configured loop completes
+successfully: the two deadline loops always run, and transactional mail adds a third loop
+only when SMTP is enabled. It becomes unavailable after a loop error or stale heartbeat
+and recovers after the next successful pass.
 
 Production env must include:
 
 ```bash
 NODE_ENV=production
 PORT=3000
+WORKER_HEALTH_HOST=0.0.0.0
 WORKER_HEALTH_PORT=3001
+OPERATIONAL_METRICS_HOST=0.0.0.0
+OPERATIONAL_METRICS_PORT=3002
 DATABASE_URL=postgresql://...
 JWT_SECRET=<64-or-more-hex-characters>
 ADMIN_USER_IDS=<comma-separated-operator-user-uuids>
-CORS_ORIGINS=https://anomaly-detector.ru,https://ops.anomaly-detector.ru
+CORS_ORIGINS=https://app.anomaly-detector.ru,https://ops.anomaly-detector.ru
+WEBAPP_ORIGIN=https://app.anomaly-detector.ru
+ANALYTICS_ENABLED=false
+ANALYTICS_ORIGINS=
+ANALYTICS_CAMPAIGN_ALLOWLIST=
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 REFRESH_REUSE_GRACE_SECONDS=10
@@ -144,7 +176,123 @@ TRUSTED_PROXY_CLIENT_IP_POSITION=first
 COOKIE_SECURE=true
 ```
 
-Leave `ADMIN_USER_IDS` empty to disable the read-only operator overview. When enabled, use immutable user UUIDs from the intended operators' profiles. Build and serve `adminapp` only from the separately protected `ops.anomaly-detector.ru` host; never include it in the player `webapp` output. Backend authorization and identical `404` responses remain mandatory behind the edge check.
+ADR 0013 count overrides are optional. Omitting them keeps these versioned
+defaults and fixed windows; do not tune them without production evidence:
+
+```bash
+ANTI_ABUSE_LOGIN_FAILURE_LIMIT=5              # 15 minutes
+ANTI_ABUSE_LOGIN_IP_LIMIT=30                  # 15 minutes
+ANTI_ABUSE_REGISTRATION_DEVICE_LIMIT=3        # 180 days
+ANTI_ABUSE_REGISTRATION_IP_LIMIT=20           # 1 day
+ANTI_ABUSE_RECOVERY_EMAIL_MINUTE_LIMIT=1
+ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT=3
+ANTI_ABUSE_RECOVERY_EMAIL_DAY_LIMIT=5
+ANTI_ABUSE_RECOVERY_EMAIL_IP_HOUR_LIMIT=20
+ANTI_ABUSE_RECOVERY_LOGIN_HOUR_LIMIT=3
+ANTI_ABUSE_RECOVERY_LOGIN_DAY_LIMIT=5
+ANTI_ABUSE_RECOVERY_LOGIN_IP_HOUR_LIMIT=10
+ANTI_ABUSE_RECOVERY_LOGIN_IP_DAY_LIMIT=30
+ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT=120   # 1 minute
+ANTI_ABUSE_ROOM_JOIN_LIMIT=20                 # 1 minute
+ANTI_ABUSE_TENDER_COMMAND_LIMIT=60            # 1 minute
+ANTI_ABUSE_REALTIME_TICKET_LIMIT=10           # 1 minute
+```
+
+Recovery Email minute/hour/day settings apply independently to the account and
+canonical address; its IP setting is hourly. Recovery-login settings are shared
+by password-recovery requests and Recovery Code checks, with independent login
+and trusted-IP hour/day buckets. Recovery Email hour, day and IP-hour limits
+must be at least `2`, because one replacement reserves messages for both the
+old and new address; the other limits may start at `1`. Values greater than
+`1_000_000` fail startup. Budget keys are domain-separated HMACs under
+`JWT_SECRET`, never raw login/email values. A coordinated `JWT_SECRET` rotation
+moves every budget into a fresh HMAC namespace, including the 180-day
+registration-device and recovery day windows, and separately changes JWT/token
+cryptography. Treat it as a security rollout with explicit compatibility and
+recovery evidence; never rotate the auth secret merely to clear budgets.
+
+For the first release that converts the legacy unkeyed SHA-256 keys of the
+one-minute Room, Tender, authenticated-mutation and realtime budgets to HMAC,
+do not run old and new API revisions at the same time. Stop every old API
+process, wait at least 60 seconds for the longest affected legacy window, and
+only then start the new revision. Rollback uses the same stop, wait and start
+sequence in reverse. PostgreSQL cannot translate the existing rows because the
+raw identity was intentionally never stored; overlapping revisions would use
+two independent namespaces and temporarily double those allowances. Record the
+controlled downtime and the 60-second drain in release and rollback evidence.
+
+Recovery Email has not yet been released to production. Before its first
+cutover, verify that no active bucket from an older cost model exists:
+
+```sql
+SELECT count(*)
+FROM auth_abuse_buckets
+WHERE scope LIKE 'rec_email_%'
+  AND expires_at > now();
+```
+
+The expected count is `0`. If it is not zero, stop the release and design a
+conservative migration or wait for those windows to expire. Do not mix the old
+replacement cost with the new rule: one replacement atomically charges two
+messages against the account hour/day and trusted-IP hour budgets.
+
+Do not roll back to an intermediate image that exposes Recovery Email
+replacement while charging those shared budgets only once per command. It
+remains incompatible after active rows expire because every later replacement
+would again undercount its two messages. Roll forward to a compatible image, or
+block the complete `/api/auth/account-protection/recovery-email/*` contour at
+the trusted ingress until a compatible revision is available. The original
+pre-feature production image is an acceptable rollback target only after
+verifying that these routes are absent. Record the route check and selected
+rollback target in the release evidence.
+
+This is the split-domain target configuration. Until the coordinated cutover,
+the active production `WEBAPP_ORIGIN` and player entry in `CORS_ORIGINS` remain
+the current root origin. `WEBAPP_ORIGIN` is mandatory in production, must be an
+origin-only HTTPS URL, and must also appear in `CORS_ORIGINS`.
+
+Keep `ANALYTICS_ENABLED=false` and both client build flags absent until issues
+#2 and #31 close the legal-copy and split-domain gates. After approval, set
+`ANALYTICS_ORIGINS=https://anomaly-detector.ru,https://app.anomaly-detector.ru`
+and only safe reviewed slugs in `ANALYTICS_CAMPAIGN_ALLOWLIST`. The public root
+must remain absent from general `CORS_ORIGINS`: it receives credentialed CORS
+only on `/api/analytics/*`, while auth and operator routes continue to reject it.
+
+When Yandex ID is enabled, keep the provider callback on the API host while the
+post-login destination comes from `WEBAPP_ORIGIN`:
+
+```bash
+YANDEX_OAUTH_CLIENT_ID=<Lockbox-backed-client-id>
+YANDEX_OAUTH_CLIENT_SECRET=<Lockbox-backed-client-secret>
+OAUTH_CALLBACK_BASE_URL=https://api.anomaly-detector.ru
+```
+
+Register
+`https://api.anomaly-detector.ru/api/auth/oauth/yandex/callback` at Yandex. The
+domain split does not move this provider callback to either browser host.
+
+In the Yandex OAuth application, grant access to the email address. The backend
+requests the `login:email` scope and reads `default_email` from the bounded user
+information response. Before public release, complete a real provider roundtrip
+and verify all of the following on the exact release image:
+
+- the consent screen grants email access and Yandex returns `default_email`;
+- each Yandex sign-in refreshes the provider attribute while the immutable
+  provider subject remains the only account identity;
+- the profile shows only a masked address and application logs contain neither
+  the address nor the provider response payload;
+- an occupied canonical address produces the non-disclosing conflict state but
+  does not block sign-in or merge accounts.
+
+The published reviewed mail-provider catalog supplies exact public address
+domains, provider-specific alias rules and complete MX profiles for eligible
+custom `.ru`/`.рф` domains. An MX match identifies only the first receiving
+provider; it does not prove later forwarding or final storage. An unlisted
+Yandex address remains a provider attribute with an exact local part and
+lowercase/IDNA domain, but is not thereby approved for local recovery delivery.
+Do not add global dot removal, plus-tag stripping, or local-part case folding.
+
+Leave `ADMIN_USER_IDS` empty to disable the operator surface. When enabled, use immutable user UUIDs from the intended operators' profiles. The system overview remains read-only; the implemented mail-policy surface adds only the audited catalog `/sync` and provider `/status` commands defined by ADR 0011 and ADR 0017. Build and serve `adminapp` only from the separately protected `ops.anomaly-detector.ru` host; never include it in the player `webapp` output. Backend authorization and identical `404` responses remain mandatory behind the edge check.
 
 Yandex Application Load Balancer places the source client address first in
 `X-Forwarded-For`. Validate this in the production-like smoke test before relying on IP
@@ -185,17 +333,23 @@ client heartbeat/reconnect window. The load balancer must never target worker po
 Attach Smart Web Security and Advanced Rate Limiter to the API virtual host before DNS
 is switched. Enable access logs with redaction and alerts for elevated `4xx`, `5xx`, and
 backend latency. Use `https://api.anomaly-detector.ru` as both `VITE_API_URL`
-and `VITE_OAUTH_API_URL`, and the exact `https://anomaly-detector.ru` origin in
-`CORS_ORIGINS`.
+and `VITE_OAUTH_API_URL`. Before ADR 0014 migration, the webapp origin is
+`https://anomaly-detector.ru`; after the coordinated migration it is
+`https://app.anomaly-detector.ru`. The public root remains excluded from general
+credentialed `CORS_ORIGINS`. Once issue #2 and #31 approve production analytics,
+list it only in `ANALYTICS_ORIGINS`; the composition root applies that allowlist
+exclusively to `/api/analytics/*`. Never enable credentialed wildcard CORS.
 
 ### Edge abuse-protection profile
 
-Application budgets remain authoritative across API instances: room joins use
-`20 requests / 60 seconds` per user, Tender commands use `60 / 60 seconds` per
-user and Tender, and authenticated mutations use a wider `120 / 60 seconds` per
-user. Edge rules complement these PostgreSQL budgets; they must reject abusive
-traffic before authentication or other expensive application work and must not
-replace application authorization.
+Application budgets remain authoritative across API instances. Their versioned
+defaults are listed with the optional runtime overrides above; this includes
+auth and recovery, Room joins, Tender commands, authenticated mutations and
+realtime-ticket issuance. The one-minute gameplay/generic budgets are keyed by
+user for Room join, authenticated mutation and realtime ticket, and by user plus
+Tender for Tender commands. Edge rules complement these PostgreSQL budgets;
+they must reject abusive traffic before authentication or other expensive
+application work and must not replace application authorization.
 
 Create separate Smart Web Security and Advanced Rate Limiter rules for these
 traffic classes instead of one global threshold:
@@ -255,6 +409,99 @@ personal address. The mailbox is hosted by REG.RU and its MX records are configu
 6. Confirm the contractual personal-data processing terms and data location of the
    active REG.RU mail service before public launch.
 
+## Transactional Mailbox
+
+The approved recovery flow uses a separate
+`no-reply@anomaly-detector.ru` mailbox at REG.RU with
+`Reply-To: support@anomaly-detector.ru`. The runtime implements the protected SMTP
+adapter and PostgreSQL outbox, but keeps delivery disabled by default. Before enabling
+it in production:
+
+1. configure the exact SMTP host, TLS mode and credentials through production
+   secrets and version every new env key in code, examples and this runbook;
+2. verify SPF, DKIM and DMARC plus actual receipt at every Approved Mail Service;
+3. drain a PostgreSQL transactional outbox through the existing worker with
+   bounded retries, idempotent message identity and terminal failure state;
+4. expose only aggregate SMTP acceptance/failure and outbox age to adminapp;
+   do not log addresses, templates containing secrets, codes or reset URLs;
+5. keep verification, recovery and security notices separate from support,
+   marketing and gameplay messages;
+6. document secret rotation, provider outage, circuit breaker, backlog recovery
+   and rollback before production enablement.
+
+Use these versioned settings. Obtain the exact host, port and TLS mode from the active
+REG.RU mailbox instead of copying an unverified example. Only `implicit_tls` and
+`starttls` are accepted; certificate verification and TLS 1.2 or newer are mandatory.
+`MAIL_SMTP_LEASE_SECONDS` must be strictly greater than
+`MAIL_SMTP_TIMEOUT_MS / 1000`, so a second worker cannot reclaim a message while
+the first SMTP attempt is still waiting for its bounded response.
+
+```bash
+MAIL_SMTP_ENABLED=true
+MAIL_SMTP_HOST=<verified-REG.RU-SMTP-hostname>
+MAIL_SMTP_PORT=<verified-port>
+MAIL_SMTP_TLS_MODE=<implicit_tls-or-starttls>
+MAIL_SMTP_USERNAME=no-reply@anomaly-detector.ru
+MAIL_SMTP_PASSWORD=<Lockbox-backed-secret>
+MAIL_SMTP_FROM=no-reply@anomaly-detector.ru
+MAIL_SMTP_REPLY_TO=support@anomaly-detector.ru
+MAIL_SMTP_TIMEOUT_MS=10000
+MAIL_SMTP_MAX_ATTEMPTS=5
+MAIL_SMTP_RETRY_BASE_SECONDS=30
+MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD=5
+MAIL_SMTP_CIRCUIT_OPEN_SECONDS=300
+MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE=60
+MAIL_SMTP_LEASE_SECONDS=60
+MAIL_SMTP_WORKER_INTERVAL_MS=1000
+MAIL_OUTBOX_RETENTION_DAYS=30
+```
+
+The API and worker receive the same non-secret tuning values. Only the worker needs the
+SMTP credential at runtime; keep it out of API/static-client environments when the
+deployment mechanism can scope secrets per process. SMTP acceptance is recorded as
+`Принято SMTP`, never as final inbox delivery. A response lost after `DATA` is an
+ambiguous outcome: retry keeps one logical outbox row and a stable `Message-ID`, but SMTP
+cannot guarantee that the recipient will never see a duplicate. Confirmation and reset
+operations must therefore remain replay-safe when the same message is received twice.
+The logical-request fingerprint is a domain-separated HMAC under the backend secret,
+so a stored fingerprint cannot be used to brute-force a short confirmation code.
+Queued and leased rows retain the recipient and template payload while awaiting
+delivery. Credential mail becomes ineligible at its template `expiresAt`, and a
+security notification becomes ineligible after seven days in the outbox. The worker
+checks the deadlines immediately before starting SMTP delivery and terminalises an
+overdue claimed row; the daily cleanup terminalises and redacts any remaining overdue
+queued or leased row within the next 24 hours. SMTP-accepted and other terminal-failure
+rows immediately replace recipient and payload with redacted values;
+only safe operational metadata and attempt outcomes remain until terminal retention
+removes the row. An SMTP request that started before its deadline may finish after a
+concurrent cleanup, but its stale lease cannot overwrite the terminal database state,
+and an expired credential remains unusable. Owner cancellation immediately redacts a
+still-queued credential message. If the worker already leased it, the current outbox
+contract allows the attempt and configured retries to continue only until the original
+delivery deadline; the cancelled credential is already unusable, and terminal handling
+or deadline cleanup redacts the row.
+
+When the fresh pre-SMTP policy check identifies a provider, the worker records that
+stable classification identifier on the leased outbox row. The delivery overview
+groups by this event-time identifier rather than the current domain assessment, so
+later DNS changes or assessment cleanup do not rewrite historical attribution. This
+identifier remains technical outbox metadata until the configured terminal-retention
+deadline of at most 30 days, then is removed by the next daily cleanup.
+
+For provider outage or suspected credential compromise, set `MAIL_SMTP_ENABLED=false`
+and restart only the worker. Queued rows remain in PostgreSQL. Rotate the credential in
+Lockbox, verify TLS and a controlled message under issue #36, then re-enable the worker;
+the global circuit breaker releases one probe after its cooldown before normal draining.
+If backlog age or terminal failures keep growing, leave delivery disabled and diagnose
+the provider/configuration rather than increasing retries. Do not extend credential
+expiry or the seven-day security-notification limit to drain a backlog. Rollback uses
+the previous immutable API/worker image after applying only backward-compatible
+migrations; do not manually delete queued rows. The named retention cleanup applies
+the deadlines and later removes terminal rows. Recovery and pending-mail cleanup is
+one PostgreSQL transaction; it retries that whole unit at most three times only for
+transaction conflicts (`P2034`, `40P01`, `40001`) and otherwise fails the cron task for
+operator investigation.
+
 ## Managed PostgreSQL
 
 Use Yandex Managed Service for PostgreSQL **18** for production data. Do not accept the provider's default version implicitly: the committed schema uses native `uuidv7()`, which requires PostgreSQL 18+.
@@ -277,7 +524,21 @@ Do not run `prisma migrate dev` in production and do not hand-write Prisma migra
 
 ## Maintenance Cleanup Timer
 
-Production must run `maintenance:cleanup` daily; setting `SESSION_RETENTION_DAYS` alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, and waiting rooms older than 24 hours. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+Production must run `maintenance:cleanup` daily; setting retention values alone does not delete rows. The task removes stale sessions, expired login and registration anti-abuse buckets, unfinished OAuth transactions, one-time realtime tickets after their TTL, waiting rooms older than 24 hours, expired mail-domain assessments, expired Feedback Reports (180 days for `new`/`in_review`, 30 days after terminal or transferred status), expired 30-day analytics journeys with their raw events, analytics daily aggregates older than 13 months, expired recovery challenges and reset credentials, pending credential mail at its own `expiresAt`, security notifications pending for seven days, and accepted or terminal mail outbox rows older than `MAIL_OUTBOX_RETENTION_DAYS`. A two-sided Recovery Email replacement keeps its still-valid side and redacts only the expired side's code derivative; the row is removed when both sides expire. Pending-mail redaction and recovery cleanup run in one PostgreSQL transaction. `auth:sessions:cleanup` remains a backwards-compatible alias for existing deployments. Use a separate private Serverless Container from the same immutable backend image in **task** runtime mode. This keeps the public API process monolithic while giving the timer a one-shot command that exits non-zero on failure.
+
+Custom-domain assessment stores one row per normalized domain with the
+classification outcome, bounded failure code when present, matched provider
+identifier, SHA-256 fingerprint of the complete normalized MX RRset when DNS
+returned one, and checked/expiry timestamps; it does not persist raw MX records.
+Retry assessments expire after 30 seconds and allowed or denied assessments
+after five minutes. Rechecking a domain updates that row rather than appending
+MX history. The next daily cleanup removes an expired row, normally adding no
+more than 24 hours after its TTL.
+
+`MAIL_OUTBOX_RETENTION_DAYS` defaults to 30 and is schema-bounded to at most 30.
+That value is the terminal-metadata deletion-eligibility deadline; the next daily
+cleanup removes eligible rows, so normal operation adds at most a 24-hour technical
+window. Increasing the eligibility period requires a code and legal-policy change.
 
 Create the cleanup container and deploy its revision. The image `WORKDIR` is already `/app/backend`, so the command can call the existing cron runner directly:
 
@@ -294,10 +555,10 @@ yc serverless container revision deploy \
   --memory 256MB \
   --execution-timeout 60s \
   --service-account-id <cleanup_runtime_service_account_ID> \
-  --environment DATABASE_URL='<production_database_url>',JWT_SECRET='<production_jwt_secret>',CORS_ORIGINS=https://anomaly-detector.ru,COOKIE_SECURE=true,SESSION_ABSOLUTE_TTL_DAYS=90,SESSION_RETENTION_DAYS=7
+  --environment DATABASE_URL='<production_database_url>',JWT_SECRET='<production_jwt_secret>',CORS_ORIGINS=https://app.anomaly-detector.ru,WEBAPP_ORIGIN=https://app.anomaly-detector.ru,COOKIE_SECURE=true,SESSION_ABSOLUTE_TTL_DAYS=90,SESSION_RETENTION_DAYS=7,MAIL_OUTBOX_RETENTION_DAYS=30
 ```
 
-Configure the cleanup revision with the same production `DATABASE_URL`, `JWT_SECRET`, session TTL, retention, network, and Lockbox policy as the API revision. Prefer Lockbox or the console instead of putting real secrets into shell history. Do not make the cleanup container public.
+Configure the cleanup revision with the same production `DATABASE_URL`, `JWT_SECRET`, session and outbox retention, network, and Lockbox policy as the API revision. It does not need SMTP credentials. Prefer Lockbox or the console instead of putting real secrets into shell history. Do not make the cleanup container public.
 
 Create a narrowly scoped service account for the timer, grant it invocation access only to the cleanup container, and schedule the task daily at 03:00 UTC. Yandex timer expressions have six fields and use UTC:
 
@@ -324,15 +585,25 @@ yc serverless trigger create timer \
   --retry-interval 30s
 ```
 
-After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired abuse buckets, ... OAuth transactions, ... realtime tickets, and ... expired waiting rooms.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
+After deployment, invoke the private cleanup container once with an IAM token and verify HTTP 200 plus `X-Task-Exit-Code: 0`. Then confirm `yc serverless trigger get --name <project>-maintenance-cleanup-daily` reports an active trigger. After the first scheduled window, inspect the cleanup container's invocation logs and require a recent `Cron maintenance:cleanup removed ... stale sessions, ... expired waiting rooms, and ... expired mail-domain assessments; cleaned ... expired recovery artifacts and ... expired pending mail records; removed ... terminal mail outbox records, ... expired analytics aggregates.` entry; absence of a recent successful entry is an operational failure, not proof that there were zero stale records.
 
 ## Real-Time Pub/Sub
 
 Keep the Yandex deployment path monolithic by default: the API container should own HTTP routes, auth, persistence, and WebSocket endpoints, while the worker is only a second process for authoritative deadlines. Do not split chat, notifications, or presence into microservices unless the product has a concrete operational reason.
 
-When the backend runs as one container instance, WebSocket connection state can stay inside that process. If the container is horizontally scaled and users connected to different instances must receive the same chat, presence, collaboration, or live-notification events, add Yandex Managed Service for Valkey as a Redis-compatible Pub/Sub broker.
+When the backend runs as one container instance, WebSocket connection state can
+stay inside that process. The current realtime hub detects committed Tender
+changes from another API instance by re-reading each active authorized view
+once per second. This provides eventual recovery during controlled transition
+checks, but adds approximately one PostgreSQL view-read per socket per second;
+do not treat it as the horizontally scaled production target.
 
-Each backend instance should publish domain events to Valkey and subscribe to the channels it needs to deliver events to its own local WebSocket connections. Keep Valkey out of baseline local setup and ordinary request/response APIs; add it only for cross-instance real-time fanout.
+Before adding API replicas with WebSocket traffic, record the active-socket and
+PostgreSQL capacity baseline. Each backend instance should then publish compact
+domain events to Valkey and subscribe to the channels it needs to deliver them
+to local connections, or adopt another grouped fanout backed by equivalent
+evidence. Keep Valkey out of baseline local setup and ordinary request/response
+APIs.
 
 ## Static Webapp And Website
 
@@ -347,6 +618,30 @@ WAF validation yet. Track that migration in
 [#21](https://github.com/Karikatun/anomaly-detector/issues/21) and distributed
 edge/application protection in
 [#19](https://github.com/Karikatun/anomaly-detector/issues/19).
+
+### Host Security Audits
+
+The lifecycle, cadence, and interpretation rules for Lynis, ssh-audit, Trivy,
+perimeter, application, and recovery checks live in
+[AUDIT_GUIDE.md](AUDIT_GUIDE.md). For the current single-VM baseline:
+
+- run the primary ssh-audit externally against the actual public endpoint and
+  review Yandex Security Groups separately; a localhost result does not prove
+  the public boundary;
+- run Lynis after substantial host/OS changes and on the documented periodic
+  cadence, but triage findings individually instead of treating Hardening Index
+  as a pass/fail security score;
+- scan the exact immutable backend release image through the repository Trivy
+  runner and compare the deployed API/worker image ID or digest with that
+  artifact;
+- never run ssh-audit `--dheat`, ZAP, load attacks, automatic hardening, package
+  installation, or firewall/SSH/sysctl remediation against production without
+  explicit approval and a recovery plan.
+
+Production audit starts read-only. Record tool version, target, time, sanitized
+result, coverage gaps, remediation owner, and rollback implications without
+copying host details, credentials, keys, tokens, cookies, or private data into
+ordinary logs or issues.
 
 After a release has passed container-internal and public health checks, finish
 the release with an explicit cleanup step. First resolve and record the active
@@ -388,9 +683,10 @@ After cleanup, require all of the following:
 
 Use
 [`deploy/yandex/Caddyfile.example`](../deploy/yandex/Caddyfile.example) as the
-source configuration: set `ANOMALY_WEBAPP_ROOT` and `ANOMALY_ADMIN_ROOT` to the
-absolute directories that contain the deployed `webapp/dist` and
-`adminapp/dist` contents. Set `ANOMALY_ADMIN_USER` and the Caddy-generated
+source configuration: set `ANOMALY_WEBSITE_ROOT`, `ANOMALY_WEBAPP_ROOT`, and
+`ANOMALY_ADMIN_ROOT` to separate absolute directories that contain the deployed
+`website/dist`, `webapp/dist`, and `adminapp/dist` contents. Set
+`ANOMALY_ADMIN_USER` and the Caddy-generated
 `ANOMALY_ADMIN_PASSWORD_HASH` only in the Caddy process environment. Generate
 the hash interactively with `caddy hash-password` so the plaintext is not added
 to shell history. When Caddy receives this environment through Docker Compose,
@@ -399,11 +695,61 @@ with its original single `$` characters. Do not escape them as `$$`: a later
 container recreation can otherwise change the value and reject the correct
 Basic Auth password. Validate with `caddy validate`, then reload Caddy. The file
 owns the browser CSP, HSTS, clickjacking protection, content-type protection,
-referrer policy, permissions policy, SPA fallbacks, operator Basic Auth, API
-proxy, and `www` redirect. Keep these controls in the serving layer; HTML
-`<meta>` tags are not an equivalent replacement.
+referrer policy, permissions policy, the player-only SPA fallback, operator
+Basic Auth, API proxy, and `www` redirect. The public root has no SPA fallback:
+unknown paths return `404`. Only the fixed legacy player route families in the
+file redirect to `https://app.anomaly-detector.ru` with their path and query.
+They remain `temporary` with `Cache-Control: no-store` while immediate rollback
+is open so a browser cannot retain a root → app redirect that would loop with
+app → root rollback. The player host carries an `X-Robots-Tag` noindex policy.
+Keep these controls in the serving layer; HTML `<meta>` tags are not an
+equivalent replacement.
 
-Backend security events are emitted as single-line JSON with
+### Split-domain cutover and rollback
+
+Treat the domain split as one release boundary. Before switching traffic:
+
+1. retain the active Caddy file, backend env key names, static directories and
+   checksums as the immediate rollback set;
+2. stage the exact-release `website/dist`, `webapp/dist`, and `adminapp/dist` in
+   separate immutable directories and verify that public artifacts contain no
+   configured localhost/test endpoints, secrets, operator output, or private
+   player data; review the documented TanStack `http://localhost` fallback
+   literal separately;
+3. make TLS and DNS for `app.anomaly-detector.ru` ready without changing the
+   public root, then validate the prepared Caddy file against the staged paths;
+4. during the controlled cutover, make the player host reachable, update the
+   backend to `WEBAPP_ORIGIN=https://app.anomaly-detector.ru` and transitional
+   exact CORS origins, switch the public root to `website`, then remove the old
+   root from CORS so the steady state is only player plus operator origins;
+5. verify fixed legacy redirects are temporary/non-cacheable and preserve URI,
+   unknown-root `404`, player SPA reload,
+   `www`, crawler policy, password auth, cookie refresh/logout, WebSocket
+   reconnect, and both OAuth success/error returns before declaring success.
+
+An OAuth callback started against the previous player origin is rejected before
+its transaction is consumed or a session/account is created. During cutover,
+treat that bounded `auth_error` as a safe retry signal; never accept the stale
+origin merely to finish an in-flight provider round trip.
+
+Rollback is coordinated in the reverse direction: restore the retained Caddy
+file and root player artifact together with the previous `WEBAPP_ORIGIN` and
+`CORS_ORIGINS`, reload API/Caddy, then prove root login, refresh, logout, OAuth
+return, deep-link reload, API readiness, and unchanged PostgreSQL volume
+identity. The split adds no migration; do not touch PostgreSQL or delete the
+staged release while the rollback decision is open.
+
+[`deploy/yandex/Caddyfile.split-domain-rollback.example`](../deploy/yandex/Caddyfile.split-domain-rollback.example)
+is the versioned immediate-rollback shape: it restores the player SPA and
+noindex policy on the root, keeps API/operator boundaries, and temporarily
+returns requests from the staged app host to the root with path/query intact and
+without caching. The target's matching no-store temporary redirects are part of
+this recovery contract. Promote them to permanent only as a separate
+owner-controlled Caddy change after the rollback window is explicitly closed.
+It is a template for the retained pre-cutover roots and values, not evidence
+that the live Caddy file or static checksums were captured.
+
+Request-bound backend security events are emitted as single-line JSON with
 `"channel":"security"`, a generated request ID, route, method, stable reason,
 outcome, and timestamp. They intentionally exclude credentials, tokens,
 realtime tickets, login names, and raw request bodies. Route these stdout
@@ -412,11 +758,27 @@ records into Cloud Logging and configure alerts at minimum for:
 - any sustained `exceptional_condition` events;
 - repeated `refresh_token_reused` events;
 - repeated `realtime_ticket_issue_budget` events;
+- any `mail_delivery_protection_activated` event with reason
+  `delivery_budget_exhausted` or `delivery_circuit_open`;
 - sharp increases in `authentication_rejected`,
   `authorization_rejected`, or `PAYLOAD_TOO_LARGE`.
 
 Retain the request ID in API responses and log search results so an incident can
 be correlated without recording sensitive request data.
+
+The mail worker persists each transition once in PostgreSQL and uses an exclusive
+lease so active workers do not claim the same row concurrently. Delivery to the log
+sink is at least once: a crash after log emission but before PostgreSQL acknowledgement
+may repeat the event. The record contains only channel, type, stable reason,
+occurrence time and `transitionAt`; downstream routing must deduplicate by reason plus
+`transitionAt`. Acknowledged rows older than 30 days are pruned lazily on a later
+transition, while pending rows remain durable. During a continuously unavailable
+sink, delivery-budget transitions can add at most one pending row per minute;
+production needs a pending-age/cardinality alarm
+or an explicitly accepted finite dead-letter policy before that becomes a capacity
+risk. This local implementation has not been deployed. Its thresholds have not been
+tuned under production load, and no Yandex Monitoring rule or notification channel
+has been configured for it.
 
 ### Current Monitoring Baseline
 
@@ -451,28 +813,53 @@ the account notification settings. Until that account is created or connected,
 the alert remains visible in Monitoring but does not notify a person.
 
 Do not treat the dashboard as the complete P0 observability contract yet. The
-current application does not publish the following metrics, so truthful graphs
-and alerts cannot be configured for them:
+application now has a local Prometheus exposition contract at the exact
+`/metrics` path, with separate scrape targets for the two runtime processes:
 
-- API availability, `5xx` rate, and request latency;
-- worker last successful cycle timestamp;
-- overdue Tender count;
-- container restart count;
-- PostgreSQL connection count;
-- WebSocket reconnect rate;
-- auth throttling and exceptional security-event counts;
-- active, completed, and early-finished match counts.
+- API target: `http://127.0.0.1:3002/metrics`. The API process starts this
+  listener only when `OPERATIONAL_METRICS_PORT` is configured. The versioned
+  Compose baseline sets `OPERATIONAL_METRICS_HOST=0.0.0.0` inside its isolated
+  container but publishes the port on host loopback only. Direct host
+  development keeps the default `127.0.0.1` bind. The public API listener and
+  API hostname intentionally return `404` for `/metrics`;
+- worker target: `http://127.0.0.1:3001/metrics` on the existing private worker
+  health listener. The versioned Compose baseline sets
+  `WORKER_HEALTH_HOST=0.0.0.0` inside the container and publishes `3001` on the
+  VM so the private instance-group health checker can reach it; the VM security
+  group must allow only the documented health-check and operations sources.
+  Direct host development defaults to a loopback listener. Port `3001` must
+  remain outside public ingress and must never be an ALB backend.
 
-Close this gap with one operational metrics endpoint scraped by Unified Agent
-in Prometheus format. Instrument the owning application and worker paths rather
-than deriving business state from fragile log text. Caddy or the API request
-boundary should own HTTP status/latency metrics; the worker health module should
-own its last-success timestamps; the Tender persistence boundary should own
-overdue and match-state counts; realtime should own reconnects; auth/security
-events should increment stable reason-labelled counters. Add container and
-PostgreSQL runtime collectors separately. Only then create the remaining
-mandatory alerts: API unavailable, worker stale, growing `5xx`, and any overdue
-Tender.
+The API target publishes `anomaly_detector_api_up`, bounded status-class request
+counters, a request-latency histogram, aggregate overdue and lifecycle Tender
+gauges, authorised realtime initial/reconnect and close counters, and bounded
+auth/security event categories. The worker target publishes each registered
+loop's last successful Unix timestamp, staleness and consecutive failures, plus
+newly persisted transactional-mail protection transitions. Reconnect is a
+telemetry-only `reconnect=1` marker produced after the first socket attempt in a
+client lifecycle and counted only after ticket consumption and authorised
+Tender subscription succeed; it has no authentication, authorization, rate-limit
+or recovery effect. Because the marker remains client-declared, an authenticated
+client can skew this bounded counter within the existing ticket budget. Use it
+as a trend corroborated by close, availability, and security signals, never as
+standalone incident evidence or an enforcement input.
+
+Every label comes from a fixed application enum. The exposition contains no
+route, object ID, player/session/request identifier, credential, provider detail
+or error text. Counter state is process-local and may reset on restart, as
+Prometheus counters normally do. Tender gauges come from one aggregate
+PostgreSQL query at scrape time; a failed query makes the private API target
+return `503` instead of publishing a plausible stale snapshot. Transactional-mail
+counts increment from the owning drain result only when the repository reports a
+new durable protection transition, not from retryable log delivery.
+
+This is local implementation evidence, not deployment evidence. Unified Agent
+scrape configuration, dashboard panels, notification routing and mandatory
+alerts for API unavailable, worker stale, growing `5xx`, and any overdue Tender
+remain owner-controlled Yandex changes. Container restart counts and PostgreSQL
+connection counts still require runtime collectors rather than application log
+parsing. None of those external collectors, graphs or alerts has been configured
+or verified by this repository change.
 
 Deploy `webapp` and fully prerendered `website` output as static websites in Yandex Object Storage. Keep `adminapp` out of public website buckets: in the current VM topology Caddy serves it from the protected operator hostname. Once `website` uses SSR/on-demand rendering or Astro server islands, that surface needs an Astro adapter and must move to a Serverless Container runtime instead of static hosting. When server islands appear on cached pages or rolling deploys, generate a stable key with `astro create-key` and configure `ASTRO_KEY` as a secret in both build and runtime environments. Never commit it, expose it as `PUBLIC_*`, print it in logs, or bake it into static output.
 
@@ -483,29 +870,73 @@ Build locally or in CI:
 ```bash
 VITE_API_URL=https://api.anomaly-detector.ru \
 VITE_OAUTH_API_URL=https://api.anomaly-detector.ru \
+VITE_BUILD_SHA=<exact-40-character-release-sha> \
 VITE_PUBLIC_LEGAL_OPERATOR_NAME='<public operator name>' \
 VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT='<public operator name in dative case>' \
 VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS='<public address for legal requests>' \
+VITE_PUBLIC_LEGAL_DOCUMENTS_EFFECTIVE_DATE='<approved Russian publication date>' \
 bun run --cwd webapp build:release
 VITE_API_URL=https://api.anomaly-detector.ru bun run build:adminapp
-PUBLIC_WEBSITE_URL=https://anomaly-detector.ru bun run build:website
+PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
+PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
+bun run build:website:release
 ```
 
 The webapp and adminapp API values are embedded at build time and must point to the
 Application Load Balancer custom host. `VITE_API_URL` owns ordinary requests;
 `VITE_OAUTH_API_URL` owns the browser-visible OAuth start request.
-`VITE_PUBLIC_LEGAL_OPERATOR_NAME`, `VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT`, and
-`VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS` are required for a webapp production build;
-they render into the public legal pages, so they are not secrets. Store the actual
-values only in the deployment environment, not in Git. Rebuild after either origin
-or legal value changes, then verify that the generated main JavaScript bundle
+`VITE_BUILD_SHA` must be the exact lowercase 40-character release commit and is
+included only as safe technical context when a player submits a Feedback Report;
+omit it rather than substituting a branch, short SHA or mutable tag.
+`VITE_PUBLIC_LEGAL_OPERATOR_NAME`, `VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT`,
+`VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS`, and
+`VITE_PUBLIC_LEGAL_DOCUMENTS_EFFECTIVE_DATE` are required for a webapp production
+build; they render into the public legal pages, so they are not secrets. The date
+must be the owner/legal-approved effective date for the exact published revisions,
+not the build date guessed by automation. Store the actual values only in the
+deployment environment, not in Git. Rebuild after either origin or legal value
+changes, then verify that the generated main JavaScript bundle
 contains the production API origin for both paths and does not contain
 `http://localhost:3000`.
 
-`PUBLIC_WEBSITE_URL` is also embedded at build time and must be the public
+`PUBLIC_WEBSITE_URL` is embedded at build time and must be the public
 canonical origin of the website; without it, the generated pages intentionally
-omit canonical and `og:url` metadata. Add `PUBLIC_WEBAPP_URL` only when the
-public website intentionally links to the authenticated webapp.
+omit canonical and `og:url` metadata. `PUBLIC_WEBAPP_URL` is the exact player
+app origin used by the landing CTA and legal links; it must be set for a
+production website build.
+
+Before creating owner-supplied release artifacts, run
+`bun run preflight:split-domain`. It builds test-only legal fixtures in an
+isolated temporary directory, verifies them, and removes them automatically;
+build owner artifacts separately afterward with the approved legal values and
+exact release SHA shown above.
+
+For the prepared ADR 0014 target, `PUBLIC_WEBSITE_URL` remains
+`https://anomaly-detector.ru` and `PUBLIC_WEBAPP_URL` is exactly
+`https://app.anomaly-detector.ru`. These build values do not prove that the
+target routing is already deployed.
+
+The prepared `build:release` guards reject all client analytics flags so an
+ambient shell or `.env.production` cannot enable collection accidentally. Only
+after issues #2 and #31 are accepted, change those guards and their tests in a
+separate reviewed release, then add `VITE_ANALYTICS_ENABLED=true` to the complete
+webapp command and enable the website client in the same exact-SHA release:
+
+```bash
+PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
+PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
+PUBLIC_ANALYTICS_API_URL=https://api.anomaly-detector.ru \
+PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST='<reviewed-safe-slugs>' \
+bun run build:website:release
+```
+
+Omitting these client variables is the supported disabled state: the landing
+contains no consent panel or analytics script, the player client sends no funnel
+event, and the backend routes remain absent while `ANALYTICS_ENABLED=false`.
+Before activation verify consent, refusal and revoke in a real browser; confirm
+the 30-day HttpOnly cookie is absent before consent and deleted on revoke; prove
+the public origin cannot call auth/operator routes; run `analytics:cleanup`; and
+check that the operator view exposes only 7/30/90-day aggregates.
 
 Before uploading, create a Yandex Object Storage static access key for a service account and configure the AWS CLI with it. Yandex's Object Storage docs recommend `aws configure` with the static key and `ru-central1` as the region.
 
@@ -594,13 +1025,21 @@ After deployment:
 - verify API `/health/live` and `/health/ready` through `https://api.<site-domain>` on the Application Load Balancer;
 - verify worker `/health/live` and `/health/ready` from the private instance-group health-check path and confirm the worker port is unreachable from the public internet;
 - verify browser auth only from allowed `CORS_ORIGINS`;
+- verify `WEBAPP_ORIGIN` is the exact player origin, the public root is absent
+  from CORS, and browser-supplied OAuth return origins other than the player
+  origin are rejected;
 - verify all cookie-backed auth writes reject missing or untrusted browser `Origin` headers;
 - verify the webapp and API use same-site custom domains and that a reload restores the cookie-backed session in a browser with third-party cookies blocked;
 - verify through the Application Load Balancer that register returns `Set-Cookie`, refresh receives that cookie, `/me` receives the bearer `Authorization` header, logout clears the cookie, and the next refresh returns 401;
 - verify Managed PostgreSQL connectivity and that Prisma migrations applied exactly once;
 - verify the private maintenance cleanup timer is active and its most recent scheduled invocation completed with task exit code `0`;
 - verify `webapp` route refreshes load the SPA fallback instead of a broken 404 page;
-- verify `website` static assets load from the production domain;
+- verify `website` static assets load from the public root, an unknown public
+  path returns `404`, fixed legacy player routes redirect to the player host,
+  and `www` redirects to the public root;
+- verify the player host returns `X-Robots-Tag: noindex, nofollow, noarchive`
+  while public canonical, robots, and sitemap values contain no player or
+  operator surfaces;
 - verify public media loads through the Cloud CDN domain when storage is active;
 - verify private file links expire and require backend authorization when private storage is active.
 

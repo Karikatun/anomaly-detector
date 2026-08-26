@@ -194,8 +194,15 @@ export type StoredTenderAuditEvent =
   | (PendingTenderAuditEvent & { formatVersion: 1; sequence: number })
   | (z.infer<typeof legacyTenderAuditEventSchema> & { formatVersion: 0 })
 
+export type TenderAuditEventDecodeErrorKind =
+  | 'current_corruption'
+  | 'historical_incompatible'
+
 export class TenderAuditEventDecodeError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    public readonly kind: TenderAuditEventDecodeErrorKind,
+  ) {
     super(message)
     this.name = 'TenderAuditEventDecodeError'
   }
@@ -204,7 +211,10 @@ export class TenderAuditEventDecodeError extends Error {
 export function encodeTenderAuditEventPayload(event: PendingTenderAuditEvent) {
   const parsed = tenderAuditEventSchema.safeParse(event)
   if (!parsed.success) {
-    throw new TenderAuditEventDecodeError(`Invalid Tender audit event ${eventKind(event)}`)
+    throw new TenderAuditEventDecodeError(
+      `Invalid Tender audit event ${eventKind(event)}`,
+      'current_corruption',
+    )
   }
   return {
     data: parsed.data.payload,
@@ -229,15 +239,16 @@ export function decodeTenderAuditEvent(input: {
     if (input.payload.formatVersion !== 1) {
       throw new TenderAuditEventDecodeError(
         `Unsupported Tender audit event format version ${String(input.payload.formatVersion)}`,
+        'historical_incompatible',
       )
     }
     const envelope = persistedEnvelopeSchema.safeParse(input.payload)
-    if (!envelope.success) throw invalidPersistedEvent(input)
+    if (!envelope.success) throw invalidPersistedEvent(input, 'current_corruption')
     const event = tenderAuditEventSchema.safeParse({
       ...metadata,
       payload: envelope.data.data,
     })
-    if (!event.success) throw invalidPersistedEvent(input)
+    if (!event.success) throw invalidPersistedEvent(input, 'current_corruption')
     return { ...event.data, formatVersion: 1, sequence: input.sequence }
   }
 
@@ -246,13 +257,17 @@ export function decodeTenderAuditEvent(input: {
     payload: input.payload,
     sequence: input.sequence,
   })
-  if (!legacyEvent.success) throw invalidPersistedEvent(input)
+  if (!legacyEvent.success) throw invalidPersistedEvent(input, 'historical_incompatible')
   return { ...legacyEvent.data, formatVersion: 0 }
 }
 
-function invalidPersistedEvent(input: { kind: string; sequence: number }) {
+function invalidPersistedEvent(
+  input: { kind: string; sequence: number },
+  kind: TenderAuditEventDecodeErrorKind,
+) {
   return new TenderAuditEventDecodeError(
     `Invalid persisted Tender audit event ${input.kind} at sequence ${input.sequence}`,
+    kind,
   )
 }
 

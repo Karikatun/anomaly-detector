@@ -4,6 +4,7 @@ import type { MiddlewareHandler } from 'hono'
 
 import { AppError, validationErrorHook } from '../../../http/errors'
 import type { RequestBudget } from '../../../security/request-budget'
+import type { RequestBudgetPolicy } from '../../../security/request-budget-policy'
 import type { AuthHttpEnv } from '../../auth'
 import { hashRealtimeTicket, type RealtimeTicketIssuer } from './tickets'
 
@@ -20,18 +21,18 @@ const createRealtimeTicketRoute = createRoute({
 export function createRealtimeTicketRoutes(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   issueBudget: RequestBudget
+  issueBudgetPolicy: RequestBudgetPolicy<'realtime_ticket_issue'>
   issuer: RealtimeTicketIssuer
   requireAuth: MiddlewareHandler<AuthHttpEnv>
 }) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
+  routes.use('*', input.authenticatedMutationBudget)
   routes.use('/tickets', async (c, next) => {
     const result = await input.issueBudget.consume({
       key: c.var.user.id,
-      limit: 10,
       now: new Date(),
-      scope: 'realtime_ticket_issue',
-      windowMs: 60_000,
+      policy: input.issueBudgetPolicy,
     })
     if (!result.allowed) {
       c.header('Retry-After', String(result.retryAfterSeconds))
@@ -45,7 +46,6 @@ export function createRealtimeTicketRoutes(input: {
     }
     await next()
   })
-  routes.use('*', input.authenticatedMutationBudget)
   routes.openapi(createRealtimeTicketRoute, async (c) => {
     const now = new Date()
     const ticket = `${crypto.randomUUID()}${crypto.randomUUID()}`

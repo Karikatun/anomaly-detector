@@ -1,5 +1,113 @@
-import type { Page } from '@playwright/test'
+import type { BrowserContext, Locator, Page } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
+import { randomUUID } from 'node:crypto'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { createPrisma } from '../../../backend/src/db'
+import { defaultDatabaseUrl } from '../env'
 import { expect, registerBrowserUser, test } from '../helpers/test'
+
+const uxAuditDirectory = process.env.UX_AUDIT_DIR
+
+type AxeFinding = {
+  id: string
+  impact: string | null
+  targets: string[][]
+  helpUrl: string
+}
+
+async function auditCheckpoint(page: Page, name: string) {
+  if (!uxAuditDirectory) return
+
+  const outputDirectory = resolve(uxAuditDirectory)
+  await mkdir(outputDirectory, { recursive: true })
+  await expect(page.locator('[role="dialog"]')).toHaveCount(0)
+  await page.evaluate(() => new Promise<void>((resolveFrame) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+  }))
+  const agentation = page.locator('[data-agentation-root]')
+  await agentation.evaluateAll((elements) => {
+    for (const element of elements) {
+      if (element instanceof HTMLElement) element.hidden = true
+    }
+  })
+  await page.screenshot({ path: resolve(outputDirectory, `${name}.viewport.png`) })
+  await page.screenshot({ path: resolve(outputDirectory, `${name}.full.png`), fullPage: true })
+
+  const axe = await new AxeBuilder({ page })
+    .exclude('[data-agentation-root]')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze()
+  const findings: AxeFinding[] = axe.violations.map((violation) => ({
+    id: violation.id,
+    impact: violation.impact,
+    targets: violation.nodes.map((node) => node.target),
+    helpUrl: violation.helpUrl,
+  }))
+  await writeFile(
+    resolve(outputDirectory, `${name}.axe.json`),
+    `${JSON.stringify(findings, null, 2)}\n`,
+  )
+  const smallTargets = await page.locator('button, select, input, summary, a[href]').evaluateAll((elements) => elements
+    .filter((element) => {
+      const rect = element.getBoundingClientRect()
+      const style = getComputedStyle(element)
+      return !element.closest('[data-agentation-root]')
+        && !(element instanceof HTMLButtonElement && element.disabled)
+        && style.visibility !== 'hidden'
+        && style.display !== 'none'
+        && rect.width > 0
+        && rect.height > 0
+        && rect.right > 0
+        && rect.bottom > 0
+        && rect.left < innerWidth
+        && rect.top < innerHeight
+        && (rect.width < 24 || rect.height < 24)
+    })
+    .map((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        name: element.getAttribute('aria-label') || element.textContent?.trim().replace(/\s+/g, ' ') || element.tagName,
+        selector: element.tagName.toLowerCase(),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+    }))
+  await writeFile(
+    resolve(outputDirectory, `${name}.touch.json`),
+    `${JSON.stringify(smallTargets, null, 2)}\n`,
+  )
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  if (process.env.UX_AUDIT_ASSERT_AXE === '1') expect(findings).toEqual([])
+}
+
+async function captureViewportCheckpoint(page: Page, name: string) {
+  if (!uxAuditDirectory) return
+
+  const outputDirectory = resolve(uxAuditDirectory)
+  await mkdir(outputDirectory, { recursive: true })
+  await page.evaluate(() => new Promise<void>((resolveFrame) => {
+    const startedAt = performance.now()
+    const waitForSettledFrame = () => {
+      if (performance.now() - startedAt >= 320) {
+        resolveFrame()
+        return
+      }
+      requestAnimationFrame(waitForSettledFrame)
+    }
+    requestAnimationFrame(waitForSettledFrame)
+  }))
+  await page.locator('[data-agentation-root]').evaluateAll((elements) => {
+    for (const element of elements) {
+      if (element instanceof HTMLElement) element.hidden = true
+    }
+  })
+  await page.screenshot({
+    path: resolve(outputDirectory, `${name}.viewport.png`),
+    animations: 'disabled',
+  })
+}
 
 const headings = {
   access: '1. Выбор слота доступа',
@@ -15,10 +123,74 @@ async function expectPhase(page: Page, heading: string) {
   await expect(page.getByRole('heading', { name: heading })).toBeVisible()
 }
 
+async function expectFullyInViewport(locator: Locator) {
+  await expect.poll(() => locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return rect.top >= 0
+      && rect.left >= 0
+      && rect.bottom <= window.innerHeight
+      && rect.right <= window.innerWidth
+      && element.scrollWidth <= element.clientWidth
+      && element.scrollHeight <= element.clientHeight
+  })).toBe(true)
+}
+
+async function waitForAnimationsToFinish(locator: Locator) {
+  await locator.evaluate(async (element) => {
+    await Promise.all(element.getAnimations({ subtree: true }).map((animation) =>
+      animation.finished.catch(() => undefined)))
+  })
+}
+
 async function readRoomJoinCode(page: Page) {
   const code = (await page.getByTestId('room-join-code').textContent())?.trim()
   if (!code) throw new Error('Room join code is missing from the lobby')
   return code
+}
+
+async function registerBrowserUserWithApiAccess(
+  page: Page,
+  displayName: string,
+  prefix: string,
+  startUrl = '/',
+) {
+  const registrationResponsePromise = page.waitForResponse((response) =>
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/auth/register')
+
+  await registerBrowserUser(page, displayName, prefix, startUrl)
+  const registrationResponse = await registrationResponsePromise
+  expect(registrationResponse.ok()).toBe(true)
+  const payload = await registrationResponse.json() as { accessToken?: unknown }
+  if (typeof payload.accessToken !== 'string') {
+    throw new Error('Browser registration response did not include an access token')
+  }
+
+  return {
+    accessToken: payload.accessToken,
+    apiOrigin: new URL(registrationResponse.url()).origin,
+  }
+}
+
+function collectRuntimeIssues(runtimeIssues: string[], source: string, runtimePage: Page) {
+  runtimePage.on('pageerror', (error) => {
+    runtimeIssues.push(`${source}: pageerror: ${error.message}`)
+  })
+  runtimePage.on('console', (message) => {
+    if (message.type() !== 'error') return
+    const resourceUrl = message.location().url
+    let resourcePath = ''
+    try {
+      resourcePath = new URL(resourceUrl).pathname
+    } catch {
+      // A console error without an absolute resource URL is never filtered.
+    }
+    const expectedUnauthenticatedBootstrap = resourcePath === '/api/auth/refresh'
+      && message.text().includes('401')
+    if (!expectedUnauthenticatedBootstrap) {
+      runtimeIssues.push(`${source}: console: ${message.text()}`)
+    }
+  })
 }
 
 async function expectSynchronizedTimers(first: Page, second: Page) {
@@ -33,6 +205,17 @@ async function expectSynchronizedTimers(first: Page, second: Page) {
     }
     return Math.abs(toSeconds(await firstTimer.textContent()) - toSeconds(await secondTimer.textContent()))
   }).toBeLessThanOrEqual(1)
+}
+
+async function disconnectTrackedTenderSockets(page: Page) {
+  await page.evaluate(() => {
+    const controlledWindow = window as Window & { __e2eWebSockets?: WebSocket[] }
+    const openSockets = controlledWindow.__e2eWebSockets?.filter(
+      (socket) => socket.readyState === WebSocket.OPEN && socket.url.includes('/api/realtime/ws'),
+    ) ?? []
+    if (openSockets.length === 0) throw new Error('No open Tender WebSocket to disconnect')
+    for (const socket of openSockets) socket.close(4001, 'E2E disconnect')
+  })
 }
 
 async function chooseAccessSlot(page: Page, slot: number) {
@@ -150,9 +333,11 @@ async function verifyWorkingModelModal(page: Page) {
     await laboratoryClose.click()
     await expect(laboratoryDialog).toBeHidden()
 
-    await page.getByRole('button', { name: /Рабочая модель/ }).click()
+    const workingModelTrigger = page.getByRole('button', { name: /Рабочая модель/ })
+    await workingModelTrigger.click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
+    expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true)
 
     await expect(sharedTimer).toBeVisible()
     await expect(dialog.locator('[role="timer"]')).toHaveCount(0)
@@ -175,9 +360,13 @@ async function verifyWorkingModelModal(page: Page) {
 
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
+    await expect(workingModelTrigger).toBeFocused()
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
 
     await page.setViewportSize({ width: 1280, height: 720 })
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
     await page.route('**/api/tenders/*/commands', async (route) => {
       const command = route.request().postDataJSON() as { type?: string } | null
       if (command?.type === 'update-working-model') {
@@ -392,12 +581,121 @@ test('requires every lobby player to be ready before enabling the match start', 
   }
 })
 
-test('lets a player collapse and return, then permanently forfeit the match', async ({ browser, page }) => {
+test('reconciles an accepted access-slot command after its response is lost', async ({ browser, page }) => {
   test.setTimeout(60_000)
+  await registerBrowserUser(page, 'Хост сверки E2E', 'ambiguous-command-host')
+  const webOrigin = new URL(page.url()).origin
+  const guestContext = await browser.newContext({ baseURL: webOrigin })
+  const guestPage = await guestContext.newPage()
+
+  try {
+    await registerBrowserUser(guestPage, 'Гость сверки E2E', 'ambiguous-command-guest', webOrigin)
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await page.getByLabel('Количество игроков').selectOption('2')
+    await page.getByRole('button', { name: 'Создать команду' }).click()
+    const roomJoinCode = await readRoomJoinCode(page)
+
+    await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
+    await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
+    await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Начать игру' }).click()
+    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+
+    let committedStatus: number | undefined
+    const attemptedCommandIds: string[] = []
+    await page.route('**/api/tenders/*/commands', async (route) => {
+      const command = route.request().postDataJSON() as { commandId?: string; type?: string } | null
+      if (command?.type !== 'request-access-slot') {
+        await route.continue()
+        return
+      }
+      if (command.commandId) attemptedCommandIds.push(command.commandId)
+      if (attemptedCommandIds.length === 2) {
+        await route.fulfill({
+          status: 429,
+          contentType: 'application/json',
+          headers: { 'Retry-After': '1' },
+          body: JSON.stringify({
+            error: { code: 'RATE_LIMITED', message: 'E2E same-command retry limit' },
+          }),
+        })
+        return
+      }
+      if (attemptedCommandIds.length > 2) {
+        await route.continue()
+        return
+      }
+      const committedResponse = await route.fetch()
+      committedStatus = committedResponse.status()
+      await expect(page.getByRole('button', { name: 'Выбор принят — ожидаем игроков' })).toBeDisabled()
+      await route.abort('failed')
+    })
+    const failedCommand = page.waitForEvent('requestfailed', (request) => {
+      const command = request.postDataJSON() as { type?: string } | null
+      return request.method() === 'POST'
+        && request.url().endsWith('/commands')
+        && command?.type === 'request-access-slot'
+    })
+
+    await page.getByRole('button', { name: /^Слот доступа 1:/ }).click()
+    await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
+    await failedCommand
+    expect(committedStatus).toBe(200)
+    await expect.poll(() => attemptedCommandIds.length).toBe(2)
+    expect(new Set(attemptedCommandIds).size).toBe(1)
+
+    await expect(page.getByRole('alert')).toContainText(
+      'Ответ сервера потерян. Сверяем состояние матча — не повторяйте действие.',
+    )
+    await expect(page.getByRole('button', { name: 'Выйти из матча' })).toBeDisabled()
+    await page.reload()
+    await expect(page.getByRole('heading', { name: headings.access })).toBeVisible()
+    await expect(page.getByRole('alert')).toContainText(
+      'Ответ сервера потерян. Сверяем состояние матча — не повторяйте действие.',
+    )
+    await expect(page.getByRole('button', { name: 'Выйти из матча' })).toBeDisabled()
+    await expect.poll(() => attemptedCommandIds.length).toBe(3)
+    expect(new Set(attemptedCommandIds).size).toBe(1)
+    await expect(page.getByRole('button', { name: 'Выбор принят — ожидаем игроков' })).toBeDisabled()
+    await expect(page.getByRole('status')).toContainText('Слот 1: Аварийный зафиксирован и остаётся секретным.')
+    await expect(page.getByRole('button', { name: 'Выйти из матча' })).toBeEnabled()
+    await expect(page.getByText(
+      'Не удалось выполнить действие. Обновите состояние матча и попробуйте ещё раз.',
+      { exact: true },
+    )).toHaveCount(0)
+  } finally {
+    await guestContext.close()
+  }
+})
+
+test('lets a player collapse and return, then permanently forfeit the match', async ({ browser, page }) => {
+  test.setTimeout(120_000)
+  await page.context().addInitScript(() => {
+    const controlledWindow = window as Window & { __e2eWebSockets: WebSocket[] }
+    const NativeWebSocket = window.WebSocket
+    controlledWindow.__e2eWebSockets = []
+    Object.defineProperty(window, 'WebSocket', {
+      configurable: true,
+      value: class TrackedWebSocket extends NativeWebSocket {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          if (protocols === undefined) {
+            super(url)
+          } else {
+            super(url, protocols)
+          }
+          controlledWindow.__e2eWebSockets.push(this)
+        }
+      },
+    })
+  })
   await registerBrowserUser(page, 'Хост выхода E2E', 'leave-host')
   const webOrigin = new URL(page.url()).origin
   const guestContext = await browser.newContext({ baseURL: webOrigin })
   const guestPage = await guestContext.newPage()
+  let mirrorPage: Page | undefined
 
   try {
     await registerBrowserUser(guestPage, 'Гость выхода E2E', 'leave-guest', webOrigin)
@@ -415,6 +713,89 @@ test('lets a player collapse and return, then permanently forfeit the match', as
     await page.getByRole('button', { name: 'Начать игру' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
     await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    mirrorPage = await page.context().newPage()
+    await mirrorPage.goto(page.url())
+    await expect(mirrorPage.getByRole('heading', { name: headings.access })).toBeVisible()
+    await expect(mirrorPage.getByText('На связи', { exact: true })).toBeVisible()
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const leaveMatchButton = page.locator('button[aria-label="Выйти из матча"]')
+    await leaveMatchButton.click()
+    const exitDialog = page.getByRole('dialog', { name: 'Что сделать с матчем?' })
+    await expect(exitDialog).toBeVisible()
+
+    await page.route('**/api/realtime/tickets', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'E2E reconnect hold' } }),
+      })
+    })
+    await mirrorPage.route('**/api/realtime/tickets', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'E2E reconnect hold' } }),
+      })
+    })
+    await disconnectTrackedTenderSockets(page)
+    await disconnectTrackedTenderSockets(mirrorPage)
+    const reconnectDialog = page.getByRole('alertdialog', { name: 'Связь с сервером прервана' })
+    const reconnectButton = reconnectDialog.getByRole('button', { name: 'Переподключиться' })
+    const mirrorReconnectDialog = mirrorPage.getByRole('alertdialog', { name: 'Связь с сервером прервана' })
+    const mirrorReconnectButton = mirrorReconnectDialog.getByRole('button', { name: 'Переподключиться' })
+    await expect(exitDialog).toHaveCount(0)
+    await expect(reconnectDialog).toBeVisible()
+    await expect(reconnectButton).toBeFocused()
+    await expect(mirrorReconnectDialog).toBeVisible()
+    await expect(mirrorReconnectButton).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(reconnectButton).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(reconnectButton).toBeFocused()
+    await expect(leaveMatchButton).toBeDisabled()
+    await waitForAnimationsToFinish(reconnectDialog)
+    const reconnectAxe = await new AxeBuilder({ page })
+      .include('[role="alertdialog"]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+    expect(reconnectAxe.violations.map((violation) => violation.id)).toEqual([])
+    await captureViewportCheckpoint(page, 'reconnect-overlay-desktop-1440x900')
+
+    await Promise.all([
+      page.unroute('**/api/realtime/tickets'),
+      mirrorPage.unroute('**/api/realtime/tickets'),
+    ])
+    await Promise.all([
+      reconnectButton.click(),
+      mirrorReconnectButton.click(),
+    ])
+    const primaryContent = page.locator('[data-tender-primary-content]')
+    const mirrorPrimaryContent = mirrorPage.locator('[data-tender-primary-content]')
+    await expect(primaryContent).toBeFocused()
+    await expect(mirrorPrimaryContent).toBeFocused()
+    await expect(page.getByText('На связи', { exact: true })).toBeVisible()
+    await expect(mirrorPage.getByText('На связи', { exact: true })).toBeVisible()
+    await mirrorPage.close()
+    mirrorPage = undefined
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    const firstAccessSlot = page.getByRole('button', { name: /^Слот доступа 1:/ })
+    await firstAccessSlot.focus()
+    await page.route('**/api/realtime/tickets', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'E2E reconnect hold' } }),
+      })
+    })
+    await disconnectTrackedTenderSockets(page)
+    await expect(reconnectDialog).toBeVisible()
+    await expect(reconnectButton).toBeFocused()
+    await captureViewportCheckpoint(page, 'reconnect-overlay-mobile-390x844')
+    await page.unroute('**/api/realtime/tickets')
+    await expect(firstAccessSlot).toBeFocused({ timeout: 30_000 })
+    await expect(page.getByText('На связи', { exact: true })).toBeVisible()
 
     const headerTimer = page
       .locator('header[aria-label="Текущая фаза игры"]')
@@ -428,7 +809,6 @@ test('lets a player collapse and return, then permanently forfeit the match', as
       initialHeaderSeconds - toSeconds(await headerTimer.textContent()),
     ).toBeGreaterThanOrEqual(2)
     await page.getByRole('button', { name: 'Выйти из матча' }).click()
-    const exitDialog = page.getByRole('dialog', { name: 'Что сделать с матчем?' })
     const exitTimer = exitDialog.getByRole('timer', { name: 'До конца фазы' })
     await expect.poll(async () => {
       return Math.abs(toSeconds(await headerTimer.textContent()) - toSeconds(await exitTimer.textContent()))
@@ -440,7 +820,11 @@ test('lets a player collapse and return, then permanently forfeit the match', as
 
     await page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()
     await expect(page.getByText('Активен', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Детали' }).click()
+    await expect(page.getByRole('button', { name: 'Продолжить' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'История матчей' })).toBeVisible()
+    await expect(page.getByText('Хост выхода E2E', { exact: true })).toBeVisible()
+    await captureViewportCheckpoint(page, 'match-history-active-mobile-390x844')
+    await page.getByRole('button', { name: 'Продолжить' }).click()
     await expect(page).toHaveURL((url) =>
       /^\/tenders\/[0-9a-f-]{36}$/.test(url.pathname)
       && url.searchParams.get('from') === 'matches')
@@ -454,8 +838,348 @@ test('lets a player collapse and return, then permanently forfeit the match', as
 
     await page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()
     await expect(page.getByText('Вы выбыли', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Открыть результаты' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'История матчей' })).toBeVisible()
+    await expect(page.getByText('Хост выхода E2E', { exact: true })).toBeVisible()
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await captureViewportCheckpoint(page, 'match-history-forfeited-complete-mobile-390x844')
+    await page.getByRole('button', { name: 'Открыть результаты' }).click()
+    await expect(page).toHaveURL((url) =>
+      /^\/tenders\/[0-9a-f-]{36}$/.test(url.pathname)
+      && url.searchParams.get('from') === 'matches')
+    await expect(page.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
+    await expect(page.locator('details[data-audit-section="full-audit"] > summary')).toBeVisible()
+    await captureViewportCheckpoint(page, 'forfeited-participant-audit-mobile-390x844')
   } finally {
-    await guestContext.close()
+    await Promise.all([
+      guestContext.close(),
+      mirrorPage?.close(),
+    ])
+  }
+})
+
+test('keeps a four-player completed leaderboard compact after an early finish', async ({ browser, page }) => {
+  test.setTimeout(90_000)
+  const runtimeIssues: string[] = []
+  collectRuntimeIssues(runtimeIssues, 'host', page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await registerBrowserUser(page, 'Хост 4P E2E', 'four-player-host')
+  const webOrigin = new URL(page.url()).origin
+  const guestSpecs = [
+    ['Исследователь с очень длинным корпоративным именем', 'four-player-guest-one'],
+    ['Гость 4P Бета', 'four-player-guest-two'],
+    ['Гость 4P Гамма', 'four-player-guest-three'],
+  ] as const
+  const guestContexts = await Promise.all(guestSpecs.map(() => browser.newContext({ baseURL: webOrigin })))
+  const guestPages = await Promise.all(guestContexts.map((context) => context.newPage()))
+  guestPages.forEach((guestPage, index) => {
+    collectRuntimeIssues(runtimeIssues, `guest-${index + 1}`, guestPage)
+  })
+
+  try {
+    for (let index = 0; index < guestPages.length; index += 1) {
+      await registerBrowserUser(guestPages[index]!, guestSpecs[index]![0], guestSpecs[index]![1], webOrigin)
+    }
+
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await page.getByLabel('Количество игроков').selectOption('4')
+    await page.getByRole('button', { name: 'Создать команду' }).click()
+    const roomJoinCode = await readRoomJoinCode(page)
+
+    for (const guestPage of guestPages) {
+      await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
+      await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
+      await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    }
+    for (let index = 0; index < guestPages.length; index += 1) {
+      const guestPage = guestPages[index]!
+      await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+      await expect(page.getByText(`Готовы: ${index + 1}/4`)).toBeVisible()
+    }
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(page.getByText('Экипаж готов.')).toBeVisible()
+    const startButton = page.getByRole('button', { name: 'Начать игру' })
+    await expect(startButton).toBeEnabled()
+    await startButton.click()
+    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+
+    for (const guestPage of guestPages) {
+      await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+      await guestPage.getByRole('button', { name: 'Выйти из матча' }).click()
+      await guestPage.getByRole('dialog', { name: 'Что сделать с матчем?' })
+        .getByRole('button', { name: 'Выйти', exact: true }).click()
+      await expect(guestPage).toHaveURL('/')
+    }
+
+    await expect(page.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
+    await expect(page.getByText('Вы победили', { exact: true })).toBeVisible()
+    const ranking = page.locator('details[data-audit-section="ranking"]')
+    await expect(ranking.locator('ol > li')).toHaveCount(4)
+    await expect(ranking.getByText('Исследователь с очен', { exact: true })).toBeVisible()
+    await auditCheckpoint(page, '14-completed-audit-four-player-desktop-1440x900')
+
+    await page.setViewportSize({ width: 360, height: 800 })
+    const rankingSummary = ranking.locator(':scope > summary')
+    await expect(rankingSummary).toContainText('4 участника')
+    await rankingSummary.press('Enter')
+    await expect(ranking.locator('ol > li')).toHaveCount(4)
+    await auditCheckpoint(page, '15-completed-audit-four-player-mobile-360x800')
+    await page.setViewportSize({ width: 320, height: 720 })
+    await auditCheckpoint(page, '16-completed-audit-four-player-mobile-320x720')
+    expect(runtimeIssues).toEqual([])
+  } finally {
+    await Promise.all(guestContexts.map((context) => context.close()))
+  }
+})
+
+test('explains a completed Tender and conceals its participant audit from outsiders', async ({ browser, page }) => {
+  test.setTimeout(90_000)
+  page.setDefaultTimeout(12_000)
+  const prisma = createPrisma(
+    process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? defaultDatabaseUrl,
+  )
+  const hostName = 'Оставшийся участник аудита E2E'
+  const guestName = 'Выбывший участник аудита E2E'
+  const runtimeIssues: string[] = []
+  let guestContext: BrowserContext | undefined
+  let outsiderContext: BrowserContext | undefined
+
+  try {
+    await page.setViewportSize({ width: 390, height: 844 })
+    collectRuntimeIssues(runtimeIssues, 'host', page)
+    const hostSession = await registerBrowserUserWithApiAccess(page, hostName, 'issue-nine-host')
+    const webOrigin = new URL(page.url()).origin
+    guestContext = await browser.newContext({
+      baseURL: webOrigin,
+      viewport: { width: 390, height: 844 },
+    })
+    const guestPage = await guestContext.newPage()
+    collectRuntimeIssues(runtimeIssues, 'guest', guestPage)
+    await registerBrowserUser(guestPage, guestName, 'issue-nine-guest', webOrigin)
+
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    await page.getByLabel('Количество игроков').selectOption('2')
+    await page.getByRole('button', { name: 'Создать команду' }).click()
+    const roomJoinCode = await readRoomJoinCode(page)
+
+    await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
+    await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
+    await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Начать игру' }).click()
+    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    await expect(guestPage).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    const tenderId = new URL(page.url()).pathname.split('/').at(-1)
+    if (!tenderId) throw new Error('Tender id is missing from the participant URL')
+
+    await guestPage.getByRole('button', { name: 'Выйти из матча' }).click()
+    await guestPage.getByRole('dialog', { name: 'Что сделать с матчем?' })
+      .getByRole('button', { name: 'Выйти', exact: true }).click()
+    await expect(guestPage).toHaveURL('/')
+    await expect(page.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
+    await expect(page.getByText('Вы победили', { exact: true })).toBeVisible()
+    await expect(page.locator('header[aria-label="Результаты завершённого тендера"]')).toBeVisible()
+
+    const participantResponse = await page.context().request.get(
+      `${hostSession.apiOrigin}/api/tenders/${tenderId}`,
+      { headers: { Authorization: `Bearer ${hostSession.accessToken}` } },
+    )
+    expect(participantResponse.status()).toBe(200)
+    const completedView = await participantResponse.json() as {
+      audit?: {
+        ratingBreakdownByPlayer: Record<string, { thesisPoints: number }>
+      }
+      phase: string
+      players: Array<{
+        budget: number
+        corporateTrust?: number
+        displayName?: string
+        playerId: string
+        rating: number
+      }>
+    }
+    expect(completedView.phase).toBe('complete')
+    if (!completedView.audit) throw new Error('Completed participant view is missing its audit')
+    expect(completedView.players).toHaveLength(2)
+
+    const ranking = page.locator('details[data-audit-section="ranking"]')
+    const rankingSummary = ranking.locator(':scope > summary')
+    const explanation = page.locator('section[aria-labelledby="completed-standing-explanation-heading"]')
+    const assertParticipantFactors = async () => {
+      for (const player of completedView.players) {
+        const playerLabel = player.displayName ?? player.playerId.slice(0, 8)
+        const breakdown = completedView.audit!.ratingBreakdownByPlayer[player.playerId]
+        if (!breakdown) throw new Error(`Rating breakdown is missing for ${playerLabel}`)
+        const standing = {
+          corporateTrust: player.corporateTrust ?? 0,
+          correctTheses: breakdown.thesisPoints,
+          rating: player.rating,
+          remainingBudget: player.budget,
+        }
+        const factors = page.getByRole('list', {
+          name: `Факторы итогового места игрока ${playerLabel}`,
+        })
+        await expect(factors).toBeVisible()
+        await expect(factors.getByText('Рейтинг', { exact: true }).locator('..').locator('strong'))
+          .toHaveText(new RegExp(`^${standing.rating} (?:очко|очка|очков)$`))
+        await expect(factors.getByText('Верные тезисы', { exact: true }).locator('..').locator('strong'))
+          .toHaveText(String(standing.correctTheses))
+        await expect(factors.getByText('Оставшийся Бюджет', { exact: true }).locator('..').locator('strong'))
+          .toHaveText(String(standing.remainingBudget))
+        await expect(factors.getByText('Корпоративное доверие', { exact: true }).locator('..').locator('strong'))
+          .toHaveText(String(standing.corporateTrust))
+        await expect(page.getByLabel(`Из чего сложились очки игрока ${playerLabel}`)).toBeVisible()
+      }
+    }
+    const assertAuditViewport = async (
+      viewport: { height: number; width: number },
+      checkpoint: string,
+    ) => {
+      await page.setViewportSize(viewport)
+      await page.evaluate(() => new Promise<void>((resolveFrame) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+      }))
+      if (!await ranking.evaluate((element) => (element as HTMLDetailsElement).open)) {
+        await rankingSummary.focus()
+        await expect(rankingSummary).toBeFocused()
+        await rankingSummary.press('Enter')
+      }
+      await expect(ranking).toHaveAttribute('open', '')
+      await expect(ranking.locator('ol > li')).toHaveCount(2)
+      await expect(explanation).toBeVisible()
+      await expect(explanation).toContainText('Рейтинг → верные тезисы → оставшийся Бюджет')
+      await expect(explanation).toContainText('Корпоративное доверие')
+      await expect(explanation).toContainText('Финальный контракт')
+      await expect(explanation).toContainText('не участвует в тай-брейке')
+      await assertParticipantFactors()
+      await expect.poll(() => page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      )).toBe(true)
+      await expect.poll(() => ranking.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      )).toBe(true)
+      await auditCheckpoint(page, checkpoint)
+    }
+
+    await assertAuditViewport(
+      { width: 1440, height: 900 },
+      '17-issue-9-completed-audit-desktop-1440x900',
+    )
+    await assertAuditViewport(
+      { width: 1024, height: 768 },
+      '18-issue-9-completed-audit-compact-1024x768',
+    )
+    await assertAuditViewport(
+      { width: 390, height: 844 },
+      '19-issue-9-completed-audit-mobile-390x844',
+    )
+
+    await prisma.tenderAuditEvent.update({
+      where: { tenderId_sequence: { sequence: 1, tenderId } },
+      data: {
+        kind: 'power_allocated',
+        payload: {},
+      },
+    })
+    const incompatibleResponse = await page.context().request.get(
+      `${hostSession.apiOrigin}/api/tenders/${tenderId}`,
+      { headers: { Authorization: `Bearer ${hostSession.accessToken}` } },
+    )
+    expect(incompatibleResponse.status()).toBe(200)
+    const incompatibleView = await incompatibleResponse.json() as Record<string, unknown>
+    expect(incompatibleView.phase).toBe('complete')
+    expect(incompatibleView).not.toHaveProperty('audit')
+    expect(incompatibleView).not.toHaveProperty('auditUnavailableReason')
+
+    await page.reload()
+    await expect(page.getByRole('heading', { name: 'Итоговый аудит недоступен' })).toBeVisible()
+    await expect(page.getByText(
+      'Сохранённые данные этого матча нельзя безопасно восстановить в текущей версии. Неполный аудит не показывается.',
+    )).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Повторить' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'В Историю матчей' })).toBeVisible()
+    await expect(page.locator('[data-audit-section]')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText('historical_data_incompatible')
+    await auditCheckpoint(
+      page,
+      '19b-issue-9-historical-audit-terminal-mobile-390x844',
+    )
+
+    outsiderContext = await browser.newContext({
+      baseURL: webOrigin,
+      viewport: { width: 390, height: 844 },
+    })
+    const outsiderPage = await outsiderContext.newPage()
+    collectRuntimeIssues(runtimeIssues, 'outsider', outsiderPage)
+    const outsiderSession = await registerBrowserUserWithApiAccess(
+      outsiderPage,
+      'Посторонний аудита E2E',
+      'issue-nine-outsider',
+      webOrigin,
+    )
+    const absentTenderId = randomUUID()
+    expect(absentTenderId).not.toBe(tenderId)
+    const outsiderHeaders = { Authorization: `Bearer ${outsiderSession.accessToken}` }
+    const [existingTenderResponse, absentTenderResponse] = await Promise.all([
+      outsiderContext.request.get(`${outsiderSession.apiOrigin}/api/tenders/${tenderId}`, {
+        headers: outsiderHeaders,
+      }),
+      outsiderContext.request.get(`${outsiderSession.apiOrigin}/api/tenders/${absentTenderId}`, {
+        headers: outsiderHeaders,
+      }),
+    ])
+    expect(existingTenderResponse.status()).toBe(404)
+    expect(absentTenderResponse.status()).toBe(404)
+    const [existingTenderBody, absentTenderBody] = await Promise.all([
+      existingTenderResponse.text(),
+      absentTenderResponse.text(),
+    ])
+    expect(existingTenderBody).toBe(absentTenderBody)
+    const concealedBody = JSON.parse(existingTenderBody) as unknown
+    expect(concealedBody).toEqual({
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Tender not found',
+      },
+    })
+    expect(JSON.stringify(concealedBody)).not.toMatch(
+      /audit|anomalyConfiguration|finalStanding|privateMeasurements|privateTheses|players/i,
+    )
+
+    await outsiderPage.goto(`${webOrigin}/tenders/${tenderId}`)
+    await expect(outsiderPage.getByRole('heading', { name: 'Матч недоступен' })).toBeVisible()
+    await expect(outsiderPage.getByRole('button', { name: 'Повторить' })).toBeVisible()
+    await expect(outsiderPage.getByRole('button', { name: 'В Историю матчей' })).toBeVisible()
+    await expect(outsiderPage.locator('[data-audit-section]')).toHaveCount(0)
+    await expect(outsiderPage.getByText(hostName, { exact: true })).toHaveCount(0)
+    await expect(outsiderPage.getByText(guestName, { exact: true })).toHaveCount(0)
+    await expect.poll(() => outsiderPage.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    )).toBe(true)
+    await auditCheckpoint(
+      outsiderPage,
+      '20-issue-9-outsider-terminal-mobile-390x844',
+    )
+
+    const retryTicketResponse = outsiderPage.waitForResponse((response) =>
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/realtime/tickets')
+    await outsiderPage.getByRole('button', { name: 'Повторить' }).click()
+    expect((await retryTicketResponse).ok()).toBe(true)
+    await expect(outsiderPage.getByRole('heading', { name: 'Матч недоступен' })).toBeVisible()
+
+    await outsiderPage.getByRole('button', { name: 'В Историю матчей' }).click()
+    await expect(outsiderPage).toHaveURL((url) => url.pathname === '/app')
+    await expect(outsiderPage.locator('[data-audit-section]')).toHaveCount(0)
+
+    expect(runtimeIssues).toEqual([])
+  } finally {
+    await Promise.all([
+      guestContext?.close(),
+      outsiderContext?.close(),
+      prisma.$disconnect(),
+    ])
   }
 })
 
@@ -540,7 +1264,11 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
   }
 })
 
-test('two players complete every Tender stage and receive each realtime phase transition', async ({ browser, page }) => {
+test('two players complete every Tender stage and receive each realtime phase transition', async ({
+  browser,
+  browserName,
+  page,
+}) => {
   test.setTimeout(300_000)
   page.setDefaultTimeout(15_000)
   await page.setViewportSize({ width: 1440, height: 900 })
@@ -555,10 +1283,46 @@ test('two players complete every Tender stage and receive each realtime phase tr
 
   const guestContext = await browser.newContext({
     baseURL: webOrigin,
+    reducedMotion: 'reduce',
     viewport: { width: 390, height: 844 },
   })
   const guestPage = await guestContext.newPage()
   guestPage.setDefaultTimeout(15_000)
+  const runtimeIssues: string[] = []
+  let expectedCommandAbort = false
+  const collectRuntimeIssues = (source: string) => {
+    const currentPage = source === 'host' ? page : guestPage
+    currentPage.on('pageerror', (error) => runtimeIssues.push(`${source}: pageerror: ${error.message}`))
+    currentPage.on('console', (message) => {
+      if (message.type() !== 'error') return
+      const resourceUrl = message.location().url
+      const expectedInjectedFailure = resourceUrl.endsWith('/api/auth/refresh')
+        || /\/api\/tenders\/[0-9a-f-]+\/commands$/.test(resourceUrl)
+        || /\/api\/tenders\/[0-9a-f-]+\/commands/.test(message.text())
+      if (!expectedInjectedFailure) runtimeIssues.push(`${source}: console: ${message.text()}`)
+    })
+    currentPage.on('requestfailed', (request) => {
+      const requestPath = new URL(request.url()).pathname
+      const expectedFirefoxBeaconRelease = browserName === 'firefox'
+        && request.method() === 'POST'
+        && requestPath === '/api/analytics/events'
+        && request.failure()?.errorText === 'NS_BINDING_ABORTED'
+      if (expectedFirefoxBeaconRelease) return
+      const expectedAmbiguousCommandAbort = source === 'host'
+        && expectedCommandAbort
+        && request.method() === 'POST'
+        && /\/api\/tenders\/[0-9a-f-]+\/commands$/.test(requestPath)
+      if (expectedAmbiguousCommandAbort) {
+        expectedCommandAbort = false
+        return
+      }
+      runtimeIssues.push(
+        `${source}: requestfailed: ${request.method()} ${requestPath} (${request.failure()?.errorText ?? 'unknown failure'})`,
+      )
+    })
+  }
+  collectRuntimeIssues('host')
+  collectRuntimeIssues('guest')
   const guestRealtimeViews: Array<Record<string, unknown>> = []
   guestPage.on('websocket', (socket) => {
     socket.on('framereceived', ({ payload }) => {
@@ -633,28 +1397,31 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByRole('button', {
       name: 'Слот доступа 6: Удалённый. Порядок действия: 6. Компенсация: 1 бюджет и 1 образец сигнала',
     })).toBeVisible()
+    await auditCheckpoint(page, '01-access-slot-desktop-1440x900')
+    await auditCheckpoint(guestPage, '02-access-slot-mobile-390x844')
 
-    let rejectFirstCommand = true
+    const attemptedAccessCommands: Array<Record<string, unknown>> = []
     await page.route('**/api/tenders/*/commands', async (route) => {
-      if (rejectFirstCommand) {
-        await route.fulfill({
-          status: 503,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Команда временно недоступна' } }),
-        })
+      const command = route.request().postDataJSON() as Record<string, unknown> | null
+      if (command?.type !== 'request-access-slot') {
+        await route.continue()
+        return
+      }
+      attemptedAccessCommands.push(command)
+      if (attemptedAccessCommands.length === 1) {
+        const committedResponse = await route.fetch()
+        expect(committedResponse.status()).toBe(200)
+        expectedCommandAbort = true
+        await route.abort('failed')
         return
       }
       await route.continue()
     })
     await page.getByRole('button', { name: /^Слот доступа 1:/ }).click()
     await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
-    await expect(page.getByRole('alert')).toContainText(
-      'Не удалось выполнить действие. Обновите состояние матча и попробуйте ещё раз.',
-    )
-    await expect(page.getByRole('alert')).not.toContainText('Команда временно недоступна')
-    await expect(page.getByRole('button', { name: 'Подтвердить выбор' })).toBeEnabled()
-    rejectFirstCommand = false
-    await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
+    await expect.poll(() => attemptedAccessCommands.length).toBe(2)
+    expect(attemptedAccessCommands[0]?.commandId).toBe(attemptedAccessCommands[1]?.commandId)
+    expect(attemptedAccessCommands[0]).toEqual(attemptedAccessCommands[1])
     await expect(page.getByRole('button', { name: 'Выбор принят — ожидаем игроков' })).toBeDisabled()
     await expect(page.getByRole('status')).toContainText('Слот 1: Аварийный зафиксирован и остаётся секретным.')
     await expectPhase(guestPage, headings.access)
@@ -666,6 +1433,10 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('2: непрерывный опыт с публичным результатом и приватным измерением полярности.')).toBeVisible()
     await expect(page.getByText('1: зарезервируйте и подайте одну заявку по контракту.')).toBeVisible()
     await expect(page.getByText('Слот 1', { exact: true })).toBeVisible()
+    await page.setViewportSize({ width: 1024, height: 768 })
+    await auditCheckpoint(page, '03-power-compact-1024x768')
+    await auditCheckpoint(guestPage, '03b-power-mobile-390x844')
+    await page.setViewportSize({ width: 1440, height: 900 })
     await allocatePower(page, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
     await allocatePower(guestPage, { 'Разведка': 2, 'Лаборатория': 1, 'Контракты': 1 })
 
@@ -678,6 +1449,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(page.getByText('Изучено', { exact: true })).toHaveCount(2)
     await expect(page.getByRole('button', { name: 'Правила' })).toBeEnabled()
     await expect(page.getByRole('button', { name: 'Трактовка анализов' })).toBeEnabled()
+    await auditCheckpoint(page, '04-reconnaissance-desktop-1440x900')
     await expectPhase(guestPage, headings.reconnaissance)
     await expect(guestPage.getByRole('button', { name: /^Контракты этого раунда · \d+$/ })).toBeVisible()
     await runReconnaissance(guestPage)
@@ -730,6 +1502,8 @@ test('two players complete every Tender stage and receive each realtime phase tr
         await expect(page.getByText('Шаг 1 из 2 · выберите тип исследования')).toBeVisible()
         await expect(page.getByRole('button', { name: 'Сначала выберите тип исследования' })).toBeDisabled()
         await expect(page.getByLabel('Образец: Aster')).toBeDisabled()
+        await auditCheckpoint(page, '05-laboratory-desktop-1440x900')
+        await auditCheckpoint(guestPage, '06-laboratory-mobile-390x844')
       }
       await runLaboratory(page, 'deep', round - 1)
       await expect(page.getByText('История', { exact: true })).toBeVisible()
@@ -759,6 +1533,10 @@ test('two players complete every Tender stage and receive each realtime phase tr
         await expect(page.getByText(`Всего: ${previousThesisCount} · раунд: 0/1`)).toBeVisible()
       }
       if (round === 2) await verifyWorkingModelModal(guestPage)
+      if (round === 2) {
+        await auditCheckpoint(page, '07-model-analysis-desktop-1440x900')
+        await auditCheckpoint(guestPage, '08-model-analysis-mobile-390x844')
+      }
       await submitThesis(page)
       if (round === 2) {
         await expect(guestPage.getByText('Завершили 1 из 2 исследователей').first()).toBeVisible()
@@ -771,6 +1549,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await submitThesis(guestPage)
       if (round >= 3) {
         await expectPhase(page, headings.contracts)
+        if (round === 3) await auditCheckpoint(page, '09-contracts-desktop-1440x900')
         await completeContract(page)
         if (await guestPage.getByRole('heading', { name: headings.contracts }).isVisible()) {
           await completeContract(guestPage)
@@ -808,6 +1587,13 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(
       guestPage.getByRole('button', { name: 'Отправить финальную модель' }).locator('xpath=ancestor::footer'),
     ).toHaveCSS('position', 'sticky')
+    await expectFullyInViewport(page.locator('[data-tutorial-final-submit]'))
+    await page.setViewportSize({ width: 1024, height: 768 })
+    await expectFullyInViewport(page.locator('[data-tutorial-final-submit]'))
+    await auditCheckpoint(page, '10-final-model-compact-1024x768')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await auditCheckpoint(page, '10-final-model-desktop-1440x900')
+    await auditCheckpoint(guestPage, '11-final-model-mobile-390x844')
     const finalDraftSaved = page.waitForResponse((response) => {
       if (response.request().method() !== 'POST' || !response.url().endsWith('/commands')) return false
       const command = response.request().postDataJSON() as { type?: string } | null
@@ -828,7 +1614,12 @@ test('two players complete every Tender stage and receive each realtime phase tr
     })).toHaveAttribute('aria-pressed', 'true')
     await completeAndSubmitFinalModel(page)
     await expectPhase(guestPage, headings.final)
-    await expect(page.getByRole('status')).toContainText('Финальная модель отправлена · 12/12')
+    await expect(page.getByRole('status')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Финальная модель отправлена · 12/12' })).toBeDisabled()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.getByRole('status')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Финальная модель отправлена · 12/12' })).toBeDisabled()
+    await page.setViewportSize({ width: 1440, height: 900 })
     await page.reload()
     await expectPhase(page, headings.final)
     await expect(page.getByLabel('Заполнено параметров: 12 из 12')).toBeVisible()
@@ -836,34 +1627,55 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await completeAndSubmitFinalModel(guestPage)
     await expect(page.getByText('Тендер завершён', { exact: true })).toBeVisible()
     await expect(guestPage.getByText('Тендер завершён', { exact: true })).toBeVisible()
-    await expect(guestPage.getByText('Ваш итог', { exact: true })).toBeVisible()
+    await expect(page.locator('header[aria-label="Результаты завершённого тендера"]')).toBeVisible()
+    await expect(guestPage.locator('header[aria-label="Результаты завершённого тендера"]')).toBeVisible()
+    await expect(guestPage.getByRole('heading', { name: /\d+ место · \d+ очк/ })).toBeVisible()
+    const guestOwnResult = guestPage.locator('section[aria-labelledby="completed-own-result-heading"]')
+    await expect(guestOwnResult).toContainText('Гость E2E')
+    await expect(guestOwnResult).not.toContainText('Слот')
+    await expect(guestPage.getByText('Исследование завершено', { exact: true })).toHaveCount(0)
     await expect(guestPage.locator('details[data-audit-section="own-model"] > summary')).toBeVisible()
     await expect(guestPage.locator('details[data-audit-section="other-players"] > summary')).toBeVisible()
+    await expect(guestPage.locator('details[data-audit-section="own-model"] > summary')).toContainText(/\d+\/12 верно/)
+    await expect(guestPage.locator('details[data-audit-section="full-audit"] > summary')).toContainText('5 раундов')
     const guestFullAudit = guestPage.locator('details[data-audit-section="full-audit"]')
     await expect(guestFullAudit).not.toHaveAttribute('open', '')
-    await guestPage.locator('details[data-audit-section="full-audit"] > summary').click()
+    const fullAuditSummary = guestPage.locator('details[data-audit-section="full-audit"] > summary')
+    await fullAuditSummary.focus()
+    await expect(fullAuditSummary).toBeFocused()
+    await fullAuditSummary.press('Enter')
     await expect(guestFullAudit.getByRole('combobox', { name: 'Фильтр итогового аудита по игроку' })
       .locator('option:checked')).toHaveText('Гость E2E')
     await expect(guestFullAudit.getByRole('option', { name: 'Все игроки' })).toHaveCount(1)
+    await fullAuditSummary.press('Enter')
+    await expect(guestFullAudit).not.toHaveAttribute('open', '')
     await expect(page.getByRole('heading', { name: 'Итоговый рейтинг', exact: true })).toBeVisible()
-    await expect(page.getByText('За что начислен рейтинг', { exact: true }).first()).toBeVisible()
-    await expect(page.getByLabel('За что начислен рейтинг игроку Хост E2E')).toContainText(
-      /Начислений рейтинга нет|Верные тезисы|Выполненные контракты|Верные свойства модели|Полностью раскрытые сигналы|Бонус полной модели/,
+    await expect(page.getByText('Подробнее', { exact: true }).first()).toBeVisible()
+    await expect(page.getByLabel('Из чего сложились очки игрока Хост E2E')).toContainText(
+      /Начислений очков нет|Верные тезисы|Выполненные контракты|Верные свойства модели|Полностью раскрытые сигналы|Бонус полной модели/,
     )
     await expect(page.getByRole('heading', { name: 'Конфигурация аномалии' })).toBeVisible()
     await expect(page.getByText('Раскрытые свойства шести сигналов', { exact: true })).toBeVisible()
     await expect(page.getByText('Финальная модель не отправлена')).toHaveCount(0)
     await expect(page.getByText('Аудит по раундам', { exact: true })).toBeVisible()
+    await page.setViewportSize({ width: 768, height: 1024 })
+    await auditCheckpoint(page, '12a-completed-audit-tablet-768x1024')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await auditCheckpoint(page, '12-completed-audit-desktop-1440x900')
+    await guestPage.setViewportSize({ width: 360, height: 800 })
+    await auditCheckpoint(guestPage, '13a-completed-audit-mobile-360x800')
+    await guestPage.setViewportSize({ width: 390, height: 844 })
+    await auditCheckpoint(guestPage, '13-completed-audit-mobile-390x844')
     const secondRoundAudit = page.locator('details[data-audit-round="2"]')
     await secondRoundAudit.locator('summary').click()
     await expect(secondRoundAudit.getByText('Широкое исследование', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Правила' }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Справочник правил' })).toBeVisible()
     await expect(page.getByText('Таймер матча продолжает идти')).toHaveCount(0)
     await page.getByRole('button', { name: 'Закрыть правила' }).click()
     await page.getByRole('button', { name: 'Трактовка анализов' }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Трактовка лабораторных анализов' })).toBeVisible()
     await expect(page.getByText('Таймер матча продолжает идти')).toHaveCount(0)
     await page.getByRole('button', { name: 'Закрыть трактовку анализов' }).click()
 
@@ -874,6 +1686,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
       page.getByText('Сыграно матчей').locator('..').getByText('1', { exact: true }),
     ).toBeVisible()
     await expect(page.getByText('Завершите первый матч, чтобы появилась статистика.')).toHaveCount(0)
+    expect(runtimeIssues).toEqual([])
   } finally {
     await guestContext.close()
   }

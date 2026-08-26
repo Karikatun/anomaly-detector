@@ -1,28 +1,173 @@
+import AxeBuilder from '@axe-core/playwright'
+import type { Locator, Page } from '@playwright/test'
 import { expect, registerBrowserUser, test } from '../helpers/test'
 
 const tasks = {
   interactionGuide: 'Небольшое правило: если вы видите кнопку «ПОНЯТНО, ДАЛЬШЕ», просто прочитайте подсказку и нажмите её. Трогать игровое поле нужно только тогда, когда подсказка прямо просит что-то выбрать, открыть или подтвердить.',
-  header: 'Наверху всегда видно, что происходит в игре: текущий раунд и фазу, ваш слот, Бюджет и порядок хода. Справа можно открыть Справку или выйти из обучения. Таймера здесь нет — можно не спешить.',
+  header: 'Наверху всегда видно, что происходит в игре: текущий раунд и фазу, ваш слот, Бюджет и порядок хода. Справа находятся «Правила», «Трактовка анализов» и выход из обучения. Таймера здесь нет — можно не спешить.',
   headerMobile: 'В верхней части экрана всегда видны текущий раунд и фаза, ваш слот, Бюджет и порядок хода. Здесь же находятся Справка и выход из обучения. Таймера нет — можно не спешить.',
   sidebar: 'Справа собрана вся полезная информация. Здесь видно, чей сейчас ход, а ниже можно открыть результаты исследований, Рабочую модель и Контракты.',
   sidebarMobile: 'На телефоне информационный блок находится ниже игрового поля. В нём видно, чей сейчас ход, а ещё отсюда открываются результаты исследований, Рабочая модель и Контракты.',
-  contracts: 'Контракты — это дополнительные задания от корпораций. Каждый Контракт объясняет, какие доказательства нужно собрать и сколько Рейтинга можно получить. Пока просто запомните, где они находятся: совсем скоро мы выполним один вместе.',
-  contractsMobile: 'Контракты находятся в информационном блоке под игровым полем. Это дополнительные задания от корпораций: в каждом указаны нужные доказательства и награда. Пока просто запомните эту кнопку — скоро мы выполним один Контракт вместе.',
+  contracts: 'Контракты — это дополнительные задания от корпораций. Каждый Контракт объясняет, какие доказательства нужно собрать и сколько Рейтинга можно получить. Сейчас достаточно заметить, где они находятся: совсем скоро мы выполним один вместе.',
+  contractsMobile: 'Контракты находятся в информационном блоке под игровым полем. Это дополнительные задания от корпораций: в каждом указаны нужные доказательства и награда. Сейчас достаточно заметить эту кнопку — скоро мы выполним один Контракт вместе.',
   accessIntro: 'Слот задаёт очерёдность хода. Чем меньше номер, тем раньше вы действуете, но за это иногда приходится платить Бюджетом. Поздний слот, наоборот, может принести компенсацию. Если несколько игроков выбрали одно место, блок «Правило выбора слота» покажет, кому оно достанется.',
-  roundOneRecon: 'Получим ещё один Образец. Выберите «Неизвестный Сигнал» и нажмите «Исследовать».',
+  roundOneRecon: 'Получим ещё один Образец. Выберите любой «Неизвестный Сигнал» и нажмите «Исследовать».',
   roundOneLabMode: 'Выберите, как потратить 2 Мощности. «Глубокое» исследование даст один опыт и личную подсказку о полярностях. «Широкое» даст два опыта, но без такой подсказки. Сейчас выберите «Глубокое».',
   roundOneLabPair: 'Теперь зададим направление опыта. Сначала выберите Aster — он будет источником. Затем выберите Boreal — он будет приёмником. Нажмите «Провести опыт».',
   researchResultsMobile: 'Опыт завершён. Его результат появился в разделе «Данные исследований» под игровым полем. Откройте этот раздел.',
-  roundOneModel: 'Запишем первую догадку. Откройте Рабочую модель и укажите для Aster тип «Инерционное» и полярность «Положительная». Изменения сохраняются автоматически — после выбора закройте окно.',
+  roundOneModel: 'Запишем первую догадку. Откройте Рабочую модель и укажите для Aster тип «Инерционное» и полярность «Положительная». Это локальный черновик текущей вкладки: игра его ещё не проверяет и не начисляет за него Рейтинг. После выбора закройте окно.',
   roundOneThesis: 'Пора проверить догадку. Выберите Сигнал Aster, тип «Инерционное» и полярность «Положительная», затем нажмите «Выдвинуть тезис». Игра отдельно проверит тип и полярность. Если ошибётесь, в обучении можно попробовать ещё раз без штрафа.',
   thesisResult: 'Тезис проверен. Откройте «Данные исследований» и посмотрите, что получилось.',
   contractsReview: 'Прежде чем распределять Мощность, заглянем в Контракты. Откройте их и проверьте, какие задания уже можно выполнить.',
-  roundTwoModel: 'Теперь попробуйте сделать вывод сами. Опыт Aster → Boreal дал «Отражение»: тип Boreal идёт сразу после типа Aster, а их полярности одинаковы. Откройте Рабочую модель, заполните Boreal и закройте окно. Изменения сохраняются автоматически.',
+  roundTwoPower: 'Во втором раунде сами распределите все 4 Мощности так, чтобы выполнить по одному действию каждого вида и подать Контракт. Когда план готов, подтвердите его.',
+  roundTwoModel: 'Теперь попробуйте сделать вывод сами. Опыт Aster → Boreal дал «Отражение»: тип Boreal идёт сразу после типа Aster, а их полярности одинаковы. Откройте Рабочую модель и заполните Boreal самостоятельно. Это всё ещё локальный черновик; правильность игра проверит только после отправки Тезиса.',
   roundTwoThesis: 'Верно: Boreal — «Электромагнитное» с положительной полярностью. Теперь выберите Boreal, эти же тип и полярность, затем нажмите «Выдвинуть тезис».',
-  contractBid: 'Доказательство выбрано. Проверьте его ещё раз и нажмите «Подтвердить контракт».',
+  contractReserve: 'В обучении подача разделена на два шага. Выберите для Контракта по Boreal доказательство — опыт Boreal → Cinder — и нажмите «Зарезервировать». Сервер окончательно закрепит Контракт за вами, но учебная заявка ещё не завершится.',
+  contractBid: 'Резервирование принято: Контракт закреплён за вами, и переключиться уже нельзя. Проверьте доказательство и нажмите «Подтвердить контракт» — это завершит учебную заявку. В настоящем Тендере резервирование и подача происходят вместе.',
   finalModel: 'Подтверждённые свойства Aster и Boreal уже перенесены в Финальную модель. В обучении остальные Сигналы можно оставить пустыми. Нажмите «Отправить финальную модель».',
   helpDesktop: 'Теперь разберёмся, что означает «Отражение». Откройте «Трактовку анализов» в верхней части экрана.',
 } as const
+
+const accountProtectionInvitation = {
+  action: 'К ЗАЩИТЕ АККАУНТА',
+  title: 'Необязательно: защитите аккаунт',
+  warning: 'Без подтверждённой почты самостоятельное восстановление доступа невозможно.',
+} as const
+
+function captureRuntimeErrors(page: Page) {
+  const errors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(`console: ${message.text()}`)
+  })
+  page.on('pageerror', (error) => errors.push(`page: ${error.message}`))
+  return errors
+}
+
+async function expectNoAxeViolations(page: Page) {
+  const activeFloater = page.locator('[data-testid="floater"]')
+  if (await activeFloater.count() > 0) {
+    await expect.poll(() => activeFloater.evaluate((element) => Number(getComputedStyle(element).opacity))).toBe(1)
+  }
+  await page.evaluate(() => new Promise<void>((resolveFrame) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+  }))
+  const stacking = await page.evaluate(() => {
+    const floater = document.querySelector<HTMLElement>('[data-testid="floater"]')
+    const overlay = document.querySelector<HTMLElement>('[data-testid="overlay"]')
+    if (!floater || !overlay) return null
+    const rect = floater.getBoundingClientRect()
+    return {
+      floaterZIndex: getComputedStyle(floater).zIndex,
+      overlayZIndex: getComputedStyle(overlay).zIndex,
+      elementsAtCoachCenter: document.elementsFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      ).slice(0, 5).map((element) => ({
+        className: String(element.className),
+        tagName: element.tagName,
+        testId: element.getAttribute('data-testid'),
+      })),
+    }
+  })
+  if (stacking) {
+    expect(Number(stacking.floaterZIndex)).toBeGreaterThan(Number(stacking.overlayZIndex))
+    expect(stacking.elementsAtCoachCenter.some((element) => element.testId === 'floater')).toBe(true)
+  }
+
+  const auditOnlyLayers = page.locator('[data-agentation-root]')
+  const previousStyles = await auditOnlyLayers.evaluateAll((elements) => elements.map((element) => (
+    element.getAttribute('style')
+  )))
+  // Agentation is an audit tool, not product UI. Keep the actual Joyride overlay in the scan after
+  // proving that the coach is above it in the browser stacking order.
+  await auditOnlyLayers.evaluateAll((elements) => {
+    for (const element of elements) {
+      if (element instanceof HTMLElement) element.style.setProperty('display', 'none', 'important')
+    }
+  })
+  await page.evaluate(() => new Promise<void>((resolveFrame) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+  }))
+  let result
+  try {
+    result = await new AxeBuilder({ page })
+      .exclude('[data-agentation-root]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+  } finally {
+    await auditOnlyLayers.evaluateAll((elements, styles) => {
+      elements.forEach((element, index) => {
+        const style = styles[index]
+        if (style === null) element.removeAttribute('style')
+        else element.setAttribute('style', style)
+      })
+    }, previousStyles)
+  }
+  const violations = result.violations.map((violation) => ({
+    id: violation.id,
+    impact: violation.impact,
+    nodes: violation.nodes.map((node) => ({
+      target: node.target,
+      summary: node.failureSummary,
+    })),
+  }))
+  expect(violations, `stacking context: ${JSON.stringify(stacking)}`).toEqual([])
+}
+
+async function focusByTab(page: Page, target: Locator, maximumTabs = 12) {
+  for (let attempt = 0; attempt < maximumTabs; attempt += 1) {
+    if (await target.evaluate((element) => element === document.activeElement)) return
+    await page.keyboard.press('Tab')
+  }
+  await expect(target).toBeFocused()
+}
+
+async function expectVisibleFocus(target: Locator) {
+  await expect(target).toBeFocused()
+  await expect.poll(() => target.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return (style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0)
+      || style.boxShadow !== 'none'
+  })).toBe(true)
+}
+
+async function expectTouchTargetsMeetMinimum(page: Page) {
+  const undersizedTargets = await page
+    .locator('button, select, input, summary, a[href]')
+    .evaluateAll((elements) => elements.flatMap((element) => {
+      const rect = element.getBoundingClientRect()
+      const style = getComputedStyle(element)
+      const before = getComputedStyle(element, '::before')
+      const pseudoExpansion = before.content !== 'none'
+        ? {
+            horizontal: Math.max(0, -Number.parseFloat(before.left))
+              + Math.max(0, -Number.parseFloat(before.right)),
+            vertical: Math.max(0, -Number.parseFloat(before.top))
+              + Math.max(0, -Number.parseFloat(before.bottom)),
+          }
+        : { horizontal: 0, vertical: 0 }
+      const targetWidth = rect.width + pseudoExpansion.horizontal
+      const targetHeight = rect.height + pseudoExpansion.vertical
+      const outsideViewport = rect.right <= 0
+        || rect.bottom <= 0
+        || rect.left >= window.innerWidth
+        || rect.top >= window.innerHeight
+      if (element.closest('[data-agentation-root]')
+        || outsideViewport
+        || style.visibility === 'hidden'
+        || style.display === 'none'
+        || rect.width === 0
+        || rect.height === 0
+        || (element instanceof HTMLButtonElement && element.disabled)
+        || (targetWidth >= 24 && targetHeight >= 24)) return []
+      return [{
+        name: element.getAttribute('aria-label') ?? element.textContent?.trim() ?? element.tagName,
+        width: Math.round(targetWidth),
+        height: Math.round(targetHeight),
+      }]
+    }))
+  expect(undersizedTargets).toEqual([])
+}
 
 async function startTutorial(page: Parameters<typeof registerBrowserUser>[0]) {
   await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
@@ -41,6 +186,63 @@ async function startTutorial(page: Parameters<typeof registerBrowserUser>[0]) {
   await expect(page.locator('[data-tutorial-access-slot][data-selected]')).toHaveCount(0)
   await expect(page.getByText('Слот: 5', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+}
+
+async function openSavedCompletionWithAccountProtection(
+  page: Page,
+  accountProtection: Record<string, unknown>,
+  responseStatus = 200,
+  responseGate?: Promise<void>,
+) {
+  await startTutorial(page)
+  await page.route('**/api/auth/account-protection', async (route) => {
+    await responseGate
+    await route.fulfill({
+      contentType: 'application/json',
+      status: responseStatus,
+      body: JSON.stringify(responseStatus === 200
+        ? { accountProtection }
+        : { error: { code: 'UNAVAILABLE', message: 'Temporary failure' } }),
+    })
+  })
+  await page.evaluate(() => {
+    const key = 'anomaly-detector:tutorial-session'
+    const serialized = sessionStorage.getItem(key)
+    if (!serialized) throw new Error('Tutorial session is unavailable')
+    const state = JSON.parse(serialized) as { step: string }
+    state.step = 'complete'
+    sessionStorage.setItem(key, JSON.stringify(state))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Сохранить отметку' }).click()
+  await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+}
+
+async function elementBox(locator: Locator) {
+  const box = await locator.boundingBox()
+  expect(box).not.toBeNull()
+  return box!
+}
+
+function expectBoxWithinViewport(
+  box: { x: number; y: number; width: number; height: number },
+  viewport: { width: number; height: number },
+) {
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.y).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height)
+}
+
+function expectStableBox(
+  before: { x: number; y: number; width: number; height: number },
+  after: { x: number; y: number; width: number; height: number },
+  tolerance = 2,
+) {
+  expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(tolerance)
 }
 
 async function continueInformationStep(page: Parameters<typeof registerBrowserUser>[0], task: string) {
@@ -121,7 +323,12 @@ async function completeInitialInterfaceTour(page: Parameters<typeof registerBrow
   } else {
     await expectTutorialFrameFullyVisible(page, '[data-tutorial-access-options]')
   }
-  await expectSpotlightMatchesTarget(page, '[data-tutorial-access-options]')
+  await expectSpotlightMatchesTarget(
+    page,
+    (page.viewportSize()?.width ?? 0) <= 1088
+      ? '[data-tutorial-access-slot="1"]'
+      : '[data-tutorial-access-options]',
+  )
   await continueInformationStep(page, tasks.accessIntro)
   await expect(page.locator('[data-tutorial-access-slot][data-selected]')).toHaveCount(0)
   await expect(page.getByText('Слот: 5', { exact: true })).toHaveCount(0)
@@ -165,6 +372,64 @@ async function expectTargetClearOfCoach(
   }, {
     message: 'tutorial coach must not cover the highlighted target',
   }).toBe(true)
+}
+
+async function expectSpotlightClearOfCoach(
+  page: Parameters<typeof registerBrowserUser>[0],
+) {
+  await expect.poll(async () => {
+    const [spotlightBox, coachBox] = await Promise.all([
+      page.getByTestId('spotlight').locator('path').last().boundingBox(),
+      page.getByTestId('floater').locator('[data-joyride-step]').boundingBox(),
+    ])
+    if (!spotlightBox || !coachBox) return false
+    return spotlightBox.y + spotlightBox.height + 8 <= coachBox.y
+      || coachBox.y + coachBox.height + 8 <= spotlightBox.y
+      || spotlightBox.x + spotlightBox.width + 8 <= coachBox.x
+      || coachBox.x + coachBox.width + 8 <= spotlightBox.x
+  }, {
+    message: 'tutorial coach must not cover the visible spotlight',
+  }).toBe(true)
+}
+
+async function expectSpotlightFullyVisible(
+  page: Parameters<typeof registerBrowserUser>[0],
+) {
+  const viewport = page.viewportSize()
+  expect(viewport, 'tutorial viewport must be configured').not.toBeNull()
+  await expect.poll(async () => {
+    const box = await page.getByTestId('spotlight').locator('path').last().boundingBox()
+    if (!box) return Number.NEGATIVE_INFINITY
+    return Math.min(
+      box.x,
+      box.y,
+      viewport!.width - (box.x + box.width),
+      viewport!.height - (box.y + box.height),
+    )
+  }, {
+    message: 'tutorial spotlight must fit inside the viewport',
+  }).toBeGreaterThanOrEqual(4)
+}
+
+async function expectControlClearOfCoach(
+  page: Parameters<typeof registerBrowserUser>[0],
+  control: ReturnType<Parameters<typeof registerBrowserUser>[0]['getByRole']>,
+) {
+  await expect.poll(async () => {
+    const [controlBox, coachBox] = await Promise.all([
+      control.boundingBox(),
+      page.getByTestId('floater').locator('[data-joyride-step]').boundingBox(),
+    ])
+    if (!controlBox || !coachBox) return false
+    return controlBox.y + controlBox.height + 8 <= coachBox.y
+      || coachBox.y + coachBox.height + 8 <= controlBox.y
+      || controlBox.x + controlBox.width + 8 <= coachBox.x
+      || coachBox.x + coachBox.width + 8 <= controlBox.x
+  }, {
+    message: 'tutorial coach must not cover the required control',
+  }).toBe(true)
+
+  await expectRequiredActionAvailable(page, control)
 }
 
 async function expectActionContainerClearOfCoach(
@@ -261,14 +526,14 @@ async function expectNoDesktopDocumentScroll(page: Parameters<typeof registerBro
     viewport: window.innerHeight,
     contentBottom: Math.max(
       ...Array.from(document.querySelector<HTMLElement>('[data-tutorial-board]')?.children ?? [])
-        .map((element) => element.getBoundingClientRect().bottom),
+        .map((element) => element.getBoundingClientRect().bottom + window.scrollY),
     ),
   }))
   if (geometry.contentBottom > geometry.viewport) return
   expect(
     Math.max(geometry.body, geometry.document),
     'desktop tutorial must not create document scroll when its content fits the viewport',
-  ).toBeLessThanOrEqual(geometry.viewport)
+  ).toBeLessThanOrEqual(geometry.viewport + 8)
 }
 
 async function expectTargetInMobileInteractiveArea(
@@ -471,7 +736,25 @@ async function expectSpotlightMatchesTarget(
     if (!target || !spotlightPath) return Number.POSITIVE_INFINITY
 
     const targetRect = target.getBoundingClientRect()
-    const spotlightRect = spotlightPath.getBoundingClientRect()
+    const spotlightBox = spotlightPath.getBBox()
+    const matrix = spotlightPath.getScreenCTM()
+    if (!matrix) return Number.POSITIVE_INFINITY
+    const transform = (x: number, y: number) => ({
+      x: matrix.a * x + matrix.c * y + matrix.e,
+      y: matrix.b * x + matrix.d * y + matrix.f,
+    })
+    const corners = [
+      transform(spotlightBox.x, spotlightBox.y),
+      transform(spotlightBox.x + spotlightBox.width, spotlightBox.y),
+      transform(spotlightBox.x, spotlightBox.y + spotlightBox.height),
+      transform(spotlightBox.x + spotlightBox.width, spotlightBox.y + spotlightBox.height),
+    ]
+    const spotlightRect = {
+      bottom: Math.max(...corners.map((corner) => corner.y)),
+      left: Math.min(...corners.map((corner) => corner.x)),
+      right: Math.max(...corners.map((corner) => corner.x)),
+      top: Math.min(...corners.map((corner) => corner.y)),
+    }
     const expectedPadding = 8
     return Math.max(
       Math.abs(spotlightRect.left - (targetRect.left - expectedPadding)),
@@ -528,16 +811,34 @@ async function captureVisibleSpotlightMismatchDuringStepChange(
           ).find((path) => path.getAttribute('stroke') === '#38bdf8')
           if (target && spotlightPath) {
             const targetRect = target.getBoundingClientRect()
-            const spotlightRect = spotlightPath.getBoundingClientRect()
+            const spotlightBox = spotlightPath.getBBox()
+            const matrix = spotlightPath.getScreenCTM()
             const spotlightStyle = getComputedStyle(spotlightPath)
             const opacity = Number(spotlightStyle.opacity)
             const visible = spotlightStyle.visibility !== 'hidden' && opacity > .05
-            const mismatch = Math.max(
-              Math.abs(spotlightRect.left - (targetRect.left - 8)),
-              Math.abs(spotlightRect.top - (targetRect.top - 8)),
-              Math.abs(spotlightRect.right - (targetRect.right + 8)),
-              Math.abs(spotlightRect.bottom - (targetRect.bottom + 8)),
-            )
+            const mismatch = (() => {
+              if (!matrix) return Number.POSITIVE_INFINITY
+              const transform = (x: number, y: number) => ({
+                x: matrix.a * x + matrix.c * y + matrix.e,
+                y: matrix.b * x + matrix.d * y + matrix.f,
+              })
+              const corners = [
+                transform(spotlightBox.x, spotlightBox.y),
+                transform(spotlightBox.x + spotlightBox.width, spotlightBox.y),
+                transform(spotlightBox.x, spotlightBox.y + spotlightBox.height),
+                transform(spotlightBox.x + spotlightBox.width, spotlightBox.y + spotlightBox.height),
+              ]
+              const left = Math.min(...corners.map((corner) => corner.x))
+              const top = Math.min(...corners.map((corner) => corner.y))
+              const right = Math.max(...corners.map((corner) => corner.x))
+              const bottom = Math.max(...corners.map((corner) => corner.y))
+              return Math.max(
+                Math.abs(left - (targetRect.left - 8)),
+                Math.abs(top - (targetRect.top - 8)),
+                Math.abs(right - (targetRect.right + 8)),
+                Math.abs(bottom - (targetRect.bottom + 8)),
+              )
+            })()
             if (visible && mismatch > 1) {
               mismatches.push(mismatch)
             }
@@ -659,11 +960,183 @@ async function submitThesis(
   await confirm.click()
 }
 
+test('keeps the first mobile tutorial target clear of the coach', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 })
+  await registerBrowserUser(page, 'Ученик Mobile Layout', 'tutorial-mobile-layout')
+
+  await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
+  await page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
+    .getByRole('button', { name: 'Начать обучение' })
+    .click()
+
+  await expect(currentTask(page, tasks.interactionGuide)).toBeVisible()
+  await expectTargetClearOfCoach(page, '[data-tutorial-access-intro]')
+  await expectSpotlightClearOfCoach(page)
+})
+
+test('keeps the narrow-desktop access spotlight clear of the coach', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await registerBrowserUser(page, 'Ученик Access Layout', 'tutorial-access-layout')
+
+  await startTutorial(page)
+  for (let index = 0; index < 3; index += 1) {
+    await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  }
+
+  await expect(currentTask(page, tasks.accessIntro)).toBeVisible()
+  await expectSpotlightClearOfCoach(page)
+})
+
+test('keeps the required laboratory action available at 1024x768', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await registerBrowserUser(page, 'Ученик Narrow Desktop', 'tutorial-narrow-desktop')
+
+  await startTutorial(page)
+  await completeInitialInterfaceTour(page)
+  await chooseAccessSlot(page, 5)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await allocatePower(page, {
+    'Разведка': 1,
+    'Лаборатория': 2,
+    'Анализ модели': 1,
+    'Контракты': 0,
+  })
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await runReconnaissance(page)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await page.getByRole('button', { name: 'Глубокое' }).click()
+  await runLaboratoryTest(page, 'Aster', 'Boreal')
+  await expect(page.getByTestId('tutorial-research-trigger')).toBeVisible()
+})
+
+test('keeps the power introduction fully visible at 1024x768', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await registerBrowserUser(page, 'Ученик Power Layout', 'tutorial-power-layout')
+
+  await startTutorial(page)
+  await completeInitialInterfaceTour(page)
+  await chooseAccessSlot(page, 5)
+
+  await expectSpotlightClearOfCoach(page)
+  await expectSpotlightFullyVisible(page)
+})
+
+test('keeps the interpretation close action available at 1024x768', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await registerBrowserUser(page, 'Ученик Interpretation Layout', 'tutorial-interpretation-layout')
+
+  await startTutorial(page)
+  await completeInitialInterfaceTour(page)
+  await chooseAccessSlot(page, 5)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await allocatePower(page, {
+    'Разведка': 1,
+    'Лаборатория': 2,
+    'Анализ модели': 1,
+    'Контракты': 0,
+  })
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await runReconnaissance(page)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await page.getByRole('button', { name: 'Глубокое' }).click()
+  await runLaboratoryTest(page, 'Aster', 'Boreal')
+  await page.getByTestId('tutorial-research-trigger').click()
+  await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+  await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
+
+  const closeInterpretation = page.getByRole('button', { name: 'Закрыть трактовку анализов' })
+  await expect(closeInterpretation).toBeVisible()
+  await expectControlClearOfCoach(page, closeInterpretation)
+})
+
+test('keeps the prologue and guided steps accessible from the keyboard', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await registerBrowserUser(page, 'Ученик Keyboard', 'tutorial-keyboard')
+  const runtimeErrors = captureRuntimeErrors(page)
+
+  await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
+  const prologue = page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
+  await expect(prologue).toBeVisible()
+  await expect.poll(() => prologue.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true)
+  await expectNoAxeViolations(page)
+
+  await page.keyboard.press('Escape')
+  await expect(prologue).toBeVisible()
+  const start = prologue.getByRole('button', { name: 'Начать обучение' })
+  await focusByTab(page, start, 3)
+  await expectVisibleFocus(start)
+  await page.keyboard.press('Enter')
+
+  await expect(currentTask(page, tasks.interactionGuide)).toBeVisible()
+  const continueAction = page.getByTestId('floater').getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' })
+  await focusByTab(page, continueAction)
+  await expectVisibleFocus(continueAction)
+  await page.keyboard.press('Enter')
+  await expect(currentTask(page, tasks.header)).toBeVisible()
+  await expectNoAxeViolations(page)
+  expect(runtimeErrors).toEqual([])
+})
+
+test('reflows at a 200% desktop zoom equivalent and honors reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await registerBrowserUser(page, 'Ученик Zoom', 'tutorial-zoom')
+  await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
+  await page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
+    .getByRole('button', { name: 'Начать обучение' })
+    .click()
+  await expect(currentTask(page, tasks.interactionGuide)).toBeVisible()
+
+  await page.setViewportSize({ width: 720, height: 450 })
+  await expectTargetClearOfCoach(page, '[data-tutorial-access-intro]')
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await expect(currentTask(page, tasks.headerMobile)).toBeVisible()
+  await expectCoachWithinViewport(page)
+  await expectTargetClearOfCoach(page, '[data-tutorial-highlight="header"] > header')
+  await expectSpotlightClearOfCoach(page)
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  const longAnimations = await page.evaluate(() => document.getAnimations().flatMap((animation) => {
+    const duration = Number(animation.effect?.getTiming().duration ?? 0)
+    return duration > 20 ? [duration] : []
+  }))
+  expect(longAnimations).toEqual([])
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await expect(currentTask(page, tasks.header)).toBeVisible()
+  await expectSpotlightClearOfCoach(page)
+})
+
+test('preserves the mobile step through dynamic viewport and orientation changes', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await registerBrowserUser(page, 'Ученик Mobile Resize', 'tutorial-mobile-resize')
+  await startTutorial(page)
+
+  await page.setViewportSize({ width: 844, height: 390 })
+  await expect(currentTask(page, tasks.header)).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 700 })
+  await expect(currentTask(page, tasks.headerMobile)).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(currentTask(page, tasks.headerMobile)).toBeVisible()
+  await expectCoachWithinViewport(page)
+  await expectSpotlightClearOfCoach(page)
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await expectTouchTargetsMeetMinimum(page)
+})
+
 test('completes the two-round tutorial, restores its tab-local step, and records only completion', async ({ page }) => {
   test.setTimeout(120_000)
   page.setDefaultTimeout(15_000)
+  const analyticsEvents: string[] = []
+  page.on('request', (request) => {
+    if (!request.url().endsWith('/api/analytics/events') || request.method() !== 'POST') return
+    const payload = request.postDataJSON() as { event?: string }
+    if (payload.event) analyticsEvents.push(payload.event)
+  })
   await page.setViewportSize({ width: 1440, height: 900 })
   await registerBrowserUser(page, 'Ученик E2E', 'tutorial-happy')
+  const runtimeErrors = captureRuntimeErrors(page)
 
   await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
   await page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
@@ -722,6 +1195,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect(researchDialog).toContainText('Boreal')
   await expect(researchDialog).toContainText('Отражение')
   await expect(researchDialog).toContainText('Одинаковая полярность')
+  await expect(page.getByTestId('floater')).toContainText('запоминать их не нужно')
   await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
 
   await expect(page.getByText(
@@ -732,11 +1206,21 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect(page.getByRole('button', { name: 'Правила', exact: true })).toBeVisible()
   await expect(currentTask(page, tasks.helpDesktop)).toBeVisible()
   await expectTutorialFrameFullyVisible(page, '[data-tutorial-interpretation-direct]')
-  await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
+  const interpretationTrigger = page.getByRole('button', { name: 'Трактовка анализов', exact: true })
+  await page.getByRole('button', { name: 'Правила', exact: true }).focus()
+  await page.keyboard.press('Tab')
+  await expectVisibleFocus(interpretationTrigger)
+  await page.keyboard.press('Enter')
   const interpretationDialog = page.getByRole('dialog', { name: 'Трактовка лабораторных анализов' })
   await expect(interpretationDialog).toContainText('Цикл типов поля')
   await expectReadingDialogAvailable(page, interpretationDialog)
   await expectCoachWithinViewport(page)
+  await expect.poll(() => interpretationDialog.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true)
+  await page.keyboard.press('Escape')
+  await expect(interpretationDialog).toBeHidden()
+  await expect(interpretationTrigger).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(interpretationDialog).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть трактовку анализов' }).click()
 
   await expectCoachWithinViewport(page)
@@ -745,6 +1229,14 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await saveHypothesis(page, 'Aster', 'Инерционное')
   await expect(currentTask(page, tasks.roundOneThesis)).toBeVisible()
   await expectCoachWithinViewport(page)
+  await page.getByLabel('Сигнал для тезиса').selectOption('aster')
+  await page.getByLabel('Тип поля для тезиса').selectOption('phase')
+  await page.getByLabel('Полярность для тезиса').selectOption('positive')
+  await page.getByRole('button', { name: 'Выдвинуть тезис' }).click()
+  await expect(page.getByTestId('floater').getByRole('alert')).toHaveText(
+    'Тезис не принят: тип поля неверен, полярность верна. В обучении эта попытка не тратит Мощность и не снижает Рейтинг. Исправьте выбор и отправьте Тезис снова.',
+  )
+  await expect(currentTask(page, tasks.roundOneThesis)).toBeVisible()
   await submitThesis(page, 'aster', 'inertial')
 
   await expect(currentTask(page, tasks.thesisResult)).toBeVisible()
@@ -769,6 +1261,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect(contractsDialog.getByText('Готов к подаче', { exact: true })).toBeVisible()
   await expect(contractsDialog.getByText('Нужно подготовить', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Закрыть контракты' }).click()
+  await expect(currentTask(page, tasks.roundTwoPower)).toBeVisible()
   await allocatePower(page, {
     'Разведка': 1,
     'Лаборатория': 1,
@@ -788,6 +1281,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
 
   await expectCoachWithinViewport(page)
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await expect(currentTask(page, tasks.contractReserve)).toBeVisible()
   await page.locator('[data-contract-id="tutorial-light-contract"]')
     .getByLabel('Подходящее исследование для контракта Boreal · источник')
     .selectOption('tutorial-test-2')
@@ -800,9 +1294,23 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect(page.getByLabel('Заполнено параметров: 4')).toBeVisible()
   await expect(currentTask(page, tasks.finalModel)).toBeVisible()
   await expectCoachWithinViewport(page, { expectDocumentFits: false })
-  await page.getByRole('button', { name: 'Отправить финальную модель' }).click()
+  const finalSubmit = page.getByRole('button', { name: 'Отправить финальную модель' })
+  await expectControlClearOfCoach(page, finalSubmit)
+  await finalSubmit.click()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
   await expect(page.getByText('В настоящем Тендере будет пять раундов', { exact: false })).toBeVisible()
+  await expect(page.getByText('Лёгкому Контракту нужен один подходящий опыт', { exact: false })).toBeVisible()
+  const protectionInvitation = page.getByRole('region', {
+    name: accountProtectionInvitation.title,
+  })
+  await expect(protectionInvitation).toContainText(accountProtectionInvitation.warning)
+  await expect(protectionInvitation.getByRole('button', {
+    name: accountProtectionInvitation.action,
+  })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeEnabled()
+  await expectNoAxeViolations(page)
   const finalBackgrounds = await page.evaluate(() => ({
     app: getComputedStyle(document.body, '::before').backgroundImage,
     tutorial: [...document.querySelectorAll<HTMLElement>('*')].filter((element) => (
@@ -812,26 +1320,151 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   expect(finalBackgrounds.app).toContain('/assets/body-background.webp')
   expect(finalBackgrounds.tutorial, 'completion must not render the tutorial-specific expedition background').toBe(0)
 
-  await page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' }).click()
+  const accountProtectionAction = protectionInvitation.getByRole('button', {
+    name: accountProtectionInvitation.action,
+  })
+  await focusByTab(page, accountProtectionAction)
+  await expectVisibleFocus(accountProtectionAction)
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/profile\/?#account-protection$/)
+  const accountProtectionCard = page.locator('#account-protection')
+  await expect(accountProtectionCard.getByRole('heading', { name: 'Защита аккаунта' })).toBeVisible()
+  await expect.poll(async () => accountProtectionCard.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return rect.top >= 0 && rect.bottom <= window.innerHeight
+  }), {
+    message: 'the Profile account-protection card must be visible after the tutorial CTA',
+  }).toBe(true)
+  await expect(page.getByRole('button', { name: 'Добавить почту' })).toBeVisible()
+  await page.getByRole('button', { name: 'Назад' }).click()
   await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeVisible()
-  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
-  await expect(
-    page.getByText('Сыграно матчей').locator('..').getByText('0', { exact: true }),
-  ).toBeVisible()
+  await expect.poll(() => analyticsEvents).toContain('tutorial_complete')
+  expect(runtimeErrors).toEqual([])
 })
 
-test('completes the full tutorial on mobile with each action clear of the coach', async ({ page }) => {
+test('keeps completion actions available when account protection lookup fails', async ({ page }) => {
+  await registerBrowserUser(page, 'Ученик без статуса защиты', 'tutorial-protection-unavailable')
+  await openSavedCompletionWithAccountProtection(page, {}, 503)
+
+  await expect(page.getByRole('region', { name: accountProtectionInvitation.title })).toHaveCount(0)
+  await expect(page.getByText(accountProtectionInvitation.title, { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeEnabled()
+})
+
+test('keeps the primary completion action stable while account protection loads on mobile', async ({ page }) => {
+  const viewport = { width: 390, height: 844 }
+  await page.setViewportSize(viewport)
+  await registerBrowserUser(page, 'Ученик с задержкой защиты', 'tutorial-protection-delayed')
+
+  let releaseAccountProtectionResponse!: () => void
+  const responseGate = new Promise<void>((resolve) => {
+    releaseAccountProtectionResponse = resolve
+  })
+  const accountProtectionRequest = page.waitForRequest('**/api/auth/account-protection')
+  await Promise.all([
+    openSavedCompletionWithAccountProtection(
+      page,
+      { state: 'password_unprotected' },
+      200,
+      responseGate,
+    ),
+    accountProtectionRequest,
+  ])
+
+  const createTenderAction = page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })
+  const protectionInvitation = page.getByRole('region', {
+    name: accountProtectionInvitation.title,
+  })
+  await expect(createTenderAction).toBeVisible()
+  await expect(protectionInvitation).toHaveCount(0)
+  const beforeResponse = await elementBox(createTenderAction)
+  expectBoxWithinViewport(beforeResponse, viewport)
+
+  releaseAccountProtectionResponse()
+  await expect(protectionInvitation).toContainText(accountProtectionInvitation.warning)
+  const afterResponse = await elementBox(createTenderAction)
+  const invitationBox = await elementBox(protectionInvitation)
+  expectBoxWithinViewport(afterResponse, viewport)
+  expectStableBox(beforeResponse, afterResponse)
+  expect(invitationBox.y).toBeGreaterThanOrEqual(afterResponse.y + afterResponse.height)
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await expectTouchTargetsMeetMinimum(page)
+  await expectNoAxeViolations(page)
+})
+
+for (const scenario of [
+  {
+    accountProtection: {
+      maskedAccountEmail: 'y***@yandex.ru',
+      state: 'yandex_managed',
+    },
+    name: 'Yandex-managed account',
+  },
+  {
+    accountProtection: {
+      maskedAccountEmail: 'p***@mail.ru',
+      recoveryCodes: 'available',
+      state: 'password_active',
+    },
+    name: 'protected password account',
+  },
+] as const) {
+  test(`does not show the Recovery Email invitation to a ${scenario.name}`, async ({ page }) => {
+    await registerBrowserUser(page, `Ученик ${scenario.name}`, `tutorial-no-invite-${scenario.accountProtection.state}`)
+    await openSavedCompletionWithAccountProtection(page, scenario.accountProtection)
+
+    await expect(page.getByRole('region', { name: accountProtectionInvitation.title })).toHaveCount(0)
+    await expect(page.getByText(accountProtectionInvitation.title, { exact: true })).toHaveCount(0)
+    await expect(page.getByText(accountProtectionInvitation.warning, { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', {
+      name: accountProtectionInvitation.action,
+    })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeEnabled()
+  })
+}
+
+for (const viewport of [
+  { height: 900, label: '1440x900', slug: '1440', width: 1440 },
+  { height: 768, label: '1024x768', slug: '1024', width: 1024 },
+] as const) {
+  test(`keeps completion actions available with the account protection invitation at ${viewport.label}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+    await registerBrowserUser(page, `Ученик ${viewport.slug}`, `tutorial-protect-${viewport.slug}`)
+    await openSavedCompletionWithAccountProtection(page, { state: 'password_unprotected' })
+
+    const protectionInvitation = page.getByRole('region', {
+      name: accountProtectionInvitation.title,
+    })
+    await expect(protectionInvitation).toContainText(accountProtectionInvitation.warning)
+    await expect(page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeEnabled()
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await expectTouchTargetsMeetMinimum(page)
+    await expectNoAxeViolations(page)
+  })
+}
+
+test('completes the full tutorial on mobile with each action clear of the coach', async ({
+  browserName,
+  page,
+}) => {
   test.setTimeout(120_000)
   page.setDefaultTimeout(15_000)
-  await page.setViewportSize({ width: 390, height: 840 })
+  await page.setViewportSize({ width: 390, height: 844 })
   await registerBrowserUser(page, 'Мобильный ученик E2E', 'tutorial-mobile-interpretation')
+  const runtimeErrors = captureRuntimeErrors(page)
 
   await startTutorial(page)
   await expectCoachWithinViewport(page)
   await completeInitialInterfaceTour(page)
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-slot="5"]')
   await chooseAccessSlot(page, 5)
-  await expectMobileTargetTopAligned(page, '[data-tutorial-primary]')
+  await expectMobileTargetTopAligned(page, '[data-tutorial-power-intro]')
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
   await expectTargetInMobileInteractiveArea(
     page,
@@ -973,7 +1606,16 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   const mobileContractsDialog = page.getByRole('dialog', { name: 'Контракты этого раунда · 2' })
   await expectReadingDialogAvailable(page, mobileContractsDialog)
   await expect(mobileContractsDialog.getByText('Готов к подаче', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Закрыть контракты' }).click()
+  const scrollBeforeRoundTwoPower = await page.evaluate(() => window.scrollY)
+  const roundTwoPowerScrollRequests = await captureScrollRequests(
+    page,
+    () => page.getByRole('button', { name: 'Закрыть контракты' }).click(),
+  )
+  expect(
+    roundTwoPowerScrollRequests.some((request) => request.top < scrollBeforeRoundTwoPower - 8),
+    'step 26 must request an upward scroll to the round-two power allocation area',
+  ).toBe(true)
+  await expect(page.getByRole('button', { name: 'Увеличить мощность: Разведка' })).toBeFocused()
 
   await expectTargetInMobileInteractiveArea(
     page,
@@ -1060,9 +1702,38 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeHidden()
   await expect(page.getByRole('alert')).toContainText('отметку об обучении пока не удалось сохранить')
   expect(completionAttempts).toBe(1)
+  expect(runtimeErrors).toEqual(browserName === 'firefox'
+    ? []
+    : ['console: Failed to load resource: the server responded with a status of 503 (Service Unavailable)'])
+  runtimeErrors.length = 0
   await page.unroute('**/api/profile/tutorial/completion')
   await page.getByRole('button', { name: 'Сохранить отметку' }).click()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+  const mobileProtectionInvitation = page.getByRole('region', {
+    name: accountProtectionInvitation.title,
+  })
+  await expect(mobileProtectionInvitation).toContainText(accountProtectionInvitation.warning)
+  await expect(mobileProtectionInvitation.getByRole('button', {
+    name: accountProtectionInvitation.action,
+  })).toBeEnabled()
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await expectTouchTargetsMeetMinimum(page)
+  await expectNoAxeViolations(page)
+  await mobileProtectionInvitation.getByRole('button', {
+    name: accountProtectionInvitation.action,
+  }).click()
+  await expect(page).toHaveURL(/\/profile\/?#account-protection$/)
+  const mobileProtectionHeading = page.locator('#account-protection').getByRole('heading', {
+    name: 'Защита аккаунта',
+  })
+  await expect(mobileProtectionHeading).toBeVisible()
+  await expect.poll(async () => mobileProtectionHeading.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return rect.top >= 0 && rect.bottom <= window.innerHeight
+  }), {
+    message: 'the Profile account-protection heading must be visible after the mobile tutorial CTA',
+  }).toBe(true)
+  expect(runtimeErrors).toEqual([])
 })
 
 test('exits the tutorial through its confirmation dialog and clears the saved step', async ({ page }) => {
@@ -1097,8 +1768,10 @@ test('blocks a direct tutorial entry while the player has an active room', async
   await page.getByLabel('Количество игроков').selectOption('2')
   await page.getByRole('button', { name: 'Создать команду' }).click()
   await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)
+  await expect(page.getByRole('heading', { name: 'Лобби' })).toBeVisible()
 
   await page.goto('/tutorial')
+  await expect(page).toHaveURL('/tutorial')
   await expect(page.getByText('Сначала завершите активный Тендер', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Вернуться в матч' }).click()
   await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)

@@ -2,6 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   apiErrorSchema,
+  accountProtectionResponseSchema,
+  cancelRecoveryEmailReplacementRequestSchema,
+  cancelRecoveryEmailRequestSchema,
+  confirmRecoveryEmailReplacementRequestSchema,
+  confirmRecoveryEmailRequestSchema,
   cookieAuthResponseSchema,
   cookieLogoutRequestSchema,
   cookieRefreshRequestSchema,
@@ -12,11 +17,33 @@ import {
   oauthProviderSchema,
   oauthStartRequestSchema,
   oauthStartResponseSchema,
+  completePasswordResetRequestSchema,
+  passwordResetCompletionResponseSchema,
+  personalDataConsentVersion,
+  requestPasswordResetRequestSchema,
+  requestPasswordResetResponseSchema,
   registerRequestSchema,
+  recoveryEmailReplacementCommandResponseSchema,
+  recoveryCodeEmailReplacementConfirmRequestSchema,
+  recoveryCodeEmailReplacementConfirmResponseSchema,
+  recoveryCodeEmailReplacementStartRequestSchema,
+  recoveryCodeEmailReplacementStartResponseSchema,
+  recoveryCodePasswordRequestSchema,
+  recoveryCodeSetResponseSchema,
+  recoveryCodeUseResponseSchema,
+  confirmRecoveryCodeReissueRequestSchema,
+  issueRecoveryCodesRequestSchema,
+  startRecoveryCodeReissueRequestSchema,
+  startRecoveryCodeReissueResponseSchema,
+  resendRecoveryEmailReplacementRequestSchema,
+  resendRecoveryEmailRequestSchema,
+  startRecoveryEmailReplacementRequestSchema,
+  startRecoveryEmailRequestSchema,
   tokenAuthResponseSchema,
   tokenLogoutRequestSchema,
   tokenRefreshRequestSchema,
   tokenRefreshResponseSchema,
+  termsVersion,
 } from './index'
 
 const validUser = {
@@ -28,6 +55,338 @@ const validUser = {
 }
 
 describe('auth contracts', () => {
+  test('requires the current legal document versions for new registration', () => {
+    const staleVersion = '1.0'
+    expect(personalDataConsentVersion).toBe('1.1')
+    expect(termsVersion).toBe('1.1')
+    expect(registerRequestSchema.safeParse({
+      login: 'user',
+      password: 'password123',
+      privacyConsent: true,
+      privacyConsentVersion: staleVersion,
+      termsAccepted: true,
+      termsVersion: staleVersion,
+    }).success).toBe(false)
+  })
+
+  test('exposes only bounded Account Email protection states and a masked address', () => {
+    expect(accountProtectionResponseSchema.parse({
+      accountProtection: {
+        state: 'yandex_managed',
+        maskedAccountEmail: 'P***@yandex.ru',
+      },
+    })).toEqual({
+      accountProtection: {
+        state: 'yandex_managed',
+        maskedAccountEmail: 'P***@yandex.ru',
+      },
+    })
+    for (const state of ['password_unprotected', 'yandex_conflict', 'yandex_unavailable']) {
+      expect(accountProtectionResponseSchema.safeParse({
+        accountProtection: { state },
+      }).success).toBe(true)
+    }
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        state: 'yandex_managed',
+        maskedAccountEmail: 'player@yandex.ru',
+      },
+    }).success).toBe(false)
+
+    expect(accountProtectionResponseSchema.parse({
+      accountProtection: {
+        canCancel: true,
+        codeExpiresAt: '2026-08-22T12:15:00.000Z',
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_pending_code',
+      },
+    })).toEqual({
+      accountProtection: {
+        canCancel: true,
+        codeExpiresAt: '2026-08-22T12:15:00.000Z',
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_pending_code',
+      },
+    })
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        activatesAt: '2026-08-23T12:00:00.000Z',
+        canCancel: false,
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_cooling_off',
+      },
+    }).success).toBe(true)
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'not_issued',
+        state: 'password_active',
+      },
+    }).success).toBe(true)
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        blockedStage: 'pending_code',
+        canCancel: true,
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_service_blocked',
+      },
+    }).success).toBe(true)
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        canonicalKey: 'player@mail.ru',
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'not_issued',
+        state: 'password_active',
+      },
+    }).success).toBe(false)
+  })
+
+  test('validates first Recovery Email commands without normalizing secrets in the contract', () => {
+    expect(startRecoveryEmailRequestSchema.parse({
+      email: ' Player@mail.ru ',
+      password: 'password123',
+    })).toEqual({
+      email: 'Player@mail.ru',
+      password: 'password123',
+    })
+    expect(confirmRecoveryEmailRequestSchema.parse({ code: '012345' })).toEqual({ code: '012345' })
+    expect(resendRecoveryEmailRequestSchema.parse(undefined)).toEqual({})
+    expect(cancelRecoveryEmailRequestSchema.parse({})).toEqual({})
+
+    expect(startRecoveryEmailRequestSchema.safeParse({
+      email: 'player@mail.ru',
+      password: 'short',
+    }).success).toBe(false)
+    expect(confirmRecoveryEmailRequestSchema.safeParse({ code: '12345' }).success).toBe(false)
+    expect(confirmRecoveryEmailRequestSchema.safeParse({ code: '123456', extra: true }).success).toBe(false)
+    expect(resendRecoveryEmailRequestSchema.safeParse({ email: 'player@mail.ru' }).success).toBe(false)
+  })
+
+  test('exposes a bounded two-sided Recovery Email replacement contract', () => {
+    expect(startRecoveryEmailReplacementRequestSchema.parse({
+      email: ' New@mail.ru ',
+      password: 'password123',
+    })).toEqual({
+      email: 'New@mail.ru',
+      password: 'password123',
+    })
+    expect(resendRecoveryEmailReplacementRequestSchema.parse({ factor: 'old' })).toEqual({
+      factor: 'old',
+    })
+    expect(confirmRecoveryEmailReplacementRequestSchema.parse({
+      code: '012345',
+      factor: 'new',
+    })).toEqual({ code: '012345', factor: 'new' })
+    expect(cancelRecoveryEmailReplacementRequestSchema.parse({})).toEqual({})
+    expect(cancelRecoveryEmailReplacementRequestSchema.safeParse({ factor: 'old' }).success)
+      .toBe(false)
+
+    expect(accountProtectionResponseSchema.parse({
+      accountProtection: {
+        canManage: true,
+        newAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'n***@mail.ru',
+          status: 'pending',
+        },
+        oldAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'o***@mail.ru',
+          status: 'confirmed',
+        },
+        state: 'password_replacing',
+      },
+    })).toEqual({
+      accountProtection: {
+        canManage: true,
+        newAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'n***@mail.ru',
+          status: 'pending',
+        },
+        oldAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'o***@mail.ru',
+          status: 'confirmed',
+        },
+        state: 'password_replacing',
+      },
+    })
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        canManage: true,
+        newAddress: {
+          canonicalKey: 'new@mail.ru',
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'n***@mail.ru',
+          status: 'pending',
+        },
+        oldAddress: {
+          codeExpiresAt: '2026-08-22T12:15:00.000Z',
+          maskedAccountEmail: 'o***@mail.ru',
+          status: 'pending',
+        },
+        state: 'password_replacing',
+      },
+    }).success).toBe(false)
+    expect(recoveryEmailReplacementCommandResponseSchema.parse({
+      accountProtection: {
+        maskedAccountEmail: 'n***@mail.ru',
+        recoveryCodes: 'consumed',
+        state: 'password_active',
+      },
+      replacement: {
+        currentSession: 'active',
+        otherSessions: 'revoked',
+        status: 'completed',
+      },
+    }).replacement).toEqual({
+      currentSession: 'active',
+      otherSessions: 'revoked',
+      status: 'completed',
+    })
+
+    expect(resendRecoveryEmailReplacementRequestSchema.safeParse({ factor: 'both' }).success)
+      .toBe(false)
+    expect(confirmRecoveryEmailReplacementRequestSchema.safeParse({
+      code: '123456',
+      factor: 'new',
+      rawEmail: 'new@mail.ru',
+    }).success).toBe(false)
+  })
+
+  test('keeps Recovery Codes bounded, one-time, and absent from normal protection reads', () => {
+    const codes = Array.from(
+      { length: 8 },
+      (_, index) => `${index.toString(16).toUpperCase().padStart(4, '0')}-AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-1234`,
+    )
+    const issued = recoveryCodeSetResponseSchema.parse({
+      accountProtection: {
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'available',
+        state: 'password_active',
+      },
+      recoveryCodes: codes,
+    })
+    expect(issued.recoveryCodes).toHaveLength(8)
+    expect(issueRecoveryCodesRequestSchema.parse(undefined)).toEqual({})
+    expect(recoveryCodeSetResponseSchema.safeParse({
+      accountProtection: {
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'available',
+        state: 'password_active',
+      },
+      recoveryCodes: codes.slice(0, 7),
+    }).success).toBe(false)
+    expect(accountProtectionResponseSchema.safeParse({
+      accountProtection: {
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: codes,
+        state: 'password_active',
+      },
+    }).success).toBe(false)
+  })
+
+  test('validates Recovery Code reissue and non-enumerating owner recovery commands', () => {
+    expect(startRecoveryCodeReissueRequestSchema.parse({ password: 'password123' }))
+      .toEqual({ password: 'password123' })
+    expect(confirmRecoveryCodeReissueRequestSchema.parse({ code: '012345' }))
+      .toEqual({ code: '012345' })
+    expect(startRecoveryCodeReissueResponseSchema.parse({
+      challenge: {
+        codeExpiresAt: '2026-08-22T12:15:00.000Z',
+        maskedAccountEmail: 'p***@mail.ru',
+      },
+    }).challenge.maskedAccountEmail).toBe('p***@mail.ru')
+
+    const unformattedCode = 'AAAA BBBB CCCC DDDD EEEE FFFF 0000 1111'
+    expect(recoveryCodePasswordRequestSchema.parse({
+      login: ' Owner ',
+      newPassword: 'new-password123',
+      recoveryCode: unformattedCode,
+    })).toEqual({
+      login: 'owner',
+      newPassword: 'new-password123',
+      recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+    })
+    expect(recoveryCodeUseResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+    expect(recoveryCodeUseResponseSchema.parse({ outcome: 'completed' }))
+      .toEqual({ outcome: 'completed' })
+
+    expect(recoveryCodeEmailReplacementStartRequestSchema.parse({
+      email: ' New@mail.ru ',
+      login: ' Owner ',
+      recoveryCode: unformattedCode,
+    })).toEqual({
+      email: 'New@mail.ru',
+      login: 'owner',
+      recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+    })
+    expect(recoveryCodeEmailReplacementStartResponseSchema.parse({
+      codeExpiresAt: '2026-08-22T12:15:00.000Z',
+      maskedAccountEmail: 'n***@mail.ru',
+      outcome: 'pending',
+    }).outcome).toBe('pending')
+    expect(recoveryCodeEmailReplacementStartResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+
+    expect(recoveryCodeEmailReplacementConfirmRequestSchema.parse({
+      code: '012345',
+      login: ' Owner ',
+    })).toEqual({ code: '012345', login: 'owner' })
+    expect(recoveryCodeEmailReplacementConfirmResponseSchema.parse({
+      activatesAt: '2026-08-23T12:00:00.000Z',
+      maskedAccountEmail: 'n***@mail.ru',
+      outcome: 'completed',
+    }).outcome).toBe('completed')
+    expect(recoveryCodeEmailReplacementConfirmResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+
+    expect(recoveryCodePasswordRequestSchema.safeParse({
+      login: 'owner',
+      newPassword: 'new-password123',
+      recoveryCode: 'AAAA-BBBB',
+    }).success).toBe(false)
+    expect(recoveryCodeEmailReplacementStartRequestSchema.safeParse({
+      email: 'new@mail.ru',
+      login: 'owner',
+      recoveryCode: unformattedCode,
+      ownerId: 'secret',
+    }).success).toBe(false)
+  })
+
+  test('keeps email-link password recovery bounded and non-enumerating', () => {
+    expect(requestPasswordResetRequestSchema.parse({ login: ' Owner ' }))
+      .toEqual({ login: 'owner' })
+    expect(requestPasswordResetResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+
+    const token = 'A'.repeat(43)
+    expect(completePasswordResetRequestSchema.parse({
+      newPassword: 'new-password123',
+      token,
+    })).toEqual({ newPassword: 'new-password123', token })
+    expect(passwordResetCompletionResponseSchema.parse({ outcome: 'completed' }))
+      .toEqual({ outcome: 'completed' })
+    expect(passwordResetCompletionResponseSchema.parse({ outcome: 'accepted' }))
+      .toEqual({ outcome: 'accepted' })
+
+    expect(completePasswordResetRequestSchema.safeParse({
+      newPassword: 'new-password123',
+      token: 'short',
+    }).success).toBe(false)
+    expect(completePasswordResetRequestSchema.safeParse({
+      newPassword: 'new-password123',
+      token,
+      userId: 'must-not-be-accepted',
+    }).success).toBe(false)
+    expect(requestPasswordResetResponseSchema.safeParse({
+      outcome: 'accepted',
+      maskedEmail: 'o***@mail.ru',
+    }).success).toBe(false)
+  })
+
   test('normalizes registration and login input', () => {
     expect(
       registerRequestSchema.parse({
@@ -35,18 +394,18 @@ describe('auth contracts', () => {
         password: 'password123',
         displayName: ' Jane ',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toEqual({
       login: 'user_1',
       password: 'password123',
       displayName: 'Jane',
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     })
 
     expect(
@@ -55,18 +414,18 @@ describe('auth contracts', () => {
         password: 'password123',
         displayName: '',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toEqual({
       login: 'user',
       password: 'password123',
       displayName: undefined,
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     })
 
     expect(
@@ -87,8 +446,8 @@ describe('auth contracts', () => {
         password: 'short',
         displayName: 'A',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
-        termsVersion: '1.0',
+        privacyConsentVersion: '1.1',
+        termsVersion: '1.1',
       }),
     ).toThrow()
 
@@ -97,8 +456,8 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'short',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
-        termsVersion: '1.0',
+        privacyConsentVersion: '1.1',
+        termsVersion: '1.1',
       }),
     ).toThrow()
 
@@ -123,9 +482,9 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'password123',
         privacyConsent: false,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toThrow()
 
@@ -135,9 +494,9 @@ describe('auth contracts', () => {
         login: 'user',
         password: 'password123',
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: false,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toThrow()
 
@@ -147,7 +506,7 @@ describe('auth contracts', () => {
         password: 'password123',
         privacyConsent: true,
         privacyConsentVersion: 'outdated',
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       }),
     ).toThrow()
   })
@@ -155,9 +514,9 @@ describe('auth contracts', () => {
   test('limits new and updated display names to twenty characters', () => {
     const legalAcceptance = {
       privacyConsent: true as const,
-      privacyConsentVersion: '1.0' as const,
+      privacyConsentVersion: '1.1' as const,
       termsAccepted: true as const,
-      termsVersion: '1.0' as const,
+      termsVersion: '1.1' as const,
     }
 
     expect(registerRequestSchema.safeParse({
@@ -277,18 +636,18 @@ describe('auth contracts', () => {
     const start = oauthStartRequestSchema.parse({
       registration: {
         privacyConsent: true,
-        privacyConsentVersion: '1.0',
+        privacyConsentVersion: '1.1',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       },
       webappOrigin: 'http://localhost:5173',
     })
     expect(start.webappOrigin).toBe('http://localhost:5173')
     expect(start.registration).toEqual({
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     })
 
     // webappOrigin is optional — the backend falls back to its configured origin.
@@ -298,7 +657,7 @@ describe('auth contracts', () => {
         privacyConsent: true,
         privacyConsentVersion: 'outdated',
         termsAccepted: true,
-        termsVersion: '1.0',
+        termsVersion: '1.1',
       },
     })).toThrow()
 

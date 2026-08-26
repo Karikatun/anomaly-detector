@@ -75,3 +75,52 @@ test('retries the complete ready transaction after a serializable write conflict
     { ready: true, seat: 2, userId: 'user-2' },
   ])
 })
+
+test('retries a complete room join after a serializable write conflict', async () => {
+  let transactionAttempts = 0
+  const createdAt = new Date('2026-07-24T11:59:00.000Z')
+  const transactionClient = {
+    currentMatch: {
+      create: async () => ({ roomId: 'room-1', userId: 'user-2' }),
+      findUnique: async () => null,
+    },
+    tenderRoom: {
+      findUnique: async () => ({
+        capacity: 4,
+        createdAt,
+        hostId: 'user-1',
+        id: 'room-1',
+        joinCode: 'JOINCODE',
+        members: [
+          { createdAt, ready: true, roomId: 'room-1', seat: 1, userId: 'user-1' },
+        ],
+        startsAt: null,
+        status: 'waiting',
+        tenderId: null,
+        updatedAt: createdAt,
+      }),
+    },
+    tenderRoomMember: {
+      create: async () => ({ ready: false, roomId: 'room-1', seat: 2, userId: 'user-2' }),
+      updateMany: async () => ({ count: 1 }),
+    },
+  }
+  const db = {
+    $transaction: async (run: (tx: typeof transactionClient) => unknown) => {
+      transactionAttempts += 1
+      if (transactionAttempts === 1) throw { code: 'P2034' }
+      return run(transactionClient)
+    },
+  } as unknown as DbClient
+
+  const room = await createPrismaRoomRepository(db).join({
+    actorId: 'user-2',
+    roomId: 'room-1',
+  })
+
+  expect(transactionAttempts).toBe(2)
+  expect(room.members).toEqual([
+    { ready: false, seat: 1, userId: 'user-1' },
+    { ready: false, seat: 2, userId: 'user-2' },
+  ])
+})

@@ -5,6 +5,9 @@ const booleanStringSchema = z
   .default('false')
   .transform((value) => value === 'true')
 
+const antiAbuseLimitSchema = z.coerce.number().int().min(1).max(1_000_000).optional()
+const antiAbuseTwoMessageLimitSchema = z.coerce.number().int().min(2).max(1_000_000).optional()
+
 const knownWeakJwtSecrets = new Set(['replace-with-at-least-32-random-characters'])
 
 const optionalStringSchema = z.preprocess((value) => {
@@ -38,13 +41,34 @@ const uuidListSchema = z
   .transform((value) => value.split(',').map((item) => item.trim()).filter(Boolean))
   .pipe(z.array(z.string().uuid()))
 
+const originListSchema = z
+  .string()
+  .default('')
+  .transform((value) => value.split(',').map((item) => item.trim()).filter(Boolean))
+
+const analyticsCampaignListSchema = z
+  .string()
+  .default('')
+  .transform((value) => value
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean))
+  .pipe(z.array(z.string().min(1).max(64).regex(/^[a-z0-9_-]+$/)).max(100))
+
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
+  API_HOST: z.ipv4().default('0.0.0.0'),
   PORT: z.coerce.number().int().positive().default(3000),
-  WORKER_HEALTH_PORT: z.coerce.number().int().positive().optional(),
+  OPERATIONAL_METRICS_HOST: z.enum(['127.0.0.1', '0.0.0.0']).optional(),
+  OPERATIONAL_METRICS_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+  WORKER_HEALTH_HOST: z.enum(['127.0.0.1', '0.0.0.0']).optional(),
+  WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   ADMIN_USER_IDS: uuidListSchema,
+  ANALYTICS_ENABLED: booleanStringSchema,
+  ANALYTICS_ORIGINS: originListSchema,
+  ANALYTICS_CAMPAIGN_ALLOWLIST: analyticsCampaignListSchema,
   CORS_ORIGINS: z
     .string()
     .default('http://localhost:5173,http://localhost:5174,http://localhost:8081,http://localhost:19006')
@@ -54,6 +78,7 @@ const envSchema = z.object({
         .map((origin) => origin.trim())
         .filter(Boolean),
     ),
+  WEBAPP_ORIGIN: stringWithDefault('http://localhost:5173').pipe(z.string().url()),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().nonnegative().max(60).default(10),
@@ -62,11 +87,44 @@ const envSchema = z.object({
   AUTH_BODY_LIMIT_BYTES: z.coerce.number().int().positive().max(1024 * 1024).default(64 * 1024),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+  ANTI_ABUSE_LOGIN_FAILURE_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_LOGIN_IP_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_REGISTRATION_DEVICE_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_REGISTRATION_IP_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_EMAIL_MINUTE_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_EMAIL_HOUR_LIMIT: antiAbuseTwoMessageLimitSchema,
+  ANTI_ABUSE_RECOVERY_EMAIL_DAY_LIMIT: antiAbuseTwoMessageLimitSchema,
+  ANTI_ABUSE_RECOVERY_EMAIL_IP_HOUR_LIMIT: antiAbuseTwoMessageLimitSchema,
+  ANTI_ABUSE_RECOVERY_LOGIN_HOUR_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_LOGIN_DAY_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_LOGIN_IP_HOUR_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_RECOVERY_LOGIN_IP_DAY_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_ROOM_JOIN_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_TENDER_COMMAND_LIMIT: antiAbuseLimitSchema,
+  ANTI_ABUSE_REALTIME_TICKET_LIMIT: antiAbuseLimitSchema,
   SHUTDOWN_GRACE_SECONDS: z.coerce.number().int().positive().max(60).default(20),
   TRUST_PROXY: booleanStringSchema,
   TRUSTED_PROXY_CLIENT_IP_HEADER: optionalHttpHeaderNameSchema,
   TRUSTED_PROXY_CLIENT_IP_POSITION: z.enum(['first', 'last']).optional(),
   COOKIE_SECURE: booleanStringSchema,
+  MAIL_SMTP_ENABLED: booleanStringSchema,
+  MAIL_SMTP_HOST: optionalStringSchema,
+  MAIL_SMTP_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+  MAIL_SMTP_TLS_MODE: z.enum(['implicit_tls', 'starttls']).optional(),
+  MAIL_SMTP_USERNAME: optionalStringSchema,
+  MAIL_SMTP_PASSWORD: optionalStringSchema,
+  MAIL_SMTP_FROM: optionalStringSchema,
+  MAIL_SMTP_REPLY_TO: optionalStringSchema,
+  MAIL_SMTP_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+  MAIL_SMTP_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
+  MAIL_SMTP_RETRY_BASE_SECONDS: z.coerce.number().int().min(1).max(3_600).default(30),
+  MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().min(1).max(100).default(5),
+  MAIL_SMTP_CIRCUIT_OPEN_SECONDS: z.coerce.number().int().min(10).max(86_400).default(300),
+  MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(60),
+  MAIL_SMTP_LEASE_SECONDS: z.coerce.number().int().min(10).max(3_600).default(60),
+  MAIL_SMTP_WORKER_INTERVAL_MS: z.coerce.number().int().min(250).max(60_000).default(1_000),
+  MAIL_OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(30).default(30),
   YANDEX_OAUTH_CLIENT_ID: optionalStringSchema,
   YANDEX_OAUTH_CLIENT_SECRET: optionalStringSchema,
   OAUTH_CALLBACK_BASE_URL: optionalUrlSchema,
@@ -83,11 +141,15 @@ const envSchema = z.object({
 }).superRefine((env, ctx) => {
   validateJwtSecret(env, ctx)
   validateProductionRuntime(env, ctx)
+  validateOperationalMetricsPort(env, ctx)
   validateCorsOrigins(env, ctx)
+  validateWebappOrigin(env, ctx)
+  validateAnalyticsEnv(env, ctx)
   validateSessionTtls(env, ctx)
   validateTrustedProxy(env, ctx)
   validateOAuth(env, ctx)
   validateStorageEnv(env, ctx)
+  validateSmtpEnv(env, ctx)
 })
 
 export type AppEnv = z.infer<typeof envSchema>
@@ -145,6 +207,20 @@ function validateProductionRuntime(env: z.infer<typeof envSchema>, ctx: z.Refine
       code: 'custom',
       path: ['COOKIE_SECURE'],
       message: 'COOKIE_SECURE must be true in production',
+    })
+  }
+}
+
+function validateOperationalMetricsPort(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  const workerHealthPort = env.WORKER_HEALTH_PORT ?? env.PORT + 1
+  if (
+    env.OPERATIONAL_METRICS_PORT === env.PORT
+    || env.OPERATIONAL_METRICS_PORT === workerHealthPort
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['OPERATIONAL_METRICS_PORT'],
+      message: 'OPERATIONAL_METRICS_PORT must differ from API and worker health ports',
     })
   }
 }
@@ -224,6 +300,104 @@ function validateCorsOrigins(env: z.infer<typeof envSchema>, ctx: z.RefinementCt
   }
 }
 
+function validateWebappOrigin(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  const origin = env.WEBAPP_ORIGIN
+  const url = new URL(origin)
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must use http or https',
+    })
+  }
+  if (url.origin !== origin) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must contain an origin only, not a path',
+    })
+  }
+  if (!env.CORS_ORIGINS.includes(origin)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must also be listed in CORS_ORIGINS',
+    })
+  }
+  if (env.NODE_ENV === 'production' && url.protocol !== 'https:') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must use HTTPS in production',
+    })
+  }
+  if (env.COOKIE_SECURE && url.protocol !== 'https:'
+    && url.hostname !== 'localhost' && !isPrivateLanIp(url.hostname)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEBAPP_ORIGIN'],
+      message: 'WEBAPP_ORIGIN must use HTTPS when COOKIE_SECURE=true',
+    })
+  }
+}
+
+function validateAnalyticsEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  if (!env.ANALYTICS_ENABLED) return
+  if (env.ANALYTICS_ORIGINS.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['ANALYTICS_ORIGINS'],
+      message: 'ANALYTICS_ORIGINS is required when first-party analytics is enabled',
+    })
+    return
+  }
+
+  for (const origin of env.ANALYTICS_ORIGINS) {
+    if (origin === '*') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ANALYTICS_ORIGINS'],
+        message: 'ANALYTICS_ORIGINS must not use wildcard origins',
+      })
+      continue
+    }
+    let url: URL
+    try {
+      url = new URL(origin)
+    } catch {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ANALYTICS_ORIGINS'],
+        message: `ANALYTICS_ORIGINS contains an invalid URL: ${origin}`,
+      })
+      continue
+    }
+    if (!['http:', 'https:'].includes(url.protocol) || url.origin !== origin) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ANALYTICS_ORIGINS'],
+        message: `ANALYTICS_ORIGINS must contain http or https origins only: ${origin}`,
+      })
+    }
+    if ((env.COOKIE_SECURE || env.NODE_ENV === 'production') && url.protocol !== 'https:') {
+      if (url.hostname === 'localhost' || isPrivateLanIp(url.hostname)) continue
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ANALYTICS_ORIGINS'],
+        message: `ANALYTICS_ORIGINS must use HTTPS in production: ${origin}`,
+      })
+    }
+  }
+
+  if (!env.ANALYTICS_ORIGINS.includes(env.WEBAPP_ORIGIN)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['ANALYTICS_ORIGINS'],
+      message: 'ANALYTICS_ORIGINS must include WEBAPP_ORIGIN when analytics is enabled',
+    })
+  }
+}
+
 function validateStorageEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
   const requiredStorageKeys = [
     'YANDEX_STORAGE_REGION',
@@ -274,6 +448,66 @@ function validateOAuth(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
       code: 'custom',
       path: ['OAUTH_CALLBACK_BASE_URL'],
       message: 'OAUTH_CALLBACK_BASE_URL must use HTTPS in production',
+    })
+  }
+}
+
+function validateSmtpEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  const requiredSmtpKeys = [
+    'MAIL_SMTP_HOST',
+    'MAIL_SMTP_PORT',
+    'MAIL_SMTP_TLS_MODE',
+    'MAIL_SMTP_USERNAME',
+    'MAIL_SMTP_PASSWORD',
+    'MAIL_SMTP_FROM',
+    'MAIL_SMTP_REPLY_TO',
+  ] as const
+  const smtpConfigured = env.MAIL_SMTP_ENABLED
+    || requiredSmtpKeys.some((key) => env[key] !== undefined)
+  if (!smtpConfigured) return
+
+  for (const key of requiredSmtpKeys) {
+    if (env[key] === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: `${key} is required when transactional SMTP is configured`,
+      })
+    }
+  }
+  if (env.MAIL_SMTP_HOST && !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i.test(env.MAIL_SMTP_HOST)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_HOST'],
+      message: 'MAIL_SMTP_HOST must be a DNS hostname used for TLS verification',
+    })
+  }
+  if (env.MAIL_SMTP_FROM && env.MAIL_SMTP_FROM !== 'no-reply@anomaly-detector.ru') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_FROM'],
+      message: 'MAIL_SMTP_FROM must use the dedicated no-reply mailbox',
+    })
+  }
+  if (env.MAIL_SMTP_USERNAME && env.MAIL_SMTP_USERNAME !== 'no-reply@anomaly-detector.ru') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_USERNAME'],
+      message: 'MAIL_SMTP_USERNAME must use the dedicated no-reply mailbox',
+    })
+  }
+  if (env.MAIL_SMTP_REPLY_TO && env.MAIL_SMTP_REPLY_TO !== 'support@anomaly-detector.ru') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_REPLY_TO'],
+      message: 'MAIL_SMTP_REPLY_TO must use the product support mailbox',
+    })
+  }
+  if (env.MAIL_SMTP_LEASE_SECONDS * 1_000 <= env.MAIL_SMTP_TIMEOUT_MS) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_SMTP_LEASE_SECONDS'],
+      message: 'MAIL_SMTP_LEASE_SECONDS must exceed MAIL_SMTP_TIMEOUT_MS',
     })
   }
 }

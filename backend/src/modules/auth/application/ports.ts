@@ -11,12 +11,13 @@ export type AccessTokenPayload = {
 }
 
 export type AuthRepository = {
+  findUserById(userId: string): Promise<AuthUserRecord | null>
   findUserByLogin(login: string): Promise<AuthUserRecord | null>
   updatePasswordHash(input: {
     userId: string
     currentPasswordHash: string
     nextPasswordHash: string
-  }): Promise<void>
+  }): Promise<boolean>
   createPasswordUserWithSession(input: {
     registration?: {
       deviceId?: string
@@ -32,6 +33,7 @@ export type AuthRepository = {
     }
   }): Promise<{ user: AuthUserRecord; session: { id: string } }>
   createSession(input: {
+    expectedPasswordHash: string
     userId: string
     refreshTokenHash: string
     refreshTokenFamilyHash: string
@@ -71,7 +73,7 @@ export type AuthRepository = {
     refreshTokenHash: string
     refreshTokenFamilyHash: string
     now: Date
-  }): Promise<string | null>
+  }): Promise<{ sessionId: string; userId: string } | null>
   updateUser(input: {
     userId: string
     displayName?: string | null
@@ -83,9 +85,12 @@ export type AuthRepository = {
     now: Date
     state: string
   }): Promise<OAuthTransaction | null>
-  findUserByIdentity(input: { provider: string; subject: string }): Promise<AuthUserRecord | null>
-  createOAuthUserWithSession(input: {
-    user: {
+  completeOAuthSignIn(input: {
+    accountEmail:
+      | { kind: 'candidate'; canonicalKey: string; providerValue: string }
+      | { kind: 'unavailable' }
+    identity: { provider: OAuthProviderId; subject: string }
+    newUser?: {
       displayName?: string | null
       legalAcceptance: {
         acceptedAt: Date
@@ -94,14 +99,200 @@ export type AuthRepository = {
       }
       login: string
     }
-    identity: { provider: string; subject: string }
     session: {
       refreshTokenHash: string
       refreshTokenFamilyHash: string
       expiresAt: Date
       metadata: SessionMetadata
     }
-  }): Promise<{ user: AuthUserRecord; session: { id: string } }>
+  }): Promise<{ created?: boolean; user: AuthUserRecord; session: { id: string } } | null>
+  readAccountProtection(userId: string): Promise<{
+    accountEmailProviderValue: string | null
+    accountEmailState: string
+    recoveryEmailBinding?: {
+      activatesAt: Date
+      cancellationSessionIds: string[]
+      providerValue: string
+      requestedAt: Date
+    } | null
+    recoveryEmailChallenge?: {
+      cancellationSessionIds: string[]
+      expiresAt: Date
+      providerValue: string
+      requestedAt: Date
+    } | null
+    recoveryEmailReplacement?: {
+      newCanonicalKey: string
+      newConfirmedAt: Date | null
+      newExpiresAt: Date
+      newProviderValue: string
+      oldConfirmedAt: Date | null
+      oldExpiresAt: Date
+      oldProviderValue: string
+      requestingSessionId: string
+    } | null
+    recoveryCodeSet?: {
+      activeCodeCount: number
+      consumedAt: Date | null
+    } | null
+    hasYandexIdentity: boolean
+  } | null>
+  issueRecoveryCodes(input: {
+    codes: string[]
+    now: Date
+    userId: string
+  }): Promise<'issued' | 'unavailable'>
+  startRecoveryCodeReissue(input: {
+    expectedPasswordHash: string
+    expiresAt: Date
+    ipAddress?: string
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<{ expiresAt: Date; providerValue: string } | null>
+  confirmRecoveryCodeReissue(input: {
+    code: string
+    codes: string[]
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<'issued' | 'invalid' | 'unavailable'>
+  reserveRecoveryCodeUseBudget(input: {
+    ipAddress?: string
+    login: string
+    now: Date
+  }): Promise<boolean>
+  reserveRecoveryEmailPolicyBudget(input: {
+    ipAddress?: string
+    now: Date
+    operation: 'replacement' | 'start'
+    userId: string
+  }): Promise<void>
+  verifyRecoveryCodeEmailPolicyProbe(input: {
+    code: string
+    login: string
+    now: Date
+  }): Promise<{ canonicalKey: string; providerValue: string } | null>
+  recoverPasswordWithRecoveryCode(input: {
+    login: string
+    newPasswordHash: string
+    now: Date
+    recoveryCode: string
+  }): Promise<boolean>
+  requestPasswordReset(input: {
+    expiresAt: Date
+    ipAddress?: string
+    login: string
+    now: Date
+    recoveryUrl: string
+  }): Promise<void>
+  completePasswordReset(input: {
+    newPasswordHash: string
+    now: Date
+    token: string
+  }): Promise<boolean>
+  startRecoveryEmailWithRecoveryCode(input: {
+    budgetReserved: true
+    expiresAt: Date
+    ipAddress?: string
+    login: string
+    newCanonicalKey: string
+    newProviderValue: string
+    now: Date
+    recoveryCode: string
+  }): Promise<{ expiresAt: Date; providerValue: string } | null>
+  confirmRecoveryEmailWithRecoveryCode(input: {
+    activatesAt: Date
+    budgetReserved: true
+    code: string
+    ipAddress?: string
+    login: string
+    now: Date
+  }): Promise<{ activatesAt: Date; providerValue: string } | null>
+  startRecoveryEmail(input: {
+    canonicalKey: string
+    expectedPasswordHash: string
+    expiresAt: Date
+    ipAddress?: string
+    now: Date
+    policyVersion: number
+    policyBudgetReserved: true
+    providerValue: string
+    sessionId: string
+    userId: string
+  }): Promise<void>
+  resendRecoveryEmail(input: {
+    expiresAt: Date
+    ipAddress?: string
+    now: Date
+    userId: string
+  }): Promise<void>
+  confirmRecoveryEmail(input: {
+    activatesAt: Date
+    code: string
+    now: Date
+    userId: string
+  }): Promise<'already_confirmed' | 'confirmed' | 'invalid'>
+  cancelRecoveryEmail(input: {
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<'cancelled' | 'forbidden' | 'unavailable'>
+  startRecoveryEmailReplacement(input: {
+    expectedPasswordHash: string
+    expiresAt: Date
+    ipAddress?: string
+    newCanonicalKey: string
+    newProviderValue: string
+    now: Date
+    policyBudgetReserved: true
+    sessionId: string
+    userId: string
+  }): Promise<void>
+  resendRecoveryEmailReplacement(input: {
+    expiresAt: Date
+    factor: 'new' | 'old'
+    ipAddress?: string
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<void>
+  confirmRecoveryEmailReplacement(input: {
+    code: string
+    factor: 'new' | 'old'
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<'completed' | 'confirmed' | 'invalid'>
+  cancelRecoveryEmailReplacement(input: {
+    now: Date
+    sessionId: string
+    userId: string
+  }): Promise<'cancelled' | 'forbidden' | 'unavailable'>
+}
+
+export type AccountEmailCanonicalizer = {
+  canonicalize(value: string): Promise<{
+    canonicalKey: string
+    providerValue: string
+  } | null>
+  canonicalizeForRecovery?(value: string, options?: { forceMxRefresh?: boolean }): Promise<{
+    canonicalKey: string
+    policyVersion: number
+    providerValue: string
+  } | null>
+  evaluate?(emailDomain: string): Promise<{
+    acceptsNewAddress: boolean
+    allowsRecoveryDelivery: boolean
+    state: 'approved' | 'blocked' | 'deprecated' | 'unlisted'
+    version: number
+  }>
+  evaluateFresh?(emailDomain: string): Promise<{
+    acceptsNewAddress: boolean
+    allowsRecoveryDelivery: boolean
+    state: 'approved' | 'blocked' | 'deprecated' | 'unlisted'
+    version: number
+  }>
 }
 
 export type OAuthProvider = {
@@ -119,6 +310,7 @@ export type OAuthProvider = {
     providerSubject: string
   }>
   getUserInfo(accessToken: string): Promise<{
+    accountEmail?: string | null
     displayName?: string | null
     providerSubject: string
   }>
@@ -141,7 +333,10 @@ export type Passwords = {
 
 export type AuthAbuseProtection = {
   beginLoginAttempt(input: { ipAddress?: string; login: string; now: Date }): Promise<void>
-  recordLoginFailure(input: { login: string; now: Date }): Promise<{ limited: boolean }>
+  recordLoginFailure(input: { login: string; now: Date }): Promise<{
+    limited: boolean
+    retryAfterSeconds?: number
+  }>
   recordLoginSuccess(input: { login: string }): Promise<void>
 }
 
@@ -164,5 +359,13 @@ export type Clock = {
 }
 
 export type ProjectUser = (user: AuthUserRecord) => UserDto | Promise<UserDto>
-export type LogoutCleanup = (input: { userId: string }) => void | Promise<void>
+export type ActiveSessionPrincipal = {
+  sessionId: string
+  userId: string
+}
+export type ActiveSessionGuard = {
+  isActive(input: ActiveSessionPrincipal): Promise<boolean>
+  runWhileActive(input: ActiveSessionPrincipal, action: () => void): Promise<boolean>
+}
+export type LogoutCleanup = (input: { sessionId: string; userId: string }) => void | Promise<void>
 export type AccountDeletionCleanup = (input: { userId: string }) => void | Promise<void>

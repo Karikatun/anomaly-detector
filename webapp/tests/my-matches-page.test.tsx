@@ -44,7 +44,45 @@ test('renders a scan-friendly four-player history row with the current placement
   expect(html).toContain('Участников: 4')
   expect(html).toContain('Исследовательская корпорация Северного контура с очень длинным именем')
   expect(html).toContain('>Вы<')
-  expect(html).toContain('Детали')
+  expect(html).toContain('Открыть результаты')
+})
+
+test('offers Continue only for a resumable active match', () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <MatchHistoryList
+        currentUserId={completedMatch.members[0].userId}
+        matches={[{
+          ...completedMatch,
+          tenderPhase: 'laboratory',
+          tenderPlacement: undefined,
+        }]}
+        onOpen={() => undefined}
+      />
+    </I18nProvider>,
+  )
+
+  expect(html).toContain('Продолжить')
+  expect(html).not.toContain('Открыть результаты')
+})
+
+test('keeps the completed audit action available after the participant forfeits', () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <MatchHistoryList
+        currentUserId={completedMatch.members[0].userId}
+        matches={[{
+          ...completedMatch,
+          tenderForfeited: true,
+        }]}
+        onOpen={() => undefined}
+      />
+    </I18nProvider>,
+  )
+
+  expect(html).toContain('Вы выбыли')
+  expect(html).toContain('Открыть результаты')
+  expect(html).not.toContain('Недоступно после выхода')
 })
 
 test('keeps an unfinished forfeited match explicit without inventing a placement', () => {

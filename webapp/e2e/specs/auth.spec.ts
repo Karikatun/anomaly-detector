@@ -1,4 +1,45 @@
-import { e2ePassword, expect, registerBrowserUser, test } from '../helpers/test'
+import { e2ePassword, expect, registerBrowserUser, test, uniqueLogin } from '../helpers/test'
+
+// Authentication journeys handle passwords and one-time credentials; keep them out of CI artifacts.
+test.use({ screenshot: 'off', trace: 'off', video: 'off' })
+
+test('submits registration once and queues its optional analytics event', async ({ browserName, page }) => {
+  let analyticsRequests = 0
+  let registrationRequests = 0
+  const analyticsOutcome = new Promise<string>((resolve) => {
+    const isRegistrationEvent = (request: import('@playwright/test').Request) =>
+      request.method() === 'POST' && request.url().endsWith('/api/analytics/events')
+    page.on('requestfinished', (request) => {
+      if (isRegistrationEvent(request)) resolve('finished')
+    })
+    page.on('requestfailed', (request) => {
+      if (isRegistrationEvent(request)) {
+        resolve(`failed: ${request.failure()?.errorText ?? 'unknown failure'}`)
+      }
+    })
+  })
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/analytics/events')) {
+      analyticsRequests += 1
+    }
+    if (request.method() === 'POST' && request.url().endsWith('/api/auth/register')) {
+      registrationRequests += 1
+    }
+  })
+
+  await registerBrowserUser(page, 'Аналитика E2E', 'analytics-registration')
+
+  expect(analyticsRequests).toBe(1)
+  expect(registrationRequests).toBe(1)
+  const outcome = await analyticsOutcome
+  if (browserName === 'firefox') {
+    // Firefox reports a successfully queued sendBeacon request as aborted once
+    // it stops tracking the response. The backend request is still issued once.
+    expect(['finished', 'failed: NS_BINDING_ABORTED']).toContain(outcome)
+  } else {
+    expect(outcome).toBe('finished')
+  }
+})
 
 test('shows the primary sign-in paths immediately and exposes accurate auth headings', async ({ page }) => {
   await page.goto('/')
@@ -41,6 +82,86 @@ test('shows the primary sign-in paths immediately and exposes accurate auth head
   await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
 })
 
+test('continues a landing registration into tutorial and ignores unknown destinations', async ({ page }) => {
+  await page.goto('/?continue=admin')
+  await expect(page.getByRole('tab', { name: 'Вход', exact: true })).toHaveAttribute('aria-selected', 'true')
+
+  const websiteUrl = process.env.E2E_WEBSITE_URL
+  const webappUrl = process.env.E2E_WEB_URL
+  if (!websiteUrl || !webappUrl) {
+    throw new Error('The public website and player webapp origins are required for E2E')
+  }
+  expect(new URL(websiteUrl).origin).not.toBe(new URL(webappUrl).origin)
+
+  const analyticsEvents: string[] = []
+  page.on('request', (request) => {
+    if (!request.url().endsWith('/api/analytics/events') || request.method() !== 'POST') return
+    const payload = request.postDataJSON() as { event?: string }
+    if (payload.event) analyticsEvents.push(payload.event)
+  })
+
+  await page.goto(`${websiteUrl}/?utm_campaign=e2e_launch`)
+  const undecidedAnalytics = page.locator('[data-analytics-panel="undecided"]')
+  await expect(undecidedAnalytics.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
+  await expect(undecidedAnalytics.getByRole('button', { name: 'Только необходимые' })).toBeVisible()
+  expect((await page.context().cookies()).some((cookie) =>
+    cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
+  await undecidedAnalytics.getByRole('button', { name: 'Разрешить аналитику' }).click()
+  await expect(page.getByText('Выбор сохранён. Его можно изменить в любой момент.')).toBeVisible()
+  await expect.poll(async () =>
+    (await page.context().cookies()).some((cookie) =>
+      cookie.name === 'anomaly_detector_analytics_journey' && cookie.httpOnly),
+  ).toBe(true)
+  const tutorialLink = page.getByRole('link', { name: 'Пройти обучение' }).first()
+  await expect(tutorialLink).toHaveAttribute(
+    'href',
+    new URL('/?continue=tutorial', webappUrl).toString(),
+  )
+  await tutorialLink.click()
+  await expect(page).toHaveURL(new URL('/?continue=tutorial', webappUrl).toString())
+  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
+
+  const login = uniqueLogin('landing-tutorial')
+  await page.getByLabel('Логин').fill(login)
+  await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
+  await page.getByLabel('Имя').fill('Исследователь лендинга')
+  await page.getByRole('checkbox', { name: 'Я даю согласие на обработку персональных данных' }).check()
+  await page.getByRole('checkbox', { name: 'Я принимаю Пользовательское соглашение' }).check()
+  await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
+
+  await expect(page).toHaveURL('/tutorial')
+  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toBeVisible()
+  await expect.poll(() => analyticsEvents).toEqual(expect.arrayContaining([
+    'tutorial_cta',
+    'registration_complete',
+  ]))
+
+  await page.goto(websiteUrl)
+  await expect(page.getByRole('button', { name: 'Отключить аналитику' })).toBeVisible()
+  await page.getByRole('button', { name: 'Отключить аналитику' }).click()
+  await expect(page.getByText('Аналитика отключена, связанный 30-дневный идентификатор удалён.')).toBeVisible()
+  await expect.poll(async () =>
+    (await page.context().cookies()).some((cookie) =>
+      cookie.name === 'anomaly_detector_analytics_journey'),
+  ).toBe(false)
+})
+
+test('keeps the landing journey available after choosing only necessary functions', async ({ page }) => {
+  const websiteUrl = process.env.E2E_WEBSITE_URL
+  const webappUrl = process.env.E2E_WEB_URL
+  if (!websiteUrl || !webappUrl) throw new Error('Public and player origins are required')
+
+  await page.goto(websiteUrl)
+  await page.getByRole('button', { name: 'Только необходимые' }).click()
+  await expect(page.getByText('Сохранены только необходимые функции.')).toBeVisible()
+  expect((await page.context().cookies()).some((cookie) =>
+    cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
+
+  await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
+  await expect(page).toHaveURL(new URL('/?continue=tutorial', webappUrl).toString())
+  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
+})
+
 test('explains how to register when a Yandex ID has no game account', async ({ page }) => {
   await page.goto('/?auth_error=oauth_registration_consent_required')
 
@@ -63,11 +184,21 @@ test('explains how to register when a Yandex ID has no game account', async ({ p
   await expect(page).toHaveURL('/')
 })
 
+test('shows a generic Yandex callback failure without exposing its internal cause', async ({ page }) => {
+  await page.goto('/?auth_error=oauth_failed')
+
+  await expect(page.getByRole('alert')).toHaveText(
+    'Не удалось завершить вход через Яндекс. Попробуйте снова или войдите другим способом.',
+  )
+  await expect(page).toHaveURL('/')
+  await expect(page.locator('body')).not.toContainText('oauth_failed')
+})
+
 test('submits registration as a native form when Enter is pressed from any field', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('tab', { name: 'Регистрация', exact: true }).click()
 
-  const login = `native-form-${Date.now()}`
+  const login = uniqueLogin('native-form')
   await page.getByLabel('Логин').fill(login)
   await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
   await page.getByLabel('Имя').fill('Нативная форма')
@@ -180,7 +311,7 @@ test('deletes an account from the profile only after confirmation and explains r
   await expect(openDeletionDialog).toBeVisible()
   await openDeletionDialog.click()
   const dialog = page.getByRole('dialog', { name: 'Удалить аккаунт?' })
-  await expect(dialog).toContainText('История матчей останется только в обезличенном виде.')
+  await expect(dialog).toContainText('история матчей останется только в обезличенном виде.')
   await dialog.getByRole('button', { name: 'Отмена' }).click()
   await expect(dialog).toBeHidden()
   await expect(page.getByRole('heading', { name: 'ПРОФИЛЬ', exact: true })).toBeVisible()
@@ -365,4 +496,482 @@ test('keeps profile input and exposes server errors until a successful retry', a
   shouldFail = false
   await save.click()
   await expect(page.getByRole('heading', { name: 'Новое имя E2E' })).toBeVisible()
+})
+
+test('shows masked Yandex protection and a non-disclosing email conflict state', async ({ page }) => {
+  await registerBrowserUser(page, 'Защита E2E', 'yandex-protection')
+  let state: 'managed' | 'conflict' = 'managed'
+  await page.route('**/api/auth/account-protection', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        accountProtection: state === 'managed'
+          ? { state: 'yandex_managed', maskedAccountEmail: 'P***@yandex.ru' }
+          : { state: 'yandex_conflict' },
+      }),
+    })
+  })
+
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await expect(page.getByRole('heading', { name: 'Защита аккаунта' })).toBeVisible()
+  await expect(page.getByText('P***@yandex.ru')).toBeVisible()
+  await expect(page.getByText('Управляется Яндекс ID')).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('Player@yandex.ru')
+
+  state = 'conflict'
+  await page.reload()
+  await expect(page.getByText('Не удалось синхронизировать актуальный адрес.')).toBeVisible()
+  await expect(page.getByText('Вход через Яндекс ID продолжает работать.')).toBeVisible()
+})
+
+test('keeps Recovery Email optional and completes its protected cooling-off flow', async ({ page }) => {
+  await registerBrowserUser(page, 'Восстановление E2E', 'recovery-protection')
+  let state: Record<string, unknown> = { state: 'password_unprotected' }
+  let startAttempts = 0
+  const mutationBodies: unknown[] = []
+  const analyticsEvents: string[] = []
+  page.on('request', (request) => {
+    if (!request.url().endsWith('/api/analytics/events') || request.method() !== 'POST') return
+    const payload = request.postDataJSON() as { event?: string }
+    if (payload.event) analyticsEvents.push(payload.event)
+  })
+  await page.route('**/api/auth/account-protection', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accountProtection: state }),
+    })
+  })
+  await page.route('**/api/auth/account-protection/recovery-email/**', async (route) => {
+    mutationBodies.push(route.request().postDataJSON())
+    const pathname = new URL(route.request().url()).pathname
+    if (pathname.endsWith('/start')) {
+      startAttempts += 1
+      if (startAttempts === 1) {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: {
+              code: 'BAD_REQUEST',
+              message: 'Recovery Email is unavailable',
+            },
+          }),
+        })
+        return
+      }
+      state = {
+        canCancel: true,
+        codeExpiresAt: '2030-08-22T15:15:00.000Z',
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_pending_code',
+      }
+    } else if (pathname.endsWith('/confirm')) {
+      state = {
+        activatesAt: '2030-08-23T15:00:00.000Z',
+        canCancel: true,
+        maskedAccountEmail: 'p***@mail.ru',
+        state: 'password_cooling_off',
+      }
+    } else if (pathname.endsWith('/cancel')) {
+      state = { state: 'password_unprotected' }
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accountProtection: state }),
+    })
+  })
+
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await expect(page.getByText('Это необязательно: урок и игра доступны без почты.')).toBeVisible()
+  await page.getByRole('button', { name: 'Добавить почту' }).click()
+  const startDialog = page.getByRole('dialog', { name: 'Добавить почту восстановления' })
+  await expect(startDialog).toBeVisible()
+  await startDialog.getByLabel('Почта восстановления').fill('postponed@mail.ru')
+  await startDialog.getByLabel('Текущий пароль').fill(e2ePassword)
+  await startDialog.getByRole('button', { name: 'Сделать позже' }).click()
+  await expect(startDialog).toBeHidden()
+  await page.getByRole('button', { name: 'Добавить почту' }).click()
+  await expect(startDialog.getByLabel('Почта восстановления')).toHaveValue('')
+  await expect(startDialog.getByLabel('Текущий пароль')).toHaveValue('')
+  await startDialog.getByRole('button', { name: 'Сделать позже' }).click()
+  await page.getByRole('button', { name: 'Назад' }).click()
+  await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await page.getByRole('button', { name: 'Добавить почту' }).click()
+  await page.getByLabel('Почта восстановления').fill('player@mail.ru')
+  await page.getByLabel('Текущий пароль').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Отправить код' }).click()
+  await expect(startDialog.getByRole('alert')).toHaveText(
+    'Этот адрес сейчас нельзя использовать. Причина скрыта для защиты аккаунтов.',
+  )
+  await expect(startDialog).not.toContainText('Recovery Email is unavailable')
+  await page.getByRole('button', { name: 'Отправить код' }).click()
+  const codeDialog = page.getByRole('dialog', { name: 'Подтвердить почту' })
+  await expect(codeDialog).toBeVisible()
+  await expect(codeDialog).toContainText('p***@mail.ru')
+  await page.getByLabel('Код из письма').fill('123456')
+  await codeDialog.getByRole('button', { name: 'Подтвердить' }).click()
+
+  await expect(page.getByText('Период защиты')).toBeVisible()
+  await expect.poll(() => analyticsEvents).toContain('recovery_email_confirmed')
+  await expect(page.getByText('p***@mail.ru', { exact: true })).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('player@mail.ru')
+  await expect(page.locator('body')).not.toContainText('123456')
+  await page.getByRole('button', { name: 'Отменить привязку' }).click()
+  const cancelDialog = page.getByRole('dialog', { name: 'Отменить защиту?' })
+  await expect(cancelDialog).toContainText('Сеансы, открытые после запроса, завершатся')
+  await cancelDialog.getByRole('button', { name: 'Отменить защиту' }).click()
+  await expect(page.getByText('Почта восстановления пока не настроена.')).toBeVisible()
+  expect(mutationBodies).toEqual([
+    { email: 'player@mail.ru', password: e2ePassword },
+    { email: 'player@mail.ru', password: e2ePassword },
+    { code: '123456' },
+    {},
+  ])
+})
+
+test('replaces Recovery Email only after both masked factors and supports safe abandonment', async ({ page }) => {
+  await registerBrowserUser(page, 'Замена почты E2E', 'recovery-replacement')
+  type ProtectionState = Record<string, unknown>
+  const replacementState = (
+    oldStatus: 'confirmed' | 'pending' = 'pending',
+    canManage = true,
+  ): ProtectionState => ({
+    canManage,
+    newAddress: {
+      codeExpiresAt: '2030-08-22T15:15:00.000Z',
+      maskedAccountEmail: 'N***@mail.ru',
+      status: 'pending',
+    },
+    oldAddress: {
+      codeExpiresAt: '2030-08-22T15:15:00.000Z',
+      maskedAccountEmail: 'O***@mail.ru',
+      status: oldStatus,
+    },
+    state: 'password_replacing',
+  })
+  let state: ProtectionState = {
+    maskedAccountEmail: 'O***@mail.ru',
+    recoveryCodes: 'not_issued',
+    state: 'password_active',
+  }
+  let replacementRound = 0
+  const mutationBodies: unknown[] = []
+  await page.route('**/api/auth/account-protection', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accountProtection: state }),
+    })
+  })
+  await page.route(
+    '**/api/auth/account-protection/recovery-email/replacement/**',
+    async (route) => {
+      const pathname = new URL(route.request().url()).pathname
+      const body = route.request().postDataJSON()
+      mutationBodies.push(body)
+      if (pathname.endsWith('/start')) {
+        replacementRound += 1
+        state = replacementRound === 1
+          ? replacementState()
+          : {
+              canManage: true,
+              newAddress: {
+                codeExpiresAt: '2030-08-22T15:30:00.000Z',
+                maskedAccountEmail: 'T***@mail.ru',
+                status: 'pending',
+              },
+              oldAddress: {
+                codeExpiresAt: '2030-08-22T15:30:00.000Z',
+                maskedAccountEmail: 'N***@mail.ru',
+                status: 'pending',
+              },
+              state: 'password_replacing',
+            }
+      } else if (pathname.endsWith('/confirm') && body.factor === 'old') {
+        state = replacementState('confirmed')
+      } else if (pathname.endsWith('/confirm')) {
+        state = {
+          maskedAccountEmail: 'N***@mail.ru',
+          recoveryCodes: 'not_issued',
+          state: 'password_active',
+        }
+      } else if (pathname.endsWith('/cancel')) {
+        state = {
+          maskedAccountEmail: 'N***@mail.ru',
+          recoveryCodes: 'not_issued',
+          state: 'password_active',
+        }
+      }
+      const response = pathname.endsWith('/cancel')
+        ? { accountProtection: state }
+        : {
+            accountProtection: state,
+            replacement: state.state === 'password_active'
+              ? {
+                  currentSession: 'active',
+                  otherSessions: 'revoked',
+                  status: 'completed',
+                }
+              : {
+                  currentSession: 'active',
+                  otherSessions: 'unchanged',
+                  status: 'pending',
+                },
+          }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(response),
+      })
+    },
+  )
+
+  await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+  await expect(page.getByText('O***@mail.ru', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Заменить почту' }).click()
+  const startDialog = page.getByRole('dialog', { name: 'Заменить почту восстановления' })
+  await startDialog.getByLabel('Новая почта восстановления').fill('discarded@mail.ru')
+  await startDialog.getByLabel('Текущий пароль').fill(e2ePassword)
+  await startDialog.getByRole('button', { name: 'Отмена' }).click()
+  await page.getByRole('button', { name: 'Заменить почту' }).click()
+  await expect(startDialog.getByLabel('Новая почта восстановления')).toHaveValue('')
+  await expect(startDialog.getByLabel('Текущий пароль')).toHaveValue('')
+  await startDialog.getByLabel('Новая почта восстановления').fill('new@mail.ru')
+  await startDialog.getByLabel('Текущий пароль').fill(e2ePassword)
+  await startDialog.getByRole('button', { name: 'Отправить два кода' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Подтвердите оба адреса' })).toBeVisible()
+  const oldFactor = page.getByRole('heading', { name: 'Старый адрес' }).locator('..').locator('..')
+  const newFactor = page.getByRole('heading', { name: 'Новый адрес' }).locator('..').locator('..')
+  await expect(oldFactor).toContainText('O***@mail.ru')
+  await expect(newFactor).toContainText('N***@mail.ru')
+  await oldFactor.getByRole('button', { name: 'Ввести код' }).click()
+  const oldCodeDialog = page.getByRole('dialog', { name: 'Подтвердить старый адрес' })
+  await oldCodeDialog.getByLabel('Код из письма').fill('111111')
+  await oldCodeDialog.getByRole('button', { name: 'Подтвердить' }).click()
+  await expect(oldFactor).toContainText('Подтверждён')
+
+  await newFactor.getByRole('button', { name: 'Новый код' }).click()
+  await expect(page.getByRole('status')).toContainText('Предыдущий код для этого адреса больше не действует')
+  await newFactor.getByRole('button', { name: 'Ввести код' }).click()
+  const newCodeDialog = page.getByRole('dialog', { name: 'Подтвердить новый адрес' })
+  await newCodeDialog.getByLabel('Код из письма').fill('222222')
+  await newCodeDialog.getByRole('button', { name: 'Подтвердить' }).click()
+  await expect(page.getByText('Почта заменена. Все остальные сессии завершены.')).toBeVisible()
+  await expect(page.getByText('N***@mail.ru', { exact: true })).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('new@mail.ru')
+  await expect(page.locator('body')).not.toContainText('111111')
+  await expect(page.locator('body')).not.toContainText('222222')
+
+  await page.getByRole('button', { name: 'Заменить почту' }).click()
+  await page.getByLabel('Новая почта восстановления').fill('third@mail.ru')
+  await page.getByLabel('Текущий пароль').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Отправить два кода' }).click()
+  await page.getByRole('button', { name: 'Отменить замену' }).click()
+  const cancelDialog = page.getByRole('dialog', { name: 'Отменить замену почты?' })
+  await expect(cancelDialog).toContainText('Старый адрес останется активным')
+  await cancelDialog.getByRole('button', { name: 'Отменить замену' }).click()
+  await expect(page.getByText('Замена отменена. Старый адрес сохранён.')).toBeVisible()
+
+  state = replacementState('pending', false)
+  await page.reload()
+  await expect(page.getByText('Продолжите в той сессии, где началась замена.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Ввести код' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Новый код' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Отменить замену' })).toHaveCount(0)
+  expect(mutationBodies).toEqual([
+    { email: 'new@mail.ru', password: e2ePassword },
+    { code: '111111', factor: 'old' },
+    { factor: 'new' },
+    { code: '222222', factor: 'new' },
+    { email: 'third@mail.ru', password: e2ePassword },
+    {},
+  ])
+})
+
+test.describe('privacy-sensitive Recovery Code journeys', () => {
+  test('shows eight codes once, offers a file, and requires save acknowledgement or warning', async ({
+    page,
+  }) => {
+    await registerBrowserUser(page, 'Резервные коды E2E', 'recovery-codes')
+    const recoveryCodes = [
+      '0000-1111-2222-3333-4444-5555-6666-7777',
+      '1111-2222-3333-4444-5555-6666-7777-8888',
+      '2222-3333-4444-5555-6666-7777-8888-9999',
+      '3333-4444-5555-6666-7777-8888-9999-AAAA',
+      '4444-5555-6666-7777-8888-9999-AAAA-BBBB',
+      '5555-6666-7777-8888-9999-AAAA-BBBB-CCCC',
+      '6666-7777-8888-9999-AAAA-BBBB-CCCC-DDDD',
+      '7777-8888-9999-AAAA-BBBB-CCCC-DDDD-EEEE',
+    ]
+    let protectionState = {
+      maskedAccountEmail: 'p***@mail.ru',
+      recoveryCodes: 'not_issued',
+      state: 'password_active',
+    }
+    await page.route('**/api/auth/account-protection', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ accountProtection: protectionState }),
+      })
+    })
+    await page.route('**/api/auth/account-protection/recovery-codes/issue', async (route) => {
+      expect(route.request().postDataJSON()).toEqual({})
+      protectionState = {
+        maskedAccountEmail: 'p***@mail.ru',
+        recoveryCodes: 'available',
+        state: 'password_active',
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ accountProtection: protectionState, recoveryCodes }),
+      })
+    })
+
+    await page.getByRole('button', { name: 'ПРОФИЛЬ' }).click()
+    await page.getByRole('button', { name: 'Получить резервные коды' }).click()
+    const issueDialog = page.getByRole('dialog', { name: 'Получить резервные коды' })
+    await expect(issueDialog).toContainText('восемь одноразовых кодов')
+    await issueDialog.getByRole('button', { name: 'Показать 8 кодов' }).click()
+
+    const sheet = page.getByRole('dialog', { name: 'Сохраните резервные коды' })
+    await expect(sheet.getByRole('list', { name: 'Восемь одноразовых резервных кодов' }))
+      .toHaveText(/0000-1111-2222-3333/)
+    await expect(sheet.locator('li')).toHaveCount(8)
+    await expect(sheet.getByRole('button', { name: 'Скопировать' })).toBeVisible()
+    await expect(sheet.getByRole('button', { name: 'Распечатать' })).toBeVisible()
+    await expect(sheet.getByRole('button', { name: 'Я сохранил — закрыть' })).toBeDisabled()
+
+    const downloadPromise = page.waitForEvent('download')
+    await sheet.getByRole('button', { name: 'Скачать .txt' }).click()
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toBe('anomaly-detector-recovery-codes.txt')
+
+    await sheet.getByRole('button', { name: 'Пропустить сохранение' }).click()
+    await expect(sheet).toContainText('этот набор исчезнет с экрана навсегда')
+    await sheet.getByRole('button', { name: 'Вернуться к кодам' }).click()
+    await sheet.getByRole('checkbox', { name: /Я сохранил коды/ }).check()
+    await sheet.getByRole('button', { name: 'Я сохранил — закрыть' }).click()
+
+    await expect(sheet).toBeHidden()
+    await expect(page.locator('body')).not.toContainText(recoveryCodes[0])
+    await expect(page.getByRole('button', { name: 'Перевыпустить коды' })).toBeVisible()
+    await page.getByRole('button', { name: 'Назад' }).click()
+    await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
+  })
+
+  test('uses one saved code for password reset or unavailable-email replacement', async ({ page }) => {
+    const requestBodies: unknown[] = []
+    const fillControlledField = async (label: string, value: string) => {
+      const field = page.getByLabel(label)
+      await field.fill(value)
+      await page.evaluate(() => new Promise<void>((resolveFrame) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+      }))
+      await expect(field).toHaveValue(value)
+    }
+    const submitReadyForm = async (input: {
+      buttonName: string
+      formId: string
+      requestPath: string
+    }) => {
+      const form = page.locator(`#${input.formId}`)
+      await expect.poll(() => form.evaluate((element) => (
+        element instanceof HTMLFormElement && element.checkValidity()
+      ))).toBe(true)
+      await page.evaluate(() => new Promise<void>((resolveFrame) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
+      }))
+      const request = page.waitForRequest((candidate) => (
+        new URL(candidate.url()).pathname === input.requestPath
+      ))
+      await form.getByRole('button', { name: input.buttonName }).click()
+      await request
+    }
+    await page.route('**/api/auth/recovery-code/**', async (route) => {
+      const path = new URL(route.request().url()).pathname
+      requestBodies.push(route.request().postDataJSON())
+      const body = path.endsWith('/password')
+        ? { outcome: 'completed' }
+        : path.endsWith('/start')
+          ? {
+              codeExpiresAt: '2030-08-22T15:15:00.000Z',
+              maskedAccountEmail: 'n***@mail.ru',
+              outcome: 'pending',
+            }
+          : {
+              activatesAt: '2030-08-23T15:15:00.000Z',
+              maskedAccountEmail: 'n***@mail.ru',
+              outcome: 'completed',
+            }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+    })
+
+    const bootstrapRefresh = page.waitForResponse((response) => (
+      new URL(response.url()).pathname === '/api/auth/refresh'
+    ))
+    await page.goto('/')
+    await bootstrapRefresh
+    await page.getByRole('link', { name: 'Восстановить пароль' }).click()
+    await expect(page).toHaveURL('/recover/password')
+    await page.getByRole('link', { name: 'Использовать сохранённый резервный код' }).click()
+    await expect(page).toHaveURL('/recover/code')
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByRole('heading', { name: 'Восстановление по резервному коду' }))
+      .toBeVisible()
+
+    const recoveryCode = 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111'
+    await fillControlledField('Логин', 'recovery-owner')
+    await fillControlledField('Резервный код', recoveryCode)
+    await fillControlledField('Новый пароль', 'new-password-123')
+    await submitReadyForm({
+      buttonName: 'Задать новый пароль',
+      formId: 'recovery-code-password-panel',
+      requestPath: '/api/auth/recovery-code/password',
+    })
+    await expect(page.getByRole('status')).toContainText('Пароль изменён')
+    await expect(page.getByLabel('Резервный код')).toHaveValue('')
+    await expect(page.getByLabel('Новый пароль')).toHaveValue('')
+
+    await page.getByRole('tab', { name: 'Почту' }).click()
+    await fillControlledField('Резервный код', recoveryCode)
+    await fillControlledField('Новая почта восстановления', 'new@mail.ru')
+    await submitReadyForm({
+      buttonName: 'Отправить код на новую почту',
+      formId: 'recovery-code-email-panel',
+      requestPath: '/api/auth/recovery-code/recovery-email/start',
+    })
+    await expect(page.getByText(/Код отправлен на n\*\*\*@mail\.ru/)).toBeVisible()
+    await expect(page.locator('body')).not.toContainText(recoveryCode)
+    await fillControlledField('Код из письма', '123456')
+    await submitReadyForm({
+      buttonName: 'Подтвердить новую почту',
+      formId: 'recovery-code-email-panel',
+      requestPath: '/api/auth/recovery-code/recovery-email/confirm',
+    })
+    await expect(page.getByRole('status')).toContainText('Почта n***@mail.ru подтверждена')
+    await expect(page.getByRole('status')).toContainText('периода защиты')
+    await expect(page.locator('body')).not.toContainText('123456')
+
+    expect(requestBodies).toEqual([
+      {
+        login: 'recovery-owner',
+        newPassword: 'new-password-123',
+        recoveryCode,
+      },
+      {
+        email: 'new@mail.ru',
+        login: 'recovery-owner',
+        recoveryCode,
+      },
+      { code: '123456', login: 'recovery-owner' },
+    ])
+  })
 })

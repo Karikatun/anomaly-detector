@@ -10,9 +10,9 @@ const registration = {
   login: 'player-one',
   password: 'password123',
   privacyConsent: true,
-  privacyConsentVersion: '1.0',
+  privacyConsentVersion: '1.1',
   termsAccepted: true,
-  termsVersion: '1.0',} as const
+  termsVersion: '1.1',} as const
 
 test('registration uses the shared display-name boundaries', () => {
   expect(parseCredentialsForm('register', { ...registration, displayName: 'Я' }).success).toBe(false)

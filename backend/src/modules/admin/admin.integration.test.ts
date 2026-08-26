@@ -1,8 +1,18 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
+import {
+  analyticsAdminOverviewSchema,
+  mailOperationsViewSchema,
+} from '@anomaly-detector/contracts'
+
 import { createApp } from '../../app'
 import { createPrisma } from '../../db'
 import type { AppEnv } from '../../env'
+import { createRequestBudgetOverviewReader } from '../../security/request-budget-overview'
+import {
+  createRequestBudgetPolicyCatalog,
+  requestBudgetPolicyEntries,
+} from '../../security/request-budget-policy'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl ? describe : describe.skip
@@ -12,13 +22,28 @@ maybeDescribe('concealed operations API integration', () => {
 
   const prisma = createPrisma(databaseUrl)
   const baseEnv: AppEnv = {
+    API_HOST: '0.0.0.0',
     ACCESS_TOKEN_TTL_SECONDS: 60,
     ADMIN_USER_IDS: [],
+    ANALYTICS_ENABLED: false,
+    ANALYTICS_ORIGINS: [],
+    ANALYTICS_CAMPAIGN_ALLOWLIST: [],
     AUTH_BODY_LIMIT_BYTES: 64 * 1024,
     AUTH_RATE_LIMIT_MAX: 60,
     AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
     COOKIE_SECURE: false,
+    MAIL_SMTP_ENABLED: false,
+    MAIL_SMTP_TIMEOUT_MS: 10_000,
+    MAIL_SMTP_MAX_ATTEMPTS: 5,
+    MAIL_SMTP_RETRY_BASE_SECONDS: 30,
+    MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD: 5,
+    MAIL_SMTP_CIRCUIT_OPEN_SECONDS: 300,
+    MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE: 60,
+    MAIL_SMTP_LEASE_SECONDS: 60,
+    MAIL_SMTP_WORKER_INTERVAL_MS: 1_000,
+    MAIL_OUTBOX_RETENTION_DAYS: 30,
     CORS_ORIGINS: ['http://localhost:5173'],
+    WEBAPP_ORIGIN: 'http://localhost:5173',
     DATABASE_URL: databaseUrl,
     JWT_SECRET: '12345678901234567890123456789012',
     PORT: 3000,
@@ -35,6 +60,15 @@ maybeDescribe('concealed operations API integration', () => {
   }
 
   beforeEach(async () => {
+    await prisma.authAbuseBucket.deleteMany()
+    await prisma.analyticsEvent.deleteMany()
+    await prisma.analyticsJourney.deleteMany()
+    await prisma.analyticsDailyAggregate.deleteMany()
+    await prisma.mailDomainAssessment.deleteMany()
+    await prisma.mailPolicyAuditEvent.deleteMany()
+    await prisma.mailPolicyCommand.deleteMany()
+    await prisma.mailPolicyEntry.deleteMany()
+    await prisma.mailPolicyVersion.deleteMany()
     await prisma.tenderRoom.deleteMany()
     await prisma.tender.deleteMany()
     await prisma.authSession.deleteMany()
@@ -50,18 +84,32 @@ maybeDescribe('concealed operations API integration', () => {
     const administrator = await register(bootstrapApp, 'operations-admin')
     const player = await register(bootstrapApp, 'operations-player')
     const app = createApp({
-      env: { ...baseEnv, ADMIN_USER_IDS: [administrator.user.id] },
+      env: {
+        ...baseEnv,
+        ADMIN_USER_IDS: [administrator.user.id],
+        ANALYTICS_ENABLED: true,
+        ANALYTICS_ORIGINS: [baseEnv.WEBAPP_ORIGIN],
+      },
       prisma,
     })
 
+    const landingResponse = await app.request('/api/analytics/events/landing', {
+      body: JSON.stringify({ campaign: null, referrerDomain: null }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    })
+    expect(landingResponse.status).toBe(204)
+
     for (const authorization of [undefined, `Bearer ${player.accessToken}`]) {
-      const response = await app.request('/api/operations/overview', {
-        headers: authorization ? { Authorization: authorization } : undefined,
-      })
-      expect(response.status).toBe(404)
-      expect(await response.json()).toEqual({
-        error: { code: 'NOT_FOUND', message: 'Route not found' },
-      })
+      for (const path of ['/api/operations/overview', '/api/operations/analytics?windowDays=30']) {
+        const response = await app.request(path, {
+          headers: authorization ? { Authorization: authorization } : undefined,
+        })
+        expect(response.status).toBe(404)
+        expect(await response.json()).toEqual({
+          error: { code: 'NOT_FOUND', message: 'Route not found' },
+        })
+      }
     }
 
     const response = await app.request('/api/operations/overview', {
@@ -90,10 +138,158 @@ maybeDescribe('concealed operations API integration', () => {
     })
     expect(secondPage.users.items).toHaveLength(1)
 
+    const analyticsResponse = await app.request('/api/operations/analytics?windowDays=30', {
+      headers: { Authorization: `Bearer ${administrator.accessToken}` },
+    })
+    const analytics = analyticsAdminOverviewSchema.parse(await analyticsResponse.json())
+    expect(analyticsResponse.status).toBe(200)
+    expect(analytics.steps.find((step) => step.event === 'landing_view')?.count).toBe(1)
+    expect(analytics.botLandingViews).toBe(0)
+    expect(JSON.stringify(analytics)).not.toMatch(/"(?:accountId|cookie|email|ipAddress|journeyId|login|rawEvents|userId)"/i)
+
     const openApi = await (await app.request('/openapi.json')).json()
     expect(JSON.stringify(openApi)).not.toContain('/api/operations')
   })
+
+  test('allows only a recently authenticated operator to sync the reviewed provider catalog', async () => {
+    const bootstrapApp = createApp({ env: baseEnv, prisma })
+    const administrator = await register(bootstrapApp, 'mail-policy-admin')
+    const player = await register(bootstrapApp, 'mail-policy-player')
+    const app = createApp({
+      env: { ...baseEnv, ADMIN_USER_IDS: [administrator.user.id] },
+      prisma,
+    })
+    const syncBody = JSON.stringify({
+      commandId: '019f8099-7e26-7760-ad08-66d1d66b2740',
+      expectedVersion: 0,
+    })
+    for (const authorization of [undefined, `Bearer ${player.accessToken}`]) {
+      const denied = await app.request('/api/operations/mail-policy/sync', {
+        body: syncBody,
+        headers: {
+          ...(authorization ? { Authorization: authorization } : {}),
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })
+      expect(denied.status).toBe(404)
+    }
+    expect(await prisma.mailPolicyVersion.count()).toBe(0)
+
+    const syncedResponse = await app.request('/api/operations/mail-policy/sync', {
+      body: syncBody,
+      headers: {
+        Authorization: `Bearer ${administrator.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+    expect(syncedResponse.status).toBe(200)
+    expect(syncedResponse.headers.get('cache-control')).toBe('no-store')
+    const synced = mailOperationsViewSchema.parse(await syncedResponse.json())
+    expect(synced).toMatchObject({
+      currentVersion: 1,
+      publishedPolicy: {
+        catalogVersion: 1,
+      },
+    })
+    expect(synced.publishedPolicy?.providers.map(({ providerId, state }) => ({ providerId, state })))
+      .toEqual(expect.arrayContaining([
+        { providerId: 'reg_ru', state: 'approved' },
+        { providerId: 'yandex', state: 'approved' },
+      ]))
+    for (const path of ['/api/operations/mail-policy/import', '/api/operations/mail-policy/publish']) {
+      expect((await app.request(path, {
+        body: syncBody,
+        headers: {
+          Authorization: `Bearer ${administrator.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })).status).toBe(404)
+    }
+
+    await prisma.authSession.updateMany({
+      where: { userId: administrator.user.id },
+      data: { createdAt: new Date(Date.now() - 11 * 60 * 1_000) },
+    })
+    const staleResponse = await app.request('/api/operations/mail-policy/status', {
+      body: JSON.stringify({
+        commandId: '019f8099-7e26-7760-ad08-66d1d66b2742',
+        expectedVersion: 1,
+        providerId: 'yandex',
+        reason: 'Security-инцидент',
+        state: 'blocked',
+      }),
+      headers: {
+        Authorization: `Bearer ${administrator.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+    expect(staleResponse.status).toBe(403)
+    expect(await staleResponse.json()).toEqual({
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Recent authentication is required for mail policy commands',
+      },
+    })
+    expect(await prisma.mailPolicyVersion.count()).toBe(1)
+  })
+
+  test('excludes expired and unknown budgets and rounds each exhausted scope before rollup', async () => {
+    const now = new Date('2026-08-24T12:00:00.000Z')
+    const activeUntil = new Date('2026-08-24T12:01:00.000Z')
+    const expiredAt = new Date('2026-08-24T12:00:00.000Z')
+    const rows = [
+      ...budgetRows('login_failure', 10, 5, activeUntil),
+      ...budgetRows('password_reset_login_hour', 10, 3, activeUntil, 20),
+      ...budgetRows('authenticated_mutation', 10, 120, activeUntil, 40),
+      ...budgetRows('rec_email_account_hour', 9, 3, activeUntil, 60),
+      ...budgetRows('rec_email_address_hour', 9, 3, activeUntil, 80),
+      ...budgetRows('room_join', 19, 20, activeUntil, 100),
+      ...budgetRows('tender_command', 20, 60, activeUntil, 120),
+      ...budgetRows('realtime_ticket_issue', 11, 10, expiredAt, 150),
+      ...budgetRows('unlisted_internal_scope', 12, 99, activeUntil, 170),
+    ]
+    await prisma.authAbuseBucket.createMany({ data: rows })
+
+    const overview = await createRequestBudgetOverviewReader(
+      prisma,
+      requestBudgetPolicyEntries(createRequestBudgetPolicyCatalog()),
+    ).read(now)
+
+    expect(overview).toEqual({
+      groups: [
+        { exhaustedBudgetKeysAtLeast: 10, surface: 'authentication' },
+        { exhaustedBudgetKeysAtLeast: 10, surface: 'room_join' },
+        { exhaustedBudgetKeysAtLeast: 20, surface: 'tender_command' },
+      ],
+      minimumGroupSize: 10,
+      roundingStep: 10,
+    })
+    expect(JSON.stringify(overview)).not.toMatch(
+      /activeBudgetKeys|exhaustedBudgetKeys"|requests|scope|keyHash|login|email|ip|userId|tenderId/i,
+    )
+  })
 })
+
+function budgetRows(
+  scope: string,
+  identities: number,
+  count: number,
+  expiresAt: Date,
+  keyOffset = 0,
+) {
+  return Array.from({ length: identities }, (_, index) => ({
+    blockedUntil: null,
+    count,
+    expiresAt,
+    keyHash: (keyOffset + index + 1).toString(16).padStart(64, '0'),
+    scope,
+    windowStartedAt: new Date('2026-08-24T11:59:00.000Z'),
+  }))
+}
 
 async function register(app: ReturnType<typeof createApp>, login: string) {
   const response = await app.request('/api/auth/token/register', {
@@ -103,9 +299,9 @@ async function register(app: ReturnType<typeof createApp>, login: string) {
       login,
       password: 'password123',
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     }),
   })
 

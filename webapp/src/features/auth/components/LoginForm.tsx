@@ -188,6 +188,12 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
           }}
         </form.Field>
 
+        {mode === 'login' && (
+          <Link className={styles.recoveryLink} to="/recover/password">
+            {t('auth.passwordRecovery.open')}
+          </Link>
+        )}
+
         {mode === 'register' && (
           <>
             <form.Field name="displayName">
@@ -293,7 +299,6 @@ export function LoginForm({ mode }: { mode: 'login' | 'register' }) {
                 size="lg"
                 className={styles.submit}
                 disabled={!isValid || isSubmitting}
-                onClick={() => void form.handleSubmit()}
               >
                 {isSubmitting
                   ? mode === 'register'

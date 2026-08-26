@@ -15,6 +15,7 @@ export class AppError extends Error {
     message: string,
     public readonly details?: unknown,
     public readonly securityReason?: string,
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message)
   }
@@ -54,6 +55,9 @@ export function handleError<
   securityEvents?: SecurityEventLogger,
 ) {
   if (error instanceof AppError) {
+    if (error.retryAfterSeconds !== undefined) {
+      c.header('Retry-After', String(error.retryAfterSeconds))
+    }
     if (securityEvents && (error.status === 401 || error.status === 403 || error.status === 429)) {
       emitSecurityEvent(c, securityEvents, {
         code: error.code,

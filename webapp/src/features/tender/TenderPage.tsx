@@ -49,9 +49,12 @@ import {
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import { CompletedTenderPanel } from './components/CompletedTenderPanel'
 import { ContractPlanningPanel } from './components/ContractPlanningPanel'
+import { TenderTerminalState } from './components/TenderTerminalState'
 import { TenderResearchDialog } from './components/TenderResearchDialog'
 import { TenderHeaderFrame } from './components/TenderHeaderFrame'
 import {
+  shouldReconcileTenderCommandError,
+  TenderCommandOutcomeUnknownError,
   useTenderCommands,
   type TenderCommandInput,
 } from './commands'
@@ -59,9 +62,7 @@ import {
   useRealtimeTender,
   type RealtimeErrorCode,
 } from './realtime'
-import {
-  getTenderCommandErrorKey,
-} from './tender-command-feedback'
+import { getTenderCommandErrorKey } from './tender-command-feedback'
 import {
   createExclusiveActionGate,
   sequentialTurnKey,
@@ -94,6 +95,7 @@ const sequentialPhases = new Set([
 ])
 
 const realtimeErrorKeys = {
+  'access-denied': 'tender.realtime.error.access-denied',
   'connection-failed': 'tender.realtime.error.connection-failed',
   'ticket-failed': 'tender.realtime.error.ticket-failed',
   'invalid-message': 'tender.realtime.error.invalid-message',
@@ -126,6 +128,8 @@ export function PhasePanel({
   activePlayerId,
   workingModelDialog,
   training,
+  onAuditRetry,
+  onReturnToHistory,
 }: {
   view: TenderView
   disabled: boolean
@@ -141,6 +145,8 @@ export function PhasePanel({
     open: boolean
     openDisabled: boolean
   }
+  onAuditRetry?: () => void
+  onReturnToHistory?: () => void
   training?: {
     laboratoryInitialMode?: 'broad' | 'deep'
     onLaboratoryModeSelect?: (mode: 'broad' | 'deep') => void
@@ -332,10 +338,11 @@ export function PhasePanel({
       return view.audit ? (
         <CompletedTenderPanel currentUserId={auth.user?.id} view={{ ...view, audit: view.audit }} />
       ) : (
-        <Card>
-          <CardHeader><CardTitle>{translate('tender.tenderPage.copy.014')}</CardTitle></CardHeader>
-          <CardContent><Typography tone="muted">{translate('tender.tenderPage.copy.015')}</Typography></CardContent>
-        </Card>
+        <TenderTerminalState
+          kind="audit"
+          onRetry={onAuditRetry ?? (() => undefined)}
+          onReturnToHistory={onReturnToHistory ?? (() => undefined)}
+        />
       )
 
     default:
@@ -365,7 +372,11 @@ function TenderContent() {
   const queryClient = useQueryClient()
 
   const { connected, error, retry, tenderView } = useRealtimeTender(auth.transport, tenderId)
-  const { execute } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
+  const {
+    commandPending,
+    execute,
+    outcomeUnknown,
+  } = useTenderCommands(auth.transport, tenderId, auth.user?.id ?? '')
   const [commandError, setCommandError] = useState<{ message: string; version: number } | null>(null)
   const [resuming, setResuming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -384,10 +395,63 @@ function TenderContent() {
   const previousSequentialTurnRef = useRef<string | undefined>(undefined)
   const leavingTenderIdRef = useRef<string | null>(null)
   const resumingTenderIdRef = useRef<string | null>(null)
+  const lastConnectedFocusRef = useRef<HTMLElement | null>(null)
+  const reconnectRestoreFocusRef = useRef<HTMLElement | null>(null)
+  const wasConnectedRef = useRef(connected)
+  const wasOutcomeUnknownRef = useRef(false)
 
   useLayoutEffect(() => {
     latestTenderViewRef.current = tenderView
   }, [tenderView])
+
+  useEffect(() => {
+    const wasOutcomeUnknown = wasOutcomeUnknownRef.current
+    wasOutcomeUnknownRef.current = outcomeUnknown
+    if (wasOutcomeUnknown && !outcomeUnknown) {
+      setCommandError(null)
+    }
+  }, [outcomeUnknown])
+
+  useEffect(() => {
+    if (!connected) return
+
+    const rememberFocus = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement) || target === document.body) return
+      if (target.closest('[role="alertdialog"]')) return
+      lastConnectedFocusRef.current = target
+    }
+    const handleFocus = (event: FocusEvent) => rememberFocus(event.target)
+
+    rememberFocus(document.activeElement)
+    document.addEventListener('focusin', handleFocus)
+    return () => document.removeEventListener('focusin', handleFocus)
+  }, [connected])
+
+  useEffect(() => {
+    const wasConnected = wasConnectedRef.current
+    wasConnectedRef.current = connected
+
+    if (wasConnected && !connected && tenderView) {
+      reconnectRestoreFocusRef.current = exitOpen
+        ? primaryContentRef.current
+        : lastConnectedFocusRef.current ?? primaryContentRef.current
+      setExitOpen(false)
+      return
+    }
+
+    if (!wasConnected && connected && tenderView && reconnectRestoreFocusRef.current) {
+      const restoreTarget = reconnectRestoreFocusRef.current
+      reconnectRestoreFocusRef.current = null
+      requestAnimationFrame(() => {
+        const targetIsDisabled = 'disabled' in restoreTarget && restoreTarget.disabled === true
+        if (restoreTarget.isConnected && !targetIsDisabled) {
+          restoreTarget.focus()
+        } else {
+          primaryContentRef.current?.focus()
+        }
+      })
+    }
+  }, [connected, exitOpen, tenderView])
 
   useLayoutEffect(() => {
     const header = headerRef.current
@@ -418,6 +482,7 @@ function TenderContent() {
   }, [queryClient, tenderView?.phase, tenderId])
 
   useEffect(() => {
+    if (outcomeUnknown) return
     if (!shouldResumeTender({
       connected,
       hasLeft: tenderView?.hasLeft ?? false,
@@ -432,7 +497,7 @@ function TenderContent() {
         resumingTenderIdRef.current = null
       })
       .finally(() => setResuming(false))
-  }, [connected, execute, tenderId, tenderView?.hasLeft])
+  }, [connected, execute, outcomeUnknown, tenderId, tenderView?.hasLeft])
 
   const remainingSeconds = useSynchronizedCountdown(
     tenderView?.dueAt,
@@ -468,9 +533,6 @@ function TenderContent() {
         try {
           await execute(command)
         } catch (err) {
-          if (err instanceof ApiRequestError && err.code === 'TENDER_EVIDENCE_UNAVAILABLE') {
-            retry()
-          }
           const messageKey = getTenderCommandErrorKey({
             actorId: auth.user?.id ?? '',
             command,
@@ -479,6 +541,13 @@ function TenderContent() {
             startingView,
           })
           if (messageKey === null) return
+          if (
+            (!(err instanceof TenderCommandOutcomeUnknownError)
+              && shouldReconcileTenderCommandError(err))
+            || (err instanceof ApiRequestError && err.code === 'TENDER_EVIDENCE_UNAVAILABLE')
+          ) {
+            retry()
+          }
           setCommandError({
             message: t(messageKey),
             version: latestTenderViewRef.current?.version ?? startingView?.version ?? 0,
@@ -525,6 +594,21 @@ function TenderContent() {
       // The shared command error remains visible; stay in the match so the player can retry.
     }
   }, [handleCommand, navigate, queryClient])
+  const returnToHistory = useCallback(() => {
+    void navigate({ to: '/app' })
+  }, [navigate])
+
+  if (error === 'access-denied' && !tenderView) {
+    return (
+      <section className="mx-auto grid min-h-dvh w-full max-w-6xl place-items-center px-5 py-16">
+        <TenderTerminalState
+          kind="access"
+          onRetry={retry}
+          onReturnToHistory={returnToHistory}
+        />
+      </section>
+    )
+  }
 
   if (error && !tenderView) {
     return (
@@ -551,7 +635,9 @@ function TenderContent() {
   }
 
   const phase = phaseLabels[tenderView.phase] ?? tenderView.phase
-  const currentCommandError = visibleCommandError(commandError, tenderView.version)
+  const currentCommandError = outcomeUnknown
+    ? commandError?.message ?? t('tender.command.reconciling')
+    : visibleCommandError(commandError, tenderView.version)
   const myPlayer = tenderView.players.find((p) => p.playerId === auth.user?.id)
   const mySlot = myPlayer?.accessSlot
   const activePlayer = tenderView.players.find((player) => player.playerId === tenderView.activePlayerId)
@@ -566,6 +652,7 @@ function TenderContent() {
   const isAccessSlotSelection = tenderView.phase === 'access-slot-selection'
   const isPowerAllocation = tenderView.phase === 'power-allocation'
   const isComplete = tenderView.phase === 'complete'
+  const mutationLocked = submitting || commandPending || outcomeUnknown
   const contextMenuVisibility = getPhaseContextMenuVisibility(tenderView.phase)
   const hasPendingAction = isAccessSlotSelection
     ? myPlayer?.requestedAccessSlot === undefined
@@ -592,17 +679,35 @@ function TenderContent() {
     setContextModal(open && (kind === 'research' || kind === 'working-model' || kind === 'contracts') ? kind : null)
     if (open) setOverlayPhase(tenderView.phase)
   }
+  const openReferenceFromHelp = (kind: 'rules' | 'interpretation') => {
+    setHelpMenuOpen(false)
+    window.setTimeout(() => setOverlayOpen(kind, true), 0)
+  }
   const handleWorkingModelSaveStatus = (status: WorkingModelSaveStatus) => {
     setWorkingModelSaveError(status.state === 'error' ? status.message : null)
   }
 
   return (
-    <section className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}>
+    <section
+      className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}
+      data-reconnecting={!connected || undefined}
+    >
       <TenderHeaderFrame
-        ariaLabel={t('tender.phase.status')}
+        ariaLabel={isComplete ? translate('tender.results.headerAria') : t('tender.phase.status')}
+        completed={isComplete}
         headerRef={headerRef}
         info={(
-          <>
+          isComplete ? <>
+            <Typography as="h2" variant="bodySmMedium">
+              {translate('tender.results.title')}
+            </Typography>
+            <Typography as="span" variant="caption" tone="muted">
+              {translate('tender.results.headerMeta', {
+                value1: tenderView.round,
+                value2: mySlot ?? '—',
+              })}
+            </Typography>
+          </> : <>
           <Typography variant="shortcut" tone="muted" className="uppercase">
             
             {translate('tender.header.round', { round: tenderView.round })}
@@ -613,7 +718,7 @@ function TenderContent() {
         timer={<TenderTimer remainingSeconds={tenderView.dueAt ? remainingSeconds : null} />}
         meta={(
           <>
-          {mySlot && <Badge variant="outline">{translate('tender.header.slot', { slot: mySlot })}</Badge>}
+          {!isComplete && mySlot && <Badge variant="outline">{translate('tender.header.slot', { slot: mySlot })}</Badge>}
           {!isComplete && (
             <Badge variant="warning">{translate('tender.header.budget', { budget: myPlayer?.budget ?? 0 })}</Badge>
           )}
@@ -642,12 +747,12 @@ function TenderContent() {
         )}
         actions={(
           <>
-          {connected ? (
+          {!isComplete && connected ? (
             <Badge variant="success" className={styles.connectionBadge}>{t('tender.realtime.live')}</Badge>
-          ) : (
+          ) : !connected && (
             <Badge variant="warning" className={styles.connectionBadge}>{t('tender.realtime.reconnecting')}</Badge>
           )}
-          <Dialog
+          {!isComplete && <Dialog
             open={helpMenuOpen && !referenceHelpLocked}
             onOpenChange={(open) => setHelpMenuOpen(open && !referenceHelpLocked)}
           >
@@ -673,8 +778,7 @@ function TenderContent() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setHelpMenuOpen(false)
-                    setOverlayOpen('rules', true)
+                    openReferenceFromHelp('rules')
                   }}
                 >
                   
@@ -684,8 +788,7 @@ function TenderContent() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setHelpMenuOpen(false)
-                    setOverlayOpen('interpretation', true)
+                    openReferenceFromHelp('interpretation')
                   }}
                 >
                   
@@ -693,7 +796,7 @@ function TenderContent() {
                 </Button>
               </div>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
           <RulesReferenceDialog
             belowTenderHeader
             disabled={referenceHelpLocked}
@@ -701,8 +804,9 @@ function TenderContent() {
             open={rulesOpen && overlayPhase === tenderView.phase && !referenceHelpLocked}
             showTimerWarning={!isComplete}
             ruleset={tenderView.ruleset}
-            triggerClassName={styles.rulesAction}
+            triggerClassName={isComplete ? styles.completedReferenceAction : styles.rulesAction}
             triggerIcon="book"
+            triggerIconOnly={isComplete}
           />
           <LaboratoryInterpretationDialog
             belowTenderHeader
@@ -711,7 +815,8 @@ function TenderContent() {
             open={laboratoryHelpOpen && overlayPhase === tenderView.phase && !referenceHelpLocked}
             ruleset={tenderView.ruleset}
             showTimerWarning={!isComplete}
-            triggerClassName={styles.laboratoryAction}
+            triggerClassName={isComplete ? styles.completedReferenceAction : styles.laboratoryAction}
+            triggerIconOnly={isComplete}
           />
           <Button
             type="button"
@@ -720,7 +825,7 @@ function TenderContent() {
             className={styles.leaveAction}
             aria-label={t('nav.leaveMatch')}
             title={t('nav.leaveMatch')}
-            disabled={submitting || resuming || tenderView.hasLeft}
+            disabled={!connected || mutationLocked || resuming || tenderView.hasLeft}
             onClick={() => {
               if (tenderView.phase === 'complete') {
                 void collapseMatch()
@@ -746,10 +851,10 @@ function TenderContent() {
                 <DialogClose asChild>
                   <Button type="button" variant="outline">{t('tender.exit.cancel')}</Button>
                 </DialogClose>
-                <Button type="button" variant="outline" onClick={() => void collapseMatch()}>
+                  <Button type="button" variant="outline" disabled={mutationLocked} onClick={() => void collapseMatch()}>
                   {t('tender.exit.collapse')}
                 </Button>
-                <Button type="button" variant="destructive" onClick={() => void forfeitMatch()}>
+                <Button type="button" variant="destructive" disabled={mutationLocked} onClick={() => void forfeitMatch()}>
                   {t('tender.exit.forfeit')}
                 </Button>
               </DialogFooter>
@@ -773,12 +878,11 @@ function TenderContent() {
       )}
 
       <div className={styles.content}>
-        {!connected && (
-          <ReconnectOverlay
-            errorText={error ? t(realtimeErrorKeys[error]) : undefined}
-            onRetry={retry}
-          />
-        )}
+        <ReconnectOverlay
+          errorText={error ? t(realtimeErrorKeys[error]) : undefined}
+          open={!connected}
+          onRetry={retry}
+        />
         {workingModelSaveError && (
           <Typography role="alert" variant="bodySm" tone="destructive">
             {workingModelSaveError}
@@ -791,6 +895,7 @@ function TenderContent() {
             <div
               ref={primaryContentRef}
               tabIndex={-1}
+              data-tender-primary-content
               className="grid min-w-0 self-start gap-4 outline-none"
             >
             {isSharedFinalScientificModel && (
@@ -802,12 +907,14 @@ function TenderContent() {
             )}
             <PhasePanel
               view={tenderView}
-              disabled={submitting || !connected}
-              pending={submitting}
+              disabled={mutationLocked || !connected}
+              pending={mutationLocked}
               error={currentCommandError}
               onCommand={handleCommand}
               onSaveWorkingModel={saveWorkingModel}
               activePlayerId={tenderView.activePlayerId}
+              onAuditRetry={retry}
+              onReturnToHistory={returnToHistory}
               workingModelDialog={{
                 onOpenChange: (open) => setOverlayOpen('working-model', open),
                 onSaveStatusChange: handleWorkingModelSaveStatus,
@@ -835,7 +942,7 @@ function TenderContent() {
               )}
               {contextMenuVisibility.workingModel && (
                 <WorkingModelWorkspace
-                  disabled={!connected}
+                  disabled={!connected || mutationLocked}
                   knownSignals={tenderView.privateSamples}
                   model={tenderView.privateWorkingModel}
                   onSave={saveWorkingModel}

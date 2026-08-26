@@ -11,12 +11,15 @@ const user = {
   locale: 'ru',
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
 }
+const oauthWebappOrigin = 'https://app.example.ru'
+const oauthState = `${Buffer.from(oauthWebappOrigin).toString('base64url')}::state`
 
 const unconfiguredRepositoryMethod = (name: keyof AuthRepository) => async (): Promise<never> => {
   throw new Error(`AuthRepository.${name} is not configured for this scenario`)
 }
 
 const defaultAuthRepository: AuthRepository = {
+  findUserById: unconfiguredRepositoryMethod('findUserById'),
   findUserByLogin: unconfiguredRepositoryMethod('findUserByLogin'),
   updatePasswordHash: unconfiguredRepositoryMethod('updatePasswordHash'),
   createPasswordUserWithSession: unconfiguredRepositoryMethod('createPasswordUserWithSession'),
@@ -30,13 +33,67 @@ const defaultAuthRepository: AuthRepository = {
   eraseUserIdentity: unconfiguredRepositoryMethod('eraseUserIdentity'),
   createOAuthTransaction: unconfiguredRepositoryMethod('createOAuthTransaction'),
   consumeOAuthTransactionByState: unconfiguredRepositoryMethod('consumeOAuthTransactionByState'),
-  findUserByIdentity: unconfiguredRepositoryMethod('findUserByIdentity'),
-  createOAuthUserWithSession: unconfiguredRepositoryMethod('createOAuthUserWithSession'),
+  completeOAuthSignIn: unconfiguredRepositoryMethod('completeOAuthSignIn'),
+  readAccountProtection: unconfiguredRepositoryMethod('readAccountProtection'),
+  cancelRecoveryEmail: unconfiguredRepositoryMethod('cancelRecoveryEmail'),
+  confirmRecoveryEmail: unconfiguredRepositoryMethod('confirmRecoveryEmail'),
+  resendRecoveryEmail: unconfiguredRepositoryMethod('resendRecoveryEmail'),
+  startRecoveryEmail: unconfiguredRepositoryMethod('startRecoveryEmail'),
+  confirmRecoveryEmailReplacement: unconfiguredRepositoryMethod('confirmRecoveryEmailReplacement'),
+  cancelRecoveryEmailReplacement: unconfiguredRepositoryMethod('cancelRecoveryEmailReplacement'),
+  resendRecoveryEmailReplacement: unconfiguredRepositoryMethod('resendRecoveryEmailReplacement'),
+  startRecoveryEmailReplacement: unconfiguredRepositoryMethod('startRecoveryEmailReplacement'),
+  issueRecoveryCodes: unconfiguredRepositoryMethod('issueRecoveryCodes'),
+  startRecoveryCodeReissue: unconfiguredRepositoryMethod('startRecoveryCodeReissue'),
+  confirmRecoveryCodeReissue: unconfiguredRepositoryMethod('confirmRecoveryCodeReissue'),
+  recoverPasswordWithRecoveryCode: unconfiguredRepositoryMethod('recoverPasswordWithRecoveryCode'),
+  requestPasswordReset: unconfiguredRepositoryMethod('requestPasswordReset'),
+  completePasswordReset: unconfiguredRepositoryMethod('completePasswordReset'),
+  reserveRecoveryCodeUseBudget: unconfiguredRepositoryMethod('reserveRecoveryCodeUseBudget'),
+  reserveRecoveryEmailPolicyBudget: unconfiguredRepositoryMethod('reserveRecoveryEmailPolicyBudget'),
+  verifyRecoveryCodeEmailPolicyProbe: unconfiguredRepositoryMethod('verifyRecoveryCodeEmailPolicyProbe'),
+  startRecoveryEmailWithRecoveryCode: unconfiguredRepositoryMethod('startRecoveryEmailWithRecoveryCode'),
+  confirmRecoveryEmailWithRecoveryCode: unconfiguredRepositoryMethod('confirmRecoveryEmailWithRecoveryCode'),
 }
 
 const createAuthRepository = (
   overrides: Partial<AuthRepository>,
 ): AuthRepository => ({ ...defaultAuthRepository, ...overrides })
+
+test('logout cleans up only the exact revoked session', async () => {
+  const cleanupCalls: Array<{ sessionId: string; userId: string }> = []
+  const service = new AuthService({
+    accessTokens: {
+      sign: async () => 'access-token',
+      verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-revoked' }),
+    },
+    clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
+    logoutCleanup: async (input) => { cleanupCalls.push(input) },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({
+      id: user.id,
+      login: user.login,
+      displayName: null,
+      locale: 'ru',
+      createdAt: user.createdAt.toISOString(),
+    }),
+    refreshReuseGraceSeconds: 10,
+    refreshTokenTtlDays: 30,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: {
+      create: () => 'refresh-token',
+      hash: (token) => `hash:${token}`,
+      familyHash: (token) => `family:${token}`,
+      rotate: (token) => token,
+    },
+    repository: createAuthRepository({
+      revokeSession: async () => ({ sessionId: 'session-revoked', userId: user.id }),
+    }),
+  })
+
+  await expect(service.logout('refresh-token')).resolves.toBe(true)
+  expect(cleanupCalls).toEqual([{ sessionId: 'session-revoked', userId: user.id }])
+})
 
 test('login opportunistically replaces a verified password hash that no longer meets policy', async () => {
   const passwordHashUpdates: Array<{
@@ -52,6 +109,7 @@ test('login opportunistically replaces a verified password hash that no longer m
       nextPasswordHash: string
     }) => {
       passwordHashUpdates.push(input)
+      return true
     },
     createSession: async () => ({ id: 'session-created' }),
   })
@@ -97,7 +155,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
   const refreshCutoffs: Date[] = []
   const repository = createAuthRepository({
     findUserByLogin: async () => null,
-    updatePasswordHash: async () => undefined,
+    updatePasswordHash: async () => true,
     createPasswordUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
     createSession: async () => ({ id: 'session-created' }),
     findActiveRefreshSession: async (input) => {
@@ -118,8 +176,8 @@ test('refresh keeps the logical session id stable while rotating its credential'
     eraseUserIdentity: async () => undefined,
     createOAuthTransaction: async () => undefined,
     consumeOAuthTransactionByState: async () => null,
-    findUserByIdentity: async () => null,
-    createOAuthUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
+    completeOAuthSignIn: async () => ({ user, session: { id: 'session-created' } }),
+    readAccountProtection: async () => null,
   })
 
   const service = new AuthService({
@@ -294,9 +352,9 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
     redirectUri: 'https://app.example.ru/api/auth/oauth/yandex/callback',
     registration: {
       privacyConsent: true,
-      privacyConsentVersion: '1.0',
+      privacyConsentVersion: '1.1',
       termsAccepted: true,
-      termsVersion: '1.0',
+      termsVersion: '1.1',
     },
     webappOrigin: 'https://app.example.ru',
   })
@@ -305,8 +363,8 @@ test('starts a provider-neutral OAuth sign-in with a persisted PKCE transaction'
   expect(transactions).toEqual([expect.objectContaining({
     legalAcceptance: {
       acceptedAt: new Date('2026-07-20T12:00:00.000Z'),
-      privacyConsentVersion: '1.0',
-      termsVersion: '1.0',
+      privacyConsentVersion: '1.1',
+      termsVersion: '1.1',
     },
     provider: 'yandex',
   })])
@@ -347,22 +405,95 @@ test('consumes an OAuth transaction before provider exchange and rejects replay'
           state: 'state',
         }
       },
-      findUserByIdentity: async () => user,
-      createSession: async () => ({ id: 'session-1' }),
+      completeOAuthSignIn: async () => ({ created: true, user, session: { id: 'session-1' } }),
     }),
   })
 
   await expect(service.completeOAuthSignIn({
     code: 'authorization-code',
     metadata: {},
-    state: 'state',
-  })).resolves.toMatchObject({ accessToken: 'access-token' })
+    state: oauthState,
+    webappOrigin: 'https://anomaly-detector.ru',
+  })).rejects.toMatchObject({ kind: 'oauth_transaction_invalid' })
+  expect(exchangeCalls).toBe(0)
+
   await expect(service.completeOAuthSignIn({
     code: 'authorization-code',
     metadata: {},
-    state: 'state',
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
+  })).resolves.toMatchObject({ accessToken: 'access-token', created: true })
+  await expect(service.completeOAuthSignIn({
+    code: 'authorization-code',
+    metadata: {},
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
   })).rejects.toMatchObject({ kind: 'oauth_transaction_invalid' })
   expect(exchangeCalls).toBe(1)
+})
+
+test('completes Yandex sign-in atomically with a canonical Account Email candidate', async () => {
+  let completionInput: Record<string, unknown> | undefined
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    accountEmailCanonicalizer: {
+      canonicalize: async (providerValue: string) => {
+        expect(providerValue).toBe('Player@Яндекс.рф')
+        return {
+          canonicalKey: 'player@xn--d1acpjx3f.xn--p1ai',
+          providerValue: 'Player@xn--d1acpjx3f.xn--p1ai',
+        }
+      },
+    },
+    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    oauthProviders: {
+      require: () => ({
+        authorizationUrl: () => 'https://provider.example/authorize',
+        exchangeCode: async () => ({ accessToken: 'provider-token', providerSubject: '' }),
+        getUserInfo: async () => ({
+          accountEmail: 'Player@Яндекс.рф',
+          displayName: 'OAuth User',
+          providerSubject: 'provider-sub-1',
+        }),
+      }),
+    },
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      consumeOAuthTransactionByState: async () => ({
+        codeVerifier: 'verifier',
+        expiresAt: new Date('2026-07-20T12:10:00.000Z'),
+        provider: 'yandex',
+        redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
+        state: 'state',
+      }),
+      completeOAuthSignIn: async (input: Record<string, unknown>) => {
+        completionInput = input
+        return { session: { id: 'session-1' }, user }
+      },
+    }),
+  })
+
+  await expect(service.completeOAuthSignIn({
+    code: 'authorization-code',
+    metadata: { ipAddress: '203.0.113.10' },
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
+  })).resolves.toMatchObject({ accessToken: 'access-token' })
+  expect(completionInput).toMatchObject({
+    accountEmail: {
+      canonicalKey: 'player@xn--d1acpjx3f.xn--p1ai',
+      kind: 'candidate',
+      providerValue: 'Player@xn--d1acpjx3f.xn--p1ai',
+    },
+    identity: { provider: 'yandex', subject: 'provider-sub-1' },
+    session: { metadata: { ipAddress: '203.0.113.10' } },
+  })
 })
 
 test('refuses to create an OAuth user without a separately confirmed legal acceptance', async () => {
@@ -391,14 +522,15 @@ test('refuses to create an OAuth user without a separately confirmed legal accep
         redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
         state: 'state',
       }),
-      findUserByIdentity: async () => null,
+      completeOAuthSignIn: async () => null,
     }),
   })
 
   await expect(service.completeOAuthSignIn({
     code: 'authorization-code',
     metadata: {},
-    state: 'state',
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
   })).rejects.toMatchObject({ kind: 'oauth_registration_consent_required' })
 })
 
@@ -427,27 +559,221 @@ test('limits a provider display name before creating an OAuth user', async () =>
         expiresAt: new Date('2026-07-20T12:10:00.000Z'),
         legalAcceptance: {
           acceptedAt: new Date('2026-07-20T12:00:00.000Z'),
-          privacyConsentVersion: '1.0',
-          termsVersion: '1.0',
+          privacyConsentVersion: '1.1',
+          termsVersion: '1.1',
         },
         provider: 'yandex',
         redirectUri: 'https://api.example.ru/api/auth/oauth/yandex/callback',
         state: 'state',
       }),
-      findUserByIdentity: async () => null,
-      createOAuthUserWithSession: async (
-        input: Parameters<AuthRepository['createOAuthUserWithSession']>[0],
+      completeOAuthSignIn: async (
+        input: Parameters<AuthRepository['completeOAuthSignIn']>[0],
       ) => {
-        createdDisplayName = input.user.displayName
+        createdDisplayName = input.newUser?.displayName
         return { session: { id: 'session-1' }, user }
       },
     }),
   })
 
-  await service.completeOAuthSignIn({ code: 'authorization-code', metadata: {}, state: 'state' })
+  await service.completeOAuthSignIn({
+    code: 'authorization-code',
+    metadata: {},
+    state: oauthState,
+    webappOrigin: oauthWebappOrigin,
+  })
 
   expect(createdDisplayName).toBe('Очень длинное имя по')
   expect(createdDisplayName?.length).toBe(20)
+})
+
+test('projects a Yandex-managed Account Email as a masked protection state', async () => {
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      readAccountProtection: async () => ({
+        accountEmailProviderValue: 'Player@yandex.ru',
+        accountEmailState: 'yandex_managed',
+        hasYandexIdentity: true,
+      }),
+    }),
+  })
+
+  await expect(service.getAccountProtection(user.id)).resolves.toEqual({
+    accountProtection: {
+      maskedAccountEmail: 'P***@yandex.ru',
+      state: 'yandex_managed',
+    },
+  })
+})
+
+test('rejects an exhausted Recovery Code budget before expensive password hashing', async () => {
+  let passwordHashCalls = 0
+  let recoveryCalls = 0
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    clock: { now: () => new Date('2026-08-22T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: {
+      hash: async () => {
+        passwordHashCalls += 1
+        return 'new-password-hash'
+      },
+      needsRehash: () => false,
+      verify: async () => true,
+    },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      reserveRecoveryCodeUseBudget: async () => false,
+      recoverPasswordWithRecoveryCode: async () => {
+        recoveryCalls += 1
+        return false
+      },
+    }),
+  })
+
+  await expect(service.recoverPasswordWithRecoveryCode({
+    ipAddress: '198.51.100.90',
+    login: 'user',
+    newPassword: 'new-password123',
+    recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+  })).resolves.toEqual({ outcome: 'accepted' })
+  expect(passwordHashCalls).toBe(0)
+  expect(recoveryCalls).toBe(0)
+})
+
+test('rejects an exhausted Recovery Code budget before resolving a replacement email domain', async () => {
+  let canonicalizationCalls = 0
+  let startCalls = 0
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    accountEmailCanonicalizer: {
+      canonicalize: async () => null,
+      canonicalizeForRecovery: async () => {
+        canonicalizationCalls += 1
+        return null
+      },
+      evaluate: async () => ({
+        acceptsNewAddress: false,
+        allowsRecoveryDelivery: false,
+        canonicalization: null,
+        catalogVersion: null,
+        providerId: null,
+        requiresMxAssessment: false,
+        state: 'unlisted',
+        version: 0,
+      }),
+    },
+    clock: { now: () => new Date('2026-08-25T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      reserveRecoveryCodeUseBudget: async () => false,
+      startRecoveryEmailWithRecoveryCode: async () => {
+        startCalls += 1
+        return null
+      },
+    }),
+  })
+
+  await expect(service.startRecoveryEmailWithRecoveryCode({
+    email: 'attacker-domain.ru',
+    ipAddress: '198.51.100.91',
+    login: 'unknown-user',
+    recoveryCode: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+  })).resolves.toEqual({ outcome: 'accepted' })
+  expect(canonicalizationCalls).toBe(0)
+  expect(startCalls).toBe(0)
+})
+
+test('verifies a Recovery Email confirmation code before resolving its custom domain', async () => {
+  let canonicalizationCalls = 0
+  let confirmCalls = 0
+  const probeInputs: unknown[] = []
+  const service = new AuthService({
+    accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
+    accountEmailCanonicalizer: {
+      canonicalize: async () => null,
+      canonicalizeForRecovery: async () => {
+        canonicalizationCalls += 1
+        return {
+          canonicalKey: 'Owner@custom-domain.ru',
+          policyVersion: 1,
+          providerId: 'reg_ru',
+          providerValue: 'Owner@custom-domain.ru',
+        }
+      },
+      evaluate: async () => ({
+        acceptsNewAddress: false,
+        allowsRecoveryDelivery: false,
+        canonicalization: null,
+        catalogVersion: null,
+        providerId: null,
+        requiresMxAssessment: false,
+        state: 'unlisted',
+        version: 0,
+      }),
+    },
+    clock: { now: () => new Date('2026-08-25T12:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: { hash: async () => 'hash', needsRehash: () => false, verify: async () => true },
+    projectUser: async () => ({ id: user.id, login: user.login, displayName: null, locale: 'ru', createdAt: user.createdAt.toISOString() }),
+    refreshTokenTtlDays: 30,
+    refreshReuseGraceSeconds: 10,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: { create: () => 'refresh-token', hash: (token) => `hash:${token}`, familyHash: (token) => `family:${token}`, rotate: (token) => token },
+    repository: createAuthRepository({
+      reserveRecoveryCodeUseBudget: async () => true,
+      verifyRecoveryCodeEmailPolicyProbe: async (input) => {
+        probeInputs.push(input)
+        return input.code === '123456'
+          ? {
+              canonicalKey: 'Owner@custom-domain.ru',
+              providerValue: 'Owner@custom-domain.ru',
+            }
+          : null
+      },
+      confirmRecoveryEmailWithRecoveryCode: async () => {
+        confirmCalls += 1
+        return {
+          activatesAt: new Date('2026-08-26T12:00:00.000Z'),
+          providerValue: 'Owner@custom-domain.ru',
+        }
+      },
+    }),
+  })
+
+  await expect(service.confirmRecoveryEmailWithRecoveryCode({
+    code: '000000',
+    login: 'user',
+  })).resolves.toEqual({ outcome: 'accepted' })
+  await expect(service.confirmRecoveryEmailWithRecoveryCode({
+    code: '123456',
+    login: 'user',
+  })).resolves.toMatchObject({ outcome: 'completed' })
+
+  expect(probeInputs).toEqual([
+    expect.objectContaining({ code: '000000', login: 'user' }),
+    expect.objectContaining({ code: '123456', login: 'user' }),
+  ])
+  expect(canonicalizationCalls).toBe(1)
+  expect(confirmCalls).toBe(1)
 })
 
 test('deleteAccount removes identity links only after Tender history is anonymised', async () => {

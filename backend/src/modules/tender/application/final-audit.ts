@@ -1,6 +1,7 @@
 import type { RatingBreakdown } from '@anomaly-detector/contracts'
 
 import type { SignalId } from '../domain/anomaly-configuration'
+import { createFinalStandingByPlayer } from '../domain/final-results'
 import type { StoredTender, StoredTenderAuditEvent } from './tender-store'
 
 export const createRatingBreakdownByPlayer = (
@@ -65,8 +66,10 @@ export const createRatingBreakdownByPlayer = (
     }
   }
 
+  const finalStandingByPlayer = createFinalStandingByPlayer(tender)
   for (const player of tender.players) {
     const breakdown = breakdownByPlayer[player.id]
+    breakdown.thesisPoints = finalStandingByPlayer[player.id]?.correctTheses ?? 0
     const knownPoints = breakdown.completeModelBonus
       + breakdown.contractPoints
       + breakdown.correctPropertyPoints

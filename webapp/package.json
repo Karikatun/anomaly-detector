@@ -6,15 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:release": "LEGAL_DOCUMENTS_CONFIGURED=true bun run build",
+    "build:release": "WEBAPP_RELEASE_BUILD=true bun run build",
     "i18n:audit": "bun scripts/i18n-source-audit.mjs",
     "typecheck": "tsc -b",
     "test": "bun run i18n:audit && bun test tests",
     "lint": "eslint .",
     "preview": "vite preview",
     "e2e": "playwright test",
+    "e2e:split-domain": "bun e2e/run-split-domain.mjs",
+    "e2e:split-domain:target": "bun e2e/run-split-domain.mjs target",
+    "e2e:split-domain:rollback": "bun e2e/run-split-domain.mjs rollback",
     "e2e:ui": "playwright test --ui",
-    "e2e:install": "playwright install chromium",
+    "e2e:install": "playwright install chromium firefox",
     "ui": "shadcn",
     "ui:add": "shadcn add",
     "ui:info": "shadcn info"
@@ -38,6 +41,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.3.0",

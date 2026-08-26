@@ -44,6 +44,27 @@ const view = {
         outcome: 'awarded',
         playerId: 'player-a',
         ratingAward: 4,
+      }, {
+        conditions: {
+          kind: 'light',
+          ratingReward: 2,
+          requiredPublicResult: 'attenuation',
+          targetRole: 'receiver',
+          targetSignal: 'boreal',
+        },
+        contractId: 'contract-2',
+        evidenceTestIds: ['r1-t2'],
+        evidenceTests: [{
+          playerId: 'player-a',
+          protocol: 'impulse',
+          publicResult: 'reflection',
+          receiverSignal: 'boreal',
+          sourceSignal: 'cinder',
+          testId: 'r1-t2',
+        }],
+        outcome: 'failed',
+        playerId: 'player-a',
+        ratingAward: 0,
       }],
       laboratory: [{
         mode: 'broad',
@@ -141,8 +162,8 @@ const view = {
   knownSignals: [],
   phase: 'complete',
   players: [
-    { accessSlot: 1, budget: 3, contractPowerRestriction: 0, displayName: 'Альфа', playerId: 'player-a', rating: 21 },
-    { accessSlot: 2, budget: 4, contractPowerRestriction: 0, displayName: 'Бета', playerId: 'player-b', rating: 0 },
+    { accessSlot: 1, budget: 3, corporateTrust: 2, contractPowerRestriction: 0, displayName: 'Альфа', playerId: 'player-a', rating: 21 },
+    { accessSlot: 2, budget: 4, corporateTrust: 1, contractPowerRestriction: 0, displayName: 'Бета', playerId: 'player-b', rating: 0 },
   ],
   privateMeasurements: [],
   privateRawTelemetrySignals: [],
@@ -165,19 +186,22 @@ test('shows what contributed to every player rating in the final audit', () => {
     </I18nProvider>,
   )
 
-  expect(html).toContain('За что начислен рейтинг')
+  expect(html).toContain('Подробнее')
   expect(html).toContain('Верные тезисы')
   expect(html).toContain('Выполненные контракты')
   expect(html).toContain('Верные свойства модели')
   expect(html).toContain('Полностью раскрытые сигналы')
   expect(html).toContain('Бонус полной модели')
-  expect(html).toContain('Начислений рейтинга нет')
+  expect(html).toContain('Начислений очков нет')
   expect(html).toContain('Приоритет при коллизии')
   expect(html).toContain('1. Альфа')
   expect(html).toContain('2. Бета')
   expect(html).toContain('Тезисы')
   expect(html).toContain('Тип поля: Инерционное · верно')
   expect(html).toContain('Полярность: Отрицательная · неверно')
+  expect(html).toContain('Заявка не прошла проверку — Рейтинг не начислен')
+  expect(html).toContain('Условия: Ослабление')
+  expect(html).toContain('Доказательство: Cinder → Boreal · Импульс · Отражение')
   expect(html).not.toContain('Приватные тезисы')
   expect(html).toContain('Модели остальных игроков')
   expect(html).toContain('Финальная модель не отправлена')
@@ -185,15 +209,35 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).toContain('value="player-a" selected=""')
   expect(html).toContain('Моя финальная модель')
   expect(html).toContain('Итоговый рейтинг')
-  expect(html).toContain('Рейтинг: 21')
+  expect(html).toContain('Вы победили')
+  expect(html).toContain('1 место · 21 очко')
+  expect(html).not.toContain('Альфа · Слот 1')
+  expect(html).not.toContain('Исследование завершено')
+  expect(html).not.toContain('Рейтинг: 21')
   expect(html).not.toContain('Rating')
   expect(html).toMatch(/<details[^>]*data-audit-section="ranking"/)
   expect(html).not.toMatch(/<details[^>]*data-audit-section="ranking"[^>]*open/)
   expect(html).toContain('Место и вклад каждого участника')
+  expect(html).toContain('Как определён результат')
+  expect(html).toContain('Рейтинг → верные тезисы → оставшийся Бюджет')
+  expect(html).toContain('При полном равенстве победа общая')
+  expect(html).toContain('Выбывшие не могут победить, идут после активных')
+  expect(html).toContain('среди них выше тот, кто вышел позже')
+  expect(html).toContain('Корпоративное доверие показывает число выполненных обычных контрактов')
+  expect(html).toContain('Факторы итогового места игрока Альфа')
+  expect(html).toContain('Оставшийся Бюджет')
+  expect(html).toContain('Корпоративное доверие')
   expect(html).toContain('>Вы<')
-  expect(html).toMatch(/<details[^>]*aria-label="За что начислен рейтинг игроку Альфа"/)
-  expect(html).not.toMatch(/<details[^>]*aria-label="За что начислен рейтинг игроку Альфа"[^>]*open/)
+  expect(html).toMatch(/<details[^>]*aria-label="Из чего сложились очки игрока Альфа"/)
+  expect(html).not.toMatch(/<details[^>]*aria-label="Из чего сложились очки игрока Альфа"[^>]*open/)
   expect(html).toContain('Полный аудит по раундам')
+  expect(html).toContain('Результаты')
+  expect(html).toContain('Разбор игры')
+  expect(html).toContain('1/12 верно')
+  expect(html).toContain('Aster · 1/2')
+  expect(html).toContain('✓ Инерционное · Верно')
+  expect(html).toContain('× Отрицательная · Неверно')
+  expect(html).toContain('1 раунд ›')
   expect(html).not.toMatch(/<details[^>]*data-audit-section[^>]*open/)
   expect(html).toContain('Раунд 1')
   expect(html).toContain('Распределение Мощности')
@@ -207,13 +251,37 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).not.toContain('contract-1')
   expect(html).not.toContain('Резерв')
   expect(html).not.toMatch(/<details[^>]*data-audit-round[^>]*open/)
+  expect(html).not.toMatch(/<section[^>]*class="[^"]*panel[^"]*"[^>]*>[\s\S]*Версия правил: 2\s*<\/section>$/)
+})
+
+test('separates another winner from the current player result', () => {
+  const losingView = {
+    ...view,
+    audit: {
+      ...view.audit,
+      placementByPlayer: { 'player-a': 2, 'player-b': 1 },
+    },
+    winnerPlayerIds: ['player-b'],
+  } satisfies TenderView
+
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <CompletedTenderPanel currentUserId="player-a" view={{ ...losingView, audit: losingView.audit }} />
+    </I18nProvider>,
+  )
+
+  expect(html).toContain('Победитель')
+  expect(html).toContain('Бета')
+  expect(html).toContain('Ваш результат')
+  expect(html).toContain('2 место · 21 очко')
+  expect(html).not.toContain('Вы победили')
 })
 
 test('keeps four-player ties and long names readable in the server ranking order', () => {
   const players = [
     ...view.players,
-    { accessSlot: 3, budget: 2, contractPowerRestriction: 0, displayName: 'Очень длинное имя исследовательской корпорации', playerId: 'player-c', rating: 12 },
-    { accessSlot: 4, budget: 1, contractPowerRestriction: 0, displayName: 'Гамма', playerId: 'player-d', rating: 12 },
+    { accessSlot: 3, budget: 2, corporateTrust: 1, contractPowerRestriction: 0, displayName: 'Очень длинное имя исследовательской корпорации', playerId: 'player-c', rating: 12 },
+    { accessSlot: 4, budget: 1, corporateTrust: 1, contractPowerRestriction: 0, displayName: 'Гамма', playerId: 'player-d', rating: 12 },
   ]
   const tiedView = {
     ...view,
@@ -246,6 +314,8 @@ test('keeps four-player ties and long names readable in the server ranking order
   expect(html).toContain('Очень длинное имя исследовательской корпорации')
   expect(html.match(/>02</g)).toHaveLength(2)
   expect(html).toContain('data-current-player="true"')
+  expect(html).toContain('4 участника ›')
+  expect(html).toContain('3 игрока ›')
 
   const threePlayerHtml = renderToStaticMarkup(
     <I18nProvider>

@@ -14,11 +14,13 @@ export type HttpRequestOptions = {
 export class ApiRequestError extends Error {
   readonly status: number
   readonly code: string
+  readonly retryAfterSeconds: number | null
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, retryAfterSeconds: number | null = null) {
     super(message)
     this.status = status
     this.code = code
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -72,11 +74,25 @@ export class HttpClient {
 
 async function toApiError(response: Response) {
   const fallbackMessage = `Request failed with status ${response.status}`
+  const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get('Retry-After'))
 
   try {
     const parsed = apiErrorSchema.parse(await response.json())
-    return new ApiRequestError(response.status, parsed.error.code, parsed.error.message)
+    return new ApiRequestError(
+      response.status,
+      parsed.error.code,
+      parsed.error.message,
+      retryAfterSeconds,
+    )
   } catch {
-    return new ApiRequestError(response.status, 'INTERNAL_ERROR', fallbackMessage)
+    return new ApiRequestError(response.status, 'INTERNAL_ERROR', fallbackMessage, retryAfterSeconds)
   }
+}
+
+function parseRetryAfterSeconds(value: string | null) {
+  const normalized = value?.trim()
+  if (!normalized || !/^\d+$/.test(normalized)) return null
+
+  const seconds = Number(normalized)
+  return Number.isSafeInteger(seconds) ? seconds : null
 }

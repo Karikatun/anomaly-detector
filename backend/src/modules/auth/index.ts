@@ -1,7 +1,13 @@
 import type { DbClient } from '../../db'
 import type { AppEnv } from '../../env'
 import { AuthService } from './application/auth-service'
-import type { AccountDeletionCleanup, Clock, LogoutCleanup, ProjectUser } from './application/ports'
+import type {
+  AccountDeletionCleanup,
+  AccountEmailCanonicalizer,
+  Clock,
+  LogoutCleanup,
+  ProjectUser,
+} from './application/ports'
 import { toBaseUserDto } from './domain/user'
 import { createPrismaAuthRepository } from './infrastructure/auth-repository'
 import { signAccessToken, verifyAccessToken } from './infrastructure/access-tokens'
@@ -21,17 +27,22 @@ import { createAuthRoutes } from './transport/routes'
 import { OAuthProviderRegistry } from './infrastructure/oauth-registry'
 import { createYandexOAuthProvider } from './infrastructure/oauth-yandex'
 import { createPrismaAuthAbuseProtection } from './infrastructure/auth-abuse-protection'
+import { cleanupExpiredAuthRecovery } from './infrastructure/prisma-auth-recovery-cleanup'
 import { createDeviceTokens } from './infrastructure/device-token'
 import { createPrismaRequestBudget } from '../../security/request-budget'
 import { createAuthenticatedMutationBudget } from './transport/authenticated-mutation-budget'
+import type { RequestBudgetPolicyCatalog } from '../../security/request-budget-policy'
+import { createPrismaActiveSessionGuard } from './infrastructure/prisma-active-session-guard'
 
 type CreateAuthModuleOptions = {
+  accountEmailCanonicalizer?: AccountEmailCanonicalizer
   clock?: Clock
   accountDeletionCleanup?: AccountDeletionCleanup
   db: DbClient
   env: AppEnv
   logoutCleanup?: LogoutCleanup
   projectUser?: ProjectUser
+  requestBudgetPolicies: RequestBudgetPolicyCatalog
 }
 
 const systemClock: Clock = {
@@ -42,12 +53,14 @@ const noLogoutCleanup: LogoutCleanup = () => undefined
 const noAccountDeletionCleanup: AccountDeletionCleanup = () => undefined
 
 export function createAuthModule({
+  accountEmailCanonicalizer,
   clock = systemClock,
   accountDeletionCleanup = noAccountDeletionCleanup,
   db,
   env,
   logoutCleanup = noLogoutCleanup,
   projectUser = toBaseUserDto,
+  requestBudgetPolicies,
 }: CreateAuthModuleOptions) {
   // Build OAuth provider registry
   const oauthProviders = new OAuthProviderRegistry()
@@ -61,11 +74,16 @@ export function createAuthModule({
 
   const service = new AuthService({
     accountDeletionCleanup,
+    accountEmailCanonicalizer,
     accessTokens: {
       sign: (payload) => signAccessToken(payload, env),
       verify: (token) => verifyAccessToken(token, env),
     },
-    abuseProtection: createPrismaAuthAbuseProtection(db, env.JWT_SECRET),
+    abuseProtection: createPrismaAuthAbuseProtection(
+      db,
+      env.JWT_SECRET,
+      requestBudgetPolicies,
+    ),
     clock,
     logoutCleanup,
     oauthProviders: oauthProviders.hasAny() ? oauthProviders : undefined,
@@ -74,6 +92,7 @@ export function createAuthModule({
       needsRehash: passwordHashNeedsRehash,
       verify: verifyPassword,
     },
+    passwordResetUrl: new URL('/recover/password', env.WEBAPP_ORIGIN).toString(),
     projectUser,
     refreshTokenTtlDays: env.REFRESH_TOKEN_TTL_DAYS,
     refreshReuseGraceSeconds: env.REFRESH_REUSE_GRACE_SECONDS,
@@ -84,11 +103,12 @@ export function createAuthModule({
       familyHash: (token) => hashRefreshTokenFamily(token, env.JWT_SECRET),
       rotate: (token) => deriveRotatedRefreshToken(token, env.JWT_SECRET),
     },
-    repository: createPrismaAuthRepository(db, env.JWT_SECRET),
+    repository: createPrismaAuthRepository(db, env.JWT_SECRET, { requestBudgetPolicies }),
   })
   const requireAuth = createRequireAuth((accessToken) => service.authenticateAccessToken(accessToken))
   const authenticatedMutationBudget = createAuthenticatedMutationBudget(
-    createPrismaRequestBudget(db),
+    createPrismaRequestBudget(db, env.JWT_SECRET),
+    requestBudgetPolicies.authenticated_mutation,
   )
 
   return {
@@ -103,11 +123,13 @@ export function createAuthModule({
       authenticatedMutationBudget,
       requireAuth,
       service,
-      webappUrl: env.CORS_ORIGINS[0],
+      webappUrl: env.WEBAPP_ORIGIN,
     }),
   }
 }
 
 export type { AuthHttpEnv }
-export type { LogoutCleanup, ProjectUser } from './application/ports'
+export { cleanupExpiredAuthRecovery }
+export { createPrismaActiveSessionGuard }
+export type { ActiveSessionGuard, LogoutCleanup, ProjectUser } from './application/ports'
 export type { AuthenticatedPrincipal } from './domain/user'

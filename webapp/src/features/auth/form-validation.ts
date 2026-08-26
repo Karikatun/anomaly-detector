@@ -1,6 +1,8 @@
 import {
   loginRequestSchema,
+  personalDataConsentVersion,
   registerRequestSchema,
+  termsVersion,
   updateProfileSchema,
 } from '@anomaly-detector/contracts'
 
@@ -9,9 +11,9 @@ export type CredentialsFormValues = {
   login: string
   password: string
   privacyConsent: boolean
-  privacyConsentVersion: '1.0'
+  privacyConsentVersion: typeof personalDataConsentVersion
   termsAccepted: boolean
-  termsVersion: '1.0'
+  termsVersion: typeof termsVersion
 }
 
 export function parseCredentialsForm(

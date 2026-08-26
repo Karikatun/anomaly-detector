@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 
-import type { AdminOverview } from '@anomaly-detector/contracts'
+import type {
+  AdminOverview,
+  AnalyticsAdminOverview,
+  FeedbackQueueResponse,
+  MailOperationsView,
+  RequestBudgetOverview,
+} from '@anomaly-detector/contracts'
 
 import { AdminApi, AdminApiError } from './api'
+import { AnalyticsScreen } from './analytics-screen'
+import { FeedbackScreen } from './feedback-screen'
 import { getApiBaseUrl } from './api-base-url'
+import { MailPolicyScreen } from './mail-policy-screen'
 import { OverviewScreen } from './overview-screen'
 
 type AppState =
@@ -11,17 +20,42 @@ type AppState =
   | { kind: 'anonymous'; error?: string }
   | { kind: 'concealed' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; data: AdminOverview }
+  | {
+      kind: 'ready'
+      antiAbuse: RequestBudgetOverview | null
+      analytics: AnalyticsAdminOverview | null
+      data: AdminOverview
+      feedback: FeedbackQueueResponse
+      mailPolicy: MailOperationsView
+    }
+
+type ReadyView = 'analytics' | 'feedback' | 'mail-policy' | 'overview'
 
 export default function App() {
   const api = useMemo(() => new AdminApi(getApiBaseUrl()), [])
   const [state, setState] = useState<AppState>({ kind: 'bootstrapping' })
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isAnalyticsRefreshing, setIsAnalyticsRefreshing] = useState(false)
+  const [view, setView] = useState<ReadyView>('overview')
 
-  const loadOverview = useCallback(async (page = 1) => {
+  const loadWorkspace = useCallback(async () => {
     try {
-      const data = await api.getOverview(page)
-      setState({ kind: 'ready', data })
+      const [data, feedback, mailWorkspace, analytics] = await Promise.all([
+        api.getOverview(),
+        api.getFeedbackQueue({ page: 1, pageSize: 20 }),
+        api.getMailPolicyWorkspace(),
+        api.getAnalytics(30).catch((error) => {
+          if (error instanceof AdminApiError && error.status === 404) return null
+          throw error
+        }),
+      ])
+      setState({
+        kind: 'ready',
+        analytics,
+        data,
+        feedback,
+        ...mailWorkspace,
+      })
     } catch (error) {
       if (error instanceof AdminApiError && error.status === 404) {
         setState({ kind: 'concealed' })
@@ -31,7 +65,7 @@ export default function App() {
         setState({ kind: 'anonymous' })
         return
       }
-      setState({ kind: 'error', message: 'Не удалось загрузить системный обзор' })
+      setState({ kind: 'error', message: 'Не удалось загрузить операторский контур' })
     }
   }, [api])
 
@@ -39,7 +73,7 @@ export default function App() {
     let active = true
     void api.restoreSession()
       .then(() => {
-        if (active) return loadOverview()
+        if (active) return loadWorkspace()
       })
       .catch((error) => {
         if (!active) return
@@ -50,11 +84,12 @@ export default function App() {
         setState({ kind: 'error', message: 'Не удалось проверить сессию' })
       })
     return () => { active = false }
-  }, [api, loadOverview])
+  }, [api, loadWorkspace])
 
   const logout = async () => {
     try {
       await api.logout()
+      setView('overview')
       setState({ kind: 'anonymous' })
     } catch {
       setState({ kind: 'error', message: 'Не удалось завершить сессию' })
@@ -62,29 +97,114 @@ export default function App() {
   }
 
   if (state.kind === 'bootstrapping') return <StateScreen title="Проверяем сессию…" />
-  if (state.kind === 'anonymous') return <LoginScreen api={api} initialError={state.error} onAuthenticated={loadOverview} />
+  if (state.kind === 'anonymous') return <LoginScreen api={api} initialError={state.error} onAuthenticated={loadWorkspace} />
   if (state.kind === 'concealed') {
     return <ConcealedScreen onSwitchUser={() => void logout()} />
   }
   if (state.kind === 'error') {
-    return <StateScreen title={state.message} actionLabel="Повторить" onAction={loadOverview} />
+    return <StateScreen title={state.message} actionLabel="Повторить" onAction={loadWorkspace} />
   }
 
+  const loadOverviewPage = async (page: number) => {
+    try {
+      const data = await api.getOverview(page)
+      setState((current) => current.kind === 'ready' ? { ...current, data } : current)
+    } catch {
+      setState({ kind: 'error', message: 'Не удалось загрузить системный обзор' })
+    }
+  }
   const refresh = async () => {
     setIsRefreshing(true)
-    await loadOverview(state.data.users.page)
+    await loadOverviewPage(state.data.users.page)
     setIsRefreshing(false)
   }
   const changePage = async (page: number) => {
     setIsRefreshing(true)
-    await loadOverview(page)
+    await loadOverviewPage(page)
     setIsRefreshing(false)
+  }
+  const reloadMailPolicy = async () => {
+    const mailWorkspace = await api.getMailPolicyWorkspace()
+    setState((current) => current.kind === 'ready' ? { ...current, ...mailWorkspace } : current)
+  }
+  const executeMailCommand = async (operation: () => Promise<MailOperationsView>) => {
+    try {
+      const mailPolicy = await operation()
+      setState((current) => current.kind === 'ready' ? { ...current, mailPolicy } : current)
+    } catch (error) {
+      await reloadMailPolicy().catch(() => undefined)
+      throw error
+    }
+  }
+  const reloadFeedback = async (page = state.feedback.page) => {
+    const feedback = await api.getFeedbackQueue({ page, pageSize: state.feedback.pageSize })
+    setState((current) => current.kind === 'ready' ? { ...current, feedback } : current)
+  }
+  const executeFeedbackCommand = async (operation: () => Promise<unknown>) => {
+    await operation()
+    await reloadFeedback()
+  }
+  const reloadAnalytics = async (windowDays = state.analytics?.windowDays ?? 30) => {
+    setIsAnalyticsRefreshing(true)
+    try {
+      const analytics = await api.getAnalytics(windowDays)
+      setState((current) => current.kind === 'ready' ? { ...current, analytics } : current)
+    } finally {
+      setIsAnalyticsRefreshing(false)
+    }
+  }
+
+  if (view === 'analytics' && state.analytics) {
+    return (
+      <AnalyticsScreen
+        data={state.analytics}
+        isRefreshing={isAnalyticsRefreshing}
+        onBack={() => setView('overview')}
+        onLogout={() => void logout()}
+        onRefresh={() => void reloadAnalytics()}
+        onWindowChange={(windowDays) => void reloadAnalytics(windowDays)}
+      />
+    )
+  }
+
+  if (view === 'feedback') {
+    return (
+      <FeedbackScreen
+        data={state.feedback}
+        onBack={() => setView('overview')}
+        onDeleteContact={(reportId, command) => executeFeedbackCommand(() => api.deleteFeedbackContact(reportId, command))}
+        onLogout={() => void logout()}
+        onPageChange={(page) => void reloadFeedback(page)}
+        onRecordGithubIssue={(reportId, command) => executeFeedbackCommand(() => api.recordFeedbackGithubIssue(reportId, command))}
+        onReject={(reportId, command) => executeFeedbackCommand(() => api.rejectFeedback(reportId, command))}
+        onReload={() => reloadFeedback()}
+        onResolve={(reportId, command) => executeFeedbackCommand(() => api.resolveFeedback(reportId, command))}
+        onTake={(reportId, command) => executeFeedbackCommand(() => api.takeFeedback(reportId, command))}
+      />
+    )
+  }
+
+  if (view === 'mail-policy') {
+    return (
+      <MailPolicyScreen
+        antiAbuse={state.antiAbuse}
+        data={state.mailPolicy}
+        onBack={() => setView('overview')}
+        onChangeStatus={(command) => executeMailCommand(() => api.changeMailPolicyStatus(command))}
+        onLogout={() => void logout()}
+        onReload={reloadMailPolicy}
+        onSyncCatalog={(command) => executeMailCommand(() => api.syncMailPolicyCatalog(command))}
+      />
+    )
   }
   return (
     <OverviewScreen
       data={state.data}
       isRefreshing={isRefreshing}
       onLogout={() => void logout()}
+      onOpenAnalytics={state.analytics ? () => setView('analytics') : undefined}
+      onOpenFeedback={() => setView('feedback')}
+      onOpenMailPolicy={() => setView('mail-policy')}
       onPageChange={(page) => void changePage(page)}
       onRefresh={() => void refresh()}
     />
