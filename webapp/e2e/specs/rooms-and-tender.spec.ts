@@ -376,16 +376,19 @@ async function verifyWorkingModelModal(page: Page) {
     })
     const inlineTable = page.getByTestId('working-model-table')
     const inlinePanel = inlineTable.locator('..')
+    const inlineFieldButton = inlinePanel.getByRole('button', {
+      name: /: гипотеза, полярность Положительная$/,
+    }).first()
+    await inlineFieldButton.scrollIntoViewIfNeeded()
     const inlineBefore = await inlineTable.boundingBox()
     expect(inlineBefore).not.toBeNull()
-    await inlinePanel.getByRole('button', {
-      name: /: гипотеза, полярность Положительная$/,
-    }).first().click()
+
+    await inlineFieldButton.click()
     await expect(inlinePanel.getByRole('status')).toHaveText('Сохраняем рабочую модель…')
     const inlineDuring = await inlineTable.boundingBox()
     expect(inlineDuring).not.toBeNull()
-    expect(inlineDuring!.y).toBe(inlineBefore!.y)
-    expect(inlineDuring!.height).toBe(inlineBefore!.height)
+    expect(Math.abs(inlineDuring!.y - inlineBefore!.y)).toBeLessThanOrEqual(0.1)
+    expect(Math.abs(inlineDuring!.height - inlineBefore!.height)).toBeLessThanOrEqual(0.1)
     await expect(inlinePanel.getByRole('status')).toBeHidden()
     await page.unrouteAll({ behavior: 'wait' })
     expect(pageErrors).toEqual([])

@@ -26,13 +26,19 @@ The job installs dependencies from `bun.lock` and runs:
 
 ### `e2e`
 
-The job installs the Chromium and Firefox revisions owned by the locked
-`webapp` Playwright workspace and runs `bun run e2e:webapp` through both browser
-projects against the real backend/test-database stack.
+The `e2e-browser` matrix starts Chromium and Firefox on separate hosted runners.
+Each matrix job installs only its locked browser revision and runs one Playwright
+project with one worker against its own disposable backend/test-database stack.
+Matrix fail-fast is disabled so both browser results are always visible.
 
-All three jobs are required because local hooks can be bypassed, static and
-supply-chain scans do not replace behavioral tests, and `checks` does not
-replace the user-visible cross-layer signal protected by `e2e`.
+The lightweight final `e2e` job runs after the complete matrix and succeeds only
+when every browser job succeeded. This preserves the single required `e2e`
+status-check name while making a failure, cancellation, or skipped browser fail
+closed.
+
+All three final statuses are required because local hooks can be bypassed,
+static and supply-chain scans do not replace behavioral tests, and `checks`
+does not replace the user-visible cross-layer signal protected by `e2e`.
 
 ## Scheduled Active Security
 
