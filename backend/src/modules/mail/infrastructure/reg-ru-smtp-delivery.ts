@@ -127,7 +127,8 @@ export class RegRuSmtpDelivery implements TransactionalMailDelivery {
             dataStarted,
             true,
           ))
-          abortController.abort()
+          if (session) session.close()
+          else abortController.abort()
         }, this.config.timeoutMs)
       })
       return await Promise.race([attempt, boundedAttempt])
@@ -144,7 +145,7 @@ export class RegRuSmtpDelivery implements TransactionalMailDelivery {
       }
     } finally {
       if (timeout) clearTimeout(timeout)
-      abortController.abort()
+      if (!session) abortController.abort()
       session?.close()
     }
   }
