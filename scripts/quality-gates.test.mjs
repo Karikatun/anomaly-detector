@@ -40,6 +40,28 @@ test('runs secret hygiene and tooling contracts in remote CI', () => {
   expect(workflow).toContain('run: bun run test:website')
 })
 
+test('runs each E2E browser on an isolated runner behind one required aggregate', () => {
+  const browserStart = workflow.indexOf('\n  e2e-browser:\n')
+  const aggregateStart = workflow.indexOf('\n  e2e:\n')
+  expect(browserStart).toBeGreaterThan(-1)
+  expect(aggregateStart).toBeGreaterThan(browserStart)
+
+  const browserJob = workflow.slice(browserStart, aggregateStart)
+  expect(browserJob).toContain('fail-fast: false')
+  expect(browserJob).toContain('browser: [chromium, firefox]')
+  expect(browserJob).toContain('key: playwright-${{ runner.os }}-${{ matrix.browser }}-')
+  expect(browserJob).toContain('E2E_WORKERS: 1')
+  expect(browserJob).toContain('bun run e2e:webapp -- --project=${{ matrix.browser }}')
+  expect(browserJob).not.toContain('continue-on-error')
+
+  const aggregate = workflow.slice(aggregateStart)
+  expect(aggregate).toContain('name: e2e')
+  expect(aggregate).toContain('needs: e2e-browser')
+  expect(aggregate).toContain('if: ${{ always() }}')
+  expect(aggregate).toContain('E2E_BROWSER_RESULT: ${{ needs.e2e-browser.result }}')
+  expect(aggregate).toContain('test "$E2E_BROWSER_RESULT" = success')
+})
+
 test('runs active ZAP only on an isolated scheduled or manual workflow', () => {
   expect(dynamicSecurityWorkflow).toContain('workflow_dispatch:')
   expect(dynamicSecurityWorkflow).toContain('schedule:')

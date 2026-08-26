@@ -98,9 +98,14 @@ jobs:
       - name: Trivy backend image scan
         run: bun run security:trivy:image anomaly-detector-backend:smoke
 
-  e2e:
+  e2e-browser:
+    name: E2E (${{ matrix.browser }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
 
     steps:
       - name: Checkout
@@ -118,10 +123,25 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('bun.lock') }}
 
       - name: Install Playwright browser
-        run: bun run --cwd webapp e2e:install
+        run: bun run --cwd webapp playwright install ${{ matrix.browser }}
 
-      - name: Webapp E2E smoke
-        run: bun run e2e:webapp
+      - name: Webapp E2E smoke (${{ matrix.browser }})
+        env:
+          E2E_WORKERS: 1
+        run: bun run e2e:webapp -- --project=${{ matrix.browser }}
+
+  e2e:
+    name: e2e
+    needs: e2e-browser
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Require every browser E2E job
+        env:
+          E2E_BROWSER_RESULT: ${{ needs.e2e-browser.result }}
+        run: test "$E2E_BROWSER_RESULT" = success

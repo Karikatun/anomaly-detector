@@ -156,7 +156,13 @@ account-delete operation from the generated OpenAPI document, and writes
 token-redacted reports under `.scratch/security/zap/`. Never change its target
 to a shared or production environment.
 
-`.github/workflows/ci.yml` runs static security, typecheck, deployment/script tests, contract tests, webapp client tests, backend tests, image vulnerability scanning, and the webapp Playwright smoke flow on pushes to `main` and `master` plus pull requests.
+`.github/workflows/ci.yml` runs static security, typecheck, deployment/script
+tests, contract tests, webapp client tests, backend tests, image vulnerability
+scanning, and the webapp Playwright smoke flow on pushes to `main` and `master`
+plus `mobile`, and on pull requests. Chromium and Firefox run concurrently on
+separate hosted runners, each with one worker and its own disposable
+application/database stack; a final required `e2e` job fails unless both
+browser jobs succeed.
 
 ## Локальные игроки для ручной проверки
 
@@ -234,6 +240,12 @@ The bound keeps browser concurrency controlled because every worker shares the
 same local backend, deadline worker and test database. Runs with `UX_AUDIT_DIR`
 always use one worker so browser projects cannot overwrite shared screenshots
 and audit files. The split-domain preflight also remains single-worker.
+
+Remote CI intentionally uses one worker per browser and gives Chromium and
+Firefox separate hosted runners. This avoids contention inside the shared
+application stack while retaining the two-worker default for faster local
+feedback. The final `e2e` status is an aggregate and cannot pass unless both
+browser projects completed successfully.
 
 Playwright artifacts live in `webapp/e2e/.artifacts/` and are not committed. For interactive debugging:
 
