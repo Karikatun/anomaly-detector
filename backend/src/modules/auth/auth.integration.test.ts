@@ -3498,7 +3498,21 @@ maybeDescribe('auth API integration', () => {
   })
 
   test('shares a safety budget for authenticated mutations across API instances', async () => {
-    const register = await app.request('/api/auth/token/register', {
+    const constrainedEnv = {
+      ...env,
+      ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT: 2,
+    }
+    const firstApp = createApp({
+      env: constrainedEnv,
+      prisma,
+      securityEvents: {
+        emit: (event) => {
+          securityEvents.push(event)
+        },
+      },
+    })
+    const secondApp = createApp({ env: constrainedEnv, prisma })
+    const register = await firstApp.request('/api/auth/token/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3511,7 +3525,6 @@ maybeDescribe('auth API integration', () => {
       }),
     })
     const { accessToken } = await register.json()
-    const secondApp = createApp({ env, prisma })
     const updateProfile = (targetApp: typeof app) => targetApp.request('/api/auth/profile', {
       method: 'PATCH',
       headers: {
@@ -3521,12 +3534,10 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({ displayName: 'Исследователь' }),
     })
 
-    for (let attempt = 1; attempt <= 120; attempt += 1) {
-      const response = await updateProfile(attempt % 2 === 0 ? app : secondApp)
-      expect(response.status).toBe(204)
-    }
+    expect((await updateProfile(firstApp)).status).toBe(204)
+    expect((await updateProfile(secondApp)).status).toBe(204)
 
-    const limited = await updateProfile(app)
+    const limited = await updateProfile(firstApp)
     expect(limited.status).toBe(429)
     expect(limited.headers.get('retry-after')).toBeTruthy()
     expect(await limited.json()).toEqual({
@@ -3542,7 +3553,7 @@ maybeDescribe('auth API integration', () => {
       type: 'request_rejected',
     }))
 
-    const limitedRoomMutation = await app.request('/api/rooms/join', {
+    const limitedRoomMutation = await firstApp.request('/api/rooms/join', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -3573,7 +3584,7 @@ maybeDescribe('auth API integration', () => {
         { id: opponent.id, tiePriority: 2 },
       ],
     })
-    const limitedTenderMutation = await app.request(`/api/tenders/${tenderId}/commands`, {
+    const limitedTenderMutation = await firstApp.request(`/api/tenders/${tenderId}/commands`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -3598,7 +3609,7 @@ maybeDescribe('auth API integration', () => {
       where: { scope: 'tender_command' },
     })).toBe(0)
 
-    const limitedRealtimeMutation = await app.request('/api/realtime/tickets', {
+    const limitedRealtimeMutation = await firstApp.request('/api/realtime/tickets', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     })
@@ -3613,13 +3624,13 @@ maybeDescribe('auth API integration', () => {
       where: { scope: 'realtime_ticket_issue' },
     })).toBe(0)
 
-    const me = await app.request('/api/auth/me', {
+    const me = await firstApp.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-    const currentRoom = await app.request('/api/rooms/current', {
+    const currentRoom = await firstApp.request('/api/rooms/current', {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-    const health = await app.request('/health/ready')
+    const health = await firstApp.request('/health/ready')
     expect(me.status).toBe(200)
     expect(currentRoom.status).toBe(200)
     expect(health.status).toBe(200)
