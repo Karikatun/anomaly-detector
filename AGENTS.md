@@ -29,6 +29,7 @@
 
 - Anomaly Detector is a dark, serious, restrained corporate sci-fi multiplayer game.
 - Write player-facing, product, and domain documentation in Russian. Keep English for code identifiers, stable data keys, and required external technical terms.
+- When creating or rewriting any player-facing Russian text (UI copy, error states, empty states, landing copy, emails, changelogs) or when the user explicitly asks to humanize text, apply the `humanize-russian-text` skill: strip AI slop and канцелярит, write live, human Russian.
 - Keep durable product, architecture, infrastructure, deployment, storage, testing, and provider decisions in README files, `docs/`, ADRs, and owning scripts rather than this file.
 - Prefer a monolithic backend and the progressive DDD-lite boundaries in `docs/ARCHITECTURE.md`. Do not introduce microservices, CQRS, event sourcing, state-machine libraries, empty layers, or generic repositories without a concrete product need.
 
