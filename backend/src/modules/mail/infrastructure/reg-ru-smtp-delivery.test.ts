@@ -25,8 +25,10 @@ describe('RegRuSmtpDelivery', () => {
       reply(221),
     ]
     let secure = false
+    let establishedConnectionAborted = false
+    let closed = false
     const session: SmtpSession = {
-      close: () => undefined,
+      close: () => { closed = true },
       command: async (command, options) => {
         if (command.startsWith('AUTH') || options?.sensitive) {
           expect(secure).toBe(true)
@@ -55,7 +57,14 @@ describe('RegRuSmtpDelivery', () => {
         tlsMode: 'starttls',
         username: 'no-reply@anomaly-detector.ru',
       },
-      sessionFactory: { connect: async () => session },
+      sessionFactory: {
+        connect: async (_config, signal) => {
+          signal.addEventListener('abort', () => {
+            establishedConnectionAborted = true
+          }, { once: true })
+          return session
+        },
+      },
     })
 
     const result = await delivery.send(message())
@@ -66,6 +75,8 @@ describe('RegRuSmtpDelivery', () => {
     expect(operations.at(-2)).toContain('Message-ID: <019f8099-7e26-7760-ad08-66d1d66b2810@anomaly-detector.ru>')
     expect(operations.at(-2)).toContain('Reply-To: support@anomaly-detector.ru')
     expect(JSON.stringify({ operations, result })).not.toContain('smtp-password-must-not-leak')
+    expect(establishedConnectionAborted).toBe(false)
+    expect(closed).toBe(true)
   })
 
   test('treats a lost response after DATA as ambiguous without returning provider content', async () => {
@@ -114,6 +125,7 @@ describe('RegRuSmtpDelivery', () => {
 
   test('bounds the complete SMTP attempt and closes a stalled session', async () => {
     let closed = false
+    let establishedConnectionAborted = false
     const session: SmtpSession = {
       close: () => { closed = true },
       command: async () => reply(250),
@@ -132,7 +144,14 @@ describe('RegRuSmtpDelivery', () => {
         tlsMode: 'implicit_tls',
         username: 'no-reply@anomaly-detector.ru',
       },
-      sessionFactory: { connect: async () => session },
+      sessionFactory: {
+        connect: async (_config, signal) => {
+          signal.addEventListener('abort', () => {
+            establishedConnectionAborted = true
+          }, { once: true })
+          return session
+        },
+      },
     })
     const startedAt = performance.now()
 
@@ -144,6 +163,7 @@ describe('RegRuSmtpDelivery', () => {
       kind: 'temporary_failure',
     })
     expect(performance.now() - startedAt).toBeLessThan(1_500)
+    expect(establishedConnectionAborted).toBe(false)
     expect(closed).toBe(true)
   })
 

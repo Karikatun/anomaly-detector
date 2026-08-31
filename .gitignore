@@ -15,6 +15,7 @@ mobile/.maestro/reports/
 docs/ui/*
 PLAYTEST_*
 .codescoring/
+posts/
 
 # Runtime and logs
 *.log
