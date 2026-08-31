@@ -25,11 +25,17 @@ class ReportRendererTests(unittest.TestCase):
     def test_privacy_gate_rejects_extended_paths_headers_and_jwts(self):
         unsafe_values = [
             "/opt/private/model.bin",
+            "/workspace/private/model.bin",
             "D:/work/private/report.txt",
             r"\\server\share\private.txt",
             "file:///root/private/report.txt",
             "Cookie: session=private-value",
             "eyJabcdefghij.eyJklmnopqrst.uvwxyzabcdefgh",
+            "ASIA" + "A" * 16,
+            "AIza" + "B" * 35,
+            "Authorization = Digest private-value",
+            "redis://:private-password@localhost:6379/0",
+            "RAILS_MASTER_KEY=abcdef0123456789abcdef0123456789",
         ]
 
         for value in unsafe_values:
@@ -58,6 +64,56 @@ class ReportRendererTests(unittest.TestCase):
                     sensitive,
                 )
 
+    def test_privacy_gate_resolves_relative_transcript_from_report_directory(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transcript = root / "transcripts" / "task.md"
+            transcript.parent.mkdir()
+            private_request = "Never publish this relative transcript request."
+            transcript.write_text(
+                "# Task T001\n\n[user] " + private_request + "\n\n[assistant] Done.\n"
+            )
+            inventory = {"tasks": [{"transcript_path": "transcripts/task.md"}]}
+            sensitive = inventory_sensitive_values(inventory, root / "report.json")
+
+            with self.assertRaises(PrivacyError):
+                validate_report_privacy(
+                    {"top_findings": [{"summary": private_request}]},
+                    sensitive,
+                )
+
+    def test_v2_privacy_gate_fails_closed_on_missing_or_escaping_transcript(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            for transcript_path in ("transcripts/missing.md", "../outside.md"):
+                inventory = {
+                    "methodology_version": 2,
+                    "tasks": [{
+                        "sampled": True,
+                        "transcript_path": transcript_path,
+                    }],
+                }
+                with self.subTest(path=transcript_path), self.assertRaises(
+                    ReportContractError
+                ):
+                    inventory_sensitive_values(inventory, root / "report.json")
+
+    def test_v2_privacy_gate_rejects_readable_absolute_transcript(self):
+        with TemporaryDirectory() as report_dir, TemporaryDirectory() as outside_dir:
+            report_root = Path(report_dir)
+            outside = Path(outside_dir) / "task.md"
+            outside.write_text("# Task T001\n\n[user] private request\n")
+            inventory = {
+                "methodology_version": 2,
+                "tasks": [{
+                    "sampled": True,
+                    "transcript_path": str(outside),
+                }],
+            }
+
+            with self.assertRaises(ReportContractError):
+                inventory_sensitive_values(inventory, report_root / "report.json")
+
     def test_inventory_marks_plural_identifier_fields_sensitive(self):
         with TemporaryDirectory() as temp_dir:
             private_id = "private-child-task-identifier"
@@ -72,6 +128,17 @@ class ReportRendererTests(unittest.TestCase):
                     {"top_findings": [{"summary": private_id}]},
                     sensitive,
                 )
+
+    def test_inventory_marks_project_relative_skill_path_sensitive(self):
+        private_path = "clients/private-codename/.agents/skills/a/SKILL.md"
+        inventory = {"project_relative_path": private_path, "tasks": []}
+        sensitive = inventory_sensitive_values(inventory, Path("report.json"))
+
+        with self.assertRaises(PrivacyError):
+            validate_report_privacy(
+                {"top_findings": [{"summary": private_path}]},
+                sensitive,
+            )
 
     def test_v2_schema_binds_card_fields_and_stats_to_inventory(self):
         inventory = {
@@ -616,6 +683,10 @@ class ReportRendererTests(unittest.TestCase):
             "propose improvements to project skills based only on `failed_tasks`",
             skill_text,
         )
+        self.assertIn("project_relative_path", skill_text)
+        self.assertIn("exactly one existing file", skill_text)
+        self.assertIn("Do not draft edits for external skills", skill_text)
+        self.assertNotIn("path is in `inventory.json`", skill_text)
 
     def test_report_renders_letter_grade(self):
         page = render_page({

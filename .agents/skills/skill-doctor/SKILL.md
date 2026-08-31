@@ -8,7 +8,7 @@ Grade the user's agent setup by scoring individual user-request tasks from recen
 
 The report can cover conversations in the current repository, conversations in selected projects, or all local conversations. It can evaluate project skills alone or project and global skills together.
 
-The collector, aggregator, and renderer have no network dependency and write only to `REPORT_DIR`. Scoring happens in the executing agent harness, so transcript excerpts may be processed by that harness's configured model provider. Read only conversation sources the user approved, disclose this boundary before collection, never send the artifacts anywhere else, and keep raw requests, identifiers, local paths, secrets, and private data out of the report.
+The collector, aggregator, and renderer have no network dependency and write only to `REPORT_DIR`. Scoring happens in the executing agent harness, so redacted transcript excerpts and the minimal scoring inventory may be processed by that harness's configured model provider. Read only conversation sources the user approved, disclose this boundary before collection, and never send the artifacts anywhere else. Keep raw requests, identifiers, absolute or unapproved local paths, secrets, and private data out of the scoring inventory and report. For an explicitly approved repository, the inventory may contain a sanitized project-relative skill path solely to resolve a justified Step 4 edit; never copy that path into the report.
 
 Let `SKILL_ROOT` be the directory containing this SKILL.md.
 
@@ -149,9 +149,11 @@ Then derive the substance:
 
 Follow `$SKILL_ROOT/references/skill-improvements.md` to propose improvements to project skills based only on `failed_tasks`.
 
-1. Read the skill's current file (path is in `inventory.json`).
-2. Write the full improved version to `$REPORT_DIR/proposed/<skill-name>/SKILL.md`, changing only what the evidence justifies. Improve the parts the sessions actually exercised: the trigger description that failed to fire, the missing preflight check, the step the agent had to figure out by trial and error.
-3. Produce a unified diff with safe relative labels (`diff -u --label "a/<skill-name>/SKILL.md" --label "b/<skill-name>/SKILL.md" <current> <proposed>`) and put it in the skill edit's `diff` field so it renders in the report. Never put real current, home, repository, or report-directory paths in the diff headers.
+1. Select a failed project-skill record whose `scope` is `project`. Resolve its `project_relative_path` against each repository root that the user approved in Step 0, reject traversal outside those roots, and continue only when exactly one existing file matches. Do not draft edits for external skills or an ambiguous match; record a workflow recommendation or `no_change` disposition instead.
+   For an all-conversations run, no repository root is approved by default. Do not draft a project-skill edit unless the user explicitly approved its repository root before this step.
+2. Read that project skill's current file.
+3. Write the full improved version to `$REPORT_DIR/proposed/<skill-name>/SKILL.md`, changing only what the evidence justifies. Improve the parts the sessions actually exercised: the trigger description that failed to fire, the missing preflight check, the step the agent had to figure out by trial and error.
+4. Produce a unified diff with safe relative labels (`diff -u --label "a/<skill-name>/SKILL.md" --label "b/<skill-name>/SKILL.md" <current> <proposed>`) and put it in the skill edit's `diff` field so it renders in the report. Never put real current, home, repository, or report-directory paths in the diff headers.
 
 For a proposed-new skill, write the complete new SKILL.md to the same `proposed/` directory and set `diff` to its full content as an addition.
 

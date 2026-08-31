@@ -32,6 +32,67 @@ MAX_TOOL_CHARS = 500
 MAX_TRANSCRIPT_ENTRIES = 160
 TRANSCRIPT_HEAD = 100
 TRANSCRIPT_TAIL = 40
+PUBLIC_TASK_STAT_FIELDS = (
+    "user_turns",
+    "assistant_turns",
+    "tool_calls",
+    "repeated_tool_calls",
+    "wait_calls",
+    "failed_outputs",
+    "environment_denials",
+    "has_code_edits",
+    "artifact_evidence",
+)
+SAFE_SKILL_NAME = re.compile(r"[A-Za-z0-9._-]+")
+BASE64URL_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+)
+SENSITIVE_NAME_MARKERS = (
+    "apikey", "api_key", "api-key", "authorization", "cookie", "password",
+    "privatekey", "private_key",
+    "private-key", "masterkey", "master_key", "master-key", "encryptionkey",
+    "encryption_key", "encryption-key", "signingkey", "signing_key",
+    "signing-key", "fernetkey", "fernet_key", "fernet-key",
+    "secret", "token",
+)
+SENSITIVE_NAME_PARTS = frozenset((
+    "authorization", "cookie", "cookies", "password", "passwords", "secret",
+    "secrets", "token", "tokens",
+))
+SENSITIVE_KEY_QUALIFIERS = frozenset(("master", "encryption", "signing", "fernet"))
+NONCREDENTIAL_METADATA_PARTS = frozenset(
+    (
+        "budget", "cooling", "count", "domain", "economy", "enabled", "expiry",
+        "format", "httponly", "length", "limit", "name", "pattern", "patterns",
+        "per", "policy", "rate", "request", "samesite", "schema", "scheme",
+        "second", "seconds", "secure", "settings", "type",
+    )
+)
+TOKEN_MEASUREMENT_PARTS = frozenset(
+    (
+        "cached", "completion", "input", "max", "min", "num", "output",
+        "prompt", "remaining", "total", "usage", "used",
+    )
+)
+CAMEL_CASE_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+REDACTED_SECRET = "[REDACTED]"
+UNQUOTED_SECRET_DELIMITERS = frozenset(" \t\r\n,;)}]&|\"'")
+NAMED_SECRET_ASSIGNMENT_PREFIX = re.compile(
+    r"(?<![A-Z0-9_-])"
+    r"(?P<prefix>(?:\\?[\"'])?(?P<name>[A-Z0-9_-]+)"
+    r"(?:\\?[\"'])?\s*[:=]\s*)",
+    re.IGNORECASE,
+)
+NAMED_SECRET_BRACKET_ASSIGNMENT_PREFIX = re.compile(
+    r"(?<![A-Z0-9_.])"
+    r"(?P<prefix>(?:[A-Z0-9_.]+\s*)?"
+    r"\[\s*[\"'](?P<name>[A-Z0-9_-]+)[\"']\s*\]\s*=\s*)",
+    re.IGNORECASE,
+)
+NAMED_SECRET_FLAG_PREFIX = re.compile(
+    r"(?<![A-Z0-9_-])(?P<prefix>--(?P<name>[A-Z0-9_-]+)\s+)",
+    re.IGNORECASE,
+)
 
 CODE_EDIT_HINTS = ("apply_patch", "*** Begin Patch", "edit_file", "create_file", "str_replace", "write_file")
 CLAUDE_CODE_EDIT_TOOLS = {"Edit", "MultiEdit", "NotebookEdit", "Write"}
@@ -413,10 +474,15 @@ def split_session_tasks(meta, entries):
             "task_index": index,
         })
         if native_meta is not None:
+            native_description = native_meta.get("description")
             task_meta.update({
                 "native_task_id": native_meta.get("id"),
                 "native_parent_task_id": native_meta.get("parent_task_id"),
-                "native_description": native_meta.get("description"),
+                "native_description": (
+                    truncate(str(native_description), MAX_MSG_CHARS)
+                    if native_description is not None
+                    else None
+                ),
                 "merged_child_task_ids": native_meta.get("merged_child_task_ids", []),
                 "started_at": native_meta.get("started_at") or task_meta.get("started_at"),
             })
@@ -479,6 +545,8 @@ def discover_skills(repos, codex_home: Path, extra_dirs, include_global: bool):
             continue
         for skill_md in sorted(root.glob("*/SKILL.md")):
             name = skill_md.parent.name
+            if not SAFE_SKILL_NAME.fullmatch(name):
+                continue
             if name in skills:
                 continue
             try:
@@ -497,6 +565,81 @@ def discover_skills(repos, codex_home: Path, extra_dirs, include_global: bool):
                 "modified_at": datetime.fromtimestamp(skill_md.stat().st_mtime, tz=timezone.utc).isoformat(),
             }
     return skills
+
+
+def canonical_timestamp(value):
+    """Return one normalized ISO timestamp without echoing hostile metadata."""
+    if value is None:
+        return None
+    try:
+        return parse_since(str(value)).isoformat()
+    except argparse.ArgumentTypeError:
+        return None
+
+
+def public_task_id(raw_task_id: str) -> str:
+    """Return a stable opaque task identifier for scorer/report contracts."""
+    digest = hashlib.sha256(str(raw_task_id).encode()).hexdigest()[:16]
+    return f"task-{digest}"
+
+
+def public_skill_records(skills, repos, expose_project_paths=True):
+    """Project only scoring-relevant skill metadata, never absolute paths."""
+    records = []
+    resolved_repos = [repo.resolve() for repo in repos]
+    for skill in sorted(skills.values(), key=lambda item: item["name"]):
+        relative_path = None
+        try:
+            skill_path = Path(skill["path"]).resolve()
+        except (KeyError, OSError):
+            skill_path = None
+        if skill_path is not None:
+            for repo in resolved_repos:
+                try:
+                    relative_path = str(skill_path.relative_to(repo))
+                    break
+                except ValueError:
+                    continue
+        records.append({
+            "name": skill["name"],
+            "description": truncate(str(skill.get("description") or ""), 300),
+            "bytes": skill.get("bytes"),
+            "modified_at": canonical_timestamp(skill.get("modified_at")),
+            "scope": "project" if relative_path is not None else "external",
+            "project_relative_path": (
+                relative_path if expose_project_paths else None
+            ),
+        })
+    return records
+
+
+def public_task_record(task, out_dir: Path):
+    """Project a collected task to the minimum scorer/report contract."""
+    transcript_path = task.get("transcript_path")
+    relative_transcript = None
+    if transcript_path:
+        try:
+            relative_transcript = str(
+                Path(transcript_path).resolve().relative_to(out_dir.resolve())
+            )
+        except (OSError, ValueError):
+            raise ValueError("transcript path escaped the report directory")
+    started_at = canonical_timestamp(
+        task.get("meta", {}).get("started_at") or task.get("modified_at")
+    )
+    return {
+        "task_id": public_task_id(task["task_id"]),
+        "report_alias": task["report_alias"],
+        "harness": task["harness"],
+        "started_at": started_at,
+        "stats": {
+            field: task["stats"].get(field)
+            for field in PUBLIC_TASK_STAT_FIELDS
+        },
+        "skills_used": list(task["skills_used"]),
+        "sampled": bool(task["sampled"]),
+        "transcript_path": relative_transcript,
+    }
 
 
 def find_codex_session_files(codex_home: Path, cutoff: datetime):
@@ -538,61 +681,352 @@ def find_claude_session_files(claude_home: Path, cutoff: datetime, include_subag
     return files
 
 
+def redact_jwts(text: str) -> str:
+    """Redact complete compact JWS/JWE values with a bounded linear scan."""
+    if "eyJ" not in text:
+        return text
+
+    def run_end(start: int) -> int:
+        end = start
+        while end < len(text) and text[end] in BASE64URL_CHARS:
+            end += 1
+        return end
+
+    pieces = []
+    cursor = 0
+    index = 0
+    while index < len(text):
+        if text[index] not in BASE64URL_CHARS:
+            index += 1
+            continue
+
+        first_start = index
+        first_end = run_end(first_start)
+        jwt_start = text.find("eyJ", first_start, first_end)
+        index = first_end
+        if (
+            jwt_start < 0
+            or first_end - jwt_start < 11
+            or first_end >= len(text)
+            or text[first_end] != "."
+        ):
+            continue
+
+        segment_lengths = [first_end - jwt_start]
+        token_end = first_end
+        while token_end < len(text) and text[token_end] == ".":
+            segment_start = token_end + 1
+            segment_end = run_end(segment_start)
+            segment_lengths.append(segment_end - segment_start)
+            token_end = segment_end
+
+        has_compact_shape = len(segment_lengths) >= 3 and (
+            segment_lengths[1] >= 8
+            or (
+                len(segment_lengths) >= 5
+                and all(length >= 8 for length in segment_lengths[2:5])
+            )
+        )
+        if not has_compact_shape:
+            continue
+
+        pieces.extend((text[cursor:jwt_start], "[REDACTED JWT]"))
+        cursor = token_end
+        index = token_end
+
+    if not pieces:
+        return text
+    pieces.append(text[cursor:])
+    return "".join(pieces)
+
+
+def is_sensitive_name(name: str) -> bool:
+    normalized = CAMEL_CASE_BOUNDARY.sub("_", name).strip("-_").lower()
+    parts = [part for part in re.split(r"[-_]+", normalized) if part]
+    candidate_indexes = [
+        index
+        for index, part in enumerate(parts)
+        if part in {"apikey", "apikeys", "privatekey", "privatekeys"}
+        or part in SENSITIVE_NAME_PARTS
+    ]
+    candidate_indexes.extend(
+        index + 1
+        for index, (first, second) in enumerate(zip(parts, parts[1:]))
+        if (first, second) in {
+            ("api", "key"), ("api", "keys"),
+            ("private", "key"), ("private", "keys"),
+        }
+    )
+    if "key" in parts:
+        candidate_indexes.extend(
+            index
+            for index, part in enumerate(parts)
+            if part == "key"
+            and any(
+                qualifier in SENSITIVE_KEY_QUALIFIERS
+                for qualifier in parts[:index]
+            )
+        )
+    for index in sorted(set(candidate_indexes)):
+        part = parts[index]
+        if any(
+            later in NONCREDENTIAL_METADATA_PARTS
+            for later in parts[index + 1:]
+        ):
+            continue
+        if (
+            part in ("token", "tokens")
+            and index > 0
+            and parts[index - 1] in TOKEN_MEASUREMENT_PARTS
+        ):
+            continue
+        return True
+    if len(parts) == 1:
+        if any(
+            parts[0].endswith(f"{qualifier}key")
+            for qualifier in SENSITIVE_KEY_QUALIFIERS
+        ):
+            return True
+        for suffix in SENSITIVE_NAME_PARTS:
+            if not parts[0].endswith(suffix):
+                continue
+            prefix = parts[0][:-len(suffix)]
+            if suffix in ("token", "tokens") and prefix in TOKEN_MEASUREMENT_PARTS:
+                continue
+            return True
+    return False
+
+
+def secret_value_end(text: str, start: int) -> int:
+    """Return one named-secret value boundary without rescanning prior text."""
+    if start >= len(text):
+        return start
+    if text.startswith(REDACTED_SECRET, start):
+        return start + len(REDACTED_SECRET)
+
+    if text[start] in "[{":
+        closing = {"[": "]", "{": "}"}
+        stack = [closing[text[start]]]
+        quote = None
+        escaped = False
+        index = start + 1
+        while index < len(text):
+            char = text[index]
+            if quote is not None:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+            elif char in ('"', "'"):
+                quote = char
+            elif char in closing:
+                stack.append(closing[char])
+            elif stack and char == stack[-1]:
+                stack.pop()
+                if not stack:
+                    return index + 1
+            index += 1
+        return len(text)
+
+    if text.startswith(('\\"', "\\'"), start):
+        escaped_quote = text[start:start + 2]
+        index = start + 2
+        while index < len(text):
+            if text.startswith(escaped_quote, index):
+                return index + 2
+            index += 1
+        return len(text)
+
+    quote = text[start]
+    if quote in ("\"", "'"):
+        index = start + 1
+        while index < len(text):
+            if text[index] == "\\":
+                index += 2
+                continue
+            if text[index] == quote:
+                return index + 1
+            index += 1
+        return len(text)
+
+    end = start
+    while end < len(text) and text[end] not in UNQUOTED_SECRET_DELIMITERS:
+        end += 1
+    return end
+
+
+def redact_named_secrets(text: str, prefix_pattern) -> str:
+    """Redact sensitive named values while preserving nested candidate starts."""
+    pieces = []
+    cursor = 0
+    search_from = 0
+
+    while match := prefix_pattern.search(text, search_from):
+        value_start = match.end()
+        search_from = value_start
+        if not is_sensitive_name(match.group("name")):
+            continue
+
+        value_end = secret_value_end(text, value_start)
+        if value_end <= value_start:
+            continue
+        pieces.extend((text[cursor:value_start], REDACTED_SECRET))
+        cursor = value_end
+        search_from = value_end
+
+    if not pieces:
+        return text
+    pieces.append(text[cursor:])
+    return "".join(pieces)
+
+
 def redact_sensitive_text(text: str) -> str:
     """Remove common secrets and local identifiers before model-visible output."""
-    text = re.sub(
-        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
-        "[REDACTED PRIVATE KEY]",
-        text,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    text = re.sub(
-        r"(?i)(\bAuthorization\s*:\s*Bearer)\s+[^\s\"']+",
-        r"\1 [REDACTED]",
-        text,
-    )
-    text = re.sub(
-        r"(?i)(\b(?:Cookie|Set-Cookie)\s*:)\s*[^\r\n]+",
-        r"\1 [REDACTED]",
-        text,
-    )
-    text = re.sub(
-        r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b",
-        "[REDACTED JWT]",
-        text,
-    )
-    text = re.sub(
-        r"\b(?:ghp_|github_pat_|sk-|xox[baprs]-|AKIA)[A-Za-z0-9_-]{16,}\b",
-        "[REDACTED TOKEN]",
-        text,
-    )
-    text = re.sub(
-        r"(?i)([\"']?[A-Z0-9_]*(?:api[_-]?key|password|secret|token)[\"']?\s*[:=]\s*)"
-        r"(?:\"[^\"]{8,}\"|'[^']{8,}'|[^\s,;}\]]{8,})",
-        r"\1[REDACTED]",
-        text,
-    )
-    text = re.sub(r"(?<![\w.+-])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[REDACTED EMAIL]", text)
-    text = re.sub(
-        r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
-        "[LOCAL-ID]",
-        text,
-        flags=re.IGNORECASE,
-    )
-    text = re.sub(r"/Users/[^/\s\"']+", "$HOME", text)
-    text = re.sub(r"/home/[^/\s\"']+", "$HOME", text)
-    text = re.sub(r"/(?:private/)?tmp/[^\s\"']+", "$TMP/[REDACTED]", text)
-    text = re.sub(r"(?i)\bfile://[^\s\"']+", "[LOCAL_PATH]", text)
-    text = re.sub(
-        r"\b[A-Za-z]:(?:\\|/)(?:[^\\/\s\"']+(?:\\|/))*[^\\/\s\"']+",
-        "[LOCAL_PATH]",
-        text,
-    )
-    text = re.sub(
-        r"\\\\[^\\\s\"']+(?:\\[^\\\s\"']+)+",
-        "[LOCAL_PATH]",
-        text,
-    )
+    folded = text.lower()
+    if "-----begin " in folded and "private key" in folded:
+        text = re.sub(
+            r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----.*?"
+            r"(?:-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----|\Z)",
+            "[REDACTED PRIVATE KEY]",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+    if "authorization" in folded:
+        text = re.sub(
+            r"(?i)(\b(?:Proxy-)?Authorization\s*[:=])[^\r\n]*",
+            r"\1 [REDACTED]",
+            text,
+        )
+        text = re.sub(
+            r'(?i)([\"\'](?:Proxy-)?Authorization[\"\']\s*:\s*)'
+            r'\"(?:\\.|[^\"\\])*\"',
+            r'\1"[REDACTED]"',
+            text,
+        )
+        text = re.sub(
+            r"(?i)([\"'](?:Proxy-)?Authorization[\"']\s*:\s*)"
+            r"'(?:\\.|[^'\\])*'",
+            r"\1'[REDACTED]'",
+            text,
+        )
+        text = re.sub(
+            r'(?i)(\\\"(?:Proxy-)?Authorization\\\"\s*:\s*)'
+            r'\\\".*?\\\"',
+            r'\1\\"[REDACTED]\\"',
+            text,
+        )
+    if "cookie" in folded:
+        text = re.sub(
+            r"(?i)(\b(?:Cookie|Set-Cookie)\s*[:=])[^\r\n]+",
+            r"\1 [REDACTED]",
+            text,
+        )
+        text = re.sub(
+            r'(?i)([\"\'](?:Cookie|Set-Cookie)[\"\']\s*:\s*)'
+            r'\"(?:\\.|[^\"\\])*\"',
+            r'\1"[REDACTED]"',
+            text,
+        )
+        text = re.sub(
+            r"(?i)([\"'](?:Cookie|Set-Cookie)[\"']\s*:\s*)"
+            r"'(?:\\.|[^'\\])*'",
+            r"\1'[REDACTED]'",
+            text,
+        )
+        text = re.sub(
+            r'(?i)(\\\"(?:Cookie|Set-Cookie)\\\"\s*:\s*)'
+            r'\\\".*?\\\"',
+            r'\1\\"[REDACTED]\\"',
+            text,
+        )
+    if "bearer" in folded:
+        text = re.sub(
+            r"(?i)\bBearer[ \t]+[A-Za-z0-9._~+/-]{12,}=*",
+            "Bearer [REDACTED]",
+            text,
+        )
+    if "eyJ" in text:
+        text = redact_jwts(text)
+    if any(
+        marker in text
+        for marker in (
+            "ghp_", "github_pat_", "sk-", "xoxb-", "xoxa-",
+            "xoxp-", "xoxr-", "xoxs-", "AKIA", "ASIA", "AIza",
+        )
+    ):
+        text = re.sub(
+            r"\b(?:ghp_|github_pat_|sk-|xox[baprs]-|AKIA|ASIA)"
+            r"[A-Za-z0-9_-]{16,}\b|\bAIza[A-Za-z0-9_-]{35}\b",
+            "[REDACTED TOKEN]",
+            text,
+        )
+    if any(marker in folded for marker in SENSITIVE_NAME_MARKERS):
+        if "=" in text or ":" in text:
+            text = redact_named_secrets(
+                text,
+                NAMED_SECRET_BRACKET_ASSIGNMENT_PREFIX,
+            )
+            text = redact_named_secrets(text, NAMED_SECRET_ASSIGNMENT_PREFIX)
+        if "--" in text:
+            text = redact_named_secrets(text, NAMED_SECRET_FLAG_PREFIX)
+    if "://" in text and "@" in text:
+        text = re.sub(
+            r"(?i)(\b[a-z][a-z0-9+.-]*://)[^/@\s]*:[^/@\s]+@",
+            r"\1[REDACTED]@",
+            text,
+        )
+    if "@" in text:
+        text = re.sub(
+            r"(?<![\w.+-])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}",
+            "[REDACTED EMAIL]",
+            text,
+        )
+    if "-" in text:
+        text = re.sub(
+            r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+            "[LOCAL-ID]",
+            text,
+            flags=re.IGNORECASE,
+        )
+    if "/Users/" in text:
+        text = re.sub(r"/Users/[^/\s\"']+", "$HOME", text)
+    if "/home/" in text:
+        text = re.sub(r"/home/[^/\s\"']+", "$HOME", text)
+    if "/tmp/" in text:
+        text = re.sub(r"/(?:private/)?tmp/[^\s\"']+", "$TMP/[REDACTED]", text)
+    if any(
+        marker in text
+        for marker in (
+            "/var/", "/private/var/", "/opt/", "/root/", "/etc/",
+            "/usr/", "/Library/", "/Volumes/", "/data/", "/mnt/",
+            "/workspace/", "/srv/", "/app/",
+        )
+    ):
+        text = re.sub(
+            r"(?<![A-Za-z0-9:/])/(?:private/)?"
+            r"(?:var|opt|root|etc|usr|Library|Volumes|data|mnt|workspace|srv|app)"
+            r"(?:/[^\s\"']+)+",
+            "[LOCAL_PATH]",
+            text,
+        )
+    if "file://" in folded:
+        text = re.sub(r"(?i)\bfile://[^\s\"']+", "[LOCAL_PATH]", text)
+    if "~/" in text or "$HOME/" in text:
+        text = re.sub(r"(?:~|\$HOME)/[^\s\"']+", "[LOCAL_PATH]", text)
+    if ":" in text:
+        text = re.sub(
+            r"\b[A-Za-z]:(?:\\|/)(?:[^\\/\s\"']+(?:\\|/))*[^\\/\s\"']+",
+            "[LOCAL_PATH]",
+            text,
+        )
+    if "\\" in text:
+        text = re.sub(
+            r"\\\\[^\\\s\"']+(?:\\[^\\\s\"']+)+",
+            "[LOCAL_PATH]",
+            text,
+        )
     return text
 
 
@@ -884,6 +1318,15 @@ def parse_codex_session(path: Path, skill_names, include_subagents: bool):
                 if seen_calls[key] > 1:
                     stats["repeated_tool_calls"] += 1
                 call_args_text.append(args)
+                for skill_name in skill_names:
+                    if (
+                        f"skills/{skill_name}/" in args
+                        or f"{skill_name}/SKILL.md" in args
+                    ):
+                        entries.append((
+                            "skill",
+                            json.dumps({"name": skill_name}, ensure_ascii=False),
+                        ))
                 entries.append((f"tool:{name}", truncate(args, MAX_TOOL_CHARS)))
             elif ptype in ("function_call_output", "custom_tool_call_output"):
                 out = payload.get("output") or ""
@@ -1276,12 +1719,12 @@ def parse_warp_conversation(record, skill_names, include_subagents):
     return meta, stats, entries, sorted(skills_used)
 
 
-def render_transcript(meta, stats, skills_used, entries) -> str:
-    project_name = Path(meta.get("cwd")).name if meta.get("cwd") else "(unknown)"
+def render_transcript(meta, stats, skills_used, entries, project_label="project") -> str:
+    started_at = canonical_timestamp(meta.get("started_at") or stats.get("first_ts"))
     lines = [
         f"# Task {meta.get('report_alias') or '(local alias unavailable)'}",
-        f"- project: {project_name}",
-        f"- started: {meta.get('started_at') or stats.get('first_ts')}",
+        f"- project: {project_label}",
+        f"- started: {started_at or '(unknown)'}",
         f"- skills detected: {', '.join(skills_used) or '(none)'}",
         f"- navigation stats: {stats['user_turns']} user turns, {stats['assistant_turns']} assistant turns, "
         f"{stats['tool_calls']} tool calls ({stats['repeated_tool_calls']} repeated), "
@@ -1301,7 +1744,15 @@ def render_transcript(meta, stats, skills_used, entries) -> str:
         shown = entries[:TRANSCRIPT_HEAD] + [("note", f"[... {omitted} entries omitted ...]")] + entries[-TRANSCRIPT_TAIL:]
     for entry in shown:
         role, text = entry[:2]
-        lines.append(f"[{role}] {text}")
+        if role.startswith("tool:"):
+            role = "tool"
+        elif role == "output" or role.startswith("output:"):
+            role = "output"
+        elif role not in {"user", "assistant", "skill", "note"}:
+            role = "entry"
+        framed_text = str(text).replace("\r\n", "\n").replace("\r", "\n")
+        framed_text = framed_text.replace("\n", "\n  ")
+        lines.append(f"[{role}] {framed_text}")
         lines.append("")
     return "\n".join(lines)
 
@@ -1643,27 +2094,30 @@ def main():
         scope_name = "all-conversations"
     elif len(repos) == 1:
         conversation_scope = "projects"
-        scope_name = repos[0].name
+        scope_name = "single-project"
     else:
         conversation_scope = "projects"
         scope_name = "multiple-projects"
+
+    public_tasks = [
+        public_task_record(task, out_dir)
+        for task in tasks
+        if task["sampled"]
+    ]
 
     inventory = {
         "methodology_version": 2,
         "generated_at": collected_at.isoformat(),
         "harness": next(iter(sources)) if len(sources) == 1 else "mixed",
-        "sources": sources,
-        "claude_home": str(claude_home) if "claude" in sources else None,
-        "codex_home": str(codex_home) if "codex" in sources else None,
-        "warp_databases": [str(path) for path in warp_databases],
         "conversation_scope": conversation_scope,
-        "repo": str(repos[0]) if len(repos) == 1 else None,
-        "repos": [str(repo) for repo in repos],
         "repo_name": scope_name,
-        "repo_names": [repo.name for repo in repos],
         "window_days": effective_window_days,
         "window_start": cutoff.isoformat(),
-        "skills": sorted(skills.values(), key=lambda x: x["name"]),
+        "skills": public_skill_records(
+            skills,
+            repos,
+            expose_project_paths=not args.all_conversations,
+        ),
         "skill_usage": skill_usage,
         "stats": {
             "conversation_records_in_window": scanned_count,
@@ -1675,7 +2129,7 @@ def main():
             "skills_found": len(skills),
             "skills_used": sum(1 for v in skill_usage.values() if v > 0),
         },
-        "tasks": tasks,
+        "tasks": public_tasks,
     }
     (out_dir / "inventory.json").write_text(json.dumps(inventory, indent=2))
 

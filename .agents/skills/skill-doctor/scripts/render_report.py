@@ -51,11 +51,13 @@ PRIVATE_PATTERNS = (
     ("local path", re.compile(r"\\\\[^\\\s<>\"']+(?:\\[^\\\s<>\"']+)+")),
     ("local path", re.compile(r"\bfile://[^\s<>\"']+", re.I)),
     ("local identifier", re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)),
-    ("secret-like token", re.compile(r"\b(?:ghp_|github_pat_|sk-|xox[baprs]-|AKIA)[A-Za-z0-9_-]{16,}\b")),
+    ("secret-like token", re.compile(r"\b(?:ghp_|github_pat_|sk-|xox[baprs]-|AKIA|ASIA)[A-Za-z0-9_-]{16,}\b")),
+    ("secret-like token", re.compile(r"\bAIza[A-Za-z0-9_-]{35}\b")),
     ("secret-like token", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("secret-like token", re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{12,}=*", re.I)),
-    ("secret-like assignment", re.compile(r"\b(?:api[_-]?key|password|secret|token)\s*[:=]\s*[^\s,;]{8,}", re.I)),
-    ("secret-like header", re.compile(r"\b(?:Authorization|Cookie|Set-Cookie)\s*:\s*\S+", re.I)),
+    ("secret-like assignment", re.compile(r"\b(?:api[_-]?key|password|secret|token|(?:rails[_-]?)?master[_-]?key|encryption[_-]?key|signing[_-]?key|fernet[_-]?key)\s*[:=]\s*[^\s,;]{8,}", re.I)),
+    ("secret-like header", re.compile(r"\b(?:(?:Proxy-)?Authorization|Cookie|Set-Cookie)\s*[:=]\s*\S+", re.I)),
+    ("credential URI", re.compile(r"\b[a-z][a-z0-9+.-]*://[^/@\s]*:[^/@\s]+@", re.I)),
     ("secret-like token", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")),
 )
 
@@ -90,11 +92,15 @@ def validate_report_privacy(report, exact_sensitive_values=()):
                 )
 
 
-def _transcript_user_values(path):
+def _transcript_user_values(path, strict=False):
     """Return verbatim user blocks/lines that may not enter a shareable report."""
     try:
         lines = path.read_text().splitlines()
-    except (OSError, UnicodeError):
+    except (OSError, UnicodeError) as exc:
+        if strict:
+            raise ReportContractError(
+                "inventory transcript is unavailable or unreadable"
+            ) from exc
         return set()
     values = set()
     block = []
@@ -134,7 +140,7 @@ def inventory_sensitive_values(inventory, report_path: Path):
     sensitive_keys = {
         "task_id", "id", "parent_session_id", "conversation_id", "cwd", "repo",
         "repos", "file", "path", "transcript_path", "claude_home", "codex_home",
-        "warp_databases", "database", "home",
+        "warp_databases", "database", "home", "project_relative_path",
     }
 
     def collect(value, key=None):
@@ -154,12 +160,35 @@ def inventory_sensitive_values(inventory, report_path: Path):
             values.add(value)
 
     collect(inventory)
+    report_root = report_path.parent.resolve()
+    strict_v2 = inventory.get("methodology_version") == 2
     for task in inventory.get("tasks", []):
         if not isinstance(task, dict):
             continue
         transcript_path = task.get("transcript_path")
+        if strict_v2 and task.get("sampled") is True and not isinstance(
+            transcript_path, str
+        ):
+            raise ReportContractError(
+                "sampled inventory task is missing a transcript reference"
+            )
         if isinstance(transcript_path, str):
-            values.update(_transcript_user_values(Path(transcript_path)))
+            candidate = Path(transcript_path)
+            if strict_v2 and candidate.is_absolute():
+                raise ReportContractError(
+                    "inventory transcript must be relative to the report directory"
+                )
+            if not candidate.is_absolute():
+                candidate = (report_root / candidate).resolve()
+                try:
+                    candidate.relative_to(report_root)
+                except ValueError:
+                    if strict_v2:
+                        raise ReportContractError(
+                            "inventory transcript escaped the report directory"
+                        )
+                    continue
+            values.update(_transcript_user_values(candidate, strict=strict_v2))
     return values
 
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -29,6 +29,38 @@ describe('secret hygiene', () => {
       'notes.txt',
       'src/config.ts',
     ])
+  })
+
+  test('allows only the exact reviewed skill-doctor private-key fixture', () => {
+    const path = '.agents/skills/skill-doctor/scripts/test_collect_sessions.py'
+    const source = readFileSync(resolve(import.meta.dirname, '..', path), 'utf8')
+
+    expect(findSecretViolations([file(path, source)])).toEqual([])
+    expect(findSecretViolations([file(path, `${source}\n`)]))
+      .toEqual([{ kind: 'private key', path }])
+    expect(findSecretViolations([file('other-test.py', source)]))
+      .toEqual([{ kind: 'private key', path: 'other-test.py' }])
+  })
+
+  test('applies the reviewed fixture fingerprint at the staged Git boundary', () => {
+    const root = createRepository()
+    const path = '.agents/skills/skill-doctor/scripts/test_collect_sessions.py'
+    const source = readFileSync(resolve(import.meta.dirname, '..', path), 'utf8')
+    const target = join(root, path)
+    mkdirSync(join(root, '.agents', 'skills', 'skill-doctor', 'scripts'), {
+      recursive: true,
+    })
+    writeFileSync(target, source)
+    runGit(root, ['add', path])
+
+    expect(runScanner(root, '--staged').status).toBe(0)
+
+    writeFileSync(target, `${source}\n`)
+    runGit(root, ['add', path])
+    const changed = runScanner(root, '--staged')
+    expect(changed.status).not.toBe(0)
+    expect(changed.stderr).toContain(`${path}: possible private key`)
+    expect(changed.stderr).not.toContain('MUST_NOT_LEAK_SECRET_PAYLOAD')
   })
 
   test('scans staged content without printing the secret value', () => {

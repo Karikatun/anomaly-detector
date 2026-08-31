@@ -6,6 +6,8 @@
 - Act autonomously by default: inspect, decide, implement, validate, and report. Ask only when ambiguity blocks a safe decision, a product choice is genuinely open, or an action is risky or destructive.
 - Start from repository evidence. Trust current code, schemas, scripts, tests, and runtime output over assumptions or stale docs.
 - Preserve unrelated user changes. Keep diffs focused and use the lightest workflow that can prove the result.
+- Before bulk repetitive work, validate 1–2 representative outputs end to end; expand only after the result and workflow are correct.
+- Before parallel execution, preflight the applicable tool schemas and limits, estimate expected data volume, and assign non-overlapping file ownership for edits.
 - Own architecture, implementation, quality, security, performance, maintainability, tests, and documentation for touched and directly coupled surfaces.
 
 ## Scope Routing

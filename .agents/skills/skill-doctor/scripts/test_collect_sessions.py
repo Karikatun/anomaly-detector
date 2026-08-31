@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,10 +20,13 @@ from collect_sessions import (
     parse_claude_session,
     parse_codex_session,
     parse_since,
+    public_skill_records,
+    render_transcript,
     session_matches_repos,
     split_session_tasks,
     transcript_path_for,
     redact_sensitive_text,
+    truncate,
 )
 
 
@@ -59,7 +63,385 @@ class ClaudeSessionTests(unittest.TestCase):
         self.assertNotIn("alice@example.test", redacted)
         self.assertNotIn("01a0545f-bda5-7212-b218-a1a2e1adace8", redacted)
         self.assertIn("[REDACTED]", redacted)
-        self.assertIn("$HOME/private/repo/file.py", redacted)
+        self.assertIn("[LOCAL_PATH]", redacted)
+
+    def test_redacts_common_workspace_paths_and_provider_key_shapes(self):
+        aws_temporary_key = "ASIA" + "A" * 16
+        google_api_key = "AIza" + "B" * 35
+        source = (
+            "/data/private/customer/repo/file.ts\n"
+            "/mnt/secret-project/file.ts\n"
+            "/workspace/client-x/file.ts\n"
+            "Authorization = Digest private-auth-value\n"
+            f"{aws_temporary_key}\n"
+            f"{google_api_key}"
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        for private_value in (
+            "/data/private", "/mnt/secret-project", "/workspace/client-x",
+            "private-auth-value", aws_temporary_key, google_api_key,
+        ):
+            self.assertNotIn(private_value, redacted)
+        self.assertIn("[LOCAL_PATH]", redacted)
+        self.assertIn("[REDACTED TOKEN]", redacted)
+
+    def test_truncate_large_unbroken_uppercase_output_completes_within_one_second(self):
+        source = "A" * (10 * 1024 * 1024)
+
+        started = time.perf_counter()
+        truncated = truncate(source, 500)
+        elapsed = time.perf_counter() - started
+
+        self.assertTrue(truncated.startswith("A" * 100))
+        self.assertIn("[truncated", truncated)
+        self.assertLess(
+            elapsed,
+            1.0,
+            f"truncate took {elapsed:.3f}s for a 10 MiB uppercase tool output",
+        )
+
+    def test_truncate_fully_redacts_long_secret_values(self):
+        secret_marker = "MUST_NOT_LEAK_SECRET_PAYLOAD"
+        cases = {
+            "unterminated quoted assignment": (
+                f'API_SECRET="{secret_marker}' + "x" * (1024 * 1024)
+            ),
+            "private key block": (
+                "-----BEGIN PRIVATE KEY-----\n"
+                f"{secret_marker}\n"
+                + "A" * (1024 * 1024)
+                + "\n-----END PRIVATE KEY-----"
+            ),
+        }
+
+        for label, source in cases.items():
+            with self.subTest(label=label):
+                truncated = truncate(source, 500)
+
+                self.assertNotIn(secret_marker, truncated)
+                self.assertIn("[REDACTED", truncated)
+
+    def test_truncate_redacts_jwt_that_crosses_output_boundary(self):
+        visible_jwt_prefix = "eyJ" + "A" * 17
+        jwt = "eyJ" + "A" * 9000 + "." + "B" * 16 + "." + "C" * 16
+        source = "p" * 480 + jwt
+
+        truncated = truncate(source, 500)
+
+        self.assertNotIn(visible_jwt_prefix, truncated)
+        self.assertIn("[REDACTED JWT]", truncated)
+
+    def test_truncate_handles_repeated_jwt_prefixes_without_quadratic_growth(self):
+        source = "eyJ" * (64 * 1024 // 3)
+
+        started = time.perf_counter()
+        truncated = truncate(source, 500)
+        elapsed = time.perf_counter() - started
+
+        self.assertTrue(truncated.startswith("eyJeyJ"))
+        self.assertLess(
+            elapsed,
+            0.5,
+            f"truncate took {elapsed:.3f}s for repeated JWT prefixes",
+        )
+
+    def test_redacts_extended_secret_names_and_command_flags(self):
+        source = (
+            "SECRET_KEY_BASE=abcdefghijklmnopqrstuvwxyz123456\n"
+            "AWS_SECRET_ACCESS_KEY=zyxwvutsrqponmlkjihgfedcba654321\n"
+            "tool --token abcdefghijklmnopqrstuvwxyz123456"
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertNotIn("abcdefghijklmnopqrstuvwxyz123456", redacted)
+        self.assertNotIn("zyxwvutsrqponmlkjihgfedcba654321", redacted)
+        self.assertEqual(redacted.count("[REDACTED]"), 3)
+
+    def test_redacts_entire_authorization_header_value_for_any_scheme(self):
+        headers = (
+            "Authorization: Bearer opaque-access-token",
+            "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+            "Authorization: Digest username=agent,response=private-response",
+            "Authorization: ApiKey private-api-key",
+            "Authorization: token private-token",
+        )
+
+        for source in headers:
+            with self.subTest(source=source):
+                redacted = redact_sensitive_text(source)
+                self.assertEqual(redacted, "Authorization: [REDACTED]")
+                self.assertEqual(redact_sensitive_text(redacted), redacted)
+
+        metadata = "AuthorizationPolicy: token public-metadata"
+        self.assertEqual(redact_sensitive_text(metadata), metadata)
+
+    def test_redacts_structured_authorization_and_cookie_headers(self):
+        cases = {
+            "authorization": '{"Authorization":"Digest private-auth-value"}',
+            "lowercase": '{"authorization":"Basic private-basic-value"}',
+            "proxy": '{"Proxy-Authorization":"Bearer private-proxy-value"}',
+            "cookie": '{"Cookie":"session=private-cookie-value"}',
+            "set-cookie": '{"Set-Cookie":"session=private-set-cookie-value"}',
+            "nested escaped": (
+                r'{"headers":"{\"Authorization\":'
+                r'\"ApiKey private-nested-value\"}"}'
+            ),
+            "authorization array": (
+                '{"Authorization":["Bearer private-array-value"]}'
+            ),
+            "set-cookie array": (
+                '{"Set-Cookie":["session=private-cookie-array-value"]}'
+            ),
+        }
+
+        for label, source in cases.items():
+            with self.subTest(label=label):
+                redacted = redact_sensitive_text(source)
+                self.assertNotIn("private-", redacted)
+                self.assertIn("[REDACTED]", redacted)
+
+    def test_redacts_standalone_bearer_session_cookie_and_home_paths(self):
+        source = (
+            "token response: Bearer opaque-private-bearer-value\n"
+            "SESSION_COOKIE=opaque-private-session-value\n"
+            "~/.ssh/id_ed25519\n"
+            "$HOME/.config/private/credentials.json"
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        for private_value in (
+            "opaque-private-bearer-value",
+            "opaque-private-session-value",
+            "id_ed25519",
+            "credentials.json",
+        ):
+            self.assertNotIn(private_value, redacted)
+        self.assertIn("Bearer [REDACTED]", redacted)
+        self.assertIn("[LOCAL_PATH]", redacted)
+
+    def test_redacts_entire_compact_jws_and_jwe_tokens(self):
+        unsigned_jws = "eyJ" + "A" * 16 + "." + "B" * 16 + "."
+        compact_jwe = (
+            "eyJ" + "C" * 16 + "." + "D" * 16 + "." + "E" * 16
+            + ".PRIVATECIPHERTEXT." + "F" * 16
+        )
+        direct_jwe = (
+            "eyJ" + "G" * 16 + ".." + "H" * 16
+            + ".PRIVATECIPHERTEXT." + "I" * 16
+        )
+
+        for token in (unsigned_jws, compact_jwe, direct_jwe):
+            with self.subTest(token=token[:24]):
+                redacted = redact_sensitive_text(f"payload={token}")
+                self.assertNotIn("PRIVATECIPHERTEXT", redacted)
+                self.assertNotIn(token, redacted)
+                self.assertIn("[REDACTED JWT]", redacted)
+
+    def test_redacts_bracketed_named_secret_assignments(self):
+        source = (
+            'os.environ["AWS_SECRET_ACCESS_KEY"] = "first-private-value"\n'
+            'config["API_TOKEN"]="second-private-value"'
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertNotIn("first-private-value", redacted)
+        self.assertNotIn("second-private-value", redacted)
+        self.assertEqual(redacted.count("[REDACTED]"), 2)
+
+    def test_redacts_short_named_secret_values(self):
+        source = "PASSWORD=hunter2\ntool --token abc1234"
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertNotIn("hunter2", redacted)
+        self.assertNotIn("abc1234", redacted)
+        self.assertEqual(redacted.count("[REDACTED]"), 2)
+
+    def test_redacts_json_escaped_and_nested_serialized_secret_values(self):
+        cases = {
+            "escaped double quote": (
+                r'{"cmd":"export AUTH_SECRET=\"json-double-secret\" && run"}',
+                "json-double-secret",
+            ),
+            "escaped single quote": (
+                r'''{"cmd":"export PASSWORD=\'json-single-secret\' && run"}''',
+                "json-single-secret",
+            ),
+            "nested serialized object": (
+                json.dumps({
+                    "payload": json.dumps({"password": "nested-json-secret"}),
+                }),
+                "nested-json-secret",
+            ),
+        }
+
+        for label, (source, secret) in cases.items():
+            with self.subTest(label=label):
+                redacted = redact_sensitive_text(source)
+                self.assertNotIn(secret, redacted)
+                self.assertIn("[REDACTED]", redacted)
+
+    def test_preserves_names_that_only_contain_sensitive_substrings(self):
+        source = (
+            "tokenizer: natural-language-component\n"
+            "secretary=office-contact\n"
+            "passwordless: enabled-by-webauthn"
+        )
+
+        self.assertEqual(redact_sensitive_text(source), source)
+
+    def test_redacts_plural_and_uppercase_concatenated_secret_names(self):
+        source = (
+            "secrets=first-private-value\n"
+            "passwords=second-private-value\n"
+            "tokens=third-private-value\n"
+            "AUTHSECRET=fourth-private-value\n"
+            "ACCESSTOKEN=fifth-private-value"
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertNotIn("private-value", redacted)
+        self.assertEqual(redacted.count("[REDACTED]"), 5)
+        self.assertEqual(redact_sensitive_text(redacted), redacted)
+
+    def test_preserves_noncredential_token_and_password_metadata(self):
+        source = (
+            "token_budget=10000\n"
+            "token_type=Bearer\n"
+            "password_policy=minimum-eight\n"
+            "max_output_tokens=12000\n"
+            "max_tokens=4000\n"
+            "SECRET_VALUE_PATTERN=compiled-regex\n"
+            "passwordResetTokenSchema=public-schema\n"
+            "cached_tokens=123\n"
+            "tokens_per_second=42\n"
+            "num_tokens=7\n"
+            "token_expiry=1700000000"
+        )
+
+        self.assertEqual(redact_sensitive_text(source), source)
+
+    def test_redacts_private_key_assignments_and_uri_userinfo(self):
+        source = (
+            "PRIVATE_KEY=base64privatekeyhere\n"
+            "REDIS_URL=redis://:s3cr3t@localhost:6379/0\n"
+            "SERVICE_URL=https://agent:private-password@example.test/api"
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertNotIn("base64privatekeyhere", redacted)
+        self.assertNotIn("s3cr3t", redacted)
+        self.assertNotIn("private-password", redacted)
+        self.assertGreaterEqual(redacted.count("[REDACTED]"), 3)
+
+    def test_redacts_camel_case_private_key_in_assignments_json_and_flags(self):
+        source = (
+            "privateKey=opaquevalueone\n"
+            '{"privateKey":"opaquevaluetwo"}\n'
+            "tool --privateKey opaquevaluethree\n"
+            "PRIVATEKEY=opaquevaluefour\n"
+            "privateKeys=opaquevaluefive\n"
+            "PRIVATEKEYS=opaquevaluesix\n"
+            "APIKEYS=opaquevalueseven"
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertNotIn("opaquevalue", redacted)
+        self.assertEqual(redacted.count("[REDACTED]"), 7)
+
+    def test_redacts_exact_master_encryption_and_signing_key_compounds(self):
+        source = (
+            "RAILS_MASTER_KEY=opaquevaluerails\n"
+            "MASTER_KEY=opaquevaluemaster\n"
+            "ENCRYPTION_KEY=opaquevalueencryption\n"
+            "SIGNING_KEY=opaquevaluesigning\n"
+            "FERNET_KEY=opaquevaluefernet"
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertNotIn("opaquevalue", redacted)
+        self.assertEqual(redacted.count("[REDACTED]"), 5)
+
+    def test_redacts_collection_valued_named_secrets(self):
+        source = (
+            'TOKENS=["secret-one", {"nested": "secret-two"}]\n'
+            'PASSWORD={"value":"hunter2","nested":["secret-three"]}'
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        for secret in ("secret-one", "secret-two", "secret-three", "hunter2"):
+            self.assertNotIn(secret, redacted)
+        self.assertEqual(redacted.count("[REDACTED]"), 2)
+
+    def test_redacts_pgp_and_digit_bearing_private_key_armor(self):
+        source = (
+            "-----BEGIN PGP PRIVATE KEY BLOCK-----\n"
+            "PGP_PRIVATE_MATERIAL\n"
+            "-----END PGP PRIVATE KEY BLOCK-----\n"
+            "-----BEGIN ED25519 PRIVATE KEY-----\n"
+            "ED25519_PRIVATE_MATERIAL\n"
+            "-----END ED25519 PRIVATE KEY-----"
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertNotIn("PGP_PRIVATE_MATERIAL", redacted)
+        self.assertNotIn("ED25519_PRIVATE_MATERIAL", redacted)
+        self.assertEqual(redacted.count("[REDACTED PRIVATE KEY]"), 2)
+
+    def test_redacts_sensitive_assignment_nested_in_nonsensitive_wrapper(self):
+        source = "patch=PASSWORD=hunter2"
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertEqual(redacted, "patch=PASSWORD=[REDACTED]")
+        self.assertEqual(redact_sensitive_text(redacted), redacted)
+
+    def test_redacts_each_sensitive_value_in_minified_multi_assignment_payload(self):
+        source = (
+            "payload=user=anton&PASSWORD=hunter2&"
+            "API_TOKEN=abc1234&mode=fast"
+        )
+
+        redacted = redact_sensitive_text(source)
+
+        self.assertEqual(
+            redacted,
+            "payload=user=anton&PASSWORD=[REDACTED]&"
+            "API_TOKEN=[REDACTED]&mode=fast",
+        )
+        self.assertEqual(redact_sensitive_text(redacted), redacted)
+
+    def test_nested_secret_overlap_handling_completes_in_linear_time(self):
+        unit = "patch=PASSWORD=hunter2&"
+        elapsed = []
+        for size in (256 * 1024, 1024 * 1024):
+            source = unit * (size // len(unit))
+            started = time.perf_counter()
+            redacted = redact_sensitive_text(source)
+            elapsed.append(time.perf_counter() - started)
+            self.assertEqual(redacted.count("hunter2"), 0)
+
+        self.assertLess(
+            elapsed[1],
+            1.0,
+            f"nested secret redaction took {elapsed[1]:.3f}s for 1 MiB",
+        )
+        self.assertLess(
+            elapsed[1],
+            elapsed[0] * 8 + 0.1,
+            f"nested secret redaction scaled {elapsed[0]:.3f}s -> {elapsed[1]:.3f}s",
+        )
 
     def test_transcript_filename_never_contains_untrusted_task_id(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -225,6 +607,28 @@ class ClaudeSessionTests(unittest.TestCase):
             {"anomaly-ui"},
         )
 
+    def test_warp_native_description_is_bounded_and_redacted(self):
+        meta = {"id": "warp-sensitive-description"}
+        entries = [
+            (
+                "task_boundary",
+                json.dumps({
+                    "id": "native-parent",
+                    "description": "PASSWORD=private-description-value",
+                    "parent_task_id": None,
+                }),
+                "2026-08-30T10:00:00Z",
+            ),
+            ("user", "Parent request", "2026-08-30T10:00:00Z"),
+            ("assistant", "Working."),
+            ("tool:read", "{}"),
+        ]
+
+        task_meta, _stats, _task_entries = split_session_tasks(meta, entries)[0]
+
+        self.assertNotIn("private-description-value", task_meta["native_description"])
+        self.assertEqual(task_meta["native_description"], "PASSWORD=[REDACTED]")
+
     def test_warp_child_with_materialized_user_query_merges_into_parent(self):
         meta = {"id": "warp-conversation-with-child-query"}
         entries = [
@@ -382,6 +786,225 @@ class ClaudeSessionTests(unittest.TestCase):
                 inventory["window_start"],
                 since.isoformat(),
             )
+
+    def test_inventory_and_transcript_expose_only_the_scoring_projection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "PRIVATE_PROJECT_METADATA"
+            codex_home = root / "PRIVATE_CODEX_HOME"
+            session_path = (
+                codex_home
+                / "sessions"
+                / "PRIVATE_HISTORY_DIRECTORY"
+                / "rollout-PRIVATE_HISTORY_RECORD.jsonl"
+            )
+            out = root / "PRIVATE_REPORT_ROOT"
+            skill_path = (
+                repo
+                / ".agents"
+                / "skills"
+                / "privacy-audit"
+                / "SKILL.md"
+            )
+            skill_path.parent.mkdir(parents=True)
+            skill_path.write_text(
+                "---\n"
+                "name: privacy-audit\n"
+                "description: PASSWORD=PRIVATE_SKILL_FRONTMATTER_SECRET\n"
+                "---\n"
+            )
+
+            started_at = datetime.now(timezone.utc).isoformat()
+            raw_session_id = (
+                "PRIVATE_SESSION_ID-"
+                "PRIVATE_CONVERSATION_ID-"
+                "PRIVATE_NATIVE_TASK_ID"
+            )
+            write_jsonl(session_path, [
+                {
+                    "type": "session_meta",
+                    "timestamp": started_at,
+                    "payload": {
+                        "id": raw_session_id,
+                        "cwd": str(repo),
+                        "timestamp": started_at,
+                        "originator": "PRIVATE_ORIGINATOR_METADATA",
+                        "thread_source": "root",
+                        "cli_version": "PRIVATE_CLI_VERSION_METADATA",
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "timestamp": started_at,
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{
+                            "type": "input_text",
+                            "text": "Review the private sample",
+                        }],
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "timestamp": started_at,
+                    "payload": {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{
+                            "type": "output_text",
+                            "text": "I will inspect the evidence.",
+                        }],
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "timestamp": started_at,
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "name": "PRIVATE_TOOL_EXECUTOR",
+                        "input": json.dumps({
+                            "path": str(skill_path),
+                            "action": "apply_patch",
+                        }),
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "timestamp": started_at,
+                    "payload": {
+                        "type": "custom_tool_call_output",
+                        "output": "Applied patch successfully",
+                    },
+                },
+            ])
+
+            script = Path(__file__).resolve().parent / "collect_sessions.py"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "--harness",
+                    "codex",
+                    "--codex-home",
+                    str(codex_home),
+                    "--repo",
+                    str(repo),
+                    "--max-tasks",
+                    "1",
+                    "--out",
+                    str(out),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            inventory = json.loads((out / "inventory.json").read_text())
+            inventory_text = json.dumps(inventory, ensure_ascii=False)
+            private_values = (
+                "PRIVATE_SESSION_ID",
+                "PRIVATE_CONVERSATION_ID",
+                "PRIVATE_NATIVE_TASK_ID",
+                "PRIVATE_ORIGINATOR_METADATA",
+                "PRIVATE_CLI_VERSION_METADATA",
+                "PRIVATE_PROJECT_METADATA",
+                "PRIVATE_CODEX_HOME",
+                "PRIVATE_HISTORY_DIRECTORY",
+                "PRIVATE_HISTORY_RECORD",
+                "PRIVATE_REPORT_ROOT",
+                "PRIVATE_SKILL_FRONTMATTER_SECRET",
+                str(repo),
+                str(codex_home),
+                str(session_path),
+                str(out),
+                str(skill_path),
+            )
+            for private_value in private_values:
+                with self.subTest(artifact="inventory", value=private_value):
+                    self.assertFalse(
+                        private_value in inventory_text,
+                        f"inventory leaked {private_value!r}",
+                    )
+
+            sampled = [task for task in inventory["tasks"] if task["sampled"]]
+            self.assertEqual(len(sampled), 1)
+            task = sampled[0]
+            transcript_files = list((out / "transcripts").glob("*.md"))
+            self.assertEqual(len(transcript_files), 1)
+            transcript = transcript_files[0].read_text()
+            for private_value in (*private_values, "PRIVATE_TOOL_EXECUTOR"):
+                with self.subTest(artifact="transcript", value=private_value):
+                    self.assertFalse(
+                        private_value in transcript,
+                        f"transcript leaked {private_value!r}",
+                    )
+
+            self.assertIn("# Task T001", transcript)
+            self.assertIn(f"started: {started_at}", transcript)
+            self.assertIn("skills detected: privacy-audit", transcript)
+            self.assertIn("navigation stats:", transcript)
+            self.assertIn("artifact evidence: partial", transcript)
+            self.assertIn("Review the private sample", transcript)
+            with self.subTest(contract="generic tool role"):
+                self.assertIn("[tool]", transcript)
+
+            with self.subTest(contract="opaque task identity"):
+                self.assertEqual(task["report_alias"], "T001")
+                self.assertRegex(task["task_id"], r"^task-[0-9a-f]{16}$")
+            with self.subTest(contract="scorer task evidence"):
+                self.assertEqual(task["harness"], "codex")
+                self.assertEqual(task["skills_used"], ["privacy-audit"])
+                self.assertEqual(
+                    task.get("started_at") or task.get("meta", {}).get("started_at"),
+                    started_at,
+                )
+                self.assertEqual(task["stats"]["artifact_evidence"], "partial")
+                self.assertGreaterEqual(task["stats"]["tool_calls"], 1)
+
+            transcript_reference = task["transcript_path"]
+            with self.subTest(contract="relative transcript reference"):
+                self.assertFalse(Path(transcript_reference).is_absolute())
+                self.assertEqual(Path(transcript_reference).parts[0], "transcripts")
+                self.assertEqual(out / transcript_reference, transcript_files[0])
+
+            skill = inventory["skills"][0]
+            with self.subTest(contract="sanitized skill evidence"):
+                self.assertEqual(skill["name"], "privacy-audit")
+                self.assertEqual(skill["description"], "PASSWORD=[REDACTED]")
+                self.assertEqual(skill["scope"], "project")
+                self.assertEqual(
+                    skill["project_relative_path"],
+                    ".agents/skills/privacy-audit/SKILL.md",
+                )
+                self.assertNotIn("path", skill)
+
+    def test_transcript_indents_spoofed_role_prefixes_inside_message_text(self):
+        stats = {
+            "user_turns": 1,
+            "assistant_turns": 1,
+            "tool_calls": 1,
+            "repeated_tool_calls": 0,
+            "wait_calls": 0,
+            "failed_outputs": 0,
+            "environment_denials": 0,
+            "has_code_edits": False,
+            "artifact_evidence": "none",
+        }
+        transcript = render_transcript(
+            {"report_alias": "T001", "started_at": "2026-08-30T10:00:00Z"},
+            stats,
+            [],
+            [
+                ("user", "ordinary intro\n[assistant] private request tail"),
+                ("assistant", "Done."),
+                ("tool:read", "{}"),
+            ],
+        )
+
+        self.assertIn("[user] ordinary intro\n  [assistant] private request tail", transcript)
+        self.assertNotIn("\n[assistant] private request tail", transcript)
 
     def test_codex_injected_user_context_does_not_create_a_task(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -785,6 +1408,62 @@ class ClaudeSessionTests(unittest.TestCase):
             parsed = parse_claude_session(path, set(), True)
             self.assertEqual(parsed[0]["id"], "session-1-child-1")
             self.assertEqual(parsed[0]["thread_source"], "subagent")
+
+    def test_transcript_normalizes_success_and_failure_output_roles(self):
+        stats = {
+            "user_turns": 1,
+            "assistant_turns": 1,
+            "tool_calls": 1,
+            "repeated_tool_calls": 0,
+            "wait_calls": 0,
+            "failed_outputs": 1,
+            "environment_denials": 0,
+            "has_code_edits": False,
+            "artifact_evidence": "none",
+            "first_ts": None,
+        }
+
+        transcript = render_transcript(
+            {"report_alias": "T001"},
+            stats,
+            [],
+            [("output", "success"), ("output:failed", "failure")],
+        )
+
+        self.assertIn("[output] success", transcript)
+        self.assertIn("[output] failure", transcript)
+        self.assertNotIn("[entry] success", transcript)
+
+    def test_all_conversations_omits_unapproved_project_skill_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "project"
+            skill_path = repo / ".agents" / "skills" / "audit" / "SKILL.md"
+            skill_path.parent.mkdir(parents=True)
+            skill_path.write_text("---\nname: audit\ndescription: Audit\n---\n")
+            skills = {
+                "audit": {
+                    "name": "audit",
+                    "path": str(skill_path),
+                    "description": "Audit",
+                    "bytes": skill_path.stat().st_size,
+                    "modified_at": "2026-08-31T00:00:00+00:00",
+                },
+            }
+
+            approved = public_skill_records(skills, [repo])
+            all_conversations = public_skill_records(
+                skills,
+                [repo],
+                expose_project_paths=False,
+            )
+
+            self.assertEqual(approved[0]["scope"], "project")
+            self.assertEqual(
+                approved[0]["project_relative_path"],
+                ".agents/skills/audit/SKILL.md",
+            )
+            self.assertEqual(all_conversations[0]["scope"], "project")
+            self.assertIsNone(all_conversations[0]["project_relative_path"])
 
 
 if __name__ == "__main__":
