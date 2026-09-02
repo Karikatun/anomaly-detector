@@ -31,18 +31,15 @@ describe('secret hygiene', () => {
     ])
   })
 
-  test('allows only the exact reviewed skill-doctor private-key fixture', () => {
+  test('keeps skill-doctor fixtures scanner-safe in source', () => {
     const path = '.agents/skills/skill-doctor/scripts/test_collect_sessions.py'
     const source = readFileSync(resolve(import.meta.dirname, '..', path), 'utf8')
 
     expect(findSecretViolations([file(path, source)])).toEqual([])
-    expect(findSecretViolations([file(path, `${source}\n`)]))
-      .toEqual([{ kind: 'private key', path }])
-    expect(findSecretViolations([file('other-test.py', source)]))
-      .toEqual([{ kind: 'private key', path: 'other-test.py' }])
+    expect(source).not.toContain(privateKeyMarker())
   })
 
-  test('applies the reviewed fixture fingerprint at the staged Git boundary', () => {
+  test('rejects a private key added to the staged skill-doctor test', () => {
     const root = createRepository()
     const path = '.agents/skills/skill-doctor/scripts/test_collect_sessions.py'
     const source = readFileSync(resolve(import.meta.dirname, '..', path), 'utf8')
@@ -50,12 +47,7 @@ describe('secret hygiene', () => {
     mkdirSync(join(root, '.agents', 'skills', 'skill-doctor', 'scripts'), {
       recursive: true,
     })
-    writeFileSync(target, source)
-    runGit(root, ['add', path])
-
-    expect(runScanner(root, '--staged').status).toBe(0)
-
-    writeFileSync(target, `${source}\n`)
+    writeFileSync(target, `${source}\n${privateKeyMarker()}\n`)
     runGit(root, ['add', path])
     const changed = runScanner(root, '--staged')
     expect(changed.status).not.toBe(0)
@@ -124,6 +116,10 @@ function runGit(root, args) {
 
 function githubToken() {
   return ['ghp', '_abcdefghijklmnopqrstuvwxyz1234567890'].join('')
+}
+
+function privateKeyMarker() {
+  return ['-----BEGIN', ' PRIVATE KEY-----'].join('')
 }
 
 function file(path, source) {

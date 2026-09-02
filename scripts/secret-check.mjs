@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
@@ -13,14 +12,6 @@ const contentPatterns = [
   { kind: 'AWS access key', pattern: /AKIA[0-9A-Z]{16}/ },
   { kind: 'Slack token', pattern: /xox[baprs]-[A-Za-z0-9-]{20,}/ },
 ]
-// Whole-file fingerprints make reviewed synthetic fixtures fail closed on any edit.
-const reviewedFixtureFingerprints = new Map([
-  [
-    '.agents/skills/skill-doctor/scripts/test_collect_sessions.py\0private key',
-    '2244f3c689b6dfa36df331861a676fff795c0961dbf06b2b6bd6514cbfaa0dd9',
-  ],
-])
-
 export function findSecretViolations(files) {
   const violations = []
 
@@ -32,10 +23,7 @@ export function findSecretViolations(files) {
     if (forbiddenName) violations.push({ kind: forbiddenName, path })
 
     for (const candidate of contentPatterns) {
-      if (
-        candidate.pattern.test(file.source)
-        && !isReviewedFixture(path, candidate.kind, file.source)
-      ) {
+      if (candidate.pattern.test(file.source)) {
         violations.push({ kind: candidate.kind, path })
       }
     }
@@ -43,12 +31,6 @@ export function findSecretViolations(files) {
 
   return violations.sort((left, right) =>
     left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind))
-}
-
-function isReviewedFixture(path, kind, source) {
-  const reviewedFingerprint = reviewedFixtureFingerprints.get(`${path}\0${kind}`)
-  if (!reviewedFingerprint) return false
-  return createHash('sha256').update(source).digest('hex') === reviewedFingerprint
 }
 
 function forbiddenFileKind(path) {

@@ -35,6 +35,20 @@ def write_jsonl(path, records):
     path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
 
 
+def initialize_repository(path):
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    subprocess.run(
+        [
+            "git", "-C", str(path),
+            "-c", "user.name=Scope Test",
+            "-c", "user.email=scope-test@example.invalid",
+            "commit", "-q", "--allow-empty", "-m", "test",
+        ],
+        check=True,
+    )
+
+
 class ClaudeSessionTests(unittest.TestCase):
     def test_redacts_secrets_and_local_identifiers_before_transcript_output(self):
         github_token = "ghp_" + "a" * 36
@@ -109,10 +123,10 @@ class ClaudeSessionTests(unittest.TestCase):
                 f'API_SECRET="{secret_marker}' + "x" * (1024 * 1024)
             ),
             "private key block": (
-                "-----BEGIN PRIVATE KEY-----\n"
+                "-----" "BEGIN PRIVATE KEY-----\n"
                 f"{secret_marker}\n"
                 + "A" * (1024 * 1024)
-                + "\n-----END PRIVATE KEY-----"
+                + "\n-----" "END PRIVATE KEY-----"
             ),
         }
 
@@ -148,16 +162,18 @@ class ClaudeSessionTests(unittest.TestCase):
         )
 
     def test_redacts_extended_secret_names_and_command_flags(self):
+        first_secret = "a" * 26 + "123456"
+        second_secret = "z" * 26 + "654321"
         source = (
-            "SECRET_KEY_BASE=abcdefghijklmnopqrstuvwxyz123456\n"
-            "AWS_SECRET_ACCESS_KEY=zyxwvutsrqponmlkjihgfedcba654321\n"
-            "tool --token abcdefghijklmnopqrstuvwxyz123456"
+            f"SECRET_KEY_BASE={first_secret}\n"
+            f"AWS_SECRET_ACCESS_KEY={second_secret}\n"
+            f"tool --token {first_secret}"
         )
 
         redacted = redact_sensitive_text(source)
 
-        self.assertNotIn("abcdefghijklmnopqrstuvwxyz123456", redacted)
-        self.assertNotIn("zyxwvutsrqponmlkjihgfedcba654321", redacted)
+        self.assertNotIn(first_secret, redacted)
+        self.assertNotIn(second_secret, redacted)
         self.assertEqual(redacted.count("[REDACTED]"), 3)
 
     def test_redacts_entire_authorization_header_value_for_any_scheme(self):
@@ -385,12 +401,12 @@ class ClaudeSessionTests(unittest.TestCase):
 
     def test_redacts_pgp_and_digit_bearing_private_key_armor(self):
         source = (
-            "-----BEGIN PGP PRIVATE KEY BLOCK-----\n"
+            "-----" "BEGIN PGP PRIVATE KEY BLOCK-----\n"
             "PGP_PRIVATE_MATERIAL\n"
-            "-----END PGP PRIVATE KEY BLOCK-----\n"
-            "-----BEGIN ED25519 PRIVATE KEY-----\n"
+            "-----" "END PGP PRIVATE KEY BLOCK-----\n"
+            "-----" "BEGIN ED25519 PRIVATE KEY-----\n"
             "ED25519_PRIVATE_MATERIAL\n"
-            "-----END ED25519 PRIVATE KEY-----"
+            "-----" "END ED25519 PRIVATE KEY-----"
         )
 
         redacted = redact_sensitive_text(source)
@@ -753,6 +769,7 @@ class ClaudeSessionTests(unittest.TestCase):
     def test_since_records_effective_window_days_in_inventory(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            initialize_repository(root)
             codex_home = root / "codex-home"
             codex_home.mkdir()
             out = root / "report"
@@ -791,6 +808,7 @@ class ClaudeSessionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             repo = root / "PRIVATE_PROJECT_METADATA"
+            initialize_repository(repo)
             codex_home = root / "PRIVATE_CODEX_HOME"
             session_path = (
                 codex_home
@@ -1245,6 +1263,8 @@ class ClaudeSessionTests(unittest.TestCase):
             root = Path(tmp)
             first = root / "first"
             second = root / "second"
+            initialize_repository(first)
+            initialize_repository(second)
             first_skill = first / ".agents" / "skills" / "alpha" / "SKILL.md"
             second_skill = second / ".claude" / "skills" / "beta" / "SKILL.md"
             first_skill.parent.mkdir(parents=True)

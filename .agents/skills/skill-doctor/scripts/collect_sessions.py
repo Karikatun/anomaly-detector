@@ -22,11 +22,14 @@ import re
 import sqlite3
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional, Tuple
 from warp_decoder import ProtobufDecodeError, decode_task
 
 MAX_WARP_CONVERSATION_BYTES = 32 * 1024 * 1024
+MAX_SCOPE_METADATA_BYTES = 64 * 1024
 MAX_MSG_CHARS = 1500
 MAX_TOOL_CHARS = 500
 MAX_TRANSCRIPT_ENTRIES = 160
@@ -128,6 +131,46 @@ NESTED_WAIT_CALL = re.compile(
     r"\btools\.(?:wait|wait_agent|wait_threads|write_stdin)\s*\(",
     re.IGNORECASE,
 )
+RAW_ANSI_CONTROL = re.compile(
+    r"\x1B(?:"
+    r"\[[0-?]*[ -/]*[@-~]"
+    r"|\][^\x07\x1B]*(?:\x07|\x1B\\)"
+    r"|[PX^_][^\x1B]*(?:\x1B\\)"
+    r"|[@-Z\\-_]"
+    r")"
+    r"|\x9B[0-?]*[ -/]*[@-~]"
+)
+ESCAPED_ANSI_OSC = re.compile(
+    r"(?i)(?:\\)+(?:u001b|x1b|033|e)\]"
+    r"[^\r\n]*?"
+    r"(?:(?:\\)+(?:u0007|x07)|"
+    r"(?:\\)+(?:u001b|x1b|033|e)(?:\\)+|$)"
+)
+ESCAPED_ANSI_CSI = re.compile(
+    r"(?i)(?:\\)+(?:u001b|x1b|033|e)\[[0-?]*[ -/]*[@-~]"
+    r"|(?:\\)+(?:u009b|x9b|233)[0-?]*[ -/]*[@-~]"
+)
+LOCAL_PATH_START = re.compile(
+    r"(?ix)(?<![A-Za-z0-9/\\])(?:"
+    r"file://"
+    r"|(?:~|\$HOME)[\\/]"
+    r"|[A-Za-z]:[\\/]+"
+    r"|\\{2,}[^\\/\r\n\t\"']+[\\/]+[^\\/\r\n\t\"']+"
+    r"|(?<!:)(?:\\)*/(?:\\)*/[^\\/\r\n\t\"']+"
+    r"(?:\\)*/[^\\/\r\n\t\"']+"
+    r"|(?:\\)*/(?![\\/])"
+    r")"
+)
+LOCAL_PATH_SUFFIX = re.compile(
+    r"\[LOCAL_PATH\](?:\\+(?!\\*[\"'])|/|[ ,;)}\]>]+[^\r\n\t\"']*[\\/])"
+)
+
+
+@dataclass(frozen=True)
+class RepoScope:
+    root: Path
+    git_common_dir: Optional[Path]
+    worktree_roots: Tuple[Path, ...]
 
 
 def parse_args():
@@ -494,17 +537,29 @@ def split_session_tasks(meta, entries):
 
 
 def resolve_repo(repo_arg) -> Path:
-    if repo_arg:
-        return Path(repo_arg).expanduser().resolve()
+    candidate = Path(repo_arg).expanduser().resolve() if repo_arg else Path.cwd().resolve()
+    if not candidate.is_dir():
+        raise ValueError("approved project path is not a live directory")
     try:
         res = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=10
+            ["git", "-C", str(candidate), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if res.returncode == 0 and res.stdout.strip():
             return Path(res.stdout.strip()).resolve()
+        bare = subprocess.run(
+            ["git", "-C", str(candidate), "rev-parse", "--is-bare-repository"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if bare.returncode == 0 and bare.stdout.strip() == "true":
+            raise ValueError("approved project path is a bare git repository")
     except (subprocess.TimeoutExpired, OSError):
         pass
-    return Path.cwd().resolve()
+    raise ValueError("approved project path is not a live git repository")
 
 
 def resolve_repos(repo_args):
@@ -519,6 +574,98 @@ def resolve_repos(repo_args):
         seen.add(repo)
         repos.append(repo)
     return repos
+
+
+def nearest_existing_directory(path: Path):
+    """Return the nearest existing directory without guessing a deleted checkout."""
+    candidate = path.expanduser().resolve()
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    if not candidate.exists():
+        return None
+    return candidate if candidate.is_dir() else candidate.parent
+
+
+def resolved_git_common_dir(path: Path):
+    """Resolve one live checkout or linked worktree to its immutable local git dir."""
+    candidate = nearest_existing_directory(path)
+    if candidate is None:
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", str(candidate), "rev-parse",
+                "--path-format=absolute", "--git-common-dir",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return Path(result.stdout.strip()).expanduser().resolve()
+
+
+def live_worktree_roots(repo: Path):
+    """List only worktrees that still exist and share the approved git common dir."""
+    common_dir = resolved_git_common_dir(repo)
+    if common_dir is None:
+        return ()
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo), "worktree", "list", "--porcelain", "-z"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return (repo.resolve(),)
+    if result.returncode != 0:
+        return (repo.resolve(),)
+    roots = []
+    for field in result.stdout.split("\0"):
+        if not field.startswith("worktree "):
+            continue
+        candidate = Path(field.removeprefix("worktree ")).expanduser().resolve()
+        if (
+            candidate.is_dir()
+            and resolved_git_common_dir(candidate) == common_dir
+            and candidate not in roots
+        ):
+            roots.append(candidate)
+    return tuple(roots or (repo.resolve(),))
+
+
+def build_repo_scopes(repos):
+    scopes = []
+    for repo in repos:
+        root = Path(repo).expanduser().resolve()
+        scopes.append(RepoScope(
+            root=root,
+            git_common_dir=resolved_git_common_dir(root),
+            worktree_roots=live_worktree_roots(root),
+        ))
+    return scopes
+
+
+def claude_project_directory_key(path: Path) -> str:
+    """Encode an absolute path using Claude Code's project-directory key shape."""
+    return re.sub(r"[^A-Za-z0-9]", "-", str(path.expanduser().resolve()))
+
+
+def claude_project_directory_keys(repos):
+    scopes = (
+        repos
+        if all(isinstance(repo, RepoScope) for repo in repos)
+        else build_repo_scopes(repos)
+    )
+    return {
+        claude_project_directory_key(worktree)
+        for scope in scopes
+        for worktree in scope.worktree_roots
+    }
 
 
 def discover_skills(repos, codex_home: Path, extra_dirs, include_global: bool):
@@ -659,15 +806,29 @@ def find_codex_session_files(codex_home: Path, cutoff: datetime):
     return files
 
 
-def find_claude_session_files(claude_home: Path, cutoff: datetime, include_subagents: bool):
+def find_claude_session_files(
+    claude_home: Path,
+    cutoff: datetime,
+    include_subagents: bool,
+    project_keys=None,
+):
     """Find recent Claude Code parent sessions and, optionally, sidechains."""
     projects = claude_home / "projects"
     if not projects.is_dir():
         return []
 
-    candidates = list(projects.glob("*/*.jsonl"))
-    if include_subagents:
-        candidates.extend(projects.glob("*/*/subagents/*.jsonl"))
+    project_dirs = (
+        [projects / key for key in sorted(project_keys)]
+        if project_keys is not None
+        else list(projects.iterdir())
+    )
+    candidates = []
+    for project_dir in project_dirs:
+        if not project_dir.is_dir():
+            continue
+        candidates.extend(project_dir.glob("*.jsonl"))
+        if include_subagents:
+            candidates.extend(project_dir.glob("*/subagents/*.jsonl"))
 
     files = []
     for path in candidates:
@@ -882,8 +1043,80 @@ def redact_named_secrets(text: str, prefix_pattern) -> str:
     return "".join(pieces)
 
 
+def quoted_path_delimiter(text: str, start: int):
+    if start >= 1 and text[start - 1] in ('"', "'"):
+        quote = text[start - 1]
+        backslashes = 0
+        cursor = start - 2
+        while cursor >= 0 and text[cursor] == "\\":
+            backslashes += 1
+            cursor -= 1
+        return quote, backslashes
+    return None
+
+
+def local_path_end(text: str, start: int) -> int:
+    """Find a conservative whole-path boundary, preserving any surrounding quote."""
+    delimiter = quoted_path_delimiter(text, start)
+    if delimiter:
+        quote, opening_backslashes = delimiter
+        index = start
+        while index < len(text):
+            if text[index] == quote:
+                backslashes = 0
+                cursor = index - 1
+                while cursor >= start and text[cursor] == "\\":
+                    backslashes += 1
+                    cursor -= 1
+                if backslashes == opening_backslashes:
+                    return index - backslashes
+            index += 1
+        return len(text)
+
+    index = start
+    while index < len(text):
+        if text[index] in "\r\n\t":
+            break
+        index += 1
+    return index
+
+
+def redact_local_paths(text: str) -> str:
+    pieces = []
+    cursor = 0
+    search_from = 0
+    while match := LOCAL_PATH_START.search(text, search_from):
+        end = local_path_end(text, match.start())
+        if end <= match.start():
+            search_from = match.end()
+            continue
+        pieces.extend((text[cursor:match.start()], "[LOCAL_PATH]"))
+        cursor = end
+        search_from = end
+    if not pieces:
+        return text
+    pieces.append(text[cursor:])
+    return "".join(pieces)
+
+
+def strip_terminal_controls(text: str) -> str:
+    """Remove raw or JSON-escaped ANSI controls before scanning visible text."""
+    text = RAW_ANSI_CONTROL.sub("", text)
+    text = ESCAPED_ANSI_OSC.sub("", text)
+    return ESCAPED_ANSI_CSI.sub("", text)
+
+
+def assert_no_local_paths(text: str, check_redaction_suffix: bool = True):
+    """Fail closed before model-visible output if a recognized local path remains."""
+    if LOCAL_PATH_START.search(text) or (
+        check_redaction_suffix and LOCAL_PATH_SUFFIX.search(text)
+    ):
+        raise ValueError("local path remained after transcript redaction")
+
+
 def redact_sensitive_text(text: str) -> str:
     """Remove common secrets and local identifiers before model-visible output."""
+    text = strip_terminal_controls(text)
     folded = text.lower()
     if "-----begin " in folded and "private key" in folded:
         text = re.sub(
@@ -990,43 +1223,12 @@ def redact_sensitive_text(text: str) -> str:
             text,
             flags=re.IGNORECASE,
         )
-    if "/Users/" in text:
-        text = re.sub(r"/Users/[^/\s\"']+", "$HOME", text)
-    if "/home/" in text:
-        text = re.sub(r"/home/[^/\s\"']+", "$HOME", text)
-    if "/tmp/" in text:
-        text = re.sub(r"/(?:private/)?tmp/[^\s\"']+", "$TMP/[REDACTED]", text)
-    if any(
-        marker in text
-        for marker in (
-            "/var/", "/private/var/", "/opt/", "/root/", "/etc/",
-            "/usr/", "/Library/", "/Volumes/", "/data/", "/mnt/",
-            "/workspace/", "/srv/", "/app/",
-        )
-    ):
-        text = re.sub(
-            r"(?<![A-Za-z0-9:/])/(?:private/)?"
-            r"(?:var|opt|root|etc|usr|Library|Volumes|data|mnt|workspace|srv|app)"
-            r"(?:/[^\s\"']+)+",
-            "[LOCAL_PATH]",
-            text,
-        )
-    if "file://" in folded:
-        text = re.sub(r"(?i)\bfile://[^\s\"']+", "[LOCAL_PATH]", text)
-    if "~/" in text or "$HOME/" in text:
-        text = re.sub(r"(?:~|\$HOME)/[^\s\"']+", "[LOCAL_PATH]", text)
-    if ":" in text:
-        text = re.sub(
-            r"\b[A-Za-z]:(?:\\|/)(?:[^\\/\s\"']+(?:\\|/))*[^\\/\s\"']+",
-            "[LOCAL_PATH]",
-            text,
-        )
-    if "\\" in text:
-        text = re.sub(
-            r"\\\\[^\\\s\"']+(?:\\[^\\\s\"']+)+",
-            "[LOCAL_PATH]",
-            text,
-        )
+    before_path_redaction = text
+    text = redact_local_paths(text)
+    assert_no_local_paths(
+        text,
+        check_redaction_suffix=text != before_path_redaction,
+    )
     return text
 
 
@@ -1076,6 +1278,82 @@ def iter_jsonl(path: Path):
                 continue
 
 
+def first_jsonl_record(path: Path):
+    try:
+        with path.open("rb") as stream:
+            line = stream.readline(MAX_SCOPE_METADATA_BYTES + 1)
+    except OSError:
+        return None
+    if not line or len(line) > MAX_SCOPE_METADATA_BYTES:
+        return None
+    try:
+        record = json.loads(line.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def claude_session_scope_cwd(path: Path):
+    record = first_jsonl_record(path)
+    if not isinstance(record, dict):
+        return None
+    cwd = record.get("cwd")
+    return cwd if isinstance(cwd, str) and cwd else None
+
+
+def codex_session_scope_cwd(path: Path):
+    record = first_jsonl_record(path)
+    if not isinstance(record, dict) or record.get("type") != "session_meta":
+        return None
+    payload = record.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    cwd = payload.get("cwd")
+    return cwd if isinstance(cwd, str) and cwd else None
+
+
+def parse_scoped_claude_session(
+    path: Path,
+    skill_names,
+    include_subagents: bool,
+    repo_scopes,
+):
+    scope_cwd = claude_session_scope_cwd(path)
+    if repo_scopes is not None and not session_matches_repos(
+        scope_cwd,
+        repo_scopes,
+    ):
+        return None
+    parsed = parse_claude_session(path, skill_names, include_subagents)
+    if parsed is None or repo_scopes is None:
+        return parsed
+    final_cwd = parsed[0].get("cwd")
+    if final_cwd != scope_cwd or not session_matches_repos(final_cwd, repo_scopes):
+        return None
+    return parsed
+
+
+def parse_scoped_codex_session(
+    path: Path,
+    skill_names,
+    include_subagents: bool,
+    repo_scopes,
+):
+    scope_cwd = codex_session_scope_cwd(path)
+    if repo_scopes is not None and not session_matches_repos(
+        scope_cwd,
+        repo_scopes,
+    ):
+        return None
+    parsed = parse_codex_session(path, skill_names, include_subagents)
+    if parsed is None or repo_scopes is None:
+        return parsed
+    final_cwd = parsed[0].get("cwd")
+    if final_cwd != scope_cwd or not session_matches_repos(final_cwd, repo_scopes):
+        return None
+    return parsed
+
+
 def parse_claude_session(path: Path, skill_names, include_subagents: bool):
     """Normalize one Claude Code JSONL session to the shared transcript shape."""
     meta = {}
@@ -1122,6 +1400,9 @@ def parse_claude_session(path: Path, skill_names, include_subagents: bool):
                 "entrypoint": obj.get("entrypoint"),
             }
         elif meta:
+            next_cwd = obj.get("cwd")
+            if next_cwd and next_cwd != meta.get("cwd"):
+                return None
             meta["cwd"] = meta.get("cwd") or obj.get("cwd")
             meta["started_at"] = meta.get("started_at") or ts
             meta["cli_version"] = meta.get("cli_version") or obj.get("version")
@@ -1270,7 +1551,7 @@ def parse_codex_session(path: Path, skill_names, include_subagents: bool):
             last_ts = ts
 
         if ltype == "session_meta":
-            meta = {
+            next_meta = {
                 "id": payload.get("id") or payload.get("session_id") or path.stem,
                 "cwd": payload.get("cwd"),
                 "started_at": payload.get("timestamp"),
@@ -1278,6 +1559,9 @@ def parse_codex_session(path: Path, skill_names, include_subagents: bool):
                 "thread_source": payload.get("thread_source"),
                 "cli_version": payload.get("cli_version"),
             }
+            if meta:
+                return None
+            meta = next_meta
             source = payload.get("source")
             is_subagent = payload.get("thread_source") == "subagent" or (
                 isinstance(source, dict) and "subagent" in source
@@ -1454,11 +1738,25 @@ def find_warp_conversations(databases, cutoff):
             if not warp_database_has_sessions(connection):
                 continue
             conversation_columns = sqlite_table_columns(connection, "agent_conversations")
-            summary_expression = "summary" if "summary" in conversation_columns else "NULL"
+            if "summary" in conversation_columns:
+                summary_expression = (
+                    "CASE WHEN summary IS NULL OR "
+                    f"length(CAST(summary AS BLOB)) <= {MAX_SCOPE_METADATA_BYTES} "
+                    "THEN summary ELSE NULL END"
+                )
+                summary_oversized_expression = (
+                    "CASE WHEN summary IS NOT NULL AND "
+                    f"length(CAST(summary AS BLOB)) > {MAX_SCOPE_METADATA_BYTES} "
+                    "THEN 1 ELSE 0 END"
+                )
+            else:
+                summary_expression = "NULL"
+                summary_oversized_expression = "0"
             rows = connection.execute(
                 f"""
-                SELECT conversation_id, conversation_data, last_modified_at,
-                       {summary_expression} AS summary
+                SELECT conversation_id, last_modified_at,
+                       {summary_expression} AS summary,
+                       {summary_oversized_expression} AS summary_oversized
                 FROM agent_conversations
                 WHERE last_modified_at >= ?
                 ORDER BY last_modified_at DESC
@@ -1478,8 +1776,8 @@ def find_warp_conversations(databases, cutoff):
                 continue
             record = {
                 "conversation_id": row["conversation_id"],
-                "conversation_data": row["conversation_data"],
                 "summary": row["summary"],
+                "summary_oversized": bool(row["summary_oversized"]),
                 "modified_at": modified_at,
                 "database": database,
                 "channel": database.parent.name,
@@ -1489,6 +1787,24 @@ def find_warp_conversations(databases, cutoff):
                 newest_by_id[record["conversation_id"]] = record
     records = sorted(newest_by_id.values(), key=lambda row: row["modified_at"], reverse=True)
     return records, scanned
+
+
+def load_warp_conversation_header(record):
+    """Load non-task conversation metadata only after its cwd passed scope checks."""
+    connection = open_warp_database(record["database"])
+    try:
+        row = connection.execute(
+            """
+            SELECT conversation_data
+            FROM agent_conversations
+            WHERE conversation_id = ?
+            LIMIT 1
+            """,
+            (record["conversation_id"],),
+        ).fetchone()
+    finally:
+        connection.close()
+    return None if row is None else row["conversation_data"]
 
 
 def load_warp_conversation_data(record):
@@ -1551,12 +1867,101 @@ def skill_name_from_reference(reference, skill_names):
     return next((name for name in candidates if name in skill_names), None)
 
 
+def warp_session_scope_cwd(record):
+    """Read only working-directory metadata; never load agent task blobs here."""
+    if record.get("summary_oversized"):
+        return None
+    summary_text = record.get("summary") or "{}"
+    if (
+        not isinstance(summary_text, str)
+        or len(summary_text.encode("utf-8", errors="replace"))
+        > MAX_SCOPE_METADATA_BYTES
+    ):
+        return None
+    try:
+        summary = json.loads(summary_text)
+    except (json.JSONDecodeError, TypeError):
+        summary = {}
+    if not isinstance(summary, dict):
+        return None
+    summary_cwd = summary.get("initial_working_directory")
+    if not isinstance(summary_cwd, str) or not summary_cwd:
+        summary_cwd = None
+
+    database = record.get("database")
+    conversation_id = record.get("conversation_id")
+    if not database or not conversation_id:
+        return summary_cwd
+    connection = None
+    try:
+        connection = open_warp_database(database)
+        columns = sqlite_table_columns(connection, "ai_queries")
+        if not {"conversation_id", "working_directory"}.issubset(columns):
+            return summary_cwd
+        rows = connection.execute(
+            """
+            SELECT DISTINCT working_directory
+            FROM ai_queries
+            WHERE conversation_id = ? AND working_directory IS NOT NULL
+            LIMIT 2
+            """,
+            (conversation_id,),
+        ).fetchall()
+    except (OSError, sqlite3.Error):
+        return summary_cwd
+    finally:
+        if connection is not None:
+            connection.close()
+    if len(rows) > 1:
+        return None
+    query_cwd = rows[0]["working_directory"] if rows else None
+    if not isinstance(query_cwd, str) or not query_cwd:
+        query_cwd = None
+    if summary_cwd and query_cwd and summary_cwd != query_cwd:
+        return None
+    return summary_cwd or query_cwd
+
+
+def parse_scoped_warp_conversation(
+    record,
+    skill_names,
+    include_subagents,
+    repo_scopes,
+):
+    scope_cwd = warp_session_scope_cwd(record)
+    if repo_scopes is not None and not session_matches_repos(
+        scope_cwd,
+        repo_scopes,
+    ):
+        return None
+    parsed = parse_warp_conversation(record, skill_names, include_subagents)
+    if parsed is None or repo_scopes is None:
+        return parsed
+    final_cwd = parsed[0].get("cwd")
+    if final_cwd != scope_cwd or not session_matches_repos(final_cwd, repo_scopes):
+        return None
+    return parsed
+
+
 def parse_warp_conversation(record, skill_names, include_subagents):
     """Normalize one persisted Warp conversation to the Codex transcript shape."""
+    conversation_data_text = record.get("conversation_data")
+    if conversation_data_text is None:
+        try:
+            conversation_data_text = load_warp_conversation_header(record)
+        except (KeyError, OSError, sqlite3.Error) as exc:
+            print(
+                f"warning: could not read Warp conversation header "
+                f"{record.get('conversation_id')}: {exc}",
+                file=sys.stderr,
+            )
+            return None
     try:
-        conversation_data = json.loads(record["conversation_data"] or "{}")
+        conversation_data = json.loads(conversation_data_text or "{}")
     except (json.JSONDecodeError, TypeError):
         conversation_data = {}
+    if not isinstance(conversation_data, dict):
+        return None
     is_child = bool(
         conversation_data.get("parent_agent_id")
         or conversation_data.get("parent_conversation_id")
@@ -1568,6 +1973,8 @@ def parse_warp_conversation(record, skill_names, include_subagents):
         summary = json.loads(record["summary"] or "{}")
     except (json.JSONDecodeError, TypeError):
         summary = {}
+    if not isinstance(summary, dict):
+        return None
 
     try:
         task_blobs, first_query_at, query_cwd = load_warp_conversation_data(record)
@@ -1758,26 +2165,37 @@ def render_transcript(meta, stats, skills_used, entries, project_label="project"
 
 
 def session_matches_repo(cwd, repo: Path) -> bool:
-    """True when a session's recorded cwd belongs to this repo.
-
-    Two ways to match:
-    1. cwd is inside the repo root (same-machine sessions).
-    2. cwd's trailing directory name equals the repo's name (git/Codex
-       worktrees like ~/.codex/worktrees/<id>/<repo-name>, and sessions
-       imported from another machine where the checkout path differs).
-    Basename matching can over-match if two different projects share a
-    directory name; acceptable for a report, and prefix matching alone
-    misses every worktree session.
-    """
+    """Match only an approved root or a live worktree sharing its git common dir."""
     if not cwd:
         return False
-    p = Path(cwd)
+    scope = repo if isinstance(repo, RepoScope) else build_repo_scopes([repo])[0]
     try:
-        if p.resolve().is_relative_to(repo):
-            return True
-    except OSError:
-        pass  # cwd from another machine may not exist locally
-    return p.name == repo.name or repo.name in p.parts
+        cwd_text = os.fspath(cwd)
+        if not isinstance(cwd_text, str):
+            return False
+        if os.name != "nt" and (
+            re.match(r"^[A-Za-z]:[\\/]", cwd_text)
+            or cwd_text.startswith(("\\\\", "//"))
+        ):
+            return False
+        recorded_path = Path(cwd_text)
+        if not recorded_path.is_absolute():
+            return False
+        path = recorded_path.resolve()
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+    if path.exists() and not path.is_dir():
+        return False
+    try:
+        matched_root = next(
+            root for root in scope.worktree_roots if path.is_relative_to(root)
+        )
+    except (StopIteration, OSError, ValueError):
+        return False
+    actual_common_dir = resolved_git_common_dir(path)
+    if scope.git_common_dir is None:
+        return False
+    return actual_common_dir == scope.git_common_dir
 
 
 def session_matches_repos(cwd, repos) -> bool:
@@ -1850,7 +2268,12 @@ def main():
     transcripts_dir = out_dir / "transcripts"
     transcripts_dir.mkdir(parents=True, exist_ok=True)
 
-    repos = [] if args.all_conversations else resolve_repos(args.repo)
+    try:
+        repos = [] if args.all_conversations else resolve_repos(args.repo)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(2)
+    repo_scopes = None if args.all_conversations else build_repo_scopes(repos)
     skills = discover_skills(
         repos,
         codex_home,
@@ -1875,6 +2298,11 @@ def main():
             claude_home,
             cutoff,
             args.include_subagents,
+            project_keys=(
+                None
+                if repo_scopes is None
+                else claude_project_directory_keys(repo_scopes)
+            ),
         )
         sources["claude"] = {
             "home": str(claude_home),
@@ -1882,15 +2310,15 @@ def main():
         }
         scanned_count += len(claude_files)
         for mtime, path in claude_files:
-            parsed = parse_claude_session(path, skills.keys(), args.include_subagents)
+            parsed = parse_scoped_claude_session(
+                path,
+                skills.keys(),
+                args.include_subagents,
+                repo_scopes,
+            )
             if parsed is None:
                 continue
             meta, stats, entries, skills_used = parsed
-            if not args.all_conversations and not session_matches_repos(
-                meta.get("cwd"),
-                repos,
-            ):
-                continue
             in_scope_count += 1
             if stats["assistant_turns"] < 1 or stats["tool_calls"] < 1:
                 continue
@@ -1916,15 +2344,15 @@ def main():
         sources["codex"] = {"home": str(codex_home), "records_in_window": len(codex_files)}
         scanned_count += len(codex_files)
         for mtime, path in codex_files:
-            parsed = parse_codex_session(path, skills.keys(), args.include_subagents)
+            parsed = parse_scoped_codex_session(
+                path,
+                skills.keys(),
+                args.include_subagents,
+                repo_scopes,
+            )
             if parsed is None:
                 continue
             meta, stats, entries, skills_used = parsed
-            if not args.all_conversations and not session_matches_repos(
-                meta.get("cwd"),
-                repos,
-            ):
-                continue
             in_scope_count += 1
             if stats["assistant_turns"] < 1 or stats["tool_calls"] < 1:
                 continue
@@ -1954,19 +2382,15 @@ def main():
             }
             scanned_count += warp_scanned
             for record in warp_records:
-                parsed = parse_warp_conversation(
+                parsed = parse_scoped_warp_conversation(
                     record,
                     skills.keys(),
                     args.include_subagents,
+                    repo_scopes,
                 )
                 if parsed is None:
                     continue
                 meta, stats, entries, skills_used = parsed
-                if not args.all_conversations and not session_matches_repos(
-                    meta.get("cwd"),
-                    repos,
-                ):
-                    continue
                 in_scope_count += 1
                 if stats["assistant_turns"] < 1 or stats["tool_calls"] < 1:
                     continue
