@@ -11,3 +11,15 @@ d7d1245aaa9ff63f843e01e2a4fbc4c0a53af35b:backend/src/env.test.ts:generic-api-key
 898e873e8eac73d12d005ecba9f0c952982e780f:.agents/skills/skill-doctor/scripts/test_collect_sessions.py:private-key:112
 898e873e8eac73d12d005ecba9f0c952982e780f:.agents/skills/skill-doctor/scripts/test_collect_sessions.py:private-key:388
 898e873e8eac73d12d005ecba9f0c952982e780f:.agents/skills/skill-doctor/scripts/test_collect_sessions.py:private-key:391
+
+# Exact rewritten equivalents after contributor identity normalization.
+e80f7298ba99a8a640ada039fadd0d115c93e2a4:backend/src/env.test.ts:generic-api-key:90
+e80f7298ba99a8a640ada039fadd0d115c93e2a4:scripts/prepare-do-specs.test.mjs:generic-api-key:285
+bd1cb7c3732f992022baa6121d350a324a8c7771:backend/src/auth/middleware.test.ts:generic-api-key:14
+440414e2d3cf66dff343ef705e92ead99d483b30:backend/src/auth/routes.test.ts:generic-api-key:10
+e99ea90afc03ea1adf500ffb822cf5b921d08e00:backend/src/env.test.ts:generic-api-key:148
+c113ebddce00d5aabafdd069340cc241b4ab450c:.agents/skills/skill-doctor/scripts/test_render_report.py:generic-api-key:38
+c113ebddce00d5aabafdd069340cc241b4ab450c:.agents/skills/skill-doctor/scripts/test_collect_sessions.py:generic-api-key:153
+c113ebddce00d5aabafdd069340cc241b4ab450c:.agents/skills/skill-doctor/scripts/test_collect_sessions.py:private-key:112
+c113ebddce00d5aabafdd069340cc241b4ab450c:.agents/skills/skill-doctor/scripts/test_collect_sessions.py:private-key:388
+c113ebddce00d5aabafdd069340cc241b4ab450c:.agents/skills/skill-doctor/scripts/test_collect_sessions.py:private-key:391
