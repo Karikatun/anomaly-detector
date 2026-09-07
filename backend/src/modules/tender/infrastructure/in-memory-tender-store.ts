@@ -21,6 +21,7 @@ const cloneTender = (tender: StoredTender) => structuredClone(tender)
 export function createInMemoryTenderStore(): TenderStore {
   const tenders = new Map<string, StoredTender>()
   const auditEvents = new Map<string, StoredTenderAuditEvent[]>()
+  const unavailableHumanAccounts = new Set<string>()
   let nextTenderId = 1
 
   const readCurrentTender = (tenderId: string) => {
@@ -35,6 +36,7 @@ export function createInMemoryTenderStore(): TenderStore {
       for (const [tenderId, tender] of tenders) {
         if (!tender.players.some((player) => player.id === playerId)) continue
         const anonymousPlayerId = `deleted-participant-${crypto.randomUUID()}`
+        unavailableHumanAccounts.add(anonymousPlayerId)
         const anonymized = anonymizeParticipantInValue(tender, playerId, anonymousPlayerId)
         const processedCommands = Object.fromEntries(
           Object.entries(tender.processedCommands).map(([commandId, command]) => [
@@ -120,6 +122,12 @@ export function createInMemoryTenderStore(): TenderStore {
         }),
       ])
       return { kind: 'committed' }
+    },
+
+    async hasActiveHumanAccount(tender) {
+      return tender.players.some((player) => !player.bot
+        && !unavailableHumanAccounts.has(player.id)
+        && tender.forfeitedAtByPlayer[player.id] === undefined)
     },
 
     async findDue({ limit, now }) {

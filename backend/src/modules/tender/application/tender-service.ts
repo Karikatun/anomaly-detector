@@ -126,6 +126,12 @@ export function createTenderService({
   const activePlayers = (tender: StoredTender) => tender.players
     .filter((player) => isActivePlayer(tender, player.id))
 
+  const activeHumans = (tender: StoredTender) => activePlayers(tender).filter((player) => !player.bot)
+  const hasBots = (tender: StoredTender) => tender.players.some((player) => player.bot)
+  const allHumansLeft = (tender: StoredTender, departed = tender.departedPlayerIds) => hasBots(tender)
+    ? activeHumans(tender).every((player) => departed.includes(player.id))
+    : departed.length === tender.players.length
+
   const nextReconnaissancePlayer = (tender: StoredTender) => tender.players
     .filter((player) => isActivePlayer(tender, player.id))
     .filter((player) => tender.powerAllocations[player.id]?.reconnaissance > 0 && !tender.reconnaissanceCompletedByPlayer[player.id])
@@ -472,6 +478,15 @@ export function createTenderService({
       for (const tenderId of changedTenderIds) onTenderChanged?.(tenderId)
     },
 
+    async completeUnattendedBotTender(tenderId) {
+      const tender = await store.read(tenderId)
+      if (!tender || tender.phase === 'complete' || !hasBots(tender) || await store.hasActiveHumanAccount(tender)) return false
+      return commitTimeout({
+        auditEvents: [{ kind: 'tender_completed_early', payload: { completionReason: 'no_human_players', winnerPlayerIds: [] } }],
+        nextTender: { ...tender, abandonmentDueAt: null, completionReason: 'no_human_players', dueAt: null, finalScientificModelDraftsByPlayer: {}, phase: 'complete', winnerPlayerIds: [] }, tender,
+      })
+    },
+
     async createTender(input: CreateTender) {
       const parsedInput = createTenderSchema.safeParse(input)
       if (!parsedInput.success) {
@@ -581,16 +596,18 @@ export function createTenderService({
           reconnaissanceCompletedByPlayer: { ...tender.reconnaissanceCompletedByPlayer, [player.id]: true },
         }
         const remainingPlayers = activePlayers(forfeitedTender)
-        const nextTender = remainingPlayers.length <= 1
+        const noActiveHumans = hasBots(forfeitedTender) && activeHumans(forfeitedTender).length === 0
+        const nextTender = noActiveHumans || remainingPlayers.length <= 1
           ? {
               ...forfeitedTender,
-              completionReason: remainingPlayers.length === 1
+              abandonmentDueAt: null,
+              completionReason: noActiveHumans ? 'no_human_players' as const : remainingPlayers.length === 1
                 ? 'last_active_player' as const
                 : 'all_players_forfeited' as const,
               dueAt: null,
               finalScientificModelDraftsByPlayer: {},
               phase: 'complete' as const,
-              winnerPlayerIds: remainingPlayers.map((candidate) => candidate.id),
+              winnerPlayerIds: noActiveHumans ? [] : remainingPlayers.map((candidate) => candidate.id),
             }
           : continueAfterForfeit(forfeitedTender, forfeitedAt)
         return commitCommand({
@@ -606,7 +623,7 @@ export function createTenderService({
             ? [{
                 kind: 'tender_completed_early',
                 payload: {
-                  completionReason: remainingPlayers.length === 1
+                  completionReason: noActiveHumans ? 'no_human_players' as const : remainingPlayers.length === 1
                     ? 'last_active_player' as const
                     : 'all_players_forfeited' as const,
                   winnerPlayerIds: nextTender.winnerPlayerIds,
@@ -626,7 +643,7 @@ export function createTenderService({
         const departedPlayerIds = command.type === 'leave-tender'
           ? [...new Set([...tender.departedPlayerIds, player.id])]
           : tender.departedPlayerIds.filter((playerId) => playerId !== player.id)
-        const allPlayersLeft = departedPlayerIds.length === tender.players.length
+        const allPlayersLeft = allHumansLeft(tender, departedPlayerIds)
         const abandonmentDueAt = allPlayersLeft
           ? tender.abandonmentDueAt ?? new Date(now().getTime() + 5_000)
           : null
@@ -1635,7 +1652,7 @@ export function createTenderService({
         if (!tender) continue
         const abandonmentIsDue = tender.abandonmentDueAt !== null
           && tender.abandonmentDueAt <= dueNow
-          && tender.departedPlayerIds.length === tender.players.length
+          && allHumansLeft(tender)
           && tender.phase !== 'complete'
         if (abandonmentIsDue) {
           const completed = await commitTimeout({

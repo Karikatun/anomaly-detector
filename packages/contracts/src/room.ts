@@ -59,6 +59,7 @@ export const roomViewSchema = z.object({
     'all_players_left',
     'last_active_player',
     'all_players_forfeited',
+    'no_human_players',
   ]).optional(),
   tenderForfeited: z.boolean().optional(),
   tenderPhase: z.string().optional(),

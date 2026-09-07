@@ -90,6 +90,7 @@ describe('operational metrics', () => {
       runtime: 'worker',
     })
     workerMetrics.observe({ kind: 'mail_protection_transition', reason: 'delivery_circuit_open' })
+    workerMetrics.observe({ acceptedCommands: 2, durationSeconds: 0.05, failedTenders: 1, kind: 'bot_batch' })
     const workerBody = await (await workerMetrics.fetch(new Request('http://collector/metrics'))).text()
     expect(workerBody).toContain('anomaly_detector_mail_protection_transitions_total{reason="delivery_circuit_open"} 1')
     expect(workerBody).toContain('anomaly_detector_mail_protection_alerts{state="pending"} 3')
@@ -98,6 +99,9 @@ describe('operational metrics', () => {
     expect(workerBody).toContain('anomaly_detector_mail_protection_alerts{state="terminal"} 1')
     expect(workerBody).toContain('anomaly_detector_mail_protection_alert_oldest_pending_unixtime_seconds 1787651700')
     expect(workerBody).toContain('anomaly_detector_mail_protection_alert_next_attempt_unixtime_seconds 1787652060')
+    expect(workerBody).toContain('anomaly_detector_bot_command_receipts_total 2')
+    expect(workerBody).toContain('anomaly_detector_bot_failed_tender_attempts_total 1')
+    expect(workerBody).toContain('anomaly_detector_bot_batch_duration_seconds_count 1')
   })
 
   test('wraps security logging without changing request telemetry when either observer fails', () => {

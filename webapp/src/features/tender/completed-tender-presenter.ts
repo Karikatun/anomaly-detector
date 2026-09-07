@@ -10,6 +10,7 @@ const completionReasonKeys = {
   all_players_left: 'tender.completedTenderPanel.copy.020',
   last_active_player: 'tender.completedTenderPanel.copy.021',
   all_players_forfeited: 'tender.completedTenderPanel.copy.022',
+  no_human_players: 'tender.completedTenderPanel.noHumans',
 } as const
 
 const ratingKeys = [
