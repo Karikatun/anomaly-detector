@@ -132,6 +132,11 @@ export function PowerAllocationPanel({
   const confirmedPlayers = players.filter((player) => player.powerAllocationConfirmed).length
   const waitingPlayers = Math.max(0, players.length - confirmedPlayers)
   const currentPlayer = players.find((player) => player.playerId === currentUserId)
+  const humanCount = players.filter((player) => !player.bot).length
+  const botSummary = players
+    .filter((player) => player.bot)
+    .map((player) => t(`tender.player.bot.${player.bot!.difficulty}`))
+    .join(', ')
   const currentPlayerName = currentPlayer?.displayName ?? currentPlayer?.playerId ?? t('tender.access.youShort')
   const currentPlayerInitials = currentPlayerName
     .split(/\s+/)
@@ -173,7 +178,7 @@ export function PowerAllocationPanel({
         {t('tender.power.title')}
       </Typography>
 
-      <div className={styles.playerBar}>
+      <div className={styles.playerBar} data-has-bots={botSummary ? true : undefined}>
         <div className={styles.playerStatusLabel}>
           <HugeiconsIcon icon={UserGroupIcon} strokeWidth={1.7} aria-hidden="true" />
           <Typography as="span" variant="bodySmMedium">
@@ -193,7 +198,11 @@ export function PowerAllocationPanel({
           {players.map((player) => (
             <span key={player.playerId} className={styles.playerStatus}>
               <Typography as="span" variant="bodySmMedium" className="truncate">
-                {player.playerId === currentUserId ? t('tender.access.youShort') : player.displayName ?? player.playerId}
+                {player.playerId === currentUserId
+                  ? t('tender.access.youShort')
+                  : player.bot
+                    ? t(`tender.player.bot.${player.bot.difficulty}`)
+                    : player.displayName ?? player.playerId}
               </Typography>
               <span
                 className={styles.playerState}
@@ -212,7 +221,12 @@ export function PowerAllocationPanel({
         <div className={styles.playerCount}>
           <HugeiconsIcon icon={UserGroupIcon} strokeWidth={1.7} aria-hidden="true" />
           <Typography as="span" variant="bodySm" tone="muted">
-            {t('tender.access.onlineCount', { count: players.length })}
+            {botSummary
+              ? t('tender.power.participantsWithBots', {
+                bots: botSummary,
+                humans: humanCount,
+              })
+              : t('tender.access.onlineCount', { count: humanCount })}
           </Typography>
         </div>
       </div>

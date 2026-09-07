@@ -84,6 +84,7 @@ export type StoredTender = {
 
 export type TenderCommit = {
   actorId?: string
+  botActor?: true
   auditEvents: PendingTenderAuditEvent[]
   command?: StoredTenderCommand
   commandId?: string
@@ -104,6 +105,7 @@ export type TenderStore = {
   create(tender: Omit<StoredTender, 'id'>): Promise<StoredTender>
   findCommand(input: { commandId: string; tenderId: string }): Promise<StoredTenderCommand | null>
   findDue(input: AdvanceDueTendersInput): Promise<string[]>
+  findBotTenders(input: { afterId?: string; limit: number }): Promise<string[]>
   listCompletedForPlayer(playerId: string): Promise<StoredTender[]>
   readAuditEvents(tenderId: string): Promise<StoredTenderAuditEvent[]>
   read(tenderId: string): Promise<StoredTender | null>

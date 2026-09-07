@@ -38,6 +38,15 @@
   color: rgba(224, 239, 248, .72);
 }
 
+.playerBar[data-has-bots] {
+  flex-wrap: wrap;
+}
+
+.playerBar[data-has-bots] .playerCount {
+  flex-basis: 100%;
+  margin-left: 0;
+}
+
 .playerStatusLabel > svg {
   width: 1.1rem;
   height: 1.1rem;

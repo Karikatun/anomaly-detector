@@ -1,6 +1,7 @@
 export * from './admin'
 export * from './analytics'
 export * from './auth'
+export * from './bots'
 export * from './errors'
 export * from './feedback'
 export * from './profile'

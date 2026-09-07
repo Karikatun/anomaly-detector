@@ -14,9 +14,11 @@ import { useSynchronizedCountdown } from '@/platform/time/synchronized-countdown
 
 import { RoomsApi } from '../api'
 import {
+  useAddRoomBotMutation,
   useCancelRoomStartMutation,
   useLeaveRoomMutation,
   useRoomQuery,
+  useRemoveRoomBotMutation,
   useSetRoomReadyMutation,
   useStartRoomMutation,
 } from '../queries'
@@ -44,6 +46,8 @@ function RoomLobbyContent() {
   const { mutateAsync: setRoomReady, isPending: isSettingReady } = useSetRoomReadyMutation({ api })
   const { mutateAsync: startRoom, isPending: isStarting } = useStartRoomMutation({ api })
   const { mutateAsync: cancelRoomStart, isPending: isCancellingStart } = useCancelRoomStartMutation({ api })
+  const { mutateAsync: addBot, isPending: isAddingBot } = useAddRoomBotMutation({ api })
+  const { mutateAsync: removeBot, isPending: isRemovingBot } = useRemoveRoomBotMutation({ api })
   const roomQuery = useRoomQuery({ api, roomId })
   const currentRoom = roomQuery.data
   const secondsLeft = useSynchronizedCountdown(
@@ -120,6 +124,16 @@ function RoomLobbyContent() {
     [cancelRoomStart, roomId, runRoomAction],
   )
 
+  const handleAddBot = useCallback(
+    (seat: number) => runRoomAction(() => addBot({ roomId, seat })),
+    [addBot, roomId, runRoomAction],
+  )
+
+  const handleRemoveBot = useCallback(
+    (botId: string) => runRoomAction(() => removeBot({ botId, roomId })),
+    [removeBot, roomId, runRoomAction],
+  )
+
   if (roomQuery.isPending) {
     return (
       <main className={styles.loading} role="status">
@@ -146,11 +160,15 @@ function RoomLobbyContent() {
 
   const isHost = currentRoom.hostId === auth.user?.id
   const isMember = currentRoom.members.some((member) => member.userId === auth.user?.id)
-  const isFull = currentRoom.members.length >= currentRoom.capacity
-  const readyCount = currentRoom.members.filter((member) => member.ready).length
+  const bots = currentRoom.bots ?? []
+  const participantCount = currentRoom.members.length + bots.length
+  const isFull = participantCount >= currentRoom.capacity
+  const readyCount = currentRoom.members.filter((member) => member.ready).length + bots.length
   const allPlayersReady = isFull && readyCount === currentRoom.capacity
   const isCountdown = currentRoom.status === 'starting'
   const canLeave = isMember && currentRoom.status === 'waiting'
+  const canManageBots = isHost && currentRoom.allowBots && currentRoom.status === 'waiting'
+  const isChangingRoster = isAddingBot || isRemovingBot
 
   return (
     <main className={expeditionStyles.screen}>
@@ -193,17 +211,22 @@ function RoomLobbyContent() {
                 {Array.from({ length: currentRoom.capacity }, (_, index) => {
                   const seat = index + 1
                   const member = currentRoom.members.find((candidate) => candidate.seat === seat)
+                  const bot = bots.find((candidate) => candidate.seat === seat)
                   const isPlayerHost = member?.userId === currentRoom.hostId
                   return (
-                    <div className={styles.player} data-empty={!member || undefined} key={seat}>
+                    <div className={styles.player} data-empty={!member && !bot || undefined} key={seat}>
                       <Typography as="span" variant="h6" className={styles.avatar} aria-hidden="true">
-                        {member ? seat : '+'}
+                        {member || bot ? seat : '+'}
                       </Typography>
                       <div className={styles.playerCopy}>
                         <Typography className={styles.playerName}>
-                          {member?.displayName ?? t('lobby.player.waiting')}
+                          {member?.displayName ?? (bot ? t(`lobby.bot.${bot.difficulty}`) : t('lobby.player.waiting'))}
                         </Typography>
-                        {isPlayerHost ? (
+                        {bot ? (
+                          <Typography as="span" variant="control" className={styles.botLabel}>
+                            {t('lobby.bot.label')}
+                          </Typography>
+                        ) : isPlayerHost ? (
                           <Typography as="span" variant="control" className={styles.hostLabel}>
                             {t('lobby.player.host')}
                           </Typography>
@@ -222,11 +245,37 @@ function RoomLobbyContent() {
                               ? t('lobby.player.ready.cancel')
                               : t('lobby.player.ready.action')}
                         </Button>
+                      ) : bot ? (
+                        <>
+                          <Typography as="span" variant="control" className={styles.playerReadiness} data-ready>
+                            <span className={styles.playerState} aria-hidden="true" />
+                            {t('lobby.player.ready')}
+                          </Typography>
+                          {canManageBots ? (
+                            <Button
+                              className={styles.botAction}
+                              type="button"
+                              disabled={isChangingRoster}
+                              onClick={() => void handleRemoveBot(bot.id)}
+                            >
+                              {isRemovingBot ? t('lobby.bot.removing') : t('lobby.bot.remove')}
+                            </Button>
+                          ) : null}
+                        </>
                       ) : member ? (
                         <Typography as="span" variant="control" className={styles.playerReadiness} data-ready={member.ready || undefined}>
                           <span className={styles.playerState} aria-hidden="true" />
                           {member.ready ? t('lobby.player.ready') : t('lobby.player.notReady')}
                         </Typography>
+                      ) : canManageBots ? (
+                        <Button
+                          className={styles.botAction}
+                          type="button"
+                          disabled={isChangingRoster}
+                          onClick={() => void handleAddBot(seat)}
+                        >
+                          {isAddingBot ? t('lobby.bot.adding') : t('lobby.bot.add')}
+                        </Button>
                       ) : null}
                     </div>
                   )
@@ -282,7 +331,7 @@ function RoomLobbyContent() {
                         ? t('lobby.ready.title')
                         : isFull
                           ? t('lobby.ready.progress', { count: readyCount, capacity: currentRoom.capacity })
-                          : t('lobby.waiting.hint', { count: currentRoom.capacity - currentRoom.members.length })}
+                          : t('lobby.waiting.hint', { count: currentRoom.capacity - participantCount })}
                     </Typography>
                     <Typography className={styles.statusHint}>
                       {allPlayersReady
@@ -303,7 +352,7 @@ function RoomLobbyContent() {
                       ? t('lobby.ready.title')
                       : isFull
                         ? t('lobby.ready.progress', { count: readyCount, capacity: currentRoom.capacity })
-                        : t('lobby.waiting.hint', { count: currentRoom.capacity - currentRoom.members.length })}
+                        : t('lobby.waiting.hint', { count: currentRoom.capacity - participantCount })}
                   </Typography>
                   <Typography className={styles.statusHint}>
                     {allPlayersReady

@@ -7,6 +7,7 @@ import {
 } from './modules/mail'
 import { createPrismaTenderStore } from './modules/tender'
 import { createTenderModule } from './modules/tender'
+import { createPersistentTenderBotRunner } from './modules/tender'
 import { createOperationalMetrics, type OperationalMetrics } from './operational-metrics'
 import {
   createWorkerHealth,
@@ -17,6 +18,7 @@ export async function runWorker() {
   const runtime = createBackendRuntime()
   const store = createPrismaTenderStore(runtime.prisma, runtime.env.JWT_SECRET)
   const tender = createTenderModule({ store })
+  const bots = createPersistentTenderBotRunner(runtime.prisma, runtime.env.JWT_SECRET)
   const roomStart = createRoomStartModule(runtime.prisma, runtime.env.JWT_SECRET)
   const mailDeliveryOptions = {
     circuitFailureThreshold: runtime.env.MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD,
@@ -75,6 +77,16 @@ export async function runWorker() {
     task: async () => {
       const result = await tender.advanceDueTenders({ limit: 50, now: new Date() })
       await roomStart.releaseCompletedCurrentMatches()
+      return result
+    },
+  })
+  const stopBotLoop = startPollingLoop({
+    health: health.registerLoop({ intervalMs: 500, label: 'Bot decisions', metricKey: 'bot_decisions' }),
+    intervalMs: 500,
+    label: 'Bot decisions',
+    task: async () => {
+      const result = await bots.advance({ limit: 50 })
+      if (result.failedTenders > 0) throw new Error('Some bot decisions failed')
       return result
     },
   })
@@ -138,6 +150,7 @@ export async function runWorker() {
     await healthServer.stop(true)
     await Promise.all([
       stopTenderAdvanceLoop(),
+      stopBotLoop(),
       stopRoomStartLoop(),
       stopMailDeliveryLoop?.(),
       stopMailProtectionAlertLoop?.(),

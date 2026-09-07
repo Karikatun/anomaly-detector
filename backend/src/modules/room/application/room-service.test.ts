@@ -7,6 +7,7 @@ import { RoomFailure } from '../domain/errors'
 const fixedNow = new Date('2026-07-24T12:00:00.000Z')
 const unused = async () => { throw new Error('not used') }
 const unusedRepositoryOperations: RoomRepository = {
+  addBot: unused,
   cancelStart: unused,
   create: unused,
   join: unused,
@@ -15,6 +16,7 @@ const unusedRepositoryOperations: RoomRepository = {
   listStartedForMember: async () => [],
   readCurrentForMember: async () => null,
   readForMember: unused,
+  removeBot: unused,
   releaseCurrentForMember: async () => {},
   setReady: unused,
   start: unused,
@@ -56,6 +58,7 @@ test('creates a waiting private room with its host in the first seat', async () 
   })
 
   await expect(service.createRoom({ capacity: 3, hostId: 'user-1' })).resolves.toEqual({
+    allowBots: false,
     capacity: 3,
     hostId: 'user-1',
     joinCode: null,
@@ -63,6 +66,36 @@ test('creates a waiting private room with its host in the first seat', async () 
     roomId: 'room-1',
     serverTime: expect.any(String),
     status: 'waiting',
+  })
+})
+
+test('projects an added easy bot separately from human room members', async () => {
+  const service = new TenderRoomService({
+    ...serviceDefaults,
+    repository: {
+      ...unusedRepositoryOperations,
+      addBot: async (input) => ({
+        allowBots: true,
+        bots: [{ difficulty: input.difficulty, id: '019f8099-7e26-7760-ad08-66d1d66b2720', seat: input.seat }],
+        capacity: 2,
+        hostId: input.actorId,
+        id: input.roomId,
+        members: [{ ready: false, seat: 1, userId: input.actorId }],
+        status: 'waiting',
+        tenderId: null,
+      }),
+    },
+  })
+
+  await expect(service.addBot({
+    actorId: 'user-1',
+    difficulty: 'easy',
+    roomId: 'room-1',
+    seat: 2,
+  })).resolves.toMatchObject({
+    allowBots: true,
+    bots: [{ difficulty: 'easy', id: '019f8099-7e26-7760-ad08-66d1d66b2720', seat: 2 }],
+    members: [{ userId: 'user-1' }],
   })
 })
 
@@ -104,6 +137,7 @@ test('lists started matches for the requesting player', async () => {
   })
 
   await expect(service.listMatches('user-1')).resolves.toEqual([{
+    allowBots: false,
     capacity: 2,
     hostId: 'user-1',
     joinCode: null,
@@ -264,6 +298,7 @@ test('schedules a full room start and exposes its server start time', async () =
   })
 
   await expect(service.startRoom({ actorId: 'user-1', roomId: 'room-1' })).resolves.toEqual({
+    allowBots: false,
     capacity: 2,
     hostId: 'user-1',
     joinCode: null,
@@ -301,6 +336,7 @@ test('lets the host cancel a scheduled room start', async () => {
   })
 
   await expect(service.cancelRoomStart({ actorId: 'user-1', roomId: 'room-1' })).resolves.toEqual({
+    allowBots: false,
     capacity: 2,
     hostId: 'user-1',
     joinCode: null,

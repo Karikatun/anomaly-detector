@@ -1,5 +1,6 @@
 import {
   apiErrorSchema,
+  addRoomBotRequestSchema,
   createRoomRequestSchema,
   currentMatchResponseSchema,
   joinRoomByCodeRequestSchema,
@@ -130,6 +131,35 @@ const cancelRoomStartRoute = createRoute({
   },
 })
 
+const addRoomBotRoute = createRoute({
+  method: 'post',
+  path: '/{roomId}/bots',
+  request: {
+    params: z.object({ roomId: roomIdSchema }),
+    body: { content: { 'application/json': { schema: addRoomBotRequestSchema } } },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: roomViewSchema } }, description: 'Added a bot to the waiting Room' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+    404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room not found' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Bot cannot be added' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
+  },
+})
+
+const removeRoomBotRoute = createRoute({
+  method: 'delete',
+  path: '/{roomId}/bots/{botId}',
+  request: { params: z.object({ botId: z.string().uuid(), roomId: roomIdSchema }) },
+  responses: {
+    200: { content: { 'application/json': { schema: roomViewSchema } }, description: 'Removed a bot from the waiting Room' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+    404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room or bot not found' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Bot cannot be removed' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
+  },
+})
+
 export function createRoomRoutes(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   joinBudget: RequestBudget
@@ -183,6 +213,23 @@ export function createRoomRoutes(input: {
     await executeRoom(() => input.service.leaveRoom({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId }))
     return c.body(null, 204)
   })
+  routes.openapi(addRoomBotRoute, async (c) => c.json(
+    await executeRoom(() => input.service.addBot({
+      actorId: c.var.user.id,
+      difficulty: c.req.valid('json').difficulty,
+      roomId: c.req.valid('param').roomId,
+      seat: c.req.valid('json').seat,
+    })),
+    200,
+  ))
+  routes.openapi(removeRoomBotRoute, async (c) => c.json(
+    await executeRoom(() => input.service.removeBot({
+      actorId: c.var.user.id,
+      botId: c.req.valid('param').botId,
+      roomId: c.req.valid('param').roomId,
+    })),
+    200,
+  ))
   routes.openapi(setRoomReadyRoute, async (c) => c.json(
     await executeRoom(() => input.service.setReady({
       actorId: c.var.user.id,

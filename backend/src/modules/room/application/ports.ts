@@ -1,5 +1,6 @@
 import type {
   RoomMember,
+  RoomBot,
   RoomView,
   TenderPhase,
   TenderRuleset,
@@ -9,6 +10,8 @@ export type RoomRecord = Omit<
   RoomView,
   | 'joinCode'
   | 'members'
+  | 'allowBots'
+  | 'bots'
   | 'roomId'
   | 'serverTime'
   | 'tenderCompletionReason'
@@ -16,6 +19,8 @@ export type RoomRecord = Omit<
   | 'tenderPhase'
   | 'tenderRuleset'
 > & {
+  allowBots?: boolean
+  bots?: RoomBot[]
   id: string
   joinCode?: string | null
   members: Array<Omit<RoomMember, 'displayName'>>
@@ -43,11 +48,13 @@ export type Clock = {
 }
 
 export type RoomRepository = {
-  create(input: { capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
+  addBot(input: { actorId: string; difficulty: 'easy'; roomId: string; seat: number }): Promise<RoomRecord>
+  create(input: { allowBots?: boolean; capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
   cancelStart(input: { actorId: string; roomId: string }): Promise<RoomRecord>
   readCurrentForMember(userId: string): Promise<RoomRecord | null>
   listStartedForMember(userId: string): Promise<RoomRecord[]>
   readForMember(input: { actorId: string; roomId: string }): Promise<RoomRecord>
+  removeBot(input: { actorId: string; botId: string; roomId: string }): Promise<RoomRecord>
   join(input: { actorId: string; roomId: string }): Promise<RoomRecord>
   joinByCode(input: { actorId: string; code: string }): Promise<RoomRecord>
   leave(input: { actorId: string; roomId: string }): Promise<void>

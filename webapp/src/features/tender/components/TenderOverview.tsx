@@ -61,7 +61,9 @@ export function TenderPlayers({
           const isActive = player.playerId === activePlayerId
           const stableIndex = players.findIndex((candidate) => candidate.playerId === player.playerId)
           const accentIndex = (stableIndex >= 0 ? stableIndex : index) % playerAccents.length
-          const playerName = player.displayName ?? player.playerId.slice(0, 8)
+          const playerName = player.bot
+            ? translate(`tender.player.bot.${player.bot.difficulty}`)
+            : player.displayName ?? player.playerId.slice(0, 8)
           const status = phase === 'access-slot-selection'
             ? player.requestedAccessSlot !== undefined ? translate('tender.tenderOverview.copy.010') : translate('tender.tenderOverview.copy.011')
             : phase === 'power-allocation'

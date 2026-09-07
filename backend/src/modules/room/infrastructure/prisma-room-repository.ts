@@ -1,5 +1,6 @@
 import { isRetryableDatabaseTransactionConflict, type DbClient } from '../../../db'
 import { randomBytes } from 'node:crypto'
+import { roomBotSchema, type RoomBot } from '@anomaly-detector/contracts'
 import type { Prisma } from '../../../generated/prisma/client'
 import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import type { Clock, RoomRecord, RoomRepository } from '../application/ports'
@@ -15,6 +16,8 @@ export function toRoomRecord(
   overrides: Partial<Pick<RoomRecord, 'members' | 'startsAt' | 'status'>> = {},
 ): RoomRecord {
   return {
+    allowBots: room.allowBots ?? false,
+    bots: roomBotSchema.array().parse(room.bots ?? []),
     capacity: room.capacity as 2 | 3 | 4,
     hostId: room.hostId,
     id: room.id,
@@ -102,6 +105,7 @@ export function createPrismaRoomRepository(
             }
             const room = await tx.tenderRoom.create({
               data: {
+                allowBots: input.allowBots ?? false,
                 capacity: input.capacity,
                 hostId: input.hostId,
                 joinCode: generateRoomJoinCode(),
@@ -161,9 +165,14 @@ export function createPrismaRoomRepository(
               return toRoomRecord(room)
             }
             if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
-            if (room.members.length >= room.capacity) throw new RoomFailure('room_full', 'Room is already full')
+            if (room.members.length + roomBotSchema.array().parse(room.bots ?? []).length >= room.capacity) {
+              throw new RoomFailure('room_full', 'Room is already full')
+            }
 
-            const occupiedSeats = new Set(room.members.map((member) => member.seat))
+            const occupiedSeats = new Set([
+              ...room.members.map((member) => member.seat),
+              ...roomBotSchema.array().parse(room.bots ?? []).map((bot) => bot.seat),
+            ])
             const seat = Array.from({ length: room.capacity }, (_, index) => index + 1)
               .find((candidate) => !occupiedSeats.has(candidate))
             if (!seat) throw new RoomFailure('room_full', 'Room is already full')
@@ -208,6 +217,65 @@ export function createPrismaRoomRepository(
       })
       if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
       return repository.join({ actorId: input.actorId, roomId: room.id })
+    },
+
+    async addBot(input) {
+      return runRetryableRoomTransaction(db, async (tx) => {
+        await requireActiveRoomActor(tx, accountLifecycleSecret, input.actorId)
+        const room = await tx.tenderRoom.findFirst({
+          where: { hostId: input.actorId, id: input.roomId },
+          include: roomMembersInclude,
+        })
+        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
+        if (!room.allowBots) throw new RoomFailure('room_bots_not_allowed', 'Room does not allow bots')
+        const bots = roomBotSchema.array().parse(room.bots ?? [])
+        if (room.members.length + bots.length >= room.capacity) {
+          throw new RoomFailure('room_full', 'Room is already full')
+        }
+        const occupiedSeats = new Set([...room.members, ...bots].map((participant) => participant.seat))
+        if (input.seat > room.capacity || occupiedSeats.has(input.seat)) {
+          throw new RoomFailure('room_full', 'Requested Room seat is unavailable')
+        }
+        const nextBots: RoomBot[] = [...bots, {
+          difficulty: input.difficulty,
+          id: crypto.randomUUID(),
+          seat: input.seat,
+        }]
+        await tx.tenderRoomMember.updateMany({
+          where: { roomId: room.id },
+          data: { ready: false },
+        })
+        return toRoomRecord(await tx.tenderRoom.update({
+          where: { id: room.id },
+          data: { bots: nextBots },
+          include: roomMembersInclude,
+        }))
+      })
+    },
+
+    async removeBot(input) {
+      return runRetryableRoomTransaction(db, async (tx) => {
+        await requireActiveRoomActor(tx, accountLifecycleSecret, input.actorId)
+        const room = await tx.tenderRoom.findFirst({
+          where: { hostId: input.actorId, id: input.roomId },
+          include: roomMembersInclude,
+        })
+        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
+        const bots = roomBotSchema.array().parse(room.bots ?? [])
+        const nextBots = bots.filter((bot) => bot.id !== input.botId)
+        if (nextBots.length === bots.length) throw new RoomFailure('room_bot_not_found', 'Bot does not exist')
+        await tx.tenderRoomMember.updateMany({
+          where: { roomId: room.id },
+          data: { ready: false },
+        })
+        return toRoomRecord(await tx.tenderRoom.update({
+          where: { id: room.id },
+          data: { bots: nextBots },
+          include: roomMembersInclude,
+        }))
+      })
     },
 
     async leave(input) {
@@ -287,7 +355,9 @@ export function createPrismaRoomRepository(
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room has already started')
-        if (room.members.length !== room.capacity) throw new RoomFailure('room_full', 'Room needs every seat filled before starting')
+        if (room.members.length + roomBotSchema.array().parse(room.bots ?? []).length !== room.capacity) {
+          throw new RoomFailure('room_full', 'Room needs every seat filled before starting')
+        }
         if (room.members.some((member) => !member.ready)) {
           throw new RoomFailure('room_not_ready', 'Every player must be ready before starting')
         }

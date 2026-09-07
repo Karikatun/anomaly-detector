@@ -1,4 +1,5 @@
 import { isRetryableDatabaseTransactionConflict, type DbClient } from '../../../db'
+import { roomBotSchema } from '@anomaly-detector/contracts'
 import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import { createPersistentTenderModule } from '../../tender'
 
@@ -52,6 +53,7 @@ async function startDueRoom(
           include: { members: { orderBy: { seat: 'asc' } } },
         })
         if (!room || room.status !== 'starting' || !room.startsAt || room.startsAt > now) return null
+        const bots = roomBotSchema.array().parse(room.bots ?? [])
 
         if (accountLifecycleSecret) {
           const memberIds = room.members.map((member) => member.userId).sort()
@@ -75,11 +77,18 @@ async function startDueRoom(
         const displayNameById = new Map(users.map((user) => [user.id, user.displayName]))
         const tender = createPersistentTenderModule(tx as DbClient, accountLifecycleSecret)
         const { tenderId } = await tender.createTender({
-          players: room.members.map((member) => ({
-            id: member.userId,
-            tiePriority: member.seat,
-            displayName: displayNameById.get(member.userId) ?? member.userId.slice(0, 8),
-          })),
+          players: [
+            ...room.members.map((member) => ({
+              id: member.userId,
+              tiePriority: member.seat,
+              displayName: displayNameById.get(member.userId) ?? member.userId.slice(0, 8),
+            })),
+            ...bots.map((bot) => ({
+              bot: { difficulty: bot.difficulty, strategyVersion: 'bot-v1' as const },
+              id: bot.id,
+              tiePriority: bot.seat,
+            })),
+          ].sort((left, right) => left.tiePriority - right.tiePriority),
         })
 
         await tx.tenderRoom.update({

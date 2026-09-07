@@ -177,7 +177,7 @@ export function MatchHistoryList({
                 <span className={styles.playersHeading}>
                   <HugeiconsIcon icon={UserGroupIcon} strokeWidth={1.7} aria-hidden="true" />
                   <Typography as="span" variant="caption">
-                    {t('matches.players.count', { count: match.members.length })}
+                    {t('matches.players.count', { count: match.members.length + (match.bots?.length ?? 0) })}
                   </Typography>
                 </span>
                 <ul className={styles.playerList}>
@@ -187,6 +187,11 @@ export function MatchHistoryList({
                       {member.userId === currentUserId && (
                         <Typography as="span" variant="caption" className={styles.youBadge}>{t('matches.player.you')}</Typography>
                       )}
+                    </li>
+                  ))}
+                  {match.bots?.map((bot) => (
+                    <li key={bot.id}>
+                      <Typography as="span" variant="bodySm">{t(`matches.player.bot.${bot.difficulty}`)}</Typography>
                     </li>
                   ))}
                 </ul>
