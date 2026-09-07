@@ -11,6 +11,7 @@ import type {
 export type TenderModule = {
   advanceDueTenders(input: AdvanceDueTendersInput): Promise<AdvanceDueTendersResult>
   anonymizeParticipant(playerId: string): Promise<void>
+  completeUnattendedBotTender(tenderId: string): Promise<boolean>
   createTender(input: CreateTender): Promise<{ tenderId: string }>
   execute(command: TenderCommand, options?: { expectedVersion: number }): Promise<CommandReceipt>
   findCommandReceipt(command: TenderCommand): Promise<CommandReceipt | undefined>

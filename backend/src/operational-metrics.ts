@@ -13,6 +13,7 @@ export type OperationalMetricEvent =
   | { event: SecurityEvent; kind: 'security_event' }
   | { kind: 'realtime_connected'; reconnect: boolean }
   | { closeCode: number; kind: 'realtime_closed' }
+  | { acceptedCommands: number; durationSeconds: number; failedTenders: number; kind: 'bot_batch' }
   | {
       kind: 'mail_protection_transition'
       reason: 'delivery_budget_exhausted' | 'delivery_circuit_open'
@@ -69,8 +70,24 @@ export function createOperationalMetrics({
   const realtimeConnections = { false: 0, true: 0 }
   const realtimeCloses = createCounterMap(realtimeCloseReasons)
   const mailProtectionTransitions = createCounterMap(mailProtectionReasons)
+  let botCommandReceipts = 0
+  let botFailedTenderAttempts = 0
+  const botBatchDurationBuckets = latencyBuckets.map(() => 0)
+  let botBatchDurationCount = 0
+  let botBatchDurationSum = 0
 
   function observe(event: OperationalMetricEvent) {
+    if (event.kind === 'bot_batch') {
+      botCommandReceipts += finiteNonnegative(event.acceptedCommands)
+      botFailedTenderAttempts += finiteNonnegative(event.failedTenders)
+      const durationSeconds = finiteNonnegative(event.durationSeconds)
+      botBatchDurationCount += 1
+      botBatchDurationSum += durationSeconds
+      latencyBuckets.forEach((upperBound, index) => {
+        if (durationSeconds <= upperBound) botBatchDurationBuckets[index]! += 1
+      })
+      return
+    }
     if (event.kind === 'api_request') {
       increment(apiRequests, apiStatusClass(event.status))
       const durationSeconds = finiteNonnegative(event.durationSeconds ?? 0)
@@ -130,6 +147,11 @@ export function createOperationalMetrics({
       ])
       const body = renderMetrics({
         apiLatencyBuckets,
+        botBatchDurationBuckets,
+        botBatchDurationCount,
+        botBatchDurationSum,
+        botCommandReceipts,
+        botFailedTenderAttempts,
         apiLatencyCount,
         apiLatencySum,
         apiRequests,
@@ -168,6 +190,11 @@ export type OperationalMetrics = ReturnType<typeof createOperationalMetrics>
 
 function renderMetrics(input: {
   apiLatencyBuckets: number[]
+  botBatchDurationBuckets: number[]
+  botBatchDurationCount: number
+  botBatchDurationSum: number
+  botCommandReceipts: number
+  botFailedTenderAttempts: number
   apiLatencyCount: number
   apiLatencySum: number
   apiRequests: Record<ApiStatusClass, number>
@@ -255,6 +282,22 @@ function renderMetrics(input: {
 
   if (input.runtime === 'worker') {
     lines.push(
+      '# HELP anomaly_detector_bot_command_receipts_total Accepted or replayed bot command receipts.',
+      '# TYPE anomaly_detector_bot_command_receipts_total counter',
+      `anomaly_detector_bot_command_receipts_total ${input.botCommandReceipts}`,
+      '# HELP anomaly_detector_bot_failed_tender_attempts_total Bot Tender attempts that failed in a batch.',
+      '# TYPE anomaly_detector_bot_failed_tender_attempts_total counter',
+      `anomaly_detector_bot_failed_tender_attempts_total ${input.botFailedTenderAttempts}`,
+      '# HELP anomaly_detector_bot_batch_duration_seconds Bot decision batch duration.',
+      '# TYPE anomaly_detector_bot_batch_duration_seconds histogram',
+    )
+    latencyBuckets.forEach((upperBound, index) => lines.push(
+      `anomaly_detector_bot_batch_duration_seconds_bucket{le="${upperBound}"} ${input.botBatchDurationBuckets[index]}`,
+    ))
+    lines.push(
+      `anomaly_detector_bot_batch_duration_seconds_bucket{le="+Inf"} ${input.botBatchDurationCount}`,
+      `anomaly_detector_bot_batch_duration_seconds_sum ${formatNumber(input.botBatchDurationSum)}`,
+      `anomaly_detector_bot_batch_duration_seconds_count ${input.botBatchDurationCount}`,
       '# HELP anomaly_detector_mail_protection_transitions_total Transactional-mail protection state transitions.',
       '# TYPE anomaly_detector_mail_protection_transitions_total counter',
     )

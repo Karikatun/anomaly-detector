@@ -85,7 +85,14 @@ export async function runWorker() {
     intervalMs: 500,
     label: 'Bot decisions',
     task: async () => {
+      const startedAt = Date.now()
       const result = await bots.advance({ limit: 50 })
+      operationalMetrics.observe({
+        acceptedCommands: result.acceptedCommands,
+        durationSeconds: (Date.now() - startedAt) / 1_000,
+        failedTenders: result.failedTenders,
+        kind: 'bot_batch',
+      })
       if (result.failedTenders > 0) throw new Error('Some bot decisions failed')
       return result
     },

@@ -107,7 +107,7 @@ const persistedTenderStateSchema = z.object({
   certifiedSignalsByPlayer: z.record(playerIdSchema, z.array(signalIdSchema)).optional(),
   contractCompletedByPlayer: playerBooleanRecordSchema.optional(),
   contractPowerRestrictionsByPlayer: z.record(playerIdSchema, z.number().int().min(0).max(1)).optional(),
-  completionReason: z.enum(['all_players_left', 'last_active_player', 'all_players_forfeited']).optional(),
+  completionReason: z.enum(['all_players_left', 'last_active_player', 'all_players_forfeited', 'no_human_players']).optional(),
   departedPlayerIds: z.array(playerIdSchema).optional(),
   finalScientificModelCompletedByPlayer: playerBooleanRecordSchema.optional(),
   finalScientificModelDraftsByPlayer: z.record(playerIdSchema, scientificModelDraftSchema).optional(),
@@ -656,6 +656,12 @@ export function createPrismaTenderStore(
         if (error instanceof TenderVersionConflict) return { kind: 'version_conflict' }
         throw error
       }
+    },
+
+    async hasActiveHumanAccount(tender) {
+      const ids = tender.players.filter((player) => !player.bot && tender.forfeitedAtByPlayer[player.id] === undefined)
+        .map((player) => player.id).filter((id) => z.uuid().safeParse(id).success)
+      return ids.length > 0 && (await db.user.count({ where: { anonymizedAt: null, id: { in: ids } } })) > 0
     },
 
     async findDue({ limit, now }) {

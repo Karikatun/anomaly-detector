@@ -39,7 +39,7 @@ export type StoredTender = {
   contractDeckVersion?: ContractDeckVersion
   contractCompletedByPlayer: Record<string, boolean>
   contractPowerRestrictionsByPlayer: Record<string, number>
-  completionReason?: 'all_players_left' | 'last_active_player' | 'all_players_forfeited'
+  completionReason?: 'all_players_left' | 'last_active_player' | 'all_players_forfeited' | 'no_human_players'
   departedPlayerIds: string[]
   dueAt: Date | null
   id: string
@@ -105,6 +105,7 @@ export type TenderStore = {
   create(tender: Omit<StoredTender, 'id'>): Promise<StoredTender>
   findCommand(input: { commandId: string; tenderId: string }): Promise<StoredTenderCommand | null>
   findDue(input: AdvanceDueTendersInput): Promise<string[]>
+  hasActiveHumanAccount(tender: StoredTender): Promise<boolean>
   findBotTenders(input: { afterId?: string; limit: number }): Promise<string[]>
   listCompletedForPlayer(playerId: string): Promise<StoredTender[]>
   readAuditEvents(tenderId: string): Promise<StoredTenderAuditEvent[]>

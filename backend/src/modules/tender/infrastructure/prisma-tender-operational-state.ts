@@ -25,7 +25,8 @@ export function createPrismaTenderOperationalStateReader(
               AND state ->> 'completionReason' IN (
                 'all_players_left',
                 'all_players_forfeited',
-                'last_active_player'
+                'last_active_player',
+                'no_human_players'
               )
           )::bigint AS early_finished,
           COUNT(*) FILTER (

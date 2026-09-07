@@ -511,6 +511,7 @@ export const tenderMessages = {
   'tender.completedTenderPanel.copy.019': 'Финальный аудит готов: сравните результат и разберите решения.',
   'tender.completedTenderPanel.copy.020': 'Завершён: все игроки покинули матч',
   'tender.completedTenderPanel.copy.021': 'Завершён досрочно: остался один активный игрок',
+  'tender.completedTenderPanel.noHumans': 'Матч завершён без победителя: людей в игре не осталось',
   'tender.completedTenderPanel.copy.022': 'Завершён досрочно без победителя: все игроки выбыли',
   'tender.completedTenderPanel.copy.023': 'Финальная модель не отправлена',
   'tender.completedTenderPanel.copy.024': 'верно',

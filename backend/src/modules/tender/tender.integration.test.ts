@@ -38,9 +38,12 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     const store = createPrismaTenderStore(prisma)
     const module = createTenderModule({ store })
     const ids: string[] = []
+    const humanIds: string[] = []
     for (const strategyVersion of ['bot-v1', 'bot-v2'] as const) {
+      const human = await prisma.user.create({ data: { login: `strategy-${crypto.randomUUID()}`, passwordHash: 'hash' } })
+      humanIds.push(human.id)
       const { tenderId } = await module.createTender({ players: [
-        { id: `human-${strategyVersion}`, tiePriority: 1 },
+        { id: human.id, tiePriority: 1 },
         { id: `bot-${strategyVersion}`, tiePriority: 2, bot: { difficulty: 'easy', strategyVersion } },
       ] })
       ids.push(tenderId)
@@ -51,12 +54,13 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     expect(await createTenderBotRunner({ store: restartedStore, tender: restarted }).advance({ limit: 10 }))
       .toMatchObject({ acceptedCommands: 2, failedTenders: 0 })
     for (const [index, strategyVersion] of (['bot-v1', 'bot-v2'] as const).entries()) {
-      const view = await restarted.readTenderView({ tenderId: ids[index]!, playerId: `human-${strategyVersion}` })
+      const view = await restarted.readTenderView({ tenderId: ids[index]!, playerId: humanIds[index]! })
       expect(view.players[1]?.bot?.strategyVersion).toBe(strategyVersion)
       expect(view.players[1]?.requestedAccessSlot).toBeUndefined()
       const botView = await restarted.readTenderView({ tenderId: ids[index]!, playerId: `bot-${strategyVersion}` })
       expect(botView.players[1]?.requestedAccessSlot).toBeGreaterThan(0)
     }
+    await prisma.user.deleteMany({ where: { id: { in: humanIds } } })
   })
 
   test('persists an all-player leave deadline and completes it after a restart', async () => {
