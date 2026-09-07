@@ -20,6 +20,7 @@ import math
 import os
 import re
 import sqlite3
+import stat
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ from warp_decoder import ProtobufDecodeError, decode_task
 
 MAX_WARP_CONVERSATION_BYTES = 32 * 1024 * 1024
 MAX_SCOPE_METADATA_BYTES = 64 * 1024
+MAX_SKILL_BYTES = 1024 * 1024
 MAX_MSG_CHARS = 1500
 MAX_TOOL_CHARS = 500
 MAX_TRANSCRIPT_ENTRIES = 160
@@ -668,48 +670,109 @@ def claude_project_directory_keys(repos):
     }
 
 
+def _path_within(path: Path, root: Path):
+    """Resolve an existing path and require it to remain under one approved root."""
+    try:
+        resolved_path = path.resolve(strict=True)
+        resolved_root = root.resolve(strict=True)
+        resolved_path.relative_to(resolved_root)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return resolved_path
+
+
+def _read_regular_skill(skill_path: Path, approved_root: Path):
+    """Read one regular skill file only after a containment check.
+
+    This is a static-tree guard, not an openat sandbox against a hostile
+    concurrent replacement of intermediate directories. Final-entry nofollow
+    and inode checks keep the bounded local read from following a swapped file.
+    """
+    resolved_skill = _path_within(skill_path, approved_root)
+    if resolved_skill is None:
+        return None
+    try:
+        initial = resolved_skill.stat()
+        if not stat.S_ISREG(initial.st_mode) or initial.st_size > MAX_SKILL_BYTES:
+            return None
+        flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        if hasattr(os, "O_NONBLOCK"):
+            flags |= os.O_NONBLOCK
+        descriptor = os.open(str(resolved_skill), flags)
+    except OSError:
+        return None
+    try:
+        with os.fdopen(descriptor, "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or opened.st_size > MAX_SKILL_BYTES
+                or (initial.st_dev, initial.st_ino) != (opened.st_dev, opened.st_ino)
+            ):
+                return None
+            raw_text = stream.read(MAX_SKILL_BYTES + 1)
+            if len(raw_text) > MAX_SKILL_BYTES:
+                return None
+            text = raw_text.decode("utf-8", errors="replace")
+        final = resolved_skill.stat()
+    except OSError:
+        return None
+    if (opened.st_dev, opened.st_ino) != (final.st_dev, final.st_ino):
+        return None
+    return text, opened
+
+
 def discover_skills(repos, codex_home: Path, extra_dirs, include_global: bool):
     if isinstance(repos, Path):
         repos = [repos]
     roots = []
     for repo in repos:
         roots.extend((
-            repo / ".agents" / "skills",
-            repo / ".claude" / "skills",
-            repo / ".codex" / "skills",
+            (repo / ".agents" / "skills", repo),
+            (repo / ".claude" / "skills", repo),
+            (repo / ".codex" / "skills", repo),
         ))
     if include_global:
         roots += [
-            codex_home / "skills",
-            Path.home() / ".agents" / "skills",
-            Path.home() / ".claude" / "skills",
+            (codex_home / "skills", None),
+            (Path.home() / ".agents" / "skills", None),
+            (Path.home() / ".claude" / "skills", None),
         ]
-    roots += [Path(d).expanduser() for d in extra_dirs]
+    roots += [(Path(d).expanduser(), None) for d in extra_dirs]
 
     skills = {}
-    for root in roots:
-        if not root.is_dir():
+    for root, project_root in roots:
+        approved_root = _path_within(root, project_root) if project_root else None
+        if project_root and approved_root is None:
             continue
-        for skill_md in sorted(root.glob("*/SKILL.md")):
+        try:
+            approved_root = approved_root or root.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if not approved_root.is_dir():
+            continue
+        for skill_md in sorted(approved_root.glob("*/SKILL.md")):
             name = skill_md.parent.name
             if not SAFE_SKILL_NAME.fullmatch(name):
                 continue
             if name in skills:
                 continue
-            try:
-                text = skill_md.read_text(errors="replace")
-            except OSError:
+            result = _read_regular_skill(skill_md, approved_root)
+            if result is None:
                 continue
+            text, file_stat = result
             desc = ""
             m = re.search(r"^description:\s*(.+)$", text, re.MULTILINE)
             if m:
                 desc = m.group(1).strip().strip("\"'")[:300]
             skills[name] = {
                 "name": name,
-                "path": str(skill_md),
+                "path": str(skill_md.resolve()),
                 "description": desc,
-                "bytes": skill_md.stat().st_size,
-                "modified_at": datetime.fromtimestamp(skill_md.stat().st_mtime, tz=timezone.utc).isoformat(),
+                "bytes": file_stat.st_size,
+                "modified_at": datetime.fromtimestamp(file_stat.st_mtime, tz=timezone.utc).isoformat(),
             }
     return skills
 

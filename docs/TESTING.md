@@ -5,6 +5,8 @@
 - `bun run check:commit` — быстрый локальный gate: tracked secret hygiene, lint, Prisma validation, typecheck, architecture, script/contracts/backend unit/webapp tests.
 - `bun run check:push` — dependency audit, full-history Gitleaks и полный `check`: все тесты, production build, backend Docker smoke и Playwright E2E.
 - `bun run check` — полный локальный поведенческий gate без сетевого dependency audit.
+- `bun run security:skills` — проверка целостности всех project skills по [локальному manifest](agents/skill-integrity.md); выполняется первой в `test:tooling`.
+- `bun run test:skills` — synthetic-тесты collector, privacy scope, aggregator и renderer skill-doctor; нужны Python 3.9+ и стандартная библиотека. Реальная история разговоров не читается, bytecode в skill bundle не записывается. Runner очищает унаследованные переменные `GIT_*`, чтобы временные репозитории не использовали Git state вызывающего hook. Входит в `test:tooling`.
 - `bun run preflight:split-domain` — отдельный воспроизводимый target/rollback gate для подготовленного разделения `anomaly-detector.ru` и `app.anomaly-detector.ru`.
 - `bun run benchmark:local-abuse` — отдельный local-only benchmark для distributed abuse boundaries, Feedback, realtime cap и Argon/recovery; он создаёт invocation-scoped `*_test` PostgreSQL и публикует secret-free JSON только после удаления временного volume.
 - `bun run acceptance:mvp --players 2|3|4` — отдельный local-only harness для контролируемого человеческого прогона Public MVP Journey и штатного Tender; протокол и границы результата описаны в [LOCAL_MVP_ACCEPTANCE.md](LOCAL_MVP_ACCEPTANCE.md).

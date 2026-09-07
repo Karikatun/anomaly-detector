@@ -74,11 +74,8 @@
 
 - Inspect `git remote -v` before any branch, commit, push, or PR workflow.
 - Work on `master` unless explicitly told otherwise. Do not create, switch to, or suggest new branches without request.
-- Treat this repository as a template for a new project by default, not as a pull request source for the template.
-- If `origin` points to the template repository and the user has not explicitly said they are contributing to the template, remove it with `git remote remove origin`.
-- Add the user's own GitHub repository as `origin` only when the user provides a URL or asks to create/publish the project.
-- If no destination is chosen, leave the project without `origin` and report that publishing is not configured.
-- Do not push, open PRs, or configure deployment from the template remote by accident.
+- This is the established Anomaly Detector product repository. Do not remove or replace `origin` during documentation or repository cleanup; stop if it does not point to the expected product repository.
+- Do not push, open a PR, or deploy unless explicitly asked. Preserve the user's existing Git state and the repository's versioned hooks.
 
 ## Task Modes
 
@@ -225,3 +222,7 @@
 - Include a concise suggested commit message when the change is ready.
 - For `Direct` or read-only `Review` tasks, compress the report to the relevant fields only.
 - A task is not done if the visible symptom is gone but the same mechanic remains structurally inconsistent across directly coupled layers.
+
+## Project Skill Integrity
+
+- Before applying a project-local skill, run `bun run security:skills`. On failure, do not use the changed bundle or refresh its digest automatically; review the diff and follow `docs/agents/skill-integrity.md`. This is a repository preflight, not harness-level sandboxing.
