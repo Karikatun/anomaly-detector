@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createPrisma } from '../../../db'
+import { lockAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import { APPROVED_MAIL_PROVIDER_CATALOG } from '../application/approved-mail-provider-catalog'
 import { MailPolicyService } from '../application/mail-policy-service'
 import { MailPolicyFailure } from '../domain/errors'
@@ -17,8 +18,9 @@ maybeDescribe('Prisma mail provider policy repository', () => {
   if (!databaseUrl) return
 
   const prisma = createPrisma(databaseUrl)
-  const repository = createPrismaMailPolicyRepository(prisma)
-  const actorId = '019f8099-7e26-7760-ad08-66d1d66b2718'
+  const accountLifecycleSecret = 'test-mail-policy-lifecycle-secret'
+  const repository = createPrismaMailPolicyRepository(prisma, accountLifecycleSecret)
+  const actorId = '019f8099-7e26-7760-ad08-66d1d66b27f2'
   const now = new Date('2026-08-25T12:00:00.000Z')
 
   beforeEach(async () => {
@@ -27,6 +29,10 @@ maybeDescribe('Prisma mail provider policy repository', () => {
     await prisma.mailPolicyCommand.deleteMany()
     await prisma.mailPolicyEntry.deleteMany()
     await prisma.mailPolicyVersion.deleteMany()
+    await prisma.user.deleteMany({ where: { id: actorId } })
+    await prisma.user.create({
+      data: { id: actorId, login: 'mail-policy-operator-lifecycle-test' },
+    })
   })
 
   afterAll(async () => {
@@ -230,6 +236,88 @@ maybeDescribe('Prisma mail provider policy repository', () => {
       reason: 'Неизвестный провайдер',
       state: 'blocked',
     }, operator)).rejects.toMatchObject({ kind: 'provider_not_found' } satisfies Partial<MailPolicyFailure>)
+  })
+
+  test('does not publish a policy command after account deletion wins the lifecycle lock', async () => {
+    const competingPrisma = createPrisma(databaseUrl!)
+    const competingRepository = createPrismaMailPolicyRepository(
+      competingPrisma,
+      accountLifecycleSecret,
+    )
+    let signalDeletionLocked!: () => void
+    let releaseDeletion!: () => void
+    const deletionLocked = new Promise<void>((resolve) => { signalDeletionLocked = resolve })
+    const deletionReleased = new Promise<void>((resolve) => { releaseDeletion = resolve })
+    const deletion = prisma.$transaction(async (transaction) => {
+      await lockAccountLifecycleTransaction(transaction, accountLifecycleSecret, actorId)
+      await transaction.user.update({
+        where: { id: actorId },
+        data: { anonymizedAt: now, deletionCleanupCompletedAt: now },
+      })
+      signalDeletionLocked()
+      await deletionReleased
+    })
+
+    try {
+      await deletionLocked
+      let commandSettled = false
+      const command = competingRepository.syncCatalog({
+        actorId,
+        catalog: APPROVED_MAIL_PROVIDER_CATALOG,
+        commandId: '019f8099-7e26-7760-ad08-66d1d66b27f5',
+        expectedVersion: 0,
+        fingerprint: 'e'.repeat(64),
+      }).finally(() => { commandSettled = true })
+      try {
+        await waitForAdvisoryLockWaiter(prisma)
+        expect(commandSettled).toBe(false)
+      } finally {
+        releaseDeletion()
+      }
+
+      await deletion
+      await expect(command).resolves.toEqual({ kind: 'operator_unavailable' })
+      expect(await prisma.mailPolicyVersion.count()).toBe(0)
+      expect(await prisma.mailPolicyCommand.count()).toBe(0)
+      expect(await prisma.mailPolicyAuditEvent.count()).toBe(0)
+    } finally {
+      releaseDeletion()
+      await competingPrisma.$disconnect()
+    }
+  })
+
+  test('keeps an already committed command replay read-only after the operator is deleted', async () => {
+    const commandId = '019f8099-7e26-7760-ad08-66d1d66b27f6'
+    const first = await repository.syncCatalog({
+      actorId,
+      catalog: APPROVED_MAIL_PROVIDER_CATALOG,
+      commandId,
+      expectedVersion: 0,
+      fingerprint: '9'.repeat(64),
+    })
+    await prisma.user.update({
+      where: { id: actorId },
+      data: { anonymizedAt: now, deletionCleanupCompletedAt: now },
+    })
+
+    await expect(repository.syncCatalog({
+      actorId,
+      catalog: APPROVED_MAIL_PROVIDER_CATALOG,
+      commandId,
+      expectedVersion: 0,
+      fingerprint: '9'.repeat(64),
+    })).resolves.toEqual({
+      fingerprint: '9'.repeat(64),
+      kind: 'command_exists',
+      receipt: { kind: 'catalog_synced', version: 1 },
+    })
+    expect(first).toEqual({
+      kind: 'committed',
+      receipt: { kind: 'catalog_synced', version: 1 },
+    })
+    expect(await prisma.mailPolicyVersion.count()).toBe(1)
+    expect(await prisma.mailPolicyCommand.count()).toBe(1)
+    expect(await prisma.mailPolicyAuditEvent.count()).toBe(1)
   })
 
   test('preserves the latest blocked state across catalog removal and re-addition', async () => {

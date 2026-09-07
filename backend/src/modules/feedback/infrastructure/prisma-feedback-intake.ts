@@ -1,8 +1,9 @@
-import { createHmac, randomBytes } from 'node:crypto'
+import { createHash, createHmac, randomBytes } from 'node:crypto'
 
 import { feedbackIntakeRequestSchema } from '@anomaly-detector/contracts'
 
 import type { DbClient } from '../../../db'
+import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import type { FeedbackIntake } from '../application/ports'
 
 const ACCOUNT_SCOPE = 'feedback_account_day'
@@ -30,11 +31,51 @@ export function createPrismaFeedbackIntake(
   return {
     async submit(input) {
       const report = feedbackIntakeRequestSchema.parse(input.report)
+      const fingerprint = submissionFingerprint(report)
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const now = clock.now()
-        const publicNumber = generatePublicNumber()
         try {
           return await db.$transaction(async (tx) => {
+            await tx.$queryRaw`
+              SELECT pg_advisory_xact_lock(
+                hashtextextended(${`feedback-submission:${report.submissionId}`}, 0)
+              )::text AS "lock"
+            `
+
+            const existingSubmission = await tx.feedbackReport.findUnique({
+              where: { submissionId: report.submissionId },
+              select: {
+                createdAt: true,
+                linkedUserId: true,
+                publicNumber: true,
+                submissionFingerprint: true,
+              },
+            })
+            if (existingSubmission) {
+              if (
+                existingSubmission.submissionFingerprint !== fingerprint
+                || (existingSubmission.linkedUserId !== null
+                  && existingSubmission.linkedUserId !== input.userId)
+              ) {
+                return { kind: 'submission_conflict' as const }
+              }
+              return {
+                kind: 'accepted' as const,
+                receipt: {
+                  acceptedAt: existingSubmission.createdAt.toISOString(),
+                  publicNumber: existingSubmission.publicNumber,
+                },
+              }
+            }
+
+            if (report.linkAccount) {
+              if (!await lockActiveAccountLifecycleTransaction(
+                tx,
+                fingerprintKey,
+                input.userId,
+              )) return { kind: 'account_unavailable' as const }
+            }
+
             const accountKeyHash = budgetKey(
               fingerprintKey,
               ACCOUNT_SCOPE,
@@ -105,6 +146,7 @@ export function createPrismaFeedbackIntake(
               })
             }
 
+            const publicNumber = generatePublicNumber()
             await tx.feedbackReport.create({
               data: {
                 ...reportSource(report),
@@ -116,6 +158,9 @@ export function createPrismaFeedbackIntake(
                 publicNumber,
                 replyEmail: report.replyEmail,
                 routeTemplate: report.technicalContext.routeTemplate,
+                submissionFingerprint: fingerprint,
+                submissionId: report.submissionId,
+                createdAt: now,
               },
             })
 
@@ -163,6 +208,16 @@ function reportSource(report: ReturnType<typeof feedbackIntakeRequestSchema.pars
 function budgetKey(secret: string, scope: string, value: string) {
   return createHmac('sha256', secret)
     .update(`feedback-budget:${scope}:${value}`)
+    .digest('hex')
+}
+
+function submissionFingerprint(
+  report: ReturnType<typeof feedbackIntakeRequestSchema.parse>,
+) {
+  const { submissionId, ...normalizedPayload } = report
+  return createHash('sha256')
+    .update('feedback-submission:v1\0')
+    .update(JSON.stringify({ normalizedPayload, submissionId }))
     .digest('hex')
 }
 

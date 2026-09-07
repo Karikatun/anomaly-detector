@@ -1,6 +1,7 @@
-import type { DbClient } from '../../../db'
+import { isRetryableDatabaseTransactionConflict, type DbClient } from '../../../db'
 import { randomBytes } from 'node:crypto'
 import type { Prisma } from '../../../generated/prisma/client'
+import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import type { Clock, RoomRecord, RoomRepository } from '../application/ports'
 import { RoomFailure } from '../domain/errors'
 
@@ -30,10 +31,15 @@ export function toRoomRecord(
   }
 }
 
-export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: () => new Date() }): RoomRepository {
+export function createPrismaRoomRepository(
+  db: DbClient,
+  clock: Clock,
+  accountLifecycleSecret: string,
+): RoomRepository {
   const repository: RoomRepository = {
     async cancelStart(input) {
-      return db.$transaction(async (tx) => {
+      return runRetryableRoomTransaction(db, async (tx) => {
+        await requireActiveRoomActor(tx, accountLifecycleSecret, input.actorId)
         const room = await tx.tenderRoom.findFirst({
           where: {
             hostId: input.actorId,
@@ -50,7 +56,7 @@ export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: (
           include: roomMembersInclude,
         })
         return toRoomRecord(waitingRoom)
-      }, { isolationLevel: 'Serializable' })
+      })
     },
     async listStartedForMember(userId) {
       const rooms = await db.tenderRoom.findMany({
@@ -90,6 +96,7 @@ export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: (
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           return await db.$transaction(async (tx) => {
+            await requireActiveRoomActor(tx, accountLifecycleSecret, input.hostId)
             if (await tx.currentMatch.findUnique({ where: { userId: input.hostId } })) {
               throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
             }
@@ -111,7 +118,13 @@ export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: (
             return toRoomRecord(room)
           }, { isolationLevel: 'Serializable' })
         } catch (error) {
-          if ((isRetryableTransactionError(error) || isJoinCodeUniqueConstraintError(error)) && attempt < 2) continue
+          if (
+            (isRetryableDatabaseTransactionConflict(error) || isJoinCodeUniqueConstraintError(error))
+            && attempt < 2
+          ) {
+            await waitForTransactionRetry(attempt)
+            continue
+          }
           if (isCurrentMatchUniqueConstraintError(error)) {
             throw new RoomFailure('room_current_match_exists', 'Player already has an unfinished match')
           }
@@ -125,6 +138,7 @@ export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: (
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           return await db.$transaction(async (tx) => {
+            await requireActiveRoomActor(tx, accountLifecycleSecret, input.actorId)
             const currentMatch = await tx.currentMatch.findUnique({
               where: { userId: input.actorId },
               select: { roomId: true },
@@ -174,7 +188,7 @@ export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: (
             })
           }, { isolationLevel: 'Serializable' })
         } catch (error) {
-          if (isRetryableTransactionError(error) && attempt < 2) {
+          if (isRetryableDatabaseTransactionConflict(error) && attempt < 2) {
             await waitForTransactionRetry(attempt)
             continue
           }
@@ -197,7 +211,8 @@ export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: (
     },
 
     async leave(input) {
-      await db.$transaction(async (tx) => {
+      await runRetryableRoomTransaction(db, async (tx) => {
+        await requireActiveRoomActor(tx, accountLifecycleSecret, input.actorId)
         const room = await tx.tenderRoom.findFirst({
           where: {
             id: input.roomId,
@@ -230,48 +245,39 @@ export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: (
             data: { hostId: remainingMembers[0].userId },
           })
         }
-      }, { isolationLevel: 'Serializable' })
+      })
     },
 
     async setReady(input) {
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          return await db.$transaction(async (tx) => {
-            const room = await tx.tenderRoom.findFirst({
-              where: {
-                id: input.roomId,
-                members: { some: { userId: input.actorId } },
-              },
-              include: roomMembersInclude,
-            })
-            if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
-            if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
+      return runRetryableRoomTransaction(db, async (tx) => {
+        await requireActiveRoomActor(tx, accountLifecycleSecret, input.actorId)
+        const room = await tx.tenderRoom.findFirst({
+          where: {
+            id: input.roomId,
+            members: { some: { userId: input.actorId } },
+          },
+          include: roomMembersInclude,
+        })
+        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
 
-            const updatedMember = await tx.tenderRoomMember.update({
-              where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
-              data: { ready: input.ready },
-            })
-            return toRoomRecord(room, {
-              members: room.members.map((member) => ({
-                ready: member.userId === updatedMember.userId ? updatedMember.ready : member.ready,
-                seat: member.seat,
-                userId: member.userId,
-              })),
-            })
-          }, { isolationLevel: 'Serializable' })
-        } catch (error) {
-          if (isRetryableTransactionError(error) && attempt < 2) {
-            await waitForTransactionRetry(attempt)
-            continue
-          }
-          throw error
-        }
-      }
-      throw new Error('Unreachable room readiness transaction retry state')
+        const updatedMember = await tx.tenderRoomMember.update({
+          where: { roomId_userId: { roomId: room.id, userId: input.actorId } },
+          data: { ready: input.ready },
+        })
+        return toRoomRecord(room, {
+          members: room.members.map((member) => ({
+            ready: member.userId === updatedMember.userId ? updatedMember.ready : member.ready,
+            seat: member.seat,
+            userId: member.userId,
+          })),
+        })
+      })
     },
 
     async start(input) {
-      return db.$transaction(async (tx) => {
+      return runRetryableRoomTransaction(db, async (tx) => {
+        await requireActiveRoomActor(tx, accountLifecycleSecret, input.actorId)
         const room = await tx.tenderRoom.findFirst({
           where: {
             hostId: input.actorId,
@@ -293,10 +299,39 @@ export function createPrismaRoomRepository(db: DbClient, clock: Clock = { now: (
           include: roomMembersInclude,
         })
         return toRoomRecord(startingRoom)
-      }, { isolationLevel: 'Serializable' })
+      })
     },
   }
   return repository
+}
+
+async function runRetryableRoomTransaction<T>(
+  db: DbClient,
+  operation: (transaction: Prisma.TransactionClient) => Promise<T>,
+) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await db.$transaction(operation, { isolationLevel: 'Serializable' })
+    } catch (error) {
+      if (!isRetryableDatabaseTransactionConflict(error) || attempt >= 2) throw error
+      await waitForTransactionRetry(attempt)
+    }
+  }
+  throw new Error('Unreachable Room transaction retry state')
+}
+
+async function requireActiveRoomActor(
+  transaction: Prisma.TransactionClient,
+  accountLifecycleSecret: string,
+  userId: string,
+) {
+  if (!await lockActiveAccountLifecycleTransaction(
+    transaction,
+    accountLifecycleSecret,
+    userId,
+  )) {
+    throw new RoomFailure('room_account_unavailable', 'Authentication is no longer active')
+  }
 }
 
 function generateRoomJoinCode() {
@@ -330,29 +365,6 @@ function isJoinCodeUniqueConstraintError(error: unknown) {
   return Array.isArray(target)
     ? target.includes('join_code')
     : String(target).includes('join_code')
-}
-
-function isRetryableTransactionError(error: unknown) {
-  if (typeof error !== 'object' || error === null) return false
-  if ('code' in error && error.code === 'P2034') return true
-
-  const cause = 'cause' in error ? error.cause : undefined
-  if (isTransactionWriteConflict(cause)) return true
-
-  const meta = 'meta' in error ? error.meta : undefined
-  if (typeof meta !== 'object' || meta === null || !('driverAdapterError' in meta)) return false
-  const driverAdapterError = meta.driverAdapterError
-  return typeof driverAdapterError === 'object'
-    && driverAdapterError !== null
-    && 'cause' in driverAdapterError
-    && isTransactionWriteConflict(driverAdapterError.cause)
-}
-
-function isTransactionWriteConflict(value: unknown) {
-  return typeof value === 'object'
-    && value !== null
-    && 'kind' in value
-    && value.kind === 'TransactionWriteConflict'
 }
 
 function waitForTransactionRetry(attempt: number) {

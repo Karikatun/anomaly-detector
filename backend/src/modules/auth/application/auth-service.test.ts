@@ -776,7 +776,7 @@ test('verifies a Recovery Email confirmation code before resolving its custom do
   expect(confirmCalls).toBe(1)
 })
 
-test('deleteAccount removes identity links only after Tender history is anonymised', async () => {
+test('deleteAccount delegates account erasure as one repository operation', async () => {
   const operations: string[] = []
   const repository = createAuthRepository({
     eraseUserIdentity: async (input: { userId: string; now: Date }) => {
@@ -784,7 +784,6 @@ test('deleteAccount removes identity links only after Tender history is anonymis
     },
   })
   const service = new AuthService({
-    accountDeletionCleanup: async ({ userId }) => { operations.push(`history:${userId}`) },
     accessTokens: { sign: async () => 'access-token', verify: async () => ({ sub: user.id, login: user.login, sessionId: 'session-1' }) },
     clock: { now: () => new Date('2026-07-20T12:00:00.000Z') },
     logoutCleanup: async () => undefined,
@@ -802,8 +801,5 @@ test('deleteAccount removes identity links only after Tender history is anonymis
     userId: user.id,
   })
 
-  expect(operations).toEqual([
-    `history:${user.id}`,
-    `erase:${user.id}`,
-  ])
+  expect(operations).toEqual([`erase:${user.id}`])
 })

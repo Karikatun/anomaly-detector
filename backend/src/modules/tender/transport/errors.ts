@@ -6,6 +6,9 @@ export async function executeTender<T>(operation: () => Promise<T>): Promise<T> 
     return await operation()
   } catch (error) {
     if (!(error instanceof TenderFailure)) throw error
+    if (error.kind === 'account_unavailable') {
+      throw new AppError(401, 'UNAUTHORIZED', error.message)
+    }
     if (error.kind === 'tender_not_found' || error.kind === 'player_not_in_tender') {
       throw new AppError(404, 'NOT_FOUND', 'Tender not found')
     }

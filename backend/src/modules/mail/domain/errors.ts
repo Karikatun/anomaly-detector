@@ -2,6 +2,7 @@ export type MailPolicyFailureKind =
   | 'catalog_version_conflict'
   | 'command_conflict'
   | 'invalid_domain'
+  | 'operator_unavailable'
   | 'provider_not_found'
   | 'recent_authentication_required'
   | 'version_conflict'

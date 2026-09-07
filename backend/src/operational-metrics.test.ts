@@ -76,10 +76,28 @@ describe('operational metrics', () => {
     expect(body).not.toContain('private-request-id')
     expect(body).not.toContain('private-database-detail')
 
-    const workerMetrics = createOperationalMetrics({ runtime: 'worker' })
+    const workerMetrics = createOperationalMetrics({
+      mailProtectionAlertStateReader: {
+        read: async () => ({
+          leased: 1,
+          nextAttemptAt: new Date('2026-08-25T10:01:00.000Z'),
+          oldestPendingAt: new Date('2026-08-25T09:55:00.000Z'),
+          pending: 3,
+          retrying: 2,
+          terminal: 1,
+        }),
+      },
+      runtime: 'worker',
+    })
     workerMetrics.observe({ kind: 'mail_protection_transition', reason: 'delivery_circuit_open' })
     const workerBody = await (await workerMetrics.fetch(new Request('http://collector/metrics'))).text()
     expect(workerBody).toContain('anomaly_detector_mail_protection_transitions_total{reason="delivery_circuit_open"} 1')
+    expect(workerBody).toContain('anomaly_detector_mail_protection_alerts{state="pending"} 3')
+    expect(workerBody).toContain('anomaly_detector_mail_protection_alerts{state="leased"} 1')
+    expect(workerBody).toContain('anomaly_detector_mail_protection_alerts{state="retrying"} 2')
+    expect(workerBody).toContain('anomaly_detector_mail_protection_alerts{state="terminal"} 1')
+    expect(workerBody).toContain('anomaly_detector_mail_protection_alert_oldest_pending_unixtime_seconds 1787651700')
+    expect(workerBody).toContain('anomaly_detector_mail_protection_alert_next_attempt_unixtime_seconds 1787652060')
   })
 
   test('wraps security logging without changing request telemetry when either observer fails', () => {
@@ -110,6 +128,16 @@ describe('operational metrics', () => {
     const response = await unavailable.fetch(new Request('http://collector/metrics'))
     expect(response.status).toBe(503)
     expect(await response.text()).toBe('Operational metrics unavailable')
+
+    const unavailableWorker = createOperationalMetrics({
+      mailProtectionAlertStateReader: {
+        read: async () => { throw new Error('private database failure') },
+      },
+      runtime: 'worker',
+    })
+    const workerResponse = await unavailableWorker.fetch(new Request('http://collector/metrics'))
+    expect(workerResponse.status).toBe(503)
+    expect(await workerResponse.text()).toBe('Operational metrics unavailable')
   })
 
   test('counts an exceptional route as 5xx after the application error handler responds', async () => {

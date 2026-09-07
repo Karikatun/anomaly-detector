@@ -83,6 +83,7 @@ export type StoredTender = {
 }
 
 export type TenderCommit = {
+  actorId?: string
   auditEvents: PendingTenderAuditEvent[]
   command?: StoredTenderCommand
   commandId?: string
@@ -93,6 +94,7 @@ export type TenderCommit = {
 
 export type TenderCommitResult =
   | { kind: 'committed' }
+  | { kind: 'actor_unavailable' }
   | { command: StoredTenderCommand; kind: 'command_exists' }
   | { kind: 'version_conflict' }
 
@@ -100,6 +102,7 @@ export type TenderStore = {
   anonymizeParticipant(playerId: string): Promise<string[]>
   commit(change: TenderCommit): Promise<TenderCommitResult>
   create(tender: Omit<StoredTender, 'id'>): Promise<StoredTender>
+  findCommand(input: { commandId: string; tenderId: string }): Promise<StoredTenderCommand | null>
   findDue(input: AdvanceDueTendersInput): Promise<string[]>
   listCompletedForPlayer(playerId: string): Promise<StoredTender[]>
   readAuditEvents(tenderId: string): Promise<StoredTenderAuditEvent[]>

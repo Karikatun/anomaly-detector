@@ -132,6 +132,12 @@ export class FeedbackOperatorService {
 
   private resolveCommit(result: FeedbackOperatorCommitResult, fingerprint: string) {
     if (result.kind === 'command_exists') return this.resolveExisting(result, fingerprint)
+    if (result.kind === 'operator_unavailable') {
+      throw new FeedbackFailure(
+        'operator_unavailable',
+        'Operator access is no longer available',
+      )
+    }
     if (result.kind === 'report_not_found') {
       throw new FeedbackFailure('report_not_found', 'Feedback report was not found')
     }

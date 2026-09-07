@@ -1,7 +1,11 @@
 import type { DbClient } from '../../../db'
+import { lockAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import type { TutorialProgressRepository } from '../application/ports'
 
-export function createPrismaTutorialProgressRepository(db: DbClient): TutorialProgressRepository {
+export function createPrismaTutorialProgressRepository(
+  db: DbClient,
+  accountLifecycleSecret: string,
+): TutorialProgressRepository {
   return {
     async read(userId) {
       const user = await db.user.findUnique({
@@ -12,15 +16,20 @@ export function createPrismaTutorialProgressRepository(db: DbClient): TutorialPr
     },
 
     async complete(userId, completedAt) {
-      await db.user.updateMany({
-        where: { id: userId, tutorialCompletedAt: null },
-        data: { tutorialCompletedAt: completedAt },
+      return db.$transaction(async (transaction) => {
+        await lockAccountLifecycleTransaction(transaction, accountLifecycleSecret, userId)
+        const user = await transaction.user.findFirst({
+          where: { anonymizedAt: null, id: userId },
+          select: { tutorialCompletedAt: true },
+        })
+        if (!user) return null
+        if (user.tutorialCompletedAt) return user.tutorialCompletedAt
+        await transaction.user.updateMany({
+          where: { anonymizedAt: null, id: userId, tutorialCompletedAt: null },
+          data: { tutorialCompletedAt: completedAt },
+        })
+        return completedAt
       })
-      const user = await db.user.findUniqueOrThrow({
-        where: { id: userId },
-        select: { tutorialCompletedAt: true },
-      })
-      return user.tutorialCompletedAt ?? completedAt
     },
   }
 }

@@ -9,6 +9,7 @@ import { createPrismaTutorialProgressRepository } from './infrastructure/prisma-
 import { createProfileRoutes } from './transport/routes'
 
 export function createProfileModule(input: {
+  accountLifecycleSecret: string
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   completedTenderSummaryReader: CompletedTenderSummaryReader
   db: DbClient
@@ -18,7 +19,7 @@ export function createProfileModule(input: {
     completedTenderSummaryReader: input.completedTenderSummaryReader,
   })
   const tutorial = new TutorialProgressService(
-    createPrismaTutorialProgressRepository(input.db),
+    createPrismaTutorialProgressRepository(input.db, input.accountLifecycleSecret),
   )
   return {
     routes: createProfileRoutes({

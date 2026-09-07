@@ -9,6 +9,7 @@ import { createPrismaFeedbackOperatorRepository } from './infrastructure/prisma-
 import { createFeedbackRoutes } from './transport/routes'
 
 export function createFeedbackModule(input: {
+  accountLifecycleSecret: string
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   clientAddress: (context: Context<AuthHttpEnv>) => string
   db: DbClient
@@ -18,7 +19,10 @@ export function createFeedbackModule(input: {
   const operator = new FeedbackOperatorService({
     clock: { now: () => new Date() },
     fingerprintKey: input.fingerprintKey,
-    repository: createPrismaFeedbackOperatorRepository(input.db),
+    repository: createPrismaFeedbackOperatorRepository(
+      input.db,
+      input.accountLifecycleSecret,
+    ),
   })
   return {
     operator,
@@ -33,3 +37,5 @@ export function createFeedbackModule(input: {
 
 export { executeFeedbackOperator } from './transport/errors'
 export { cleanupFeedbackReports }
+export { anonymizePrismaFeedbackOperatorActorBatch } from './infrastructure/prisma-feedback-operator-account-cleanup'
+export { unlinkFeedbackAccountInTransaction } from './infrastructure/prisma-feedback-account-cleanup'

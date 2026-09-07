@@ -13,7 +13,9 @@ import type {
 
 export type FeedbackIntakeOutcome =
   | { kind: 'accepted'; receipt: FeedbackReceipt }
+  | { kind: 'account_unavailable' }
   | { kind: 'rate_limited'; retryAfterSeconds: number }
+  | { kind: 'submission_conflict' }
 
 export type FeedbackIntake = {
   submit(input: {
@@ -64,7 +66,14 @@ export type StoredFeedbackOperatorCommand = {
 export type FeedbackOperatorCommitResult =
   | ({ kind: 'command_exists' } & StoredFeedbackOperatorCommand)
   | { kind: 'committed'; receipt: FeedbackOperatorCommandResponse }
-  | { kind: 'contact_absent' | 'report_not_found' | 'transition_conflict' | 'version_conflict' }
+  | {
+      kind:
+        | 'contact_absent'
+        | 'operator_unavailable'
+        | 'report_not_found'
+        | 'transition_conflict'
+        | 'version_conflict'
+    }
 
 export type FeedbackOperatorRepository = {
   deleteContact(input: {

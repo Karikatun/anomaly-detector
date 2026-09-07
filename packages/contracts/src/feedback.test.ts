@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  feedbackIntakeCompatibilityRequestSchema,
   feedbackIntakeRequestSchema,
   feedbackOperatorCommandResponseSchema,
   feedbackQueueResponseSchema,
@@ -18,6 +19,28 @@ const technicalContext = {
 } as const
 
 describe('feedback player contracts', () => {
+  test('requires a client-generated submission UUID for safe retries', () => {
+    const report = {
+      category: 'suggestion' as const,
+      desiredChange: 'Добавить краткую подсказку перед первым ходом.',
+      linkAccount: false,
+      problemSolved: 'Новому игроку будет проще понять цель раунда.',
+      replyEmail: null,
+      submissionId: '019f8099-7e26-7760-ad08-66d1d66b2717',
+      technicalContext,
+    }
+
+    expect(feedbackIntakeRequestSchema.parse(report).submissionId).toBe(report.submissionId)
+    const { submissionId: _submissionId, ...withoutSubmissionId } = report
+    expect(feedbackIntakeRequestSchema.safeParse(withoutSubmissionId).success).toBe(false)
+    expect(feedbackIntakeCompatibilityRequestSchema.parse(withoutSubmissionId))
+      .toEqual(withoutSubmissionId)
+    expect(feedbackIntakeRequestSchema.safeParse({
+      ...report,
+      submissionId: 'not-a-uuid',
+    }).success).toBe(false)
+  })
+
   test('accepts only bounded product-owned report fields', () => {
     const report = feedbackIntakeRequestSchema.parse({
       category: 'error',
@@ -26,6 +49,7 @@ describe('feedback player contracts', () => {
       linkAccount: true,
       replyEmail: 'player@example.com',
       reproductionSteps: 'Открыл матч и нажал на карточку.',
+      submissionId: '019f8099-7e26-7760-ad08-66d1d66b2717',
       technicalContext,
       whatHappened: 'Карточка не открылась.',
     })
@@ -38,6 +62,7 @@ describe('feedback player contracts', () => {
       linkAccount: false,
       problemSolved: 'Новому игроку будет проще понять цель раунда.',
       replyEmail: null,
+      submissionId: '019f8099-7e26-7760-ad08-66d1d66b2718',
       technicalContext,
     }).category).toBe('suggestion')
   })
@@ -50,6 +75,7 @@ describe('feedback player contracts', () => {
       linkAccount: false,
       replyEmail: null,
       reproductionSteps: 'Нажал кнопку.',
+      submissionId: '019f8099-7e26-7760-ad08-66d1d66b2719',
       technicalContext,
       whatHappened: 'Ничего не произошло.',
     }

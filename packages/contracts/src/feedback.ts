@@ -28,7 +28,7 @@ export const feedbackTechnicalContextSchema = z.object({
   routeTemplate: feedbackRouteTemplateSchema,
 }).strict()
 
-const feedbackIntakeBaseSchema = z.object({
+const feedbackIntakeBasePayloadSchema = z.object({
   linkAccount: z.boolean(),
   replyEmail: z.string().trim().email().max(254).nullable(),
   technicalContext: feedbackTechnicalContextSchema,
@@ -36,7 +36,7 @@ const feedbackIntakeBaseSchema = z.object({
 
 const boundedFeedbackText = z.string().trim().min(3).max(2_000)
 
-export const feedbackErrorIntakeSchema = feedbackIntakeBaseSchema.extend({
+export const feedbackErrorPayloadSchema = feedbackIntakeBasePayloadSchema.extend({
   canContinue: z.boolean(),
   category: z.literal('error'),
   expectedResult: boundedFeedbackText,
@@ -44,15 +44,41 @@ export const feedbackErrorIntakeSchema = feedbackIntakeBaseSchema.extend({
   whatHappened: boundedFeedbackText,
 }).strict()
 
-export const feedbackSuggestionIntakeSchema = feedbackIntakeBaseSchema.extend({
+export const feedbackSuggestionPayloadSchema = feedbackIntakeBasePayloadSchema.extend({
   category: z.literal('suggestion'),
   desiredChange: boundedFeedbackText,
   problemSolved: boundedFeedbackText,
 }).strict()
 
+export const feedbackIntakePayloadSchema = z.discriminatedUnion('category', [
+  feedbackErrorPayloadSchema,
+  feedbackSuggestionPayloadSchema,
+])
+
+const feedbackSubmissionSchema = z.object({
+  submissionId: z.string().uuid(),
+})
+
+export const feedbackErrorIntakeSchema = feedbackErrorPayloadSchema.extend(
+  feedbackSubmissionSchema.shape,
+).strict()
+
+export const feedbackSuggestionIntakeSchema = feedbackSuggestionPayloadSchema.extend(
+  feedbackSubmissionSchema.shape,
+).strict()
+
 export const feedbackIntakeRequestSchema = z.discriminatedUnion('category', [
   feedbackErrorIntakeSchema,
   feedbackSuggestionIntakeSchema,
+])
+
+export const feedbackIntakeCompatibilityRequestSchema = z.discriminatedUnion('category', [
+  feedbackErrorPayloadSchema.extend({
+    submissionId: feedbackSubmissionSchema.shape.submissionId.optional(),
+  }).strict(),
+  feedbackSuggestionPayloadSchema.extend({
+    submissionId: feedbackSubmissionSchema.shape.submissionId.optional(),
+  }).strict(),
 ])
 
 export const feedbackReceiptSchema = z.object({
@@ -140,6 +166,7 @@ export type FeedbackCategory = z.infer<typeof feedbackCategorySchema>
 export type FeedbackStatus = z.infer<typeof feedbackStatusSchema>
 export type FeedbackRouteTemplate = z.infer<typeof feedbackRouteTemplateSchema>
 export type FeedbackTechnicalContext = z.infer<typeof feedbackTechnicalContextSchema>
+export type FeedbackIntakePayload = z.infer<typeof feedbackIntakePayloadSchema>
 export type FeedbackIntakeRequest = z.infer<typeof feedbackIntakeRequestSchema>
 export type FeedbackReceipt = z.infer<typeof feedbackReceiptSchema>
 export type FeedbackReport = z.infer<typeof feedbackReportSchema>

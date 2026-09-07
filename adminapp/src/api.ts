@@ -111,7 +111,7 @@ export class AdminApi {
   }
 
   async getMailPolicy(): Promise<MailOperationsView> {
-    const response = await this.request('/api/operations/mail-policy', {
+    const response = await this.request('/api/operations/mail-policy?deliveryContract=2', {
       headers: this.authenticatedHeaders(),
     })
     return mailOperationsViewSchema.parse(await response.json())
@@ -189,11 +189,11 @@ export class AdminApi {
   }
 
   async syncMailPolicyCatalog(input: MailPolicySyncCommand): Promise<MailOperationsView> {
-    return this.mailPolicyCommand('/api/operations/mail-policy/sync', mailPolicySyncCommandSchema.parse(input))
+    return this.mailPolicyCommand('/api/operations/mail-policy/sync?deliveryContract=2', mailPolicySyncCommandSchema.parse(input))
   }
 
   async changeMailPolicyStatus(input: MailPolicyStatusCommand): Promise<MailOperationsView> {
-    return this.mailPolicyCommand('/api/operations/mail-policy/status', mailPolicyStatusCommandSchema.parse(input))
+    return this.mailPolicyCommand('/api/operations/mail-policy/status?deliveryContract=2', mailPolicyStatusCommandSchema.parse(input))
   }
 
   private async mailPolicyCommand(path: string, body: unknown) {

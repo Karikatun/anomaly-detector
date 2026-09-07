@@ -16,12 +16,26 @@ const mailOperationsView = {
     groups: [],
     lastSmtpSuccessAt: null,
     outbox: { leased: 0, oldestQueuedAt: null, queued: 0 },
+    protectionAlerts: {
+      leased: 0,
+      nextAttemptAt: null,
+      oldestPendingAt: null,
+      pending: 0,
+      retrying: 0,
+      terminal: 0,
+    },
     provider: 'reg_ru',
     catalogLastSyncedAt: null,
     totals: { requested: 0, smtpAccepted: 0, temporaryFailures: 0, terminalFailures: 0 },
   },
   generatedAt: '2026-08-22T12:00:00.000Z',
   publishedPolicy: null,
+}
+const rollbackMailOperationsView = {
+  ...mailOperationsView,
+  delivery: Object.fromEntries(
+    Object.entries(mailOperationsView.delivery).filter(([key]) => key !== 'protectionAlerts'),
+  ),
 }
 const antiAbuseOverview = {
   groups: [{ exhaustedBudgetKeysAtLeast: 10, surface: 'authentication' }],
@@ -147,10 +161,10 @@ test('uses the authenticated narrow mail-policy endpoints without generic mutati
   })).resolves.toEqual(mailOperationsView)
 
   expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
-    { method: 'GET', url: '/api/operations/mail-policy' },
+    { method: 'GET', url: '/api/operations/mail-policy?deliveryContract=2' },
     { method: 'GET', url: '/api/operations/mail-policy/anti-abuse' },
-    { method: 'POST', url: '/api/operations/mail-policy/sync' },
-    { method: 'POST', url: '/api/operations/mail-policy/status' },
+    { method: 'POST', url: '/api/operations/mail-policy/sync?deliveryContract=2' },
+    { method: 'POST', url: '/api/operations/mail-policy/status?deliveryContract=2' },
   ])
   expect(requests[2].body).toEqual({ commandId, expectedVersion: 0 })
   expect(requests.some(({ url }) => /create|update|delete/.test(url))).toBe(false)
@@ -162,23 +176,23 @@ test('keeps the mail screen available only for a missing rollback-era anti-abuse
     const url = String(input)
     if (url.endsWith('/api/auth/refresh')) return Response.json({ accessToken: 'operator-token' })
     urls.push(url)
-    if (url.endsWith('/api/operations/mail-policy')) return Response.json(mailOperationsView)
+    if (url.startsWith('/api/operations/mail-policy?')) return Response.json(rollbackMailOperationsView)
     return Response.json({ error: { code: 'NOT_FOUND', message: 'Route not found' } }, { status: 404 })
   })
 
   await api.restoreSession()
   await expect(api.getMailPolicyWorkspace()).resolves.toEqual({
     antiAbuse: null,
-    mailPolicy: mailOperationsView,
+    mailPolicy: rollbackMailOperationsView,
   })
   expect(urls).toEqual([
-    '/api/operations/mail-policy',
+    '/api/operations/mail-policy?deliveryContract=2',
     '/api/operations/mail-policy/anti-abuse',
   ])
 
   const failingApi = new AdminApi('', async (input) => {
-    if (String(input).endsWith('/api/operations/mail-policy')) {
-      return Response.json(mailOperationsView)
+    if (String(input).startsWith('/api/operations/mail-policy?')) {
+      return Response.json(rollbackMailOperationsView)
     }
     return Response.json({ error: { code: 'INTERNAL_ERROR', message: 'failed' } }, { status: 500 })
   })
@@ -198,7 +212,7 @@ test('does not probe anti-abuse when the primary mail-policy endpoint is conceal
   await expect(api.getMailPolicyWorkspace()).rejects.toEqual(
     new AdminApiError(404, 'NOT_FOUND', 'Ресурс недоступен'),
   )
-  expect(urls).toEqual(['/api/operations/mail-policy'])
+  expect(urls).toEqual(['/api/operations/mail-policy?deliveryContract=2'])
 })
 
 test('uses only the explicit authenticated feedback queue commands', async () => {

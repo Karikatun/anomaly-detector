@@ -50,6 +50,9 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 - [ ] Prisma migration set and production migration state are recorded.
 - [ ] New migrations are backward compatible with the immediate rollback
       application; destructive contract steps are deferred to a later release.
+- [ ] One-way worker or account-lifecycle protocol migrations have an explicit
+      stop-and-drain order; no incompatible writer remains active or is retained as
+      the immediate rollback target after the protocol becomes durable.
 - [ ] Latest production backup identifier and completion are recorded.
 - [ ] `bun run drill:postgres:backup-restore` passed locally and the current
       production-like restore drill evidence is available.
@@ -68,6 +71,14 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 - [ ] Prisma deploy completed exactly once before stateless application switch.
 - [ ] API and worker container-internal `/health/live` and `/health/ready` pass;
       neither container is crash-looping.
+- [ ] Account-deletion reconciliation runs on its separate periodic trigger; the
+      latest run exited successfully with `failed=0`, `deferred_failed=0`, `pending=0`
+      and no overdue marker. Concurrent invocations claim disjoint account sets, and no
+      claim is older than its 35-minute lease. The trigger was enabled only after all
+      lifecycle-incompatible writers were drained.
+- [ ] Worker readiness records successful deadline and protection-alert loops, plus
+      the transactional-mail loop when SMTP is enabled; protection-alert pending,
+      retrying, terminal, and oldest-pending gauges match PostgreSQL.
 - [ ] Public API readiness returns the documented status through HTTPS; worker
       health and service ports remain private.
 - [ ] Webapp and website return expected checksums; the public root serves the

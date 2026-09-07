@@ -1,9 +1,14 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 
 import { createPrisma } from '../../db'
+import { lockAccountLifecycleTransaction } from '../../security/account-lifecycle-lock'
 import { createTenderModule } from './index'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
-import { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
+import {
+  anonymizePrismaTenderParticipant,
+  createPrismaTenderStore,
+} from './infrastructure/prisma-tender-store'
 import { createPrismaTenderOperationalStateReader } from './infrastructure/prisma-tender-operational-state'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -11,13 +16,18 @@ const maybeDescribe = databaseUrl
   ? describe
   : (name: string, fn: () => void) => describe.skip(name, fn)
 
+const expectedStoredCommandId = (commandId: string) => `stored-command-v1-${createHash('sha256')
+  .update('tender-command-storage-v1\0')
+  .update(commandId)
+  .digest('hex')}`
+
 maybeDescribe('Tender PostgreSQL integration', () => {
   if (!databaseUrl) return
   const prisma = createPrisma(databaseUrl!)
 
   beforeEach(async () => {
     await prisma.tender.deleteMany()
-  })
+  }, 15_000)
 
   afterAll(async () => {
     await prisma.$disconnect()
@@ -283,7 +293,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     expect(await createPrismaTenderStore(prisma).readAuditEvents(tenderId)).toMatchObject([
       {
         actorId: 'player-a',
-        commandId: 'access-slot-a-1',
+        commandId: expectedStoredCommandId('access-slot-a-1'),
         kind: 'access_slot_requested',
         payload: { playerId: 'player-a', slot: 1 },
         sequence: 1,
@@ -354,7 +364,7 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     ).toEqual([
       {
         actorId: 'player-a',
-        commandId: 'command-a-1',
+        commandId: expectedStoredCommandId('command-a-1'),
         kind: 'access_slot_requested',
         payload: {
           data: { playerId: 'player-a', slot: 1 },
@@ -390,7 +400,9 @@ maybeDescribe('Tender PostgreSQL integration', () => {
   })
 
   test('decodes known legacy audit events through the Prisma store boundary', async () => {
-    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const module = createTenderModule({
+      store: createPrismaTenderStore(prisma),
+    })
     const { tenderId } = await module.createTender({
       players: [
         { id: 'player-a', tiePriority: 1 },
@@ -474,7 +486,9 @@ maybeDescribe('Tender PostgreSQL integration', () => {
   })
 
   test('persists an anonymised participant name without changing other players', async () => {
-    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const module = createTenderModule({
+      store: createPrismaTenderStore(prisma),
+    })
     const { tenderId } = await module.createTender({
       players: [
         { id: 'player-a', tiePriority: 1, displayName: 'Анна' },
@@ -530,6 +544,332 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     expect(JSON.stringify(persistedCommands)).not.toContain('player-a')
   })
 
+  test('keeps a maximum-length Working Model note valid while removing an embedded deleted UUID', async () => {
+    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const deletedPlayerId = crypto.randomUUID()
+    const activePlayerId = crypto.randomUUID()
+    const note = `${'x'.repeat(482)}${deletedPlayerId}${'y'.repeat(482)}`
+    expect(note).toHaveLength(1_000)
+    const { tenderId } = await module.createTender({
+      players: [
+        { id: deletedPlayerId, tiePriority: 1 },
+        { id: activePlayerId, tiePriority: 2 },
+      ],
+    })
+    await module.execute({
+      actorId: activePlayerId,
+      commandId: 'maximum-note-before-other-player-deletion',
+      tenderId,
+      type: 'update-working-model',
+      workingModel: { signals: { aster: { note } } },
+    })
+
+    await module.anonymizeParticipant(deletedPlayerId)
+
+    const persisted = await prisma.tender.findUniqueOrThrow({
+      where: { id: tenderId },
+      select: { state: true },
+    })
+    expect(JSON.stringify(persisted.state)).not.toContain(deletedPlayerId)
+    const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const view = await restartedModule.readTenderView({
+      playerId: activePlayerId,
+      tenderId,
+    })
+    const persistedNote = view.privateWorkingModel.signals.aster?.note
+    expect(persistedNote).toHaveLength(1_000)
+    expect(persistedNote).not.toContain(deletedPlayerId)
+  })
+
+  test('anonymises representative budget-saturated Tender history within the deletion timeout', async () => {
+    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const tenderIds: string[] = []
+    const historyRowsPerTender = 480
+    const tenderCount = 26
+    for (let index = 0; index < tenderCount; index += 1) {
+      const otherPlayerId = `batch-player-${index}`
+      const { tenderId } = await module.createTender({
+        players: [
+          { id: 'batch-player-a', tiePriority: 1, displayName: 'Deleted participant' },
+          { id: otherPlayerId, tiePriority: 2, displayName: `Игрок ${index}` },
+        ],
+      })
+      tenderIds.push(tenderId)
+      await module.execute({
+        actorId: 'batch-player-a',
+        commandId: index === 0
+          ? 'prefix-batch-player-a-suffix'
+          : `batch-history-command-${index}`,
+        slot: 1,
+        tenderId,
+        type: 'request-access-slot',
+      })
+      await prisma.tenderCommand.createMany({
+        data: Array.from({ length: historyRowsPerTender - 1 }, (_, historyIndex) => ({
+          commandId: historyIndex === 0
+            ? `unrelated-history-command-${index}`
+            : `batch-history-command-${index}-${historyIndex}`,
+          fingerprint: JSON.stringify(historyIndex === 0
+            ? { actorId: otherPlayerId, tenderId, type: 'update-working-model' }
+            : {
+                actorId: 'batch-player-a',
+                nested: { 'batch-player-a': ['batch-player-a'] },
+                tenderId,
+                type: 'update-working-model',
+              }),
+          receipt: { tenderId, version: historyIndex + 2 },
+          tenderId,
+        })),
+      })
+      await prisma.tenderAuditEvent.createMany({
+        data: Array.from({ length: historyRowsPerTender - 1 }, (_, historyIndex) => ({
+          actorId: historyIndex === 0 ? otherPlayerId : 'batch-player-a',
+          commandId: historyIndex === 0
+            ? `unrelated-history-command-${index}`
+            : `batch-history-command-${index}-${historyIndex}`,
+          kind: 'working_model_updated',
+          payload: historyIndex === 0
+            ? { actorId: otherPlayerId, players: [otherPlayerId] }
+            : {
+                actorId: 'batch-player-a',
+                players: ['batch-player-a'],
+                privateByPlayer: { 'batch-player-a': true },
+              },
+          sequence: historyIndex + 10_000,
+          tenderId,
+        })),
+      })
+    }
+
+    const unrelatedHistoryBefore = await Promise.all([
+      prisma.tenderCommand.findMany({
+        orderBy: { commandId: 'asc' },
+        where: { commandId: { startsWith: 'unrelated-history-command-' } },
+        select: { commandId: true, fingerprint: true, receipt: true },
+      }),
+      prisma.tenderAuditEvent.findMany({
+        orderBy: { commandId: 'asc' },
+        where: { commandId: { startsWith: 'unrelated-history-command-' } },
+        select: { actorId: true, commandId: true, payload: true },
+      }),
+    ])
+
+    const changedTenderIds = await prisma.$transaction(
+      (transaction) => anonymizePrismaTenderParticipant(transaction, 'batch-player-a'),
+      { isolationLevel: 'Serializable', timeout: 15_000 },
+    )
+
+    expect(changedTenderIds).toEqual([...tenderIds].sort())
+    const persistedHistory = await Promise.all([
+      prisma.tender.findMany({ orderBy: { id: 'asc' }, select: { id: true, state: true } }),
+      prisma.tenderAuditEvent.findMany({
+        select: { actorId: true, commandId: true, payload: true, tenderId: true },
+      }),
+      prisma.tenderCommand.findMany({
+        select: { commandId: true, fingerprint: true, receipt: true, tenderId: true },
+      }),
+    ])
+    expect(JSON.stringify(persistedHistory)).not.toContain('batch-player-a')
+    const anonymousPlayerIdsByTender = new Map(persistedHistory[0].map(({ id, state }) => {
+      const players = (state as { players: Array<{ id: string }> }).players
+      return [id, players.find(({ id: playerId }) =>
+        playerId.startsWith('deleted-participant-'))?.id] as const
+    }))
+    expect(new Set(anonymousPlayerIdsByTender.values()).size).toBe(tenderIds.length)
+    const expectedCommandAlias = expectedStoredCommandId('prefix-batch-player-a-suffix')
+    const commandWithIdentifier = persistedHistory[2].find(({ tenderId, commandId }) =>
+      tenderId === tenderIds[0]
+      && commandId === expectedCommandAlias)
+    expect(commandWithIdentifier).toBeDefined()
+    expect(persistedHistory[1]).toContainEqual(expect.objectContaining({
+      commandId: commandWithIdentifier?.commandId,
+      tenderId: commandWithIdentifier?.tenderId,
+    }))
+    await expect(Promise.all([
+      prisma.tenderCommand.findMany({
+        orderBy: { commandId: 'asc' },
+        where: { commandId: { startsWith: 'unrelated-history-command-' } },
+        select: { commandId: true, fingerprint: true, receipt: true },
+      }),
+      prisma.tenderAuditEvent.findMany({
+        orderBy: { commandId: 'asc' },
+        where: { commandId: { startsWith: 'unrelated-history-command-' } },
+        select: { actorId: true, commandId: true, payload: true },
+      }),
+    ])).resolves.toEqual(unrelatedHistoryBefore)
+  }, 60_000)
+
+  test('pseudonymises a foreign command key but never re-executes the original key', async () => {
+    const module = createTenderModule({
+      store: createPrismaTenderStore(prisma),
+    })
+    const deletedPlayerId = 'player-a'
+    const commandId = `foreign-command-${deletedPlayerId}`
+    const { tenderId } = await module.createTender({
+      players: [
+        { id: deletedPlayerId, tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    const command = {
+      actorId: 'player-b',
+      commandId,
+      slot: 2,
+      tenderId,
+      type: 'request-access-slot' as const,
+    }
+    await module.execute(command)
+    const currentStorageId = expectedStoredCommandId(commandId)
+    await prisma.$transaction([
+      prisma.tenderCommand.update({
+        where: {
+          tenderId_commandId: { commandId: currentStorageId, tenderId },
+        },
+        data: {
+          commandId,
+          fingerprint: JSON.stringify(command),
+        },
+      }),
+      prisma.tenderAuditEvent.updateMany({
+        where: { commandId: currentStorageId, tenderId },
+        data: { commandId },
+      }),
+    ])
+    const predictablePublicAlias = `deleted-command-${createHash('sha256')
+      .update(commandId)
+      .digest('hex')}`
+    await prisma.tenderCommand.create({
+      data: {
+        commandId: predictablePublicAlias,
+        fingerprint: '{}',
+        receipt: { tenderId, version: 1 },
+        tenderId,
+      },
+    })
+
+    await module.anonymizeParticipant(deletedPlayerId)
+
+    const persistedCommand = await prisma.tenderCommand.findFirstOrThrow({
+      where: { commandId: { not: predictablePublicAlias }, tenderId },
+      select: { commandId: true, fingerprint: true },
+    })
+    const persistedAudit = await prisma.tenderAuditEvent.findFirstOrThrow({
+      where: { tenderId },
+      select: { commandId: true, payload: true },
+    })
+    expect(persistedCommand.commandId).toMatch(/^deleted-command-v1-[0-9a-f]{64}$/)
+    expect(persistedCommand.commandId).not.toBe(predictablePublicAlias)
+    expect(persistedAudit.commandId).toBe(persistedCommand.commandId)
+    expect(JSON.stringify({ persistedAudit, persistedCommand })).not.toContain(deletedPlayerId)
+    await expect(createPrismaTenderStore(prisma).readAuditEvents(tenderId)).resolves.toContainEqual(
+      expect.objectContaining({
+        commandId: persistedCommand.commandId,
+        formatVersion: 1,
+      }),
+    )
+    await expect(module.execute(command)).rejects.toMatchObject({
+      kind: 'duplicate_command_conflict',
+    })
+  })
+
+  test('never persists a post-deletion public command id containing the deleted UUID', async () => {
+    const module = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const deletedPlayerId = crypto.randomUUID()
+    const activePlayerId = crypto.randomUUID()
+    const { tenderId } = await module.createTender({
+      players: [
+        { id: deletedPlayerId, tiePriority: 1 },
+        { id: activePlayerId, tiePriority: 2 },
+      ],
+    })
+    await module.anonymizeParticipant(deletedPlayerId)
+    const command = {
+      actorId: activePlayerId,
+      commandId: `post-delete-${deletedPlayerId}`,
+      slot: 2,
+      tenderId,
+      type: 'request-access-slot' as const,
+    }
+
+    const receipt = await module.execute(command)
+    const expectedStorageId = expectedStoredCommandId(command.commandId)
+    const persistedCommand = await prisma.tenderCommand.findUniqueOrThrow({
+      where: {
+        tenderId_commandId: { commandId: expectedStorageId, tenderId },
+      },
+      select: { commandId: true, fingerprint: true, receipt: true },
+    })
+    const persistedAudit = await prisma.tenderAuditEvent.findFirstOrThrow({
+      where: { tenderId },
+      select: { commandId: true, payload: true },
+    })
+
+    expect(JSON.stringify({ persistedAudit, persistedCommand })).not.toContain(deletedPlayerId)
+    expect(persistedAudit.commandId).toBe(expectedStorageId)
+    await expect(createPrismaTenderStore(prisma).readAuditEvents(tenderId)).resolves.toContainEqual(
+      expect.objectContaining({ commandId: expectedStorageId, formatVersion: 1 }),
+    )
+    await expect(module.findCommandReceipt(command)).resolves.toEqual(receipt)
+    await expect(module.execute(command)).resolves.toEqual(receipt)
+    await expect(module.execute({ ...command, slot: 3 })).rejects.toMatchObject({
+      kind: 'duplicate_command_conflict',
+    })
+  })
+
+  test('rejects a stale authenticated command after account deletion wins the lifecycle lock', async () => {
+    const lifecycleSecret = 'tender-account-lifecycle-integration-secret'
+    const secondPrisma = createPrisma(databaseUrl!)
+    const deletionMayCommit = deferred()
+    const deletionHasLock = deferred()
+    const [deletedPlayer, otherPlayer] = await Promise.all([
+      prisma.user.create({ data: { login: `tender-delete-${crypto.randomUUID()}` } }),
+      prisma.user.create({ data: { login: `tender-peer-${crypto.randomUUID()}` } }),
+    ])
+    try {
+      const module = createTenderModule({
+        store: createPrismaTenderStore(secondPrisma, lifecycleSecret),
+      })
+      const { tenderId } = await module.createTender({
+        players: [
+          { id: deletedPlayer.id, tiePriority: 1 },
+          { id: otherPlayer.id, tiePriority: 2 },
+        ],
+      })
+      const deletion = prisma.$transaction(async (transaction) => {
+        await lockAccountLifecycleTransaction(transaction, lifecycleSecret, deletedPlayer.id)
+        deletionHasLock.resolve()
+        await deletionMayCommit.promise
+        await transaction.user.update({
+          where: { id: deletedPlayer.id },
+          data: { anonymizedAt: new Date('2026-09-04T16:30:00.000Z') },
+        })
+      }, { isolationLevel: 'Serializable' })
+      await deletionHasLock.promise
+
+      const command = module.execute({
+        actorId: deletedPlayer.id,
+        commandId: crypto.randomUUID(),
+        slot: 1,
+        tenderId,
+        type: 'request-access-slot',
+      })
+      try {
+        await waitForAdvisoryLockWait(prisma)
+      } finally {
+        deletionMayCommit.resolve()
+      }
+
+      await deletion
+      await expect(command).rejects.toMatchObject({ kind: 'account_unavailable' })
+      expect(await prisma.tenderCommand.count({ where: { tenderId } })).toBe(0)
+      expect(await prisma.tenderAuditEvent.count({ where: { tenderId } })).toBe(0)
+    } finally {
+      deletionMayCommit.resolve()
+      await secondPrisma.$disconnect()
+      await prisma.user.deleteMany({ where: { id: { in: [deletedPlayer.id, otherPlayer.id] } } })
+    }
+  }, 15_000)
+
   test('replays a persisted command receipt through a new PostgreSQL store adapter', async () => {
     const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
     const { tenderId } = await firstModule.createTender({
@@ -551,6 +891,51 @@ maybeDescribe('Tender PostgreSQL integration', () => {
     const restartedModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
 
     expect(await restartedModule.execute(command)).toEqual({ tenderId, version: 1 })
+    await expect(restartedModule.execute({ ...command, slot: 2 })).rejects.toMatchObject({
+      kind: 'duplicate_command_conflict',
+    })
+  })
+
+  test('replays a legacy raw command row through the public command id', async () => {
+    const firstModule = createTenderModule({ store: createPrismaTenderStore(prisma) })
+    const { tenderId } = await firstModule.createTender({
+      players: [
+        { id: 'player-a', tiePriority: 1 },
+        { id: 'player-b', tiePriority: 2 },
+      ],
+    })
+    const command = {
+      commandId: 'legacy-command-a-1',
+      tenderId,
+      actorId: 'player-a',
+      type: 'request-access-slot' as const,
+      slot: 1,
+    }
+    const receipt = await firstModule.execute(command)
+    const storageCommandId = expectedStoredCommandId(command.commandId)
+    await prisma.$transaction([
+      prisma.tenderCommand.update({
+        where: {
+          tenderId_commandId: { commandId: storageCommandId, tenderId },
+        },
+        data: {
+          commandId: command.commandId,
+          fingerprint: JSON.stringify(command),
+        },
+      }),
+      prisma.tenderAuditEvent.updateMany({
+        where: { commandId: storageCommandId, tenderId },
+        data: { commandId: command.commandId },
+      }),
+    ])
+
+    const restartedStore = createPrismaTenderStore(prisma)
+    const restartedModule = createTenderModule({ store: restartedStore })
+    await expect(restartedStore.readAuditEvents(tenderId)).resolves.toContainEqual(
+      expect.objectContaining({ commandId: command.commandId, formatVersion: 1 }),
+    )
+    await expect(restartedModule.findCommandReceipt(command)).resolves.toEqual(receipt)
+    await expect(restartedModule.execute(command)).resolves.toEqual(receipt)
     await expect(restartedModule.execute({ ...command, slot: 2 })).rejects.toMatchObject({
       kind: 'duplicate_command_conflict',
     })
@@ -932,4 +1317,26 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       privateSamples: [],
     })
   })
+
+  function deferred() {
+    let resolve!: () => void
+    const promise = new Promise<void>((resolvePromise) => {
+      resolve = resolvePromise
+    })
+    return { promise, resolve }
+  }
+
+  async function waitForAdvisoryLockWait(db: ReturnType<typeof createPrisma>) {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [state] = await db.$queryRaw<Array<{ waiting: bigint }>>`
+        SELECT count(*)::bigint AS waiting
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND wait_event = 'advisory'
+      `
+      if ((state?.waiting ?? 0n) > 0n) return
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    throw new Error('Expected a transaction to wait for the account lifecycle lock')
+  }
 })

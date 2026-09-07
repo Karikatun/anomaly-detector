@@ -1,5 +1,6 @@
 import {
   apiErrorSchema,
+  feedbackIntakeCompatibilityRequestSchema,
   feedbackIntakeRequestSchema,
   feedbackReceiptSchema,
 } from '@anomaly-detector/contracts'
@@ -15,7 +16,7 @@ const submitRoute = createRoute({
   path: '/',
   request: {
     body: {
-      content: { 'application/json': { schema: feedbackIntakeRequestSchema } },
+      content: { 'application/json': { schema: feedbackIntakeCompatibilityRequestSchema } },
     },
   },
   responses: {
@@ -30,6 +31,10 @@ const submitRoute = createRoute({
     401: {
       content: { 'application/json': { schema: apiErrorSchema } },
       description: 'Authentication required',
+    },
+    409: {
+      content: { 'application/json': { schema: apiErrorSchema } },
+      description: 'Submission identifier conflicts with its first use',
     },
     429: {
       content: { 'application/json': { schema: apiErrorSchema } },
@@ -53,9 +58,14 @@ export function createFeedbackRoutes(input: {
   })
 
   routes.openapi(submitRoute, async (c) => {
+    const submittedReport = c.req.valid('json')
+    const report = feedbackIntakeRequestSchema.parse({
+      ...submittedReport,
+      submissionId: submittedReport.submissionId ?? crypto.randomUUID(),
+    })
     const result = await input.intake.submit({
       clientAddress: input.clientAddress(c),
-      report: c.req.valid('json'),
+      report,
       userId: c.var.user.id,
     })
     if (result.kind === 'rate_limited') {
@@ -66,6 +76,20 @@ export function createFeedbackRoutes(input: {
         'Daily feedback report limit reached',
         undefined,
         'feedback_daily_budget',
+      )
+    }
+    if (result.kind === 'submission_conflict') {
+      throw new AppError(
+        409,
+        'CONFLICT',
+        'Feedback submission identifier conflicts with its first use',
+      )
+    }
+    if (result.kind === 'account_unavailable') {
+      throw new AppError(
+        409,
+        'CONFLICT',
+        'Account is unavailable for feedback linkage',
       )
     }
 

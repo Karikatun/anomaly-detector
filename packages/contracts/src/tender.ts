@@ -3,7 +3,17 @@ import { z } from 'zod'
 export const tenderIdSchema = z.string().min(1).max(128)
 export const tenderResourceIdSchema = z.uuid()
 export const playerIdSchema = z.string().min(1).max(128)
-export const commandIdSchema = z.string().min(1).max(128)
+export const tenderReservedCommandIdPrefix = 'deleted-command-v1-'
+export const tenderStorageCommandIdPrefix = 'stored-command-v1-'
+export const tenderInternalCommandIdPrefixes = [
+  tenderReservedCommandIdPrefix,
+  tenderStorageCommandIdPrefix,
+] as const
+export const tenderStoredCommandIdSchema = z.string().min(1).max(128)
+export const commandIdSchema = tenderStoredCommandIdSchema.refine(
+  (commandId) => !tenderInternalCommandIdPrefixes.some((prefix) => commandId.startsWith(prefix)),
+  'Command ID uses a reserved prefix',
+)
 export const contractIdSchema = z.string().min(1).max(128)
 export const signalIdSchema = z.enum(['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro'])
 export const tenderRulesetSchema = z.enum(['tender-v1', 'tender-v2'])

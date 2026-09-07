@@ -1,6 +1,7 @@
 export type FeedbackFailureKind =
   | 'command_conflict'
   | 'contact_absent'
+  | 'operator_unavailable'
   | 'report_not_found'
   | 'transition_conflict'
   | 'version_conflict'

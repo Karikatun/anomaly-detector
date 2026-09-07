@@ -22,17 +22,18 @@ const ticketStore = createPrismaRealtimeTicketStore(runtime.prisma, {
 const sessionGuard = createPrismaActiveSessionGuard(runtime.prisma, {
   sessionAbsoluteTtlDays: runtime.env.SESSION_ABSOLUTE_TTL_DAYS,
 })
-const tenderStore = createPrismaTenderStore(runtime.prisma)
+const tenderStore = createPrismaTenderStore(runtime.prisma, runtime.env.JWT_SECRET)
 const operationalMetrics = createOperationalMetrics({
   tenderStateReader: createPrismaTenderOperationalStateReader(runtime.prisma),
 })
 
 let realtime: RealtimeHub
+const publishTenderChange = (tenderId: string) => {
+  void realtime?.handleTenderChanged(tenderId)
+    .catch((error) => console.error('Realtime Tender publish failed:', error))
+}
 const tender = createTenderModule({
-  onTenderChanged: (tenderId) => {
-    void realtime?.handleTenderChanged(tenderId)
-      .catch((error) => console.error('Realtime Tender publish failed:', error))
-  },
+  onTenderChanged: publishTenderChange,
   store: tenderStore,
 })
 realtime = createRealtimeHub({ sessionGuard, tender })
@@ -42,6 +43,7 @@ const stopRealtimeSyncLoop = realtime.startSyncLoop()
 const app = createApp({
   env: runtime.env,
   logoutCleanup: ({ sessionId }) => realtime.closeSession(sessionId),
+  onTenderChanged: publishTenderChange,
   operationalMetrics,
   prisma: runtime.prisma,
   tender,

@@ -35,6 +35,14 @@ const mailPolicyView = {
     groups: [],
     lastSmtpSuccessAt: null,
     outbox: { leased: 0, oldestQueuedAt: null, queued: 0 },
+    protectionAlerts: {
+      leased: 0,
+      nextAttemptAt: null,
+      oldestPendingAt: null,
+      pending: 0,
+      retrying: 0,
+      terminal: 0,
+    },
     provider: 'reg_ru' as const,
     catalogLastSyncedAt: null,
     totals: { requested: 0, smtpAccepted: 0, temporaryFailures: 0, terminalFailures: 0 },
@@ -209,15 +217,15 @@ test('keeps the catalog mail endpoints exact and removes the legacy RKN mutation
   })
   const commandId = '019f8099-7e26-7760-ad08-66d1d66b2720'
   const requests = [
-    module.routes.request('/mail-policy', {
+    module.routes.request('/mail-policy?deliveryContract=2', {
       headers: { Authorization: 'Bearer admin-token' },
     }),
-    module.routes.request('/mail-policy/sync', {
+    module.routes.request('/mail-policy/sync?deliveryContract=2', {
       body: JSON.stringify({ commandId, expectedVersion: 0 }),
       headers: { Authorization: 'Bearer admin-token', 'Content-Type': 'application/json' },
       method: 'POST',
     }),
-    module.routes.request('/mail-policy/status', {
+    module.routes.request('/mail-policy/status?deliveryContract=2', {
       body: JSON.stringify({
         commandId,
         expectedVersion: 1,
@@ -234,6 +242,12 @@ test('keeps the catalog mail endpoints exact and removes the legacy RKN mutation
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual(mailPolicyView)
   }
+  const legacyResponse = await module.routes.request('/mail-policy', {
+    headers: { Authorization: 'Bearer admin-token' },
+  })
+  const legacyBody = await legacyResponse.json()
+  expect(legacyResponse.status).toBe(200)
+  expect(legacyBody.delivery).not.toHaveProperty('protectionAlerts')
   for (const path of ['/mail-policy/import', '/mail-policy/publish']) {
     const response = await module.routes.request(path, {
       body: JSON.stringify({ commandId, expectedVersion: 0 }),
@@ -342,7 +356,7 @@ test('passes a bounded catalog sync command and authenticated operator to the ma
     requestBudgetOverviewReader,
   })
 
-  const response = await module.routes.request('/mail-policy/sync', {
+  const response = await module.routes.request('/mail-policy/sync?deliveryContract=2', {
     body: JSON.stringify({
       commandId: '019f8099-7e26-7760-ad08-66d1d66b2720',
       expectedVersion: 0,

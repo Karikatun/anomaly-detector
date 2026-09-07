@@ -6,6 +6,9 @@ export async function executeMailPolicy<T>(operation: () => Promise<T>): Promise
     return await operation()
   } catch (error) {
     if (!(error instanceof MailPolicyFailure)) throw error
+    if (error.kind === 'operator_unavailable') {
+      throw new AppError(404, 'NOT_FOUND', 'Route not found')
+    }
     if (error.kind === 'recent_authentication_required') {
       throw new AppError(403, 'FORBIDDEN', error.message, undefined, error.kind)
     }

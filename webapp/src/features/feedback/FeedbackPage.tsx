@@ -1,10 +1,10 @@
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 
 import {
-  feedbackIntakeRequestSchema,
+  feedbackIntakePayloadSchema,
   type FeedbackCategory,
   type FeedbackReceipt,
 } from '@anomaly-detector/contracts'
@@ -22,6 +22,11 @@ import { useI18n } from '@/platform/i18n'
 
 import { FeedbackApi } from './api'
 import { consumeFeedbackOrigin } from './origin-route'
+import {
+  pendingFeedbackSubmissionAfterError,
+  prepareFeedbackSubmission,
+  type PendingFeedbackSubmission,
+} from './submission'
 import { buildFeedbackTechnicalContext } from './technical-context'
 import styles from './FeedbackPage.module.css'
 
@@ -53,6 +58,7 @@ function FeedbackContent() {
   const [error, setError] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<FeedbackReceipt | null>(null)
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
+  const pendingSubmission = useRef<PendingFeedbackSubmission | null>(null)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -82,18 +88,29 @@ function FeedbackContent() {
           replyEmail: includeContact ? replyEmail : null,
           technicalContext,
         }
-    const parsed = feedbackIntakeRequestSchema.safeParse(candidate)
+    const parsed = feedbackIntakePayloadSchema.safeParse(candidate)
     if (!parsed.success) {
       setError(t('feedback.error.validation'))
       return
     }
+    const prepared = prepareFeedbackSubmission(parsed.data, pendingSubmission.current)
+    pendingSubmission.current = prepared.pending
 
     setIsSubmitting(true)
     try {
-      const accepted = await api.submit(parsed.data)
+      const accepted = await api.submit(prepared.request)
+      if (pendingSubmission.current === prepared.pending) {
+        pendingSubmission.current = null
+      }
       setReceipt(accepted)
       clearDraft()
     } catch (caught) {
+      if (pendingSubmission.current === prepared.pending) {
+        pendingSubmission.current = pendingFeedbackSubmissionAfterError(
+          prepared.pending,
+          caught,
+        )
+      }
       setError(feedbackErrorMessage(caught, t))
     } finally {
       setIsSubmitting(false)
