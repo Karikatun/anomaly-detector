@@ -1,6 +1,7 @@
-import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, lstatSync, writeFileSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import { closeSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, lstatSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
+import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { secretContentKinds } from './secret-check.mjs'
@@ -12,7 +13,47 @@ const planPath = join(root, 'docs/agents/rag-pilot-cases.json')
 const json = (path) => JSON.parse(readFileSync(path, 'utf8'))
 function create(path, value) {
   mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 })
+  // Publish complete JSON atomically, without overwriting another process's record.
+  const temp = `${path}.${randomUUID()}.tmp`
+  try {
+    writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 })
+    linkSync(temp, path)
+  } finally { if (existsSync(temp)) unlinkSync(temp) }
+}
+
+function requireRootTask(taskId) {
+  const current = process.env.CODEX_THREAD_ID
+  if (!current || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(current) || taskId !== current) {
+    throw new Error('Use the current top-level CODEX_THREAD_ID; subagent or invented task IDs are not accepted')
+  }
+  const sessions = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'sessions')
+  const matches = []
+  function find(folder, depth) {
+    if (!existsSync(folder)) return
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      if (entry.isDirectory() && depth < 3 && /^\d{2,4}$/.test(entry.name)) find(join(folder, entry.name), depth + 1)
+      if (entry.isFile() && entry.name.endsWith(`-${current}.jsonl`)) matches.push(join(folder, entry.name))
+    }
+  }
+  find(sessions, 0)
+  if (matches.length !== 1) throw new Error('Top-level session metadata missing or ambiguous; skip this observation')
+  // Read only the bounded metadata line, never subsequent conversation turns.
+  const fd = openSync(matches[0], 'r')
+  const buffer = Buffer.alloc(65536)
+  let record
+  try {
+    let end = 0
+    while (end < buffer.length && readSync(fd, buffer, end, 1, null) === 1 && buffer[end] !== 10) end++
+    if (end === buffer.length || buffer[end] !== 10) throw new Error('Session metadata header is incomplete or too large')
+    try { record = JSON.parse(buffer.subarray(0, end).toString('utf8')) }
+    catch { throw new Error('Malformed session metadata; skip this observation') }
+  } finally { closeSync(fd) }
+  const meta = record?.payload
+  if (record?.type !== 'session_meta' || meta?.id !== current
+    || !['cli', 'vscode'].includes(meta?.source) || meta?.forked_from_id) {
+    throw new Error('Only a verified top-level task may record observations; descendants and forks must report to their root agent')
+  }
+  return sha(current)
 }
 
 export function isCorpusPath(path) {
@@ -177,6 +218,7 @@ function semantic(query) {
 
 function batch() {
   requireActive()
+  requireRootTask(process.env.CODEX_THREAD_ID)
   checkedRuntime()
   const meta = json(join(pilot, 'meta.json'))
   for (const [path, expected] of Object.entries(meta.entries)) if (sha(readFileSync(join(pilot, 'corpus', path))) !== expected) safetyFailure('Frozen corpus changed')
@@ -201,9 +243,16 @@ function batch() {
 function searchTask(taskId, query) {
   requireActive()
   if (!taskId || !query || query.length > 1000 || secretContentKinds(query).length) throw new Error('Expected task id and short nonsecret query')
-  const id = sha(taskId)
-  const previous = records('task-searches').find((r) => r.taskId === id)
-  if (previous) return previous
+  const id = requireRootTask(taskId)
+  const resultPath = join(pilot, 'task-searches', `${id}.json`)
+  if (existsSync(resultPath)) return json(resultPath)
+  mkdirSync(join(pilot, 'task-claims'), { recursive: true })
+  try { mkdirSync(join(pilot, 'task-claims', id)) }
+  catch (e) {
+    if (e.code !== 'EEXIST') throw e
+    if (existsSync(resultPath)) return json(resultPath)
+    throw new Error('Root task search already reserved or interrupted; do not retry or allocate another slot')
+  }
   const meta = json(join(pilot, 'meta.json'))
   for (let slot = 1; slot <= 5; slot++) {
     try { create(join(pilot, 'task-slots', `${slot}.json`), { taskId: id }) }
@@ -220,7 +269,7 @@ function searchTask(taskId, query) {
     const result = { taskId: id, at: new Date().toISOString(), querySha256: sha(query), ...retrieved,
       paths: retrieved.paths.filter((p) => !stalePaths.includes(p)), stalePaths,
       scope: 'frozen-snapshot; current-files-revalidated; new-files-require-ordinary-search' }
-    create(join(pilot, 'task-searches', `${id}.json`), result)
+    create(resultPath, result)
     return result
   }
   throw new Error('Five task slots are already reserved; use ordinary search')
@@ -228,9 +277,18 @@ function searchTask(taskId, query) {
 
 function observe(taskId, useful, path) {
   requireActive()
-  const id = sha(taskId ?? '')
-  const search = json(join(pilot, 'task-searches', `${id}.json`))
+  const id = requireRootTask(taskId)
   if (!['useful', 'not-useful'].includes(useful)) throw new Error('Expected useful or not-useful')
+  const target = join(pilot, 'observations', `${id}.json`)
+  const sameObservation = () => {
+    const previous = json(target)
+    if (previous.useful !== (useful === 'useful') || previous.path !== (useful === 'useful' ? path : null)) {
+      throw new Error('Root task observation already recorded; its assessment cannot be replaced')
+    }
+    return status()
+  }
+  if (existsSync(target)) return sameObservation()
+  const search = json(join(pilot, 'task-searches', `${id}.json`))
   let verified = false
   if (useful === 'useful') {
     if (!search.paths.includes(path) || !isCorpusPath(path)) throw new Error('Useful evidence must reference a retrieved file')
@@ -238,7 +296,8 @@ function observe(taskId, useful, path) {
     verified = sha(readFileSync(join(root, path))) === expected
     if (!verified) throw new Error('Retrieved evidence is stale')
   }
-  create(join(pilot, 'observations', `${id}.json`), { taskId: id, useful: useful === 'useful', verified, path: verified ? path : null, at: new Date().toISOString() })
+  try { create(target, { taskId: id, useful: useful === 'useful', verified, path: verified ? path : null, at: new Date().toISOString() }) }
+  catch (e) { if (e.code !== 'EEXIST') throw e; return sameObservation() }
   return status()
 }
 
@@ -246,9 +305,10 @@ if (import.meta.main) {
   try {
     const [command, ...args] = process.argv.slice(2)
     const result = command === 'init' ? initialize() : command === 'status' || command === 'tick' ? status()
+      : command === 'identity' ? { taskId: requireRootTask(args[0] ?? process.env.CODEX_THREAD_ID), scope: 'one-observation-per-root-task' }
       : command === 'batch' ? batch() : command === 'search' ? searchTask(...args)
         : command === 'observe' ? observe(...args) : null
-    if (!result) throw new Error('Use init | status | tick | batch | search <task-id> <query> | observe <task-id> useful <path> | observe <task-id> not-useful')
+    if (!result) throw new Error('Use init | status | tick | identity | batch | search <root-task-id> <query> | observe <root-task-id> useful <path> | observe <root-task-id> not-useful')
     console.log(JSON.stringify(result, null, 2))
   } catch (e) { console.error(e.message); process.exitCode = 1 }
 }
