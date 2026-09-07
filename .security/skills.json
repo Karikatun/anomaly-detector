@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "bundles": [
+    {
+      "name": "anomaly-security-review",
+      "path": ".agents/skills/anomaly-security-review",
+      "sha256": "3a66d9bfc45c20d2595f33209a44cd352dd687684928f08f33ee23cf465102cd"
+    },
+    {
+      "name": "anomaly-ui",
+      "path": ".agents/skills/anomaly-ui",
+      "sha256": "dee2d34d56713262d03aaed0b92ff0ee58d40c0178ed91b8353e707f09938836"
+    },
+    {
+      "name": "skill-doctor",
+      "path": ".agents/skills/skill-doctor",
+      "sha256": "d4c2242a56f1c55a276650262f7a417964ab693d829302225c67f77667c1c99a"
+    }
+  ]
+}

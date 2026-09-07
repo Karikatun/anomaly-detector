@@ -1287,6 +1287,113 @@ class ClaudeSessionTests(unittest.TestCase):
                 session_matches_repos(root / "elsewhere", [first, second])
             )
 
+    def test_discovery_rejects_project_skill_symlink_escapes_before_projection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "approved"
+            outside = root / "outside"
+            initialize_repository(repo)
+            outside.mkdir()
+
+            valid = repo / ".agents" / "skills" / "valid" / "SKILL.md"
+            valid.parent.mkdir(parents=True)
+            valid.write_text("---\ndescription: Valid\n---\n")
+
+            outside_file = outside / "file-SKILL.md"
+            outside_file.write_text("---\ndescription: Outside file\n---\n")
+            file_link = repo / ".agents" / "skills" / "file-link" / "SKILL.md"
+            file_link.parent.mkdir()
+            file_link.symlink_to(outside_file)
+
+            outside_directory = outside / "directory-link"
+            outside_directory.mkdir()
+            (outside_directory / "SKILL.md").write_text(
+                "---\ndescription: Outside directory\n---\n"
+            )
+            (repo / ".agents" / "skills" / "directory-link").symlink_to(
+                outside_directory,
+                target_is_directory=True,
+            )
+
+            escaped_root = repo / ".claude" / "skills"
+            escaped_root.parent.mkdir()
+            escaped_root.symlink_to(outside, target_is_directory=True)
+
+            skills = discover_skills([repo], root / "codex-home", [], False)
+            public = public_skill_records(skills, [repo])
+
+            self.assertEqual(set(skills), {"valid"})
+            self.assertEqual(
+                [(record["name"], record["scope"]) for record in public],
+                [("valid", "project")],
+            )
+
+    def test_discovery_allows_internal_and_explicit_skill_roots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "approved"
+            explicit_root = root / "explicit-skills"
+            initialize_repository(repo)
+
+            internal_target = (
+                repo / ".agents" / "skills" / "internal-target"
+            )
+            internal_target.mkdir(parents=True)
+            (internal_target / "SKILL.md").write_text(
+                "---\ndescription: Internal target\n---\n"
+            )
+            (repo / ".agents" / "skills" / "internal-link").symlink_to(
+                internal_target,
+                target_is_directory=True,
+            )
+
+            explicit_target = explicit_root / "explicit" / "SKILL.md"
+            explicit_target.parent.mkdir(parents=True)
+            explicit_target.write_text("---\ndescription: Explicit\n---\n")
+            explicit_link = root / "explicit-link"
+            explicit_link.symlink_to(explicit_root, target_is_directory=True)
+
+            skills = discover_skills(
+                [repo], root / "codex-home", [explicit_link], False,
+            )
+            public = public_skill_records(skills, [repo])
+
+            self.assertEqual(
+                set(skills), {"internal-target", "internal-link", "explicit"},
+            )
+            self.assertEqual(
+                {record["name"]: record["scope"] for record in public},
+                {
+                    "internal-target": "project",
+                    "internal-link": "project",
+                    "explicit": "external",
+                },
+            )
+
+    def test_discovery_rejects_oversized_skills_and_nonregular_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "approved"
+            initialize_repository(repo)
+            skills_root = repo / ".agents" / "skills"
+
+            valid = skills_root / "valid" / "SKILL.md"
+            valid.parent.mkdir(parents=True)
+            valid.write_text("---\ndescription: Valid\n---\n")
+
+            oversized = skills_root / "oversized" / "SKILL.md"
+            oversized.parent.mkdir()
+            oversized.write_bytes(b"x" * (1024 * 1024 + 1))
+
+            fifo = skills_root / "fifo" / "SKILL.md"
+            if hasattr(os, "mkfifo"):
+                fifo.parent.mkdir()
+                os.mkfifo(fifo)
+
+            discovered = discover_skills([repo], root / "codex-home", [], False)
+
+            self.assertEqual(set(discovered), {"valid"})
+
     def test_detects_skills_from_deferred_tool_entries(self):
         entries = [
             ("tool:Skill", '{"skill": "alpha"}'),
