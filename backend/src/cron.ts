@@ -1,5 +1,6 @@
 import { createBackendRuntime, type BackendRuntime } from './runtime'
 import { isRetryableDatabaseTransactionConflict } from './db'
+import { reconcileDeletedAccounts } from './account-deletion-reconciliation'
 import { cleanupAnalyticsData } from './modules/analytics'
 import { cleanupExpiredAuthRecovery } from './modules/auth'
 import { cleanupFeedbackReports } from './modules/feedback'
@@ -95,6 +96,29 @@ const cleanupAnalytics: CronTask = async ({ prisma }, now) => {
   )
 }
 
+const reconcileAccountDeletionTombstones: CronTask = async ({ env, prisma }, now) => {
+  const result = await reconcileDeletedAccounts({
+    db: prisma,
+    lifecycleSecret: env.JWT_SECRET,
+    now,
+  })
+  console.log(
+    `Cron accounts:deletion-reconcile processed ${result.accounts} deleted accounts across ${result.tenders} Tenders; failed=${result.failed}; deferred_failed=${result.deferredFailed}; pending=${result.pending}; oldest_pending_at=${result.oldestPendingAt?.toISOString() ?? 'none'}; overdue=${result.overdue}; failure_categories=${formatReconciliationFailures(result.failures)}; deferred_failure_categories=${formatReconciliationFailures(result.deferredFailures)}.`,
+  )
+  if (result.failed > 0 || result.overdue) {
+    throw new Error(
+      `Account deletion reconciliation requires operator action; failed=${result.failed}; deferred_failed=${result.deferredFailed}; overdue=${result.overdue}; failure categories: ${formatReconciliationFailures(result.failures)}; deferred failure categories: ${formatReconciliationFailures(result.deferredFailures)}`,
+    )
+  }
+}
+
+function formatReconciliationFailures(failures: Record<string, number>) {
+  const entries = Object.entries(failures)
+  return entries.length === 0
+    ? 'none'
+    : entries.map(([kind, count]) => `${kind}=${count}`).join(',')
+}
+
 const cronTasks = {
   noop: async () => {
     console.log('Cron noop task completed.')
@@ -105,6 +129,7 @@ const cronTasks = {
   },
   'maintenance:cleanup': cleanupMaintenance,
   'auth:sessions:cleanup': cleanupMaintenance,
+  'accounts:deletion-reconcile': reconcileAccountDeletionTombstones,
   'analytics:cleanup': cleanupAnalytics,
 } satisfies Record<string, CronTask>
 

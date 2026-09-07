@@ -6,10 +6,13 @@ import {
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
 
-import { validationErrorHook } from '../../../http/errors'
+import { AppError, validationErrorHook } from '../../../http/errors'
 import type { AuthHttpEnv } from '../../auth'
 import type { ProfileStatisticsService } from '../application/profile-statistics-service'
-import type { TutorialProgressService } from '../application/tutorial-progress-service'
+import {
+  TutorialProgressFailure,
+  type TutorialProgressService,
+} from '../application/tutorial-progress-service'
 
 const statisticsRoute = createRoute({
   method: 'get',
@@ -74,6 +77,17 @@ export function createProfileRoutes(input: {
   routes.openapi(tutorialRoute, async (c) =>
     c.json(await input.tutorial.read(c.var.user.id), 200))
   routes.openapi(completeTutorialRoute, async (c) =>
-    c.json(await input.tutorial.complete(c.var.user.id), 200))
+    c.json(await executeTutorial(() => input.tutorial.complete(c.var.user.id)), 200))
   return routes
+}
+
+async function executeTutorial<T>(operation: () => Promise<T>) {
+  try {
+    return await operation()
+  } catch (error) {
+    if (error instanceof TutorialProgressFailure) {
+      throw new AppError(401, 'UNAUTHORIZED', error.message, undefined, error.kind)
+    }
+    throw error
+  }
 }

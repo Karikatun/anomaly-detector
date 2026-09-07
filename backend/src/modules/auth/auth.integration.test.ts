@@ -2,13 +2,21 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { createHash, createHmac } from 'node:crypto'
 
 import { createApp } from '../../app'
+import { reconcileDeletedAccount } from '../../account-deletion-reconciliation'
 import { createPrisma, type DbClient } from '../../db'
 import type { AppEnv } from '../../env'
+import { lockAccountLifecycleTransaction } from '../../security/account-lifecycle-lock'
 import type { SecurityEvent } from '../../security/events'
 import { createPrismaAuthRepository } from './infrastructure/auth-repository'
 import { signAccessToken } from './infrastructure/access-tokens'
-import { createRoomStartModule } from '../room'
-import { createPersistentTenderModule } from '../tender'
+import {
+  cleanupPrismaRoomsForAccountDeletion,
+  createRoomStartModule,
+} from '../room'
+import {
+  anonymizePrismaTenderParticipant,
+  createPersistentTenderModule,
+} from '../tender'
 import {
   createMailModule,
   createTransactionalMailRequester,
@@ -17,6 +25,7 @@ import {
 } from '../mail'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
+const TEST_ACCOUNT_LIFECYCLE_SECRET = '12345678901234567890123456789012'
 
 const maybeDescribe = databaseUrl ? describe : describe.skip
 
@@ -25,7 +34,7 @@ maybeDescribe('auth API integration', () => {
     API_HOST: '0.0.0.0',
     PORT: 3000,
     DATABASE_URL: databaseUrl!,
-    JWT_SECRET: '12345678901234567890123456789012',
+    JWT_SECRET: TEST_ACCOUNT_LIFECYCLE_SECRET,
     ADMIN_USER_IDS: [],
     ANALYTICS_ENABLED: false,
     ANALYTICS_ORIGINS: [],
@@ -81,6 +90,7 @@ maybeDescribe('auth API integration', () => {
     await prisma.mailPolicyEntry.deleteMany()
     await prisma.mailPolicyVersion.deleteMany()
     await prisma.authAbuseBucket.deleteMany()
+    await prisma.feedbackReport.deleteMany()
     await prisma.tenderRoomMember.deleteMany()
     await prisma.tenderRoom.deleteMany()
     await prisma.authSession.deleteMany()
@@ -300,10 +310,14 @@ maybeDescribe('auth API integration', () => {
           : { exchanges: ['aspmx.l.google.com'], kind: 'resolved' as const }
       },
     }
-    await createMailModule({ db: prisma, mxResolver }).operatorPolicy.syncCatalog(
+    await withActiveMailPolicyOperator(prisma, (actor) => createMailModule({
+      accountLifecycleSecret: env.JWT_SECRET,
+      db: prisma,
+      mxResolver,
+    }).operatorPolicy.syncCatalog(
       { commandId: crypto.randomUUID(), expectedVersion: 0 },
-      { authenticatedAt: new Date(), id: crypto.randomUUID() },
-    )
+      actor,
+    ))
     const customDomainApp = createApp({
       env,
       mailMxResolver: mxResolver,
@@ -393,10 +407,14 @@ maybeDescribe('auth API integration', () => {
         }
       },
     }
-    await createMailModule({ db: prisma, mxResolver }).operatorPolicy.syncCatalog(
+    await withActiveMailPolicyOperator(prisma, (actor) => createMailModule({
+      accountLifecycleSecret: env.JWT_SECRET,
+      db: prisma,
+      mxResolver,
+    }).operatorPolicy.syncCatalog(
       { commandId: crypto.randomUUID(), expectedVersion: 0 },
-      { authenticatedAt: new Date(), id: crypto.randomUUID() },
-    )
+      actor,
+    ))
     const customDomainApp = createApp({ env, mailMxResolver: mxResolver, prisma })
     const account = await registerTokenAccount('custom-domain-recovery-code')
     await seedActiveRecoveryEmail(prisma, {
@@ -2489,18 +2507,18 @@ maybeDescribe('auth API integration', () => {
         userId: account.user.id,
       },
     })
-    const policy = createMailModule({ db: prisma }).operatorPolicy
+    const policy = createMailModule({
+      accountLifecycleSecret: env.JWT_SECRET,
+      db: prisma,
+    }).operatorPolicy
     const current = await policy.read()
-    await policy.changeStatus({
+    await withActiveMailPolicyOperator(prisma, (actor) => policy.changeStatus({
       commandId: crypto.randomUUID(),
       expectedVersion: current.currentVersion,
       providerId: 'reg_ru',
       reason: 'integration provider migration',
       state: 'blocked',
-    }, {
-      authenticatedAt: new Date(),
-      id: crypto.randomUUID(),
-    })
+    }, actor))
     await prisma.mailDomainAssessment.create({
       data: {
         catalogVersion: 1,
@@ -2869,6 +2887,501 @@ maybeDescribe('auth API integration', () => {
       body: JSON.stringify({ login: 'expired-email-link-recovery', password: 'password123' }),
     })).status).toBe(200)
   })
+
+  test('keeps legacy account tombstones immutable across password-reset link flows', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const requestTombstone = await registerTokenAccount('legacy-tombstone-reset-request')
+    await seedActiveRecoveryEmail(prisma, {
+      canonicalKey: 'Legacy-tombstone-reset-request@mail.ru',
+      providerValue: 'Legacy-tombstone-reset-request@mail.ru',
+      userId: requestTombstone.user.id,
+    })
+    await prisma.user.update({
+      where: { id: requestTombstone.user.id },
+      data: { anonymizedAt: new Date(), deletionCleanupCompletedAt: null },
+    })
+
+    const request = await app.request('/api/auth/password-recovery/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '198.51.100.121',
+      },
+      body: JSON.stringify({ login: requestTombstone.user.login }),
+    })
+
+    expect(request.status).toBe(200)
+    expect(await request.json()).toEqual({ outcome: 'accepted' })
+    expect(await prisma.passwordResetCredential.count({
+      where: { userId: requestTombstone.user.id },
+    })).toBe(0)
+    expect(await prisma.mailOutboxMessage.count({
+      where: { recipient: 'Legacy-tombstone-reset-request@mail.ru' },
+    })).toBe(0)
+
+    const completionTombstone = await registerTokenAccount('legacy-tombstone-reset-complete')
+    await seedActiveRecoveryEmail(prisma, {
+      canonicalKey: 'Legacy-tombstone-reset-complete@mail.ru',
+      providerValue: 'Legacy-tombstone-reset-complete@mail.ru',
+      userId: completionTombstone.user.id,
+    })
+    const issued = await app.request('/api/auth/account-protection/recovery-codes/issue', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${completionTombstone.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+    expect(issued.status).toBe(200)
+    expect((await app.request('/api/auth/password-recovery/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '198.51.100.122',
+      },
+      body: JSON.stringify({ login: completionTombstone.user.login }),
+    })).status).toBe(200)
+    const credentialBefore = await prisma.passwordResetCredential.findUniqueOrThrow({
+      where: { userId: completionTombstone.user.id },
+    })
+    const messageBefore = await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId: credentialBefore.messageId },
+      select: { recipient: true, state: true, templatePayload: true },
+    })
+    const passwordBefore = await prisma.user.findUniqueOrThrow({
+      where: { id: completionTombstone.user.id },
+      select: { passwordHash: true },
+    })
+    await prisma.user.update({
+      where: { id: completionTombstone.user.id },
+      data: { anonymizedAt: new Date(), deletionCleanupCompletedAt: null },
+    })
+    const token = derivePasswordResetToken(env.JWT_SECRET, credentialBefore.messageId)
+
+    const completion = await app.request('/api/auth/password-recovery/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword: 'must-not-restore-password123', token }),
+    })
+
+    expect(completion.status).toBe(200)
+    expect(await completion.json()).toEqual({ outcome: 'accepted' })
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: completionTombstone.user.id },
+      select: { passwordHash: true },
+    })).toEqual(passwordBefore)
+    expect(await prisma.passwordResetCredential.findUniqueOrThrow({
+      where: { userId: completionTombstone.user.id },
+    })).toEqual(credentialBefore)
+    expect(await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId: credentialBefore.messageId },
+      select: { recipient: true, state: true, templatePayload: true },
+    })).toEqual(messageBefore)
+    expect(await prisma.mailOutboxMessage.count({
+      where: { templateKind: 'security_notification' },
+    })).toBe(0)
+    expect(await prisma.recoveryCode.count({
+      where: { userId: completionTombstone.user.id },
+    })).toBe(8)
+    expect(await prisma.recoveryCodeSet.findUniqueOrThrow({
+      where: { userId: completionTombstone.user.id },
+      select: { consumedAt: true },
+    })).toEqual({ consumedAt: null })
+    expect(await prisma.authSession.findFirstOrThrow({
+      where: { userId: completionTombstone.user.id },
+      select: { revokedAt: true },
+    })).toEqual({ revokedAt: null })
+  })
+
+  test('keeps legacy account tombstones immutable across Recovery Code flows', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const passwordTombstone = await registerTokenAccount('legacy-tombstone-recovery-code')
+    await seedActiveRecoveryEmail(prisma, {
+      canonicalKey: 'Legacy-tombstone-recovery-code@mail.ru',
+      providerValue: 'Legacy-tombstone-recovery-code@mail.ru',
+      userId: passwordTombstone.user.id,
+    })
+    const issued = await app.request('/api/auth/account-protection/recovery-codes/issue', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${passwordTombstone.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+    expect(issued.status).toBe(200)
+    const recoveryCode = (await issued.json()).recoveryCodes[0] as string
+    const passwordBefore = await prisma.user.findUniqueOrThrow({
+      where: { id: passwordTombstone.user.id },
+      select: { passwordHash: true },
+    })
+    const bindingBefore = await prisma.recoveryEmailBinding.findUniqueOrThrow({
+      where: { userId: passwordTombstone.user.id },
+    })
+    await prisma.user.update({
+      where: { id: passwordTombstone.user.id },
+      data: { anonymizedAt: new Date(), deletionCleanupCompletedAt: null },
+    })
+
+    const recovered = await app.request('/api/auth/recovery-code/password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '198.51.100.123',
+      },
+      body: JSON.stringify({
+        login: passwordTombstone.user.login,
+        newPassword: 'must-not-restore-password123',
+        recoveryCode,
+      }),
+    })
+    const started = await app.request('/api/auth/recovery-code/recovery-email/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '198.51.100.124',
+      },
+      body: JSON.stringify({
+        email: 'Legacy-tombstone-recovery-code-next@mail.ru',
+        login: passwordTombstone.user.login,
+        recoveryCode,
+      }),
+    })
+
+    expect(recovered.status).toBe(200)
+    expect(await recovered.json()).toEqual({ outcome: 'accepted' })
+    expect(started.status).toBe(200)
+    expect(await started.json()).toEqual({ outcome: 'accepted' })
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: passwordTombstone.user.id },
+      select: { passwordHash: true },
+    })).toEqual(passwordBefore)
+    expect(await prisma.recoveryEmailBinding.findUniqueOrThrow({
+      where: { userId: passwordTombstone.user.id },
+    })).toEqual(bindingBefore)
+    expect(await prisma.recoveryCode.count({
+      where: { userId: passwordTombstone.user.id },
+    })).toBe(8)
+    expect(await prisma.recoveryCodeSet.findUniqueOrThrow({
+      where: { userId: passwordTombstone.user.id },
+      select: { consumedAt: true },
+    })).toEqual({ consumedAt: null })
+    expect(await prisma.authSession.findFirstOrThrow({
+      where: { userId: passwordTombstone.user.id },
+      select: { revokedAt: true },
+    })).toEqual({ revokedAt: null })
+    expect(await prisma.recoveryCodeEmailReplacement.count({
+      where: { userId: passwordTombstone.user.id },
+    })).toBe(0)
+    expect(await prisma.mailOutboxMessage.count()).toBe(0)
+
+    const emailTombstone = await registerTokenAccount('legacy-tombstone-recovery-email')
+    await seedActiveRecoveryEmail(prisma, {
+      canonicalKey: 'Legacy-tombstone-recovery-email@mail.ru',
+      providerValue: 'Legacy-tombstone-recovery-email@mail.ru',
+      userId: emailTombstone.user.id,
+    })
+    const emailCodes = await app.request('/api/auth/account-protection/recovery-codes/issue', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${emailTombstone.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
+    expect(emailCodes.status).toBe(200)
+    const emailRecoveryCode = (await emailCodes.json()).recoveryCodes[0] as string
+    const start = await app.request('/api/auth/recovery-code/recovery-email/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-test-client-ip': '198.51.100.125',
+      },
+      body: JSON.stringify({
+        email: 'Legacy-tombstone-recovery-email-next@mail.ru',
+        login: emailTombstone.user.login,
+        recoveryCode: emailRecoveryCode,
+      }),
+    })
+    expect(start.status).toBe(200)
+    expect(await start.json()).toMatchObject({ outcome: 'pending' })
+    const replacementBefore = await prisma.recoveryCodeEmailReplacement.findUniqueOrThrow({
+      where: { userId: emailTombstone.user.id },
+    })
+    const replacementMessageBefore = await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId: replacementBefore.newMessageId },
+      select: { recipient: true, state: true, templatePayload: true },
+    })
+    const emailBindingBefore = await prisma.recoveryEmailBinding.findUniqueOrThrow({
+      where: { userId: emailTombstone.user.id },
+    })
+    const confirmationCode = deriveAccountEmailConfirmationCode(
+      env.JWT_SECRET,
+      replacementBefore.newMessageId,
+    )
+    await prisma.user.update({
+      where: { id: emailTombstone.user.id },
+      data: { anonymizedAt: new Date(), deletionCleanupCompletedAt: null },
+    })
+
+    const genericConfirmation = await app.request(
+      '/api/auth/recovery-code/recovery-email/confirm',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-test-client-ip': '198.51.100.126',
+        },
+        body: JSON.stringify({ code: '000000', login: emailTombstone.user.login }),
+      },
+    )
+    const tombstoneRepository = createPrismaAuthRepository(prisma, env.JWT_SECRET)
+    const probe = await tombstoneRepository.verifyRecoveryCodeEmailPolicyProbe({
+      code: confirmationCode,
+      login: emailTombstone.user.login,
+      now: new Date(),
+    })
+    const confirmed = await tombstoneRepository.confirmRecoveryEmailWithRecoveryCode({
+      activatesAt: new Date(Date.now() + 24 * 60 * 60_000),
+      budgetReserved: true,
+      code: confirmationCode,
+      login: emailTombstone.user.login,
+      now: new Date(),
+    })
+
+    expect(genericConfirmation.status).toBe(200)
+    expect(await genericConfirmation.json()).toEqual({ outcome: 'accepted' })
+    expect(probe).toBeNull()
+    expect(confirmed).toBeNull()
+    expect(await prisma.recoveryCodeEmailReplacement.findUniqueOrThrow({
+      where: { userId: emailTombstone.user.id },
+    })).toEqual(replacementBefore)
+    expect(await prisma.recoveryEmailBinding.findUniqueOrThrow({
+      where: { userId: emailTombstone.user.id },
+    })).toEqual(emailBindingBefore)
+    expect(await prisma.mailOutboxMessage.findUniqueOrThrow({
+      where: { messageId: replacementBefore.newMessageId },
+      select: { recipient: true, state: true, templatePayload: true },
+    })).toEqual(replacementMessageBefore)
+  })
+
+  test('serializes public and authenticated Recovery Email replacement without a lock inversion', async () => {
+    await seedApprovedMailService(prisma, 'mail.ru')
+    const account = await registerTokenAccount('recovery-email-lock-order')
+    await seedActiveRecoveryEmail(prisma, {
+      canonicalKey: 'Recovery-email-lock-order@mail.ru',
+      providerValue: 'Recovery-email-lock-order@mail.ru',
+      userId: account.user.id,
+    })
+    const recoveryCodes = Array.from(
+      { length: 8 },
+      (_, index) => Array(8).fill(index.toString(16).toUpperCase().repeat(4)).join('-'),
+    )
+    const setupRepository = createPrismaAuthRepository(prisma, env.JWT_SECRET)
+    expect(await setupRepository.issueRecoveryCodes({
+      codes: recoveryCodes,
+      now: new Date(),
+      userId: account.user.id,
+    })).toBe('issued')
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: account.user.id },
+      select: { passwordHash: true },
+    })
+    const session = await prisma.authSession.findFirstOrThrow({
+      where: { userId: account.user.id },
+      select: { id: true },
+    })
+    const [deadlocksBefore] = await prisma.$queryRaw<Array<{ deadlocks: bigint }>>`
+      SELECT deadlocks::bigint AS deadlocks
+      FROM pg_stat_database
+      WHERE datname = current_database()
+    `
+    const blockerPrisma = createPrisma(databaseUrl!)
+    const publicPrisma = createPrisma(databaseUrl!)
+    const authenticatedPrisma = createPrisma(databaseUrl!)
+    const publicRepository = createPrismaAuthRepository(publicPrisma, env.JWT_SECRET)
+    const authenticatedRepository = createPrismaAuthRepository(authenticatedPrisma, env.JWT_SECRET)
+    let signalLifecycleLocked!: () => void
+    let releaseLifecycle!: () => void
+    const lifecycleLocked = new Promise<void>((resolve) => { signalLifecycleLocked = resolve })
+    const lifecycleReleased = new Promise<void>((resolve) => { releaseLifecycle = resolve })
+    const blocker = blockerPrisma.$transaction(async (tx) => {
+      await lockAccountLifecycleTransaction(tx, env.JWT_SECRET, account.user.id)
+      signalLifecycleLocked()
+      await lifecycleReleased
+    })
+
+    try {
+      await lifecycleLocked
+      const now = new Date()
+      const publicReplacement = publicRepository.startRecoveryEmailWithRecoveryCode({
+        budgetReserved: true,
+        expiresAt: new Date(now.getTime() + 15 * 60_000),
+        login: account.user.login,
+        newCanonicalKey: 'Recovery-email-lock-order-public@mail.ru',
+        newProviderValue: 'Recovery-email-lock-order-public@mail.ru',
+        now,
+        recoveryCode: recoveryCodes[0],
+      })
+      await waitForAdvisoryLockWait(prisma, 1)
+      const authenticatedReplacement = authenticatedRepository.startRecoveryEmailReplacement({
+        expectedPasswordHash: user.passwordHash!,
+        expiresAt: new Date(now.getTime() + 15 * 60_000),
+        newCanonicalKey: 'Recovery-email-lock-order-authenticated@mail.ru',
+        newProviderValue: 'Recovery-email-lock-order-authenticated@mail.ru',
+        now,
+        policyBudgetReserved: true,
+        sessionId: session.id,
+        userId: account.user.id,
+      })
+      await waitForAdvisoryLockWait(prisma, 2)
+      releaseLifecycle()
+
+      const outcomes = await Promise.allSettled([
+        publicReplacement,
+        authenticatedReplacement,
+      ])
+      expect(outcomes[0].status).toBe('fulfilled')
+      if (outcomes[1].status === 'rejected') {
+        expect(outcomes[1].reason).toMatchObject({
+          kind: expect.stringMatching(/^(?:recovery_email_pending|session_invalid)$/),
+        })
+      }
+      expect(await prisma.recoveryCodeEmailReplacement.count({
+        where: { userId: account.user.id },
+      })).toBe(1)
+      expect(await prisma.recoveryEmailReplacement.count({
+        where: { userId: account.user.id },
+      })).toBe(0)
+      expect(await prisma.mailOutboxMessage.count({
+        where: { state: 'queued' },
+      })).toBe(1)
+      expect(await prisma.mailOutboxMessage.findFirstOrThrow({
+        where: { state: 'queued' },
+        select: { recipient: true },
+      })).toEqual({ recipient: 'Recovery-email-lock-order-public@mail.ru' })
+      const [deadlocksAfter] = await prisma.$queryRaw<Array<{ deadlocks: bigint }>>`
+        SELECT deadlocks::bigint AS deadlocks
+        FROM pg_stat_database
+        WHERE datname = current_database()
+      `
+      expect(deadlocksAfter?.deadlocks).toBe(deadlocksBefore?.deadlocks)
+    } finally {
+      releaseLifecycle()
+      await blocker.catch(() => undefined)
+      await Promise.all([
+        blockerPrisma.$disconnect(),
+        publicPrisma.$disconnect(),
+        authenticatedPrisma.$disconnect(),
+      ])
+    }
+  }, 10_000)
+
+  test('serializes existing OAuth completion before Recovery Email locks', async () => {
+    const canonicalKey = 'OAuth-recovery-lock@mail.ru'
+    const user = await prisma.user.create({
+      data: {
+        accountEmailCanonicalKey: canonicalKey,
+        accountEmailProviderValue: canonicalKey,
+        accountEmailState: 'yandex_managed',
+        login: 'oauth-recovery-lock-order',
+        passwordHash: 'oauth-recovery-lock-password-hash',
+      },
+    })
+    await prisma.authIdentity.create({
+      data: {
+        provider: 'yandex',
+        subject: 'oauth-recovery-lock-subject',
+        userId: user.id,
+      },
+    })
+    await prisma.recoveryEmailBinding.create({
+      data: {
+        activatesAt: new Date(Date.now() - 60_000),
+        canonicalKey,
+        policyVersion: 1,
+        providerId: 'vk_mail',
+        providerValue: canonicalKey,
+        requestedAt: new Date(Date.now() - 86_400_000),
+        userId: user.id,
+      },
+    })
+    const session = await prisma.authSession.create({
+      data: {
+        expiresAt: new Date(Date.now() + 60_000),
+        refreshTokenFamilyHash: 'oauth-recovery-lock-existing-family',
+        refreshTokenHash: 'oauth-recovery-lock-existing-refresh',
+        userId: user.id,
+      },
+    })
+    const [deadlocksBefore] = await prisma.$queryRaw<Array<{ deadlocks: bigint }>>`
+      SELECT deadlocks::bigint AS deadlocks
+      FROM pg_stat_database
+      WHERE datname = current_database()
+    `
+    const blockerPrisma = createPrisma(databaseUrl!)
+    const recoveryPrisma = createPrisma(databaseUrl!)
+    const oauthPrisma = createPrisma(databaseUrl!)
+    const recoveryRepository = createPrismaAuthRepository(recoveryPrisma, env.JWT_SECRET)
+    const oauthRepository = createPrismaAuthRepository(oauthPrisma, env.JWT_SECRET)
+    let signalLifecycleLocked!: () => void
+    let releaseLifecycle!: () => void
+    const lifecycleLocked = new Promise<void>((resolve) => { signalLifecycleLocked = resolve })
+    const lifecycleReleased = new Promise<void>((resolve) => { releaseLifecycle = resolve })
+    const blocker = blockerPrisma.$transaction(async (tx) => {
+      await lockAccountLifecycleTransaction(tx, env.JWT_SECRET, user.id)
+      signalLifecycleLocked()
+      await lifecycleReleased
+    })
+
+    try {
+      await lifecycleLocked
+      const now = new Date()
+      const recovery = recoveryRepository.startRecoveryCodeReissue({
+        expectedPasswordHash: user.passwordHash!,
+        expiresAt: new Date(now.getTime() + 15 * 60_000),
+        now,
+        sessionId: session.id,
+        userId: user.id,
+      })
+      await waitForAdvisoryLockWait(prisma, 1)
+      const oauth = oauthRepository.completeOAuthSignIn({
+        accountEmail: { canonicalKey, kind: 'candidate', providerValue: canonicalKey },
+        identity: { provider: 'yandex', subject: 'oauth-recovery-lock-subject' },
+        session: {
+          expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60_000),
+          metadata: {},
+          refreshTokenFamilyHash: 'oauth-recovery-lock-next-family',
+          refreshTokenHash: 'oauth-recovery-lock-next-refresh',
+        },
+      })
+      await waitForAdvisoryLockWait(prisma, 2)
+      releaseLifecycle()
+
+      const [recoveryResult, oauthResult] = await Promise.all([recovery, oauth])
+      expect(recoveryResult).toBeNull()
+      expect(oauthResult?.user.id).toBe(user.id)
+      expect(await prisma.authSession.count({ where: { userId: user.id } })).toBe(2)
+      expect(await prisma.recoveryCodeReissueChallenge.count({
+        where: { userId: user.id },
+      })).toBe(0)
+      const [deadlocksAfter] = await prisma.$queryRaw<Array<{ deadlocks: bigint }>>`
+        SELECT deadlocks::bigint AS deadlocks
+        FROM pg_stat_database
+        WHERE datname = current_database()
+      `
+      expect(deadlocksAfter?.deadlocks).toBe(deadlocksBefore?.deadlocks)
+    } finally {
+      releaseLifecycle()
+      await blocker.catch(() => undefined)
+      await Promise.all([
+        blockerPrisma.$disconnect(),
+        recoveryPrisma.$disconnect(),
+        oauthPrisma.$disconnect(),
+      ])
+    }
+  }, 10_000)
 
   test('rolls back password-reset request state when its mail cannot enter the outbox', async () => {
     await seedApprovedMailService(prisma, 'mail.ru')
@@ -5089,6 +5602,36 @@ maybeDescribe('auth API integration', () => {
     expect(missingMe.status).toBe(401)
   })
 
+  test('rejects every HTTP credential left on a legacy account tombstone before reconciliation', async () => {
+    const tombstone = await registerForMeGuard('legacy-tombstone-auth')
+    await prisma.user.update({
+      where: { id: tombstone.userId },
+      data: {
+        anonymizedAt: new Date('2026-09-04T12:00:00.000Z'),
+        deletionCleanupCompletedAt: null,
+      },
+    })
+
+    const access = await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${tombstone.accessToken}` },
+    })
+    const refresh = await app.request('/api/auth/token/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: tombstone.refreshToken }),
+    })
+    const password = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'legacy-tombstone-auth', password: 'password123' }),
+    })
+
+    expect(access.status).toBe(401)
+    expect(refresh.status).toBe(401)
+    expect(password.status).toBe(401)
+    expect(await prisma.authSession.count({ where: { userId: tombstone.userId } })).toBe(1)
+  })
+
   test('enforces absolute session lifetime in PostgreSQL for access and refresh credentials', async () => {
     const absoluteExpired = await registerForMeGuard('absolute-expired')
     await prisma.authSession.updateMany({
@@ -5412,9 +5955,186 @@ maybeDescribe('auth API integration', () => {
     expect(protectionText).not.toContain('Player@yandex.ru')
   })
 
+  test('re-erases resurrected auth state before completing a legacy deletion tombstone', async () => {
+    const anonymizedAt = new Date('2026-08-01T12:00:00.000Z')
+    const now = new Date('2026-09-04T14:30:00.000Z')
+    const challengeMessageId = '019f8099-7e26-7760-ad08-66d1d66b2971'
+    const resetMessageId = '019f8099-7e26-7760-ad08-66d1d66b2972'
+    const user = await prisma.user.create({
+      data: {
+        accountEmailCanonicalKey: 'resurrected@example.test',
+        accountEmailProviderValue: 'Resurrected@example.test',
+        accountEmailState: 'yandex_managed',
+        anonymizedAt,
+        deletionCleanupCompletedAt: null,
+        displayName: 'Resurrected player',
+        locale: 'en',
+        login: 'resurrected-legacy-login',
+        passwordHash: 'resurrected-password-hash',
+        privacyConsentAt: new Date('2026-07-01T12:00:00.000Z'),
+        privacyConsentVersion: '1.1',
+        termsAcceptedAt: new Date('2026-07-01T12:00:00.000Z'),
+        termsVersion: '1.1',
+        tutorialCompletedAt: new Date('2026-07-02T12:00:00.000Z'),
+      },
+    })
+    const session = await prisma.authSession.create({
+      data: {
+        expiresAt: new Date('2026-10-04T14:30:00.000Z'),
+        refreshTokenFamilyHash: 'resurrected-legacy-family',
+        refreshTokenHash: 'resurrected-legacy-refresh',
+        userId: user.id,
+      },
+    })
+    await prisma.realtimeTicket.create({
+      data: {
+        expiresAt: new Date('2026-09-04T14:35:00.000Z'),
+        sessionId: session.id,
+        ticketHash: 'resurrected-legacy-ticket',
+        userId: user.id,
+      },
+    })
+    await prisma.authIdentity.create({
+      data: {
+        provider: 'yandex',
+        subject: 'resurrected-legacy-subject',
+        userId: user.id,
+      },
+    })
+    await prisma.recoveryEmailBinding.create({
+      data: {
+        activatesAt: now,
+        canonicalKey: 'recovery-resurrected@example.test',
+        policyVersion: 1,
+        providerValue: 'Recovery-Resurrected@example.test',
+        requestedAt: now,
+        userId: user.id,
+      },
+    })
+    await prisma.recoveryEmailChallenge.create({
+      data: {
+        canonicalKey: 'pending-resurrected@example.test',
+        codeHash: 'a'.repeat(64),
+        expiresAt: new Date('2026-09-04T14:45:00.000Z'),
+        messageId: challengeMessageId,
+        policyVersion: 1,
+        providerValue: 'Pending-Resurrected@example.test',
+        requestedAt: now,
+        userId: user.id,
+      },
+    })
+    const recoveryCodeSet = await prisma.recoveryCodeSet.create({
+      data: { issuedAt: now, userId: user.id },
+    })
+    await prisma.recoveryCode.create({
+      data: { codeHash: 'b'.repeat(64), userId: user.id },
+    })
+    await prisma.passwordResetCredential.create({
+      data: {
+        expiresAt: new Date('2026-09-04T14:45:00.000Z'),
+        messageId: resetMessageId,
+        recoveryCanonicalKey: 'recovery-resurrected@example.test',
+        requestedAt: now,
+        tokenHash: 'c'.repeat(64),
+        userId: user.id,
+      },
+    })
+    await prisma.mailOutboxMessage.createMany({
+      data: [challengeMessageId, resetMessageId].map((messageId, index) => ({
+        fingerprint: `${index + 1}`.repeat(64),
+        messageId,
+        providerMessageId: `<${messageId}@anomaly-detector.ru>`,
+        recipient: 'resurrected@example.test',
+        recipientDomain: 'example.test',
+        templateKind: index === 0 ? 'account_email_confirmation' : 'password_recovery',
+        templatePayload: { kind: index === 0 ? 'account_email_confirmation' : 'password_recovery' },
+      })),
+    })
+    const survivingHost = await prisma.user.create({
+      data: { login: 'legacy-stale-current-match-host' },
+    })
+    const staleRoom = await prisma.tenderRoom.create({
+      data: {
+        capacity: 2,
+        hostId: survivingHost.id,
+        status: 'started',
+      },
+    })
+    await prisma.currentMatch.create({
+      data: { roomId: staleRoom.id, userId: user.id },
+    })
+
+    await reconcileDeletedAccount({
+      db: prisma,
+      lifecycleSecret: env.JWT_SECRET,
+      now,
+    }, user.id)
+
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: {
+        accountEmailCanonicalKey: true,
+        accountEmailProviderValue: true,
+        accountEmailState: true,
+        anonymizedAt: true,
+        deletionCleanupCompletedAt: true,
+        displayName: true,
+        locale: true,
+        login: true,
+        passwordHash: true,
+        privacyConsentAt: true,
+        privacyConsentVersion: true,
+        termsAcceptedAt: true,
+        termsVersion: true,
+        tutorialCompletedAt: true,
+      },
+    })).toEqual({
+      accountEmailCanonicalKey: null,
+      accountEmailProviderValue: null,
+      accountEmailState: 'absent',
+      anonymizedAt,
+      deletionCleanupCompletedAt: now,
+      displayName: null,
+      locale: 'ru',
+      login: expect.stringMatching(/^deleted-[0-9a-f-]{36}$/),
+      passwordHash: null,
+      privacyConsentAt: null,
+      privacyConsentVersion: null,
+      termsAcceptedAt: null,
+      termsVersion: null,
+      tutorialCompletedAt: null,
+    })
+    await expect(Promise.all([
+      prisma.authIdentity.count({ where: { userId: user.id } }),
+      prisma.authSession.count({ where: { userId: user.id } }),
+      prisma.currentMatch.count({ where: { userId: user.id } }),
+      prisma.realtimeTicket.count({ where: { userId: user.id } }),
+      prisma.recoveryEmailBinding.count({ where: { userId: user.id } }),
+      prisma.recoveryEmailChallenge.count({ where: { userId: user.id } }),
+      prisma.recoveryCode.count({ where: { userId: user.id } }),
+      prisma.recoveryCodeSet.count({ where: { id: recoveryCodeSet.id } }),
+      prisma.passwordResetCredential.count({ where: { userId: user.id } }),
+    ])).resolves.toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0])
+    expect(await prisma.tenderRoom.count({ where: { id: staleRoom.id } })).toBe(1)
+    expect(await prisma.mailOutboxMessage.count({
+      where: {
+        messageId: { in: [challengeMessageId, resetMessageId] },
+        recipient: '[redacted]',
+        state: 'terminal_failure',
+        templatePayload: { equals: {} },
+      },
+    })).toBe(2)
+  })
+
   test('deleting an account removes auth links and its identifier from Tender history', async () => {
+    const changedTenderIds: string[] = []
+    const deletionApp = createApp({
+      env,
+      onTenderChanged: (tenderId) => { changedTenderIds.push(tenderId) },
+      prisma,
+    })
     const register = async (login: string, displayName: string) => {
-      const response = await app.request('/api/auth/token/register', {
+      const response = await deletionApp.request('/api/auth/token/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5430,12 +6150,16 @@ maybeDescribe('auth API integration', () => {
       expect(response.status).toBe(201)
       return response.json()
     }
-    const deletedAccount = await register('delete-me', 'Анна')
+    const deletedAccount = await register('delete-me', 'Deleted participant')
     const remainingAccount = await register('keep-me', 'Борис')
     const deletedUserId = deletedAccount.user.id as string
     const remainingUserId = remainingAccount.user.id as string
+    await prisma.user.update({
+      where: { id: deletedUserId },
+      data: { tutorialCompletedAt: new Date('2026-09-04T11:00:00.000Z') },
+    })
     await seedApprovedMailService(prisma, 'mail.ru')
-    expect((await app.request('/api/auth/account-protection/recovery-email/start', {
+    expect((await deletionApp.request('/api/auth/account-protection/recovery-email/start', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${deletedAccount.accessToken}`,
@@ -5447,7 +6171,7 @@ maybeDescribe('auth API integration', () => {
     const tender = createPersistentTenderModule(prisma)
     const { tenderId } = await tender.createTender({
       players: [
-        { displayName: 'Анна', id: deletedUserId, tiePriority: 1 },
+        { displayName: 'Deleted participant', id: deletedUserId, tiePriority: 1 },
         { displayName: 'Борис', id: remainingUserId, tiePriority: 2 },
       ],
     })
@@ -5458,8 +6182,55 @@ maybeDescribe('auth API integration', () => {
         userId: deletedUserId,
       },
     })
+    const linkedFeedback = await prisma.feedbackReport.create({
+      data: {
+        browserClass: 'chromium',
+        category: 'suggestion',
+        deviceClass: 'desktop',
+        linkedUserId: deletedUserId,
+        publicNumber: 'FB-DELETE0001',
+        routeTemplate: '/profile',
+        suggestionDesiredChange: 'Скрыть связь с удалённым аккаунтом.',
+        suggestionProblemSolved: 'В обращении не останется идентификатор аккаунта.',
+      },
+    })
+    const createdRoomResponse = await deletionApp.request('/api/rooms', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${deletedAccount.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ capacity: 2 }),
+    })
+    expect(createdRoomResponse.status).toBe(201)
+    const createdRoom = await createdRoomResponse.json() as {
+      joinCode: string
+      roomId: string
+    }
+    expect((await deletionApp.request('/api/rooms/join', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${remainingAccount.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: createdRoom.joinCode }),
+    })).status).toBe(200)
+    for (const accessToken of [deletedAccount.accessToken, remainingAccount.accessToken]) {
+      expect((await deletionApp.request(`/api/rooms/${createdRoom.roomId}/ready`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ready: true }),
+      })).status).toBe(200)
+    }
+    expect((await deletionApp.request(`/api/rooms/${createdRoom.roomId}/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${deletedAccount.accessToken}` },
+    })).status).toBe(200)
 
-    const deleted = await app.request('/api/auth/account', {
+    const deleted = await deletionApp.request('/api/auth/account', {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${deletedAccount.accessToken}` },
     })
@@ -5469,6 +6240,25 @@ maybeDescribe('auth API integration', () => {
     expect(await prisma.authSession.count({ where: { userId: deletedUserId } })).toBe(0)
     expect(await prisma.recoveryEmailChallenge.count({ where: { userId: deletedUserId } })).toBe(0)
     expect(await prisma.recoveryEmailBinding.count({ where: { userId: deletedUserId } })).toBe(0)
+    expect(await prisma.feedbackReport.findUniqueOrThrow({
+      where: { id: linkedFeedback.id },
+      select: { linkedUserId: true },
+    })).toEqual({ linkedUserId: null })
+    expect(await prisma.tenderRoom.findUniqueOrThrow({
+      where: { id: createdRoom.roomId },
+      select: {
+        hostId: true,
+        members: { orderBy: { seat: 'asc' }, select: { ready: true, userId: true } },
+        startsAt: true,
+        status: true,
+      },
+    })).toEqual({
+      hostId: remainingUserId,
+      members: [{ ready: false, userId: remainingUserId }],
+      startsAt: null,
+      status: 'waiting',
+    })
+    expect(await prisma.currentMatch.count({ where: { userId: deletedUserId } })).toBe(0)
     expect(await prisma.mailOutboxMessage.findFirstOrThrow({
       select: { lastFailureCode: true, recipient: true, state: true, templatePayload: true },
     })).toEqual({
@@ -5480,18 +6270,22 @@ maybeDescribe('auth API integration', () => {
     expect(await prisma.user.findUniqueOrThrow({
       where: { id: deletedUserId },
       select: {
+        deletionCleanupCompletedAt: true,
         displayName: true,
         privacyConsentAt: true,
         privacyConsentVersion: true,
         termsAcceptedAt: true,
         termsVersion: true,
+        tutorialCompletedAt: true,
       },
     })).toEqual({
+      deletionCleanupCompletedAt: expect.any(Date),
       displayName: null,
       privacyConsentAt: null,
       privacyConsentVersion: null,
       termsAcceptedAt: null,
       termsVersion: null,
+      tutorialCompletedAt: null,
     })
 
     const oldPasswordLogin = await app.request('/api/auth/token/login', {
@@ -5510,6 +6304,221 @@ maybeDescribe('auth API integration', () => {
       displayName: 'Deleted participant',
       playerId: expect.stringMatching(/^deleted-participant-/),
     }))
+    expect(changedTenderIds).toEqual([tenderId])
+  })
+
+  test('does not restore a profile after account deletion holds the lifecycle lock', async () => {
+    const user = await prisma.user.create({
+      data: { displayName: 'До удаления', login: 'delete-profile-race', passwordHash: 'password-hash' },
+    })
+    let signalCleanupStarted!: () => void
+    let releaseCleanup!: () => void
+    const cleanupStarted = new Promise<void>((resolve) => { signalCleanupStarted = resolve })
+    const cleanupReleased = new Promise<void>((resolve) => { releaseCleanup = resolve })
+    const deletionRepository = createPrismaAuthRepository(prisma, env.JWT_SECRET, {
+      accountDeletionCleanup: async () => {
+        signalCleanupStarted()
+        await cleanupReleased
+      },
+    })
+    const competingPrisma = createPrisma(databaseUrl!)
+    const profileRepository = createPrismaAuthRepository(competingPrisma, env.JWT_SECRET)
+
+    try {
+      const deletion = deletionRepository.eraseUserIdentity({
+        now: new Date('2026-09-04T13:00:00.000Z'),
+        userId: user.id,
+      })
+      await cleanupStarted
+      const profileUpdate = profileRepository.updateUser({
+        displayName: 'После удаления',
+        userId: user.id,
+      })
+      releaseCleanup()
+
+      await deletion
+      await expect(profileUpdate).rejects.toMatchObject({ kind: 'session_invalid' })
+      expect(await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+        select: { anonymizedAt: true, displayName: true },
+      })).toEqual({
+        anonymizedAt: new Date('2026-09-04T13:00:00.000Z'),
+        displayName: null,
+      })
+    } finally {
+      releaseCleanup()
+      await competingPrisma.$disconnect()
+    }
+  })
+
+  test('does not restore an OAuth session across JWT secret rotation while deletion holds the lifecycle lock', async () => {
+    const user = await prisma.user.create({
+      data: { displayName: 'До удаления', login: 'delete-oauth-race', passwordHash: null },
+    })
+    await prisma.authIdentity.create({
+      data: { provider: 'yandex', subject: 'delete-oauth-race-subject', userId: user.id },
+    })
+    let signalCleanupStarted!: () => void
+    let releaseCleanup!: () => void
+    const cleanupStarted = new Promise<void>((resolve) => { signalCleanupStarted = resolve })
+    const cleanupReleased = new Promise<void>((resolve) => { releaseCleanup = resolve })
+    const deletionRepository = createPrismaAuthRepository(prisma, env.JWT_SECRET, {
+      accountDeletionCleanup: async () => {
+        signalCleanupStarted()
+        await cleanupReleased
+      },
+    })
+    const competingPrisma = createPrisma(databaseUrl!)
+    const oauthRepository = createPrismaAuthRepository(
+      competingPrisma,
+      'rotated-jwt-secret-12345678901234567890123456789012',
+    )
+
+    try {
+      const deletion = deletionRepository.eraseUserIdentity({
+        now: new Date('2026-09-04T13:30:00.000Z'),
+        userId: user.id,
+      })
+      await cleanupStarted
+      let oauthSettled = false
+      const oauthCompletion = oauthRepository.completeOAuthSignIn({
+        accountEmail: { kind: 'unavailable' },
+        identity: { provider: 'yandex', subject: 'delete-oauth-race-subject' },
+        session: {
+          expiresAt: new Date('2026-10-04T13:30:00.000Z'),
+          metadata: {},
+          refreshTokenFamilyHash: 'delete-oauth-race-family',
+          refreshTokenHash: 'delete-oauth-race-refresh',
+        },
+      }).finally(() => {
+        oauthSettled = true
+      })
+
+      try {
+        await waitForAdvisoryLockWait(prisma)
+        expect(oauthSettled).toBe(false)
+      } finally {
+        releaseCleanup()
+      }
+
+      await deletion
+      await expect(oauthCompletion).resolves.toBeNull()
+      expect(await prisma.authIdentity.count({ where: { userId: user.id } })).toBe(0)
+      expect(await prisma.authSession.count({ where: { userId: user.id } })).toBe(0)
+      expect(await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+        select: { anonymizedAt: true, displayName: true },
+      })).toEqual({
+        anonymizedAt: new Date('2026-09-04T13:30:00.000Z'),
+        displayName: null,
+      })
+    } finally {
+      releaseCleanup()
+      await competingPrisma.$disconnect()
+    }
+  })
+
+  test('rolls dependent cleanup back when account erasure cannot finish', async () => {
+    const user = await prisma.user.create({
+      data: {
+        login: 'delete-rollback',
+        passwordHash: 'password-hash',
+      },
+    })
+    const report = await prisma.feedbackReport.create({
+      data: {
+        browserClass: 'chromium',
+        category: 'suggestion',
+        deviceClass: 'desktop',
+        linkedUserId: user.id,
+        publicNumber: 'FB-ROLLBACK01',
+        routeTemplate: '/profile',
+        suggestionDesiredChange: 'Проверить откат удаления.',
+        suggestionProblemSolved: 'Связанные данные остаются согласованными.',
+      },
+    })
+    const otherUser = await prisma.user.create({
+      data: {
+        login: 'delete-rollback-peer',
+        passwordHash: 'password-hash',
+      },
+    })
+    const tender = createPersistentTenderModule(prisma)
+    const { tenderId } = await tender.createTender({
+      players: [
+        { displayName: 'Удаляемый участник', id: user.id, tiePriority: 1 },
+        { displayName: 'Оставшийся участник', id: otherUser.id, tiePriority: 2 },
+      ],
+    })
+    const room = await prisma.tenderRoom.create({
+      data: {
+        capacity: 2,
+        hostId: user.id,
+        joinCode: 'ROLLBACK01',
+        members: {
+          create: [
+            { ready: true, seat: 1, userId: user.id },
+            { ready: true, seat: 2, userId: otherUser.id },
+          ],
+        },
+        currentMatches: {
+          create: [
+            { userId: user.id },
+            { userId: otherUser.id },
+          ],
+        },
+        startsAt: new Date('2026-09-04T12:01:00.000Z'),
+        status: 'starting',
+      },
+    })
+    const cleanupFailure = new Error('account erasure interrupted')
+    const repository = createPrismaAuthRepository(prisma, env.JWT_SECRET, {
+      accountDeletionCleanup: async (transaction, input) => {
+        await cleanupPrismaRoomsForAccountDeletion(transaction, input.userId)
+        await anonymizePrismaTenderParticipant(transaction, input.userId)
+        await transaction.feedbackReport.updateMany({
+          where: { linkedUserId: input.userId },
+          data: { linkedUserId: null },
+        })
+        throw cleanupFailure
+      },
+    })
+
+    await expect(repository.eraseUserIdentity({
+      now: new Date('2026-09-04T12:00:00.000Z'),
+      userId: user.id,
+    })).rejects.toBe(cleanupFailure)
+
+    expect(await prisma.feedbackReport.findUniqueOrThrow({
+      where: { id: report.id },
+      select: { linkedUserId: true },
+    })).toEqual({ linkedUserId: user.id })
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { anonymizedAt: true, passwordHash: true },
+    })).toEqual({ anonymizedAt: null, passwordHash: 'password-hash' })
+    expect(JSON.stringify(await prisma.tender.findUniqueOrThrow({
+      where: { id: tenderId },
+      select: { state: true },
+    }))).toContain(user.id)
+    expect(await prisma.tenderRoom.findUniqueOrThrow({
+      where: { id: room.id },
+      select: {
+        hostId: true,
+        members: { orderBy: { seat: 'asc' }, select: { ready: true, userId: true } },
+        startsAt: true,
+        status: true,
+      },
+    })).toEqual({
+      hostId: user.id,
+      members: [
+        { ready: true, userId: user.id },
+        { ready: true, userId: otherUser.id },
+      ],
+      startsAt: new Date('2026-09-04T12:01:00.000Z'),
+      status: 'starting',
+    })
+    expect(await prisma.currentMatch.count({ where: { userId: user.id } })).toBe(1)
   })
 
   test('requires a recent sign-in before deleting an account, even after token refresh', async () => {
@@ -5893,18 +6902,35 @@ maybeDescribe('auth API integration', () => {
     expect(response.status).toBe(201)
     return response.json()
   }
+
+  async function waitForAdvisoryLockWait(
+    db: ReturnType<typeof createPrisma>,
+    expectedWaiters = 1,
+  ) {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [state] = await db.$queryRaw<Array<{ waiting: bigint }>>`
+        SELECT count(*)::bigint AS waiting
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND wait_event = 'advisory'
+      `
+      if ((state?.waiting ?? 0n) >= BigInt(expectedWaiters)) return
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    throw new Error(`Timed out waiting for ${expectedWaiters} account lifecycle lock waiter(s)`)
+  }
 })
 
 async function seedApprovedMailService(prisma: DbClient, emailDomain: string) {
-  const policy = createMailModule({ db: prisma }).operatorPolicy
+  const policy = createMailModule({
+    accountLifecycleSecret: TEST_ACCOUNT_LIFECYCLE_SECRET,
+    db: prisma,
+  }).operatorPolicy
   const current = await policy.read()
-  const synced = await policy.syncCatalog({
+  const synced = await withActiveMailPolicyOperator(prisma, (actor) => policy.syncCatalog({
     commandId: crypto.randomUUID(),
     expectedVersion: current.currentVersion,
-  }, {
-    authenticatedAt: new Date(),
-    id: crypto.randomUUID(),
-  })
+  }, actor))
   if (!synced.publishedPolicy?.providers.some((provider) =>
     provider.publicDomains.some((domain) => domain.emailDomain === emailDomain))) {
     throw new Error(`Reviewed mail catalog does not include ${emailDomain}`)
@@ -5955,19 +6981,32 @@ async function publishMailServiceState(
   emailDomain: string,
   state: 'blocked' | 'deprecated',
 ) {
-  const policy = createMailModule({ db: prisma }).operatorPolicy
+  const policy = createMailModule({
+    accountLifecycleSecret: TEST_ACCOUNT_LIFECYCLE_SECRET,
+    db: prisma,
+  }).operatorPolicy
   const current = await policy.read()
   const provider = current.publishedPolicy?.providers.find((candidate) =>
     candidate.publicDomains.some((domain) => domain.emailDomain === emailDomain))
   if (!provider) throw new Error(`Published mail provider is missing for ${emailDomain}`)
-  await policy.changeStatus({
+  await withActiveMailPolicyOperator(prisma, (actor) => policy.changeStatus({
     commandId: crypto.randomUUID(),
     expectedVersion: current.currentVersion,
     providerId: provider.providerId,
     reason: 'integration state transition',
     state,
-  }, {
-    authenticatedAt: new Date(),
-    id: crypto.randomUUID(),
-  })
+  }, actor))
+}
+
+async function withActiveMailPolicyOperator<T>(
+  prisma: DbClient,
+  operation: (actor: { authenticatedAt: Date; id: string }) => Promise<T>,
+) {
+  const id = crypto.randomUUID()
+  await prisma.user.create({ data: { id, login: `mail-policy-operator-${id}` } })
+  try {
+    return await operation({ authenticatedAt: new Date(), id })
+  } finally {
+    await prisma.user.deleteMany({ where: { id } })
+  }
 }

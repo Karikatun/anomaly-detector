@@ -12,6 +12,7 @@ import type {
   FeedbackReport as PrismaFeedbackReport,
   Prisma,
 } from '../../../generated/prisma/client'
+import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import type {
   FeedbackOperatorCommitResult,
   FeedbackOperatorRepository,
@@ -39,6 +40,7 @@ type MutationDecision =
 
 export function createPrismaFeedbackOperatorRepository(
   db: DbClient,
+  accountLifecycleSecret: string,
 ): FeedbackOperatorRepository {
   return {
     async findCommand(commandId) {
@@ -51,7 +53,7 @@ export function createPrismaFeedbackOperatorRepository(
     },
 
     async take(input) {
-      return commitCommand(db, input, (report) => report.status !== 'new'
+      return commitCommand(db, accountLifecycleSecret, input, (report) => report.status !== 'new'
         ? { kind: 'transition_conflict' }
         : {
             auditKind: 'feedback_taken_in_review',
@@ -63,7 +65,7 @@ export function createPrismaFeedbackOperatorRepository(
     },
 
     async resolve(input) {
-      return commitCommand(db, input, (report) => report.status !== 'in_review'
+      return commitCommand(db, accountLifecycleSecret, input, (report) => report.status !== 'in_review'
         ? { kind: 'transition_conflict' }
         : {
             auditKind: 'feedback_resolved',
@@ -75,7 +77,7 @@ export function createPrismaFeedbackOperatorRepository(
     },
 
     async reject(input) {
-      return commitCommand(db, input, (report) =>
+      return commitCommand(db, accountLifecycleSecret, input, (report) =>
         !['new', 'in_review'].includes(report.status)
           ? { kind: 'transition_conflict' }
           : {
@@ -96,7 +98,7 @@ export function createPrismaFeedbackOperatorRepository(
     },
 
     async recordGithubIssue(input) {
-      return commitCommand(db, input, (report) =>
+      return commitCommand(db, accountLifecycleSecret, input, (report) =>
         report.status !== 'in_review' || report.githubIssueNumber !== null
           ? { kind: 'transition_conflict' }
           : {
@@ -112,13 +114,17 @@ export function createPrismaFeedbackOperatorRepository(
     },
 
     async deleteContact(input) {
-      return commitCommand(db, input, (report) => report.replyEmail === null
+      return commitCommand(db, accountLifecycleSecret, input, (report) => report.replyEmail === null
         ? { kind: 'contact_absent' }
         : {
             auditKind: 'feedback_contact_deleted',
             auditPayload: { hadContact: true },
             commandKind: 'delete_contact',
-            data: { contactDeletedAt: input.now, replyEmail: null },
+            data: {
+              contactDeletedAt: input.now,
+              replyEmail: null,
+              submissionFingerprint: null,
+            },
             kind: 'update',
           })
     },
@@ -150,10 +156,25 @@ async function readQueue(db: DbClient, query: FeedbackQueueQuery) {
 
 async function commitCommand(
   db: DbClient,
+  accountLifecycleSecret: string,
   input: BaseCommandInput,
   decide: (report: PrismaFeedbackReport) => MutationDecision,
 ): Promise<FeedbackOperatorCommitResult> {
   return db.$transaction(async (tx) => {
+    const activeOperator = await lockActiveAccountLifecycleTransaction(
+      tx,
+      accountLifecycleSecret,
+      input.actorId,
+    )
+    if (!activeOperator) {
+      const existing = await tx.feedbackOperatorCommand.findUnique({
+        where: { commandId: input.commandId },
+      })
+      return existing
+        ? { kind: 'command_exists', ...toStoredCommand(existing) }
+        : { kind: 'operator_unavailable' }
+    }
+
     const lockKeys = [
       `feedback-command:${input.commandId}`,
       `feedback-report:${input.reportId}`,

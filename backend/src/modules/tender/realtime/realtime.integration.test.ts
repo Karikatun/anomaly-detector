@@ -356,6 +356,42 @@ describe('realtime websocket integration', () => {
     expect(response.status).toBe(401)
   })
 
+  test('rejects realtime access left on a legacy account tombstone before reconciliation', async () => {
+    const host = await register('ws-legacy-account-tombstone')
+    const { tenderId } = await tender.createTender({
+      players: [
+        { id: host.user.id, tiePriority: 1 },
+        { id: crypto.randomUUID(), tiePriority: 2 },
+      ],
+    })
+    const ticket = await issueTicket(host.accessToken)
+    const session = await prisma.authSession.findFirstOrThrow({
+      where: { userId: host.user.id },
+    })
+
+    await prisma.user.update({
+      data: { anonymizedAt: new Date(), deletionCleanupCompletedAt: null },
+      where: { id: host.user.id },
+    })
+
+    const principal = { sessionId: session.id, userId: host.user.id }
+    let deliveries = 0
+    const [active, delivered] = await Promise.all([
+      sessionGuard.isActive(principal),
+      sessionGuard.runWhileActive(principal, () => { deliveries += 1 }),
+    ])
+    const response = await fetch(
+      `${baseUrl}${wsPath}?ticket=${ticket.ticket}&tenderId=${tenderId}`,
+    )
+
+    expect({ active, delivered, deliveries, status: response.status }).toEqual({
+      active: false,
+      delivered: false,
+      deliveries: 0,
+      status: 401,
+    })
+  })
+
   test('logout closes only its established socket and prevents future private views', async () => {
     const firstSession = await register('ws-established-logout')
     const secondSession = await login('ws-established-logout')

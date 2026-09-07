@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createPrisma } from '../../../db'
+import { lockAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import { FeedbackOperatorService } from '../application/feedback-operator-service'
 import { FeedbackFailure } from '../domain/errors'
 import { createPrismaFeedbackOperatorRepository } from './prisma-feedback-operator-repository'
@@ -8,8 +9,9 @@ import { createPrismaFeedbackOperatorRepository } from './prisma-feedback-operat
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl ? describe : describe.skip
 const now = new Date('2026-08-23T12:00:00.000Z')
+const accountLifecycleSecret = 'test-feedback-operator-lifecycle-secret'
 const operator = {
-  id: '019f8099-7e26-7760-ad08-66d1d66b2718',
+  id: '019f8099-7e26-7760-ad08-66d1d66b27f1',
 }
 
 maybeDescribe('Prisma feedback operator queue', () => {
@@ -19,11 +21,15 @@ maybeDescribe('Prisma feedback operator queue', () => {
   const service = new FeedbackOperatorService({
     clock: { now: () => now },
     fingerprintKey: 'test-feedback-operator-fingerprint-key',
-    repository: createPrismaFeedbackOperatorRepository(prisma),
+    repository: createPrismaFeedbackOperatorRepository(prisma, accountLifecycleSecret),
   })
 
   beforeEach(async () => {
     await prisma.feedbackReport.deleteMany()
+    await prisma.user.deleteMany({ where: { id: operator.id } })
+    await prisma.user.create({
+      data: { id: operator.id, login: 'feedback-operator-lifecycle-test' },
+    })
   })
 
   afterAll(async () => {
@@ -106,8 +112,87 @@ maybeDescribe('Prisma feedback operator queue', () => {
     }, operator, report.id)).rejects.toBeInstanceOf(FeedbackFailure)
   })
 
+  test('does not commit a new operator command after account deletion wins the lifecycle lock', async () => {
+    const report = await createReport()
+    const competingPrisma = createPrisma(databaseUrl!)
+    const competingService = new FeedbackOperatorService({
+      clock: { now: () => now },
+      fingerprintKey: 'test-feedback-operator-fingerprint-key',
+      repository: createPrismaFeedbackOperatorRepository(
+        competingPrisma,
+        accountLifecycleSecret,
+      ),
+    })
+    let signalDeletionLocked!: () => void
+    let releaseDeletion!: () => void
+    const deletionLocked = new Promise<void>((resolve) => { signalDeletionLocked = resolve })
+    const deletionReleased = new Promise<void>((resolve) => { releaseDeletion = resolve })
+    const deletion = prisma.$transaction(async (transaction) => {
+      await lockAccountLifecycleTransaction(transaction, accountLifecycleSecret, operator.id)
+      await transaction.user.update({
+        where: { id: operator.id },
+        data: { anonymizedAt: now, deletionCleanupCompletedAt: now },
+      })
+      signalDeletionLocked()
+      await deletionReleased
+    })
+
+    try {
+      await deletionLocked
+      let commandSettled = false
+      const command = competingService.take({
+        commandId: '019f8099-7e26-7760-ad08-66d1d66b27f3',
+        expectedVersion: 1,
+      }, operator, report.id).finally(() => { commandSettled = true })
+      try {
+        await waitForAdvisoryLockWaiter(prisma)
+        expect(commandSettled).toBe(false)
+      } finally {
+        releaseDeletion()
+      }
+
+      await deletion
+      await expect(command).rejects.toMatchObject({ kind: 'operator_unavailable' })
+      expect(await prisma.feedbackOperatorCommand.count({
+        where: { reportId: report.id },
+      })).toBe(0)
+      expect(await prisma.feedbackAuditEvent.count({ where: { reportId: report.id } })).toBe(0)
+      expect(await prisma.feedbackReport.findUniqueOrThrow({
+        where: { id: report.id },
+        select: { status: true, version: true },
+      })).toEqual({ status: 'new', version: 1 })
+    } finally {
+      releaseDeletion()
+      await competingPrisma.$disconnect()
+    }
+  })
+
+  test('keeps an already committed command replay read-only after the operator is deleted', async () => {
+    const report = await createReport()
+    const command = {
+      commandId: '019f8099-7e26-7760-ad08-66d1d66b27f4',
+      expectedVersion: 1,
+    }
+    const first = await service.take(command, operator, report.id)
+    await prisma.user.update({
+      where: { id: operator.id },
+      data: { anonymizedAt: now, deletionCleanupCompletedAt: now },
+    })
+
+    await expect(service.take(command, operator, report.id)).resolves.toEqual(first)
+    expect(await prisma.feedbackOperatorCommand.count({ where: { reportId: report.id } })).toBe(1)
+    expect(await prisma.feedbackAuditEvent.count({ where: { reportId: report.id } })).toBe(1)
+  })
+
   test('deletes voluntary contact without deleting source or requiring recent authentication', async () => {
     const report = await createReport()
+    await prisma.feedbackReport.update({
+      where: { id: report.id },
+      data: {
+        submissionFingerprint: 'f'.repeat(64),
+        submissionId: '019f8099-7e26-7760-ad08-66d1d66b2741',
+      },
+    })
     const sourceBefore = await sourceSnapshot(report.id)
     await service.deleteContact({
       commandId: '019f8099-7e26-7760-ad08-66d1d66b2740',
@@ -117,6 +202,7 @@ maybeDescribe('Prisma feedback operator queue', () => {
     expect(await prisma.feedbackReport.findUniqueOrThrow({ where: { id: report.id } })).toMatchObject({
       contactDeletedAt: now,
       replyEmail: null,
+      submissionFingerprint: null,
       version: 2,
     })
     expect(await sourceSnapshot(report.id)).toEqual(sourceBefore)
@@ -183,3 +269,16 @@ maybeDescribe('Prisma feedback operator queue', () => {
     })
   }
 })
+
+async function waitForAdvisoryLockWaiter(prisma: ReturnType<typeof createPrisma>) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [result] = await prisma.$queryRaw<Array<{ waiting: bigint }>>`
+      SELECT count(*)::bigint AS waiting
+      FROM pg_locks
+      WHERE locktype = 'advisory' AND NOT granted
+    `
+    if ((result?.waiting ?? 0n) > 0n) return
+    await Bun.sleep(10)
+  }
+  throw new Error('Expected feedback operator command to wait for account deletion')
+}

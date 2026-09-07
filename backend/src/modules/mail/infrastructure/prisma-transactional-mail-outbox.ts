@@ -108,6 +108,8 @@ export function createPrismaMailOutboxRepository(
     claimProtectionAlerts: (input) => claimProtectionAlerts(db, options, input),
     recordAccepted: (input) => recordAccepted(db, input),
     recordFailure: (input) => recordFailure(db, options, input),
+    recordProtectionAlertFailure: (input) => recordProtectionAlertFailure(db, options, input),
+    renewLeaseForDelivery: (input) => renewLeaseForDelivery(db, options, input),
     releaseBlocked: (input) => releaseBlocked(db, options, input),
   }
 }
@@ -133,6 +135,52 @@ async function assignPolicyProvider(
   })
 }
 
+async function renewLeaseForDelivery(
+  db: DbClient,
+  options: MailOutboxRepositoryOptions,
+  input: {
+    circuitProbe: boolean
+    id: string
+    leaseExpiresAt: Date
+    now: Date
+    workerId: string
+  },
+) {
+  return db.$transaction(async (tx) => {
+    await ensureAndLockControl(tx, input.now)
+    await lockOutboxRow(tx, input.id)
+    const message = await tx.mailOutboxMessage.findFirst({
+      where: { id: input.id, leaseOwner: input.workerId, state: 'leased' },
+      select: { leaseExpiresAt: true },
+    })
+    if (
+      !message?.leaseExpiresAt
+      || message.leaseExpiresAt.getTime() !== input.leaseExpiresAt.getTime()
+    ) return false
+
+    if (input.circuitProbe) {
+      const control = await tx.mailDeliveryControl.findUniqueOrThrow({
+        where: { id: DELIVERY_CONTROL_ID },
+        select: { circuitOpenUntil: true },
+      })
+      if (control.circuitOpenUntil?.getTime() !== input.leaseExpiresAt.getTime()) return false
+    }
+
+    const leaseExpiresAt = new Date(input.now.getTime() + options.leaseMs)
+    await tx.mailOutboxMessage.update({
+      where: { id: input.id },
+      data: { leaseExpiresAt },
+    })
+    if (input.circuitProbe) {
+      await tx.mailDeliveryControl.update({
+        where: { id: DELIVERY_CONTROL_ID },
+        data: { circuitOpenUntil: leaseExpiresAt },
+      })
+    }
+    return true
+  })
+}
+
 async function claimProtectionAlerts(
   db: DbClient,
   options: MailOutboxRepositoryOptions,
@@ -140,13 +188,16 @@ async function claimProtectionAlerts(
 ): Promise<ClaimedMailDeliveryProtectionAlert[]> {
   return db.$transaction(async (tx) => {
     const selected = await tx.$queryRaw<Array<{
+      attempt_count: number
       occurred_at: Date
       reason: MailDeliveryProtectionAlert['reason']
       transition_at: Date
     }>>`
-      SELECT occurred_at, reason, transition_at
+      SELECT attempt_count, occurred_at, reason, transition_at
       FROM mail_delivery_protection_alerts
       WHERE delivered_at IS NULL
+        AND terminal_at IS NULL
+        AND available_at <= ${input.now}
         AND (lease_expires_at IS NULL OR lease_expires_at <= ${input.now})
         AND reason IN ('delivery_budget_exhausted', 'delivery_circuit_open')
       ORDER BY occurred_at ASC, reason ASC, transition_at ASC
@@ -154,7 +205,25 @@ async function claimProtectionAlerts(
       LIMIT ${input.limit}
     `
     const leaseExpiresAt = new Date(input.now.getTime() + options.leaseMs)
+    const claimed: ClaimedMailDeliveryProtectionAlert[] = []
     for (const alert of selected) {
+      if (alert.attempt_count >= options.maxAttempts) {
+        await tx.mailDeliveryProtectionAlert.update({
+          where: {
+            reason_transitionAt: {
+              reason: alert.reason,
+              transitionAt: alert.transition_at,
+            },
+          },
+          data: {
+            lastFailureCode: 'worker_lease_exhausted',
+            leaseExpiresAt: null,
+            leaseOwner: null,
+            terminalAt: input.now,
+          },
+        })
+        continue
+      }
       await tx.mailDeliveryProtectionAlert.update({
         where: {
           reason_transitionAt: {
@@ -163,16 +232,18 @@ async function claimProtectionAlerts(
           },
         },
         data: {
+          attemptCount: { increment: 1 },
           leaseExpiresAt,
           leaseOwner: input.workerId,
         },
       })
+      claimed.push({
+        occurredAt: alert.occurred_at,
+        reason: alert.reason,
+        transitionAt: alert.transition_at,
+      })
     }
-    return selected.map((alert) => ({
-      occurredAt: alert.occurred_at,
-      reason: alert.reason,
-      transitionAt: alert.transition_at,
-    }))
+    return claimed
   })
 }
 
@@ -190,15 +261,79 @@ async function acknowledgeProtectionAlert(
       deliveredAt: null,
       leaseOwner: input.workerId,
       reason: input.reason,
+      terminalAt: null,
       transitionAt: input.transitionAt,
     },
     data: {
       deliveredAt: input.now,
+      lastFailureCode: null,
       leaseExpiresAt: null,
       leaseOwner: null,
     },
   })
   return acknowledged.count === 1
+}
+
+async function recordProtectionAlertFailure(
+  db: DbClient,
+  options: MailOutboxRepositoryOptions,
+  input: {
+    now: Date
+    reason: MailDeliveryProtectionAlert['reason']
+    transitionAt: Date
+    workerId: string
+  },
+) {
+  return db.$transaction(async (tx) => {
+    const alerts = await tx.$queryRaw<Array<{ attempt_count: number }>>`
+      SELECT attempt_count
+      FROM mail_delivery_protection_alerts
+      WHERE delivered_at IS NULL
+        AND terminal_at IS NULL
+        AND lease_owner = ${input.workerId}
+        AND reason = ${input.reason}
+        AND transition_at = ${input.transitionAt}
+      FOR UPDATE
+    `
+    const alert = alerts[0]
+    if (!alert) return 'stale_claim' as const
+
+    if (alert.attempt_count >= options.maxAttempts) {
+      await tx.mailDeliveryProtectionAlert.update({
+        where: {
+          reason_transitionAt: {
+            reason: input.reason,
+            transitionAt: input.transitionAt,
+          },
+        },
+        data: {
+          lastFailureCode: 'alert_delivery_failed',
+          leaseExpiresAt: null,
+          leaseOwner: null,
+          terminalAt: input.now,
+        },
+      })
+      return 'terminal_failure' as const
+    }
+
+    await tx.mailDeliveryProtectionAlert.update({
+      where: {
+        reason_transitionAt: {
+          reason: input.reason,
+          transitionAt: input.transitionAt,
+        },
+      },
+      data: {
+        availableAt: new Date(
+          input.now.getTime() + options.retryBaseMs * (2 ** (alert.attempt_count - 1)),
+        ),
+        lastFailureCode: 'alert_delivery_failed',
+        leaseExpiresAt: null,
+        leaseOwner: null,
+      },
+    })
+    return 'queued' as const
+  })
 }
 
 async function claimNext(
@@ -283,6 +418,7 @@ async function claimNext(
       })
     }
 
+    const circuitProbe = control.circuitOpenUntil !== null
     const leaseExpiresAt = new Date(input.now.getTime() + options.leaseMs)
     const message = await tx.mailOutboxMessage.update({
       where: { id: candidate.id },
@@ -304,9 +440,11 @@ async function claimNext(
       kind: 'claimed',
       message: {
         attemptCount: message.attemptCount,
+        circuitProbe,
         createdAt: message.createdAt,
         deliveryBudgetWindowStartedAt: control.windowStartedAt,
         id: message.id,
+        leaseExpiresAt,
         messageId: message.messageId,
         providerMessageId: message.providerMessageId,
         recipient: message.recipient,

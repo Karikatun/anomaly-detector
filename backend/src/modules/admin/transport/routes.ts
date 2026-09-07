@@ -80,7 +80,7 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
   }
 
   routes.get('/mail-policy', async (c) => {
-    return c.json(mailOperationsViewSchema.parse(await input.mailPolicy.read()))
+    return mailOperationsResponse(c, await input.mailPolicy.read())
   })
 
   // Intentionally use a plain route so the operator surface is not published in OpenAPI.
@@ -124,16 +124,24 @@ export function createAdminRoutes(input: CreateAdminRoutesInput) {
   routes.post('/mail-policy/sync', async (c) => {
     const command = mailPolicySyncCommandSchema.parse(await c.req.json())
     const result = await executeMailPolicy(() => input.mailPolicy.syncCatalog(command, operator(c)))
-    return c.json(mailOperationsViewSchema.parse(result))
+    return mailOperationsResponse(c, result)
   })
 
   routes.post('/mail-policy/status', async (c) => {
     const command = mailPolicyStatusCommandSchema.parse(await c.req.json())
     const result = await executeMailPolicy(() => input.mailPolicy.changeStatus(command, operator(c)))
-    return c.json(mailOperationsViewSchema.parse(result))
+    return mailOperationsResponse(c, result)
   })
 
   return routes
+}
+
+function mailOperationsResponse(c: Context<AuthHttpEnv>, value: unknown) {
+  const view = mailOperationsViewSchema.parse(value)
+  if (c.req.query('deliveryContract') === '2') return c.json(view)
+
+  const { protectionAlerts: _protectionAlerts, ...delivery } = view.delivery
+  return c.json({ ...view, delivery })
 }
 
 async function feedbackCommandResponse(

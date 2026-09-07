@@ -32,6 +32,10 @@ import type {
   TenderStore,
 } from './tender-store'
 import { TenderAuditEventDecodeError } from './tender-audit-event'
+import {
+  tenderCommandFingerprint,
+  tenderCommandFingerprintMatches,
+} from './tender-command-identity'
 import { resolveAccessSlots, rotateTiePriority } from '../domain/access-slots'
 import { createAnomalyConfiguration, resolvePublicResult, signalIds, type SignalId } from '../domain/anomaly-configuration'
 import { createRoundContracts } from '../domain/contracts'
@@ -96,7 +100,6 @@ export function createTenderService({
     return player
   }
 
-  const fingerprint = (command: TenderCommand) => JSON.stringify(command)
   const parseCommand = (commandInput: TenderCommand) => {
     const parsedCommand = tenderCommandSchema.safeParse(commandInput)
     if (!parsedCommand.success) {
@@ -108,9 +111,12 @@ export function createTenderService({
     const command = parseCommand(commandInput)
     const tender = await readTender(command.tenderId)
     readPlayer(tender, command.actorId)
-    const previousCommand = tender.processedCommands[command.commandId]
+    const previousCommand = await store.findCommand({
+      commandId: command.commandId,
+      tenderId: command.tenderId,
+    })
     if (!previousCommand) return undefined
-    if (previousCommand.fingerprint !== fingerprint(command)) {
+    if (!tenderCommandFingerprintMatches(previousCommand.fingerprint, command)) {
       throw new TenderFailure('duplicate_command_conflict', `Command ${command.commandId} conflicts with its first use`)
     }
     return previousCommand.receipt
@@ -418,6 +424,7 @@ export function createTenderService({
   }) => {
     const receipt = { tenderId: command.tenderId, version: tender.version + 1 }
     const result = await store.commit({
+      actorId: command.actorId,
       auditEvents,
       tenderId: command.tenderId,
       expectedVersion: tender.version,
@@ -426,10 +433,13 @@ export function createTenderService({
       command: { fingerprint: commandFingerprint, receipt },
     })
     if (result.kind === 'command_exists') {
-      if (result.command.fingerprint !== commandFingerprint) {
+      if (!tenderCommandFingerprintMatches(result.command.fingerprint, command)) {
         throw new TenderFailure('duplicate_command_conflict', `Command ${command.commandId} conflicts with its first use`)
       }
       return result.command.receipt
+    }
+    if (result.kind === 'actor_unavailable') {
+      throw new TenderFailure('account_unavailable', 'Authentication is no longer active')
     }
     if (result.kind === 'version_conflict') {
       throw new TenderFailure('tender_version_conflict', `Tender ${command.tenderId} changed before command execution`)
@@ -531,10 +541,13 @@ export function createTenderService({
       const command = parseCommand(commandInput)
       const tender = await readTender(command.tenderId)
       const player = readPlayer(tender, command.actorId)
-      const commandFingerprint = fingerprint(command)
-      const previousCommand = tender.processedCommands[command.commandId]
+      const commandFingerprint = tenderCommandFingerprint(command)
+      const previousCommand = await store.findCommand({
+        commandId: command.commandId,
+        tenderId: command.tenderId,
+      })
       if (previousCommand) {
-        if (previousCommand.fingerprint !== commandFingerprint) {
+        if (!tenderCommandFingerprintMatches(previousCommand.fingerprint, command)) {
           throw new TenderFailure('duplicate_command_conflict', `Command ${command.commandId} conflicts with its first use`)
         }
         return previousCommand.receipt

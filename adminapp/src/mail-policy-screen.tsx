@@ -9,6 +9,10 @@ import type {
 
 import { AdminApiError } from './api'
 import { shouldRetainCommand } from './mail-policy-command-retry'
+import {
+  mailProtectionAlertRunbookPath,
+  resolveMailProtectionAlertRunbookUrl,
+} from './mail-policy-runbook'
 
 type MailPolicyScreenProps = {
   antiAbuse: RequestBudgetOverview | null
@@ -22,6 +26,10 @@ type MailPolicyScreenProps = {
 
 type BusyCommand = 'reload' | 'status' | 'sync'
 type Feedback = { kind: 'error' | 'success'; message: string }
+
+const mailProtectionAlertRunbookUrl = resolveMailProtectionAlertRunbookUrl(
+  import.meta.env.VITE_BUILD_SHA,
+)
 
 export function MailPolicyScreen({
   antiAbuse,
@@ -37,6 +45,7 @@ export function MailPolicyScreen({
   const syncCommand = useRef<MailPolicySyncCommand | null>(null)
   const statusCommand = useRef<MailPolicyStatusCommand | null>(null)
   const publishedProviders = data.publishedPolicy?.providers ?? []
+  const protectionAlerts = data.delivery.protectionAlerts
   const publishedById = new Map(publishedProviders.map((provider) => [provider.providerId, provider]))
   const catalogDiff = data.availableCatalog.diff
   const hasCatalogDiff = catalogDiff.addedProviderIds.length > 0
@@ -158,13 +167,55 @@ export function MailPolicyScreen({
               <strong>{data.delivery.budget.usedInWindow} / {data.delivery.budget.limitPerMinute}</strong>
               <small>{data.delivery.outbox.leased} сейчас обрабатывается</small>
             </div>
+            {protectionAlerts ? (
+              <div className="mail-metric">
+                <span>Оповещения защиты</span>
+                <strong>{protectionAlerts.pending} / {protectionAlerts.terminal}</strong>
+                <small>
+                  {alertWaitingLabel(protectionAlerts.pending)} ·{' '}
+                  {alertTerminalLabel(protectionAlerts.terminal)}
+                </small>
+              </div>
+            ) : (
+              <div className="mail-metric">
+                <span>Оповещения защиты</span>
+                <strong>Нет данных</strong>
+                <small>Обновите серверную часть, чтобы увидеть состояние оповещений</small>
+              </div>
+            )}
           </div>
           <dl className="mail-health-details">
             <div><dt>Последнее принятие SMTP</dt><dd>{formatOptionalDate(data.delivery.lastSmtpSuccessAt)}</dd></div>
             <div><dt>Последняя синхронизация каталога</dt><dd>{formatOptionalDate(data.delivery.catalogLastSyncedAt)}</dd></div>
             <div><dt>Повторные сбои</dt><dd>{data.delivery.circuit.consecutiveFailures}</dd></div>
             <div><dt>Circuit до</dt><dd>{formatOptionalDate(data.delivery.circuit.openUntil)}</dd></div>
+            {protectionAlerts && (
+              <>
+                <div><dt>Следующая попытка</dt><dd>{formatOptionalDate(protectionAlerts.nextAttemptAt)}</dd></div>
+                <div><dt>Старейшее оповещение</dt><dd>{formatOptionalDate(protectionAlerts.oldestPendingAt)}</dd></div>
+                <div><dt>В обработке / после сбоя</dt><dd>{protectionAlerts.leased} / {protectionAlerts.retrying}</dd></div>
+              </>
+            )}
           </dl>
+          {protectionAlerts && protectionAlerts.terminal > 0 && (
+            <p className="inline-warning">
+              Есть оповещения, которые больше не отправляются. Сначала восстановите канал
+              доставки, затем верните в очередь только нужный переход. Автоматического
+              сброса нет.{' '}
+              {mailProtectionAlertRunbookUrl ? (
+                <a
+                  className="evidence-link"
+                  href={mailProtectionAlertRunbookUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Открыть инструкцию по восстановлению
+                </a>
+              ) : (
+                <span>Инструкция: {mailProtectionAlertRunbookPath}</span>
+              )}
+            </p>
+          )}
           {data.delivery.groups.length === 0 ? (
             <p className="empty-copy">Группы меньше пяти запросов скрыты; адреса, домены пользователей, содержимое, коды и токены здесь не показываются.</p>
           ) : (
@@ -385,15 +436,30 @@ function formatOptionalDate(value: string | null) {
 }
 
 function deliveryStateLabel(delivery: MailOperationsView['delivery']) {
+  if (delivery.protectionAlerts && delivery.protectionAlerts.terminal > 0) return 'Оповещения остановлены'
   if (!delivery.configured) return 'Отключено'
   if (delivery.circuit.state === 'open') return 'Circuit открыт'
   return 'Включено'
 }
 
 function deliveryStateTone(delivery: MailOperationsView['delivery']) {
+  if (delivery.protectionAlerts && delivery.protectionAlerts.terminal > 0) return 'blocked'
   if (!delivery.configured) return 'deprecated'
   if (delivery.circuit.state === 'open') return 'blocked'
   return 'approved'
+}
+
+function alertWaitingLabel(count: number) {
+  return `${count} ${count % 10 === 1 && count % 100 !== 11 ? 'ждёт' : 'ждут'} отправки`
+}
+
+function alertTerminalLabel(count: number) {
+  const lastTwo = count % 100
+  if (count % 10 === 1 && lastTwo !== 11) return `${count} остановлен после повторных сбоев`
+  if (count % 10 >= 2 && count % 10 <= 4 && (lastTwo < 12 || lastTwo > 14)) {
+    return `${count} остановлены после повторных сбоев`
+  }
+  return `${count} остановлено после повторных сбоев`
 }
 
 function templateKindLabel(kind: MailOperationsView['delivery']['groups'][number]['templateKind']) {

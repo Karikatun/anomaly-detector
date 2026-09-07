@@ -143,6 +143,14 @@ describe('mailOperationsViewSchema', () => {
         }],
         lastSmtpSuccessAt: '2026-08-22T12:01:00.000Z',
         outbox: { leased: 1, oldestQueuedAt: '2026-08-22T11:59:00.000Z', queued: 2 },
+        protectionAlerts: {
+          leased: 1,
+          nextAttemptAt: '2026-08-22T12:03:00.000Z',
+          oldestPendingAt: '2026-08-22T11:57:00.000Z',
+          pending: 3,
+          retrying: 2,
+          terminal: 1,
+        },
         provider: 'reg_ru',
         catalogLastSyncedAt: '2026-08-22T10:00:00.000Z',
         totals: { requested: 12, smtpAccepted: 10, temporaryFailures: 2, terminalFailures: 0 },
@@ -161,6 +169,21 @@ describe('mailOperationsViewSchema', () => {
     })
 
     expect(result.delivery.totals.smtpAccepted).toBe(10)
+    expect(result.delivery.protectionAlerts).toEqual({
+      leased: 1,
+      nextAttemptAt: '2026-08-22T12:03:00.000Z',
+      oldestPendingAt: '2026-08-22T11:57:00.000Z',
+      pending: 3,
+      retrying: 2,
+      terminal: 1,
+    })
+    const legacyDelivery = Object.fromEntries(
+      Object.entries(result.delivery).filter(([key]) => key !== 'protectionAlerts'),
+    )
+    expect(mailOperationsViewSchema.parse({
+      ...result,
+      delivery: legacyDelivery,
+    }).delivery.protectionAlerts).toBeUndefined()
     expect(JSON.stringify(result.delivery)).not.toMatch(/recipient|address|token|code|content/i)
     expect(() => mailOperationsViewSchema.parse({
       ...result,

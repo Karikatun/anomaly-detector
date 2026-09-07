@@ -3,7 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import { AdminApiError } from '../src/api'
 import { shouldRetainCommand } from '../src/mail-policy-command-retry'
-import { MailPolicyScreen, RequestBudgetOverviewPanel } from '../src/mail-policy-screen'
+import {
+  MailPolicyScreen,
+  RequestBudgetOverviewPanel,
+} from '../src/mail-policy-screen'
+import { resolveMailProtectionAlertRunbookUrl } from '../src/mail-policy-runbook'
 
 test('retains a command only when the outcome is ambiguous', () => {
   expect(shouldRetainCommand(new TypeError('network failure'))).toBe(true)
@@ -74,6 +78,14 @@ test('renders one reviewed-catalog sync workflow and provider-level controls', (
           }],
           lastSmtpSuccessAt: '2026-08-25T11:59:00.000Z',
           outbox: { leased: 1, oldestQueuedAt: '2026-08-25T11:58:00.000Z', queued: 2 },
+          protectionAlerts: {
+            leased: 1,
+            nextAttemptAt: '2026-08-25T12:01:00.000Z',
+            oldestPendingAt: '2026-08-25T11:57:00.000Z',
+            pending: 2,
+            retrying: 1,
+            terminal: 1,
+          },
           provider: 'reg_ru',
           catalogLastSyncedAt: '2026-08-25T11:55:00.000Z',
           totals: { requested: 12, smtpAccepted: 10, temporaryFailures: 2, terminalFailures: 0 },
@@ -97,6 +109,9 @@ test('renders one reviewed-catalog sync workflow and provider-level controls', (
     />,
   )
 
+  expect(html).not.toContain('/blob/HEAD/')
+  expect(html).toContain('Инструкция: docs/YANDEX_CLOUD.md#mail-protection-alert-recovery')
+
   expect(html).toContain('Проверенный каталог v1')
   expect(html).toContain('Синхронизировать каталог')
   expect(html).toContain('REG.RU')
@@ -108,14 +123,58 @@ test('renders one reviewed-catalog sync workflow and provider-level controls', (
   expect(html).toContain('Новые адреса запрещены')
   expect(html).toContain('Состояние отправки')
   expect(html).toContain('это не подтверждение доставки в ящик')
+  expect(html).toContain('Оповещения защиты')
+  expect(html).toContain('2 ждут отправки')
+  expect(html).toContain('1 остановлен после повторных сбоев')
+  expect(html).toContain('Следующая попытка')
   expect(html).toContain('Anti-abuse budgets')
   expect(html).not.toMatch(/Роскомнадзор|кандидат|импорт|Опубликовать домен/i)
   expect(html).not.toContain('anomaly-detector.ru')
 })
 
-test('renders the rollback compatibility state without fabricating an empty aggregate', () => {
-  const html = renderToStaticMarkup(<RequestBudgetOverviewPanel antiAbuse={null} />)
+test('pins the protection-alert runbook to the exact release revision', () => {
+  const releaseSha = 'a'.repeat(40)
+  expect(resolveMailProtectionAlertRunbookUrl(releaseSha)).toBe(
+    `https://github.com/Karikatun/anomaly-detector/blob/${releaseSha}/docs/YANDEX_CLOUD.md#mail-protection-alert-recovery`,
+  )
+  expect(resolveMailProtectionAlertRunbookUrl('HEAD')).toBeNull()
+  expect(resolveMailProtectionAlertRunbookUrl(undefined)).toBeNull()
+})
 
-  expect(html).toContain('Агрегат недоступен в этой версии')
-  expect(html).not.toContain('Нет широких групп')
+test('renders the rollback compatibility state without fabricating an empty aggregate', () => {
+  const antiAbuseHtml = renderToStaticMarkup(<RequestBudgetOverviewPanel antiAbuse={null} />)
+  const mailHtml = renderToStaticMarkup(<MailPolicyScreen
+    antiAbuse={null}
+    data={{
+      availableCatalog: {
+        diff: { addedProviderIds: [], changedProviderIds: [], removedProviderIds: [] },
+        providers: [],
+        version: 1,
+      },
+      currentVersion: 0,
+      delivery: {
+        budget: { limitPerMinute: 60, usedInWindow: 0, windowStartedAt: null },
+        circuit: { consecutiveFailures: 0, openUntil: null, state: 'disabled' },
+        configured: false,
+        groups: [],
+        lastSmtpSuccessAt: null,
+        outbox: { leased: 0, oldestQueuedAt: null, queued: 0 },
+        provider: 'reg_ru',
+        catalogLastSyncedAt: null,
+        totals: { requested: 0, smtpAccepted: 0, temporaryFailures: 0, terminalFailures: 0 },
+      },
+      generatedAt: '2026-08-25T12:00:00.000Z',
+      publishedPolicy: null,
+    }}
+    onBack={() => undefined}
+    onChangeStatus={async () => undefined}
+    onLogout={() => undefined}
+    onReload={async () => undefined}
+    onSyncCatalog={async () => undefined}
+  />)
+
+  expect(antiAbuseHtml).toContain('Агрегат недоступен в этой версии')
+  expect(antiAbuseHtml).not.toContain('Нет широких групп')
+  expect(mailHtml).toContain('Обновите серверную часть, чтобы увидеть состояние оповещений')
+  expect(mailHtml).not.toContain('0 ждут отправки')
 })

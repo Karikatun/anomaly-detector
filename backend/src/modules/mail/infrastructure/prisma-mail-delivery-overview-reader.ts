@@ -4,6 +4,7 @@ import {
 } from '@anomaly-detector/contracts'
 
 import type { DbClient } from '../../../db'
+import { createPrismaMailProtectionAlertStateReader } from './prisma-mail-protection-alert-state-reader'
 
 type RawDeliveryGroup = {
   provider_id: string
@@ -30,6 +31,7 @@ export function createPrismaMailDeliveryOverviewReader(
     deliveryBudgetPerMinute: number
   },
 ) {
+  const protectionAlertStateReader = createPrismaMailProtectionAlertStateReader(db)
   return {
     async read(now: Date): Promise<MailDeliveryOverview> {
       const [
@@ -39,6 +41,7 @@ export function createPrismaMailDeliveryOverviewReader(
         oldestQueued,
         requested,
         catalogSync,
+        protectionAlerts,
         rawGroups,
       ] = await Promise.all([
         db.mailDeliveryControl.findUnique({ where: { id: 'reg_ru' } }),
@@ -55,6 +58,7 @@ export function createPrismaMailDeliveryOverviewReader(
           orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
           select: { occurredAt: true },
         }),
+        protectionAlertStateReader.read(now),
         db.$queryRaw<RawDeliveryGroup[]>`
           SELECT
             COALESCE(m.policy_provider_id, 'other') AS provider_id,
@@ -101,6 +105,14 @@ export function createPrismaMailDeliveryOverviewReader(
           leased: stateCounts.get('leased') ?? 0,
           oldestQueuedAt: oldestQueued?.createdAt.toISOString() ?? null,
           queued: stateCounts.get('queued') ?? 0,
+        },
+        protectionAlerts: {
+          leased: protectionAlerts.leased,
+          nextAttemptAt: protectionAlerts.nextAttemptAt?.toISOString() ?? null,
+          oldestPendingAt: protectionAlerts.oldestPendingAt?.toISOString() ?? null,
+          pending: protectionAlerts.pending,
+          retrying: protectionAlerts.retrying,
+          terminal: protectionAlerts.terminal,
         },
         provider: 'reg_ru',
         catalogLastSyncedAt: catalogSync?.occurredAt.toISOString() ?? null,

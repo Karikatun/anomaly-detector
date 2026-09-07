@@ -1,13 +1,19 @@
 import { PrismaPg } from '@prisma/adapter-pg'
 
-import { PrismaClient } from './generated/prisma/client'
+import { PrismaClient, type Prisma } from './generated/prisma/client'
+
+const interactiveTransactionTimeoutMs = 35_000
 
 export function createPrisma(connectionString: string) {
   const adapter = new PrismaPg({ connectionString: normalizePgConnectionString(connectionString) })
-  return new PrismaClient({ adapter })
+  return new PrismaClient({
+    adapter,
+    transactionOptions: { timeout: interactiveTransactionTimeoutMs },
+  })
 }
 
 export type DbClient = ReturnType<typeof createPrisma>
+export type DbTransaction = Prisma.TransactionClient
 
 export function isRetryableDatabaseTransactionConflict(error: unknown) {
   if (typeof error !== 'object' || error === null) return false

@@ -12,19 +12,32 @@ import {
   derivePasswordResetToken,
   evaluateTransactionalAccountEmail,
 } from '../../mail'
+import {
+  lockAccountLifecycleTransaction,
+  lockActiveAccountLifecycleTransaction,
+} from '../../../security/account-lifecycle-lock'
 import type { AuthRepository } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
+import {
+  cancelOutstandingRecoveryCredentials,
+  erasePrismaAccountIdentityInTransaction,
+} from './prisma-account-erasure'
 import {
   createRequestBudgetPolicyCatalog,
   type RequestBudgetPolicyCatalog,
 } from '../../../security/request-budget-policy'
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000'
+const ACCOUNT_ERASURE_TRANSACTION_TIMEOUT_MS = 30_000
 
 export function createPrismaAuthRepository(
   db: DbClient,
   abuseSecret: string,
   options: {
+    accountDeletionCleanup?: (
+      transaction: Prisma.TransactionClient,
+      input: { now: Date; userId: string },
+    ) => void | { afterCommit(): void | Promise<void> } | Promise<void | { afterCommit(): void | Promise<void> }>
     createMessageId?: () => string
     requestBudgetPolicies?: RequestBudgetPolicyCatalog
   } = {},
@@ -33,18 +46,18 @@ export function createPrismaAuthRepository(
     ?? createRequestBudgetPolicyCatalog()
   return {
     findUserById(userId) {
-      return db.user.findUnique({ where: { id: userId } })
+      return db.user.findFirst({ where: { anonymizedAt: null, id: userId } })
     },
 
     findUserByLogin(login) {
-      return db.user.findUnique({ where: { login } })
+      return db.user.findFirst({ where: { anonymizedAt: null, login } })
     },
 
     async updatePasswordHash({ userId, currentPasswordHash, nextPasswordHash }) {
       return db.$transaction(async (tx) => {
-        await lockAuthTransactionKey(tx, abuseSecret, 'recovery-user', userId)
+        if (!await lockActiveAccountLifecycleTransaction(tx, abuseSecret, userId)) return false
         const result = await tx.user.updateMany({
-          where: { id: userId, passwordHash: currentPasswordHash },
+          where: { anonymizedAt: null, id: userId, passwordHash: currentPasswordHash },
           data: { passwordHash: nextPasswordHash },
         })
         return result.count === 1
@@ -131,7 +144,9 @@ export function createPrismaAuthRepository(
 
     createSession(input) {
       return db.$transaction(async (tx) => {
-        await lockAuthTransactionKey(tx, abuseSecret, 'recovery-user', input.userId)
+        if (!await lockActiveAccountLifecycleTransaction(tx, abuseSecret, input.userId)) {
+          throw new AuthFailure('invalid_credentials', 'Invalid login or password')
+        }
         const credential = await tx.user.findUnique({
           where: { id: input.userId },
           select: { passwordHash: true },
@@ -160,6 +175,7 @@ export function createPrismaAuthRepository(
           revokedAt: null,
           expiresAt: { gt: input.now },
           createdAt: { gt: input.createdAfter },
+          user: { anonymizedAt: null },
         },
         include: { user: true },
       })
@@ -187,6 +203,7 @@ export function createPrismaAuthRepository(
           revokedAt: null,
           expiresAt: { gt: input.now },
           createdAt: { gt: input.createdAfter },
+          user: { anonymizedAt: null },
         },
         include: { user: true },
       })
@@ -200,6 +217,7 @@ export function createPrismaAuthRepository(
           revokedAt: null,
           expiresAt: { gt: input.now },
           createdAt: { gt: input.createdAfter },
+          user: { anonymizedAt: null },
         },
         include: { user: true },
       })
@@ -222,6 +240,7 @@ export function createPrismaAuthRepository(
           refreshTokenHash: input.currentRefreshTokenHash,
           revokedAt: null,
           expiresAt: { gt: input.now },
+          user: { anonymizedAt: null },
         },
         data: {
           previousRefreshTokenHash: input.currentRefreshTokenHash,
@@ -250,6 +269,7 @@ export function createPrismaAuthRepository(
           revokedAt: null,
           expiresAt: { gt: input.now },
           createdAt: { gt: input.createdAfter },
+          user: { anonymizedAt: null },
         },
         include: { user: true },
       })
@@ -350,12 +370,29 @@ export function createPrismaAuthRepository(
               select: { userId: true },
             })
             const isNewIdentity = identity === null
-
-            let user = identity
-              ? await tx.user.findUniqueOrThrow({ where: { id: identity.userId } })
-              : null
-            if (!user) {
+            let user = null
+            if (identity) {
+              await lockAccountLifecycleTransaction(tx, abuseSecret, identity.userId)
+              user = await tx.user.findFirst({
+                where: { anonymizedAt: null, id: identity.userId },
+              })
+              if (!user) return null
+              const emailLockKeys = [
+                user.accountEmailCanonicalKey,
+                input.accountEmail.kind === 'candidate'
+                  ? input.accountEmail.canonicalKey
+                  : null,
+              ].filter((value): value is string => value !== null)
+              await lockAuthTransactionKeys(tx, abuseSecret, emailLockKeys.map((value) => ({
+                scope: 'account-email',
+                value,
+              })))
+            } else {
               if (!input.newUser) return null
+              const emailLocks = input.accountEmail.kind === 'candidate'
+                ? [{ scope: 'account-email', value: input.accountEmail.canonicalKey }]
+                : []
+              await lockAuthTransactionKeys(tx, abuseSecret, emailLocks)
               user = await tx.user.create({
                 data: {
                   displayName: input.newUser.displayName ?? null,
@@ -374,23 +411,6 @@ export function createPrismaAuthRepository(
                   userId: user.id,
                 },
               })
-            }
-
-            const emailLockKeys = [
-              user.accountEmailCanonicalKey,
-              input.accountEmail.kind === 'candidate'
-                ? input.accountEmail.canonicalKey
-                : null,
-            ].filter((value): value is string => value !== null)
-              .filter((value, index, values) => values.indexOf(value) === index)
-              .sort()
-            for (const canonicalKey of emailLockKeys) {
-              await lockAuthTransactionKey(
-                tx,
-                abuseSecret,
-                'account-email',
-                canonicalKey,
-              )
             }
 
             if (input.accountEmail.kind === 'candidate') {
@@ -529,7 +549,9 @@ export function createPrismaAuthRepository(
         throw new AuthFailure('recovery_codes_unavailable', 'Recovery Codes are unavailable')
       }
       return db.$transaction(async (tx) => {
-        await lockAuthTransactionKey(tx, abuseSecret, 'recovery-user', input.userId)
+        await lockAuthTransactionKeys(tx, abuseSecret, [
+          { scope: 'recovery-user', value: input.userId },
+        ])
         const [user, binding, existingSet, yandexIdentity, replacement, codeReplacement] =
           await Promise.all([
             tx.user.findUnique({
@@ -596,18 +618,14 @@ export function createPrismaAuthRepository(
       })
 
       return runRetryableAuthTransaction(db, async (tx) => {
-        const locks = [
+        await lockAuthTransactionKeys(tx, abuseSecret, [
           { scope: 'recovery-user', value: input.userId },
           { scope: 'account-email', value: bindingSnapshot.canonicalKey },
           ...quotas.map((quota) => ({
             scope: 'recovery-budget',
             value: `${quota.scope}:${quota.keyHash}`,
           })),
-        ].sort((left, right) =>
-          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-        for (const lock of locks) {
-          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-        }
+        ])
 
         const [user, binding, session, yandexIdentity, replacement, codeReplacement] =
           await Promise.all([
@@ -704,14 +722,10 @@ export function createPrismaAuthRepository(
       if (!snapshot) return 'unavailable'
 
       return runRetryableAuthTransaction(db, async (tx) => {
-        const locks = [
+        await lockAuthTransactionKeys(tx, abuseSecret, [
           { scope: 'recovery-user', value: input.userId },
           { scope: 'account-email', value: snapshot.recoveryCanonicalKey },
-        ].sort((left, right) =>
-          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-        for (const lock of locks) {
-          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-        }
+        ])
         const challenge = await tx.recoveryCodeReissueChallenge.findUnique({
           where: { userId: input.userId },
         })
@@ -787,14 +801,10 @@ export function createPrismaAuthRepository(
         input,
       )
       await db.$transaction(async (tx) => {
-        const locks = quotas.map((quota) => ({
+        await lockAuthTransactionKeys(tx, abuseSecret, quotas.map((quota) => ({
           scope: 'recovery-budget',
           value: `${quota.scope}:${quota.keyHash}`,
-        })).sort((left, right) =>
-          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-        for (const lock of locks) {
-          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-        }
+        })))
         for (const quota of quotas) {
           await consumeRecoveryEmailQuota(tx, { ...quota, now: input.now })
         }
@@ -802,19 +812,16 @@ export function createPrismaAuthRepository(
     },
 
     async verifyRecoveryCodeEmailPolicyProbe(input) {
-      const snapshot = await db.user.findUnique({
-        where: { login: input.login },
+      const snapshot = await db.user.findFirst({
+        where: { anonymizedAt: null, login: input.login },
         select: { id: true },
       })
       return runRetryableAuthTransaction(db, async (tx) => {
-        await lockAuthTransactionKey(
-          tx,
-          abuseSecret,
-          'recovery-user',
-          snapshot?.id ?? `missing:${input.login}`,
-        )
-        const user = await tx.user.findUnique({
-          where: { login: input.login },
+        const accountActive = snapshot
+          ? await lockActiveAccountLifecycleTransaction(tx, abuseSecret, snapshot.id)
+          : false
+        const user = await tx.user.findFirst({
+          where: { anonymizedAt: null, login: input.login },
           select: { id: true, passwordHash: true },
         })
         const lookupUserId = user?.id ?? NIL_UUID
@@ -823,7 +830,8 @@ export function createPrismaAuthRepository(
           tx.recoveryCodeEmailReplacement.findUnique({ where: { userId: lookupUserId } }),
         ])
         const candidateValid = Boolean(
-          snapshot
+          accountActive
+          && snapshot
           && user?.passwordHash
           && user.id === snapshot.id
           && binding
@@ -860,22 +868,19 @@ export function createPrismaAuthRepository(
     },
 
     async recoverPasswordWithRecoveryCode(input) {
-      const snapshot = await db.user.findUnique({
-        where: { login: input.login },
+      const snapshot = await db.user.findFirst({
+        where: { anonymizedAt: null, login: input.login },
         select: { id: true },
       })
       return runRetryableAuthTransaction(db, async (tx) => {
-        const locks = snapshot
-          ? [{ scope: 'recovery-user', value: snapshot.id }]
-          : []
-        for (const lock of locks) {
-          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-        }
-        const user = await tx.user.findUnique({
-          where: { login: input.login },
+        const accountActive = snapshot
+          ? await lockActiveAccountLifecycleTransaction(tx, abuseSecret, snapshot.id)
+          : false
+        const user = await tx.user.findFirst({
+          where: { anonymizedAt: null, login: input.login },
           select: { id: true, passwordHash: true },
         })
-        if (!snapshot || !user?.passwordHash || user.id !== snapshot.id) {
+        if (!accountActive || !snapshot || !user?.passwordHash || user.id !== snapshot.id) {
           performDummyRecoveryCodeComparison(abuseSecret, input.login, input.recoveryCode)
           return false
         }
@@ -907,8 +912,8 @@ export function createPrismaAuthRepository(
     },
 
     async requestPasswordReset(input) {
-      const snapshot = await db.user.findUnique({
-        where: { login: input.login },
+      const snapshot = await db.user.findFirst({
+        where: { anonymizedAt: null, login: input.login },
         select: { id: true },
       })
       const messageId = options.createMessageId?.() ?? crypto.randomUUID()
@@ -919,13 +924,9 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           await db.$transaction(async (tx) => {
-            const locks = (snapshot
-              ? [{ scope: 'recovery-user', value: snapshot.id }]
-              : []).sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            const accountActive = snapshot
+              ? await lockActiveAccountLifecycleTransaction(tx, abuseSecret, snapshot.id)
+              : false
 
             const budgetAvailable = await consumeRecoveryRequestQuotasIpFirst(
               tx,
@@ -933,8 +934,8 @@ export function createPrismaAuthRepository(
               quotas,
               input.now,
             )
-            const user = await tx.user.findUnique({
-              where: { login: input.login },
+            const user = await tx.user.findFirst({
+              where: { anonymizedAt: null, login: input.login },
               select: {
                 id: true,
                 passwordHash: true,
@@ -955,6 +956,7 @@ export function createPrismaAuthRepository(
             // decision immediately before SMTP without exposing it as a timing oracle.
             const eligible = Boolean(
               budgetAvailable
+              && accountActive
               && snapshot
               && user?.id === snapshot.id
               && user.passwordHash
@@ -1016,8 +1018,8 @@ export function createPrismaAuthRepository(
 
     async completePasswordReset(input) {
       const tokenHash = hashPasswordResetToken(abuseSecret, input.token)
-      const snapshot = await db.passwordResetCredential.findUnique({
-        where: { tokenHash },
+      const snapshot = await db.passwordResetCredential.findFirst({
+        where: { tokenHash, user: { anonymizedAt: null } },
         select: { id: true, recoveryCanonicalKey: true, userId: true },
       })
       if (!snapshot) {
@@ -1029,22 +1031,22 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           return await db.$transaction(async (tx) => {
-            const locks = [
-              { scope: 'recovery-user', value: snapshot.userId },
+            if (!await lockActiveAccountLifecycleTransaction(
+              tx,
+              abuseSecret,
+              snapshot.userId,
+            )) return false
+            await lockAuthTransactionKeys(tx, abuseSecret, [
               { scope: 'account-email', value: snapshot.recoveryCanonicalKey },
-            ].sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            ])
 
-            const credential = await tx.passwordResetCredential.findUnique({
-              where: { tokenHash },
+            const credential = await tx.passwordResetCredential.findFirst({
+              where: { tokenHash, user: { anonymizedAt: null } },
             })
             if (!credential || credential.id !== snapshot.id) return false
             const [user, binding, yandexIdentity] = await Promise.all([
-              tx.user.findUnique({
-                where: { id: credential.userId },
+              tx.user.findFirst({
+                where: { anonymizedAt: null, id: credential.userId },
                 select: { passwordHash: true },
               }),
               tx.recoveryEmailBinding.findUnique({ where: { userId: credential.userId } }),
@@ -1099,8 +1101,8 @@ export function createPrismaAuthRepository(
     },
 
     async startRecoveryEmailWithRecoveryCode(input) {
-      const snapshot = await db.user.findUnique({
-        where: { login: input.login },
+      const snapshot = await db.user.findFirst({
+        where: { anonymizedAt: null, login: input.login },
         select: {
           id: true,
           recoveryEmailBinding: {
@@ -1120,22 +1122,20 @@ export function createPrismaAuthRepository(
         : createHmac('sha256', abuseSecret).update(confirmationCode).digest('hex')
 
       return runRetryableAuthTransaction(db, async (tx) => {
-        const locks = [
-          ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
+        const accountActive = snapshot
+          ? await lockActiveAccountLifecycleTransaction(tx, abuseSecret, snapshot.id)
+          : false
+        await lockAuthTransactionKeys(tx, abuseSecret, [
           ...(snapshot?.recoveryEmailBinding
             ? [{ scope: 'account-email', value: snapshot.recoveryEmailBinding.canonicalKey }]
             : []),
           { scope: 'account-email', value: input.newCanonicalKey },
-        ].sort((left, right) =>
-          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-        for (const lock of locks) {
-          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-        }
-        const user = await tx.user.findUnique({
-          where: { login: input.login },
+        ])
+        const user = await tx.user.findFirst({
+          where: { anonymizedAt: null, login: input.login },
           select: { id: true, passwordHash: true },
         })
-        if (!snapshot || !user?.passwordHash || user.id !== snapshot.id) {
+        if (!accountActive || !snapshot || !user?.passwordHash || user.id !== snapshot.id) {
           performDummyRecoveryCodeComparison(abuseSecret, input.login, input.recoveryCode)
           return null
         }
@@ -1218,8 +1218,8 @@ export function createPrismaAuthRepository(
     },
 
     async confirmRecoveryEmailWithRecoveryCode(input) {
-      const snapshot = await db.user.findUnique({
-        where: { login: input.login },
+      const snapshot = await db.user.findFirst({
+        where: { anonymizedAt: null, login: input.login },
         select: {
           id: true,
           recoveryCodeReplacement: {
@@ -1228,24 +1228,22 @@ export function createPrismaAuthRepository(
         },
       })
       return runRetryableAuthTransaction(db, async (tx) => {
-        const locks = [
-          ...(snapshot ? [{ scope: 'recovery-user', value: snapshot.id }] : []),
+        const accountActive = snapshot
+          ? await lockActiveAccountLifecycleTransaction(tx, abuseSecret, snapshot.id)
+          : false
+        await lockAuthTransactionKeys(tx, abuseSecret, [
           ...(snapshot?.recoveryCodeReplacement
             ? [
                 { scope: 'account-email', value: snapshot.recoveryCodeReplacement.oldCanonicalKey },
                 { scope: 'account-email', value: snapshot.recoveryCodeReplacement.newCanonicalKey },
               ]
             : []),
-        ].sort((left, right) =>
-          `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-        for (const lock of locks) {
-          await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-        }
-        const user = await tx.user.findUnique({
-          where: { login: input.login },
+        ])
+        const user = await tx.user.findFirst({
+          where: { anonymizedAt: null, login: input.login },
           select: { id: true, passwordHash: true },
         })
-        if (!snapshot || !user?.passwordHash || user.id !== snapshot.id) {
+        if (!accountActive || !snapshot || !user?.passwordHash || user.id !== snapshot.id) {
           return null
         }
         const replacement = await tx.recoveryCodeEmailReplacement.findUnique({
@@ -1349,18 +1347,14 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           await db.$transaction(async (tx) => {
-            const locks = [
+            await lockAuthTransactionKeys(tx, abuseSecret, [
               { scope: 'recovery-user', value: input.userId },
               { scope: 'account-email', value: input.canonicalKey },
               ...quotas.map((quota) => ({
                 scope: 'recovery-budget',
                 value: `${quota.scope}:${quota.keyHash}`,
               })),
-            ].sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            ])
 
             const user = await tx.user.findUnique({
               where: { id: input.userId },
@@ -1478,18 +1472,14 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           await db.$transaction(async (tx) => {
-            const locks = [
+            await lockAuthTransactionKeys(tx, abuseSecret, [
               { scope: 'recovery-user', value: input.userId },
               { scope: 'account-email', value: snapshot.canonicalKey },
               ...quotas.map((quota) => ({
                 scope: 'recovery-budget',
                 value: `${quota.scope}:${quota.keyHash}`,
               })),
-            ].sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            ])
 
             const challenge = await tx.recoveryEmailChallenge.findUnique({
               where: { userId: input.userId },
@@ -1545,14 +1535,10 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           return await db.$transaction(async (tx) => {
-            const locks = [
+            await lockAuthTransactionKeys(tx, abuseSecret, [
               { scope: 'recovery-user', value: input.userId },
               { scope: 'account-email', value: snapshot.canonicalKey },
-            ].sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            ])
 
             const binding = await tx.recoveryEmailBinding.findUnique({
               where: { userId: input.userId },
@@ -1658,14 +1644,10 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           return await db.$transaction(async (tx) => {
-            const locks = [
+            await lockAuthTransactionKeys(tx, abuseSecret, [
               { scope: 'recovery-user', value: input.userId },
               { scope: 'account-email', value: canonicalKey },
-            ].sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            ])
 
             const binding = await tx.recoveryEmailBinding.findUnique({
               where: { userId: input.userId },
@@ -1741,7 +1723,7 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           await db.$transaction(async (tx) => {
-            const locks = [
+            await lockAuthTransactionKeys(tx, abuseSecret, [
               { scope: 'recovery-user', value: input.userId },
               { scope: 'account-email', value: bindingSnapshot.canonicalKey },
               { scope: 'account-email', value: input.newCanonicalKey },
@@ -1749,11 +1731,7 @@ export function createPrismaAuthRepository(
                 scope: 'recovery-budget',
                 value: `${quota.scope}:${quota.keyHash}`,
               })),
-            ].sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            ])
 
             const user = await tx.user.findUnique({
               where: { id: input.userId },
@@ -1803,10 +1781,15 @@ export function createPrismaAuthRepository(
               providerValue: input.newProviderValue,
               requirement: 'new_address',
             })
-            if (await tx.recoveryEmailReplacement.findUnique({
+            const pendingReplacement = await tx.recoveryEmailReplacement.findUnique({
               where: { userId: input.userId },
               select: { id: true },
-            })) {
+            })
+            const pendingCodeReplacement = await tx.recoveryCodeEmailReplacement.findUnique({
+              where: { userId: input.userId },
+              select: { id: true },
+            })
+            if (pendingReplacement || pendingCodeReplacement) {
               throw new AuthFailure(
                 'recovery_email_pending',
                 'Recovery Email replacement is already pending',
@@ -1906,18 +1889,14 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           await db.$transaction(async (tx) => {
-            const locks = [
+            await lockAuthTransactionKeys(tx, abuseSecret, [
               { scope: 'recovery-user', value: input.userId },
               { scope: 'account-email', value: canonicalKey },
               ...quotas.map((quota) => ({
                 scope: 'recovery-budget',
                 value: `${quota.scope}:${quota.keyHash}`,
               })),
-            ].sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            ])
 
             const replacement = await tx.recoveryEmailReplacement.findUnique({
               where: { userId: input.userId },
@@ -2038,15 +2017,11 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           return await db.$transaction(async (tx) => {
-            const locks = [
+            await lockAuthTransactionKeys(tx, abuseSecret, [
               { scope: 'recovery-user', value: input.userId },
               { scope: 'account-email', value: snapshot.oldCanonicalKey },
               { scope: 'account-email', value: snapshot.newCanonicalKey },
-            ].sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            ])
 
             const replacement = await tx.recoveryEmailReplacement.findUnique({
               where: { userId: input.userId },
@@ -2245,15 +2220,11 @@ export function createPrismaAuthRepository(
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           return await db.$transaction(async (tx) => {
-            const locks = [
+            await lockAuthTransactionKeys(tx, abuseSecret, [
               { scope: 'recovery-user', value: input.userId },
               { scope: 'account-email', value: snapshot.oldCanonicalKey },
               { scope: 'account-email', value: snapshot.newCanonicalKey },
-            ].sort((left, right) =>
-              `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`))
-            for (const lock of locks) {
-              await lockAuthTransactionKey(tx, abuseSecret, lock.scope, lock.value)
-            }
+            ])
 
             const replacement = await tx.recoveryEmailReplacement.findUnique({
               where: { userId: input.userId },
@@ -2292,41 +2263,40 @@ export function createPrismaAuthRepository(
     },
 
     async eraseUserIdentity({ userId, now }) {
-      await runRetryableAuthTransaction(db, async (tx) => {
-        await lockAuthTransactionKey(tx, abuseSecret, 'recovery-user', userId)
-        await cancelOutstandingRecoveryCredentials(tx, userId, now)
-        await tx.recoveryCode.deleteMany({ where: { userId } })
-        await tx.recoveryCodeSet.deleteMany({ where: { userId } })
-        await tx.recoveryEmailBinding.deleteMany({ where: { userId } })
-        await tx.authIdentity.deleteMany({ where: { userId } })
-        await tx.authSession.deleteMany({ where: { userId } })
-        await tx.currentMatch.deleteMany({ where: { userId } })
-        await tx.tenderRoomMember.deleteMany({ where: { userId } })
-        await tx.user.update({
-          where: { id: userId },
-          data: {
-            anonymizedAt: now,
-            displayName: null,
-            locale: 'ru',
-            login: `deleted-${crypto.randomUUID()}`,
-            passwordHash: null,
-            accountEmailCanonicalKey: null,
-            accountEmailProviderValue: null,
-            accountEmailState: 'absent',
-            privacyConsentAt: null,
-            privacyConsentVersion: null,
-            termsAcceptedAt: null,
-            termsVersion: null,
-          },
+      const cleanup = await runRetryableAuthTransaction(db, async (tx) => {
+        if (!await lockActiveAccountLifecycleTransaction(tx, abuseSecret, userId)) return null
+        const transactionCleanup = await options.accountDeletionCleanup?.(tx, { now, userId })
+        await erasePrismaAccountIdentityInTransaction(tx, {
+          anonymizedAt: now,
+          now,
+          userId,
         })
+        return transactionCleanup
+      }, {
+        isolationLevel: 'Serializable',
+        timeout: ACCOUNT_ERASURE_TRANSACTION_TIMEOUT_MS,
       })
+      try {
+        await cleanup?.afterCommit()
+      } catch {
+        console.error('Account deletion reconciliation remains pending after identity erasure.')
+      }
     },
 
     async updateUser({ userId, displayName, locale }) {
       const data: Record<string, string | null> = {}
       if (displayName !== undefined) data.displayName = displayName
       if (locale !== undefined) data.locale = locale
-      await db.user.update({ where: { id: userId }, data })
+      await db.$transaction(async (tx) => {
+        await lockAccountLifecycleTransaction(tx, abuseSecret, userId)
+        const updated = await tx.user.updateMany({
+          where: { anonymizedAt: null, id: userId },
+          data,
+        })
+        if (updated.count !== 1) {
+          throw new AuthFailure('session_invalid', 'Session is invalid or expired')
+        }
+      })
     },
   }
 }
@@ -2503,16 +2473,10 @@ async function lockRecoveryRequestQuotas(
   secret: string,
   quotas: readonly RecoveryRequestQuota[],
 ) {
-  const sorted = [...quotas].sort((left, right) =>
-    `${left.scope}:${left.keyHash}`.localeCompare(`${right.scope}:${right.keyHash}`))
-  for (const quota of sorted) {
-    await lockAuthTransactionKey(
-      tx,
-      secret,
-      'recovery-budget',
-      `${quota.scope}:${quota.keyHash}`,
-    )
-  }
+  await lockAuthTransactionKeys(tx, secret, quotas.map((quota) => ({
+    scope: 'recovery-budget',
+    value: `${quota.scope}:${quota.keyHash}`,
+  })))
 }
 
 async function consumeRecoveryRequestQuotaGroup(
@@ -2554,36 +2518,6 @@ function hashPasswordResetToken(secret: string, token: string) {
     .update('password-reset-token-hash-v1\0')
     .update(token)
     .digest('hex')
-}
-
-async function cancelOutstandingRecoveryCredentials(
-  tx: Prisma.TransactionClient,
-  userId: string,
-  now: Date,
-) {
-  const [challenge, replacement, reissue, codeReplacement, passwordReset] = await Promise.all([
-    tx.recoveryEmailChallenge.findUnique({ where: { userId } }),
-    tx.recoveryEmailReplacement.findUnique({ where: { userId } }),
-    tx.recoveryCodeReissueChallenge.findUnique({ where: { userId } }),
-    tx.recoveryCodeEmailReplacement.findUnique({ where: { userId } }),
-    tx.passwordResetCredential.findUnique({ where: { userId } }),
-  ])
-  const messageIds = [
-    challenge?.messageId,
-    replacement?.oldMessageId,
-    replacement?.newMessageId,
-    reissue?.messageId,
-    codeReplacement?.newMessageId,
-    passwordReset?.messageId,
-  ].filter((messageId): messageId is string => Boolean(messageId))
-  for (const messageId of messageIds) {
-    await cancelQueuedTransactionalMail(tx, { messageId, now })
-  }
-  await tx.recoveryEmailChallenge.deleteMany({ where: { userId } })
-  await tx.recoveryEmailReplacement.deleteMany({ where: { userId } })
-  await tx.recoveryCodeReissueChallenge.deleteMany({ where: { userId } })
-  await tx.recoveryCodeEmailReplacement.deleteMany({ where: { userId } })
-  await tx.passwordResetCredential.deleteMany({ where: { userId } })
 }
 
 async function revokeRecoveryCodeCredentials(
@@ -2828,10 +2762,33 @@ async function lockAuthTransactionKey(
   scope: string,
   value: string,
 ) {
+  if (scope === 'recovery-user') {
+    await lockAccountLifecycleTransaction(tx, secret, value)
+    return
+  }
   const key = createHmac('sha256', secret)
     .update(`auth-transaction:${scope}:${value}`)
     .digest('hex')
   await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text AS "lock"`
+}
+
+async function lockAuthTransactionKeys(
+  tx: Prisma.TransactionClient,
+  secret: string,
+  locks: readonly { scope: string; value: string }[],
+) {
+  const uniqueLocks = locks.filter((lock, index) =>
+    locks.findIndex((candidate) =>
+      candidate.scope === lock.scope && candidate.value === lock.value) === index)
+  const orderedLocks = uniqueLocks.sort((left, right) => {
+    const lifecycleOrder = Number(right.scope === 'recovery-user')
+      - Number(left.scope === 'recovery-user')
+    return lifecycleOrder
+      || `${left.scope}:${left.value}`.localeCompare(`${right.scope}:${right.value}`)
+  })
+  for (const lock of orderedLocks) {
+    await lockAuthTransactionKey(tx, secret, lock.scope, lock.value)
+  }
 }
 
 function isRetryableTransactionError(error: unknown) {
@@ -2854,10 +2811,16 @@ function isRetryableTransactionError(error: unknown) {
 async function runRetryableAuthTransaction<T>(
   db: DbClient,
   operation: (tx: Prisma.TransactionClient) => Promise<T>,
+  transactionOptions?: {
+    isolationLevel: 'Serializable'
+    timeout: number
+  },
 ) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await db.$transaction(operation)
+      return transactionOptions
+        ? await db.$transaction(operation, transactionOptions)
+        : await db.$transaction(operation)
     } catch (error) {
       if (!isRetryableTransactionError(error) || attempt >= 2) throw error
       await new Promise((resolve) => setTimeout(resolve, 10 * (2 ** attempt)))

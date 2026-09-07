@@ -183,6 +183,32 @@ describe('loadEnv', () => {
     })).toThrow('MAIL_SMTP_LEASE_SECONDS')
     expect(() => loadEnv({
       ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_FROM: 'no-reply@anomaly-detector.ru',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+      MAIL_SMTP_LEASE_SECONDS: '60',
+      MAIL_SMTP_PASSWORD: 'smtp-password-must-not-leak',
+      MAIL_SMTP_PORT: '465',
+      MAIL_SMTP_REPLY_TO: 'support@anomaly-detector.ru',
+      MAIL_SMTP_TIMEOUT_MS: '55000',
+      MAIL_SMTP_TLS_MODE: 'implicit_tls',
+      MAIL_SMTP_USERNAME: 'no-reply@anomaly-detector.ru',
+    })).not.toThrow()
+    expect(() => loadEnv({
+      ...baseEnv,
+      MAIL_SMTP_ENABLED: 'true',
+      MAIL_SMTP_FROM: 'no-reply@anomaly-detector.ru',
+      MAIL_SMTP_HOST: 'smtp.example.ru',
+      MAIL_SMTP_LEASE_SECONDS: '60',
+      MAIL_SMTP_PASSWORD: 'smtp-password-must-not-leak',
+      MAIL_SMTP_PORT: '465',
+      MAIL_SMTP_REPLY_TO: 'support@anomaly-detector.ru',
+      MAIL_SMTP_TIMEOUT_MS: '55001',
+      MAIL_SMTP_TLS_MODE: 'implicit_tls',
+      MAIL_SMTP_USERNAME: 'no-reply@anomaly-detector.ru',
+    })).toThrow('MAIL_SMTP_LEASE_SECONDS')
+    expect(() => loadEnv({
+      ...baseEnv,
       MAIL_OUTBOX_RETENTION_DAYS: '31',
     })).toThrow('MAIL_OUTBOX_RETENTION_DAYS')
 

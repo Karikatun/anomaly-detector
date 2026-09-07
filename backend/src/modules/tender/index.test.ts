@@ -1246,7 +1246,7 @@ test('anonymises a deleted participant in every Tender view', async () => {
   const tender = createTenderModule()
   const { tenderId } = await tender.createTender({
     players: [
-      { id: 'player-a', tiePriority: 1, displayName: 'Анна' },
+      { id: 'player-a', tiePriority: 1, displayName: 'Deleted participant' },
       { id: 'player-b', tiePriority: 2, displayName: 'Борис' },
     ],
   })

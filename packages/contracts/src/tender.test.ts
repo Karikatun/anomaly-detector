@@ -6,6 +6,7 @@ import {
   signalIdSchema,
   tenderAuditViewSchema,
   tenderCommandSchema,
+  tenderStoredCommandIdSchema,
   tenderViewSchema,
 } from './index'
 
@@ -130,6 +131,23 @@ describe('Tender contracts', () => {
         verification: 'extended',
       }],
     })
+  })
+
+  test('rejects every internal command namespace at the public contract', () => {
+    const reservedCommandIds = [
+      `deleted-command-v1-${'a'.repeat(64)}`,
+      `stored-command-v1-${'b'.repeat(64)}`,
+    ]
+    for (const reservedCommandId of reservedCommandIds) {
+      expect(tenderCommandSchema.safeParse({
+        actorId: 'player-a',
+        commandId: reservedCommandId,
+        slot: 1,
+        tenderId: 'tender-1',
+        type: 'request-access-slot',
+      }).success).toBe(false)
+      expect(tenderStoredCommandIdSchema.parse(reservedCommandId)).toBe(reservedCommandId)
+    }
   })
 
   test('validates a Working Model update command', () => {

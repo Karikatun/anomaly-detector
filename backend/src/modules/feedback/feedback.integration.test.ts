@@ -79,6 +79,7 @@ maybeDescribe('feedback API integration', () => {
       linkAccount: false,
       problemSolved: 'Новому игроку будет проще понять цель раунда.',
       replyEmail: null,
+      submissionId: '019f8099-7e26-7760-ad08-66d1d66b2740',
       technicalContext: {
         browserClass: 'chromium',
         buildSha: 'a'.repeat(40),
@@ -117,6 +118,36 @@ maybeDescribe('feedback API integration', () => {
     expect(acceptedResponse.status).toBe(201)
     expect(acceptedResponse.headers.get('cache-control')).toBe('no-store')
     const receipt = feedbackReceiptSchema.parse(await acceptedResponse.json())
+
+    const replayResponse = await app.request('/api/feedback', {
+      body: JSON.stringify(report),
+      headers: {
+        Authorization: `Bearer ${player.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+    expect(replayResponse.status).toBe(201)
+    expect(await replayResponse.json()).toEqual(receipt)
+
+    const conflictResponse = await app.request('/api/feedback', {
+      body: JSON.stringify({ ...report, desiredChange: 'Отправить другой текст.' }),
+      headers: {
+        Authorization: `Bearer ${player.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+    expect(conflictResponse.status).toBe(409)
+    const conflictBody = await conflictResponse.json()
+    expect(conflictBody).toEqual({
+      error: {
+        code: 'CONFLICT',
+        message: 'Feedback submission identifier conflicts with its first use',
+      },
+    })
+    expect(JSON.stringify(conflictBody)).not.toContain(receipt.publicNumber)
+    expect(await prisma.feedbackReport.count()).toBe(1)
 
     const playerRead = await app.request(`/api/feedback/${receipt.publicNumber}`, {
       headers: { Authorization: `Bearer ${player.accessToken}` },

@@ -14,6 +14,58 @@ describe('runCronTask', () => {
     await expect(runCronTask('missing', runtime)).rejects.toThrow('Unknown cron task')
   })
 
+  test('runs account-deletion reconciliation independently from daily retention', async () => {
+    const reconciliationRuntime = {
+      env: { JWT_SECRET: 'test-account-lifecycle-secret' },
+      prisma: {
+        $transaction: async (run: (transaction: unknown) => unknown) => run({
+          $queryRaw: async () => [],
+        }),
+        user: {
+          count: async () => 0,
+          groupBy: async () => [],
+        },
+      },
+    } as unknown as BackendRuntime
+
+    await expect(runCronTask(
+      'accounts:deletion-reconcile',
+      reconciliationRuntime,
+      new Date('2026-09-04T15:00:00.000Z'),
+    )).resolves.toBeUndefined()
+  })
+
+  test('keeps deferred cleanup failures visible and fails hard only after the SLA', async () => {
+    const now = new Date('2026-09-04T15:00:00.000Z')
+    const runtimeWithPendingFailure = (anonymizedAt: Date) => ({
+      env: { JWT_SECRET: 'test-account-lifecycle-secret' },
+      prisma: {
+        $transaction: async (run: (transaction: unknown) => unknown) => run({
+          $queryRaw: async () => [],
+        }),
+        user: {
+          count: async () => 1,
+          findFirst: async () => ({ anonymizedAt }),
+          groupBy: async () => [{
+            _count: { deletionCleanupLastFailureCode: 3 },
+            deletionCleanupLastFailureCode: 'legacy_data_invalid',
+          }],
+        },
+      },
+    }) as unknown as BackendRuntime
+
+    await expect(runCronTask(
+      'accounts:deletion-reconcile',
+      runtimeWithPendingFailure(new Date(now.getTime() - 60_000)),
+      now,
+    )).resolves.toBeUndefined()
+    await expect(runCronTask(
+      'accounts:deletion-reconcile',
+      runtimeWithPendingFailure(new Date(now.getTime() - 24 * 60 * 60_000)),
+      now,
+    )).rejects.toThrow('deferred_failed=3')
+  })
+
   test('deletes expired auth data, feedback and waiting rooms', async () => {
     const calls: unknown[] = []
     const abuseCalls: unknown[] = []
@@ -91,6 +143,9 @@ describe('runCronTask', () => {
       },
       prisma: {
         ...prismaModels,
+        user: {
+          groupBy: async () => [],
+        },
         $transaction: async (
           operation: (tx: typeof prismaModels) => Promise<unknown>,
         ) => {

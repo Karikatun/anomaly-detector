@@ -30,8 +30,8 @@ export function createTenderModule({
   })
 }
 
-export function createPersistentTenderModule(db: DbClient) {
-  return createTenderModule({ store: createPrismaTenderStore(db) })
+export function createPersistentTenderModule(db: DbClient, accountLifecycleSecret?: string) {
+  return createTenderModule({ store: createPrismaTenderStore(db, accountLifecycleSecret) })
 }
 
 export function createPersistentCompletedTenderSummaryReader(db: DbClient) {
@@ -57,6 +57,11 @@ export { createRealtimeHub, type RealtimeHub } from './realtime/hub'
 export { createPrismaRealtimeTicketIssuer } from './realtime/prisma-realtime-ticket-issuer'
 export { createPrismaRealtimeTicketStore } from './realtime/prisma-realtime-ticket-store'
 export { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
+export {
+  anonymizePrismaTenderParticipant,
+  anonymizePrismaTenderParticipantBatch,
+  TenderVersionConflict,
+} from './infrastructure/prisma-tender-store'
 export { createPrismaTenderOperationalStateReader } from './infrastructure/prisma-tender-operational-state'
 export {
   createRealtimeWebSocketHandlers,

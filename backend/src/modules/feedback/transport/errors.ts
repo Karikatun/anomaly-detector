@@ -6,6 +6,9 @@ export async function executeFeedbackOperator<T>(operation: () => Promise<T>): P
     return await operation()
   } catch (error) {
     if (!(error instanceof FeedbackFailure)) throw error
+    if (error.kind === 'operator_unavailable') {
+      throw new AppError(404, 'NOT_FOUND', 'Route not found')
+    }
     if (error.kind === 'report_not_found') {
       throw new AppError(404, 'NOT_FOUND', error.message)
     }

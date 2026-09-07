@@ -7,6 +7,10 @@ import type { TenderModule } from '../tender'
 import type { TenderLifecycleReader } from './application/ports'
 import { TenderRoomService } from './application/room-service'
 import { createPrismaRoomMemberIdentityReader } from './infrastructure/prisma-room-member-identity-reader'
+import {
+  cleanupPrismaRoomBatchForAccountDeletion,
+  cleanupPrismaRoomsForAccountDeletion,
+} from './infrastructure/prisma-room-account-cleanup'
 import { createPrismaRoomRepository } from './infrastructure/prisma-room-repository'
 import { createRoomStartModule } from './infrastructure/prisma-room-start'
 import { createRoomRoutes } from './transport/routes'
@@ -27,7 +31,7 @@ export function createRoomModule(input: {
       readPlacement: (query) => input.tender.readTenderPlacement(query),
     },
     memberIdentityReader: createPrismaRoomMemberIdentityReader(input.db),
-    repository: createPrismaRoomRepository(input.db, clock),
+    repository: createPrismaRoomRepository(input.db, clock, input.requestBudgetSecret),
     tenderLifecycleReader: input.tenderLifecycleReader,
   })
   return {
@@ -41,4 +45,8 @@ export function createRoomModule(input: {
   }
 }
 
-export { createRoomStartModule }
+export {
+  cleanupPrismaRoomBatchForAccountDeletion,
+  cleanupPrismaRoomsForAccountDeletion,
+  createRoomStartModule,
+}

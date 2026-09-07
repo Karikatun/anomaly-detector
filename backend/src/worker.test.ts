@@ -4,10 +4,63 @@ import { createOperationalMetrics } from './operational-metrics'
 import { createWorkerHealth } from './worker-health'
 import {
   createWorkerHttpFetch,
+  dispatchMailProtectionAlerts,
   emitMailDeliveryProtectionAlert,
   recordMailProtectionTransitions,
   startPollingLoop,
 } from './worker'
+
+test('fails the dedicated alert cycle after the callback failure is durably recorded', async () => {
+  await expect(dispatchMailProtectionAlerts({
+    dispatcher: {
+      dispatch: async () => ({ claimed: 1, delivered: 0, failed: 1, staleClaims: 0 }),
+    },
+    now: new Date('2026-09-04T10:00:00.000Z'),
+    workerId: 'alert-worker-a',
+  })).rejects.toThrow('Mail protection alert delivery failed')
+})
+
+test('keeps worker readiness healthy while retrying and terminal alerts stay observable', async () => {
+  const health = createWorkerHealth()
+  const metrics = createOperationalMetrics({
+    mailProtectionAlertStateReader: {
+      read: async () => ({
+        leased: 0,
+        nextAttemptAt: new Date('2026-09-04T10:00:30.000Z'),
+        oldestPendingAt: new Date('2026-09-04T10:00:00.000Z'),
+        pending: 2,
+        retrying: 1,
+        terminal: 1,
+      }),
+    },
+    runtime: 'worker',
+    workerHealth: health.snapshot,
+  })
+  const fetch = createWorkerHttpFetch({ health, operationalMetrics: metrics })
+  const stop = startPollingLoop({
+    health: health.registerLoop({
+      intervalMs: 60_000,
+      label: 'Mail protection alert delivery',
+      metricKey: 'mail_protection_alert_delivery',
+    }),
+    intervalMs: 60_000,
+    label: 'Mail protection alert delivery',
+    task: () => dispatchMailProtectionAlerts({
+      dispatcher: {
+        dispatch: async () => ({ claimed: 0, delivered: 0, failed: 0, staleClaims: 0 }),
+      },
+      now: new Date('2026-09-04T10:00:00.000Z'),
+      workerId: 'alert-worker-a',
+    }),
+  })
+
+  await stop()
+
+  expect((await fetch(new Request('http://worker/health/ready'))).status).toBe(200)
+  const metricsBody = await (await fetch(new Request('http://worker/metrics'))).text()
+  expect(metricsBody).toContain('anomaly_detector_mail_protection_alerts{state="retrying"} 1')
+  expect(metricsBody).toContain('anomaly_detector_mail_protection_alerts{state="terminal"} 1')
+})
 
 test('worker polling starts immediately and shutdown waits for the active task', async () => {
   let releaseTask!: () => void

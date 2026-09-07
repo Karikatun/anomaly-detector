@@ -160,6 +160,12 @@ export class MailPolicyService {
 
   private async resolveCommit(result: MailPolicyCommitResult, fingerprint: string) {
     if (result.kind === 'command_exists') return this.resolveExisting(result, fingerprint)
+    if (result.kind === 'operator_unavailable') {
+      throw new MailPolicyFailure(
+        'operator_unavailable',
+        'Operator access is no longer available',
+      )
+    }
     if (result.kind === 'version_conflict') {
       throw new MailPolicyFailure('version_conflict', 'Mail policy version changed before the command committed')
     }

@@ -140,9 +140,14 @@ Worker: GET http://<instance>:3001/health/ready
 ```
 
 The worker readiness endpoint stays unavailable until every configured loop completes
-successfully: the two deadline loops always run, and transactional mail adds a third loop
-only when SMTP is enabled. It becomes unavailable after a loop error or stale heartbeat
-and recovers after the next successful pass.
+successfully. The two deadline loops and protection-alert delivery always run;
+transactional SMTP adds a fourth loop only when enabled. Readiness becomes unavailable
+after a loop error or stale heartbeat. A protection-alert callback exception or stale
+acknowledgement fails that polling cycle, and a later successful or no-op cycle restores
+readiness. Durable retrying and terminal alert rows do not hold process readiness at
+`503`: restarting the VM cannot repair them. Alarm separately on the exported retry,
+oldest-pending, and terminal gauges instead of using instance autohealing for backlog
+recovery.
 
 Production env must include:
 
@@ -422,7 +427,8 @@ it in production:
 2. verify SPF, DKIM and DMARC plus actual receipt at every Approved Mail Service;
 3. drain a PostgreSQL transactional outbox through the existing worker with
    bounded retries, idempotent message identity and terminal failure state;
-4. expose only aggregate SMTP acceptance/failure and outbox age to adminapp;
+4. expose only aggregate SMTP acceptance/failure, outbox age, and protection-alert
+   backlog/retry/terminal state to adminapp;
    do not log addresses, templates containing secrets, codes or reset URLs;
 5. keep verification, recovery and security notices separate from support,
    marketing and gameplay messages;
@@ -432,9 +438,14 @@ it in production:
 Use these versioned settings. Obtain the exact host, port and TLS mode from the active
 REG.RU mailbox instead of copying an unverified example. Only `implicit_tls` and
 `starttls` are accepted; certificate verification and TLS 1.2 or newer are mandatory.
-`MAIL_SMTP_LEASE_SECONDS` must be strictly greater than
-`MAIL_SMTP_TIMEOUT_MS / 1000`, so a second worker cannot reclaim a message while
-the first SMTP attempt is still waiting for its bounded response.
+The renewed SMTP lease must cover `MAIL_SMTP_TIMEOUT_MS` plus the fixed 5-second
+acknowledgement safety margin. In other words,
+`MAIL_SMTP_LEASE_SECONDS * 1000 >= MAIL_SMTP_TIMEOUT_MS + 5000`. The worker renews
+the owner-checked lease immediately before SMTP; the remaining margin is reserved
+for the bounded result acknowledgement and ordinary scheduling delay before another
+worker may reclaim the row. For a half-open circuit recovery probe, that transaction
+also verifies the claim's lease token and extends the global probe guard to the same
+deadline; a second worker cannot start a concurrent probe during the renewed lease.
 
 ```bash
 MAIL_SMTP_ENABLED=true
@@ -494,13 +505,26 @@ Lockbox, verify TLS and a controlled message under issue #36, then re-enable the
 the global circuit breaker releases one probe after its cooldown before normal draining.
 If backlog age or terminal failures keep growing, leave delivery disabled and diagnose
 the provider/configuration rather than increasing retries. Do not extend credential
-expiry or the seven-day security-notification limit to drain a backlog. Rollback uses
-the previous immutable API/worker image after applying only backward-compatible
-migrations; do not manually delete queued rows. The named retention cleanup applies
-the deadlines and later removes terminal rows. Recovery and pending-mail cleanup is
-one PostgreSQL transaction; it retries that whole unit at most three times only for
-transaction conflicts (`P2034`, `40P01`, `40001`) and otherwise fails the cron task for
-operator investigation.
+expiry or the seven-day security-notification limit to drain a backlog. The migration
+that adds protection-alert retry and terminal fields is not compatible with an older
+mail worker: that worker ignores `available_at` and `terminal_at` and can reclaim a row
+that the new protocol deliberately delayed or stopped. Before `prisma:deploy`, stop and
+drain every old worker and verify that no old worker process remains. Apply the
+migration, then start only the new worker. Once the new state exists, never roll the
+worker back below this protocol; keep the compatible worker running while rolling back
+the API, adminapp or webapp, or roll the worker forward with a fix.
+
+The API contracts are staged for a mixed application rollout. An old adminapp receives
+the legacy mail projection from a new API; a new adminapp requests
+`deliveryContract=2` and tolerates a legacy response without the alert aggregate. A new
+Feedback client retries once without `submissionId` only when an old API rejects the
+new strict field before handling the request, while a new API assigns an identifier to
+a legacy request that omitted it. Preserve these compatibility paths until every old
+API and client revision is outside the rollback window. Do not manually delete queued
+rows. The named retention cleanup applies deadlines and later removes terminal rows.
+Recovery and pending-mail cleanup is one PostgreSQL transaction; it retries that whole
+unit at most three times only for transaction conflicts (`P2034`, `40P01`, `40001`) and
+otherwise fails the cron task for operator investigation.
 
 ## Managed PostgreSQL
 
@@ -521,6 +545,160 @@ bun run --cwd backend prisma:deploy
 ```
 
 Do not run `prisma migrate dev` in production and do not hand-write Prisma migration SQL.
+
+## Account Deletion Reconciliation
+
+Run `accounts:deletion-reconcile` on its own periodic trigger and use the same task
+for the release-time legacy drain. Do not fold it into `maintenance:cleanup`: the two
+jobs need separate success signals and alerts. A successful account-deletion request
+first destroys identity, credentials and sessions and leaves a durable
+`deletion_cleanup_completed_at = NULL` marker. The API then attempts one cleanup pass.
+Each pass commits at most one historical Room and one Tender, so a crash or one large
+account cannot roll back already completed work. Operator history is also processed in
+bounded batches: at most 100 rows from each Feedback and mail-policy audit table per
+transaction. While such batches remain, the tombstone keeps one random UUID pseudonym;
+every operator audit row for that deletion receives the same value. The marker is written
+last, only after no Room, Tender, Feedback link or raw operator UUID remains. The same
+transaction then clears the temporary pseudonym from the tombstone, so the database does
+not retain a reverse mapping.
+
+Use the same immutable backend image selected for the release and set the task timeout
+to at least 1,800 seconds. Each invocation admits at most 25 pending accounts and performs
+at most 50 bounded work transactions. One transaction has a 15-second timeout and at
+most two conflict attempts. Accounts are claimed durably with `FOR UPDATE SKIP LOCKED`;
+parallel invocations therefore work on disjoint batches. A claim lease expires after
+35 minutes, longer than the task timeout, so a crashed invocation becomes recoverable
+without allowing a live task to lose its account. A failed account records only a safe
+failure category and retries with exponential backoff from one minute up to six hours.
+The task reports only aggregate counts, the oldest pending timestamp and those safe
+failure categories. It exits non-zero for a failure attempted in the current run or when
+the oldest marker has remained pending for 24 hours. A deferred failure remains visible
+without creating a retry storm.
+
+For the first rollout, deploy the reconciliation task revision without invoking it and
+keep its timer absent or paused. Stop and drain every older API and worker revision, wait
+for the legacy one-minute budget window described above, and verify that no old writer
+receives traffic. Before switching to the new public Tender command contract, verify that
+neither of the newly reserved internal prefixes was ever occupied by a legacy client:
+
+```sql
+SELECT count(*)
+FROM tender_commands
+WHERE command_id LIKE 'deleted-command-v1-%'
+   OR command_id LIKE 'stored-command-v1-%';
+```
+
+The expected count is `0`; stop the rollout and resolve any collision otherwise. Only
+then apply `prisma:deploy`, start the compatible API and worker, invoke reconciliation to
+zero pending work, and enable the periodic trigger. The cleanup marker is written last,
+so an old in-flight writer must not survive that boundary.
+
+This migration creates five regular indexes for bounded operator-audit cleanup. On a
+database with a large operator history, inspect the affected table sizes first and reserve
+a maintenance window: regular `CREATE INDEX` can briefly block writes. Do not rewrite the
+migration to `CONCURRENTLY` without a separately tested migration procedure.
+
+Self-service account deletion does not edit deployment environment variables. If the
+deleted UUID was listed in `ADMIN_USER_IDS`, authentication stops working as soon as the
+account becomes a tombstone, but the stale allowlist entry still records the former
+operator role. Remove it during the next protected configuration reconciliation and
+redeploy the affected API revision. Do not make account deletion wait for that external
+operation.
+
+This lifecycle protocol is one-way. Once reconciliation has completed any tombstone, do
+not roll API or worker writers back to an image that predates the account-lifecycle locks:
+such a writer can restore identity, credentials or Room/Tender references without
+clearing the completion marker. Roll forward to a compatible image instead. Static
+clients may be rolled back only when their API contract remains compatible.
+
+Deploy a separate private task revision with the production database, network,
+`JWT_SECRET`, and Lockbox policy used by the API revision. It does not need SMTP
+credentials and must not be public:
+
+```bash
+yc serverless container create --name <project>-account-deletion-reconcile
+
+yc serverless container revision deploy \
+  --container-name <project>-account-deletion-reconcile \
+  --image cr.yandex/$REGISTRY_ID/<project>-backend:<immutable-tag> \
+  --runtime task \
+  --command bun \
+  --args src/cron.ts,accounts:deletion-reconcile \
+  --cores 1 \
+  --memory 256MB \
+  --execution-timeout 1800s \
+  --service-account-id <reconciliation_runtime_service_account_ID> \
+  --environment DATABASE_URL='<production_database_url>',JWT_SECRET='<production_jwt_secret>',CORS_ORIGINS=https://app.anomaly-detector.ru,WEBAPP_ORIGIN=https://app.anomaly-detector.ru,COOKIE_SECURE=true,SESSION_ABSOLUTE_TTL_DAYS=90,SESSION_RETENTION_DAYS=7,MAIL_OUTBOX_RETENTION_DAYS=30
+```
+
+These placeholders show the complete runtime boundary required by
+`createBackendRuntime`; use Lockbox or the console for the real database URL and
+JWT secret instead of putting them into shell history.
+
+Give a dedicated trigger service account invocation access only to this private task,
+then run it every five minutes:
+
+```bash
+yc iam service-account create --name <project>-account-deletion-reconcile-trigger
+ACCOUNT_DELETION_TRIGGER_SA_ID=$(yc iam service-account get \
+  --name <project>-account-deletion-reconcile-trigger \
+  --format json | jq -r .id)
+ACCOUNT_DELETION_CONTAINER_ID=$(yc serverless container get \
+  --name <project>-account-deletion-reconcile \
+  --format json | jq -r .id)
+
+yc serverless container add-access-binding \
+  --name <project>-account-deletion-reconcile \
+  --service-account-id "$ACCOUNT_DELETION_TRIGGER_SA_ID" \
+  --role serverless-containers.containerInvoker
+
+yc serverless trigger create timer \
+  --name <project>-account-deletion-reconcile-periodic \
+  --cron-expression '0 */5 * * * *' \
+  --invoke-container-id "$ACCOUNT_DELETION_CONTAINER_ID" \
+  --invoke-container-service-account-id "$ACCOUNT_DELETION_TRIGGER_SA_ID" \
+  --retry-attempts 3 \
+  --retry-interval 30s
+```
+
+After the new API revision is the only active writer, invoke the task and inspect
+its aggregate result. Repeat it while `pending` is greater than zero; this is a
+post-pass count, not the selected batch size. Continue the release only after
+`failed=0`, `deferred_failed=0`, `pending=0`, and an active periodic trigger are all
+recorded. A run with `pending>0` proves progress only. Fix a reported safe failure
+category before retrying; blind retries do not prove that a poison row moved. Logs may
+contain aggregate processed, failed, deferred-failed and pending counts,
+`oldest_pending_at`, `overdue`, `failure_categories`, and
+`deferred_failure_categories`, but never account IDs.
+
+If logs are unavailable or disagree with monitoring, run this aggregate-only query from
+the protected operator environment. Do not copy rows or identifiers into release notes:
+
+```sql
+SELECT
+  COALESCE(deletion_cleanup_last_failure_code, 'ready_or_in_progress') AS failure_category,
+  count(*) AS pending,
+  min(anonymized_at) AS oldest_pending_at,
+  min(deletion_cleanup_available_at) AS next_available_at
+FROM users
+WHERE anonymized_at IS NOT NULL
+  AND deletion_cleanup_completed_at IS NULL
+GROUP BY deletion_cleanup_last_failure_code
+ORDER BY failure_category;
+```
+
+If a rollback or traffic switch exposes an older API image again, the previous
+zero-pending result is no longer sufficient. Keep the compatible reconciliation
+task and trigger running, then return to the new image, drain the old revision and
+run the release check again to zero pending work.
+
+After deployment, verify the trigger is active and inspect at least one scheduled
+invocation with task exit code `0`. Alert on any non-zero exit, `failed>0`,
+`deferred_failed>0`, `overdue=true`, a growing `pending` count, or missing recent
+invocation. Concurrent invocations are allowed, but their claimed account sets must be
+disjoint and no claim may remain beyond its 35-minute lease. This is a required release
+procedure, not evidence that the task or alert has been deployed or run against
+production. Keep release and scheduled evidence in the protected operator record.
 
 ## Maintenance Cleanup Timer
 
@@ -766,19 +944,75 @@ records into Cloud Logging and configure alerts at minimum for:
 Retain the request ID in API responses and log search results so an incident can
 be correlated without recording sensitive request data.
 
-The mail worker persists each transition once in PostgreSQL and uses an exclusive
-lease so active workers do not claim the same row concurrently. Delivery to the log
-sink is at least once: a crash after log emission but before PostgreSQL acknowledgement
-may repeat the event. The record contains only channel, type, stable reason,
-occurrence time and `transitionAt`; downstream routing must deduplicate by reason plus
-`transitionAt`. Acknowledged rows older than 30 days are pruned lazily on a later
-transition, while pending rows remain durable. During a continuously unavailable
-sink, delivery-budget transitions can add at most one pending row per minute;
-production needs a pending-age/cardinality alarm
-or an explicitly accepted finite dead-letter policy before that becomes a capacity
-risk. This local implementation has not been deployed. Its thresholds have not been
-tuned under production load, and no Yandex Monitoring rule or notification channel
-has been configured for it.
+### Mail protection alert recovery
+
+The mail worker persists each transition once in PostgreSQL and uses an exclusive lease
+so active workers do not claim the same row concurrently. PostgreSQL acknowledgement
+means only that the synchronous emission callback returned. The current callback writes
+one JSON line with `console.warn` to worker stderr; acknowledgement does not prove that
+Docker, Unified Agent, Cloud Logging, a log-based monitor, or a notification channel
+ingested it. A callback exception clears the lease and schedules exponential backoff. A
+crash after local stderr emission but before PostgreSQL acknowledgement may repeat the
+line. The record contains only channel, type, stable reason, occurrence time and
+`transitionAt`; downstream routing must deduplicate by reason plus `transitionAt`.
+
+The worker stops after the configured attempt limit and leaves the row in a terminal
+state instead of retrying forever. Alert dispatch has its own worker-health loop and
+continues while SMTP delivery is disabled. Retrying and terminal rows remain visible in
+PostgreSQL-backed metrics but do not keep process readiness unavailable or trigger an
+autohealing restart loop. Acknowledged rows older than 30 days are pruned lazily on a
+later transition; pending and terminal rows remain durable. Repeated callback exceptions
+can add at most one delivery-budget transition per minute. Monitor pending
+age/cardinality and terminal count before this becomes a capacity risk. Independently
+monitor stderr ingestion and the absence of expected log events: downstream pipeline
+failure happens beyond the database retry boundary. This local implementation has not
+been deployed. Its thresholds have not been tuned under production load, and no stderr
+ingestion proof, log-based monitor, Yandex Monitoring rule, or notification channel has
+been configured for it.
+
+Recover one terminal protection alert only after the synchronous stderr callback no
+longer throws and a controlled test record reaches the configured Cloud Logging and
+notification path. Copy the exact `reason` and `transition_at` from the incident
+evidence into the operator change record, together with the
+operator, incident, release SHA, reason for recovery, and verification result. The
+only accepted reasons are `delivery_budget_exhausted` and `delivery_circuit_open`.
+Then use a protected PostgreSQL session and one explicit transaction:
+
+```sql
+BEGIN;
+
+SELECT reason, transition_at, attempt_count, terminal_at
+FROM mail_delivery_protection_alerts
+WHERE reason = :'reason'
+  AND transition_at = (:'transition_at'::timestamptz AT TIME ZONE 'UTC')
+FOR UPDATE;
+
+UPDATE mail_delivery_protection_alerts
+SET attempt_count = 0,
+    available_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
+    last_failure_code = NULL,
+    terminal_at = NULL,
+    lease_expires_at = NULL,
+    lease_owner = NULL
+WHERE reason = :'reason'
+  AND transition_at = (:'transition_at'::timestamptz AT TIME ZONE 'UTC')
+  AND delivered_at IS NULL
+  AND terminal_at IS NOT NULL
+RETURNING reason, transition_at;
+
+COMMIT;
+```
+
+The locked `SELECT` and `UPDATE ... RETURNING` must each identify exactly one row with
+the same composite `(reason, transition_at)` key. If either result is zero, unexpected,
+or not the intended incident, run `ROLLBACK` instead of `COMMIT`. Never remove either
+key predicate, update all rows for one reason, or clear the table. After commit, verify
+that the exact row leaves terminal state, the next alert cycle processes it, the expected
+event reaches the configured ingestion and notification path, and the pending/terminal
+gauges move as expected. `/health/ready` is only the process-heartbeat signal: it should
+remain healthy but is not evidence that this row reached Cloud Logging. This MVP recovery
+has no application-level requeue command or audit event: the operator change record is
+mandatory evidence, but it must not be described as application audit.
 
 ### Current Monitoring Baseline
 
@@ -835,7 +1069,9 @@ counters, a request-latency histogram, aggregate overdue and lifecycle Tender
 gauges, authorised realtime initial/reconnect and close counters, and bounded
 auth/security event categories. The worker target publishes each registered
 loop's last successful Unix timestamp, staleness and consecutive failures, plus
-newly persisted transactional-mail protection transitions. Reconnect is a
+newly persisted transactional-mail protection transitions and PostgreSQL-backed
+protection-alert pending, leased, retrying, terminal, oldest-pending, and next-attempt
+gauges. Reconnect is a
 telemetry-only `reconnect=1` marker produced after the first socket attempt in a
 client lifecycle and counted only after ticket consumption and authorised
 Tender subscription succeed; it has no authentication, authorization, rate-limit
@@ -847,19 +1083,21 @@ standalone incident evidence or an enforcement input.
 Every label comes from a fixed application enum. The exposition contains no
 route, object ID, player/session/request identifier, credential, provider detail
 or error text. Counter state is process-local and may reset on restart, as
-Prometheus counters normally do. Tender gauges come from one aggregate
-PostgreSQL query at scrape time; a failed query makes the private API target
-return `503` instead of publishing a plausible stale snapshot. Transactional-mail
+Prometheus counters normally do. Tender and protection-alert gauges come from bounded
+PostgreSQL aggregate queries at scrape time; a failed query makes the corresponding
+private target return `503` instead of publishing a plausible stale snapshot.
+Transactional-mail
 counts increment from the owning drain result only when the repository reports a
 new durable protection transition, not from retryable log delivery.
 
-This is local implementation evidence, not deployment evidence. Unified Agent
-scrape configuration, dashboard panels, notification routing and mandatory
-alerts for API unavailable, worker stale, growing `5xx`, and any overdue Tender
-remain owner-controlled Yandex changes. Container restart counts and PostgreSQL
-connection counts still require runtime collectors rather than application log
-parsing. None of those external collectors, graphs or alerts has been configured
-or verified by this repository change.
+This is local implementation evidence, not deployment evidence. Unified Agent scrape
+and stderr-ingestion configuration, dashboard panels, notification routing, a log-based
+mail-protection event monitor, and mandatory alerts for API unavailable, worker stale,
+growing `5xx`, any overdue Tender, mail-protection oldest-pending age, and any terminal
+mail-protection row remain owner-controlled Yandex changes. Container restart counts and
+PostgreSQL connection counts still require runtime collectors rather than application
+log parsing. None of those external collectors, ingestion paths, graphs, or alerts has
+been configured or verified by this repository change.
 
 Deploy `webapp` and fully prerendered `website` output as static websites in Yandex Object Storage. Keep `adminapp` out of public website buckets: in the current VM topology Caddy serves it from the protected operator hostname. Once `website` uses SSR/on-demand rendering or Astro server islands, that surface needs an Astro adapter and must move to a Serverless Container runtime instead of static hosting. When server islands appear on cached pages or rolling deploys, generate a stable key with `astro create-key` and configure `ASTRO_KEY` as a secret in both build and runtime environments. Never commit it, expose it as `PUBLIC_*`, print it in logs, or bake it into static output.
 
@@ -876,7 +1114,9 @@ VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT='<public operator name in dative case>' \
 VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS='<public address for legal requests>' \
 VITE_PUBLIC_LEGAL_DOCUMENTS_EFFECTIVE_DATE='<approved Russian publication date>' \
 bun run --cwd webapp build:release
-VITE_API_URL=https://api.anomaly-detector.ru bun run build:adminapp
+VITE_API_URL=https://api.anomaly-detector.ru \
+VITE_BUILD_SHA=<exact-40-character-release-sha> \
+bun run build:adminapp
 PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
 PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
 bun run build:website:release
@@ -885,9 +1125,11 @@ bun run build:website:release
 The webapp and adminapp API values are embedded at build time and must point to the
 Application Load Balancer custom host. `VITE_API_URL` owns ordinary requests;
 `VITE_OAUTH_API_URL` owns the browser-visible OAuth start request.
-`VITE_BUILD_SHA` must be the exact lowercase 40-character release commit and is
-included only as safe technical context when a player submits a Feedback Report;
-omit it rather than substituting a branch, short SHA or mutable tag.
+`VITE_BUILD_SHA` must be the exact lowercase 40-character release commit. The webapp
+includes it only as safe technical context when a player submits a Feedback Report;
+the adminapp uses it to pin operational runbook links to the matching immutable
+revision. Omit an invalid value rather than substituting a branch, short SHA or mutable
+tag; without it the adminapp shows the repository path as non-clickable text.
 `VITE_PUBLIC_LEGAL_OPERATOR_NAME`, `VITE_PUBLIC_LEGAL_OPERATOR_RECIPIENT`,
 `VITE_PUBLIC_LEGAL_OPERATOR_ADDRESS`, and
 `VITE_PUBLIC_LEGAL_DOCUMENTS_EFFECTIVE_DATE` are required for a webapp production

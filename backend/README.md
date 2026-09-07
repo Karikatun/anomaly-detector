@@ -59,7 +59,7 @@ Keep an explicit username and password in Prisma connection URLs even on local n
 
 `ADMIN_USER_IDS` is an optional comma-separated allowlist of immutable user UUIDs for the separate operator application. Empty means that nobody has access. The backend returns the same `404 NOT_FOUND` to anonymous and ordinary authenticated users and does not publish operator routes in OpenAPI. Obtain an operator UUID from that user's profile and configure it only in backend runtime env; changing a login or display name does not change access. The separate Caddy-host is an additional edge boundary, not a replacement for this backend check.
 
-The operator overview remains read-only. Approved Mail Service policy exposes a safe read projection plus narrow audited `/sync` and `/status` commands. `/sync` atomically applies the bundled reviewed provider catalog; it does not import candidates from RKN or discover providers from DNS. Both policy mutations require a recent authenticated session, an allowlisted operator UUID, an optimistic version precondition, an idempotent `commandId`, and immutable audit. A separate read-only `/api/operations/mail-policy/anti-abuse` endpoint preserves the existing mail command-response contract. It returns only broad active-window lower bounds from authenticated-account scopes; public login, registration, password-reset and Recovery Code scopes are excluded from the query. A remaining scope contributes only after at least ten keys reach its limit, and each scope is rounded down to a multiple of ten before the surface rollup. Scope names, exact request totals, HMAC hashes and user, login, email, IP, Room or Tender identities are never returned. This is operational coarsening for the trusted allowlisted operator boundary, not a differential-privacy guarantee against a compromised operator controlling many accounts. Feedback Report processing has its own protected queue and only take, resolve, reject, record-sanitized-GitHub-number, and delete-contact commands. Feedback commands use the same operator boundary. Feedback source text and authorship cannot be edited, and no command publishes an external issue or sends mail automatically.
+The operator overview remains read-only. Approved Mail Service policy exposes a safe read projection plus narrow audited `/sync` and `/status` commands. `/sync` atomically applies the bundled reviewed provider catalog; it does not import candidates from RKN or discover providers from DNS. Both policy mutations require a recent authenticated session, an allowlisted operator UUID, an optimistic version precondition, and an idempotent `commandId`. Audit events and command results are append-only; account deletion may replace only the actor UUID with an irreversible pseudonym while preserving their semantics and reasons. A separate read-only `/api/operations/mail-policy/anti-abuse` endpoint preserves the existing mail command-response contract. It returns only broad active-window lower bounds from authenticated-account scopes; public login, registration, password-reset and Recovery Code scopes are excluded from the query. A remaining scope contributes only after at least ten keys reach its limit, and each scope is rounded down to a multiple of ten before the surface rollup. Scope names, exact request totals, HMAC hashes and user, login, email, IP, Room or Tender identities are never returned. This is operational coarsening for the trusted allowlisted operator boundary, not a differential-privacy guarantee against a compromised operator controlling many accounts. Feedback Report processing has its own protected queue and only take, resolve, reject, record-sanitized-GitHub-number, and delete-contact commands. Feedback commands use the same operator boundary. Feedback source text and authorship cannot be edited by those commands, and no command publishes an external issue or sends mail automatically.
 
 `COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production also requires `WEBAPP_ORIGIN`: one origin-only HTTPS URL for the player application, included in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
 
@@ -86,10 +86,21 @@ Yandex Object Storage env is optional. Leave `YANDEX_STORAGE_*` blank until the 
 The backend is one workspace with one Prisma schema and one Dockerfile, but it has separate runtime entrypoints:
 
 - API: `bun run start:api`, backed by `src/index.ts`.
-- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases, scheduled Room starts, and the PostgreSQL transactional-mail outbox. `bun run dev` starts both API and worker locally; production runs them as separate processes. The worker serves internal `/health/live`, `/health/ready`, and `/metrics` endpoints on `WORKER_HEALTH_PORT` or `PORT + 1`; `WORKER_HEALTH_HOST` defaults to loopback. Readiness requires recent successful passes from the two base loops and, when SMTP is enabled, the mail-delivery loop.
-- Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, `maintenance:cleanup`, and the backwards-compatible `auth:sessions:cleanup` alias.
+- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is the only owner of polling schedules for due Tender phases, scheduled Room starts, and the PostgreSQL transactional-mail outbox. `bun run dev` starts both API and worker locally; production runs them as separate processes. The worker serves internal `/health/live`, `/health/ready`, and `/metrics` endpoints on `WORKER_HEALTH_PORT` or `PORT + 1`; `WORKER_HEALTH_HOST` defaults to loopback. Readiness always requires recent successful passes from the two deadline loops and the protection-alert delivery loop. Retrying or terminal protection-alert rows stay visible in metrics but do not fail process readiness. Enabling SMTP adds the transactional-mail delivery loop as a fourth required signal.
+- Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, `maintenance:cleanup`, the separately scheduled `accounts:deletion-reconcile`, and the backwards-compatible `auth:sessions:cleanup` alias. Account deletion reconciliation is isolated from retention cleanup so one failure cannot hide the other; production runs it on its own timer and also drains legacy tombstones during rollout.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
+
+Account deletion commits identity and credential removal first, then clears at most one
+historical Room and one Tender per short reconciliation transaction. A null
+`deletion_cleanup_completed_at` is the durable pending marker. Production must invoke
+`accounts:deletion-reconcile` on its separate five-minute schedule. Each run durably
+claims at most 25 accounts with `FOR UPDATE SKIP LOCKED`, performs at most 50 passes, and
+uses a 35-minute crash-recovery lease. Failed accounts back off from one minute to six
+hours without blocking later accounts. `failed`, `deferred_failed`, `pending`, safe
+failure categories, and the oldest marker are aggregate operational signals; account IDs
+must not enter logs. A marker older than 24 hours is an operational failure, not a
+completed deletion.
 
 Primary keys use database-generated UUIDv7 values in PostgreSQL (`@default(dbgenerated("uuidv7()")) @db.Uuid`). Use UUIDv7 consistently for new primary keys and foreign-key references that point at them; do not introduce new `cuid()`, `uuid()`, `serial`, or `bigserial` IDs into this repository. PostgreSQL 18+ is required anywhere the backend schema is applied so IDs are generated consistently through Prisma, raw SQL, imports, and future non-Prisma writers.
 
@@ -132,8 +143,13 @@ values.
 
 ## Feedback API
 
-- `POST /api/feedback` — authenticated strict intake; returns only a public
-  receipt number and exposes no player read route.
+- `POST /api/feedback` — authenticated strict intake with a client-generated
+  `submissionId`; returns only a public receipt number and exposes no player
+  read route. While the voluntary contact fingerprint is retained, repeating
+  the same ID and normalized payload returns the original receipt, while
+  reusing the ID for different content fails with `409`. After an operator
+  deletes the contact and its fingerprint, every reuse of that ID fails closed
+  with `409` because an exact replay can no longer be verified.
 - `GET /api/operations/feedback` — allowlisted operator queue, concealed from
   ordinary users and omitted from OpenAPI.
 - `POST /api/operations/feedback/:reportId/take`
@@ -144,9 +160,12 @@ values.
 
 The intake stores only bounded source fields and safe coarse technical context.
 Account linkage and reply contact are separate voluntary values; account and
-trusted-IP daily budget identities are HMAC-derived. Operator commands cannot
-edit source content. `maintenance:cleanup` deletes `new`/`in_review` reports at
-180 days and terminal or transferred reports 30 days after that event.
+trusted-IP daily budget identities are HMAC-derived. A verifiable exact
+submission replay does not spend the Feedback account/IP daily budgets again,
+but every HTTP attempt still passes through the common authenticated-mutation
+budget. Operator commands cannot edit source content. `maintenance:cleanup` deletes
+`new`/`in_review` reports at 180 days and terminal or transferred reports 30
+days after that event.
 
 `GET /api/auth/account-protection` exposes only the current account's bounded
 protection state. A Yandex-managed address is masked by the server; conflict and
@@ -208,17 +227,19 @@ The identifier remains only as technical outbox metadata and follows the
 configured terminal-retention deadline of at most 30 days plus the next daily
 cleanup. The shared PostgreSQL SMTP delivery budget and circuit breaker
 persist each protection transition once. Workers claim those rows with an exclusive
-lease and deliver a safe structured event at least once before acknowledging it. The
-event contains only an allowlisted reason, occurrence time and stable transition time;
-it contains no recipient, template payload, code, token or message identity. A crash
-after logging but before acknowledgement can repeat the same event, so downstream
-consumers deduplicate by reason plus transition time. Acknowledged history older than
-30 days is pruned lazily on a later transition; pending rows remain durable. A
-continuously unavailable log sink can add at most one delivery-budget transition per
-minute and therefore still needs an
-operator-owned capacity alarm or finite dead-letter policy before production scale.
-Production log routing, Monitoring rules/channels and threshold tuning remain
-deployment gates.
+lease and emit a safe structured event before acknowledging it. An acknowledgement means
+only that the synchronous worker `console.warn` callback returned after writing one JSON
+line to stderr; it does not prove that Docker, Unified Agent, Cloud Logging, or a
+notification channel ingested the line. The event contains only an allowlisted reason,
+occurrence time and stable transition time; it contains no recipient, template payload,
+code, token or message identity. A callback exception keeps the row for durable retry,
+and a crash after local emission but before acknowledgement can repeat the event, so
+downstream consumers deduplicate by reason plus transition time. Acknowledged history
+older than 30 days is pruned lazily on a later transition; pending and terminal rows
+remain durable and are exported as separate metrics rather than process-readiness
+failures. Production stderr ingestion, a log-based protection-event monitor, backlog and
+terminal metric alarms, notification routing, and threshold tuning remain deployment
+gates.
 `MAIL_SMTP_ENABLED`, `MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`,
 `MAIL_SMTP_TLS_MODE`, `MAIL_SMTP_USERNAME`, `MAIL_SMTP_PASSWORD`,
 `MAIL_SMTP_FROM`, `MAIL_SMTP_REPLY_TO`, `MAIL_SMTP_TIMEOUT_MS`,
@@ -228,7 +249,9 @@ deployment gates.
 `MAIL_SMTP_WORKER_INTERVAL_MS` and `MAIL_OUTBOX_RETENTION_DAYS` are documented
 with safe empty/default values in `.env.example`; production secret placement,
 verification and recovery procedures live in the Yandex runbook. The configured
-lease must be longer than the SMTP timeout.
+lease must satisfy
+`MAIL_SMTP_LEASE_SECONDS * 1000 >= MAIL_SMTP_TIMEOUT_MS + 5000` so the renewed lease
+covers the SMTP timeout and the fixed result-acknowledgement margin.
 
 Личная игровая статистика доступна авторизованному пользователю через `GET /api/profile/statistics`. Сервер рассчитывает её по завершённым совместимым партиям и журналу принятых игровых действий; формулы закреплены в [../docs/GAME_DESIGN_BRIEF.md](../docs/GAME_DESIGN_BRIEF.md).
 

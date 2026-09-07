@@ -15,14 +15,23 @@ import {
 
 export async function runWorker() {
   const runtime = createBackendRuntime()
-  const store = createPrismaTenderStore(runtime.prisma)
+  const store = createPrismaTenderStore(runtime.prisma, runtime.env.JWT_SECRET)
   const tender = createTenderModule({ store })
-  const roomStart = createRoomStartModule(runtime.prisma)
-  const mail = runtime.env.MAIL_SMTP_ENABLED
-    ? createMailModule({
-        confirmationCodeSecret: runtime.env.JWT_SECRET,
-        db: runtime.prisma,
-        delivery: createRegRuSmtpDelivery({
+  const roomStart = createRoomStartModule(runtime.prisma, runtime.env.JWT_SECRET)
+  const mailDeliveryOptions = {
+    circuitFailureThreshold: runtime.env.MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD,
+    circuitOpenMs: runtime.env.MAIL_SMTP_CIRCUIT_OPEN_SECONDS * 1_000,
+    deliveryBudgetPerMinute: runtime.env.MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE,
+    leaseMs: runtime.env.MAIL_SMTP_LEASE_SECONDS * 1_000,
+    maxAttempts: runtime.env.MAIL_SMTP_MAX_ATTEMPTS,
+    retryBaseMs: runtime.env.MAIL_SMTP_RETRY_BASE_SECONDS * 1_000,
+  }
+  const mail = createMailModule({
+    accountLifecycleSecret: runtime.env.JWT_SECRET,
+    confirmationCodeSecret: runtime.env.MAIL_SMTP_ENABLED ? runtime.env.JWT_SECRET : undefined,
+    db: runtime.prisma,
+    delivery: runtime.env.MAIL_SMTP_ENABLED
+      ? createRegRuSmtpDelivery({
           from: runtime.env.MAIL_SMTP_FROM!,
           host: runtime.env.MAIL_SMTP_HOST!,
           password: runtime.env.MAIL_SMTP_PASSWORD!,
@@ -31,19 +40,17 @@ export async function runWorker() {
           timeoutMs: runtime.env.MAIL_SMTP_TIMEOUT_MS,
           tlsMode: runtime.env.MAIL_SMTP_TLS_MODE!,
           username: runtime.env.MAIL_SMTP_USERNAME!,
-        }),
-        deliveryOptions: {
-          circuitFailureThreshold: runtime.env.MAIL_SMTP_CIRCUIT_FAILURE_THRESHOLD,
-          circuitOpenMs: runtime.env.MAIL_SMTP_CIRCUIT_OPEN_SECONDS * 1_000,
-          deliveryBudgetPerMinute: runtime.env.MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE,
-          leaseMs: runtime.env.MAIL_SMTP_LEASE_SECONDS * 1_000,
-          maxAttempts: runtime.env.MAIL_SMTP_MAX_ATTEMPTS,
-          retryBaseMs: runtime.env.MAIL_SMTP_RETRY_BASE_SECONDS * 1_000,
-        },
-      })
-    : null
+        })
+      : undefined,
+    deliveryOptions: mailDeliveryOptions,
+    deliveryStatus: {
+      configured: runtime.env.MAIL_SMTP_ENABLED,
+      deliveryBudgetPerMinute: runtime.env.MAIL_SMTP_DELIVERY_BUDGET_PER_MINUTE,
+    },
+  })
   const health = createWorkerHealth()
   const operationalMetrics = createOperationalMetrics({
+    mailProtectionAlertStateReader: mail.protectionAlertStateReader,
     runtime: 'worker',
     workerHealth: health.snapshot,
   })
@@ -55,7 +62,7 @@ export async function runWorker() {
   })
 
   console.log(
-    `Worker: starting advance loops for due Tenders and Rooms${mail ? ' plus transactional mail delivery' : ''}; health listening on ${healthServer.hostname}:${healthServer.port}`,
+    `Worker: starting advance loops for due Tenders and Rooms${mail.outboxDrainer ? ' plus transactional mail delivery' : ''} plus mail protection alerts; health listening on ${healthServer.hostname}:${healthServer.port}`,
   )
   const stopTenderAdvanceLoop = startPollingLoop({
     health: health.registerLoop({
@@ -82,7 +89,8 @@ export async function runWorker() {
     task: () => roomStart.advanceDueRoomStarts({ now: new Date() }),
   })
   const mailWorkerId = `mail-${crypto.randomUUID()}`
-  const stopMailDeliveryLoop = mail?.outboxDrainer
+  const mailAlertWorkerId = `mail-alert-${crypto.randomUUID()}`
+  const stopMailDeliveryLoop = mail.outboxDrainer
     ? startPollingLoop({
         health: health.registerLoop({
           intervalMs: runtime.env.MAIL_SMTP_WORKER_INTERVAL_MS,
@@ -101,14 +109,24 @@ export async function runWorker() {
             observe: operationalMetrics.observe,
             protectionAlerts: result.protectionAlerts,
           })
-          const alertDelivery = await mail.outboxDrainer!.dispatchProtectionAlerts({
-            deliver: (alert) => emitMailDeliveryProtectionAlert(alert),
-            limit: 20,
-            now: new Date(),
-            workerId: mailWorkerId,
-          })
-          return { alertDelivery, delivery: result }
+          return result
         },
+      })
+    : null
+  const stopMailProtectionAlertLoop = mail.protectionAlertDispatcher
+    ? startPollingLoop({
+        health: health.registerLoop({
+          intervalMs: runtime.env.MAIL_SMTP_WORKER_INTERVAL_MS,
+          label: 'Mail protection alert delivery',
+          metricKey: 'mail_protection_alert_delivery',
+        }),
+        intervalMs: runtime.env.MAIL_SMTP_WORKER_INTERVAL_MS,
+        label: 'Mail protection alert delivery',
+        task: () => dispatchMailProtectionAlerts({
+          dispatcher: mail.protectionAlertDispatcher!,
+          now: new Date(),
+          workerId: mailAlertWorkerId,
+        }),
       })
     : null
 
@@ -122,6 +140,7 @@ export async function runWorker() {
       stopTenderAdvanceLoop(),
       stopRoomStartLoop(),
       stopMailDeliveryLoop?.(),
+      stopMailProtectionAlertLoop?.(),
     ])
     await runtime.close()
   }
@@ -132,6 +151,30 @@ export async function runWorker() {
   process.on('SIGTERM', () => {
     void shutdown('SIGTERM')
   })
+}
+
+export async function dispatchMailProtectionAlerts(input: {
+  dispatcher: {
+    dispatch(options: {
+      deliver(alert: ClaimedMailDeliveryProtectionAlert): Promise<void> | void
+      limit: number
+      now: Date
+      workerId: string
+    }): Promise<{ claimed: number; delivered: number; failed: number; staleClaims: number }>
+  }
+  now: Date
+  workerId: string
+}) {
+  const result = await input.dispatcher.dispatch({
+    deliver: (alert) => emitMailDeliveryProtectionAlert(alert),
+    limit: 20,
+    now: input.now,
+    workerId: input.workerId,
+  })
+  if (result.failed > 0 || result.staleClaims > 0) {
+    throw new Error('Mail protection alert delivery failed')
+  }
+  return result
 }
 
 export function createWorkerHttpFetch(input: {

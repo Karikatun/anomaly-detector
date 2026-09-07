@@ -4,6 +4,7 @@ import type {
   TenderOperationalState,
   TenderOperationalStateReader,
 } from './modules/tender'
+import type { MailProtectionAlertStateReader } from './modules/mail'
 import type { SecurityEvent, SecurityEventLogger } from './security/events'
 import type { WorkerHealthSnapshot } from './worker-health'
 
@@ -18,6 +19,7 @@ export type OperationalMetricEvent =
     }
 
 type OperationalMetricsOptions = {
+  mailProtectionAlertStateReader?: MailProtectionAlertStateReader
   now?: () => number
   runtime?: 'api' | 'worker'
   tenderStateReader?: TenderOperationalStateReader
@@ -53,6 +55,7 @@ type RealtimeCloseReason = typeof realtimeCloseReasons[number]
 type MailProtectionReason = typeof mailProtectionReasons[number]
 
 export function createOperationalMetrics({
+  mailProtectionAlertStateReader,
   now = Date.now,
   runtime = 'api',
   tenderStateReader,
@@ -118,15 +121,20 @@ export function createOperationalMetrics({
     }
 
     try {
-      const tenderState = tenderStateReader
-        ? await tenderStateReader.read(new Date(now()))
-        : undefined
+      const observedAt = new Date(now())
+      const [tenderState, mailProtectionAlerts] = await Promise.all([
+        tenderStateReader ? tenderStateReader.read(observedAt) : undefined,
+        mailProtectionAlertStateReader
+          ? mailProtectionAlertStateReader.read(observedAt)
+          : undefined,
+      ])
       const body = renderMetrics({
         apiLatencyBuckets,
         apiLatencyCount,
         apiLatencySum,
         apiRequests,
         mailProtectionTransitions,
+        mailProtectionAlerts,
         realtimeCloses,
         realtimeConnections,
         runtime,
@@ -164,6 +172,7 @@ function renderMetrics(input: {
   apiLatencySum: number
   apiRequests: Record<ApiStatusClass, number>
   mailProtectionTransitions: Record<MailProtectionReason, number>
+  mailProtectionAlerts?: Awaited<ReturnType<MailProtectionAlertStateReader['read']>>
   realtimeCloses: Record<RealtimeCloseReason, number>
   realtimeConnections: Record<'false' | 'true', number>
   runtime: 'api' | 'worker'
@@ -252,6 +261,22 @@ function renderMetrics(input: {
     for (const reason of mailProtectionReasons) {
       lines.push(`anomaly_detector_mail_protection_transitions_total{reason="${reason}"} ${input.mailProtectionTransitions[reason]}`)
     }
+    if (input.mailProtectionAlerts) {
+      lines.push(
+        '# HELP anomaly_detector_mail_protection_alerts Durable protection-alert records grouped by bounded delivery state.',
+        '# TYPE anomaly_detector_mail_protection_alerts gauge',
+        `anomaly_detector_mail_protection_alerts{state="pending"} ${input.mailProtectionAlerts.pending}`,
+        `anomaly_detector_mail_protection_alerts{state="leased"} ${input.mailProtectionAlerts.leased}`,
+        `anomaly_detector_mail_protection_alerts{state="retrying"} ${input.mailProtectionAlerts.retrying}`,
+        `anomaly_detector_mail_protection_alerts{state="terminal"} ${input.mailProtectionAlerts.terminal}`,
+        '# HELP anomaly_detector_mail_protection_alert_oldest_pending_unixtime_seconds Oldest unresolved protection alert.',
+        '# TYPE anomaly_detector_mail_protection_alert_oldest_pending_unixtime_seconds gauge',
+        `anomaly_detector_mail_protection_alert_oldest_pending_unixtime_seconds ${dateSeconds(input.mailProtectionAlerts.oldestPendingAt)}`,
+        '# HELP anomaly_detector_mail_protection_alert_next_attempt_unixtime_seconds Next eligible protection-alert attempt outside an active lease.',
+        '# TYPE anomaly_detector_mail_protection_alert_next_attempt_unixtime_seconds gauge',
+        `anomaly_detector_mail_protection_alert_next_attempt_unixtime_seconds ${dateSeconds(input.mailProtectionAlerts.nextAttemptAt)}`,
+      )
+    }
   }
 
   return `${lines.join('\n')}\n`
@@ -298,4 +323,8 @@ function finiteNonnegative(value: number) {
 
 function formatNumber(value: number) {
   return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(9)))
+}
+
+function dateSeconds(value: Date | null) {
+  return value === null ? '0' : formatNumber(value.getTime() / 1_000)
 }

@@ -27,6 +27,7 @@ export function createPrismaActiveSessionGuard(
       where: {
         id: sessionId,
         userId,
+        user: { anonymizedAt: null },
         revokedAt: null,
         expiresAt: { gt: checkedAt },
         createdAt: { gt: createdAfter },
@@ -40,6 +41,15 @@ export function createPrismaActiveSessionGuard(
     { sessionId, userId },
     action,
   ) => db.$transaction(async (tx) => {
+    const activeAccounts = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id
+      FROM users
+      WHERE id = CAST(${userId} AS uuid)
+        AND anonymized_at IS NULL
+      FOR SHARE
+    `
+    if (activeAccounts.length === 0) return false
+
     const sessions = await tx.$queryRaw<LockedSession[]>`
       SELECT
         created_at AS "createdAt",

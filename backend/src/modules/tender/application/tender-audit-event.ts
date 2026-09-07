@@ -1,5 +1,4 @@
 import {
-  commandIdSchema,
   contractIdSchema,
   laboratoryProtocolSchema,
   playerIdSchema,
@@ -9,12 +8,13 @@ import {
   scientificModelSchema,
   signalIdSchema,
   tenderPhaseSchema,
+  tenderStoredCommandIdSchema,
 } from '@anomaly-detector/contracts'
 import { z } from 'zod'
 
 const auditEventMetadata = {
   actorId: playerIdSchema.optional(),
-  commandId: commandIdSchema.optional(),
+  commandId: tenderStoredCommandIdSchema.optional(),
 }
 
 const playerIdListSchema = z.array(playerIdSchema).max(4)
