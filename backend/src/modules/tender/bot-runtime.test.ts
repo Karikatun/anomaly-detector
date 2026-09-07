@@ -79,3 +79,69 @@ test('a bot with no proven final claim finishes through the ordinary authoritati
   expect((await store.read(tenderId))?.phase).toBe('complete')
   expect((await store.read(tenderId))?.finalScientificModelsByPlayer.bot).toBeUndefined()
 })
+
+test('bot batches rotate past a broken Tender and respect their work budget without starving later matches', async () => {
+  const storage = createInMemoryTenderStore()
+  let elapsed = 0
+  const store = {
+    ...storage,
+    async read(id: string) {
+      elapsed += 10
+      if (id === 'tender-1') throw new Error('Isolated corrupt test state')
+      return storage.read(id)
+    },
+  }
+  const module = createTenderModule({ store })
+  for (let index = 0; index < 3; index += 1) {
+    await module.createTender({ players: [
+      { id: 'human', tiePriority: 1 },
+      { id: 'bot', tiePriority: 2, bot: { difficulty: 'easy', strategyVersion: 'bot-v2' } },
+    ] })
+  }
+  const runner = createTenderBotRunner({ store, tender: module, nowMs: () => elapsed })
+  expect(await runner.advance({ limit: 3, timeBudgetMs: 1 })).toEqual({ acceptedCommands: 0, failedTenders: 1 })
+  expect(await runner.advance({ limit: 3, timeBudgetMs: 1 })).toEqual({ acceptedCommands: 1, failedTenders: 0 })
+  expect(await runner.advance({ limit: 3, timeBudgetMs: 1 })).toEqual({ acceptedCommands: 1, failedTenders: 0 })
+  expect((await storage.read('tender-2'))?.requestedSlots.bot).toBe(6)
+  expect((await storage.read('tender-3'))?.requestedSlots.bot).toBe(6)
+  expect(await runner.advance({ limit: 3, timeBudgetMs: 1 })).toEqual({ acceptedCommands: 0, failedTenders: 1 })
+  await expect(runner.advance({ limit: 101 })).rejects.toThrow('Invalid bot batch limit')
+  await expect(runner.advance({ limit: 1, timeBudgetMs: Number.NaN })).rejects.toThrow('Invalid bot time budget')
+})
+
+test('all-human leave suspends new bot decisions until resume or the ordinary abandonment deadline', async () => {
+  let now = new Date('2026-09-07T12:00:00.000Z')
+  const store = createInMemoryTenderStore()
+  const module = createTenderModule({ store, now: () => now })
+  const { tenderId } = await module.createTender({ players: [
+    { id: 'human', tiePriority: 1 },
+    { id: 'bot-a', tiePriority: 2, bot: { difficulty: 'easy', strategyVersion: 'bot-v2' } },
+    { id: 'bot-b', tiePriority: 3, bot: { difficulty: 'hard', strategyVersion: 'bot-v2' } },
+  ] })
+  await module.execute({ actorId: 'human', commandId: 'leave', tenderId, type: 'leave-tender' })
+  const runner = createTenderBotRunner({ store, tender: module })
+  expect(await runner.advance({ limit: 10 })).toEqual({ acceptedCommands: 0, failedTenders: 0 })
+  await module.execute({ actorId: 'human', commandId: 'resume', tenderId, type: 'resume-tender' })
+  expect((await runner.advance({ limit: 10 })).acceptedCommands).toBe(1)
+  await module.execute({ actorId: 'human', commandId: 'leave-again', tenderId, type: 'leave-tender' })
+  now = new Date(now.getTime() + 5_000)
+  await module.advanceDueTenders({ limit: 10, now })
+  expect(await module.readTenderView({ tenderId, playerId: 'human' })).toMatchObject({
+    phase: 'complete', completionReason: 'all_players_left', winnerPlayerIds: [],
+  })
+})
+
+test('anonymizing the final simulated human also stops bot matches in memory', async () => {
+  const store = createInMemoryTenderStore()
+  const module = createTenderModule({ store })
+  const { tenderId } = await module.createTender({ players: [
+    { id: 'human', tiePriority: 1 },
+    { id: 'bot', tiePriority: 2, bot: { difficulty: 'easy', strategyVersion: 'bot-v2' } },
+  ] })
+  await module.anonymizeParticipant('human')
+  expect(await createTenderBotRunner({ store, tender: module }).advance({ limit: 10 }))
+    .toEqual({ acceptedCommands: 0, failedTenders: 0 })
+  expect(await module.readTenderView({ tenderId, playerId: 'bot' })).toMatchObject({
+    phase: 'complete', completionReason: 'no_human_players', winnerPlayerIds: [],
+  })
+})

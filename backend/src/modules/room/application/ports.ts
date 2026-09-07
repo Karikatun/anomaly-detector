@@ -37,7 +37,7 @@ export type MatchPlacementReader = {
 
 export type TenderLifecycleReader = {
   readLifecycle(input: { playerId: string; tenderId: string }): Promise<{
-    completionReason?: 'all_players_forfeited' | 'all_players_left' | 'last_active_player'
+    completionReason?: 'all_players_forfeited' | 'all_players_left' | 'last_active_player' | 'no_human_players'
     forfeited: boolean
     phase: TenderPhase
     ruleset: TenderRuleset

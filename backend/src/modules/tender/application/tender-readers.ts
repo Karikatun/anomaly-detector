@@ -21,7 +21,7 @@ export type CompletedTenderSummary = {
 }
 
 export type TenderLifecycle = {
-  completionReason?: 'all_players_forfeited' | 'all_players_left' | 'last_active_player'
+  completionReason?: 'all_players_forfeited' | 'all_players_left' | 'last_active_player' | 'no_human_players'
   forfeited: boolean
   phase: StoredTender['phase']
   ruleset: StoredTender['ruleset']

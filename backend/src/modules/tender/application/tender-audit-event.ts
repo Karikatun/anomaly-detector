@@ -155,7 +155,7 @@ export const tenderAuditEventSchema = z.discriminatedUnion('kind', [
     playerIds: playerIdListSchema,
   }).strict()),
   eventSchema('tender_completed_early', z.object({
-    completionReason: z.enum(['all_players_forfeited', 'last_active_player']),
+    completionReason: z.enum(['all_players_forfeited', 'last_active_player', 'no_human_players']),
     winnerPlayerIds: playerIdListSchema,
   }).strict()),
   eventSchema('thesis_checked', z.object({
