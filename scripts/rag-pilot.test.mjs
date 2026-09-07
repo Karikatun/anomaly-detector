@@ -1,13 +1,125 @@
 import { describe, expect, test } from 'bun:test'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { deriveStatus, evaluateBenchmark, isCorpusPath } from './rag-pilot.mjs'
 
 const meta = { startedAt: '2026-09-07T12:00:00Z', deadline: '2026-09-14T12:00:00Z' }
+const rootId = '01a07b95-0815-73d1-acea-5b79c1b7d2d0'
+const childId = '01a07b95-0815-73d1-acea-5b79c1b7d2d1'
+const digest = (s) => createHash('sha256').update(s).digest('hex')
+
+function observationFixture() {
+  const root = mkdtempSync(join(tmpdir(), 'rag-observation-test-'))
+  const pilot = join(root, '.scratch/rag-pilot')
+  const codexHome = join(root, 'codex-home')
+  const sessions = join(codexHome, 'sessions/2026/09/07')
+  for (const path of [join(root, 'scripts'), pilot, sessions]) mkdirSync(path, { recursive: true })
+  for (const name of ['rag-pilot.mjs', 'secret-check.mjs']) copyFileSync(join(import.meta.dir, name), join(root, 'scripts', name))
+  writeFileSync(join(pilot, 'meta.json'), JSON.stringify({ ...meta, deadline: '2099-01-01T00:00:00Z', entries: {}, cases: [] }))
+  writeFileSync(join(pilot, 'safety.json'), JSON.stringify({ safe: true }))
+  const session = (id, source, extra = {}) => writeFileSync(join(sessions, `rollout-test-${id}.jsonl`),
+    `${JSON.stringify({ type: 'session_meta', payload: { id, source, ...extra } })}\n`)
+  session(rootId, 'vscode')
+  const options = (id) => ({ encoding: 'utf8', timeout: 5000, env: { ...process.env, CODEX_HOME: codexHome, CODEX_THREAD_ID: id } })
+  const args = (...a) => [join(root, 'scripts/rag-pilot.mjs'), ...a]
+  const call = (id, ...a) => spawnSync(process.execPath, args(...a), options(id))
+  const concurrent = (id, ...a) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, args(...a), options(id))
+    let stdout = '', stderr = ''
+    child.stdout.on('data', (data) => { stdout += data })
+    child.stderr.on('data', (data) => { stderr += data })
+    child.on('error', reject)
+    child.on('close', (status) => resolve({ status, stdout, stderr }))
+  })
+  const records = (dir) => existsSync(join(pilot, dir)) ? readdirSync(join(pilot, dir)) : []
+  return { root, pilot, sessions, session, call, concurrent, records, cleanup: () => rmSync(root, { recursive: true, force: true }) }
+}
 
 describe('bounded retrieval pilot', () => {
+  test('only a verified top-level Codex task can search or observe; descendants and invented IDs consume no slots', () => {
+    const f = observationFixture()
+    try {
+      for (const source of [{ subagent: { thread_spawn: { parent_thread_id: rootId, depth: 1 } } },
+        { subagent: { thread_spawn: { parent_thread_id: 'intermediate-agent', depth: 3 } } }, 'unknown']) {
+        f.session(childId, source)
+        for (const command of [['identity'], ['batch'], ['search', childId, 'query'], ['search', rootId, 'query'], ['observe', childId, 'not-useful'], ['observe', rootId, 'not-useful']]) {
+          expect(f.call(childId, ...command).status).toBe(1)
+        }
+      }
+      expect(f.call(rootId, 'search', childId, 'query').status).toBe(1)
+      expect(f.call('', 'search', rootId, 'query').status).toBe(1)
+      f.session(rootId, 'vscode', { forked_from_id: childId })
+      expect(f.call(rootId, 'search', rootId, 'query').status).toBe(1)
+      expect(f.records('task-slots')).toHaveLength(0)
+      expect(f.records('observations')).toHaveLength(0)
+      f.session(rootId, 'vscode')
+      expect(JSON.parse(f.call(rootId, 'identity').stdout).taskId).toBe(digest(rootId))
+      expect(f.records('task-slots')).toHaveLength(0)
+      expect(f.call(rootId, 'search', rootId, 'query').status).toBe(0)
+      expect(f.call(rootId, 'observe', rootId, 'not-useful').status).toBe(0)
+      expect(f.call(rootId, 'observe', rootId, 'not-useful').status).toBe(0)
+      expect(f.records('task-slots')).toHaveLength(1)
+      expect(f.records('observations')).toHaveLength(1)
+    } finally { f.cleanup() }
+  })
+  test('five distinct top-level tasks retain separate observations and a sixth cannot exceed the quota', () => {
+    const f = observationFixture()
+    try {
+      for (let n = 0; n < 6; n++) {
+        const id = `${rootId.slice(0, -1)}${n}`
+        f.session(id, 'vscode')
+        expect(f.call(id, 'search', id, 'query').status).toBe(n < 5 ? 0 : 1)
+        if (n < 5) expect(f.call(id, 'observe', id, 'not-useful').status).toBe(0)
+      }
+      expect(f.records('task-slots')).toHaveLength(5)
+      expect(f.records('observations')).toHaveLength(5)
+      expect(JSON.parse(f.call(rootId, 'status').stdout).phase).toBe('ACTIVE')
+    } finally { f.cleanup() }
+  })
+  test('missing, ambiguous or malformed session metadata fails closed before reserving a slot', () => {
+    const f = observationFixture()
+    try {
+      rmSync(join(f.sessions, `rollout-test-${rootId}.jsonl`))
+      expect(f.call(rootId, 'search', rootId, 'query').status).toBe(1)
+      f.session(rootId, 'vscode')
+      writeFileSync(join(f.sessions, `duplicate-${rootId}.jsonl`), '{}\n')
+      expect(f.call(rootId, 'search', rootId, 'query').status).toBe(1)
+      rmSync(join(f.sessions, `duplicate-${rootId}.jsonl`))
+      writeFileSync(join(f.sessions, `rollout-test-${rootId}.jsonl`), '{broken\n')
+      expect(f.call(rootId, 'search', rootId, 'query').status).toBe(1)
+      writeFileSync(join(f.sessions, `rollout-test-${rootId}.jsonl`), 'PRIVATE_FIXTURE_MARKER{invalid\n')
+      expect(f.call(rootId, 'identity').stderr).not.toContain('PRIVATE_FIXTURE_MARKER')
+      writeFileSync(join(f.sessions, `rollout-test-${rootId}.jsonl`), `${'x'.repeat(65536)}\n`)
+      expect(f.call(rootId, 'identity').status).toBe(1)
+      expect(f.records('task-slots')).toHaveLength(0)
+    } finally { f.cleanup() }
+  })
+  test('concurrent searches and observations from one tree consume one slot and one immutable observation', async () => {
+    const f = observationFixture()
+    try {
+      const searches = await Promise.all(Array.from({ length: 8 }, () => f.concurrent(rootId, 'search', rootId, 'query')))
+      expect(searches.some((x) => x.status === 0)).toBe(true)
+      for (const x of searches) if (x.status !== 0) expect(x.stderr).toContain('already reserved')
+      expect(f.records('task-slots')).toHaveLength(1)
+      expect(f.records('task-searches')).toHaveLength(1)
+      const observations = await Promise.all(Array.from({ length: 8 }, () => f.concurrent(rootId, 'observe', rootId, 'not-useful')))
+      expect(observations.every((x) => x.status === 0)).toBe(true)
+      expect(f.records('observations')).toHaveLength(1)
+      expect(f.call(rootId, 'observe', rootId, 'useful', 'docs/a.md').status).toBe(1)
+      expect(JSON.parse(readFileSync(join(f.pilot, 'observations', `${digest(rootId)}.json`))).useful).toBe(false)
+    } finally { f.cleanup() }
+  })
+  test('an interrupted search reservation cannot be retried with another query or allocate another slot', () => {
+    const f = observationFixture()
+    try {
+      mkdirSync(join(f.pilot, 'task-claims', digest(rootId)), { recursive: true })
+      expect(f.call(rootId, 'search', rootId, 'different query').stderr).toContain('already reserved')
+      expect(f.records('task-slots')).toHaveLength(0)
+    } finally { f.cleanup() }
+  })
   test('CLI persists closure across fresh processes and init cannot restart an expired pilot', () => {
     const fixture = mkdtempSync(join(tmpdir(), 'rag-pilot-test-'))
     try {
