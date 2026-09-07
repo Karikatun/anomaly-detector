@@ -37,6 +37,7 @@ maybeDescribe('auth API integration', () => {
     JWT_SECRET: TEST_ACCOUNT_LIFECYCLE_SECRET,
     ADMIN_USER_IDS: [],
     ANALYTICS_ENABLED: false,
+    ROOM_BOT_CREATION_DISABLED: false,
     ANALYTICS_ORIGINS: [],
     ANALYTICS_CAMPAIGN_ALLOWLIST: [],
     CORS_ORIGINS: ['http://localhost:5173'],

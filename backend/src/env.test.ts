@@ -21,6 +21,7 @@ describe('loadEnv', () => {
     expect(env.SESSION_ABSOLUTE_TTL_DAYS).toBe(90)
     expect(env.COOKIE_SECURE).toBe(false)
     expect(env.ANALYTICS_ENABLED).toBe(false)
+    expect(env.ROOM_BOT_CREATION_DISABLED).toBe(false)
     expect(env.ANALYTICS_ORIGINS).toEqual([])
     expect(env.ANALYTICS_CAMPAIGN_ALLOWLIST).toEqual([])
     expect(env.ADMIN_USER_IDS).toEqual([])
@@ -31,6 +32,17 @@ describe('loadEnv', () => {
     expect(env.YANDEX_STORAGE_UPLOAD_URL_TTL_SECONDS).toBe(900)
     expect(env.YANDEX_STORAGE_DOWNLOAD_URL_TTL_SECONDS).toBe(300)
     expect(env.YANDEX_STORAGE_PUBLIC_CACHE_CONTROL).toBe('public, max-age=31536000, immutable')
+  })
+
+  test('parses the server-only room bot creation switch strictly', () => {
+    const base = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+
+    expect(loadEnv({ ...base, ROOM_BOT_CREATION_DISABLED: 'true' }).ROOM_BOT_CREATION_DISABLED).toBe(true)
+    expect(loadEnv({ ...base, ROOM_BOT_CREATION_DISABLED: 'false' }).ROOM_BOT_CREATION_DISABLED).toBe(false)
+    expect(() => loadEnv({ ...base, ROOM_BOT_CREATION_DISABLED: '1' })).toThrow('ROOM_BOT_CREATION_DISABLED')
   })
 
   test('parses bounded anti-abuse policy overrides without changing defaults implicitly', () => {

@@ -17,6 +17,7 @@ maybeDescribe('profile statistics API integration', () => {
     ACCESS_TOKEN_TTL_SECONDS: 60,
     ANALYTICS_CAMPAIGN_ALLOWLIST: [],
     ANALYTICS_ENABLED: false,
+    ROOM_BOT_CREATION_DISABLED: false,
     ANALYTICS_ORIGINS: [],
     AUTH_BODY_LIMIT_BYTES: 64 * 1024,
     AUTH_RATE_LIMIT_MAX: 60,

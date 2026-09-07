@@ -69,6 +69,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   ADMIN_USER_IDS: uuidListSchema,
   ANALYTICS_ENABLED: booleanStringSchema,
+  ROOM_BOT_CREATION_DISABLED: booleanStringSchema,
   ANALYTICS_ORIGINS: originListSchema,
   ANALYTICS_CAMPAIGN_ALLOWLIST: analyticsCampaignListSchema,
   CORS_ORIGINS: z

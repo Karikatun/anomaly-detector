@@ -100,6 +100,64 @@ test('projects an added easy bot separately from human room members', async () =
   })
 })
 
+test('does not call the repository to add a bot while creation is disabled', async () => {
+  let addBotCalled = false
+  const service = new TenderRoomService({
+    ...serviceDefaults,
+    botCreationDisabled: true,
+    repository: {
+      ...unusedRepositoryOperations,
+      addBot: async () => {
+        addBotCalled = true
+        throw new Error('repository must not be called')
+      },
+    },
+  })
+
+  await expect(service.addBot({ actorId: 'user-1', difficulty: 'easy', roomId: 'room-1', seat: 2 }))
+    .rejects.toMatchObject({ kind: 'room_bot_creation_disabled', message: 'Добавление ботов временно недоступно.' })
+  expect(addBotCalled).toBe(false)
+})
+
+test('keeps existing bot removal, updates, and room start available while creation is disabled', async () => {
+  const calls: string[] = []
+  const room = {
+    allowBots: true,
+    bots: [{ difficulty: 'easy' as const, id: '019f8099-7e26-7760-ad08-66d1d66b2720', seat: 2 }],
+    capacity: 2 as const,
+    hostId: 'user-1',
+    id: 'room-1',
+    members: [{ ready: true, seat: 1, userId: 'user-1' }],
+    status: 'waiting' as const,
+    tenderId: null,
+  }
+  const service = new TenderRoomService({
+    ...serviceDefaults,
+    botCreationDisabled: true,
+    repository: {
+      ...unusedRepositoryOperations,
+      removeBot: async () => {
+        calls.push('remove')
+        return { ...room, bots: [] }
+      },
+      start: async () => {
+        calls.push('start')
+        return { ...room, startsAt: fixedNow.toISOString(), status: 'starting' as const }
+      },
+      updateBotDifficulty: async () => {
+        calls.push('update')
+        return { ...room, bots: [{ ...room.bots![0]!, difficulty: 'hard' as const }] }
+      },
+    },
+  })
+
+  await service.removeBot({ actorId: 'user-1', botId: room.bots![0]!.id, roomId: room.id })
+  await service.updateBotDifficulty({ actorId: 'user-1', botId: room.bots![0]!.id, difficulty: 'hard', roomId: room.id })
+  await service.startRoom({ actorId: 'user-1', roomId: room.id })
+
+  expect(calls).toEqual(['remove', 'update', 'start'])
+})
+
 test('projects a changed bot difficulty separately from human room members', async () => {
   const service = new TenderRoomService({
     ...serviceDefaults,

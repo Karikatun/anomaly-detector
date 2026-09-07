@@ -104,6 +104,7 @@ describe('storageConfigFromEnv', () => {
         JWT_SECRET: '12345678901234567890123456789012',
         ADMIN_USER_IDS: [],
         ANALYTICS_ENABLED: false,
+        ROOM_BOT_CREATION_DISABLED: false,
         ANALYTICS_ORIGINS: [],
         ANALYTICS_CAMPAIGN_ALLOWLIST: [],
         CORS_ORIGINS: ['http://localhost:5173'],
