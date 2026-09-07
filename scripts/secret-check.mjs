@@ -22,15 +22,15 @@ export function findSecretViolations(files) {
     const forbiddenName = forbiddenFileKind(path)
     if (forbiddenName) violations.push({ kind: forbiddenName, path })
 
-    for (const candidate of contentPatterns) {
-      if (candidate.pattern.test(file.source)) {
-        violations.push({ kind: candidate.kind, path })
-      }
-    }
+    for (const kind of secretContentKinds(file.source)) violations.push({ kind, path })
   }
 
   return violations.sort((left, right) =>
     left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind))
+}
+
+export function secretContentKinds(source) {
+  return contentPatterns.filter(({ pattern }) => pattern.test(source)).map(({ kind }) => kind)
 }
 
 function forbiddenFileKind(path) {

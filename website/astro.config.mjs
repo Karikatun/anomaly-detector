@@ -1,5 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import { fileURLToPath } from 'node:url';
+import { assertStaticArtifacts } from '../scripts/static-artifacts.mjs';
 
 import {
 	loadWebsiteReleaseEnvironment,
@@ -38,6 +40,12 @@ if (process.env.WEBSITE_RELEASE_BUILD === 'true') {
 //      Yandex Cloud static path; use rebuilds or CDN/runtime cache
 //      freshness instead.
 export default defineConfig({
+	integrations: [{
+		name: 'static-artifact-guard',
+		hooks: {
+			'astro:build:done': ({ dir }) => assertStaticArtifacts(fileURLToPath(dir)),
+		},
+	}],
 	...(process.env.LOCAL_MVP_ENV_DIR
 		? { vite: { envDir: process.env.LOCAL_MVP_ENV_DIR } }
 		: {}),
