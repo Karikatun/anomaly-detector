@@ -149,8 +149,12 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
     media.addEventListener('change', applyViewport)
     return () => media.removeEventListener('change', applyViewport)
   }, [currentPlayer?.playerId])
-  const playerName = (playerId: string) =>
-    view.players.find((player) => player.playerId === playerId)?.displayName ?? playerId
+  const playerName = (playerId: string) => {
+    const player = view.players.find((candidate) => candidate.playerId === playerId)
+    return player?.bot
+      ? translate(`tender.player.bot.${player.bot.difficulty}`)
+      : player?.displayName ?? playerId
+  }
   const completionReasonLabel = translate(presentation.completionReasonKey)
   const ratingEntries = (playerId: string) => presentation.ratingEntries(playerId)
     .map(({ key, points }) => ({ label: ratingLabels[key], points }))
@@ -188,7 +192,9 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
         return (
           <article key={player.playerId} className={styles.auditPlayer}>
             <Typography as="h4" variant="bodySmMedium">
-              {player.displayName ?? player.playerId.slice(0, 8)}
+              {player.bot
+                ? translate(`tender.player.bot.${player.bot.difficulty}`)
+                : player.displayName ?? player.playerId.slice(0, 8)}
             </Typography>
             {!result?.submitted ? (
               <Typography variant="caption" tone="muted">{translate('tender.completedTenderPanel.copy.023')}</Typography>

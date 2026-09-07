@@ -100,9 +100,12 @@ export function TenderLaboratoryJournal({
 }) {
   const { t } = useI18n()
   const latest = results.at(-1)
-  const playerName = latest
-    ? players.find((player) => player.playerId === latest.playerId)?.displayName
+  const latestPlayer = latest
+    ? players.find((player) => player.playerId === latest.playerId)
     : undefined
+  const playerName = latestPlayer?.bot
+    ? t(`tender.player.bot.${latestPlayer.bot.difficulty}`)
+    : latestPlayer?.displayName
 
   return (
     <section className={styles.journalPanel} aria-labelledby="laboratory-journal-heading">

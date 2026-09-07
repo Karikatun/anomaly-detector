@@ -42,6 +42,8 @@ function RoomLobbyContent() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [rosterFocusTarget, setRosterFocusTarget] = useState<{ seat: number; target: 'add' | 'difficulty' } | null>(null)
+  const playersPanelRef = useRef<HTMLElement | null>(null)
 
   const api = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
   const { mutateAsync: leaveRoom, isPending: isLeaving } = useLeaveRoomMutation({ api })
@@ -53,6 +55,7 @@ function RoomLobbyContent() {
   const { mutateAsync: updateBotDifficulty, isPending: isUpdatingBotDifficulty } = useUpdateRoomBotDifficultyMutation({ api })
   const roomQuery = useRoomQuery({ api, roomId })
   const currentRoom = roomQuery.data
+  const isChangingRoster = isAddingBot || isRemovingBot || isUpdatingBotDifficulty
   const secondsLeft = useSynchronizedCountdown(
     currentRoom?.startsAt,
     currentRoom?.serverTime,
@@ -68,6 +71,23 @@ function RoomLobbyContent() {
       void navigate({ to: '/tenders/$tenderId', params: { tenderId: currentRoom.tenderId }, search: { from: undefined } })
     }
   }, [currentRoom, navigate])
+
+  useEffect(() => {
+    const target = rosterFocusTarget
+    if (!target || isChangingRoster) return
+    const selector = target.target === 'difficulty'
+      ? `[data-bot-difficulty-seat="${target.seat}"]`
+      : `[data-add-bot-seat="${target.seat}"]`
+    const control = playersPanelRef.current?.querySelector<HTMLElement>(selector)
+    if (!control) return
+    const activeElement = document.activeElement
+    if (activeElement !== document.body && activeElement !== control) {
+      setRosterFocusTarget(null)
+      return
+    }
+    control.focus()
+    setRosterFocusTarget(null)
+  }, [currentRoom, isChangingRoster, rosterFocusTarget])
 
   const handleCopy = useCallback(async () => {
     const joinCredential = currentRoom?.joinCode ?? roomId
@@ -128,17 +148,28 @@ function RoomLobbyContent() {
   )
 
   const handleAddBot = useCallback(
-    (seat: number) => runRoomAction(() => addBot({ roomId, seat })),
+    (seat: number) => runRoomAction(
+      () => addBot({ roomId, seat }),
+      () => setRosterFocusTarget({ seat, target: 'difficulty' }),
+    ),
     [addBot, roomId, runRoomAction],
   )
 
   const handleRemoveBot = useCallback(
-    (botId: string) => runRoomAction(() => removeBot({ botId, roomId })),
+    (botId: string, seat: number) => runRoomAction(
+      () => removeBot({ botId, roomId }),
+      () => setRosterFocusTarget({ seat, target: 'add' }),
+    ),
     [removeBot, roomId, runRoomAction],
   )
 
   const handleBotDifficultyChange = useCallback(
-    (botId: string, difficulty: 'easy' | 'hard') => runRoomAction(() => updateBotDifficulty({ botId, difficulty, roomId })),
+    (botId: string, difficulty: 'easy' | 'hard', seat: number, restoreFocus: boolean) => {
+      return runRoomAction(() => updateBotDifficulty({ botId, difficulty, roomId }))
+        .finally(() => {
+          if (restoreFocus) setRosterFocusTarget({ seat, target: 'difficulty' })
+        })
+    },
     [roomId, runRoomAction, updateBotDifficulty],
   )
 
@@ -176,8 +207,6 @@ function RoomLobbyContent() {
   const isCountdown = currentRoom.status === 'starting'
   const canLeave = isMember && currentRoom.status === 'waiting'
   const canManageBots = isHost && currentRoom.allowBots && currentRoom.status === 'waiting'
-  const isChangingRoster = isAddingBot || isRemovingBot || isUpdatingBotDifficulty
-
   return (
     <main className={expeditionStyles.screen}>
       <ExpeditionBackground />
@@ -213,8 +242,13 @@ function RoomLobbyContent() {
 
         <div className={styles.layout}>
           <aside className={styles.leftColumn}>
-            <section className={styles.playersPanel}>
+            <section className={styles.playersPanel} ref={playersPanelRef}>
               <Typography as="h2" className={styles.sectionTitle}>{t('lobby.players')}</Typography>
+              {canManageBots && bots.length > 0 ? (
+                <Typography id="lobby-bot-difficulty-goal" variant="caption" className={styles.botDifficultyGoal}>
+                  {t('lobby.bot.difficulty.goal')}
+                </Typography>
+              ) : null}
               <Typography as="div" className={styles.playerList}>
                 {Array.from({ length: currentRoom.capacity }, (_, index) => {
                   const seat = index + 1
@@ -264,10 +298,17 @@ function RoomLobbyContent() {
                             <NativeSelect
                               size="sm"
                               aria-label={t('lobby.bot.difficulty.label', { seat })}
+                              aria-describedby="lobby-bot-difficulty-goal"
+                              data-bot-difficulty-seat={seat}
                               className={styles.botDifficulty}
                               disabled={isChangingRoster}
                               value={bot.difficulty}
-                              onChange={(event) => void handleBotDifficultyChange(bot.id, event.currentTarget.value as 'easy' | 'hard')}
+                              onChange={(event) => void handleBotDifficultyChange(
+                                bot.id,
+                                event.currentTarget.value as 'easy' | 'hard',
+                                seat,
+                                event.currentTarget === document.activeElement,
+                              )}
                             >
                               <option value="easy">{t('lobby.bot.difficulty.easy')}</option>
                               <option value="hard">{t('lobby.bot.difficulty.hard')}</option>
@@ -276,7 +317,7 @@ function RoomLobbyContent() {
                               className={styles.botAction}
                               type="button"
                               disabled={isChangingRoster}
-                              onClick={() => void handleRemoveBot(bot.id)}
+                              onClick={() => void handleRemoveBot(bot.id, seat)}
                             >
                               {isRemovingBot ? t('lobby.bot.removing') : t('lobby.bot.remove')}
                             </Button>
@@ -292,6 +333,7 @@ function RoomLobbyContent() {
                         <Button
                           className={styles.botAction}
                           type="button"
+                          data-add-bot-seat={seat}
                           disabled={isChangingRoster}
                           onClick={() => void handleAddBot(seat)}
                         >
