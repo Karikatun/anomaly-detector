@@ -219,8 +219,20 @@ async function disconnectTrackedTenderSockets(page: Page) {
 }
 
 async function chooseAccessSlot(page: Page, slot: number) {
+  const commandResponse = page.waitForResponse((response) => {
+    const request = response.request()
+    if (
+      request.method() !== 'POST'
+      || !/^\/api\/tenders\/[0-9a-f-]{36}\/commands$/.test(new URL(response.url()).pathname)
+    ) return false
+    const command = request.postDataJSON() as { slot?: number; type?: string } | null
+    return command?.type === 'request-access-slot' && command.slot === slot
+  })
   await page.getByRole('button', { name: new RegExp(`^Слот доступа ${slot}:`) }).click()
   await page.getByRole('button', { name: 'Подтвердить выбор' }).click()
+  const response = await commandResponse
+  expect(response.status()).toBe(200)
+  expect(await response.finished()).toBeNull()
 }
 
 async function allocatePower(page: Page, allocation: Record<string, number>) {
