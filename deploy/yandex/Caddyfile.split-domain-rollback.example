@@ -1,6 +1,18 @@
 # Immediate rollback profile for ADR 0014. It restores the player SPA on the
 # public root while keeping API and operator boundaries unchanged. Substitute
 # only the retained pre-cutover static roots and Caddy environment values.
+(static_file_guard) {
+	@hiddenFiles {
+		path_regexp hiddenFiles (^|/)\.
+		not path /.well-known/*
+	}
+	@hiddenWellKnown path_regexp hiddenWellKnown ^/\.well-known/(.*/)?\.
+	@privateArtifacts path_regexp privateArtifacts (?i)\.(bak|backup|old|orig|save|swp|swo|tmp|sql|dump|zip|tar|tgz|gz|bz2|xz|7z|rar|key|pem|p12|pfx|map)(\.|/|$)|~($|/)
+	respond @hiddenFiles 404
+	respond @hiddenWellKnown 404
+	respond @privateArtifacts 404
+}
+
 anomaly-detector.ru {
 	root * {$ANOMALY_WEBAPP_ROOT}
 	encode zstd gzip
@@ -20,6 +32,7 @@ anomaly-detector.ru {
 	header @playerAssets Cache-Control "public, max-age=31536000, immutable"
 
 	route {
+		import static_file_guard
 		try_files {path} /index.html
 		header /index.html Cache-Control "public, max-age=0, must-revalidate"
 		file_server
@@ -57,6 +70,7 @@ ops.anomaly-detector.ru {
 	}
 
 	route {
+		import static_file_guard
 		try_files {path} /index.html
 		file_server
 	}
