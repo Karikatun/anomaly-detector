@@ -132,6 +132,16 @@ export function createInMemoryTenderStore(): TenderStore {
         .map((tender) => tender.id)
     },
 
+    async findBotTenders({ afterId, limit }) {
+      return [...tenders.values()]
+        .filter((tender) => tender.phase !== 'complete'
+          && tender.players.some((player) => player.bot)
+          && (afterId === undefined || tender.id > afterId))
+        .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+        .slice(0, limit)
+        .map((tender) => tender.id)
+    },
+
     async listCompletedForPlayer(playerId) {
       return [...tenders.values()]
         .filter((tender) =>

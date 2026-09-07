@@ -425,6 +425,7 @@ export function createTenderService({
     const receipt = { tenderId: command.tenderId, version: tender.version + 1 }
     const result = await store.commit({
       actorId: command.actorId,
+      ...(tender.players.find((player) => player.id === command.actorId)?.bot ? { botActor: true as const } : {}),
       auditEvents,
       tenderId: command.tenderId,
       expectedVersion: tender.version,
@@ -537,7 +538,7 @@ export function createTenderService({
       return { tenderId: tender.id }
     },
 
-    async execute(commandInput: TenderCommand): Promise<CommandReceipt> {
+    async execute(commandInput: TenderCommand, options?: { expectedVersion: number }): Promise<CommandReceipt> {
       const command = parseCommand(commandInput)
       const tender = await readTender(command.tenderId)
       const player = readPlayer(tender, command.actorId)
@@ -551,6 +552,9 @@ export function createTenderService({
           throw new TenderFailure('duplicate_command_conflict', `Command ${command.commandId} conflicts with its first use`)
         }
         return previousCommand.receipt
+      }
+      if (options && tender.version !== options.expectedVersion) {
+        throw new TenderFailure('tender_version_conflict', 'Tender changed after decision projection')
       }
       if (!isActivePlayer(tender, player.id) && command.type !== 'forfeit-tender') {
         throw new TenderFailure('player_forfeited', 'Player permanently forfeited this Tender')
@@ -1547,8 +1551,11 @@ export function createTenderService({
         phase: tender.phase,
         dueAt: tender.dueAt?.toISOString() ?? null,
         players: tender.players.map((player) => ({
+          ...(player.bot ? { bot: player.bot } : {}),
           playerId: player.id,
-          displayName: player.displayName ?? player.id.slice(0, 8),
+          displayName: player.bot
+            ? player.bot.difficulty === 'easy' ? 'Бот · лёгкий' : 'Бот · сложный'
+            : player.displayName ?? player.id.slice(0, 8),
           tiePriority: tiePriorities[player.id],
           ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
           ...(!isActivePlayer(tender, player.id) ? { forfeited: true } : {}),

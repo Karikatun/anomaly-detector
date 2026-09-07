@@ -56,11 +56,12 @@ export function createInMemoryRoomRepository(): RoomRepository {
     return room
   }
   const repository: RoomRepository = {
+    async addBot() { throw new Error('not implemented by contract fixture') },
     async cancelStart({ roomId }) {
       const current = readRoom()
       if (current.id !== roomId) throw new Error('Room does not exist')
       room = { ...current, startsAt: null, status: 'waiting' }
-      return room
+      return room!
     },
     async create({ capacity, hostId }) {
       room = {
@@ -117,6 +118,7 @@ export function createInMemoryRoomRepository(): RoomRepository {
       }
       return current
     },
+    async removeBot() { throw new Error('not implemented by contract fixture') },
     async releaseCurrentForMember({ userId }) {
       currentByUser.delete(userId)
     },

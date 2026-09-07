@@ -68,6 +68,14 @@ export class TenderRoomService {
     await this.dependencies.repository.leave(input)
   }
 
+  async addBot(input: { actorId: string; difficulty: 'easy'; roomId: string; seat: number }): Promise<RoomView> {
+    return this.toRoomView(await this.dependencies.repository.addBot(input), input.actorId)
+  }
+
+  async removeBot(input: { actorId: string; botId: string; roomId: string }): Promise<RoomView> {
+    return this.toRoomView(await this.dependencies.repository.removeBot(input), input.actorId)
+  }
+
   async setReady(input: { actorId: string; ready: boolean; roomId: string }): Promise<RoomView> {
     return this.toRoomView(await this.dependencies.repository.setReady(input), input.actorId)
   }
@@ -105,6 +113,8 @@ export class TenderRoomService {
     const userIds = room.members.map((member) => member.userId)
     const displayNames = await this.dependencies.memberIdentityReader.readDisplayNames(userIds)
     return {
+      allowBots: room.allowBots ?? false,
+      ...(room.bots === undefined ? {} : { bots: room.bots }),
       capacity: room.capacity,
       hostId: room.hostId,
       joinCode: room.joinCode ?? null,

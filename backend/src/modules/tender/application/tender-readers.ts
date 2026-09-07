@@ -32,6 +32,7 @@ export function createCompletedTenderSummaryReader(store: TenderStore) {
     async listCompletedForPlayer(playerId: string): Promise<CompletedTenderSummary[]> {
       const summaries: CompletedTenderSummary[] = []
       for (const tender of await store.listCompletedForPlayer(playerId)) {
+        if (tender.players.some((player) => player.bot)) continue
         const auditEvents = await store.readAuditEvents(tender.id)
         summaries.push(toCompletedTenderSummary(tender, auditEvents, playerId))
       }

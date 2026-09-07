@@ -1,4 +1,5 @@
 import {
+  addRoomBotRequestSchema,
   createRoomRequestSchema,
   currentMatchResponseSchema,
   joinRoomByCodeRequestSchema,
@@ -73,6 +74,19 @@ export class RoomsApi {
   cancelStart(roomId: string): Promise<RoomView> {
     return this.transport.request(`/api/rooms/${roomId}/cancel-start`, roomViewSchema, {
       method: 'POST',
+    })
+  }
+
+  addBot(roomId: string, seat: number): Promise<RoomView> {
+    return this.transport.request(`/api/rooms/${roomId}/bots`, roomViewSchema, {
+      method: 'POST',
+      body: addRoomBotRequestSchema.parse({ difficulty: 'easy', seat }),
+    })
+  }
+
+  removeBot(roomId: string, botId: string): Promise<RoomView> {
+    return this.transport.request(`/api/rooms/${roomId}/bots/${botId}`, roomViewSchema, {
+      method: 'DELETE',
     })
   }
 }

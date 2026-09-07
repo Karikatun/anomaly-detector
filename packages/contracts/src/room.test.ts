@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 
 import {
+  addRoomBotRequestSchema,
   createRoomRequestSchema,
   joinRoomByCodeRequestSchema,
   roomJoinCodeSchema,
@@ -9,10 +10,20 @@ import {
 } from './room'
 
 test('Room contracts accept a waiting private room for two to four players', () => {
-  expect(createRoomRequestSchema.parse({ capacity: 3 })).toEqual({ capacity: 3 })
+  expect(createRoomRequestSchema.parse({ capacity: 3 })).toEqual({ capacity: 3, allowBots: false })
+  expect(createRoomRequestSchema.parse({ allowBots: true, capacity: 3 })).toEqual({
+    allowBots: true,
+    capacity: 3,
+  })
   expect(() => createRoomRequestSchema.parse({ capacity: 5 })).toThrow()
   expect(roomViewSchema.parse({
     capacity: 3,
+    allowBots: true,
+    bots: [{
+      difficulty: 'easy',
+      id: '019f8099-7e26-7760-ad08-66d1d66b2720',
+      seat: 2,
+    }],
     hostId: '019f8099-7e26-7760-ad08-66d1d66b2717',
     members: [{
       displayName: 'Исследователь',
@@ -36,6 +47,9 @@ test('Room contracts accept a waiting private room for two to four players', () 
     status: 'waiting',
   })).toThrow()
   expect(setRoomReadyRequestSchema.parse({ ready: true })).toEqual({ ready: true })
+  expect(addRoomBotRequestSchema.parse({ difficulty: 'easy', seat: 3 })).toEqual({ difficulty: 'easy', seat: 3 })
+  expect(() => addRoomBotRequestSchema.parse({ difficulty: 'hard', seat: 3 })).toThrow()
+  expect(() => addRoomBotRequestSchema.parse({ difficulty: 'easy', seat: 5 })).toThrow()
 })
 
 test('Room join codes accept an unambiguous uppercase code and normalize pasted separators', () => {

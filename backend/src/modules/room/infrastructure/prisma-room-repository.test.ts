@@ -10,6 +10,8 @@ test('projects every Prisma Room query shape through one canonical RoomRecord ma
   const createdAt = new Date('2026-07-24T11:59:00.000Z')
 
   expect(toRoomRecord({
+    allowBots: false,
+    bots: [],
     capacity: 3,
     createdAt,
     hostId: 'host',
@@ -21,6 +23,8 @@ test('projects every Prisma Room query shape through one canonical RoomRecord ma
     tenderId: 'tender-1',
     updatedAt: createdAt,
   })).toEqual({
+    allowBots: false,
+    bots: [],
     capacity: 3,
     hostId: 'host',
     id: 'room-1',

@@ -11,6 +11,7 @@ import {
 } from './application/tender-service'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 import { createPrismaTenderStore } from './infrastructure/prisma-tender-store'
+import { createTenderBotRunner } from './application/bot-runner'
 
 type CreateTenderModuleOptions = Partial<Omit<CreateTenderServiceOptions, 'store'>> & {
   store?: CreateTenderServiceOptions['store']
@@ -32,6 +33,11 @@ export function createTenderModule({
 
 export function createPersistentTenderModule(db: DbClient, accountLifecycleSecret?: string) {
   return createTenderModule({ store: createPrismaTenderStore(db, accountLifecycleSecret) })
+}
+
+export function createPersistentTenderBotRunner(db: DbClient, accountLifecycleSecret: string) {
+  const store = createPrismaTenderStore(db, accountLifecycleSecret)
+  return createTenderBotRunner({ store, tender: createTenderModule({ store }) })
 }
 
 export function createPersistentCompletedTenderSummaryReader(db: DbClient) {

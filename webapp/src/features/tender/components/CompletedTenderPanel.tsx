@@ -354,6 +354,9 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
 
         <ol className={styles.ranking}>
           {rankedPlayers.map((player) => {
+            const playerName = player.bot
+              ? translate(`tender.player.bot.${player.bot.difficulty}`)
+              : player.displayName ?? player.playerId.slice(0, 8)
             const isWinner = winnerIds.has(player.playerId)
             const placement = view.audit.placementByPlayer[player.playerId] ?? 1
             const earnedRating = ratingEntries(player.playerId)
@@ -374,9 +377,9 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                     <Typography
                       as="strong"
                       variant="bodySmMedium"
-                      title={player.displayName ?? player.playerId.slice(0, 8)}
+                      title={playerName}
                     >
-                      {player.displayName ?? player.playerId.slice(0, 8)}
+                      {playerName}
                     </Typography>
                     {player.playerId === currentPlayer?.playerId && (
                       <Typography as="span" variant="caption" className={styles.youBadge}>
@@ -392,7 +395,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   <ul
                     className={styles.playerStats}
                     aria-label={translate('tender.completedTenderPanel.finalStanding.playerAria', {
-                      player: player.displayName ?? player.playerId.slice(0, 8),
+                      player: playerName,
                     })}
                   >
                     {[
@@ -416,7 +419,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                 </div>
                 <details
                   className={styles.ratingBreakdown}
-                  aria-label={translate('tender.completedTenderPanel.copy.054', { value1: player.displayName ?? player.playerId.slice(0, 8) })}
+                  aria-label={translate('tender.completedTenderPanel.copy.054', { value1: playerName })}
                 >
                   <summary className={styles.breakdownSummary}>
                     <Typography as="span" variant="caption" className={styles.breakdownPreview}>
