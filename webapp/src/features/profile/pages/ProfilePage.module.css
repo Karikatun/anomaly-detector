@@ -137,9 +137,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 1.5rem;
+  gap: var(--space-6);
   scroll-margin-block: var(--space-4);
-  padding: 1.25rem clamp(1.5rem, 3vw, 2.25rem);
+  padding: var(--space-5) clamp(1.5rem, 3vw, 2.25rem);
   border-top: 1px solid rgba(42, 82, 117, .44);
   background: rgba(4, 17, 29, .72);
 }
@@ -174,20 +174,23 @@
 
 .protectionControlColumn {
   display: grid;
-  justify-items: end;
-  gap: .65rem;
+  width: 20rem;
+  max-width: 100%;
+  justify-items: stretch;
+  gap: var(--space-2);
 }
 
 .protectionState {
   display: grid;
-  min-width: min(100%, 14rem);
-  justify-items: end;
-  gap: .3rem;
-  padding: .75rem 1rem;
+  width: 100%;
+  min-width: 0;
+  justify-items: start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid rgba(73, 133, 172, .42);
   border-radius: var(--radius-panel);
   background: rgba(8, 30, 47, .72);
-  text-align: right;
+  text-align: left;
 }
 
 .protectionState[data-tone='managed'] {
@@ -215,26 +218,28 @@
 }
 
 .protectionActions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: .45rem;
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--space-2);
+}
+
+.protectionActions > button {
+  width: 100%;
 }
 
 .recoveryCodeControl {
-  display: flex;
-  min-width: min(100%, 18rem);
-  align-items: center;
-  justify-content: flex-end;
-  gap: .65rem;
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
 }
 
 .recoveryCodeStatus {
-  max-width: 15rem;
+  max-width: none;
   color: #94adbf;
   font-size: .78rem;
   line-height: 1.35;
-  text-align: right;
+  text-align: left;
 }
 
 .recoveryCodeSheet {
@@ -289,28 +294,29 @@
 .replacementSection {
   grid-template-columns: 1fr;
   align-items: stretch;
+  gap: var(--space-4);
 }
 
 .replacementControl {
   display: grid;
   width: 100%;
-  justify-items: end;
-  gap: .75rem;
+  justify-items: stretch;
+  gap: var(--space-3);
 }
 
 .replacementFactors {
   display: grid;
   width: 100%;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .75rem;
+  gap: var(--space-3);
 }
 
 .replacementFactor {
   display: grid;
   min-width: 0;
   align-content: start;
-  gap: .55rem;
-  padding: 1rem;
+  gap: var(--space-2);
+  padding: var(--space-4);
   border: 1px solid rgba(211, 153, 73, .44);
   border-radius: var(--radius-panel);
   background: rgba(36, 25, 11, .56);
@@ -373,8 +379,8 @@
 .replacementFactorActions {
   display: flex;
   flex-wrap: wrap;
-  gap: .45rem;
-  margin-top: .2rem;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 .protectionDialog {

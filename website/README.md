@@ -52,6 +52,16 @@ Only anonymous, public-equivalent HTML may use shared CDN caching. Personalized
 or auth-dependent responses must use `private` or `no-store` unless a deliberate
 and tested `Vary` strategy proves shared caching safe.
 
+## Запуск установленного приложения
+
+PWA устанавливается из игрового клиента на `app.anomaly-detector.ru`.
+Его manifest задаёт `id`, `start_url` и `scope` как `/`, поэтому запуск ведёт
+на главный экран клиента; вход в аккаунт остаётся обязательным.
+Лендинг не подключает manifest. Старый ярлык корневого сайта при открытии
+в standalone-режиме переходит на `PUBLIC_WEBAPP_URL` без переноса query и hash.
+Обычный визит в браузере показывает лендинг. Переход требует сети;
+офлайн-режим этим исправлением не добавляется.
+
 ## Commands
 
 From the repository root:
