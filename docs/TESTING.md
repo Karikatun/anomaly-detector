@@ -326,3 +326,14 @@ For testing questions, consult the current upstream documentation linked here fi
 - Playwright CLI and browser install: https://playwright.dev/docs/test-cli and https://playwright.dev/docs/browsers
 - Docker Compose: https://docs.docker.com/compose/
 - PostgreSQL Docker Official Image: https://hub.docker.com/_/postgres
+
+## Боты Tender
+
+Серверные сценарии ботов входят в `bun run test:backend:integration`, включая
+несколько процессов, неоднозначный commit, гонку с дедлайном и удаление последнего
+человека. Полный браузерный путь покрывают `room-bots.spec.ts` и
+`room-bots-mixed.spec.ts` в обычном Playwright-контуре webapp.
+
+Воспроизводимые измерения стратегий и ограниченный PostgreSQL worker-стенд
+описаны в [приёмке ботов](BOTS_BENCHMARK.md). Это отдельные локальные измерения;
+они не подменяют человеческую приёмку и проверку реальных устройств.

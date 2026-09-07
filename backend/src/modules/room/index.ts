@@ -16,6 +16,7 @@ import { createRoomStartModule } from './infrastructure/prisma-room-start'
 import { createRoomRoutes } from './transport/routes'
 
 export function createRoomModule(input: {
+  botCreationDisabled: boolean
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   db: DbClient
   joinBudgetPolicy: RequestBudgetPolicy<'room_join'>
@@ -26,6 +27,7 @@ export function createRoomModule(input: {
 }) {
   const clock = { now: () => new Date() }
   const service = new TenderRoomService({
+    botCreationDisabled: input.botCreationDisabled,
     clock,
     matchPlacementReader: {
       readPlacement: (query) => input.tender.readTenderPlacement(query),

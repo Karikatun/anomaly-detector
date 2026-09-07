@@ -17,6 +17,7 @@ const env: AppEnv = {
   JWT_SECRET: 'test-route-secret-at-least-thirty-two-chars-123',
   ADMIN_USER_IDS: [],
   ANALYTICS_ENABLED: false,
+  ROOM_BOT_CREATION_DISABLED: false,
   ANALYTICS_ORIGINS: [],
   ANALYTICS_CAMPAIGN_ALLOWLIST: [],
   CORS_ORIGINS: ['https://ops.example.com', 'https://web.example.com'],

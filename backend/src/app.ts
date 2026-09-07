@@ -100,6 +100,7 @@ export function createApp({
     requestBudgetPolicies,
   })
   const rooms = createRoomModule({
+    botCreationDisabled: env.ROOM_BOT_CREATION_DISABLED,
     authenticatedMutationBudget: auth.authenticatedMutationBudget,
     db: prisma,
     joinBudgetPolicy: requestBudgetPolicies.room_join,

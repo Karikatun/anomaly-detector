@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import { createApp } from '../../app'
 import { createPrisma } from '../../db'
+import { loadEnv } from '../../env'
 import { lockAccountLifecycleTransaction } from '../../security/account-lifecycle-lock'
 import { createPersistentTenderModule } from '../tender'
 import {
@@ -22,6 +24,7 @@ maybeDescribe('Room start integration', () => {
   const cleanDatabase = async () => {
     await prisma.tenderRoom.deleteMany()
     await prisma.tender.deleteMany()
+    await prisma.authAbuseBucket.deleteMany()
     await prisma.user.deleteMany()
   }
 
@@ -108,6 +111,75 @@ maybeDescribe('Room start integration', () => {
         { bot: { difficulty: 'easy', strategyVersion: 'bot-v2' }, playerId: botId, tiePriority: 2 },
       ],
     })
+  })
+
+  test('returns 409 without persisting a new bot while allowing existing bots to be removed and started', async () => {
+    const app = createApp({
+      env: loadEnv({
+        DATABASE_URL: databaseUrl,
+        JWT_SECRET: '12345678901234567890123456789012',
+        ROOM_BOT_CREATION_DISABLED: 'true',
+      }),
+      prisma,
+    })
+    const registration = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'disabled-bot-creation-host',
+        password: 'password123',
+        privacyConsent: true,
+        privacyConsentVersion: '1.1',
+        termsAccepted: true,
+        termsVersion: '1.1',
+      }),
+    })
+    expect(registration.status).toBe(201)
+    const { accessToken } = await registration.json() as { accessToken: string }
+    const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+
+    const created = await app.request('/api/rooms', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ allowBots: true, capacity: 2 }),
+    })
+    expect(created.status).toBe(201)
+    const { roomId } = await created.json() as { roomId: string }
+
+    const rejected = await app.request(`/api/rooms/${roomId}/bots`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ difficulty: 'easy', seat: 2 }),
+    })
+    expect(rejected.status).toBe(409)
+    expect(await rejected.json()).toEqual({
+      error: { code: 'CONFLICT', message: 'Добавление ботов временно недоступно.' },
+    })
+    expect((await prisma.tenderRoom.findUniqueOrThrow({ where: { id: roomId } })).bots).toEqual([])
+
+    const removedBotId = crypto.randomUUID()
+    await prisma.tenderRoom.update({
+      where: { id: roomId },
+      data: { bots: [{ difficulty: 'easy', id: removedBotId, seat: 2 }] },
+    })
+    expect((await app.request(`/api/rooms/${roomId}/bots/${removedBotId}`, {
+      method: 'DELETE',
+      headers,
+    })).status).toBe(200)
+    expect((await prisma.tenderRoom.findUniqueOrThrow({ where: { id: roomId } })).bots).toEqual([])
+
+    await prisma.tenderRoom.update({
+      where: { id: roomId },
+      data: { bots: [{ difficulty: 'easy', id: crypto.randomUUID(), seat: 2 }] },
+    })
+    expect((await app.request(`/api/rooms/${roomId}/ready`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ready: true }),
+    })).status).toBe(200)
+    const started = await app.request(`/api/rooms/${roomId}/start`, { method: 'POST', headers })
+    expect(started.status).toBe(200)
+    expect(await started.json()).toMatchObject({ roomId, status: 'starting' })
   })
 
   test('allows only the host to add and remove an easy bot from an opted-in waiting Room', async () => {
