@@ -22,6 +22,6 @@ export type CompletedTenderSummaryReader = {
 }
 
 export type TutorialProgressRepository = {
-  complete(userId: string, completedAt: Date): Promise<Date>
+  complete(userId: string, completedAt: Date): Promise<Date | null>
   read(userId: string): Promise<Date | null>
 }

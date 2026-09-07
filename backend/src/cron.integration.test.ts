@@ -2,6 +2,13 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { runCronTask } from './cron'
 import {
+  accountDeletionClaimLeaseMs,
+  claimDeletedAccountCleanupBatch,
+  operatorAuditActorCleanupBatchSize,
+  reconcileDeletedAccount,
+  reconcileDeletedAccounts,
+} from './account-deletion-reconciliation'
+import {
   createPrisma,
   isRetryableDatabaseTransactionConflict,
 } from './db'
@@ -11,6 +18,7 @@ import {
   cleanupExpiredPendingMailOutbox,
   createTransactionalMailRequester,
 } from './modules/mail'
+import { createPersistentTenderModule } from './modules/tender'
 import type { BackendRuntime } from './runtime'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -24,6 +32,13 @@ maybeDescribe('maintenance cleanup integration', () => {
   beforeEach(async () => {
     await prisma.mailDeliveryAttempt.deleteMany()
     await prisma.mailOutboxMessage.deleteMany()
+    await prisma.mailPolicyAuditEvent.deleteMany()
+    await prisma.mailPolicyCommand.deleteMany()
+    await prisma.mailPolicyEntry.deleteMany()
+    await prisma.mailPolicyVersion.deleteMany()
+    await prisma.tenderRoom.deleteMany()
+    await prisma.tender.deleteMany()
+    await prisma.feedbackReport.deleteMany()
     await prisma.authSession.deleteMany()
     await prisma.user.deleteMany()
   })
@@ -328,6 +343,612 @@ maybeDescribe('maintenance cleanup integration', () => {
       where: { failureCode: 'retention_expired' },
     })).toBe(8)
   })
+
+  test('reconciles legacy account-deletion tombstones without retaining player links', async () => {
+    const now = new Date('2026-09-04T15:00:00.000Z')
+    const deletedAccount = await prisma.user.create({
+      data: {
+        anonymizedAt: new Date('2026-08-01T12:00:00.000Z'),
+        deletionCleanupAvailableAt: new Date('2026-08-01T12:00:00.000Z'),
+        deletionCleanupCompletedAt: null,
+        displayName: null,
+        login: 'deleted-legacy-account',
+        passwordHash: null,
+        tutorialCompletedAt: new Date('2026-07-01T12:00:00.000Z'),
+      },
+    })
+    const remainingAccount = await prisma.user.create({
+      data: { displayName: 'Оставшийся участник', login: 'legacy-room-peer' },
+    })
+    const tender = createPersistentTenderModule(prisma)
+    const { tenderId } = await tender.createTender({
+      players: [
+        {
+          displayName: 'Deleted participant',
+          id: deletedAccount.id,
+          tiePriority: 1,
+        },
+        {
+          displayName: 'Оставшийся участник',
+          id: remainingAccount.id,
+          tiePriority: 2,
+        },
+      ],
+    })
+    const room = await prisma.tenderRoom.create({
+      data: {
+        capacity: 2,
+        createdAt: now,
+        hostId: deletedAccount.id,
+        joinCode: 'LEGACY0001',
+        members: {
+          create: {
+            ready: true,
+            seat: 2,
+            userId: remainingAccount.id,
+          },
+        },
+        currentMatches: {
+          create: { userId: remainingAccount.id },
+        },
+        startsAt: new Date(now.getTime() + 10_000),
+        status: 'starting',
+      },
+    })
+    const feedback = await prisma.feedbackReport.create({
+      data: {
+        browserClass: 'chromium',
+        category: 'suggestion',
+        createdAt: now,
+        deviceClass: 'desktop',
+        linkedUserId: deletedAccount.id,
+        publicNumber: 'FB-LEGACY001',
+        routeTemplate: '/profile',
+        suggestionDesiredChange: 'Удалить старую связь.',
+        suggestionProblemSolved: 'История удаления останется обезличенной.',
+      },
+    })
+    const feedbackCommandId = '019f8099-7e26-7760-ad08-66d1d66b2a01'
+    const feedbackReceipt = {
+      commandId: feedbackCommandId,
+      reportId: feedback.id,
+      version: 2,
+    }
+    await prisma.feedbackOperatorCommand.create({
+      data: {
+        actorId: deletedAccount.id,
+        commandId: feedbackCommandId,
+        fingerprint: 'a'.repeat(64),
+        kind: 'take_in_review',
+        receipt: feedbackReceipt,
+        reportId: feedback.id,
+      },
+    })
+    await prisma.feedbackAuditEvent.create({
+      data: {
+        actorId: deletedAccount.id,
+        commandId: feedbackCommandId,
+        fromVersion: 1,
+        kind: 'feedback_taken_in_review',
+        payload: { fromStatus: 'new', toStatus: 'in_review' },
+        reportId: feedback.id,
+        toVersion: 2,
+      },
+    })
+    const mailCommandId = '019f8099-7e26-7760-ad08-66d1d66b2a02'
+    const mailReceipt = { kind: 'catalog_synced', version: 1 }
+    await prisma.mailPolicyVersion.create({
+      data: {
+        catalogVersion: 1,
+        providerCatalog: {
+          providers: [{
+            customDomain: null,
+            displayName: 'Test Mail',
+            evidenceUrl: 'https://example.com/mail',
+            providerId: 'vk_mail',
+            publicDomains: [{
+              canonicalization: {
+                ignoreDots: false,
+                localPartCaseInsensitive: false,
+                stripPlusTag: false,
+              },
+              emailDomain: 'mail.ru',
+            }],
+            reason: null,
+            state: 'approved',
+          }],
+          version: 1,
+        },
+        publishedBy: deletedAccount.id,
+        publishedAt: now,
+        version: 1,
+      },
+    })
+    await prisma.mailPolicyCommand.create({
+      data: {
+        actorId: deletedAccount.id,
+        commandId: mailCommandId,
+        fingerprint: 'b'.repeat(64),
+        kind: 'sync_catalog',
+        receipt: mailReceipt,
+      },
+    })
+    await prisma.mailPolicyAuditEvent.create({
+      data: {
+        actorId: deletedAccount.id,
+        commandId: mailCommandId,
+        kind: 'mail_provider_catalog_synced',
+        payload: { catalogVersion: 1, previousVersion: 0, version: 1 },
+      },
+    })
+    const runtime = {
+      env: {
+        JWT_SECRET: 'test-account-lifecycle-secret-0001',
+        MAIL_OUTBOX_RETENTION_DAYS: 30,
+        SESSION_ABSOLUTE_TTL_DAYS: 90,
+        SESSION_RETENTION_DAYS: 7,
+      },
+      prisma,
+    } as unknown as BackendRuntime
+
+    await runCronTask('accounts:deletion-reconcile', runtime, now)
+
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: deletedAccount.id },
+      select: { deletionCleanupCompletedAt: true, tutorialCompletedAt: true },
+    })).toEqual({
+      deletionCleanupCompletedAt: expect.any(Date),
+      tutorialCompletedAt: null,
+    })
+    expect(await prisma.feedbackReport.findUniqueOrThrow({
+      where: { id: feedback.id },
+      select: { linkedUserId: true },
+    })).toEqual({ linkedUserId: null })
+    expect(await prisma.tenderRoom.findUniqueOrThrow({
+      where: { id: room.id },
+      select: {
+        hostId: true,
+        members: { select: { ready: true, userId: true } },
+        startsAt: true,
+        status: true,
+      },
+    })).toEqual({
+      hostId: remainingAccount.id,
+      members: [{ ready: false, userId: remainingAccount.id }],
+      startsAt: null,
+      status: 'waiting',
+    })
+    expect(await prisma.currentMatch.count({ where: { userId: deletedAccount.id } })).toBe(0)
+    const persistedTender = await prisma.tender.findUniqueOrThrow({
+      where: { id: tenderId },
+      select: { state: true },
+    })
+    expect(JSON.stringify(persistedTender.state)).not.toContain(deletedAccount.id)
+    expect(JSON.stringify(persistedTender.state)).toContain('deleted-participant-')
+    const feedbackCommand = await prisma.feedbackOperatorCommand.findUniqueOrThrow({
+      where: { commandId: feedbackCommandId },
+    })
+    const feedbackAudit = await prisma.feedbackAuditEvent.findUniqueOrThrow({
+      where: { commandId: feedbackCommandId },
+    })
+    const mailPolicy = await prisma.mailPolicyVersion.findUniqueOrThrow({
+      where: { version: 1 },
+    })
+    const mailCommand = await prisma.mailPolicyCommand.findUniqueOrThrow({
+      where: { commandId: mailCommandId },
+    })
+    const mailAudit = await prisma.mailPolicyAuditEvent.findUniqueOrThrow({
+      where: { commandId: mailCommandId },
+    })
+    const pseudonymousActorIds = [
+      feedbackCommand.actorId,
+      feedbackAudit.actorId,
+      mailPolicy.publishedBy,
+      mailCommand.actorId,
+      mailAudit.actorId,
+    ]
+    expect(new Set(pseudonymousActorIds).size).toBe(1)
+    expect(pseudonymousActorIds[0]).not.toBe(deletedAccount.id)
+    expect(pseudonymousActorIds[0]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    )
+    expect(feedbackCommand.receipt).toEqual(feedbackReceipt)
+    expect(mailCommand.receipt).toEqual(mailReceipt)
+    expect(JSON.stringify({
+      feedbackAudit: feedbackAudit.payload,
+      feedbackFingerprint: feedbackCommand.fingerprint,
+      feedbackReceipt: feedbackCommand.receipt,
+      mailAudit: mailAudit.payload,
+      mailCatalog: mailPolicy.providerCatalog,
+      mailFingerprint: mailCommand.fingerprint,
+      mailReceipt: mailCommand.receipt,
+    })).not.toContain(deletedAccount.id)
+  })
+
+  test('resumes bounded operator-audit anonymization with one temporary pseudonym', async () => {
+    const now = new Date('2026-09-04T15:30:00.000Z')
+    const accountId = crypto.randomUUID()
+    const deletedAccount = await prisma.user.create({
+      data: {
+        anonymizedAt: now,
+        deletionCleanupAvailableAt: now,
+        deletionCleanupCompletedAt: null,
+        displayName: null,
+        login: `deleted-${accountId}`,
+        passwordHash: null,
+      },
+    })
+    await prisma.mailPolicyCommand.createMany({
+      data: Array.from(
+        { length: operatorAuditActorCleanupBatchSize + 1 },
+        () => ({
+          actorId: deletedAccount.id,
+          commandId: crypto.randomUUID(),
+          fingerprint: 'c'.repeat(64),
+          kind: 'sync_catalog',
+          receipt: { kind: 'catalog_synced', version: 1 },
+        }),
+      ),
+    })
+
+    await expect(reconcileDeletedAccount({
+      db: prisma,
+      lifecycleSecret: 'test-account-lifecycle-secret-0001',
+      now,
+    }, deletedAccount.id)).resolves.toMatchObject({ completed: false })
+    const pendingAccount = await prisma.user.findUniqueOrThrow({
+      where: { id: deletedAccount.id },
+      select: { deletionAuditPseudonym: true, deletionCleanupCompletedAt: true },
+    })
+    expect(pendingAccount.deletionAuditPseudonym).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    )
+    expect(pendingAccount.deletionCleanupCompletedAt).toBeNull()
+    expect(await prisma.mailPolicyCommand.count({
+      where: { actorId: deletedAccount.id },
+    })).toBe(1)
+    expect(await prisma.mailPolicyCommand.count({
+      where: { actorId: pendingAccount.deletionAuditPseudonym! },
+    })).toBe(operatorAuditActorCleanupBatchSize)
+
+    const completedAt = new Date(now.getTime() + 60_000)
+    await expect(reconcileDeletedAccount({
+      db: prisma,
+      lifecycleSecret: 'test-account-lifecycle-secret-0001',
+      now: completedAt,
+    }, deletedAccount.id)).resolves.toMatchObject({ completed: true })
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: deletedAccount.id },
+      select: { deletionAuditPseudonym: true, deletionCleanupCompletedAt: true },
+    })).toEqual({ deletionAuditPseudonym: null, deletionCleanupCompletedAt: completedAt })
+    expect(await prisma.mailPolicyCommand.count({
+      where: { actorId: deletedAccount.id },
+    })).toBe(0)
+    expect(await prisma.mailPolicyCommand.count({
+      where: { actorId: pendingAccount.deletionAuditPseudonym! },
+    })).toBe(operatorAuditActorCleanupBatchSize + 1)
+  })
+
+  test('commits one Tender cleanup at a time and leaves a durable marker for the next pass', async () => {
+    const now = new Date('2026-09-04T16:00:00.000Z')
+    const deletedAccount = await prisma.user.create({
+      data: {
+        anonymizedAt: now,
+        deletionCleanupAvailableAt: now,
+        deletionCleanupCompletedAt: null,
+        displayName: null,
+        login: 'deleted-resumable-account',
+        passwordHash: null,
+      },
+    })
+    const peers = await Promise.all([0, 1, 2].map((index) => prisma.user.create({
+      data: { login: `resumable-peer-${index}` },
+    })))
+    const tender = createPersistentTenderModule(prisma)
+    for (const peer of peers) {
+      const { tenderId } = await tender.createTender({
+        players: [
+          { id: deletedAccount.id, tiePriority: 1 },
+          { id: peer.id, tiePriority: 2 },
+        ],
+      })
+      await prisma.tenderRoom.create({
+        data: {
+          capacity: 2,
+          hostId: deletedAccount.id,
+          members: {
+            create: [
+              { ready: true, seat: 1, userId: deletedAccount.id },
+              { ready: true, seat: 2, userId: peer.id },
+            ],
+          },
+          status: 'started',
+          tenderId,
+        },
+      })
+    }
+    const runtime = {
+      env: { JWT_SECRET: 'test-account-lifecycle-secret-0001' },
+      prisma,
+    } as unknown as BackendRuntime
+
+    await reconcileDeletedAccount({
+      db: prisma,
+      lifecycleSecret: runtime.env.JWT_SECRET,
+      now,
+    }, deletedAccount.id)
+
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: deletedAccount.id },
+      select: { deletionCleanupCompletedAt: true },
+    })).toEqual({ deletionCleanupCompletedAt: null })
+    const afterFirstPass = await prisma.tender.findMany({ select: { state: true } })
+    expect(afterFirstPass.filter(({ state }) =>
+      JSON.stringify(state).includes(deletedAccount.id))).toHaveLength(2)
+    expect(await prisma.tenderRoom.count({
+      where: {
+        OR: [
+          { hostId: deletedAccount.id },
+          { members: { some: { userId: deletedAccount.id } } },
+        ],
+      },
+    })).toBe(2)
+
+    await runCronTask(
+      'accounts:deletion-reconcile',
+      runtime,
+      new Date(now.getTime() + 60_000),
+    )
+
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: deletedAccount.id },
+      select: { deletionCleanupCompletedAt: true },
+    })).toEqual({ deletionCleanupCompletedAt: expect.any(Date) })
+    expect((await prisma.tender.findMany({ select: { state: true } })).some(({ state }) =>
+      JSON.stringify(state).includes(deletedAccount.id))).toBe(false)
+    expect(await prisma.tenderRoom.count({
+      where: {
+        OR: [
+          { hostId: deletedAccount.id },
+          { members: { some: { userId: deletedAccount.id } } },
+        ],
+      },
+    })).toBe(0)
+  })
+
+  test('assigns concurrent account-deletion claimers disjoint durable leases', async () => {
+    const now = new Date('2026-09-04T17:00:00.000Z')
+    const accounts = await Promise.all([0, 1].map((index) => prisma.user.create({
+      data: {
+        anonymizedAt: new Date(now.getTime() - 60_000 + index),
+        deletionCleanupAvailableAt: now,
+        login: `deleted-concurrent-claim-${index}`,
+      },
+    })))
+
+    const [workerA, workerB] = await Promise.all([
+      claimDeletedAccountCleanupBatch({
+        db: prisma,
+        limit: 1,
+        now,
+        workerId: 'account-cleanup-worker-a',
+      }),
+      claimDeletedAccountCleanupBatch({
+        db: prisma,
+        limit: 1,
+        now,
+        workerId: 'account-cleanup-worker-b',
+      }),
+    ])
+
+    const claimedIds = [...workerA, ...workerB].map((claim) => claim.id)
+    expect(claimedIds).toHaveLength(2)
+    expect(new Set(claimedIds)).toEqual(new Set(accounts.map((account) => account.id)))
+    expect(await prisma.user.findMany({
+      where: { id: { in: claimedIds } },
+      orderBy: { deletionCleanupClaimOwner: 'asc' },
+      select: {
+        deletionCleanupClaimOwner: true,
+        deletionCleanupLeaseExpiresAt: true,
+      },
+    })).toEqual([
+      {
+        deletionCleanupClaimOwner: 'account-cleanup-worker-a',
+        deletionCleanupLeaseExpiresAt: new Date(now.getTime() + accountDeletionClaimLeaseMs),
+      },
+      {
+        deletionCleanupClaimOwner: 'account-cleanup-worker-b',
+        deletionCleanupLeaseExpiresAt: new Date(now.getTime() + accountDeletionClaimLeaseMs),
+      },
+    ])
+  })
+
+  test('recovers an account-deletion claim after its worker lease expires', async () => {
+    const now = new Date('2026-09-04T17:30:00.000Z')
+    const account = await prisma.user.create({
+      data: {
+        anonymizedAt: new Date(now.getTime() - 60_000),
+        deletionCleanupAttemptCount: 2,
+        deletionCleanupAvailableAt: new Date(now.getTime() - 30_000),
+        deletionCleanupClaimOwner: 'crashed-account-cleanup-worker',
+        deletionCleanupLastFailureCode: 'database_conflict',
+        deletionCleanupLeaseExpiresAt: new Date(now.getTime() - 1),
+        login: 'deleted-expired-cleanup-claim',
+      },
+    })
+
+    await expect(claimDeletedAccountCleanupBatch({
+      db: prisma,
+      limit: 1,
+      now,
+      workerId: 'replacement-account-cleanup-worker',
+    })).resolves.toEqual([{
+      failureAttemptCount: 2,
+      id: account.id,
+    }])
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: account.id },
+      select: {
+        deletionCleanupAttemptCount: true,
+        deletionCleanupClaimOwner: true,
+        deletionCleanupLastFailureCode: true,
+        deletionCleanupLeaseExpiresAt: true,
+      },
+    })).toEqual({
+      deletionCleanupAttemptCount: 2,
+      deletionCleanupClaimOwner: 'replacement-account-cleanup-worker',
+      deletionCleanupLastFailureCode: 'database_conflict',
+      deletionCleanupLeaseExpiresAt: new Date(now.getTime() + accountDeletionClaimLeaseMs),
+    })
+  })
+
+  test('uses the partial claim index when active accounts outnumber due tombstones', async () => {
+    const now = new Date('2026-09-04T17:45:00.000Z')
+    await prisma.user.createMany({
+      data: Array.from({ length: 20_000 }, (_, index) => ({
+        deletionCleanupAvailableAt: now,
+        login: `claim-index-active-${index}`,
+      })),
+    })
+    const unleasedAccount = await prisma.user.create({
+      data: {
+        anonymizedAt: new Date(now.getTime() - 120_000),
+        deletionCleanupAvailableAt: new Date(now.getTime() - 60_000),
+        login: 'claim-index-due-unleased',
+      },
+    })
+    const expiredLeaseAccount = await prisma.user.create({
+      data: {
+        anonymizedAt: new Date(now.getTime() - 90_000),
+        deletionCleanupAvailableAt: new Date(now.getTime() - 30_000),
+        deletionCleanupClaimOwner: 'expired-index-worker',
+        deletionCleanupLeaseExpiresAt: new Date(now.getTime() - 1),
+        login: 'claim-index-due-expired-lease',
+      },
+    })
+    const claimableAccounts = [unleasedAccount, expiredLeaseAccount]
+    await prisma.user.createMany({
+      data: [
+        {
+          anonymizedAt: new Date(now.getTime() - 180_000),
+          deletionCleanupAvailableAt: new Date(now.getTime() + 60_000),
+          login: 'claim-index-future-backoff',
+        },
+        {
+          anonymizedAt: new Date(now.getTime() - 150_000),
+          deletionCleanupAvailableAt: new Date(now.getTime() - 60_000),
+          deletionCleanupClaimOwner: 'live-index-worker',
+          deletionCleanupLeaseExpiresAt: new Date(now.getTime() + 60_000),
+          login: 'claim-index-live-lease',
+        },
+      ],
+    })
+    await prisma.$executeRaw`ANALYZE "users"`
+
+    const plan = await prisma.$queryRaw<Array<{ 'QUERY PLAN': string }>>`
+      EXPLAIN (COSTS OFF)
+      SELECT "id"
+      FROM "users"
+      WHERE "anonymized_at" IS NOT NULL
+        AND "deletion_cleanup_completed_at" IS NULL
+        AND "deletion_cleanup_available_at" <= ${now}
+        AND (
+          "deletion_cleanup_lease_expires_at" IS NULL
+          OR "deletion_cleanup_lease_expires_at" <= ${now}
+        )
+      ORDER BY "deletion_cleanup_available_at" ASC, "anonymized_at" ASC, "id" ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 25
+    `
+    const planText = plan.map((row) => row['QUERY PLAN']).join('\n')
+    expect(planText).toContain('users_deletion_cleanup_claim_idx')
+    expect(planText).not.toContain('Sort')
+    const [partialIndex] = await prisma.$queryRaw<Array<{ indexdef: string }>>`
+      SELECT indexdef
+      FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND indexname = 'users_deletion_cleanup_claim_idx'
+    `
+    expect(partialIndex?.indexdef).toContain(
+      'WHERE ((anonymized_at IS NOT NULL) AND (deletion_cleanup_completed_at IS NULL))',
+    )
+
+    const claimed = await claimDeletedAccountCleanupBatch({
+      db: prisma,
+      limit: 25,
+      now,
+      workerId: 'claim-index-test-worker',
+    })
+    expect(new Set(claimed.map((claim) => claim.id))).toEqual(
+      new Set(claimableAccounts.map((account) => account.id)),
+    )
+  }, 30_000)
+
+  test('backs off more than 25 poisoned tombstones so a newer account is not starved', async () => {
+    const now = new Date('2026-09-04T18:00:00.000Z')
+    const poisonedAccounts = []
+    for (let index = 0; index < 25; index += 1) {
+      poisonedAccounts.push(await prisma.user.create({
+        data: {
+          anonymizedAt: new Date(now.getTime() - 120_000 + index),
+          deletionCleanupAvailableAt: now,
+          login: `deleted-poisoned-cleanup-${index}`,
+        },
+      }))
+    }
+    const healthyAccount = await prisma.user.create({
+      data: {
+        anonymizedAt: new Date(now.getTime() - 60_000),
+        deletionCleanupAvailableAt: now,
+        login: 'deleted-cleanup-after-poison-prefix',
+      },
+    })
+    await prisma.tender.createMany({
+      data: poisonedAccounts.map((account) => ({
+        phase: 'contract',
+        state: { players: [{ id: account.id, tiePriority: 1 }] },
+        version: 0,
+      })),
+    })
+
+    await expect(reconcileDeletedAccounts({
+      db: prisma,
+      lifecycleSecret: 'test-account-lifecycle-secret-0001',
+      now,
+    })).resolves.toMatchObject({
+      accounts: 0,
+      deferredFailed: 25,
+      deferredFailures: { legacy_data_invalid: 25 },
+      failed: 25,
+      failures: { legacy_data_invalid: 25 },
+      pending: 26,
+    })
+    expect(await prisma.user.count({
+      where: {
+        deletionCleanupAttemptCount: 1,
+        deletionCleanupAvailableAt: { gt: now },
+        deletionCleanupClaimOwner: null,
+        deletionCleanupLastFailureCode: 'legacy_data_invalid',
+        id: { in: poisonedAccounts.map((account) => account.id) },
+      },
+    })).toBe(25)
+
+    await expect(reconcileDeletedAccounts({
+      db: prisma,
+      lifecycleSecret: 'test-account-lifecycle-secret-0001',
+      now,
+    })).resolves.toMatchObject({
+      accounts: 1,
+      deferredFailed: 25,
+      deferredFailures: { legacy_data_invalid: 25 },
+      failed: 0,
+      pending: 25,
+    })
+    expect(await prisma.user.findUniqueOrThrow({
+      where: { id: healthyAccount.id },
+      select: { deletionCleanupCompletedAt: true },
+    })).toEqual({ deletionCleanupCompletedAt: expect.any(Date) })
+  }, 60_000)
 
   test('rolls back recovery deletion and mail redaction as one retention unit', async () => {
     const now = new Date(Date.now() + 24 * 60 * 60_000)

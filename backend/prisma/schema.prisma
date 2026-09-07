@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -8,38 +9,46 @@ datasource db {
 }
 
 model User {
-  id                        String                        @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  login                     String                        @unique
-  passwordHash              String?                       @map("password_hash")
-  accountEmailProviderValue String?                       @map("account_email_provider_value") @db.VarChar(254)
-  accountEmailCanonicalKey  String?                       @unique(map: "users_account_email_canonical_key_key") @map("account_email_canonical_key") @db.VarChar(254)
-  accountEmailState         String                        @default("absent") @map("account_email_state") @db.VarChar(32)
-  displayName               String?                       @map("display_name")
-  locale                    String                        @default("ru") @map("locale")
-  privacyConsentVersion     String?                       @map("privacy_consent_version")
-  privacyConsentAt          DateTime?                     @map("privacy_consent_at")
-  termsVersion              String?                       @map("terms_version")
-  termsAcceptedAt           DateTime?                     @map("terms_accepted_at")
-  anonymizedAt              DateTime?                     @map("anonymized_at")
-  tutorialCompletedAt       DateTime?                     @map("tutorial_completed_at")
-  createdAt                 DateTime                      @default(now()) @map("created_at")
-  updatedAt                 DateTime                      @updatedAt @map("updated_at")
-  sessions                  AuthSession[]
-  realtimeTickets           RealtimeTicket[]
-  identities                AuthIdentity[]
-  hostedRooms               TenderRoom[]                  @relation("TenderRoomHost")
-  roomMemberships           TenderRoomMember[]
-  currentMatch              CurrentMatch?
-  recoveryEmailBinding      RecoveryEmailBinding?
-  recoveryEmailChallenge    RecoveryEmailChallenge?
-  recoveryEmailReplacement  RecoveryEmailReplacement?
-  recoveryCodeSet           RecoveryCodeSet?
-  recoveryCodes             RecoveryCode[]
-  recoveryCodeReissue       RecoveryCodeReissueChallenge?
-  recoveryCodeReplacement   RecoveryCodeEmailReplacement?
-  passwordResetCredential   PasswordResetCredential?
-  linkedFeedbackReports     FeedbackReport[]              @relation("FeedbackReportLinkedUser")
+  id                             String                        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  login                          String                        @unique
+  passwordHash                   String?                       @map("password_hash")
+  accountEmailProviderValue      String?                       @map("account_email_provider_value") @db.VarChar(254)
+  accountEmailCanonicalKey       String?                       @unique(map: "users_account_email_canonical_key_key") @map("account_email_canonical_key") @db.VarChar(254)
+  accountEmailState              String                        @default("absent") @map("account_email_state") @db.VarChar(32)
+  displayName                    String?                       @map("display_name")
+  locale                         String                        @default("ru") @map("locale")
+  privacyConsentVersion          String?                       @map("privacy_consent_version")
+  privacyConsentAt               DateTime?                     @map("privacy_consent_at")
+  termsVersion                   String?                       @map("terms_version")
+  termsAcceptedAt                DateTime?                     @map("terms_accepted_at")
+  anonymizedAt                   DateTime?                     @map("anonymized_at")
+  deletionCleanupCompletedAt     DateTime?                     @map("deletion_cleanup_completed_at")
+  deletionCleanupAttemptCount    Int                           @default(0) @map("deletion_cleanup_attempt_count")
+  deletionCleanupAvailableAt     DateTime                      @default(now()) @map("deletion_cleanup_available_at")
+  deletionCleanupClaimOwner      String?                       @map("deletion_cleanup_claim_owner") @db.VarChar(64)
+  deletionCleanupLastFailureCode String?                       @map("deletion_cleanup_last_failure_code") @db.VarChar(64)
+  deletionCleanupLeaseExpiresAt  DateTime?                     @map("deletion_cleanup_lease_expires_at")
+  deletionAuditPseudonym         String?                       @map("deletion_audit_pseudonym") @db.Uuid
+  tutorialCompletedAt            DateTime?                     @map("tutorial_completed_at")
+  createdAt                      DateTime                      @default(now()) @map("created_at")
+  updatedAt                      DateTime                      @updatedAt @map("updated_at")
+  sessions                       AuthSession[]
+  realtimeTickets                RealtimeTicket[]
+  identities                     AuthIdentity[]
+  hostedRooms                    TenderRoom[]                  @relation("TenderRoomHost")
+  roomMemberships                TenderRoomMember[]
+  currentMatch                   CurrentMatch?
+  recoveryEmailBinding           RecoveryEmailBinding?
+  recoveryEmailChallenge         RecoveryEmailChallenge?
+  recoveryEmailReplacement       RecoveryEmailReplacement?
+  recoveryCodeSet                RecoveryCodeSet?
+  recoveryCodes                  RecoveryCode[]
+  recoveryCodeReissue            RecoveryCodeReissueChallenge?
+  recoveryCodeReplacement        RecoveryCodeEmailReplacement?
+  passwordResetCredential        PasswordResetCredential?
+  linkedFeedbackReports          FeedbackReport[]              @relation("FeedbackReportLinkedUser")
 
+  @@index([deletionCleanupAvailableAt, anonymizedAt, id], map: "users_deletion_cleanup_claim_idx", where: { anonymizedAt: { not: null }, deletionCleanupCompletedAt: null })
   @@map("users")
 }
 
@@ -316,6 +325,8 @@ model FeedbackReport {
   suggestionProblemSolved String?                   @map("suggestion_problem_solved")
   replyEmail              String?                   @map("reply_email") @db.VarChar(254)
   linkedUserId            String?                   @map("linked_user_id") @db.Uuid
+  submissionId            String?                   @unique(map: "feedback_reports_submission_id_key") @map("submission_id") @db.Uuid
+  submissionFingerprint   String?                   @map("submission_fingerprint") @db.Char(64)
   buildSha                String?                   @map("build_sha") @db.Char(40)
   routeTemplate           String                    @map("route_template") @db.VarChar(64)
   deviceClass             String                    @map("device_class") @db.VarChar(16)
@@ -354,6 +365,7 @@ model FeedbackOperatorCommand {
   createdAt   DateTime       @default(now()) @map("created_at")
   report      FeedbackReport @relation(fields: [reportId], references: [id], onDelete: Cascade, map: "feedback_operator_commands_report_id_fkey")
 
+  @@index([actorId, id], map: "feedback_operator_commands_actor_id_id_idx")
   @@index([reportId, createdAt], map: "feedback_operator_commands_report_id_created_at_idx")
   @@map("feedback_operator_commands")
 }
@@ -370,6 +382,7 @@ model FeedbackAuditEvent {
   occurredAt  DateTime       @default(now()) @map("occurred_at")
   report      FeedbackReport @relation(fields: [reportId], references: [id], onDelete: Cascade, map: "feedback_audit_events_report_id_fkey")
 
+  @@index([actorId, id], map: "feedback_audit_events_actor_id_id_idx")
   @@index([reportId, occurredAt], map: "feedback_audit_events_report_id_occurred_at_idx")
   @@index([occurredAt], map: "feedback_audit_events_occurred_at_idx")
   @@map("feedback_audit_events")
@@ -406,6 +419,7 @@ model Tender {
   @@index([dueAt], map: "tenders_due_at_idx")
   @@index([abandonmentDueAt], map: "tenders_abandonment_due_at_idx")
   @@index([phase], map: "tenders_phase_idx")
+  @@index([state(ops: JsonbPathOps)], type: Gin, map: "tenders_state_jsonb_path_idx")
   @@map("tenders")
 }
 
@@ -424,6 +438,7 @@ model TenderRoom {
   members        TenderRoomMember[]
   currentMatches CurrentMatch[]
 
+  @@index([hostId], map: "tender_rooms_host_id_idx")
   @@index([status], map: "tender_rooms_status_idx")
   @@map("tender_rooms")
 }
@@ -492,6 +507,7 @@ model MailPolicyVersion {
   publishedAt     DateTime          @default(now()) @map("published_at")
   entries         MailPolicyEntry[]
 
+  @@index([publishedBy, id], map: "mail_policy_versions_published_by_id_idx")
   @@map("mail_policy_versions")
 }
 
@@ -536,6 +552,7 @@ model MailPolicyCommand {
   receipt     Json
   createdAt   DateTime @default(now()) @map("created_at")
 
+  @@index([actorId, id], map: "mail_policy_commands_actor_id_id_idx")
   @@map("mail_policy_commands")
 }
 
@@ -547,6 +564,7 @@ model MailPolicyAuditEvent {
   payload    Json
   occurredAt DateTime @default(now()) @map("occurred_at")
 
+  @@index([actorId, id], map: "mail_policy_audit_events_actor_id_id_idx")
   @@index([occurredAt], map: "mail_policy_audit_events_occurred_at_idx")
   @@map("mail_policy_audit_events")
 }
@@ -604,15 +622,19 @@ model MailDeliveryControl {
 }
 
 model MailDeliveryProtectionAlert {
-  reason         String    @db.VarChar(40)
-  transitionAt   DateTime  @map("transition_at")
-  occurredAt     DateTime  @map("occurred_at")
-  deliveredAt    DateTime? @map("delivered_at")
-  leaseExpiresAt DateTime? @map("lease_expires_at")
-  leaseOwner     String?   @map("lease_owner") @db.VarChar(64)
+  reason          String    @db.VarChar(40)
+  transitionAt    DateTime  @map("transition_at")
+  occurredAt      DateTime  @map("occurred_at")
+  deliveredAt     DateTime? @map("delivered_at")
+  attemptCount    Int       @default(0) @map("attempt_count")
+  availableAt     DateTime  @default(now()) @map("available_at")
+  lastFailureCode String?   @map("last_failure_code") @db.VarChar(64)
+  terminalAt      DateTime? @map("terminal_at")
+  leaseExpiresAt  DateTime? @map("lease_expires_at")
+  leaseOwner      String?   @map("lease_owner") @db.VarChar(64)
 
   @@id([reason, transitionAt], map: "mail_delivery_protection_alerts_pkey")
-  @@index([deliveredAt, leaseExpiresAt, occurredAt], map: "mail_delivery_protection_alerts_delivery_idx")
+  @@index([deliveredAt, terminalAt, availableAt, leaseExpiresAt, occurredAt], map: "mail_delivery_protection_alerts_claim_idx")
   @@index([occurredAt], map: "mail_delivery_protection_alerts_occurred_at_idx")
   @@map("mail_delivery_protection_alerts")
 }

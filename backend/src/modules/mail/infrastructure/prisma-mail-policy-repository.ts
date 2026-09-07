@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import type { DbClient } from '../../../db'
 import { Prisma } from '../../../generated/prisma/client'
+import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import {
   CONSERVATIVE_MAIL_CANONICALIZATION,
   mailProviderCatalogSchema,
@@ -106,7 +107,10 @@ async function cleanupExpiredMailDomainAssessmentBatch(
   return { count: deleted.count, selectedCount: expired.length }
 }
 
-export function createPrismaMailPolicyRepository(db: DbClient): MailPolicyRepository {
+export function createPrismaMailPolicyRepository(
+  db: DbClient,
+  accountLifecycleSecret: string,
+): MailPolicyRepository {
   return {
     async findCommand(commandId) {
       const command = await db.mailPolicyCommand.findUnique({ where: { commandId } })
@@ -114,7 +118,13 @@ export function createPrismaMailPolicyRepository(db: DbClient): MailPolicyReposi
     },
 
     async syncCatalog(input) {
-      return withPolicyLock(db, input.commandId, input.expectedVersion, async (tx, currentPolicy) => {
+      return withPolicyLock(
+        db,
+        accountLifecycleSecret,
+        input.actorId,
+        input.commandId,
+        input.expectedVersion,
+        async (tx, currentPolicy) => {
         const catalog = mailProviderCatalogSchema.parse(input.catalog)
         const currentCatalog = parseStoredCatalog(currentPolicy?.providerCatalog)
         if (currentCatalog) {
@@ -181,11 +191,18 @@ export function createPrismaMailPolicyRepository(db: DbClient): MailPolicyReposi
           receipt,
         })
         return { kind: 'committed', receipt }
-      })
+        },
+      )
     },
 
     async changeStatus(input) {
-      return withPolicyLock(db, input.commandId, input.expectedVersion, async (tx, currentPolicy) => {
+      return withPolicyLock(
+        db,
+        accountLifecycleSecret,
+        input.actorId,
+        input.commandId,
+        input.expectedVersion,
+        async (tx, currentPolicy) => {
         const currentCatalog = parseStoredCatalog(currentPolicy?.providerCatalog)
         if (!currentCatalog || !currentCatalog.providers.some(({ providerId }) => providerId === input.providerId)) {
           return { kind: 'provider_not_found' }
@@ -224,7 +241,8 @@ export function createPrismaMailPolicyRepository(db: DbClient): MailPolicyReposi
           receipt,
         })
         return { kind: 'committed', receipt }
-      })
+        },
+      )
     },
 
     async evaluate(emailDomain, now) {
@@ -396,6 +414,8 @@ export function evaluateMailProviderSnapshot(input: {
 
 async function withPolicyLock(
   db: DbClient,
+  accountLifecycleSecret: string,
+  actorId: string,
   commandId: string,
   expectedVersion: number,
   operation: (
@@ -404,6 +424,18 @@ async function withPolicyLock(
   ) => Promise<MailPolicyCommitResult>,
 ) {
   return db.$transaction<MailPolicyCommitResult>(async (tx) => {
+    const activeOperator = await lockActiveAccountLifecycleTransaction(
+      tx,
+      accountLifecycleSecret,
+      actorId,
+    )
+    if (!activeOperator) {
+      const existing = await tx.mailPolicyCommand.findUnique({ where: { commandId } })
+      return existing
+        ? { kind: 'command_exists', ...toStoredCommand(existing) }
+        : { kind: 'operator_unavailable' }
+    }
+
     await lockMailPolicyTransaction(tx)
     const existing = await tx.mailPolicyCommand.findUnique({ where: { commandId } })
     if (existing) return { kind: 'command_exists', ...toStoredCommand(existing) }

@@ -73,6 +73,9 @@ test('keeps feedback voluntary and submits only approved fields with a copyable 
     linkAccount: true,
     problemSolved,
     replyEmail: 'feedback-player@example.com',
+    submissionId: expect.stringMatching(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    ),
     technicalContext: {
       browserClass: browserName === 'firefox'
         ? 'firefox'

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { createMiddleware } from 'hono/factory'
 
 import type { DbClient } from '../../db'
+import { handleError } from '../../http/errors'
 import type { AuthHttpEnv } from '../auth'
 import { createProfileModule } from './index'
 
@@ -24,6 +25,7 @@ test('returns authenticated player statistics from compatible completed matches'
     await next()
   })
   const profile = createProfileModule({
+    accountLifecycleSecret: 'test-account-lifecycle-secret',
     authenticatedMutationBudget,
     completedTenderSummaryReader: {
       listCompletedMatches: async () => [{
@@ -63,10 +65,12 @@ test('returns authenticated player statistics from compatible completed matches'
 test('reads and idempotently records the authenticated player tutorial completion', async () => {
   let completedAt: Date | null = null
   const db = {
+    $transaction: async (run: (transaction: unknown) => unknown) => run(db),
+    $queryRaw: async () => [],
     tenderRoom: { findMany: async () => [] },
     user: {
+      findFirst: async () => ({ tutorialCompletedAt: completedAt }),
       findUnique: async () => ({ tutorialCompletedAt: completedAt }),
-      findUniqueOrThrow: async () => ({ tutorialCompletedAt: completedAt }),
       updateMany: async ({ data }: { data: { tutorialCompletedAt: Date } }) => {
         completedAt ??= data.tutorialCompletedAt
         return { count: 1 }
@@ -86,6 +90,7 @@ test('reads and idempotently records the authenticated player tutorial completio
     await next()
   })
   const profile = createProfileModule({
+    accountLifecycleSecret: 'test-account-lifecycle-secret',
     authenticatedMutationBudget,
     completedTenderSummaryReader: { listCompletedMatches: async () => [] },
     db,
@@ -103,4 +108,42 @@ test('reads and idempotently records the authenticated player tutorial completio
 
   const repeated = await profile.routes.request('/tutorial/completion', { method: 'PUT' })
   expect(await repeated.json()).toEqual(firstCompletion)
+})
+
+test('rejects tutorial completion when account deletion already won the lifecycle lock', async () => {
+  const transaction = {
+    $queryRaw: async () => [],
+    user: { findFirst: async () => null },
+  }
+  const db = {
+    $transaction: async (run: (value: typeof transaction) => unknown) => run(transaction),
+    user: { findUnique: async () => ({ tutorialCompletedAt: null }) },
+  } as unknown as DbClient
+  const requireAuth = createMiddleware<AuthHttpEnv>(async (c, next) => {
+    c.set('user', {
+      authenticatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      createdAt: '2026-01-01T00:00:00.000Z',
+      displayName: null,
+      id: 'deleted-player',
+      locale: 'ru',
+      login: 'deleted-player',
+      sessionId: 'deleted-session',
+    })
+    await next()
+  })
+  const profile = createProfileModule({
+    accountLifecycleSecret: 'test-account-lifecycle-secret',
+    authenticatedMutationBudget,
+    completedTenderSummaryReader: { listCompletedMatches: async () => [] },
+    db,
+    requireAuth,
+  })
+  profile.routes.onError((error, context) => handleError(error, context))
+
+  const response = await profile.routes.request('/tutorial/completion', { method: 'PUT' })
+
+  expect(response.status).toBe(401)
+  expect(await response.json()).toEqual({
+    error: { code: 'UNAUTHORIZED', message: 'Session is invalid or expired' },
+  })
 })

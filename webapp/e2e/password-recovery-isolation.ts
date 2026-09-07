@@ -17,17 +17,23 @@ export function shouldEnsurePasswordRecoveryMailPolicy(
   return env.E2E_SPLIT_DOMAIN_MODE === undefined
 }
 
-export async function ensurePasswordRecoveryMailPolicy(db: DbClient) {
-  const policy = createMailModule({ db }).operatorPolicy
+export async function ensurePasswordRecoveryMailPolicy(
+  db: DbClient,
+  accountLifecycleSecret: string,
+) {
+  const policy = createMailModule({ accountLifecycleSecret, db }).operatorPolicy
   const current = await policy.read()
   if (allowsPasswordRecovery(current)) return
 
+  const actor = await db.user.create({
+    data: { login: `e2e-mail-policy-operator-${randomUUID()}` },
+  })
   const synced = await policy.syncCatalog({
     commandId: randomUUID(),
     expectedVersion: current.currentVersion,
   }, {
     authenticatedAt: new Date(),
-    id: randomUUID(),
+    id: actor.id,
   })
 
   if (!allowsPasswordRecovery(synced)) {

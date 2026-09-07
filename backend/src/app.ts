@@ -13,13 +13,20 @@ import {
   requestBudgetPolicyEntries,
 } from './security/request-budget-policy'
 import { createRequestBudgetOverviewReader } from './security/request-budget-overview'
+import { reconcileDeletedAccount } from './account-deletion-reconciliation'
 import { createAuthModule, type AuthHttpEnv, type LogoutCleanup } from './modules/auth'
 import { createAnalyticsModule } from './modules/analytics'
 import { createAdminModule } from './modules/admin'
-import { createFeedbackModule } from './modules/feedback'
+import {
+  createFeedbackModule,
+  unlinkFeedbackAccountInTransaction,
+} from './modules/feedback'
 import { createMailModule, type MxResolver } from './modules/mail'
 import { createProfileModule } from './modules/profile'
-import { createRoomModule } from './modules/room'
+import {
+  cleanupPrismaRoomBatchForAccountDeletion,
+  createRoomModule,
+} from './modules/room'
 import {
   createPersistentCompletedTenderSummaryReader,
   createPersistentTenderLifecycleReader,
@@ -41,6 +48,7 @@ type CreateAppOptions = {
   prisma: DbClient
   securityEvents?: SecurityEventLogger
   mailMxResolver?: MxResolver
+  onTenderChanged?: (tenderId: string) => void
   operationalMetrics?: OperationalMetrics
   tender?: TenderModule
 }
@@ -49,6 +57,7 @@ export function createApp({
   env,
   logoutCleanup,
   mailMxResolver,
+  onTenderChanged,
   operationalMetrics,
   prisma,
   securityEvents = consoleSecurityEventLogger,
@@ -59,8 +68,9 @@ export function createApp({
     : securityEvents
   const requestBudgetPolicies = createRequestBudgetPolicyCatalog(env)
   const requestBudget = createPrismaRequestBudget(prisma, env.JWT_SECRET)
-  const tender = providedTender ?? createPersistentTenderModule(prisma)
+  const tender = providedTender ?? createPersistentTenderModule(prisma, env.JWT_SECRET)
   const mail = createMailModule({
+    accountLifecycleSecret: env.JWT_SECRET,
     db: prisma,
     deliveryStatus: {
       configured: env.MAIL_SMTP_ENABLED,
@@ -69,7 +79,20 @@ export function createApp({
     mxResolver: mailMxResolver,
   })
   const auth = createAuthModule({
-    accountDeletionCleanup: ({ userId }) => tender.anonymizeParticipant(userId),
+    accountDeletionCleanup: async (transaction, { now, userId }) => {
+      await cleanupPrismaRoomBatchForAccountDeletion(transaction, userId)
+      await unlinkFeedbackAccountInTransaction(transaction, userId)
+      return {
+        afterCommit: async () => {
+          await reconcileDeletedAccount({
+            db: prisma,
+            lifecycleSecret: env.JWT_SECRET,
+            now,
+            ...(onTenderChanged ? { onTenderChanged } : {}),
+          }, userId)
+        },
+      }
+    },
     accountEmailCanonicalizer: mail.accountEmailCanonicalizer,
     db: prisma,
     env,
@@ -86,12 +109,14 @@ export function createApp({
     tenderLifecycleReader: createPersistentTenderLifecycleReader(prisma),
   })
   const profile = createProfileModule({
+    accountLifecycleSecret: env.JWT_SECRET,
     authenticatedMutationBudget: auth.authenticatedMutationBudget,
     completedTenderSummaryReader: createPersistentCompletedTenderSummaryReader(prisma),
     db: prisma,
     requireAuth: auth.requireAuth,
   })
   const feedback = createFeedbackModule({
+    accountLifecycleSecret: env.JWT_SECRET,
     authenticatedMutationBudget: auth.authenticatedMutationBudget,
     clientAddress: (context) => clientAddress(context, {
       trustProxy: env.TRUST_PROXY,

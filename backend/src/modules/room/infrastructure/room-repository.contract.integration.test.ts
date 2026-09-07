@@ -7,6 +7,7 @@ import { roomRepositoryContract } from './room-repository.contract-helper.test'
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl ? describe : describe.skip
 const clock = { now: () => new Date('2026-07-24T12:00:00.000Z') }
+const accountLifecycleSecret = 'room-account-lifecycle-contract-test-secret'
 
 maybeDescribe('Prisma Room repository contract', () => {
   if (!databaseUrl) return
@@ -24,7 +25,7 @@ maybeDescribe('Prisma Room repository contract', () => {
       },
       guestId: guest.id,
       hostId: host.id,
-      repository: createPrismaRoomRepository(db, clock),
+      repository: createPrismaRoomRepository(db, clock, accountLifecycleSecret),
     }
   })
 })

@@ -12,7 +12,6 @@ import { sessionExpiresAt, type SessionMetadata } from '../domain/session'
 import type { AuthUserRecord, AuthenticatedPrincipal } from '../domain/user'
 import { userDtoFromPrincipal } from '../domain/user'
 import type {
-  AccountDeletionCleanup,
   AccountEmailCanonicalizer,
   AccessTokens,
   AuthAbuseProtection,
@@ -26,7 +25,6 @@ import type {
 } from './ports'
 
 type AuthServiceDependencies = {
-  accountDeletionCleanup?: AccountDeletionCleanup
   accountEmailCanonicalizer?: AccountEmailCanonicalizer
   accessTokens: AccessTokens
   abuseProtection?: AuthAbuseProtection
@@ -990,7 +988,6 @@ export class AuthService {
         'Recent authentication is required to delete the account',
       )
     }
-    await this.dependencies.accountDeletionCleanup?.({ userId: input.userId })
     await this.dependencies.repository.eraseUserIdentity({ userId: input.userId, now })
   }
 

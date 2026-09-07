@@ -33,6 +33,27 @@ test('round-trips a versioned Tender audit event through its persistence envelop
   })
 })
 
+test('decodes persisted audit events from every internal command namespace', () => {
+  const commandIds = [
+    `deleted-command-v1-${'a'.repeat(64)}`,
+    `stored-command-v1-${'b'.repeat(64)}`,
+  ]
+
+  for (const commandId of commandIds) {
+    expect(decodeTenderAuditEvent({
+      ...requestedSlotEvent,
+      commandId,
+      payload: encodeTenderAuditEventPayload(requestedSlotEvent),
+      sequence: 5,
+    })).toMatchObject({
+      commandId,
+      formatVersion: 1,
+      kind: 'access_slot_requested',
+      sequence: 5,
+    })
+  }
+})
+
 test('rejects unknown producers and malformed payloads before persistence', () => {
   expect(() => encodeTenderAuditEventPayload({
     kind: 'access_slot_typo',

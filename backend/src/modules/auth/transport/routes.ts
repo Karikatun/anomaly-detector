@@ -695,7 +695,7 @@ const deleteAccountRoute = createRoute({
   method: 'delete',
   path: '/account',
   responses: {
-    204: { description: 'Account deleted and anonymised' },
+    204: { description: 'Account identity deleted; dependent history cleanup is durable' },
     401: { content: errorResponseContent, description: 'Authentication required' },
     429: { content: errorResponseContent, description: 'Authenticated mutation rate limited' },
   },

@@ -8,7 +8,9 @@
 провайдера. Реестр ОРИ и произвольные интернет-данные не расширяют политику.
 Очередь Feedback Report разрешает только взять обращение в работу, решить,
 отклонить с причиной, записать номер вручную созданной очищенной GitHub Issue и
-досрочно удалить добровольный контакт. Исходный текст и авторство неизменяемы;
+досрочно удалить добровольный контакт. Исходный текст не редактируется, а
+добровольная связь с аккаунтом меняется только при предусмотренной политикой
+приватности очистке;
 Feedback Report автоматически не публикуется во внешнюю систему и не запускает
 отправку писем. Универсальный CRUD, ручная смена Account Email, password reset,
 просмотр recovery credentials и отправка писем из adminapp запрещены.
@@ -27,7 +29,9 @@ Backend должен содержать UUID оператора в `ADMIN_USER_I
 Production-сборка:
 
 ```bash
-VITE_API_URL=https://api.anomaly-detector.ru bun run build:adminapp
+VITE_API_URL=https://api.anomaly-detector.ru \
+VITE_BUILD_SHA=<exact-40-character-release-sha> \
+bun run build:adminapp
 ```
 
 Публиковать `adminapp/dist` в открытый Object Storage нельзя. В текущем Yandex VM-контуре его обслуживает отдельный Caddy-host `ops.anomaly-detector.ru`, защищённый HTTP Basic Auth до выдачи любых файлов. После edge-проверки оператор дополнительно входит обычной учётной записью приложения, а backend проверяет её UUID по `ADMIN_USER_IDS`.

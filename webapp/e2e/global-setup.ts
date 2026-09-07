@@ -148,7 +148,7 @@ export default async function globalSetup() {
   if (shouldEnsurePasswordRecoveryMailPolicy(process.env)) {
     const prisma = createPrisma(databaseUrl)
     try {
-      await ensurePasswordRecoveryMailPolicy(prisma)
+      await ensurePasswordRecoveryMailPolicy(prisma, env.JWT_SECRET!)
     } finally {
       await prisma.$disconnect()
     }

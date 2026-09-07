@@ -21,6 +21,7 @@ const requestBody = {
   linkAccount: false,
   replyEmail: null,
   reproductionSteps: 'Открыл матч и нажал на карточку.',
+  submissionId: '019f8099-7e26-7760-ad08-66d1d66b271a',
   technicalContext: {
     browserClass: 'chromium',
     buildSha: 'a'.repeat(40),
@@ -80,6 +81,47 @@ test('accepts an authenticated bounded report and passes only trusted identity c
   })
 })
 
+test('accepts a rollback-era report and assigns its server-side submission identifier', async () => {
+  let received: { report: { submissionId: string } } | undefined
+  const routes = createFeedbackRoutes({
+    authenticatedMutationBudget: async (_c, next) => next(),
+    clientAddress: () => '203.0.113.10',
+    intake: {
+      submit: async (input) => {
+        received = input
+        return {
+          kind: 'accepted',
+          receipt: {
+            acceptedAt: '2026-08-23T12:00:00.000Z',
+            publicNumber: 'FB-8M4Q2K7P9X',
+          },
+        }
+      },
+    },
+    requireAuth,
+  })
+  const { submissionId: _submissionId, ...rollbackEraBody } = requestBody
+
+  const response = await routes.request('/', {
+    body: JSON.stringify(rollbackEraBody),
+    headers: {
+      Authorization: 'Bearer player-token',
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  })
+
+  expect(response.status).toBe(201)
+  expect(received).toMatchObject({
+    clientAddress: '203.0.113.10',
+    report: rollbackEraBody,
+    userId: player.id,
+  })
+  expect(received?.report.submissionId).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  )
+})
+
 test('requires authentication and never exposes a report read route', async () => {
   const routes = createFeedbackRoutes({
     authenticatedMutationBudget: async (_c, next) => next(),
@@ -129,4 +171,40 @@ test('returns a stable rate-limit response without an accepted receipt', async (
   expect(response.status).toBe(429)
   expect(response.headers.get('retry-after')).toBe('3600')
   expect(JSON.stringify(await response.json())).not.toContain('FB-')
+})
+
+test('returns a safe conflict without exposing the original receipt', async () => {
+  const routes = createFeedbackRoutes({
+    authenticatedMutationBudget: async (_c, next) => next(),
+    clientAddress: () => '203.0.113.10',
+    intake: {
+      submit: async () => ({ kind: 'submission_conflict' }),
+    },
+    requireAuth,
+  })
+  routes.onError((error, c) => {
+    if ('status' in error && error.status === 409) {
+      return c.json({ error: { code: 'CONFLICT', message: error.message } }, 409)
+    }
+    throw error
+  })
+
+  const response = await routes.request('/', {
+    body: JSON.stringify(requestBody),
+    headers: {
+      Authorization: 'Bearer player-token',
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  })
+
+  expect(response.status).toBe(409)
+  const body = await response.json()
+  expect(body).toEqual({
+    error: {
+      code: 'CONFLICT',
+      message: 'Feedback submission identifier conflicts with its first use',
+    },
+  })
+  expect(JSON.stringify(body)).not.toContain('FB-')
 })

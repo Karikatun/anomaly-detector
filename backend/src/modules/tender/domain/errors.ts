@@ -1,4 +1,5 @@
 export type TenderFailureKind =
+  | 'account_unavailable'
   | 'contract_evidence_stale'
   | 'duplicate_command_conflict'
   | 'invalid_create_tender'

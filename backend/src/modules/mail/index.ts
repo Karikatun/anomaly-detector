@@ -1,6 +1,7 @@
 import type { DbClient } from '../../db'
 import type { Prisma } from '../../generated/prisma/client'
 import { MailPolicyService } from './application/mail-policy-service'
+import { MailDeliveryProtectionAlertService } from './application/mail-delivery-protection-alert-service'
 import { TransactionalMailDeliveryService } from './application/transactional-mail-delivery-service'
 import type {
   MailDeliveryPolicy,
@@ -19,6 +20,7 @@ import {
   evaluateTransactionalMailProvider,
 } from './infrastructure/prisma-account-email-policy'
 import { createPrismaMailDeliveryOverviewReader } from './infrastructure/prisma-mail-delivery-overview-reader'
+import { createPrismaMailProtectionAlertStateReader } from './infrastructure/prisma-mail-protection-alert-state-reader'
 import { NodeMxResolver } from './infrastructure/node-mx-resolver'
 import {
   cleanupExpiredPendingMailOutbox,
@@ -33,6 +35,7 @@ import {
 import { RegRuSmtpDelivery, type RegRuSmtpConfig } from './infrastructure/reg-ru-smtp-delivery'
 
 export function createMailModule(input: {
+  accountLifecycleSecret: string
   clock?: Clock
   confirmationCodeSecret?: string
   db: DbClient
@@ -48,7 +51,7 @@ export function createMailModule(input: {
   const service = new MailPolicyService({
     clock,
     mxResolver: input.mxResolver ?? new NodeMxResolver(),
-    repository: createPrismaMailPolicyRepository(input.db),
+    repository: createPrismaMailPolicyRepository(input.db, input.accountLifecycleSecret),
   })
   const accountEmailCanonicalizer = createAccountEmailCanonicalizer({
     evaluate: (emailDomain, options) => service.evaluate(emailDomain, options),
@@ -56,17 +59,23 @@ export function createMailModule(input: {
   const policy: MailDeliveryPolicy = {
     evaluate: (emailDomain, options) => service.evaluate(emailDomain, options),
   }
-  const outboxDrainer = input.delivery && input.deliveryOptions
+  const outboxRepository = input.deliveryOptions
+    ? createPrismaMailOutboxRepository(input.db, input.deliveryOptions)
+    : null
+  const protectionAlertDispatcher = outboxRepository
+    ? new MailDeliveryProtectionAlertService({ clock, repository: outboxRepository })
+    : null
+  const outboxDrainer = input.delivery && outboxRepository
     ? new TransactionalMailDeliveryService({
         clock,
         confirmationCodeSecret: input.confirmationCodeSecret ?? '',
         delivery: input.delivery,
         policy,
-        repository: createPrismaMailOutboxRepository(input.db, input.deliveryOptions),
+        repository: outboxRepository,
       })
     : null
-  if ((input.delivery === undefined) !== (input.deliveryOptions === undefined)) {
-    throw new Error('Mail delivery and outbox options must be configured together')
+  if (input.delivery && !input.deliveryOptions) {
+    throw new Error('Mail outbox options must be configured with delivery')
   }
   if (input.delivery && !input.confirmationCodeSecret) {
     throw new Error('Mail confirmation code secret must be configured with delivery')
@@ -75,6 +84,7 @@ export function createMailModule(input: {
     configured: input.delivery !== undefined,
     deliveryBudgetPerMinute: input.deliveryOptions?.deliveryBudgetPerMinute ?? 60,
   })
+  const protectionAlertStateReader = createPrismaMailProtectionAlertStateReader(input.db)
   const readOperationsView = async (policyView: Awaited<ReturnType<typeof service.read>>) => ({
     ...policyView,
     delivery: await deliveryOverview.read(clock.now()),
@@ -91,6 +101,8 @@ export function createMailModule(input: {
     operatorPolicy,
     outboxDrainer,
     policy,
+    protectionAlertDispatcher,
+    protectionAlertStateReader,
   }
 }
 
@@ -116,10 +128,15 @@ export {
 }
 export { evaluateTransactionalAccountEmail }
 export { evaluateTransactionalMailProvider }
+export { anonymizePrismaMailOperatorActorBatch } from './infrastructure/prisma-mail-operator-account-cleanup'
 export { deriveAccountEmailConfirmationCode } from './application/account-email-confirmation-code'
 export { derivePasswordResetToken } from './application/password-reset-token'
 
 export type { MxResolver } from './application/mail-domain-classifier'
+export type {
+  MailProtectionAlertOperationalState,
+  MailProtectionAlertStateReader,
+} from './infrastructure/prisma-mail-protection-alert-state-reader'
 export type { ClaimedMailDeliveryProtectionAlert } from './application/transactional-mail-ports'
 export type { TransactionalMailRequest } from './application/transactional-mail-service'
 export { executeMailPolicy } from './transport/errors'

@@ -311,7 +311,12 @@ test('deletes an account from the profile only after confirmation and explains r
   await expect(openDeletionDialog).toBeVisible()
   await openDeletionDialog.click()
   const dialog = page.getByRole('dialog', { name: 'Удалить аккаунт?' })
-  await expect(dialog).toContainText('история матчей останется только в обезличенном виде.')
+  await expect(dialog).toContainText(
+    'Доступ к аккаунту, Account Email, Recovery Email, коды и ссылки восстановления исчезнут сразу.',
+  )
+  await expect(dialog).toContainText(
+    'Сервис автоматически удалит связи с комнатами и обращениями и обезличит историю матчей.',
+  )
   await dialog.getByRole('button', { name: 'Отмена' }).click()
   await expect(dialog).toBeHidden()
   await expect(page.getByRole('heading', { name: 'ПРОФИЛЬ', exact: true })).toBeVisible()

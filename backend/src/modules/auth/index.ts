@@ -1,8 +1,7 @@
-import type { DbClient } from '../../db'
+import type { DbClient, DbTransaction } from '../../db'
 import type { AppEnv } from '../../env'
 import { AuthService } from './application/auth-service'
 import type {
-  AccountDeletionCleanup,
   AccountEmailCanonicalizer,
   Clock,
   LogoutCleanup,
@@ -33,11 +32,12 @@ import { createPrismaRequestBudget } from '../../security/request-budget'
 import { createAuthenticatedMutationBudget } from './transport/authenticated-mutation-budget'
 import type { RequestBudgetPolicyCatalog } from '../../security/request-budget-policy'
 import { createPrismaActiveSessionGuard } from './infrastructure/prisma-active-session-guard'
+import { erasePrismaAccountIdentityInTransaction } from './infrastructure/prisma-account-erasure'
 
 type CreateAuthModuleOptions = {
   accountEmailCanonicalizer?: AccountEmailCanonicalizer
   clock?: Clock
-  accountDeletionCleanup?: AccountDeletionCleanup
+  accountDeletionCleanup: AccountDeletionCleanup
   db: DbClient
   env: AppEnv
   logoutCleanup?: LogoutCleanup
@@ -50,12 +50,20 @@ const systemClock: Clock = {
 }
 
 const noLogoutCleanup: LogoutCleanup = () => undefined
-const noAccountDeletionCleanup: AccountDeletionCleanup = () => undefined
+
+export type AccountDeletionCleanup = (
+  transaction: DbTransaction,
+  input: { now: Date; userId: string },
+) => AccountDeletionCleanupResult | Promise<AccountDeletionCleanupResult>
+
+export type AccountDeletionCleanupResult = void | {
+  afterCommit(): void | Promise<void>
+}
 
 export function createAuthModule({
   accountEmailCanonicalizer,
   clock = systemClock,
-  accountDeletionCleanup = noAccountDeletionCleanup,
+  accountDeletionCleanup,
   db,
   env,
   logoutCleanup = noLogoutCleanup,
@@ -73,7 +81,6 @@ export function createAuthModule({
   }
 
   const service = new AuthService({
-    accountDeletionCleanup,
     accountEmailCanonicalizer,
     accessTokens: {
       sign: (payload) => signAccessToken(payload, env),
@@ -103,7 +110,10 @@ export function createAuthModule({
       familyHash: (token) => hashRefreshTokenFamily(token, env.JWT_SECRET),
       rotate: (token) => deriveRotatedRefreshToken(token, env.JWT_SECRET),
     },
-    repository: createPrismaAuthRepository(db, env.JWT_SECRET, { requestBudgetPolicies }),
+    repository: createPrismaAuthRepository(db, env.JWT_SECRET, {
+      accountDeletionCleanup,
+      requestBudgetPolicies,
+    }),
   })
   const requireAuth = createRequireAuth((accessToken) => service.authenticateAccessToken(accessToken))
   const authenticatedMutationBudget = createAuthenticatedMutationBudget(
@@ -131,5 +141,6 @@ export function createAuthModule({
 export type { AuthHttpEnv }
 export { cleanupExpiredAuthRecovery }
 export { createPrismaActiveSessionGuard }
+export { erasePrismaAccountIdentityInTransaction }
 export type { ActiveSessionGuard, LogoutCleanup, ProjectUser } from './application/ports'
 export type { AuthenticatedPrincipal } from './domain/user'

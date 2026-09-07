@@ -122,6 +122,14 @@ export const mailDeliveryOverviewSchema = z.object({
     oldestQueuedAt: z.string().datetime().nullable(),
     queued: z.number().int().nonnegative(),
   }).strict(),
+  protectionAlerts: z.object({
+    leased: z.number().int().nonnegative(),
+    nextAttemptAt: z.string().datetime().nullable(),
+    oldestPendingAt: z.string().datetime().nullable(),
+    pending: z.number().int().nonnegative(),
+    retrying: z.number().int().nonnegative(),
+    terminal: z.number().int().nonnegative(),
+  }).strict().optional(),
   provider: z.literal('reg_ru'),
   catalogLastSyncedAt: z.string().datetime().nullable(),
   totals: z.object({

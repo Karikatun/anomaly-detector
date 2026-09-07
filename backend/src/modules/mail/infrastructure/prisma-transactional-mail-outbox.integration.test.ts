@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createPrisma } from '../../../db'
-import { createTransactionalMailRequester, derivePasswordResetToken } from '..'
+import { createMailModule, createTransactionalMailRequester, derivePasswordResetToken } from '..'
 import { TransactionalMailDeliveryService } from '../application/transactional-mail-delivery-service'
 import { TransactionalMailService } from '../application/transactional-mail-service'
 import type { RenderedTransactionalMail } from '../application/transactional-mail-ports'
@@ -800,7 +800,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     ])
   })
 
-  test('reclaims an unacknowledged protection alert after logging recovers', async () => {
+  test('records alert callback failure and retries only after durable backoff', async () => {
     const now = scenarioTime()
     const repository = createPrismaMailOutboxRepository(prisma, {
       circuitFailureThreshold: 3,
@@ -836,11 +836,23 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       where: {
         reason_transitionAt: { reason: 'delivery_budget_exhausted', transitionAt: now },
       },
-      select: { deliveredAt: true, leaseExpiresAt: true, leaseOwner: true },
+      select: {
+        attemptCount: true,
+        availableAt: true,
+        deliveredAt: true,
+        lastFailureCode: true,
+        leaseExpiresAt: true,
+        leaseOwner: true,
+        terminalAt: true,
+      },
     })).toEqual({
+      attemptCount: 1,
+      availableAt: scenarioTime(1_000),
       deliveredAt: null,
-      leaseExpiresAt: scenarioTime(1_000),
-      leaseOwner: 'alert-worker-a',
+      lastFailureCode: 'alert_delivery_failed',
+      leaseExpiresAt: null,
+      leaseOwner: null,
+      terminalAt: null,
     })
 
     await expect(service.dispatchProtectionAlerts({
@@ -856,7 +868,7 @@ maybeDescribe('Prisma transactional mail outbox', () => {
         delivered.push(alert)
       },
       limit: 1,
-      now: scenarioTime(1_001),
+      now: scenarioTime(1_000),
       workerId: 'alert-worker-b',
     })).resolves.toEqual({ claimed: 1, delivered: 1, failed: 0, staleClaims: 0 })
     expect(delivered).toEqual([{
@@ -868,18 +880,129 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       where: {
         reason_transitionAt: { reason: 'delivery_budget_exhausted', transitionAt: now },
       },
-      select: { deliveredAt: true, leaseExpiresAt: true, leaseOwner: true },
+      select: {
+        attemptCount: true,
+        deliveredAt: true,
+        lastFailureCode: true,
+        leaseExpiresAt: true,
+        leaseOwner: true,
+        terminalAt: true,
+      },
     })).toEqual({
-      deliveredAt: scenarioTime(1_001),
+      attemptCount: 2,
+      deliveredAt: scenarioTime(1_000),
+      lastFailureCode: null,
       leaseExpiresAt: null,
       leaseOwner: null,
+      terminalAt: null,
     })
 
     await expect(service.dispatchProtectionAlerts({
       deliver: () => undefined,
       limit: 1,
-      now: scenarioTime(2_001),
+      now: scenarioTime(2_000),
       workerId: 'alert-worker-c',
+    })).resolves.toEqual({ claimed: 0, delivered: 0, failed: 0, staleClaims: 0 })
+  })
+
+  test('dispatches pending protection alerts while SMTP delivery is disabled', async () => {
+    const now = scenarioTime()
+    const mail = createMailModule({
+      accountLifecycleSecret: 'test-mail-outbox-lifecycle-secret',
+      db: prisma,
+      deliveryOptions: {
+        circuitFailureThreshold: 3,
+        circuitOpenMs: 60_000,
+        deliveryBudgetPerMinute: 20,
+        leaseMs: 1_000,
+        maxAttempts: 3,
+        retryBaseMs: 1_000,
+      },
+      deliveryStatus: { configured: false, deliveryBudgetPerMinute: 20 },
+    })
+    await prisma.mailDeliveryProtectionAlert.create({
+      data: {
+        availableAt: now,
+        occurredAt: now,
+        reason: 'delivery_budget_exhausted',
+        transitionAt: now,
+      },
+    })
+    const delivered: string[] = []
+
+    expect(mail.outboxDrainer).toBeNull()
+    await expect(mail.protectionAlertDispatcher!.dispatch({
+      deliver: (alert) => {
+        delivered.push(`${alert.reason}:${alert.transitionAt.toISOString()}`)
+      },
+      limit: 1,
+      now,
+      workerId: 'smtp-disabled-alert-worker',
+    })).resolves.toEqual({ claimed: 1, delivered: 1, failed: 0, staleClaims: 0 })
+    expect(delivered).toEqual([`delivery_budget_exhausted:${now.toISOString()}`])
+  })
+
+  test('moves repeatedly failing protection alerts to a terminal state', async () => {
+    const now = scenarioTime()
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 3,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 1_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+    const service = new TransactionalMailDeliveryService({
+      confirmationCodeSecret,
+      delivery: { send: async () => ({ kind: 'accepted' }) },
+      policy: { evaluate: async () => ({ acceptsNewAddress: true, allowsRecoveryDelivery: true }) },
+      repository,
+    })
+    await prisma.mailDeliveryProtectionAlert.create({
+      data: {
+        availableAt: now,
+        occurredAt: now,
+        reason: 'delivery_circuit_open',
+        transitionAt: now,
+      },
+    })
+
+    for (const [index, offset] of [0, 1_000, 3_000].entries()) {
+      await expect(service.dispatchProtectionAlerts({
+        deliver: () => {
+          throw new Error('logging unavailable')
+        },
+        limit: 1,
+        now: scenarioTime(offset),
+        workerId: `alert-terminal-worker-${index}`,
+      })).resolves.toEqual({ claimed: 1, delivered: 0, failed: 1, staleClaims: 0 })
+    }
+
+    expect(await prisma.mailDeliveryProtectionAlert.findUniqueOrThrow({
+      where: {
+        reason_transitionAt: { reason: 'delivery_circuit_open', transitionAt: now },
+      },
+      select: {
+        attemptCount: true,
+        deliveredAt: true,
+        lastFailureCode: true,
+        leaseExpiresAt: true,
+        leaseOwner: true,
+        terminalAt: true,
+      },
+    })).toEqual({
+      attemptCount: 3,
+      deliveredAt: null,
+      lastFailureCode: 'alert_delivery_failed',
+      leaseExpiresAt: null,
+      leaseOwner: null,
+      terminalAt: scenarioTime(3_000),
+    })
+    await expect(service.dispatchProtectionAlerts({
+      deliver: () => undefined,
+      limit: 1,
+      now: scenarioTime(30_000),
+      workerId: 'alert-terminal-worker-late',
     })).resolves.toEqual({ claimed: 0, delivered: 0, failed: 0, staleClaims: 0 })
   })
 
@@ -918,6 +1041,98 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     expect(remaining).toHaveLength(1)
     expect(new Set([...claimedTransitions, remaining[0]!.transitionAt.toISOString()]).size).toBe(5)
     expect(Object.keys(remaining[0]!).sort()).toEqual(['occurredAt', 'reason', 'transitionAt'])
+  })
+
+  test('rejects a stale protection-alert acknowledgement after lease reclaim', async () => {
+    const now = scenarioTime()
+    await prisma.mailDeliveryProtectionAlert.create({
+      data: {
+        availableAt: now,
+        occurredAt: now,
+        reason: 'delivery_budget_exhausted',
+        transitionAt: now,
+      },
+    })
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 3,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 1_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+
+    expect(await repository.claimProtectionAlerts({
+      limit: 1,
+      now,
+      workerId: 'alert-stale-worker-a',
+    })).toHaveLength(1)
+    expect(await repository.claimProtectionAlerts({
+      limit: 1,
+      now: scenarioTime(1_001),
+      workerId: 'alert-stale-worker-b',
+    })).toHaveLength(1)
+    await expect(repository.acknowledgeProtectionAlert({
+      now: scenarioTime(1_002),
+      reason: 'delivery_budget_exhausted',
+      transitionAt: now,
+      workerId: 'alert-stale-worker-a',
+    })).resolves.toBe(false)
+    await expect(repository.acknowledgeProtectionAlert({
+      now: scenarioTime(1_003),
+      reason: 'delivery_budget_exhausted',
+      transitionAt: now,
+      workerId: 'alert-stale-worker-b',
+    })).resolves.toBe(true)
+  })
+
+  test('terminalizes a protection alert after its final worker lease expires', async () => {
+    const now = scenarioTime()
+    await prisma.mailDeliveryProtectionAlert.create({
+      data: {
+        availableAt: now,
+        occurredAt: now,
+        reason: 'delivery_circuit_open',
+        transitionAt: now,
+      },
+    })
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 3,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 1_000,
+      maxAttempts: 1,
+      retryBaseMs: 1_000,
+    })
+
+    expect(await repository.claimProtectionAlerts({
+      limit: 1,
+      now,
+      workerId: 'alert-crashed-worker',
+    })).toHaveLength(1)
+    await expect(repository.claimProtectionAlerts({
+      limit: 1,
+      now: scenarioTime(1_001),
+      workerId: 'alert-recovery-worker',
+    })).resolves.toEqual([])
+    expect(await prisma.mailDeliveryProtectionAlert.findUniqueOrThrow({
+      where: {
+        reason_transitionAt: { reason: 'delivery_circuit_open', transitionAt: now },
+      },
+      select: {
+        attemptCount: true,
+        lastFailureCode: true,
+        leaseExpiresAt: true,
+        leaseOwner: true,
+        terminalAt: true,
+      },
+    })).toEqual({
+      attemptCount: 1,
+      lastFailureCode: 'worker_lease_exhausted',
+      leaseExpiresAt: null,
+      leaseOwner: null,
+      terminalAt: scenarioTime(1_001),
+    })
   })
 
   test('removes acknowledged alert history after thirty days without dropping pending delivery', async () => {
@@ -1226,6 +1441,122 @@ maybeDescribe('Prisma transactional mail outbox', () => {
     })).toEqual({ recipient: '[redacted]', state: 'terminal_failure', templatePayload: {} })
   })
 
+  test('renews only the current owner lease and rejects the old owner after reclaim', async () => {
+    const enqueuer = createEnqueuer()
+    await enqueuer.enqueue({
+      ...request,
+      messageId: '019f8099-7e26-7760-ad08-66d1d66b2852',
+    })
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 3,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 1_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+    const first = await repository.claim({
+      now: scenarioTime(),
+      workerId: 'lease-renew-worker-a',
+    })
+    expect(first.kind).toBe('claimed')
+    if (first.kind !== 'claimed') throw new Error('Expected a claimed message')
+
+    await expect(repository.renewLeaseForDelivery({
+      circuitProbe: first.message.circuitProbe,
+      id: first.message.id,
+      leaseExpiresAt: first.message.leaseExpiresAt,
+      now: scenarioTime(900),
+      workerId: 'lease-renew-worker-b',
+    })).resolves.toBe(false)
+    await expect(repository.renewLeaseForDelivery({
+      circuitProbe: first.message.circuitProbe,
+      id: first.message.id,
+      leaseExpiresAt: first.message.leaseExpiresAt,
+      now: scenarioTime(900),
+      workerId: 'lease-renew-worker-a',
+    })).resolves.toBe(true)
+    await expect(repository.claim({
+      now: scenarioTime(1_001),
+      workerId: 'lease-renew-worker-b',
+    })).resolves.toEqual({ kind: 'empty' })
+
+    const reclaimed = await repository.claim({
+      now: scenarioTime(1_901),
+      workerId: 'lease-renew-worker-b',
+    })
+    expect(reclaimed.kind).toBe('claimed')
+    if (reclaimed.kind !== 'claimed') throw new Error('Expected the expired lease to be reclaimed')
+    await expect(repository.recordAccepted({
+      id: first.message.id,
+      now: scenarioTime(1_902),
+      workerId: 'lease-renew-worker-a',
+    })).resolves.toBe(false)
+    await expect(repository.recordAccepted({
+      id: reclaimed.message.id,
+      now: scenarioTime(1_903),
+      workerId: 'lease-renew-worker-b',
+    })).resolves.toBe(true)
+  })
+
+  test('keeps a renewed circuit recovery probe exclusive until its SMTP lease expires', async () => {
+    const enqueuer = createEnqueuer()
+    await enqueuer.enqueue({
+      ...request,
+      messageId: '019f8099-7e26-7760-ad08-66d1d66b2853',
+    })
+    await enqueuer.enqueue({
+      ...request,
+      messageId: '019f8099-7e26-7760-ad08-66d1d66b2854',
+    })
+    const repository = createPrismaMailOutboxRepository(prisma, {
+      circuitFailureThreshold: 1,
+      circuitOpenMs: 60_000,
+      deliveryBudgetPerMinute: 20,
+      leaseMs: 1_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+    })
+    const failed = await repository.claim({
+      now: scenarioTime(),
+      workerId: 'probe-failure-worker',
+    })
+    expect(failed.kind).toBe('claimed')
+    if (failed.kind !== 'claimed') throw new Error('Expected a claimed message')
+    await expect(repository.recordFailure({
+      affectsCircuit: true,
+      code: 'smtp_unavailable',
+      id: failed.message.id,
+      now: scenarioTime(1),
+      temporary: true,
+      workerId: 'probe-failure-worker',
+    })).resolves.toMatchObject({
+      protectionAlert: {
+        reason: 'delivery_circuit_open',
+      },
+      state: 'queued',
+    })
+
+    const probe = await repository.claim({
+      now: scenarioTime(60_001),
+      workerId: 'probe-renew-worker',
+    })
+    expect(probe.kind).toBe('claimed')
+    if (probe.kind !== 'claimed') throw new Error('Expected a circuit recovery probe')
+    await expect(repository.renewLeaseForDelivery({
+      circuitProbe: probe.message.circuitProbe,
+      id: probe.message.id,
+      leaseExpiresAt: probe.message.leaseExpiresAt,
+      now: scenarioTime(60_901),
+      workerId: 'probe-renew-worker',
+    })).resolves.toBe(true)
+
+    await expect(repository.claim({
+      now: scenarioTime(61_002),
+      workerId: 'concurrent-probe-worker',
+    })).resolves.toEqual({ kind: 'circuit_open' })
+  })
+
   test('blocks new Account Email delivery while preserving recovery for a deprecated service', async () => {
     const enqueuer = createEnqueuer()
     await enqueuer.enqueue({ ...request, messageId: '019f8099-7e26-7760-ad08-66d1d66b2860' })
@@ -1348,6 +1679,70 @@ maybeDescribe('Prisma transactional mail outbox', () => {
       temporaryFailures: 0,
       terminalFailures: 0,
     }])
+  })
+
+  test('projects the protection-alert retry backlog without message or recipient data', async () => {
+    const now = scenarioTime()
+    await prisma.mailDeliveryProtectionAlert.createMany({
+      data: [
+        {
+          availableAt: scenarioTime(2_000),
+          occurredAt: scenarioTime(-5_000),
+          reason: 'delivery_budget_exhausted',
+          transitionAt: scenarioTime(-5_000),
+        },
+        {
+          attemptCount: 1,
+          availableAt: scenarioTime(1_000),
+          lastFailureCode: 'alert_delivery_failed',
+          occurredAt: scenarioTime(-4_000),
+          reason: 'delivery_circuit_open',
+          transitionAt: scenarioTime(-4_000),
+        },
+        {
+          attemptCount: 1,
+          availableAt: scenarioTime(-3_000),
+          leaseExpiresAt: scenarioTime(10_000),
+          leaseOwner: 'aggregate-alert-worker',
+          occurredAt: scenarioTime(-3_000),
+          reason: 'delivery_budget_exhausted',
+          transitionAt: scenarioTime(-3_000),
+        },
+        {
+          attemptCount: 3,
+          availableAt: scenarioTime(-2_000),
+          lastFailureCode: 'alert_delivery_failed',
+          occurredAt: scenarioTime(-2_000),
+          reason: 'delivery_circuit_open',
+          terminalAt: scenarioTime(-1_000),
+          transitionAt: scenarioTime(-2_000),
+        },
+        {
+          attemptCount: 1,
+          availableAt: scenarioTime(-1_000),
+          deliveredAt: now,
+          occurredAt: scenarioTime(-1_000),
+          reason: 'delivery_budget_exhausted',
+          transitionAt: scenarioTime(-1_000),
+        },
+      ],
+    })
+    const reader = createPrismaMailDeliveryOverviewReader(prisma, {
+      configured: false,
+      deliveryBudgetPerMinute: 60,
+    })
+
+    const view = await reader.read(now)
+
+    expect(view.protectionAlerts).toEqual({
+      leased: 1,
+      nextAttemptAt: scenarioTime(1_000).toISOString(),
+      oldestPendingAt: scenarioTime(-5_000).toISOString(),
+      pending: 3,
+      retrying: 1,
+      terminal: 1,
+    })
+    expect(JSON.stringify(view.protectionAlerts)).not.toMatch(/recipient|message|token|@/i)
   })
 
   test('keeps the provider attribution captured by the delivery worker after MX assessment changes', async () => {

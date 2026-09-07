@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+export const MAIL_SMTP_ACK_SAFETY_MARGIN_MS = 5_000
+
 const booleanStringSchema = z
   .enum(['true', 'false'])
   .default('false')
@@ -503,11 +505,14 @@ function validateSmtpEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
       message: 'MAIL_SMTP_REPLY_TO must use the product support mailbox',
     })
   }
-  if (env.MAIL_SMTP_LEASE_SECONDS * 1_000 <= env.MAIL_SMTP_TIMEOUT_MS) {
+  if (
+    env.MAIL_SMTP_LEASE_SECONDS * 1_000
+    < env.MAIL_SMTP_TIMEOUT_MS + MAIL_SMTP_ACK_SAFETY_MARGIN_MS
+  ) {
     ctx.addIssue({
       code: 'custom',
       path: ['MAIL_SMTP_LEASE_SECONDS'],
-      message: 'MAIL_SMTP_LEASE_SECONDS must exceed MAIL_SMTP_TIMEOUT_MS',
+      message: `MAIL_SMTP_LEASE_SECONDS must cover MAIL_SMTP_TIMEOUT_MS plus the ${MAIL_SMTP_ACK_SAFETY_MARGIN_MS}ms acknowledgement safety margin`,
     })
   }
 }

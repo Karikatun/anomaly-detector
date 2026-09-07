@@ -800,14 +800,20 @@ async function validateRecoveryCodePasswordReset(apiInstances: ApiInstance[], pr
 }
 
 async function ensureApprovedMailService(prisma: DbClient) {
-  const policy = createMailModule({ db: prisma }).operatorPolicy
+  const operator = await prisma.user.create({
+    data: { login: `benchmark-mail-policy-${crypto.randomUUID()}` },
+  })
+  const policy = createMailModule({
+    accountLifecycleSecret: env.JWT_SECRET,
+    db: prisma,
+  }).operatorPolicy
   const current = await policy.read()
   const synced = await policy.syncCatalog({
     commandId: crypto.randomUUID(),
     expectedVersion: current.currentVersion,
   }, {
     authenticatedAt: new Date(),
-    id: crypto.randomUUID(),
+    id: operator.id,
   })
   const vkMail = synced.publishedPolicy?.providers.find(({ providerId }) =>
     providerId === 'vk_mail')

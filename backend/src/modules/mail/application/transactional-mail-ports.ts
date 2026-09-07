@@ -58,9 +58,11 @@ export type TransactionalMailDelivery = {
 
 export type ClaimedTransactionalMail = {
   attemptCount: number
+  circuitProbe: boolean
   createdAt: Date
   deliveryBudgetWindowStartedAt: Date
   id: string
+  leaseExpiresAt: Date
   messageId: string
   providerMessageId: string
   recipient: string
@@ -83,6 +85,8 @@ export type MailOutboxRecordFailureResult = {
   protectionAlert?: MailDeliveryProtectionAlert
   state: MailOutboxFailureState
 }
+
+export type MailProtectionAlertFailureState = 'queued' | 'stale_claim' | 'terminal_failure'
 
 export type MailOutboxClaimResult =
   | { kind: 'budget_exhausted'; protectionAlert?: MailDeliveryProtectionAlert }
@@ -123,6 +127,19 @@ export type MailOutboxRepository = {
     temporary: boolean
     workerId: string
   }): Promise<MailOutboxRecordFailureResult>
+  recordProtectionAlertFailure(input: {
+    now: Date
+    reason: MailDeliveryProtectionAlert['reason']
+    transitionAt: Date
+    workerId: string
+  }): Promise<MailProtectionAlertFailureState>
+  renewLeaseForDelivery(input: {
+    circuitProbe: boolean
+    id: string
+    leaseExpiresAt: Date
+    now: Date
+    workerId: string
+  }): Promise<boolean>
   releaseBlocked(input: {
     deliveryBudgetWindowStartedAt: Date
     id: string

@@ -368,4 +368,3 @@ export type ActiveSessionGuard = {
   runWhileActive(input: ActiveSessionPrincipal, action: () => void): Promise<boolean>
 }
 export type LogoutCleanup = (input: { sessionId: string; userId: string }) => void | Promise<void>
-export type AccountDeletionCleanup = (input: { userId: string }) => void | Promise<void>

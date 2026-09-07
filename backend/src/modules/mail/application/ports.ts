@@ -28,6 +28,7 @@ export type MailPolicyCommitResult =
   | ({ kind: 'command_exists' } & StoredMailPolicyCommand)
   | { kind: 'catalog_version_conflict' }
   | { kind: 'committed'; receipt: MailPolicyCommandReceipt }
+  | { kind: 'operator_unavailable' }
   | { kind: 'provider_not_found' }
   | { kind: 'version_conflict' }
 

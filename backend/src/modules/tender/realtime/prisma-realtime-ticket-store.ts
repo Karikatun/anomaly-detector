@@ -22,12 +22,17 @@ export function createPrismaRealtimeTicketStore(
                 userId: true,
               },
             },
+            user: {
+              select: { anonymizedAt: true },
+            },
           },
         })
         if (!ticket) return { kind: 'not_found' as const }
         if (ticket.usedAt !== null) return { kind: 'used' as const }
         if (ticket.expiresAt <= now) return { kind: 'expired' as const }
         if (
+          ticket.user.anonymizedAt !== null
+          ||
           ticket.session.userId !== ticket.userId
           || ticket.session.revokedAt !== null
           || ticket.session.expiresAt <= now
@@ -40,6 +45,9 @@ export function createPrismaRealtimeTicketStore(
           where: {
             ticketHash,
             usedAt: null,
+            user: {
+              is: { anonymizedAt: null },
+            },
             session: {
               is: {
                 expiresAt: { gt: now },

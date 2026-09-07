@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { deriveAccountEmailConfirmationCode } from './account-email-confirmation-code'
+import { MailDeliveryProtectionAlertService } from './mail-delivery-protection-alert-service'
 
 import type {
   ClaimedMailDeliveryProtectionAlert,
@@ -166,6 +167,18 @@ export class TransactionalMailDeliveryService {
         continue
       }
 
+      const renewed = await this.dependencies.repository.renewLeaseForDelivery({
+        circuitProbe: claim.message.circuitProbe,
+        id: claim.message.id,
+        leaseExpiresAt: claim.message.leaseExpiresAt,
+        now: this.now(input.now),
+        workerId,
+      })
+      if (!renewed) {
+        result.staleClaims += 1
+        continue
+      }
+
       let deliveryResult: TransactionalMailDeliveryResult
       try {
         deliveryResult = await this.dependencies.delivery.send(rendered)
@@ -212,38 +225,10 @@ export class TransactionalMailDeliveryService {
     now: Date
     workerId: string
   }) {
-    const limit = z.number().int().min(1).max(100).parse(input.limit)
-    const workerId = workerIdSchema.parse(input.workerId)
-    const alerts = await this.dependencies.repository.claimProtectionAlerts({
-      limit,
-      now: input.now,
-      workerId,
-    })
-    const result = {
-      claimed: alerts.length,
-      delivered: 0,
-      failed: 0,
-      staleClaims: 0,
-    }
-
-    for (const alert of alerts) {
-      try {
-        await input.deliver(alert)
-      } catch {
-        result.failed += 1
-        continue
-      }
-      const acknowledged = await this.dependencies.repository.acknowledgeProtectionAlert({
-        now: input.now,
-        reason: alert.reason,
-        transitionAt: alert.transitionAt,
-        workerId,
-      })
-      if (acknowledged) result.delivered += 1
-      else result.staleClaims += 1
-    }
-
-    return result
+    return new MailDeliveryProtectionAlertService({
+      clock: this.dependencies.clock,
+      repository: this.dependencies.repository,
+    }).dispatch(input)
   }
 
   private now(fallback: Date) {
