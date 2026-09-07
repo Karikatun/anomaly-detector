@@ -105,7 +105,7 @@ maybeDescribe('Room start integration', () => {
     })).resolves.toMatchObject({
       players: [
         { displayName: 'Хост', playerId: host.id, tiePriority: 1 },
-        { bot: { difficulty: 'easy', strategyVersion: 'bot-v1' }, playerId: botId, tiePriority: 2 },
+        { bot: { difficulty: 'easy', strategyVersion: 'bot-v2' }, playerId: botId, tiePriority: 2 },
       ],
     })
   })
