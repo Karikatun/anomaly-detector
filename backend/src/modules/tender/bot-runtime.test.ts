@@ -58,3 +58,24 @@ test('a completed mixed Tender stays available in history but is excluded from h
   expect(await store.listCompletedForPlayer('human')).toHaveLength(1)
   expect(await createCompletedTenderSummaryReader(store).listCompletedForPlayer('human')).toEqual([])
 })
+
+test('a bot with no proven final claim finishes through the ordinary authoritative deadline', async () => {
+  let now = new Date('2026-09-07T12:00:00.000Z')
+  const store = createInMemoryTenderStore()
+  const module = createTenderModule({ store, now: () => now })
+  const { tenderId } = await module.createTender({ players: [
+    { id: 'human', tiePriority: 1 },
+    { id: 'bot', tiePriority: 2, bot: { difficulty: 'easy', strategyVersion: 'bot-v2' } },
+  ] })
+  const initial = (await store.read(tenderId))!
+  await store.commit({
+    tenderId, expectedVersion: initial.version, auditEvents: [],
+    nextTender: { ...initial, phase: 'final-scientific-model', round: 5, dueAt: new Date(now.getTime() + 1_000) },
+  })
+  expect(await createTenderBotRunner({ store, tender: module }).advance({ limit: 10 }))
+    .toEqual({ acceptedCommands: 0, failedTenders: 0 })
+  now = new Date(now.getTime() + 1_000)
+  expect((await module.advanceDueTenders({ limit: 10, now })).advancedTenderIds).toContain(tenderId)
+  expect((await store.read(tenderId))?.phase).toBe('complete')
+  expect((await store.read(tenderId))?.finalScientificModelsByPlayer.bot).toBeUndefined()
+})

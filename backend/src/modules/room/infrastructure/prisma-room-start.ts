@@ -84,7 +84,7 @@ async function startDueRoom(
               displayName: displayNameById.get(member.userId) ?? member.userId.slice(0, 8),
             })),
             ...bots.map((bot) => ({
-              bot: { difficulty: bot.difficulty, strategyVersion: 'bot-v1' as const },
+              bot: { difficulty: bot.difficulty, strategyVersion: 'bot-v2' as const },
               id: bot.id,
               tiePriority: bot.seat,
             })),

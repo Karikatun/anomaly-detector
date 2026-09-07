@@ -29,6 +29,7 @@ export function createTenderBotRunner({ store, tender }: { store: TenderStore; t
               difficulty: player.bot.difficulty,
               playerId: player.id,
               seed,
+              strategyVersion: player.bot.strategyVersion,
             })
             if (!command) continue
             await tender.execute(command, { expectedVersion: view.version })
