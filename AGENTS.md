@@ -12,6 +12,7 @@
 
 ## Scope Routing
 
+- For code investigation during the bounded RAG pilot, run `bun scripts/rag-pilot.mjs status` and follow `docs/agents/rag-pilot.md`. Missing state is not permission to initialize or restart it. Only `ACTIVE` enables optional pilot retrieval; `SETUP`, expired, or `CLOSED` means use ordinary search. Never extend the deadline, alter frozen cases, or adopt the tool permanently. New conversations in this checkout share `.scratch/rag-pilot/`; do not initialize a second pilot in another checkout.
 - Read `README.md`, root `CONTEXT.md`, relevant `docs/`, and applicable ADRs for non-trivial work. Discover the current structure rather than treating README as a file inventory.
 - For backend, contract, persistence, auth, or API work, read `backend/AGENTS.md`.
 - For player web application work, read `webapp/AGENTS.md`. For substantial UI, UX, responsive, animation, design-system, or rendered-flow work in any client, use `$anomaly-ui`.
