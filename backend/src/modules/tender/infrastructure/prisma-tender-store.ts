@@ -562,7 +562,17 @@ export function createPrismaTenderStore(
     async commit(change: TenderCommit): Promise<TenderCommitResult> {
       try {
         return await db.$transaction<TenderCommitResult>(async (tx) => {
-          if (change.actorId && accountLifecycleSecret) {
+          if (change.botActor) {
+            const current = await tx.tender.findUnique({
+              where: { id: change.tenderId },
+              select: { state: true, version: true },
+            })
+            if (!current || !persistedTenderStateSchema.parse(current.state).players
+              .some((player) => player.id === change.actorId && player.bot)) {
+              return { kind: 'actor_unavailable' }
+            }
+            if (current.version !== change.expectedVersion) return { kind: 'version_conflict' }
+          } else if (change.actorId && accountLifecycleSecret) {
             const activeActor = await lockActiveAccountLifecycleTransaction(
               tx,
               accountLifecycleSecret,
@@ -663,6 +673,20 @@ export function createPrismaTenderStore(
         .sort((left, right) => earliestDeadline(left).getTime() - earliestDeadline(right).getTime())
         .slice(0, limit)
         .map((tender) => tender.id)
+    },
+
+    async findBotTenders({ afterId, limit }) {
+      const records = await db.tender.findMany({
+        where: {
+          phase: { not: 'complete' },
+          ...(afterId ? { id: { gt: afterId } } : {}),
+          state: { path: ['players'], array_contains: [{ bot: { strategyVersion: 'bot-v1' } }] },
+        },
+        orderBy: { id: 'asc' },
+        take: limit,
+        select: { id: true },
+      })
+      return records.map((record) => record.id)
     },
 
     async listCompletedForPlayer(playerId) {

@@ -122,3 +122,27 @@ export function useCancelRoomStartMutation({ api }: RoomMutationsOptions) {
     },
   })
 }
+
+export function useAddRoomBotMutation({ api }: RoomMutationsOptions) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ roomId, seat }: { roomId: string; seat: number }) => api.addBot(roomId, seat),
+    onSuccess: (room) => {
+      queryClient.setQueryData(roomQueryKeys.byId(room.roomId), room)
+      queryClient.setQueryData(roomQueryKeys.current(), room)
+    },
+  })
+}
+
+export function useRemoveRoomBotMutation({ api }: RoomMutationsOptions) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ botId, roomId }: { botId: string; roomId: string }) => api.removeBot(roomId, botId),
+    onSuccess: (room) => {
+      queryClient.setQueryData(roomQueryKeys.byId(room.roomId), room)
+      queryClient.setQueryData(roomQueryKeys.current(), room)
+    },
+  })
+}

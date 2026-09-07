@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { CompletedTenderPanel } from '../src/features/tender/components/CompletedTenderPanel'
+import { TenderPlayers } from '../src/features/tender/components/TenderOverview'
 import { I18nProvider } from '../src/platform/i18n'
 
 const view = {
@@ -252,6 +253,35 @@ test('shows what contributed to every player rating in the final audit', () => {
   expect(html).not.toContain('Резерв')
   expect(html).not.toMatch(/<details[^>]*data-audit-round[^>]*open/)
   expect(html).not.toMatch(/<section[^>]*class="[^"]*panel[^"]*"[^>]*>[\s\S]*Версия правил: 2\s*<\/section>$/)
+})
+
+test('labels a bot by its visible difficulty without exposing its strategy', () => {
+  const botView = {
+    ...view,
+    players: [
+      view.players[0],
+      {
+        ...view.players[1],
+        bot: { difficulty: 'easy' as const, strategyVersion: 'bot-v1' as const },
+        displayName: undefined,
+      },
+    ],
+  } satisfies TenderView
+
+  const overview = renderToStaticMarkup(
+    <I18nProvider>
+      <TenderPlayers players={botView.players} />
+    </I18nProvider>,
+  )
+  const completed = renderToStaticMarkup(
+    <I18nProvider>
+      <CompletedTenderPanel currentUserId="player-a" view={botView} />
+    </I18nProvider>,
+  )
+
+  expect(overview).toContain('Бот · лёгкий')
+  expect(completed).toContain('Бот · лёгкий')
+  expect(`${overview}${completed}`).not.toContain('bot-v1')
 })
 
 test('separates another winner from the current player result', () => {

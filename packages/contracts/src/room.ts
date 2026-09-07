@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { botDifficultySchema } from './bots'
 
 export const roomCapacitySchema = z.union([z.literal(2), z.literal(3), z.literal(4)])
 export const roomIdSchema = z.string().uuid()
@@ -6,7 +7,13 @@ export const roomJoinCodeSchema = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{10}$/)
 export const roomStatusSchema = z.enum(['waiting', 'starting', 'started'])
 
 export const createRoomRequestSchema = z.object({
+  allowBots: z.boolean().default(false),
   capacity: roomCapacitySchema,
+}).strict()
+
+export const addRoomBotRequestSchema = z.object({
+  difficulty: z.literal('easy'),
+  seat: z.number().int().min(1).max(4),
 }).strict()
 
 export const setRoomReadyRequestSchema = z.object({
@@ -26,7 +33,15 @@ export const roomMemberSchema = z.object({
   userId: z.string().uuid(),
 }).strict()
 
+export const roomBotSchema = z.object({
+  difficulty: botDifficultySchema,
+  id: z.string().uuid(),
+  seat: z.number().int().positive(),
+}).strict()
+
 export const roomViewSchema = z.object({
+  allowBots: z.boolean(),
+  bots: z.array(roomBotSchema).optional(),
   capacity: roomCapacitySchema,
   hostId: z.string().uuid(),
   joinCode: roomJoinCodeSchema.nullable(),
@@ -56,9 +71,11 @@ export const currentMatchResponseSchema = z.object({
 }).strict()
 
 export type CreateRoomRequest = z.infer<typeof createRoomRequestSchema>
+export type AddRoomBotRequest = z.infer<typeof addRoomBotRequestSchema>
 export type CurrentMatchResponse = z.infer<typeof currentMatchResponseSchema>
 export type JoinRoomByCodeRequest = z.input<typeof joinRoomByCodeRequestSchema>
 export type JoinRoomByCodePayload = z.output<typeof joinRoomByCodeRequestSchema>
 export type RoomMember = z.infer<typeof roomMemberSchema>
+export type RoomBot = z.infer<typeof roomBotSchema>
 export type RoomView = z.infer<typeof roomViewSchema>
 export type SetRoomReadyRequest = z.infer<typeof setRoomReadyRequestSchema>

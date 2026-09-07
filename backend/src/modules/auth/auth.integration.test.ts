@@ -4176,6 +4176,8 @@ maybeDescribe('auth API integration', () => {
     expect(createRoom.status).toBe(201)
     const room = await createRoom.json()
     expect(room).toEqual({
+      allowBots: false,
+      bots: [],
       capacity: 2,
       hostId: user.id,
       joinCode: expect.stringMatching(/^[0-9A-HJKMNP-TV-Z]{10}$/),

@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogClose,
@@ -31,13 +32,14 @@ export function CreateRoomDialog({
   const auth = useAuth()
   const navigate = useNavigate()
   const [capacity, setCapacity] = useState<2 | 3 | 4>(2)
+  const [allowBots, setAllowBots] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const api = new RoomsApi(auth.transport)
   const { mutateAsync: createRoom, isPending } = useCreateRoomMutation({ api })
 
   const handleCreate = async () => {
     setError(null)
-    const result = createRoomRequestSchema.safeParse({ capacity })
+    const result = createRoomRequestSchema.safeParse({ allowBots, capacity })
     if (!result.success) {
       setError(t('rooms.create.error.invalid'))
       return
@@ -72,6 +74,16 @@ export function CreateRoomDialog({
               <option value="3">{t('rooms.create.capacity.3')}</option>
               <option value="4">{t('rooms.create.capacity.4')}</option>
             </NativeSelect>
+          </Field>
+          <Field className={`${styles.field} ${styles.checkboxField}`} orientation="horizontal">
+            <Checkbox
+              id="create-room-allow-bots"
+              checked={allowBots}
+              onCheckedChange={(checked) => setAllowBots(checked === true)}
+            />
+            <FieldLabel className={styles.label} htmlFor="create-room-allow-bots">
+              {t('rooms.create.allowBots')}
+            </FieldLabel>
           </Field>
           {error && <FieldError className={styles.error} errors={[{ message: error }]} />}
         </div>

@@ -659,7 +659,8 @@ maybeDescribe('Tender PostgreSQL integration', () => {
       { isolationLevel: 'Serializable', timeout: 15_000 },
     )
 
-    expect(changedTenderIds).toEqual([...tenderIds].sort())
+    // The bounded cleanup does not promise SQL row order.
+    expect([...changedTenderIds].sort()).toEqual([...tenderIds].sort())
     const persistedHistory = await Promise.all([
       prisma.tender.findMany({ orderBy: { id: 'asc' }, select: { id: true, state: true } }),
       prisma.tenderAuditEvent.findMany({

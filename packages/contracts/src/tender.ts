@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { botParticipantSchema } from './bots'
 
 export const tenderIdSchema = z.string().min(1).max(128)
 export const tenderResourceIdSchema = z.uuid()
@@ -19,6 +20,7 @@ export const signalIdSchema = z.enum(['aster', 'boreal', 'cinder', 'delta', 'ecl
 export const tenderRulesetSchema = z.enum(['tender-v1', 'tender-v2'])
 
 export const tenderPlayerSchema = z.object({
+  bot: botParticipantSchema.optional(),
   id: playerIdSchema,
   tiePriority: z.number().int().min(1).max(4),
   displayName: z.string().min(1).max(100).optional(),
@@ -273,6 +275,7 @@ export const tenderPhaseSchema = z.enum([
 ])
 
 export const tenderPlayerViewSchema = z.object({
+  bot: botParticipantSchema.optional(),
   playerId: playerIdSchema,
   displayName: z.string().min(1).max(100).optional(),
   tiePriority: z.number().int().min(1).max(4).optional(),

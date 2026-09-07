@@ -8,6 +8,7 @@ import {
   createRoomStartModule,
 } from './index'
 import { createPrismaRoomRepository } from './infrastructure/prisma-room-repository'
+import { createPersistentTenderBotRunner } from '../tender'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl ? describe : describe.skip
@@ -75,6 +76,137 @@ maybeDescribe('Room start integration', () => {
     })
     await expect(roomStart.releaseCompletedCurrentMatches()).resolves.toBe(2)
     expect(await prisma.currentMatch.count({ where: { roomId: room.id } })).toBe(0)
+  })
+
+  test('starts a due Room with one human and one persisted easy bot', async () => {
+    const host = await prisma.user.create({
+      data: { displayName: 'Хост', login: 'room-bot-start-host', passwordHash: 'hash' },
+    })
+    const botId = crypto.randomUUID()
+    const room = await prisma.tenderRoom.create({
+      data: {
+        allowBots: true,
+        bots: [{ difficulty: 'easy', id: botId, seat: 2 }],
+        capacity: 2,
+        hostId: host.id,
+        members: { create: { ready: true, seat: 1, userId: host.id } },
+        startsAt: new Date('2026-07-24T12:00:00.000Z'),
+        status: 'starting',
+      },
+    })
+
+    const result = await createRoomStartModule(prisma).advanceDueRoomStarts({ now: new Date('2026-07-24T12:00:05.000Z') })
+    const tenderId = result.started[0]?.tenderId
+    await expect(createPersistentTenderBotRunner(prisma, accountLifecycleSecret).advance({ limit: 1 }))
+      .resolves.toEqual({ acceptedCommands: 1, failedTenders: 0 })
+    await expect(createPersistentTenderModule(prisma).readTenderView({
+      playerId: host.id,
+      tenderId: tenderId!,
+    })).resolves.toMatchObject({
+      players: [
+        { displayName: 'Хост', playerId: host.id, tiePriority: 1 },
+        { bot: { difficulty: 'easy', strategyVersion: 'bot-v1' }, playerId: botId, tiePriority: 2 },
+      ],
+    })
+  })
+
+  test('allows only the host to add and remove an easy bot from an opted-in waiting Room', async () => {
+    const [host, guest] = await Promise.all([
+      prisma.user.create({ data: { login: 'bot-room-host', passwordHash: 'hash' } }),
+      prisma.user.create({ data: { login: 'bot-room-guest', passwordHash: 'hash' } }),
+    ])
+    const room = await prisma.tenderRoom.create({
+      data: {
+        allowBots: true,
+        capacity: 4,
+        hostId: host.id,
+        members: { create: [{ ready: true, seat: 1, userId: host.id }, { ready: true, seat: 2, userId: guest.id }] },
+        status: 'waiting',
+      },
+    })
+    const repository = createPrismaRoomRepository(prisma, clock, accountLifecycleSecret)
+
+    await expect(repository.addBot({ actorId: guest.id, difficulty: 'easy', roomId: room.id, seat: 4 }))
+      .rejects.toMatchObject({ kind: 'room_not_found' })
+    const withBot = await repository.addBot({ actorId: host.id, difficulty: 'easy', roomId: room.id, seat: 4 })
+    expect(withBot).toMatchObject({
+      bots: [{ difficulty: 'easy', id: expect.any(String), seat: 4 }],
+      members: [{ ready: false, userId: host.id }, { ready: false, userId: guest.id }],
+    })
+    await expect(repository.addBot({ actorId: host.id, difficulty: 'easy', roomId: room.id, seat: 4 }))
+      .rejects.toMatchObject({ kind: 'room_full' })
+    const persistedWithBot = await prisma.tenderRoom.findUniqueOrThrow({ where: { id: room.id } })
+    expect(persistedWithBot.bots).toEqual(withBot.bots ?? [])
+    const botId = (persistedWithBot.bots as Array<{ id: string }>)[0]?.id
+    expect(botId).toBeDefined()
+    await expect(repository.removeBot({ actorId: guest.id, botId: botId!, roomId: room.id }))
+      .rejects.toMatchObject({ kind: 'room_not_found' })
+    const withoutBot = await repository.removeBot({ actorId: host.id, botId: botId!, roomId: room.id })
+    expect(withoutBot).toMatchObject({ bots: [], members: [{ ready: false }, { ready: false }] })
+  })
+
+  test('serializes a human join and bot add so they cannot occupy the same final seat', async () => {
+    const secondPrisma = createPrisma(databaseUrl)
+    try {
+      const [host, guest] = await Promise.all([
+        prisma.user.create({ data: { login: 'bot-race-host', passwordHash: 'hash' } }),
+        prisma.user.create({ data: { login: 'bot-race-guest', passwordHash: 'hash' } }),
+      ])
+      const room = await prisma.tenderRoom.create({
+        data: {
+          allowBots: true,
+          capacity: 2,
+          hostId: host.id,
+          members: { create: { seat: 1, userId: host.id } },
+          status: 'waiting',
+        },
+      })
+      await prisma.currentMatch.create({ data: { roomId: room.id, userId: host.id } })
+      const hostRepository = createPrismaRoomRepository(prisma, clock, accountLifecycleSecret)
+      const guestRepository = createPrismaRoomRepository(secondPrisma, clock, accountLifecycleSecret)
+
+      const outcomes = await Promise.allSettled([
+        hostRepository.addBot({ actorId: host.id, difficulty: 'easy', roomId: room.id, seat: 2 }),
+        guestRepository.join({ actorId: guest.id, roomId: room.id }),
+      ])
+      expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1)
+      const persisted = await prisma.tenderRoom.findUniqueOrThrow({
+        where: { id: room.id },
+        include: { members: { orderBy: { seat: 'asc' } } },
+      })
+      expect(persisted.members.length + (persisted.bots as Array<unknown>).length).toBe(2)
+      expect(new Set([
+        ...persisted.members.map((member) => member.seat),
+        ...(persisted.bots as Array<{ seat: number }>).map((bot) => bot.seat),
+      ])).toEqual(new Set([1, 2]))
+    } finally {
+      await secondPrisma.$disconnect()
+    }
+  })
+
+  test('joins the remaining seat when a persisted bot occupies an earlier seat', async () => {
+    const [host, guest] = await Promise.all([
+      prisma.user.create({ data: { login: 'bot-seat-host', passwordHash: 'hash' } }),
+      prisma.user.create({ data: { login: 'bot-seat-guest', passwordHash: 'hash' } }),
+    ])
+    const room = await prisma.tenderRoom.create({
+      data: {
+        allowBots: true,
+        bots: [{ difficulty: 'easy', id: crypto.randomUUID(), seat: 2 }],
+        capacity: 3,
+        hostId: host.id,
+        members: { create: { seat: 1, userId: host.id } },
+        status: 'waiting',
+      },
+    })
+    await prisma.currentMatch.create({ data: { roomId: room.id, userId: host.id } })
+
+    await expect(createPrismaRoomRepository(prisma, clock, accountLifecycleSecret).join({
+      actorId: guest.id,
+      roomId: room.id,
+    })).resolves.toMatchObject({
+      members: [{ seat: 1, userId: host.id }, { seat: 3, userId: guest.id }],
+    })
   })
 
   test('reopens a starting Room under the remaining player when its host account is deleted', async () => {
@@ -150,6 +282,30 @@ maybeDescribe('Room start integration', () => {
     expect(await prisma.tenderRoom.findUnique({ where: { id: room.id } })).toBeNull()
     expect(await prisma.tenderRoomMember.count({ where: { userId: host.id } })).toBe(0)
     expect(await prisma.currentMatch.count({ where: { userId: host.id } })).toBe(0)
+  })
+
+  test('deletes a waiting Room with bots when its last human account is deleted', async () => {
+    const host = await prisma.user.create({
+      data: { login: 'deleted-only-bot-room-host', passwordHash: 'hash' },
+    })
+    const room = await prisma.tenderRoom.create({
+      data: {
+        allowBots: true,
+        bots: [{ difficulty: 'easy', id: crypto.randomUUID(), seat: 2 }],
+        capacity: 2,
+        hostId: host.id,
+        members: { create: { seat: 1, userId: host.id } },
+        status: 'waiting',
+      },
+    })
+    await prisma.currentMatch.create({ data: { roomId: room.id, userId: host.id } })
+
+    await prisma.$transaction(
+      (transaction) => cleanupPrismaRoomsForAccountDeletion(transaction, host.id),
+      { isolationLevel: 'Serializable' },
+    )
+
+    expect(await prisma.tenderRoom.findUnique({ where: { id: room.id } })).toBeNull()
   })
 
   test('serializes Room creation behind account deletion and rejects the tombstone', async () => {
