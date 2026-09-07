@@ -804,84 +804,102 @@ maybeDescribe('maintenance cleanup integration', () => {
 
   test('uses the partial claim index when active accounts outnumber due tombstones', async () => {
     const now = new Date('2026-09-04T17:45:00.000Z')
-    await prisma.user.createMany({
-      data: Array.from({ length: 20_000 }, (_, index) => ({
-        deletionCleanupAvailableAt: now,
-        login: `claim-index-active-${index}`,
-      })),
-    })
-    const unleasedAccount = await prisma.user.create({
-      data: {
-        anonymizedAt: new Date(now.getTime() - 120_000),
-        deletionCleanupAvailableAt: new Date(now.getTime() - 60_000),
-        login: 'claim-index-due-unleased',
-      },
-    })
-    const expiredLeaseAccount = await prisma.user.create({
-      data: {
-        anonymizedAt: new Date(now.getTime() - 90_000),
-        deletionCleanupAvailableAt: new Date(now.getTime() - 30_000),
-        deletionCleanupClaimOwner: 'expired-index-worker',
-        deletionCleanupLeaseExpiresAt: new Date(now.getTime() - 1),
-        login: 'claim-index-due-expired-lease',
-      },
-    })
-    const claimableAccounts = [unleasedAccount, expiredLeaseAccount]
-    await prisma.user.createMany({
-      data: [
-        {
-          anonymizedAt: new Date(now.getTime() - 180_000),
-          deletionCleanupAvailableAt: new Date(now.getTime() + 60_000),
-          login: 'claim-index-future-backoff',
-        },
-        {
-          anonymizedAt: new Date(now.getTime() - 150_000),
+    let testFailure: unknown
+
+    try {
+      await prisma.user.createMany({
+        data: Array.from({ length: 20_000 }, (_, index) => ({
+          deletionCleanupAvailableAt: now,
+          login: `claim-index-active-${index}`,
+        })),
+      })
+      const unleasedAccount = await prisma.user.create({
+        data: {
+          anonymizedAt: new Date(now.getTime() - 120_000),
           deletionCleanupAvailableAt: new Date(now.getTime() - 60_000),
-          deletionCleanupClaimOwner: 'live-index-worker',
-          deletionCleanupLeaseExpiresAt: new Date(now.getTime() + 60_000),
-          login: 'claim-index-live-lease',
+          login: 'claim-index-due-unleased',
         },
-      ],
-    })
-    await prisma.$executeRaw`ANALYZE "users"`
+      })
+      const expiredLeaseAccount = await prisma.user.create({
+        data: {
+          anonymizedAt: new Date(now.getTime() - 90_000),
+          deletionCleanupAvailableAt: new Date(now.getTime() - 30_000),
+          deletionCleanupClaimOwner: 'expired-index-worker',
+          deletionCleanupLeaseExpiresAt: new Date(now.getTime() - 1),
+          login: 'claim-index-due-expired-lease',
+        },
+      })
+      const claimableAccounts = [unleasedAccount, expiredLeaseAccount]
+      await prisma.user.createMany({
+        data: [
+          {
+            anonymizedAt: new Date(now.getTime() - 180_000),
+            deletionCleanupAvailableAt: new Date(now.getTime() + 60_000),
+            login: 'claim-index-future-backoff',
+          },
+          {
+            anonymizedAt: new Date(now.getTime() - 150_000),
+            deletionCleanupAvailableAt: new Date(now.getTime() - 60_000),
+            deletionCleanupClaimOwner: 'live-index-worker',
+            deletionCleanupLeaseExpiresAt: new Date(now.getTime() + 60_000),
+            login: 'claim-index-live-lease',
+          },
+        ],
+      })
+      await prisma.$executeRaw`ANALYZE "users"`
 
-    const plan = await prisma.$queryRaw<Array<{ 'QUERY PLAN': string }>>`
-      EXPLAIN (COSTS OFF)
-      SELECT "id"
-      FROM "users"
-      WHERE "anonymized_at" IS NOT NULL
-        AND "deletion_cleanup_completed_at" IS NULL
-        AND "deletion_cleanup_available_at" <= ${now}
-        AND (
-          "deletion_cleanup_lease_expires_at" IS NULL
-          OR "deletion_cleanup_lease_expires_at" <= ${now}
-        )
-      ORDER BY "deletion_cleanup_available_at" ASC, "anonymized_at" ASC, "id" ASC
-      FOR UPDATE SKIP LOCKED
-      LIMIT 25
-    `
-    const planText = plan.map((row) => row['QUERY PLAN']).join('\n')
-    expect(planText).toContain('users_deletion_cleanup_claim_idx')
-    expect(planText).not.toContain('Sort')
-    const [partialIndex] = await prisma.$queryRaw<Array<{ indexdef: string }>>`
-      SELECT indexdef
-      FROM pg_indexes
-      WHERE schemaname = current_schema()
-        AND indexname = 'users_deletion_cleanup_claim_idx'
-    `
-    expect(partialIndex?.indexdef).toContain(
-      'WHERE ((anonymized_at IS NOT NULL) AND (deletion_cleanup_completed_at IS NULL))',
-    )
+      const plan = await prisma.$queryRaw<Array<{ 'QUERY PLAN': string }>>`
+        EXPLAIN (COSTS OFF)
+        SELECT "id"
+        FROM "users"
+        WHERE "anonymized_at" IS NOT NULL
+          AND "deletion_cleanup_completed_at" IS NULL
+          AND "deletion_cleanup_available_at" <= ${now}
+          AND (
+            "deletion_cleanup_lease_expires_at" IS NULL
+            OR "deletion_cleanup_lease_expires_at" <= ${now}
+          )
+        ORDER BY "deletion_cleanup_available_at" ASC, "anonymized_at" ASC, "id" ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 25
+      `
+      const planText = plan.map((row) => row['QUERY PLAN']).join('\n')
+      expect(planText).toContain('users_deletion_cleanup_claim_idx')
+      expect(planText).not.toContain('Sort')
+      const [partialIndex] = await prisma.$queryRaw<Array<{ indexdef: string }>>`
+        SELECT indexdef
+        FROM pg_indexes
+        WHERE schemaname = current_schema()
+          AND indexname = 'users_deletion_cleanup_claim_idx'
+      `
+      expect(partialIndex?.indexdef).toContain(
+        'WHERE ((anonymized_at IS NOT NULL) AND (deletion_cleanup_completed_at IS NULL))',
+      )
 
-    const claimed = await claimDeletedAccountCleanupBatch({
-      db: prisma,
-      limit: 25,
-      now,
-      workerId: 'claim-index-test-worker',
-    })
-    expect(new Set(claimed.map((claim) => claim.id))).toEqual(
-      new Set(claimableAccounts.map((account) => account.id)),
-    )
+      const claimed = await claimDeletedAccountCleanupBatch({
+        db: prisma,
+        limit: 25,
+        now,
+        workerId: 'claim-index-test-worker',
+      })
+      expect(new Set(claimed.map((claim) => claim.id))).toEqual(
+        new Set(claimableAccounts.map((account) => account.id)),
+      )
+    } catch (error) {
+      testFailure = error
+      throw error
+    } finally {
+      try {
+        await prisma.user.deleteMany({
+          where: { login: { startsWith: 'claim-index-' } },
+        })
+        expect(await prisma.user.count({
+          where: { login: { startsWith: 'claim-index-' } },
+        })).toBe(0)
+      } catch (cleanupError) {
+        if (!testFailure) throw cleanupError
+      }
+    }
   }, 30_000)
 
   test('backs off more than 25 poisoned tombstones so a newer account is not starved', async () => {
