@@ -171,7 +171,9 @@ export function PhasePanel({
     <>
       {isWaitingForTurn && (
         <WaitingForTurn
-          playerName={activePlayer?.displayName}
+          playerName={activePlayer?.bot
+            ? translate(`tender.player.bot.${activePlayer.bot.difficulty}`)
+            : activePlayer?.displayName}
         />
       )}
       {content}
@@ -724,7 +726,11 @@ function TenderContent() {
           )}
           {isSequentialPhase && (
             <Badge variant={isMyTurn ? 'default' : 'outline'}>
-              {isMyTurn ? translate('tender.tenderPage.copy.023') : translate('tender.tenderPage.copy.024', { value1: activePlayer?.displayName ?? translate('tender.player.fallbackGenitive') })}
+              {isMyTurn ? translate('tender.tenderPage.copy.023') : translate('tender.tenderPage.copy.024', {
+                value1: activePlayer?.bot
+                  ? translate(`tender.player.bot.${activePlayer.bot.difficulty}`)
+                  : activePlayer?.displayName ?? translate('tender.player.fallbackGenitive'),
+              })}
             </Badge>
           )}
           {isSharedModelAnalysis && tenderView.modelAnalysisProgress && (

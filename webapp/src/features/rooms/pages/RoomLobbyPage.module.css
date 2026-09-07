@@ -14,6 +14,7 @@
 .playersPanel, .settingsPanel, .startPanel { border: 1px solid rgba(38, 102, 162, .62); border-radius: var(--radius-panel); background: linear-gradient(135deg, rgba(2, 17, 33, .94), rgba(2, 10, 20, .83)); }
 .playersPanel, .settingsPanel { padding: clamp(1rem, 1.8vw, 1.45rem); }
 .sectionTitle { padding-bottom: .85rem; border-bottom: 1px solid rgba(80, 130, 174, .25); font-size: .95rem; text-transform: uppercase; }
+.botDifficultyGoal { display: block; padding: .7rem 0 .2rem; color: #91a8bd; line-height: 1.35; }
 .playerList { display: grid; }
 .player { display: flex; min-height: 4.25rem; align-items: center; gap: .8rem; border-bottom: 1px solid rgba(80, 130, 174, .19); }
 .player:last-child { border-bottom: 0; }
@@ -77,6 +78,7 @@
 }
 
 @media (max-width: 520px) {
+  .botControls { padding-left: 0; }
   .startPanel { grid-template-columns: auto minmax(0, 1fr); }
   .startButton, .cancelStartButton { grid-column: 1 / -1; width: 100%; }
   .error { grid-column: 1 / -1; }

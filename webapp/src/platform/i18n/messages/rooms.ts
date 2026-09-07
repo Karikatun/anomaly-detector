@@ -42,6 +42,7 @@ export const roomsMessages = {
   'lobby.bot.difficulty.label': 'Сложность бота в слоте {seat}',
   'lobby.bot.difficulty.easy': 'Лёгкий',
   'lobby.bot.difficulty.hard': 'Сложный',
+  'lobby.bot.difficulty.goal': 'Лёгкий выясняет конфигурацию аномалии. Сложный старается набрать больше очков.',
   'lobby.button.exit': 'Выйти',
   'lobby.button.leaving': 'Выходим...',
   'lobby.button.start': 'Начать игру',

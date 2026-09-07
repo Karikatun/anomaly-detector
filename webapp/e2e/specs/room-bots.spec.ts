@@ -34,11 +34,19 @@ async function registerWithAccessToken(page: Page) {
 }
 
 async function sendHumanCommand(request: APIRequestContext, apiOrigin: string, accessToken: string, tenderId: string, command: Record<string, unknown>) {
-  const response = await request.post(`${apiOrigin}/api/tenders/${tenderId}/commands`, {
-    data: { ...command, actorId: command.actorId, commandId: randomUUID(), tenderId },
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-  expect(response.ok()).toBe(true)
+  const data = { ...command, actorId: command.actorId, commandId: randomUUID(), tenderId }
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await request.post(`${apiOrigin}/api/tenders/${tenderId}/commands`, {
+      data,
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (response.ok()) return
+    const body = await response.json() as { error?: { code?: string } }
+    // Concurrent bot writes can win the optimistic commit. Reuse the intent ID
+    // so a receipt, if present, remains idempotent. Other failures are defects.
+    if (response.status() === 409 && body.error?.code === 'TENDER_VERSION_CONFLICT' && attempt < 3) continue
+    throw new Error(`Tender command ${String(command.type)} failed with ${response.status()}: ${JSON.stringify(body)}`)
+  }
 }
 
 for (const scenario of [
@@ -118,9 +126,16 @@ for (const scenario of [
       }
       await route.continue()
     })
+    await difficulty.focus()
+    await expect(difficulty).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('button', { name: 'Убрать' })).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(difficulty).toBeFocused()
     await difficulty.selectOption('hard')
     await expect(page.getByRole('alert')).toContainText('E2E bot difficulty failure')
     await expect(difficulty).toHaveValue('easy')
+    await expect(difficulty).toBeFocused()
     await difficulty.selectOption('hard')
     await expect(difficulty).toHaveValue('hard')
     await expect(page.getByText(scenario.label, { exact: true }).filter({ visible: true }).first()).toBeVisible()
@@ -141,16 +156,33 @@ for (const scenario of [
     headers: { Authorization: `Bearer ${session.accessToken}` },
   })
   expect(initialViewResponse.ok()).toBe(true)
-  const initialView = await initialViewResponse.json() as { players: Array<{ bot?: unknown; playerId: string }> }
+  const initialView = await initialViewResponse.json() as { players: Array<{ bot?: unknown; playerId: string }>; version: number }
   const humanPlayerId = initialView.players.find((player) => !player.bot)?.playerId
   if (!humanPlayerId) throw new Error('Tender view has no human participant')
   await expect(page.getByText(scenario.label, { exact: true }).filter({ visible: true }).first()).toBeVisible()
 
-  await sendHumanCommand(page.request, session.apiOrigin, session.accessToken, tenderId, {
-    actorId: humanPlayerId,
-    slot: 6,
-    type: 'request-access-slot',
-  })
+  if (scenario.difficulty === 'easy') {
+    await page.context().setOffline(true)
+    await sendHumanCommand(page.request, session.apiOrigin, session.accessToken, tenderId, {
+      actorId: humanPlayerId,
+      slot: 6,
+      type: 'request-access-slot',
+    })
+    await expect.poll(async () => {
+      const response = await page.request.get(`${session.apiOrigin}/api/tenders/${tenderId}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      })
+      expect(response.ok()).toBe(true)
+      return tenderViewSchema.parse(await response.json()).version
+    }, { intervals: [1_000], timeout: 30_000 }).toBeGreaterThan(initialView.version)
+    await page.context().setOffline(false)
+  } else {
+    await sendHumanCommand(page.request, session.apiOrigin, session.accessToken, tenderId, {
+      actorId: humanPlayerId,
+      slot: 6,
+      type: 'request-access-slot',
+    })
+  }
   await expect(page.getByRole('heading', { name: '2. Распределение мощности' })).toBeVisible({ timeout: 30_000 })
   await capture(page, `tender-bot-${scenario.screenshot}-1440x900`)
   await expectNoHorizontalOverflow(page)
@@ -202,4 +234,51 @@ for (const scenario of [
   await page.goto('/')
   await page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()
   await expect(page.getByRole('table')).toContainText(scenario.label)
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+})
+
+test('host can manage three bots without losing mobile selector access', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await registerWithAccessToken(page)
+
+  await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Количество игроков').selectOption('4')
+  await dialog.getByRole('checkbox', { name: 'Возможность добавить ботов' }).check()
+  await dialog.getByRole('button', { name: 'Создать команду' }).click()
+  await expect(page.getByRole('heading', { name: 'Лобби' })).toBeVisible()
+
+  for (let count = 0; count < 3; count += 1) {
+    await page.getByRole('button', { name: 'Добавить лёгкого бота' }).first().click()
+  }
+  await expect(page.getByText('Бот · лёгкий', { exact: true })).toHaveCount(3)
+  const explanation = 'Лёгкий выясняет конфигурацию аномалии. Сложный старается набрать больше очков.'
+  await expect(page.getByText(explanation, { exact: true })).toBeVisible()
+  const thirdBotDifficulty = page.getByLabel('Сложность бота в слоте 3')
+  await expect(thirdBotDifficulty).toHaveAccessibleDescription(explanation)
+  await thirdBotDifficulty.selectOption('hard')
+  await expect(page.getByText('Бот · сложный', { exact: true })).toBeVisible()
+  await capture(page, 'lobby-three-bots-1440x900')
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const seat of [2, 3, 4]) {
+    const selector = page.getByLabel(`Сложность бота в слоте ${seat}`)
+    await selector.scrollIntoViewIfNeeded()
+    await expect(selector).toBeVisible()
+  }
+  await expectNoHorizontalOverflow(page)
+  await capture(page, 'lobby-three-bots-390x844')
+
+  const remove = page.getByRole('button', { name: 'Убрать' }).last()
+  await remove.focus()
+  await expect(remove).toBeFocused()
+  await remove.click()
+  const addFourthBot = page.locator('[data-add-bot-seat="4"]')
+  await expect(addFourthBot).toBeFocused()
+  await addFourthBot.press('Enter')
+  const fourthBotDifficulty = page.getByLabel('Сложность бота в слоте 4')
+  await expect(fourthBotDifficulty).toBeVisible()
+  await expect(fourthBotDifficulty).toBeFocused()
 })
