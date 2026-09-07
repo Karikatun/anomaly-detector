@@ -26,6 +26,7 @@ maybeDescribe('concealed operations API integration', () => {
     ACCESS_TOKEN_TTL_SECONDS: 60,
     ADMIN_USER_IDS: [],
     ANALYTICS_ENABLED: false,
+    ROOM_BOT_CREATION_DISABLED: false,
     ANALYTICS_ORIGINS: [],
     ANALYTICS_CAMPAIGN_ALLOWLIST: [],
     AUTH_BODY_LIMIT_BYTES: 64 * 1024,
