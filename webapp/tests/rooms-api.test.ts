@@ -77,9 +77,11 @@ test('host bot mutations use the room roster endpoints and return the reconciled
 
   await api.addBot(roomId, 2)
   await api.removeBot(roomId, botId)
+  await api.updateBotDifficulty(roomId, botId, 'hard')
 
   expect(requests).toEqual([
     { body: { difficulty: 'easy', seat: 2 }, method: 'POST', path: `/api/rooms/${roomId}/bots` },
     { method: 'DELETE', path: `/api/rooms/${roomId}/bots/${botId}` },
+    { body: { difficulty: 'hard' }, method: 'PATCH', path: `/api/rooms/${roomId}/bots/${botId}` },
   ])
 })

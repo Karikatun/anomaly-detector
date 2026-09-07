@@ -1,5 +1,6 @@
 import {
   addRoomBotRequestSchema,
+  updateRoomBotDifficultyRequestSchema,
   createRoomRequestSchema,
   currentMatchResponseSchema,
   joinRoomByCodeRequestSchema,
@@ -87,6 +88,13 @@ export class RoomsApi {
   removeBot(roomId: string, botId: string): Promise<RoomView> {
     return this.transport.request(`/api/rooms/${roomId}/bots/${botId}`, roomViewSchema, {
       method: 'DELETE',
+    })
+  }
+
+  updateBotDifficulty(roomId: string, botId: string, difficulty: 'easy' | 'hard'): Promise<RoomView> {
+    return this.transport.request(`/api/rooms/${roomId}/bots/${botId}`, roomViewSchema, {
+      method: 'PATCH',
+      body: updateRoomBotDifficultyRequestSchema.parse({ difficulty }),
     })
   }
 }

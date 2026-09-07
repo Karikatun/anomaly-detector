@@ -119,6 +119,7 @@ export function createInMemoryRoomRepository(): RoomRepository {
       return current
     },
     async removeBot() { throw new Error('not implemented by contract fixture') },
+    async updateBotDifficulty() { throw new Error('not implemented by contract fixture') },
     async releaseCurrentForMember({ userId }) {
       currentByUser.delete(userId)
     },

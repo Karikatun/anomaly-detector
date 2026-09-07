@@ -7,6 +7,7 @@ import {
   roomJoinCodeSchema,
   roomViewSchema,
   setRoomReadyRequestSchema,
+  updateRoomBotDifficultyRequestSchema,
 } from './room'
 
 test('Room contracts accept a waiting private room for two to four players', () => {
@@ -50,6 +51,10 @@ test('Room contracts accept a waiting private room for two to four players', () 
   expect(addRoomBotRequestSchema.parse({ difficulty: 'easy', seat: 3 })).toEqual({ difficulty: 'easy', seat: 3 })
   expect(() => addRoomBotRequestSchema.parse({ difficulty: 'hard', seat: 3 })).toThrow()
   expect(() => addRoomBotRequestSchema.parse({ difficulty: 'easy', seat: 5 })).toThrow()
+  expect(updateRoomBotDifficultyRequestSchema.parse({ difficulty: 'easy' })).toEqual({ difficulty: 'easy' })
+  expect(updateRoomBotDifficultyRequestSchema.parse({ difficulty: 'hard' })).toEqual({ difficulty: 'hard' })
+  expect(() => updateRoomBotDifficultyRequestSchema.parse({ difficulty: 'medium' })).toThrow()
+  expect(() => updateRoomBotDifficultyRequestSchema.parse({ difficulty: 'hard', seat: 4 })).toThrow()
 })
 
 test('Room join codes accept an unambiguous uppercase code and normalize pasted separators', () => {

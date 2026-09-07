@@ -18,6 +18,7 @@ const unusedRepositoryOperations: RoomRepository = {
   readForMember: unused,
   removeBot: unused,
   releaseCurrentForMember: async () => {},
+  updateBotDifficulty: unused,
   setReady: unused,
   start: unused,
 }
@@ -96,6 +97,31 @@ test('projects an added easy bot separately from human room members', async () =
     allowBots: true,
     bots: [{ difficulty: 'easy', id: '019f8099-7e26-7760-ad08-66d1d66b2720', seat: 2 }],
     members: [{ userId: 'user-1' }],
+  })
+})
+
+test('projects a changed bot difficulty separately from human room members', async () => {
+  const service = new TenderRoomService({
+    ...serviceDefaults,
+    repository: {
+      ...unusedRepositoryOperations,
+      updateBotDifficulty: async (input) => ({
+        allowBots: true,
+        bots: [{ difficulty: input.difficulty, id: input.botId, seat: 2 }],
+        capacity: 2,
+        hostId: input.actorId,
+        id: input.roomId,
+        members: [{ ready: false, seat: 1, userId: input.actorId }],
+        status: 'waiting',
+        tenderId: null,
+      }),
+    },
+  })
+
+  await expect(service.updateBotDifficulty({
+    actorId: 'user-1', botId: '019f8099-7e26-7760-ad08-66d1d66b2720', difficulty: 'hard', roomId: 'room-1',
+  })).resolves.toMatchObject({
+    bots: [{ difficulty: 'hard', id: '019f8099-7e26-7760-ad08-66d1d66b2720', seat: 2 }],
   })
 })
 

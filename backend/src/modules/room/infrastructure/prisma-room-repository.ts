@@ -278,6 +278,34 @@ export function createPrismaRoomRepository(
       })
     },
 
+    async updateBotDifficulty(input) {
+      return runRetryableRoomTransaction(db, async (tx) => {
+        await requireActiveRoomActor(tx, accountLifecycleSecret, input.actorId)
+        const room = await tx.tenderRoom.findFirst({
+          where: { hostId: input.actorId, id: input.roomId },
+          include: roomMembersInclude,
+        })
+        if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
+        const bots = roomBotSchema.array().parse(room.bots ?? [])
+        const bot = bots.find((candidate) => candidate.id === input.botId)
+        if (!bot) throw new RoomFailure('room_bot_not_found', 'Bot does not exist')
+        if (bot.difficulty === input.difficulty) return toRoomRecord(room)
+        const nextBots = bots.map((candidate) => candidate.id === input.botId
+          ? { ...candidate, difficulty: input.difficulty }
+          : candidate)
+        await tx.tenderRoomMember.updateMany({
+          where: { roomId: room.id },
+          data: { ready: false },
+        })
+        return toRoomRecord(await tx.tenderRoom.update({
+          where: { id: room.id },
+          data: { bots: nextBots },
+          include: roomMembersInclude,
+        }))
+      })
+    },
+
     async leave(input) {
       await runRetryableRoomTransaction(db, async (tx) => {
         await requireActiveRoomActor(tx, accountLifecycleSecret, input.actorId)

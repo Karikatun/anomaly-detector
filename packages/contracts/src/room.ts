@@ -16,6 +16,10 @@ export const addRoomBotRequestSchema = z.object({
   seat: z.number().int().min(1).max(4),
 }).strict()
 
+export const updateRoomBotDifficultyRequestSchema = z.object({
+  difficulty: botDifficultySchema,
+}).strict()
+
 export const setRoomReadyRequestSchema = z.object({
   ready: z.boolean(),
 }).strict()
@@ -75,6 +79,7 @@ export type AddRoomBotRequest = z.infer<typeof addRoomBotRequestSchema>
 export type CurrentMatchResponse = z.infer<typeof currentMatchResponseSchema>
 export type JoinRoomByCodeRequest = z.input<typeof joinRoomByCodeRequestSchema>
 export type JoinRoomByCodePayload = z.output<typeof joinRoomByCodeRequestSchema>
+export type UpdateRoomBotDifficultyRequest = z.infer<typeof updateRoomBotDifficultyRequestSchema>
 export type RoomMember = z.infer<typeof roomMemberSchema>
 export type RoomBot = z.infer<typeof roomBotSchema>
 export type RoomView = z.infer<typeof roomViewSchema>

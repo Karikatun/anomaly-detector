@@ -1,6 +1,7 @@
 import type { FieldType, Polarity, SignalId, TenderCommand, TenderView } from '@anomaly-detector/contracts'
 
 import { candidateConsensus, candidatesFromView, chooseLaboratoryObservation, type LaboratoryObservation } from './candidates'
+import { chooseHardFinalModel, chooseHardLaboratoryPair, chooseHardThesis } from './hard'
 import { signalIds } from '../../domain/anomaly-configuration'
 
 export type BotDifficulty = 'easy' | 'hard'
@@ -251,7 +252,7 @@ const chooseInformationThesis = (view: TenderView, options: ChooseBotCommandOpti
       - seededValue(`${options.seed}:${right.signalId}:${right.fieldType}:${right.polarity}`))[0]
 }
 
-const chooseBotV2Command = (view: TenderView, options: ChooseBotCommandOptions): TenderCommand | null => {
+export const chooseBotV2Command = (view: TenderView, options: ChooseBotCommandOptions): TenderCommand | null => {
   const player = view.players.find((candidate) => candidate.playerId === options.playerId)
   if (!player || player.forfeited || view.hasForfeited || view.hasLeft || view.phase === 'complete') return null
   const base = commandBase(view, options)
@@ -315,7 +316,73 @@ const chooseBotV2Command = (view: TenderView, options: ChooseBotCommandOptions):
   return chooseBotV1Command(view, options)
 }
 
+const chooseBotHardCommand = (view: TenderView, options: ChooseBotCommandOptions): TenderCommand | null => {
+  const player = view.players.find((candidate) => candidate.playerId === options.playerId)
+  if (!player || player.forfeited || view.hasForfeited || view.hasLeft || view.phase === 'complete') return null
+  const base = commandBase(view, options)
+  if (view.phase === 'access-slot-selection' && player.requestedAccessSlot === undefined) {
+    return { ...base, slot: player.budget >= 2 ? 1 : 3, type: 'request-access-slot' }
+  }
+  if (view.phase === 'power-allocation' && !player.powerAllocationConfirmed) {
+    const samples = new Set(view.privateSamples).size
+    if (view.round === 5) return { ...base, allocation: { contracts: 1, laboratory: 0, modelAnalysis: 2, reconnaissance: 0, reserve: 1 }, type: 'allocate-power' }
+    if (samples < 6) return { ...base, allocation: { contracts: 0, laboratory: 1, modelAnalysis: 1, reconnaissance: 2, reserve: 0 }, type: 'allocate-power' }
+    return { ...base, allocation: { contracts: 1, laboratory: 1, modelAnalysis: 2, reconnaissance: 0, reserve: 0 }, type: 'allocate-power' }
+  }
+  if (view.phase === 'laboratory' && isSequentialTurn(view, options.playerId)
+    && (player.powerAllocation?.laboratory ?? 0) > 0) {
+    const pair = chooseHardLaboratoryPair(view, options.playerId, candidatesFromView(view))
+    if (pair) return {
+      ...base,
+      laboratory: (player.powerAllocation?.laboratory ?? 0) === 1 ? { mode: 'impulse', pair } : { mode: 'deep', pair },
+      type: 'run-laboratory-test',
+    }
+  }
+  if (view.phase === 'model-analysis'
+    && !player.modelAnalysisCompleted
+    && (view.ruleset === 'tender-v2' || isSequentialTurn(view, options.playerId))) {
+    const submitted = (view.privateTheses ?? []).filter((thesis) => thesis.round === view.round)
+    const maxTheses = player.powerAllocation?.modelAnalysis ?? 0
+    if (maxTheses >= 2 && submitted.length === 1 && view.corporateReviewActive && player.budget < 1) {
+      return { ...base, type: 'finish-model-analysis' }
+    }
+    if (submitted.length < maxTheses) {
+      const thesis = chooseHardThesis(view, options.playerId, candidatesFromView(view), submitted.map((thesis) => thesis.signalId))
+      if (thesis) return { ...base, ...thesis, type: 'submit-thesis' }
+    }
+  }
+  if (view.phase === 'contracts' && isSequentialTurn(view, options.playerId)) {
+    const contracts = [...view.publicContracts, ...(view.publicFinalContract ? [view.publicFinalContract] : [])]
+    const reserved = contracts.find((contract) => contract.reservedByPlayerId === options.playerId && contract.bidOutcome === undefined)
+    if (reserved?.planning) {
+      const evidenceTestIds = reserved.planning.suitableEvidenceSelections[0]
+      const researchCertificationSignal = reserved.planning.suitableResearchCertificationSignals[0]
+      return {
+        ...base,
+        contractId: reserved.contractId,
+        ...(evidenceTestIds ? { evidenceTestIds } : {}),
+        ...(researchCertificationSignal ? { researchCertificationSignal } : {}),
+        type: 'submit-contract-bid',
+      }
+    }
+    const eligible = contracts.filter((contract) =>
+      !contract.reservedByPlayerId && contract.bidOutcome === undefined && contract.planning?.eligible,
+    ).sort((left, right) => (right.ratingReward ?? 0) - (left.ratingReward ?? 0)
+      || left.contractId.localeCompare(right.contractId))[0]
+    if (eligible) return { ...base, contractId: eligible.contractId, type: 'reserve-contract' }
+  }
+  if (view.phase === 'final-scientific-model' && !player.finalScientificModelSubmitted && !view.privateFinalScientificModelSubmission) {
+    const candidates = candidatesFromView(view)
+    if (candidates.length > 0) {
+      return { ...base, scientificModel: chooseHardFinalModel(candidates, options.seed), type: 'submit-scientific-model' }
+    }
+  }
+  return chooseBotV2Command(view, options)
+}
+
 export const chooseBotCommand = (view: TenderView, options: ChooseBotCommandOptions): TenderCommand | null =>
-  options.strategyVersion === 'bot-v2'
+  options.strategyVersion === 'bot-v2' && options.difficulty === 'hard'
+    ? chooseBotHardCommand(view, options)
+    : options.strategyVersion === 'bot-v2'
     ? chooseBotV2Command(view, options)
     : chooseBotV1Command(view, options)
