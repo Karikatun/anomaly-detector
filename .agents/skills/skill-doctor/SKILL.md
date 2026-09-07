@@ -66,7 +66,7 @@ Build the collector arguments from the startup answers:
 - Project skills only: do not add `--include-global-skills`.
 
 ```bash
-python3 "$SKILL_ROOT/scripts/collect_sessions.py" \
+python3 -B "$SKILL_ROOT/scripts/collect_sessions.py" \
   --out "$REPORT_DIR" \
   <conversation-scope arguments> \
   <skill-scope arguments>
@@ -131,7 +131,7 @@ Write `$REPORT_DIR/scoring.json`:
 Compute the score contract deterministically:
 
 ```bash
-python3 "$SKILL_ROOT/scripts/aggregate_scores.py" \
+python3 -B "$SKILL_ROOT/scripts/aggregate_scores.py" \
   "$REPORT_DIR/inventory.json" \
   "$REPORT_DIR/scoring.json" \
   --out "$REPORT_DIR/aggregation.json"
@@ -206,7 +206,7 @@ Write `$REPORT_DIR/report.json` using `aggregation.json` as the score source. `s
 Map collector statistics explicitly: `tasks_analyzed` comes from `inventory.stats.tasks_sampled`, and `conversations_scanned` comes from `inventory.stats.conversation_records_in_window`. Copy `skills_found`, `skills_used`, and `window_days` from their namesakes. A `null` code-quality score means no sampled task contained enough artifact evidence; render it as `N/A`, never as a neutral positive score.
 
 ```bash
-python3 "$SKILL_ROOT/scripts/render_report.py" \
+python3 -B "$SKILL_ROOT/scripts/render_report.py" \
   "$REPORT_DIR/report.json" \
   --inventory "$REPORT_DIR/inventory.json" \
   --aggregation "$REPORT_DIR/aggregation.json" \
