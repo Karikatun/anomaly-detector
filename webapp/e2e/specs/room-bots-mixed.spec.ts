@@ -20,7 +20,13 @@ async function command(page: Parameters<typeof registerBrowserUser>[0], session:
     data: { ...payload, actorId: session.playerId, commandId: randomUUID(), tenderId },
     headers: { Authorization: `Bearer ${session.accessToken}` },
   })
-  expect(response.ok()).toBe(true)
+  if (!response.ok()) {
+    const body = await response.json() as { error?: { code?: string } }
+    // A simultaneous bot commit is an expected optimistic conflict. The next
+    // poll reads fresh participant views and chooses a new legal human action.
+    if (response.status() === 409 && body.error?.code === 'TENDER_VERSION_CONFLICT') return
+    throw new Error(`Mixed human command ${String(payload.type)} failed ${response.status()}: ${JSON.stringify(body)}`)
+  }
 }
 
 async function readTender(page: Parameters<typeof registerBrowserUser>[0], session: Session, tenderId: string) {
