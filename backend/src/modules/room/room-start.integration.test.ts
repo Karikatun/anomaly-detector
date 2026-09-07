@@ -145,6 +145,83 @@ maybeDescribe('Room start integration', () => {
     expect(withoutBot).toMatchObject({ bots: [], members: [{ ready: false }, { ready: false }] })
   })
 
+  test('allows only the waiting host to persist a bot difficulty change and resets human readiness', async () => {
+    const [host, guest] = await Promise.all([
+      prisma.user.create({ data: { login: 'bot-difficulty-host', passwordHash: 'hash' } }),
+      prisma.user.create({ data: { login: 'bot-difficulty-guest', passwordHash: 'hash' } }),
+    ])
+    const firstBotId = crypto.randomUUID()
+    const secondBotId = crypto.randomUUID()
+    const room = await prisma.tenderRoom.create({
+      data: {
+        allowBots: true,
+        bots: [
+          { difficulty: 'easy', id: firstBotId, seat: 3 },
+          { difficulty: 'hard', id: secondBotId, seat: 4 },
+        ],
+        capacity: 4,
+        hostId: host.id,
+        members: { create: [{ ready: true, seat: 1, userId: host.id }, { ready: true, seat: 2, userId: guest.id }] },
+        status: 'waiting',
+      },
+    })
+    const repository = createPrismaRoomRepository(prisma, clock, accountLifecycleSecret)
+
+    await expect(repository.updateBotDifficulty({ actorId: guest.id, botId: firstBotId, difficulty: 'hard', roomId: room.id }))
+      .rejects.toMatchObject({ kind: 'room_not_found' })
+    const updated = await repository.updateBotDifficulty({ actorId: host.id, botId: firstBotId, difficulty: 'hard', roomId: room.id })
+    expect(updated).toMatchObject({
+      bots: [
+        { difficulty: 'hard', id: firstBotId, seat: 3 },
+        { difficulty: 'hard', id: secondBotId, seat: 4 },
+      ],
+      members: [{ ready: false }, { ready: false }],
+    })
+    expect((await prisma.tenderRoom.findUniqueOrThrow({ where: { id: room.id } })).bots).toEqual(updated.bots!)
+    await expect(repository.updateBotDifficulty({ actorId: host.id, botId: crypto.randomUUID(), difficulty: 'easy', roomId: room.id }))
+      .rejects.toMatchObject({ kind: 'room_bot_not_found' })
+    await prisma.tenderRoom.update({ where: { id: room.id }, data: { status: 'starting' } })
+    await expect(repository.updateBotDifficulty({ actorId: host.id, botId: firstBotId, difficulty: 'easy', roomId: room.id }))
+      .rejects.toMatchObject({ kind: 'room_not_joinable' })
+  })
+
+  test('serializes bot difficulty updates with Room start', async () => {
+    const secondPrisma = createPrisma(databaseUrl)
+    try {
+      const host = await prisma.user.create({ data: { login: 'bot-difficulty-race-host', passwordHash: 'hash' } })
+      const botId = crypto.randomUUID()
+      const room = await prisma.tenderRoom.create({
+        data: {
+          allowBots: true,
+          bots: [{ difficulty: 'easy', id: botId, seat: 2 }],
+          capacity: 2,
+          hostId: host.id,
+          members: { create: { ready: true, seat: 1, userId: host.id } },
+          status: 'waiting',
+        },
+      })
+      const firstRepository = createPrismaRoomRepository(prisma, clock, accountLifecycleSecret)
+      const secondRepository = createPrismaRoomRepository(secondPrisma, clock, accountLifecycleSecret)
+      const outcomes = await Promise.allSettled([
+        firstRepository.updateBotDifficulty({ actorId: host.id, botId, difficulty: 'hard', roomId: room.id }),
+        secondRepository.start({ actorId: host.id, roomId: room.id }),
+      ])
+      expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1)
+      const persisted = await prisma.tenderRoom.findUniqueOrThrow({ where: { id: room.id }, include: { members: true } })
+      if (outcomes[0]?.status === 'fulfilled') {
+        expect(persisted).toMatchObject({ status: 'waiting' })
+        expect((persisted.bots as Array<{ difficulty: string }>)[0]?.difficulty).toBe('hard')
+        expect(persisted.members.every((member) => !member.ready)).toBe(true)
+      } else {
+        expect(persisted).toMatchObject({ status: 'starting' })
+        expect((persisted.bots as Array<{ difficulty: string }>)[0]?.difficulty).toBe('easy')
+        expect(persisted.members.every((member) => member.ready)).toBe(true)
+      }
+    } finally {
+      await secondPrisma.$disconnect()
+    }
+  })
+
   test('serializes a human join and bot add so they cannot occupy the same final seat', async () => {
     const secondPrisma = createPrisma(databaseUrl)
     try {

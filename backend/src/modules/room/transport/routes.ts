@@ -8,6 +8,7 @@ import {
   roomIdSchema,
   roomViewSchema,
   setRoomReadyRequestSchema,
+  updateRoomBotDifficultyRequestSchema,
 } from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
@@ -160,6 +161,22 @@ const removeRoomBotRoute = createRoute({
   },
 })
 
+const updateRoomBotDifficultyRoute = createRoute({
+  method: 'patch',
+  path: '/{roomId}/bots/{botId}',
+  request: {
+    params: z.object({ botId: z.string().uuid(), roomId: roomIdSchema }),
+    body: { content: { 'application/json': { schema: updateRoomBotDifficultyRequestSchema } } },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: roomViewSchema } }, description: 'Updated a waiting bot difficulty' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+    404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room or bot not found' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Bot difficulty cannot be changed' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
+  },
+})
+
 export function createRoomRoutes(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   joinBudget: RequestBudget
@@ -226,6 +243,15 @@ export function createRoomRoutes(input: {
     await executeRoom(() => input.service.removeBot({
       actorId: c.var.user.id,
       botId: c.req.valid('param').botId,
+      roomId: c.req.valid('param').roomId,
+    })),
+    200,
+  ))
+  routes.openapi(updateRoomBotDifficultyRoute, async (c) => c.json(
+    await executeRoom(() => input.service.updateBotDifficulty({
+      actorId: c.var.user.id,
+      botId: c.req.valid('param').botId,
+      difficulty: c.req.valid('json').difficulty,
       roomId: c.req.valid('param').roomId,
     })),
     200,

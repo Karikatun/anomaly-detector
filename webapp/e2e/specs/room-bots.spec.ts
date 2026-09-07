@@ -41,8 +41,12 @@ async function sendHumanCommand(request: APIRequestContext, apiOrigin: string, a
   expect(response.ok()).toBe(true)
 }
 
-test('host recovers a roster failure and completes five rounds with a server bot', async ({ page }) => {
+for (const scenario of [
+  { difficulty: 'easy' as const, label: 'Бот · лёгкий', screenshot: 'easy' },
+  { difficulty: 'hard' as const, label: 'Бот · сложный', screenshot: 'hard' },
+]) test(`host completes five real-worker rounds with a ${scenario.difficulty} server bot`, async ({ page }) => {
   test.setTimeout(180_000)
+  const initialBotLabel = 'Бот · лёгкий'
   await page.setViewportSize({ width: 1440, height: 900 })
   const session = await registerWithAccessToken(page)
 
@@ -71,7 +75,7 @@ test('host recovers a roster failure and completes five rounds with a server bot
   await addBot.click()
   await expect(page.getByRole('alert')).toContainText('E2E bot roster failure')
   await expect(addBot).toBeEnabled()
-  await capture(page, 'lobby-bot-error-1440x900')
+  await capture(page, `lobby-bot-${scenario.screenshot}-error-1440x900`)
   await page.unrouteAll({ behavior: 'wait' })
 
   await addBot.click()
@@ -79,24 +83,54 @@ test('host recovers a roster failure and completes five rounds with a server bot
   await expect(page.getByRole('button', { name: 'Убрать' })).toBeVisible()
   await expect(page.getByText('Готовы: 1/2')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
-  await capture(page, 'lobby-bot-1440x900')
+  await capture(page, `lobby-bot-${scenario.screenshot}-1440x900`)
   await expectNoHorizontalOverflow(page)
 
   await page.keyboard.press('Tab')
   await expect(page.locator(':focus-visible')).toHaveCount(1)
-  await capture(page, 'lobby-bot-keyboard-1440x900')
+  await capture(page, `lobby-bot-${scenario.screenshot}-keyboard-1440x900`)
   for (const [width, height, name] of [
-    [1024, 768, 'lobby-bot-1024x768'],
-    [390, 844, 'lobby-bot-390x844'],
+    [1024, 768, `lobby-bot-${scenario.screenshot}-1024x768`],
+    [390, 844, `lobby-bot-${scenario.screenshot}-390x844`],
   ] as const) {
     await page.setViewportSize({ width, height })
-    const botLabel = page.getByText('Бот · лёгкий', { exact: true })
+    const botLabel = page.getByText(initialBotLabel, { exact: true })
     await expect(botLabel).toBeVisible()
     await expectNoHorizontalOverflow(page)
     if (width === 390) await botLabel.scrollIntoViewIfNeeded()
     await capture(page, name)
   }
   await page.setViewportSize({ width: 1440, height: 900 })
+  if (scenario.difficulty === 'hard') {
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Начать игру' })).toBeEnabled()
+    const difficulty = page.getByLabel('Сложность бота в слоте 2')
+    let failedPatch = false
+    await page.route('**/api/rooms/*/bots/*', async (route) => {
+      if (route.request().method() === 'PATCH' && !failedPatch) {
+        failedPatch = true
+        await route.fulfill({
+          body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'E2E bot difficulty failure' } }),
+          contentType: 'application/json',
+          status: 500,
+        })
+        return
+      }
+      await route.continue()
+    })
+    await difficulty.selectOption('hard')
+    await expect(page.getByRole('alert')).toContainText('E2E bot difficulty failure')
+    await expect(difficulty).toHaveValue('easy')
+    await difficulty.selectOption('hard')
+    await expect(difficulty).toHaveValue('hard')
+    await expect(page.getByText(scenario.label, { exact: true }).filter({ visible: true }).first()).toBeVisible()
+    await expect(page.getByText('Готовы: 1/2')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Начать игру' })).toBeDisabled()
+    await page.unrouteAll({ behavior: 'wait' })
+    await page.reload()
+    await expect(page.getByLabel('Сложность бота в слоте 2')).toHaveValue('hard')
+    await expect(page.getByText(scenario.label, { exact: true }).filter({ visible: true }).first()).toBeVisible()
+  }
   await page.getByRole('button', { name: 'Готов', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Начать игру' })).toBeEnabled()
   await page.getByRole('button', { name: 'Начать игру' }).click()
@@ -110,7 +144,7 @@ test('host recovers a roster failure and completes five rounds with a server bot
   const initialView = await initialViewResponse.json() as { players: Array<{ bot?: unknown; playerId: string }> }
   const humanPlayerId = initialView.players.find((player) => !player.bot)?.playerId
   if (!humanPlayerId) throw new Error('Tender view has no human participant')
-  await expect(page.getByText('Бот · лёгкий', { exact: true }).filter({ visible: true }).first()).toBeVisible()
+  await expect(page.getByText(scenario.label, { exact: true }).filter({ visible: true }).first()).toBeVisible()
 
   await sendHumanCommand(page.request, session.apiOrigin, session.accessToken, tenderId, {
     actorId: humanPlayerId,
@@ -118,15 +152,15 @@ test('host recovers a roster failure and completes five rounds with a server bot
     type: 'request-access-slot',
   })
   await expect(page.getByRole('heading', { name: '2. Распределение мощности' })).toBeVisible({ timeout: 30_000 })
-  await capture(page, 'tender-bot-1440x900')
+  await capture(page, `tender-bot-${scenario.screenshot}-1440x900`)
   await expectNoHorizontalOverflow(page)
 
   for (const [width, height, name] of [
-    [1024, 768, 'tender-bot-1024x768'],
-    [390, 844, 'tender-bot-390x844'],
+    [1024, 768, `tender-bot-${scenario.screenshot}-1024x768`],
+    [390, 844, `tender-bot-${scenario.screenshot}-390x844`],
   ] as const) {
     await page.setViewportSize({ width, height })
-    await expect(page.getByText('Бот · лёгкий', { exact: true }).filter({ visible: true }).first()).toBeVisible()
+    await expect(page.getByText(scenario.label, { exact: true }).filter({ visible: true }).first()).toBeVisible()
     await expectNoHorizontalOverflow(page)
     await capture(page, name)
   }
@@ -164,8 +198,8 @@ test('host recovers a roster failure and completes five rounds with a server bot
   }, { timeout: 120_000, intervals: [1_000] }).toBe(true)
   expect([...observedRounds].sort()).toEqual([1, 2, 3, 4, 5])
   await expect(page.locator('#completed-tender-heading')).toBeVisible()
-  await capture(page, 'completed-bot-390x844')
+  await capture(page, `completed-bot-${scenario.screenshot}-390x844`)
   await page.goto('/')
   await page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()
-  await expect(page.getByRole('table')).toContainText('Бот · лёгкий')
+  await expect(page.getByRole('table')).toContainText(scenario.label)
 })
