@@ -65,6 +65,22 @@ test('publishes the approved landing and a bounded tutorial continuation in init
   }
 })
 
+test('uses dedicated portrait game renders for mobile screenshots', async () => {
+  const mobileScreens = [...html.matchAll(/<source media="\(max-width: 640px\)" srcset="([^"]+)" width="390" height="(\d+)"/g)]
+
+  expect(mobileScreens).toHaveLength(3)
+
+  for (const [, source, declaredHeight] of mobileScreens) {
+    const image = await readFile(resolve(buildOutput, source.slice(1)))
+    expect(image.subarray(1, 4).toString()).toBe('PNG')
+    const width = image.readUInt32BE(16)
+    const height = image.readUInt32BE(20)
+    expect(width).toBe(390)
+    expect(height).toBe(Number(declaredHeight))
+    expect(height).toBeGreaterThan(width)
+  }
+})
+
 test('renders an equal-choice first-party consent panel only when explicitly enabled', async () => {
   const analyticsApiUrl = 'https://api.anomaly-detector.ru'
   const build = spawnSync('bun', ['run', 'build'], {
