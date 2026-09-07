@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 
 import { validateWebappReleaseEnvironment } from './release-config'
+import { staticArtifactGuard } from '../scripts/static-artifacts.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -59,7 +60,7 @@ export default defineConfig(({ command, mode }) => {
         },
       },
     },
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), staticArtifactGuard()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

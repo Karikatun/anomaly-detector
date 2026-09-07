@@ -1,8 +1,9 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { staticArtifactGuard } from '../scripts/static-artifacts.mjs'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), staticArtifactGuard()],
   server: {
     host: '0.0.0.0',
     port: 5174,

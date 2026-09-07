@@ -24,6 +24,24 @@ const runtimeCompose = readFileSync(
 const publicSite = siteBlock(caddyfile, 'anomaly-detector.ru')
 const playerSite = siteBlock(caddyfile, 'app.anomaly-detector.ru')
 
+test('every static site guards private files before file lookup in target and rollback profiles', () => {
+  for (const [source, hosts] of [
+    [caddyfile, ['anomaly-detector.ru', 'app.anomaly-detector.ru', 'ops.anomaly-detector.ru']],
+    [rollbackCaddyfile, ['anomaly-detector.ru', 'ops.anomaly-detector.ru']],
+  ]) {
+    expect(source).toContain('(static_file_guard) {')
+    for (const host of hosts) {
+      const block = siteBlock(source, host)
+      const guard = block.indexOf('import static_file_guard')
+      expect(guard).toBeGreaterThan(-1)
+      expect(guard).toBeLessThan(block.indexOf('file_server'))
+      if (block.includes('try_files')) expect(guard).toBeLessThan(block.indexOf('try_files'))
+    }
+  }
+  expect(siteBlock(caddyfile, '(static_file_guard)'))
+    .toBe(siteBlock(rollbackCaddyfile, '(static_file_guard)'))
+})
+
 test('Yandex VM Caddy config serves the public website without a private SPA fallback', () => {
   expect(publicSite).toContain('root * {$ANOMALY_WEBSITE_ROOT}')
   expect(publicSite).toContain('file_server')

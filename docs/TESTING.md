@@ -57,6 +57,15 @@ private app routes are excluded from indexing.
 
 ## Choosing Test Level
 
+Защита статических артефактов проверяется двумя способами. `bun run test:deploy`
+включает файловые сценарии `scripts/static-artifacts.test.mjs` и реальную
+Vite- и Astro-сборки в изолированных каталогах. `bun run test:static-serving` отдельно
+запускает закреплённый Caddy через локальный Docker и проверяет target/rollback:
+служебные файлы и их отсутствие дают `404` до SPA fallback, а обычные assets,
+`/.well-known/`, переходы SPA и операторская авторизация сохраняются. Этот
+тест обязателен при изменении правил выдачи статики; Docker не требуется
+для обычного `check:commit`.
+
 Default to the highest useful behavioral boundary:
 
 - Use E2E when the risk is user-visible and crosses client/backend boundaries: critical journeys, auth/session restore, persistence, navigation, high-risk regressions, and important empty/error states.
