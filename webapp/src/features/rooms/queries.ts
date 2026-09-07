@@ -146,3 +146,15 @@ export function useRemoveRoomBotMutation({ api }: RoomMutationsOptions) {
     },
   })
 }
+
+export function useUpdateRoomBotDifficultyMutation({ api }: RoomMutationsOptions) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ botId, difficulty, roomId }: { botId: string; difficulty: 'easy' | 'hard'; roomId: string }) =>
+      api.updateBotDifficulty(roomId, botId, difficulty),
+    onSuccess: (room) => {
+      queryClient.setQueryData(roomQueryKeys.byId(room.roomId), room)
+      queryClient.setQueryData(roomQueryKeys.current(), room)
+    },
+  })
+}

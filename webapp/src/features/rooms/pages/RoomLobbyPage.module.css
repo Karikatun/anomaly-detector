@@ -30,6 +30,10 @@
 .readyButton { min-height: 2rem !important; margin-left: auto; padding: .42rem .68rem !important; border: 1px solid rgba(75, 226, 155, .62) !important; border-radius: var(--radius-compact) !important; color: #77e7aa !important; background: rgba(4, 37, 29, .78) !important; font-size: .7rem !important; }
 .readyButton:hover:not(:disabled) { background: rgba(8, 62, 45, .9) !important; }
 .botAction { min-height: 2rem !important; margin-left: auto; padding: .42rem .68rem !important; border: 1px solid rgba(192, 104, 242, .66) !important; border-radius: var(--radius-compact) !important; color: #e5c7ff !important; background: rgba(45, 17, 69, .7) !important; font-size: .7rem !important; }
+.player[data-bot] { flex-wrap: wrap; padding-block: .75rem; row-gap: .65rem; }
+.botControls { display: flex; flex-basis: 100%; min-width: 0; align-items: stretch; gap: .65rem; padding-left: 3.05rem; }
+.botDifficulty { flex: 1; width: auto; }
+.botControls .botAction { min-height: 2.75rem !important; margin-left: 0; }
 .botAction:hover:not(:disabled) { background: rgba(67, 24, 103, .86) !important; }
 .settingsList { display: grid; gap: .8rem; padding-top: .2rem; }
 .settingsList > div { display: flex; justify-content: space-between; gap: 1rem; color: #8ea5bc; font-size: .83rem; }
@@ -68,7 +72,7 @@
   .startPanel { order: 3; min-height: 7rem; padding: 1rem; }
   .playersPanel, .settingsPanel { padding: 1rem; }
   .player { min-height: 3.65rem; }
-  .readyButton, .botAction { max-width: 7.5rem; white-space: normal; }
+ .readyButton, .botAction { max-width: 7.5rem; white-space: normal; }
   .sectionTitle { font-size: .82rem; }
 }
 

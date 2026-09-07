@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExpeditionBackground } from '@/components/ExpeditionBackground'
 import expeditionStyles from '@/components/ExpeditionShell.module.css'
 import { Button } from '@/components/ui/button'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
@@ -14,6 +15,7 @@ import { useSynchronizedCountdown } from '@/platform/time/synchronized-countdown
 
 import { RoomsApi } from '../api'
 import {
+  useUpdateRoomBotDifficultyMutation,
   useAddRoomBotMutation,
   useCancelRoomStartMutation,
   useLeaveRoomMutation,
@@ -48,6 +50,7 @@ function RoomLobbyContent() {
   const { mutateAsync: cancelRoomStart, isPending: isCancellingStart } = useCancelRoomStartMutation({ api })
   const { mutateAsync: addBot, isPending: isAddingBot } = useAddRoomBotMutation({ api })
   const { mutateAsync: removeBot, isPending: isRemovingBot } = useRemoveRoomBotMutation({ api })
+  const { mutateAsync: updateBotDifficulty, isPending: isUpdatingBotDifficulty } = useUpdateRoomBotDifficultyMutation({ api })
   const roomQuery = useRoomQuery({ api, roomId })
   const currentRoom = roomQuery.data
   const secondsLeft = useSynchronizedCountdown(
@@ -134,6 +137,11 @@ function RoomLobbyContent() {
     [removeBot, roomId, runRoomAction],
   )
 
+  const handleBotDifficultyChange = useCallback(
+    (botId: string, difficulty: 'easy' | 'hard') => runRoomAction(() => updateBotDifficulty({ botId, difficulty, roomId })),
+    [roomId, runRoomAction, updateBotDifficulty],
+  )
+
   if (roomQuery.isPending) {
     return (
       <main className={styles.loading} role="status">
@@ -168,7 +176,7 @@ function RoomLobbyContent() {
   const isCountdown = currentRoom.status === 'starting'
   const canLeave = isMember && currentRoom.status === 'waiting'
   const canManageBots = isHost && currentRoom.allowBots && currentRoom.status === 'waiting'
-  const isChangingRoster = isAddingBot || isRemovingBot
+  const isChangingRoster = isAddingBot || isRemovingBot || isUpdatingBotDifficulty
 
   return (
     <main className={expeditionStyles.screen}>
@@ -214,7 +222,7 @@ function RoomLobbyContent() {
                   const bot = bots.find((candidate) => candidate.seat === seat)
                   const isPlayerHost = member?.userId === currentRoom.hostId
                   return (
-                    <div className={styles.player} data-empty={!member && !bot || undefined} key={seat}>
+                    <div className={styles.player} data-empty={!member && !bot || undefined} data-bot={bot ? true : undefined} key={seat}>
                       <Typography as="span" variant="h6" className={styles.avatar} aria-hidden="true">
                         {member || bot ? seat : '+'}
                       </Typography>
@@ -252,6 +260,18 @@ function RoomLobbyContent() {
                             {t('lobby.player.ready')}
                           </Typography>
                           {canManageBots ? (
+                            <div className={styles.botControls}>
+                            <NativeSelect
+                              size="sm"
+                              aria-label={t('lobby.bot.difficulty.label', { seat })}
+                              className={styles.botDifficulty}
+                              disabled={isChangingRoster}
+                              value={bot.difficulty}
+                              onChange={(event) => void handleBotDifficultyChange(bot.id, event.currentTarget.value as 'easy' | 'hard')}
+                            >
+                              <option value="easy">{t('lobby.bot.difficulty.easy')}</option>
+                              <option value="hard">{t('lobby.bot.difficulty.hard')}</option>
+                            </NativeSelect>
                             <Button
                               className={styles.botAction}
                               type="button"
@@ -260,6 +280,7 @@ function RoomLobbyContent() {
                             >
                               {isRemovingBot ? t('lobby.bot.removing') : t('lobby.bot.remove')}
                             </Button>
+                            </div>
                           ) : null}
                         </>
                       ) : member ? (

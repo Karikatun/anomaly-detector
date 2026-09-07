@@ -1,4 +1,4 @@
-import type { RoomView } from '@anomaly-detector/contracts'
+import type { BotDifficulty, RoomView } from '@anomaly-detector/contracts'
 
 import type {
   Clock,
@@ -74,6 +74,10 @@ export class TenderRoomService {
 
   async removeBot(input: { actorId: string; botId: string; roomId: string }): Promise<RoomView> {
     return this.toRoomView(await this.dependencies.repository.removeBot(input), input.actorId)
+  }
+
+  async updateBotDifficulty(input: { actorId: string; botId: string; difficulty: BotDifficulty; roomId: string }): Promise<RoomView> {
+    return this.toRoomView(await this.dependencies.repository.updateBotDifficulty(input), input.actorId)
   }
 
   async setReady(input: { actorId: string; ready: boolean; roomId: string }): Promise<RoomView> {

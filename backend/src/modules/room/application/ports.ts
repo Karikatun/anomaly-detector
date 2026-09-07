@@ -1,4 +1,5 @@
 import type {
+  BotDifficulty,
   RoomMember,
   RoomBot,
   RoomView,
@@ -55,6 +56,7 @@ export type RoomRepository = {
   listStartedForMember(userId: string): Promise<RoomRecord[]>
   readForMember(input: { actorId: string; roomId: string }): Promise<RoomRecord>
   removeBot(input: { actorId: string; botId: string; roomId: string }): Promise<RoomRecord>
+  updateBotDifficulty(input: { actorId: string; botId: string; difficulty: BotDifficulty; roomId: string }): Promise<RoomRecord>
   join(input: { actorId: string; roomId: string }): Promise<RoomRecord>
   joinByCode(input: { actorId: string; code: string }): Promise<RoomRecord>
   leave(input: { actorId: string; roomId: string }): Promise<void>
