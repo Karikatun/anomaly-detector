@@ -60,7 +60,11 @@ test('two humans complete a mixed easy and hard bot Tender', async ({ browser, p
   // The owner deliberately fills seats 3 and 4. #51 selector changes only bot 4.
   await page.getByRole('button', { name: 'Добавить лёгкого бота' }).nth(0).click()
   await page.getByRole('button', { name: 'Добавить лёгкого бота' }).nth(0).click()
+  await expect(guestPage.getByText('Бот · лёгкий', { exact: true })).toHaveCount(2)
   await page.getByLabel('Сложность бота в слоте 4').selectOption('hard')
+  // Guest roster polling can still show both easy bots after the owner's mutation.
+  // Wait for the composition transition before asserting a unique visible label.
+  await expect(guestPage.getByText('Бот · лёгкий', { exact: true })).toHaveCount(1)
   await expect(guestPage.getByText('Бот · лёгкий', { exact: true })).toBeVisible()
   await expect(guestPage.getByText('Бот · сложный', { exact: true })).toBeVisible()
 
