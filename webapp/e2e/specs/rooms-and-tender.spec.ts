@@ -1059,7 +1059,35 @@ test('explains a completed Tender and conceals its participant audit from outsid
         requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
       }))
       if (viewport.width >= 768) {
-        await page.getByRole('button', { name: 'Полный разбор партии', exact: true }).click()
+        const roster = page.getByRole('region', { name: 'Участники', exact: true })
+        await expect(roster.getByRole('listitem')).toHaveCount(2)
+        const rules = roster.locator('details')
+        if (!await rules.evaluate((element) => (element as HTMLDetailsElement).open)) {
+          await rules.locator('summary').click()
+        }
+        await expect(rules).toContainText('Рейтинг → верные тезисы → оставшийся Бюджет')
+        for (const player of completedView.players) {
+          const playerLabel = player.displayName ?? player.playerId.slice(0, 8)
+          await inspectCompletedTender(page, playerLabel)
+          const inspector = page.getByRole('region', { name: 'Разбор участника', exact: true })
+          const score = inspector.getByRole('tabpanel', { name: 'Очки и ресурсы', exact: true })
+          await expect(score.getByRole('list').getByText('Рейтинг', { exact: true }).locator('..').locator('strong'))
+            .toHaveText(new RegExp(`^${player.rating} (?:очко|очка|очков)$`))
+          for (const [label, value] of [
+            ['Верные тезисы', completedView.audit!.ratingBreakdownByPlayer[player.playerId]!.thesisPoints],
+            ['Оставшийся Бюджет', player.budget],
+            ['Корпоративное доверие', player.corporateTrust ?? 0],
+          ] as const) {
+            await expect(score.locator('dl').getByText(label, { exact: true }).locator('..').locator('dd')).toHaveText(String(value))
+          }
+          await expect(score).toContainText('Финальный контракт')
+          await expect(score).toContainText('не участвует в тай-брейке')
+        }
+        await expect.poll(() => page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        )).toBe(true)
+        await auditCheckpoint(page, checkpoint)
+        return
       }
       if (!await ranking.evaluate((element) => (element as HTMLDetailsElement).open)) {
         await rankingSummary.focus()
@@ -1080,9 +1108,6 @@ test('explains a completed Tender and conceals its participant audit from outsid
       await expect.poll(() => ranking.evaluate(
         (element) => element.scrollWidth <= element.clientWidth,
       )).toBe(true)
-      if (viewport.width >= 768) {
-        await page.getByRole('button', { name: 'Закрыть полный разбор', exact: true }).click()
-      }
       await auditCheckpoint(page, checkpoint)
     }
 

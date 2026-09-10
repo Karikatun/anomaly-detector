@@ -23,6 +23,8 @@ export async function inspectCompletedTender(page: Page, playerName: string) {
   await fullAudit.click()
   const dialog = page.getByRole('dialog', { name: 'Полный разбор партии', exact: true })
   await expect(dialog.getByRole('heading', { name: 'Аудит по раундам', exact: true })).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'Тендер завершён', exact: true })).toHaveCount(0)
+  await expect(dialog.locator('[data-audit-section]')).toHaveCount(0)
   await expect(dialog.getByRole('combobox', { name: 'Фильтр итогового аудита по игроку' })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()

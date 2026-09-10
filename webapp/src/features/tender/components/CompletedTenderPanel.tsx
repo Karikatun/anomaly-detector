@@ -191,17 +191,460 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
     <CompletedTenderModels view={view} players={players} />
   )
 
-  const headingId = desktopAudit ? 'completed-full-audit-heading' : 'completed-tender-heading'
-  const ownResultId = desktopAudit ? 'completed-full-audit-own-result-heading' : 'completed-own-result-heading'
+  const renderRoundAudit = () => (
+    <>
+      <label className={styles.playerFilter}>
+        <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.061')}</Typography>
+        <NativeSelect
+          aria-label={translate('tender.completedTenderPanel.copy.062')}
+          value={selectedPlayerId}
+          onChange={(event) => setSelectedPlayerId(event.target.value)}
+        >
+          <option value="all">{translate('tender.completedTenderPanel.copy.063')}</option>
+          {rankedPlayers.map((player) => (
+            <option key={player.playerId} value={player.playerId}>
+              {player.displayName ?? player.playerId.slice(0, 8)}
+            </option>
+          ))}
+        </NativeSelect>
+      </label>
+
+      <section className={styles.section} aria-labelledby="completed-rounds-heading">
+        <div className={styles.sectionHeader}>
+          <span>
+            <Typography id="completed-rounds-heading" as="h3" variant="bodySmMedium">
+
+              {translate('tender.completedTenderPanel.copy.064')}
+            </Typography>
+            <Typography variant="caption" tone="muted">
+
+              {translate('tender.completedTenderPanel.copy.065')}
+            </Typography>
+            {view.ruleset && (
+              <Typography as="span" variant="caption" tone="muted" className={styles.rulesetMeta}>
+                {t('rules.ruleset', { version: view.ruleset === 'tender-v2' ? '2' : '1' })}
+              </Typography>
+            )}
+          </span>
+        </div>
+        <div className={styles.auditPlayerList}>
+          {view.audit.rounds.map((round) => {
+            const includesPlayer = (playerId: string) =>
+              selectedPlayerId === 'all' || selectedPlayerId === playerId
+            const accessSlots = round.accessSlots.filter((entry) => includesPlayer(entry.playerId))
+            const powerAllocations = round.powerAllocations.filter((entry) => includesPlayer(entry.playerId))
+            const reconnaissance = round.reconnaissance.filter((entry) => includesPlayer(entry.playerId))
+            const laboratory = round.laboratory.filter((entry) => includesPlayer(entry.playerId))
+            const theses = round.theses.filter((entry) => includesPlayer(entry.playerId))
+            const contracts = round.contracts.filter((entry) => includesPlayer(entry.playerId))
+            const ratingChanges = round.ratingChanges.filter((entry) => includesPlayer(entry.playerId))
+            const entryCount = accessSlots.length
+              + powerAllocations.length
+              + reconnaissance.length
+              + laboratory.length
+              + theses.length
+              + contracts.length
+              + ratingChanges.length
+            return (
+              <details
+                key={round.round}
+                className={styles.roundAudit}
+                data-audit-round={round.round}
+              >
+                <summary>
+                  <Typography as="span" variant="bodySmMedium" className={styles.roundIndex}>
+                    {String(round.round).padStart(2, '0')}
+                  </Typography>
+                  <span className={styles.roundSummaryCopy}>
+                    <Typography as="strong" variant="bodySmMedium">{translate('tender.completed.auditRound', { round: round.round })}</Typography>
+                    <Typography as="span" variant="caption" tone="muted">{entryCount}  {translate('tender.completedTenderPanel.copy.067')}</Typography>
+                  </span>
+                  <span className={styles.roundToggle} aria-hidden="true">
+                    <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={1.8} />
+                  </span>
+                </summary>
+
+                <div className={styles.roundAuditContent}>
+                  <section className={styles.roundPriority} aria-label={translate('tender.completedTenderPanel.copy.068', { value1: round.round })}>
+                    <Typography as="h4" variant="caption">{translate('tender.completedTenderPanel.copy.069')}</Typography>
+                    <ol>
+                      {round.priorityPlayerIds.map((playerId, index) => (
+                        <li key={playerId}>
+                          <Typography as="span" variant="caption">
+                            {index + 1}. {playerName(playerId)}
+                          </Typography>
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+
+                  <AuditGroup
+                    accent="#f4a51c"
+                    icon={UserGroupIcon}
+                    title={translate('tender.completedTenderPanel.copy.070')}
+                    count={accessSlots.length}
+                  >
+                    {accessSlots.map((entry) => (
+                      <li key={`slot-${entry.playerId}`}>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          {entry.resolution === 'timeout' && (
+                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
+
+                              {translate('tender.completedTenderPanel.copy.071')}
+                            </Typography>
+                          )}
+                        </div>
+                        <div className={styles.auditFacts}>
+                          <span>
+                            <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.072')}</Typography>
+                            <Typography as="strong" variant="caption">{entry.requestedSlot ?? '—'}</Typography>
+                          </span>
+                          <Typography as="span" variant="caption" className={styles.auditArrow}>→</Typography>
+                          <span>
+                            <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.073')}</Typography>
+                            <Typography as="strong" variant="caption">{entry.assignedSlot ?? '—'}</Typography>
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup
+                    accent="#38bdf8"
+                    icon={FlashIcon}
+                    title={translate('tender.completedTenderPanel.copy.074')}
+                    count={powerAllocations.length}
+                  >
+                    {powerAllocations.map((entry) => (
+                      <li key={`power-${entry.playerId}`}>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          {entry.resolution === 'timeout' && (
+                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
+
+                              {translate('tender.completedTenderPanel.copy.075')}
+                            </Typography>
+                          )}
+                        </div>
+                        <div className={styles.powerFacts}>
+                          {[
+                            [translate('tender.completedTenderPanel.copy.076'), entry.allocation.reconnaissance],
+                            [translate('tender.completedTenderPanel.copy.077'), entry.allocation.laboratory],
+                            [translate('tender.completedTenderPanel.copy.078'), entry.allocation.modelAnalysis],
+                            [translate('tender.completedTenderPanel.copy.079'), entry.allocation.contracts],
+                          ].map(([label, value]) => (
+                            <span key={label}>
+                              <Typography as="small" variant="caption">{label}</Typography>
+                              <Typography as="strong" variant="caption">{value}</Typography>
+                            </span>
+                          ))}
+                        </div>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup
+                    accent="#38bdf8"
+                    icon={Radar02Icon}
+                    title={translate('tender.completedTenderPanel.copy.080')}
+                    count={reconnaissance.length}
+                  >
+                    {reconnaissance.map((entry) => (
+                      <li key={`recon-${entry.playerId}`}>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          {entry.resolution === 'timeout' && (
+                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
+
+                              {translate('tender.completedTenderPanel.copy.081')}
+                            </Typography>
+                          )}
+                          {entry.resolution === 'skipped' && (
+                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
+
+                              {translate('tender.completedTenderPanel.copy.082')}
+                            </Typography>
+                          )}
+                        </div>
+                        <div className={styles.auditTagList}>
+                          {entry.targets.length > 0 ? entry.targets.map((target, targetIndex) => (
+                            <Typography key={`${target}-${targetIndex}`} as="span" variant="caption">
+                              {target === 'unknown-sector'
+                                ? translate('tender.completedTenderPanel.copy.083')
+                                : t(signalLabelKeys[target])}
+                            </Typography>
+                          )) : (
+                            <Typography as="span" variant="caption" tone="muted">
+
+                              {translate('tender.completedTenderPanel.copy.084')}
+                            </Typography>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup
+                    accent="#a968e8"
+                    icon={FlaskConicalIcon}
+                    title={translate('tender.completedTenderPanel.copy.085')}
+                    count={laboratory.length}
+                  >
+                    {laboratory.map((entry, index) => {
+                      const modeLabel = entry.mode === 'broad'
+                        ? translate('tender.completedTenderPanel.copy.086')
+                        : entry.mode === 'deep' ? translate('tender.completedTenderPanel.copy.087') : translate('tender.completedTenderPanel.copy.088')
+                      return (
+                        <li
+                          key={`lab-${entry.playerId}-${index}`}
+                          aria-label={translate('tender.completedTenderPanel.copy.089', { value1: playerName(entry.playerId) })}
+                        >
+                          <div className={styles.auditEntryHeader}>
+                            <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                              {playerName(entry.playerId)}
+                            </Typography>
+                            <Typography
+                              as="span"
+                              variant="caption"
+                              className={entry.resolution === 'timeout' || entry.resolution === 'skipped'
+                                ? styles.auditTimeoutBadge
+                                : styles.auditModeBadge}
+                            >
+                              {entry.resolution === 'timeout'
+                                ? translate('tender.completedTenderPanel.copy.090')
+                                : entry.resolution === 'skipped'
+                                  ? entry.skipReason === 'insufficient_samples'
+                                    ? translate('tender.completedTenderPanel.copy.091')
+                                    : translate('tender.completedTenderPanel.copy.092')
+                                  : modeLabel}
+                            </Typography>
+                          </div>
+                          <div className={styles.laboratoryTests}>
+                            {entry.tests.map((test) => (
+                              <div key={test.testId} className={styles.laboratoryTest}>
+                                <Typography as="strong" variant="caption" className={styles.testRoute}>
+                                  {t(signalLabelKeys[test.sourceSignal])}
+                                  {' → '}
+                                  {t(signalLabelKeys[test.receiverSignal])}
+                                </Typography>
+                                <Typography as="span" variant="caption" className={styles.testResultBadge}>
+                                  {t(`tender.result.${test.publicResult}`)}
+                                </Typography>
+                                {test.usedByContractId && (
+                                  <Typography as="span" variant="caption" className={styles.contractUseBadge}>
+
+                                    {translate('tender.completedTenderPanel.copy.093')}
+                                  </Typography>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          {entry.privateMeasurements?.map((measurement) => (
+                            <div
+                              key={`${measurement.sourceSignal}-${measurement.receiverSignal}`}
+                              className={styles.privateMeasurement}
+                            >
+                              <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.094')}</Typography>
+                              <Typography as="strong" variant="caption">
+                                {measurement.polarityRelation === 'same'
+                                  ? translate('tender.completedTenderPanel.copy.095')
+                                  : translate('tender.completedTenderPanel.copy.096')}
+                              </Typography>
+                            </div>
+                          ))}
+                        </li>
+                      )
+                    })}
+                  </AuditGroup>
+
+                  <AuditGroup
+                    accent="#22d3ee"
+                    icon={Analytics01Icon}
+                    title={translate('tender.completedTenderPanel.copy.097')}
+                    count={theses.length}
+                  >
+                    {theses.map((entry) => (
+                      <li key={entry.id}>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          <Typography as="span" variant="caption" className={styles.signalNameBadge}>
+                            {t(signalLabelKeys[entry.signalId])}
+                          </Typography>
+                        </div>
+                        <div className={styles.correctness}>
+                          <Typography as="span" variant="caption" data-correct={entry.fieldTypeCorrect || undefined}>
+
+                            {translate('tender.completed.fieldResult', {
+                              field: t(fieldTypeLabelKeys[entry.fieldType]),
+                              correctness: entry.fieldTypeCorrect ? translate('tender.completedTenderPanel.copy.099') : translate('tender.completedTenderPanel.copy.100'),
+                            })}
+                          </Typography>
+                          <Typography as="span" variant="caption" data-correct={entry.polarityCorrect || undefined}>
+
+                            {translate('tender.completed.polarityResult', {
+                              polarity: t(polarityLabelKeys[entry.polarity]),
+                              correctness: entry.polarityCorrect ? translate('tender.completedTenderPanel.copy.102') : translate('tender.completedTenderPanel.copy.103'),
+                            })}
+                          </Typography>
+                        </div>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup
+                    accent="#f4a51c"
+                    icon={ContractsIcon}
+                    title={translate('tender.completedTenderPanel.copy.104')}
+                    count={contracts.length}
+                  >
+                    {contracts.map((entry, index) => (
+                      <li key={`${entry.playerId}-${entry.contractId ?? entry.outcome}-${index}`}>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          {entry.conditions && (
+                            <Typography as="span" variant="caption" className={styles.auditModeBadge}>
+                              {translate('tender.completed.contractReward', {
+                                kind: contractKindLabels[entry.conditions.kind],
+                                rating: formatPoints(entry.conditions.ratingReward),
+                              })}
+                            </Typography>
+                          )}
+                        </div>
+                        <Typography as="strong" variant="caption" className={styles.contractOutcome}>
+                          {entry.outcome === 'timeout_released'
+                            ? translate('tender.completedTenderPanel.copy.105')
+                            : entry.outcome === 'skipped'
+                              ? translate('tender.completedTenderPanel.copy.106')
+                              : entry.outcome === 'failed'
+                                ? translate('tender.completedTenderPanel.contract.failed')
+                                : translate('tender.completedTenderPanel.copy.107')}
+                        </Typography>
+                        {entry.outcome === 'skipped' ? (
+                          <Typography variant="caption" tone="muted">
+
+                            {translate('tender.completedTenderPanel.copy.108')}
+                          </Typography>
+                        ) : (entry.outcome === 'awarded' || entry.outcome === 'failed') && (
+                          <div className={styles.contractDetails}>
+                            {entry.conditions && (
+                              <>
+                                <Typography as="span" variant="caption">
+
+                                  {translate('tender.completed.target', {
+                                    signal: t(signalLabelKeys[entry.conditions.targetSignal]),
+                                    role: contractRoleLabels[entry.conditions.targetRole],
+                                  })}
+                                </Typography>
+                                <Typography as="span" variant="caption">
+                                  {entry.conditions.kind === 'scientific'
+                                    ? translate('tender.completedTenderPanel.copy.110', { value1: t(signalLabelKeys[entry.conditions.targetSignal]) })
+                                    : translate('tender.completedTenderPanel.copy.111', { value1: [
+                                        t(`tender.result.${entry.conditions.requiredPublicResult}`),
+                                        ...((entry.conditions.kind === 'complex' || entry.conditions.kind === 'final')
+                                          && entry.conditions.requiredSecondaryPublicResult
+                                          ? [t(`tender.result.${entry.conditions.requiredSecondaryPublicResult}`)]
+                                          : []),
+                                      ].join(' + ') })}
+                                </Typography>
+                                {(entry.conditions.kind === 'complex' || entry.conditions.kind === 'final') && (
+                                  <Typography as="span" variant="caption">
+
+                                    {translate('tender.completedTenderPanel.copy.112')}
+                                  </Typography>
+                                )}
+                              </>
+                            )}
+                            {entry.evidenceTests.map((evidence) => (
+                              <Typography key={evidence.testId} as="span" variant="caption">
+
+                                {translate('tender.completed.evidence', { signal: t(signalLabelKeys[evidence.sourceSignal]) })}
+                                {' → '}
+                                {t(signalLabelKeys[evidence.receiverSignal])}
+                                {' · '}
+                                {laboratoryProtocolLabels[evidence.protocol]}
+                                {' · '}
+                                {t(`tender.result.${evidence.publicResult}`)}
+                              </Typography>
+                            ))}
+                            {entry.researchCertificationSignal && (
+                              <Typography as="span" variant="caption">
+
+                                {translate('tender.completed.certificationEvidence', { signal: t(signalLabelKeys[entry.researchCertificationSignal]) })}
+                              </Typography>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  <AuditGroup
+                    accent="#2fcda3"
+                    icon={Award02Icon}
+                    title={translate('tender.completedTenderPanel.copy.115')}
+                    count={ratingChanges.length}
+                  >
+                    {ratingChanges.map((entry, index) => (
+                      <li key={`${entry.playerId}-${entry.source}-${index}`}>
+                        <div className={styles.auditEntryHeader}>
+                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
+                            {playerName(entry.playerId)}
+                          </Typography>
+                          <Typography as="strong" variant="caption" className={styles.ratingChangeBadge}>
+                            {entry.points >= 0 ? '+' : ''}{entry.points}
+                          </Typography>
+                        </div>
+                        <Typography variant="caption" tone="muted">
+
+                          {translate('tender.completed.ratingSource', { source: roundRatingLabels[entry.source] })}
+                        </Typography>
+                      </li>
+                    ))}
+                  </AuditGroup>
+
+                  {entryCount === 0 && (
+                    <Typography variant="caption" tone="muted" className={styles.emptyRound}>
+
+                      {translate('tender.completedTenderPanel.copy.117')}
+                    </Typography>
+                  )}
+                </div>
+              </details>
+            )
+          })}
+        </div>
+      </section>
+    </>
+  )
+
+  if (desktopAudit) {
+    return (
+      <CompletedTenderDesktop key={view.tenderId} currentUserId={currentUserId} view={view}>
+        {renderRoundAudit()}
+      </CompletedTenderDesktop>
+    )
+  }
+
   const panel = (
-    <section className={styles.panel} aria-labelledby={headingId}>
+    <section className={styles.panel} aria-labelledby="completed-tender-heading">
       <header className={styles.hero}>
         <span className={styles.completionIcon}>
           <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={1.8} aria-hidden="true" />
         </span>
         <span className={styles.heroCopy}>
-          <Typography id={headingId} as="h2" variant="h3">
-            
+          <Typography id="completed-tender-heading" as="h2" variant="h3">
+
             {translate('tender.completedTenderPanel.copy.029')}
           </Typography>
           <Typography variant="bodySm" tone="muted">
@@ -225,7 +668,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
         <section
           className={styles.ownResult}
           data-winner={currentPlayerIsWinner || undefined}
-          aria-labelledby={ownResultId}
+          aria-labelledby="completed-own-result-heading"
         >
           <span className={styles.ownResultSummary}>
             <span className={styles.ownResultLabel}>
@@ -236,7 +679,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   : translate('tender.completedTenderPanel.currentPlayerResult')}
               </Typography>
             </span>
-            <Typography id={ownResultId} as="h3" variant="h4">
+            <Typography id="completed-own-result-heading" as="h3" variant="h4">
               {translate('tender.completedTenderPanel.placementAndPoints', {
                 value1: currentPlacement ?? '—',
                 value2: formatPoints(currentRating ?? 0),
@@ -401,7 +844,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                     </ul>
                   ) : (
                     <Typography variant="caption" tone="muted" className={styles.noRatingAwards}>
-                      
+
                       {translate('tender.completedTenderPanel.copy.056')}
                     </Typography>
                   )}
@@ -478,11 +921,11 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
           <div className={styles.sectionHeader}>
             <span>
               <Typography id="completed-other-models-heading" as="h3" variant="bodySmMedium">
-                
+
                 {translate('tender.completedTenderPanel.copy.057')}
               </Typography>
               <Typography variant="caption" tone="muted">
-                
+
                 {translate('tender.completedTenderPanel.copy.058')}
               </Typography>
             </span>
@@ -501,446 +944,11 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
           <Typography as="span" variant="caption">{roundCountLabel} ›</Typography>
         </summary>
         <div className={styles.disclosureBody}>
-      <label className={styles.playerFilter}>
-        <Typography as="span" variant="caption">{translate('tender.completedTenderPanel.copy.061')}</Typography>
-        <NativeSelect
-          aria-label={translate('tender.completedTenderPanel.copy.062')}
-          value={selectedPlayerId}
-          onChange={(event) => setSelectedPlayerId(event.target.value)}
-        >
-          <option value="all">{translate('tender.completedTenderPanel.copy.063')}</option>
-          {rankedPlayers.map((player) => (
-            <option key={player.playerId} value={player.playerId}>
-              {player.displayName ?? player.playerId.slice(0, 8)}
-            </option>
-          ))}
-        </NativeSelect>
-      </label>
-
-      <section className={styles.section} aria-labelledby="completed-rounds-heading">
-        <div className={styles.sectionHeader}>
-          <span>
-            <Typography id="completed-rounds-heading" as="h3" variant="bodySmMedium">
-              
-              {translate('tender.completedTenderPanel.copy.064')}
-            </Typography>
-            <Typography variant="caption" tone="muted">
-              
-              {translate('tender.completedTenderPanel.copy.065')}
-            </Typography>
-            {view.ruleset && (
-              <Typography as="span" variant="caption" tone="muted" className={styles.rulesetMeta}>
-                {t('rules.ruleset', { version: view.ruleset === 'tender-v2' ? '2' : '1' })}
-              </Typography>
-            )}
-          </span>
-        </div>
-        <div className={styles.auditPlayerList}>
-          {view.audit.rounds.map((round) => {
-            const includesPlayer = (playerId: string) =>
-              selectedPlayerId === 'all' || selectedPlayerId === playerId
-            const accessSlots = round.accessSlots.filter((entry) => includesPlayer(entry.playerId))
-            const powerAllocations = round.powerAllocations.filter((entry) => includesPlayer(entry.playerId))
-            const reconnaissance = round.reconnaissance.filter((entry) => includesPlayer(entry.playerId))
-            const laboratory = round.laboratory.filter((entry) => includesPlayer(entry.playerId))
-            const theses = round.theses.filter((entry) => includesPlayer(entry.playerId))
-            const contracts = round.contracts.filter((entry) => includesPlayer(entry.playerId))
-            const ratingChanges = round.ratingChanges.filter((entry) => includesPlayer(entry.playerId))
-            const entryCount = accessSlots.length
-              + powerAllocations.length
-              + reconnaissance.length
-              + laboratory.length
-              + theses.length
-              + contracts.length
-              + ratingChanges.length
-            return (
-              <details
-                key={round.round}
-                className={styles.roundAudit}
-                data-audit-round={round.round}
-              >
-                <summary>
-                  <Typography as="span" variant="bodySmMedium" className={styles.roundIndex}>
-                    {String(round.round).padStart(2, '0')}
-                  </Typography>
-                  <span className={styles.roundSummaryCopy}>
-                    <Typography as="strong" variant="bodySmMedium">{translate('tender.completed.auditRound', { round: round.round })}</Typography>
-                    <Typography as="span" variant="caption" tone="muted">{entryCount}  {translate('tender.completedTenderPanel.copy.067')}</Typography>
-                  </span>
-                  <span className={styles.roundToggle} aria-hidden="true">
-                    <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={1.8} />
-                  </span>
-                </summary>
-
-                <div className={styles.roundAuditContent}>
-                  <section className={styles.roundPriority} aria-label={translate('tender.completedTenderPanel.copy.068', { value1: round.round })}>
-                    <Typography as="h4" variant="caption">{translate('tender.completedTenderPanel.copy.069')}</Typography>
-                    <ol>
-                      {round.priorityPlayerIds.map((playerId, index) => (
-                        <li key={playerId}>
-                          <Typography as="span" variant="caption">
-                            {index + 1}. {playerName(playerId)}
-                          </Typography>
-                        </li>
-                      ))}
-                    </ol>
-                  </section>
-
-                  <AuditGroup
-                    accent="#f4a51c"
-                    icon={UserGroupIcon}
-                    title={translate('tender.completedTenderPanel.copy.070')}
-                    count={accessSlots.length}
-                  >
-                    {accessSlots.map((entry) => (
-                      <li key={`slot-${entry.playerId}`}>
-                        <div className={styles.auditEntryHeader}>
-                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
-                            {playerName(entry.playerId)}
-                          </Typography>
-                          {entry.resolution === 'timeout' && (
-                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
-                              
-                              {translate('tender.completedTenderPanel.copy.071')}
-                            </Typography>
-                          )}
-                        </div>
-                        <div className={styles.auditFacts}>
-                          <span>
-                            <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.072')}</Typography>
-                            <Typography as="strong" variant="caption">{entry.requestedSlot ?? '—'}</Typography>
-                          </span>
-                          <Typography as="span" variant="caption" className={styles.auditArrow}>→</Typography>
-                          <span>
-                            <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.073')}</Typography>
-                            <Typography as="strong" variant="caption">{entry.assignedSlot ?? '—'}</Typography>
-                          </span>
-                        </div>
-                      </li>
-                    ))}
-                  </AuditGroup>
-
-                  <AuditGroup
-                    accent="#38bdf8"
-                    icon={FlashIcon}
-                    title={translate('tender.completedTenderPanel.copy.074')}
-                    count={powerAllocations.length}
-                  >
-                    {powerAllocations.map((entry) => (
-                      <li key={`power-${entry.playerId}`}>
-                        <div className={styles.auditEntryHeader}>
-                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
-                            {playerName(entry.playerId)}
-                          </Typography>
-                          {entry.resolution === 'timeout' && (
-                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
-                              
-                              {translate('tender.completedTenderPanel.copy.075')}
-                            </Typography>
-                          )}
-                        </div>
-                        <div className={styles.powerFacts}>
-                          {[
-                            [translate('tender.completedTenderPanel.copy.076'), entry.allocation.reconnaissance],
-                            [translate('tender.completedTenderPanel.copy.077'), entry.allocation.laboratory],
-                            [translate('tender.completedTenderPanel.copy.078'), entry.allocation.modelAnalysis],
-                            [translate('tender.completedTenderPanel.copy.079'), entry.allocation.contracts],
-                          ].map(([label, value]) => (
-                            <span key={label}>
-                              <Typography as="small" variant="caption">{label}</Typography>
-                              <Typography as="strong" variant="caption">{value}</Typography>
-                            </span>
-                          ))}
-                        </div>
-                      </li>
-                    ))}
-                  </AuditGroup>
-
-                  <AuditGroup
-                    accent="#38bdf8"
-                    icon={Radar02Icon}
-                    title={translate('tender.completedTenderPanel.copy.080')}
-                    count={reconnaissance.length}
-                  >
-                    {reconnaissance.map((entry) => (
-                      <li key={`recon-${entry.playerId}`}>
-                        <div className={styles.auditEntryHeader}>
-                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
-                            {playerName(entry.playerId)}
-                          </Typography>
-                          {entry.resolution === 'timeout' && (
-                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
-                              
-                              {translate('tender.completedTenderPanel.copy.081')}
-                            </Typography>
-                          )}
-                          {entry.resolution === 'skipped' && (
-                            <Typography as="span" variant="caption" className={styles.auditTimeoutBadge}>
-                              
-                              {translate('tender.completedTenderPanel.copy.082')}
-                            </Typography>
-                          )}
-                        </div>
-                        <div className={styles.auditTagList}>
-                          {entry.targets.length > 0 ? entry.targets.map((target, targetIndex) => (
-                            <Typography key={`${target}-${targetIndex}`} as="span" variant="caption">
-                              {target === 'unknown-sector'
-                                ? translate('tender.completedTenderPanel.copy.083')
-                                : t(signalLabelKeys[target])}
-                            </Typography>
-                          )) : (
-                            <Typography as="span" variant="caption" tone="muted">
-                              
-                              {translate('tender.completedTenderPanel.copy.084')}
-                            </Typography>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </AuditGroup>
-
-                  <AuditGroup
-                    accent="#a968e8"
-                    icon={FlaskConicalIcon}
-                    title={translate('tender.completedTenderPanel.copy.085')}
-                    count={laboratory.length}
-                  >
-                    {laboratory.map((entry, index) => {
-                      const modeLabel = entry.mode === 'broad'
-                        ? translate('tender.completedTenderPanel.copy.086')
-                        : entry.mode === 'deep' ? translate('tender.completedTenderPanel.copy.087') : translate('tender.completedTenderPanel.copy.088')
-                      return (
-                        <li
-                          key={`lab-${entry.playerId}-${index}`}
-                          aria-label={translate('tender.completedTenderPanel.copy.089', { value1: playerName(entry.playerId) })}
-                        >
-                          <div className={styles.auditEntryHeader}>
-                            <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
-                              {playerName(entry.playerId)}
-                            </Typography>
-                            <Typography
-                              as="span"
-                              variant="caption"
-                              className={entry.resolution === 'timeout' || entry.resolution === 'skipped'
-                                ? styles.auditTimeoutBadge
-                                : styles.auditModeBadge}
-                            >
-                              {entry.resolution === 'timeout'
-                                ? translate('tender.completedTenderPanel.copy.090')
-                                : entry.resolution === 'skipped'
-                                  ? entry.skipReason === 'insufficient_samples'
-                                    ? translate('tender.completedTenderPanel.copy.091')
-                                    : translate('tender.completedTenderPanel.copy.092')
-                                  : modeLabel}
-                            </Typography>
-                          </div>
-                          <div className={styles.laboratoryTests}>
-                            {entry.tests.map((test) => (
-                              <div key={test.testId} className={styles.laboratoryTest}>
-                                <Typography as="strong" variant="caption" className={styles.testRoute}>
-                                  {t(signalLabelKeys[test.sourceSignal])}
-                                  {' → '}
-                                  {t(signalLabelKeys[test.receiverSignal])}
-                                </Typography>
-                                <Typography as="span" variant="caption" className={styles.testResultBadge}>
-                                  {t(`tender.result.${test.publicResult}`)}
-                                </Typography>
-                                {test.usedByContractId && (
-                                  <Typography as="span" variant="caption" className={styles.contractUseBadge}>
-                                    
-                                    {translate('tender.completedTenderPanel.copy.093')}
-                                  </Typography>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                          {entry.privateMeasurements?.map((measurement) => (
-                            <div
-                              key={`${measurement.sourceSignal}-${measurement.receiverSignal}`}
-                              className={styles.privateMeasurement}
-                            >
-                              <Typography as="small" variant="caption">{translate('tender.completedTenderPanel.copy.094')}</Typography>
-                              <Typography as="strong" variant="caption">
-                                {measurement.polarityRelation === 'same'
-                                  ? translate('tender.completedTenderPanel.copy.095')
-                                  : translate('tender.completedTenderPanel.copy.096')}
-                              </Typography>
-                            </div>
-                          ))}
-                        </li>
-                      )
-                    })}
-                  </AuditGroup>
-
-                  <AuditGroup
-                    accent="#22d3ee"
-                    icon={Analytics01Icon}
-                    title={translate('tender.completedTenderPanel.copy.097')}
-                    count={theses.length}
-                  >
-                    {theses.map((entry) => (
-                      <li key={entry.id}>
-                        <div className={styles.auditEntryHeader}>
-                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
-                            {playerName(entry.playerId)}
-                          </Typography>
-                          <Typography as="span" variant="caption" className={styles.signalNameBadge}>
-                            {t(signalLabelKeys[entry.signalId])}
-                          </Typography>
-                        </div>
-                        <div className={styles.correctness}>
-                          <Typography as="span" variant="caption" data-correct={entry.fieldTypeCorrect || undefined}>
-                            
-                            {translate('tender.completed.fieldResult', {
-                              field: t(fieldTypeLabelKeys[entry.fieldType]),
-                              correctness: entry.fieldTypeCorrect ? translate('tender.completedTenderPanel.copy.099') : translate('tender.completedTenderPanel.copy.100'),
-                            })}
-                          </Typography>
-                          <Typography as="span" variant="caption" data-correct={entry.polarityCorrect || undefined}>
-                            
-                            {translate('tender.completed.polarityResult', {
-                              polarity: t(polarityLabelKeys[entry.polarity]),
-                              correctness: entry.polarityCorrect ? translate('tender.completedTenderPanel.copy.102') : translate('tender.completedTenderPanel.copy.103'),
-                            })}
-                          </Typography>
-                        </div>
-                      </li>
-                    ))}
-                  </AuditGroup>
-
-                  <AuditGroup
-                    accent="#f4a51c"
-                    icon={ContractsIcon}
-                    title={translate('tender.completedTenderPanel.copy.104')}
-                    count={contracts.length}
-                  >
-                    {contracts.map((entry, index) => (
-                      <li key={`${entry.playerId}-${entry.contractId ?? entry.outcome}-${index}`}>
-                        <div className={styles.auditEntryHeader}>
-                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
-                            {playerName(entry.playerId)}
-                          </Typography>
-                          {entry.conditions && (
-                            <Typography as="span" variant="caption" className={styles.auditModeBadge}>
-                              {translate('tender.completed.contractReward', {
-                                kind: contractKindLabels[entry.conditions.kind],
-                                rating: formatPoints(entry.conditions.ratingReward),
-                              })}
-                            </Typography>
-                          )}
-                        </div>
-                        <Typography as="strong" variant="caption" className={styles.contractOutcome}>
-                          {entry.outcome === 'timeout_released'
-                            ? translate('tender.completedTenderPanel.copy.105')
-                            : entry.outcome === 'skipped'
-                              ? translate('tender.completedTenderPanel.copy.106')
-                              : entry.outcome === 'failed'
-                                ? translate('tender.completedTenderPanel.contract.failed')
-                                : translate('tender.completedTenderPanel.copy.107')}
-                        </Typography>
-                        {entry.outcome === 'skipped' ? (
-                          <Typography variant="caption" tone="muted">
-                            
-                            {translate('tender.completedTenderPanel.copy.108')}
-                          </Typography>
-                        ) : (entry.outcome === 'awarded' || entry.outcome === 'failed') && (
-                          <div className={styles.contractDetails}>
-                            {entry.conditions && (
-                              <>
-                                <Typography as="span" variant="caption">
-                                  
-                                  {translate('tender.completed.target', {
-                                    signal: t(signalLabelKeys[entry.conditions.targetSignal]),
-                                    role: contractRoleLabels[entry.conditions.targetRole],
-                                  })}
-                                </Typography>
-                                <Typography as="span" variant="caption">
-                                  {entry.conditions.kind === 'scientific'
-                                    ? translate('tender.completedTenderPanel.copy.110', { value1: t(signalLabelKeys[entry.conditions.targetSignal]) })
-                                    : translate('tender.completedTenderPanel.copy.111', { value1: [
-                                        t(`tender.result.${entry.conditions.requiredPublicResult}`),
-                                        ...((entry.conditions.kind === 'complex' || entry.conditions.kind === 'final')
-                                          && entry.conditions.requiredSecondaryPublicResult
-                                          ? [t(`tender.result.${entry.conditions.requiredSecondaryPublicResult}`)]
-                                          : []),
-                                      ].join(' + ') })}
-                                </Typography>
-                                {(entry.conditions.kind === 'complex' || entry.conditions.kind === 'final') && (
-                                  <Typography as="span" variant="caption">
-                                    
-                                    {translate('tender.completedTenderPanel.copy.112')}
-                                  </Typography>
-                                )}
-                              </>
-                            )}
-                            {entry.evidenceTests.map((evidence) => (
-                              <Typography key={evidence.testId} as="span" variant="caption">
-                                
-                                {translate('tender.completed.evidence', { signal: t(signalLabelKeys[evidence.sourceSignal]) })}
-                                {' → '}
-                                {t(signalLabelKeys[evidence.receiverSignal])}
-                                {' · '}
-                                {laboratoryProtocolLabels[evidence.protocol]}
-                                {' · '}
-                                {t(`tender.result.${evidence.publicResult}`)}
-                              </Typography>
-                            ))}
-                            {entry.researchCertificationSignal && (
-                              <Typography as="span" variant="caption">
-                                
-                                {translate('tender.completed.certificationEvidence', { signal: t(signalLabelKeys[entry.researchCertificationSignal]) })}
-                              </Typography>
-                            )}
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </AuditGroup>
-
-                  <AuditGroup
-                    accent="#2fcda3"
-                    icon={Award02Icon}
-                    title={translate('tender.completedTenderPanel.copy.115')}
-                    count={ratingChanges.length}
-                  >
-                    {ratingChanges.map((entry, index) => (
-                      <li key={`${entry.playerId}-${entry.source}-${index}`}>
-                        <div className={styles.auditEntryHeader}>
-                          <Typography as="strong" variant="caption" className={styles.auditPlayerBadge}>
-                            {playerName(entry.playerId)}
-                          </Typography>
-                          <Typography as="strong" variant="caption" className={styles.ratingChangeBadge}>
-                            {entry.points >= 0 ? '+' : ''}{entry.points}
-                          </Typography>
-                        </div>
-                        <Typography variant="caption" tone="muted">
-                          
-                          {translate('tender.completed.ratingSource', { source: roundRatingLabels[entry.source] })}
-                        </Typography>
-                      </li>
-                    ))}
-                  </AuditGroup>
-
-                  {entryCount === 0 && (
-                    <Typography variant="caption" tone="muted" className={styles.emptyRound}>
-                      
-                      {translate('tender.completedTenderPanel.copy.117')}
-                    </Typography>
-                  )}
-                </div>
-              </details>
-            )
-          })}
-        </div>
-      </section>
+          {renderRoundAudit()}
         </div>
       </details>
     </section>
   )
 
-  return desktopAudit ? (
-    <CompletedTenderDesktop key={view.tenderId} currentUserId={currentUserId} view={view}>
-      {panel}
-    </CompletedTenderDesktop>
-  ) : panel
+  return panel
 }

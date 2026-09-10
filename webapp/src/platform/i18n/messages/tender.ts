@@ -8,7 +8,7 @@ export const tenderMessages = {
   'tender.completed.desktop.noWinner': 'Партия без победителя',
   'tender.completed.desktop.fullAudit': 'Полный разбор партии',
   'tender.completed.desktop.closeAudit': 'Закрыть полный разбор',
-  'tender.completed.desktop.auditHint': 'Модели всех участников, тезисы, контракты и ход партии по раундам.',
+  'tender.completed.desktop.auditHint': 'Исследования, тезисы, контракты и начисление очков по раундам.',
   'tender.access.title': 'Выбор слота доступа',
   'tender.access.you': 'Вы · {name}',
   'tender.access.youShort': 'Вы',
