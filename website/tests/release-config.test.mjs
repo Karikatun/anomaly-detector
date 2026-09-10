@@ -18,6 +18,24 @@ describe('website split-domain release environment', () => {
     expect(() => validateWebsiteReleaseEnvironment(validEnvironment)).not.toThrow()
   })
 
+  test('builds approved analytics only through the explicit analytics release profile', () => {
+    const environment = {
+      ...validEnvironment,
+      PUBLIC_ANALYTICS_API_URL: 'https://api.anomaly-detector.ru',
+      PUBLIC_ANALYTICS_MODE: 'aggregate',
+      PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'ad_01,ad_02',
+    }
+    expect(() => validateWebsiteReleaseEnvironment(environment)).toThrow()
+    expect(() => validateWebsiteReleaseEnvironment(environment, { analytics: true })).not.toThrow()
+    expect(() => validateWebsiteReleaseEnvironment({ ...environment, PUBLIC_ANALYTICS_MODE: 'consented' }, { analytics: true })).toThrow()
+    for (const api of [undefined, 'http://localhost:3000', 'https://api.anomaly-detector.ru/path', 'https://other.example']) {
+      expect(() => validateWebsiteReleaseEnvironment({ ...environment, PUBLIC_ANALYTICS_API_URL: api }, { analytics: true })).toThrow()
+    }
+    for (const campaigns of ['ad_01,https://example.org', 'ad_01,private@example.org', Array.from({ length: 101 }, (_, i) => `ad_${i}`).join(',')]) {
+      expect(() => validateWebsiteReleaseEnvironment({ ...environment, PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: campaigns }, { analytics: true })).toThrow()
+    }
+  })
+
   test.each([
     ['PUBLIC_ANALYTICS_API_URL', 'https://api.anomaly-detector.ru'],
     ['PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST', 'launch_ru'],

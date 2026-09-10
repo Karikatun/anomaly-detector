@@ -41,9 +41,10 @@ function normalizeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 }
 
 const backendEnv = normalizeEnv(e2eBackendEnv({
-  ANALYTICS_CAMPAIGN_ALLOWLIST: '',
-  ANALYTICS_ENABLED: 'false',
-  ANALYTICS_ORIGINS: '',
+  ANALYTICS_CAMPAIGN_ALLOWLIST: 'ad_01,ad_02,ad_03,ad_04,ad_05,ad_06',
+  ANALYTICS_ENABLED: mode === 'target' ? 'true' : 'false',
+  ANALYTICS_MODE: 'aggregate',
+  ANALYTICS_ORIGINS: mode === 'target' ? [rootOrigin, appOrigin].join(',') : '',
   COOKIE_SECURE: 'true',
   CORS_ORIGINS: [playerOrigin, `https://ops.anomaly-detector.localhost:${portPlan.edgePort}`].join(','),
   DATABASE_URL: portPlan.databaseUrl,
@@ -96,8 +97,9 @@ if (mode === 'target') {
       SPLIT_DOMAIN_BUILD_OUT_DIR: resolve(artifactRoot, 'website'),
       PUBLIC_WEBSITE_URL: rootOrigin,
       PUBLIC_WEBAPP_URL: appOrigin,
-      PUBLIC_ANALYTICS_API_URL: '',
-      PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: '',
+      PUBLIC_ANALYTICS_API_URL: apiOrigin,
+      PUBLIC_ANALYTICS_MODE: 'aggregate',
+      PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'ad_01,ad_02,ad_03,ad_04,ad_05,ad_06',
     }),
     url: portPlan.websiteUrl,
     reuseExistingServer: false,

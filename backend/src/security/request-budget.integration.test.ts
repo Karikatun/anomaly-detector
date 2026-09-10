@@ -44,6 +44,8 @@ describe('request budget policy catalog', () => {
       'rec_code_login_day',
       'rec_code_ip_hour',
       'rec_code_ip_day',
+      'analytics_ingest',
+      'analytics_consent',
     ])
     expect(requestBudgetPolicyEntries(catalog)
       .filter(({ adminAggregation }) => adminAggregation === 'authenticated_only')

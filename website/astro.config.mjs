@@ -8,8 +8,13 @@ import {
 	validateWebsiteReleaseEnvironment,
 } from './release-config.mjs';
 
-if (process.env.WEBSITE_RELEASE_BUILD === 'true') {
-	validateWebsiteReleaseEnvironment(loadWebsiteReleaseEnvironment());
+if (process.env.WEBSITE_RELEASE_BUILD && process.env.WEBSITE_RELEASE_BUILD !== 'false') {
+	if (!['true', 'analytics'].includes(process.env.WEBSITE_RELEASE_BUILD)) {
+		throw new Error('WEBSITE_RELEASE_BUILD must be true or analytics');
+	}
+	validateWebsiteReleaseEnvironment(loadWebsiteReleaseEnvironment(), {
+		analytics: process.env.WEBSITE_RELEASE_BUILD === 'analytics',
+	});
 }
 
 // https://astro.build/config

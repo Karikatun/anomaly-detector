@@ -35,7 +35,7 @@ export function OverviewScreen({ data, isRefreshing, onLogout, onOpenAnalytics, 
             <p className="updated-at">Сформирован {formatDate(data.generatedAt)}</p>
           </div>
           <div className="header-actions">
-            {onOpenAnalytics && <button type="button" className="button button-secondary" onClick={onOpenAnalytics}>Путь MVP</button>}
+            {onOpenAnalytics && <button type="button" className="button button-secondary" onClick={onOpenAnalytics}>Аналитика</button>}
             <button type="button" className="button button-secondary" onClick={onOpenFeedback}>Обратная связь</button>
             <button type="button" className="button button-secondary" onClick={onOpenMailPolicy}>Политика почты</button>
             <button type="button" className="button" disabled={isRefreshing} onClick={onRefresh}>

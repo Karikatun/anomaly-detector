@@ -21,6 +21,7 @@ maybeDescribe('feedback API integration', () => {
     ACCESS_TOKEN_TTL_SECONDS: 60,
     ADMIN_USER_IDS: [],
     ANALYTICS_ENABLED: false,
+    ANALYTICS_MODE: 'aggregate',
     ROOM_BOT_CREATION_DISABLED: false,
     ANALYTICS_ORIGINS: [],
     ANALYTICS_CAMPAIGN_ALLOWLIST: [],

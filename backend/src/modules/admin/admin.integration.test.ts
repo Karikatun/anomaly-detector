@@ -26,6 +26,7 @@ maybeDescribe('concealed operations API integration', () => {
     ACCESS_TOKEN_TTL_SECONDS: 60,
     ADMIN_USER_IDS: [],
     ANALYTICS_ENABLED: false,
+    ANALYTICS_MODE: 'consented',
     ROOM_BOT_CREATION_DISABLED: false,
     ANALYTICS_ORIGINS: [],
     ANALYTICS_CAMPAIGN_ALLOWLIST: [],
@@ -65,6 +66,7 @@ maybeDescribe('concealed operations API integration', () => {
     await prisma.analyticsEvent.deleteMany()
     await prisma.analyticsJourney.deleteMany()
     await prisma.analyticsDailyAggregate.deleteMany()
+    await prisma.analyticsCampaignDailyAggregate.deleteMany()
     await prisma.mailDomainAssessment.deleteMany()
     await prisma.mailPolicyAuditEvent.deleteMany()
     await prisma.mailPolicyCommand.deleteMany()
@@ -89,14 +91,16 @@ maybeDescribe('concealed operations API integration', () => {
         ...baseEnv,
         ADMIN_USER_IDS: [administrator.user.id],
         ANALYTICS_ENABLED: true,
+        ANALYTICS_MODE: 'aggregate',
+        ANALYTICS_CAMPAIGN_ALLOWLIST: ['ad_01'],
         ANALYTICS_ORIGINS: [baseEnv.WEBAPP_ORIGIN],
       },
       prisma,
     })
 
-    const landingResponse = await app.request('/api/analytics/events/landing', {
-      body: JSON.stringify({ campaign: null, referrerDomain: null }),
-      headers: { 'Content-Type': 'application/json' },
+    const landingResponse = await app.request('/api/analytics/events/aggregate', {
+      body: JSON.stringify({ campaign: 'ad_01', event: 'landing_view', referrerDomain: null }),
+      headers: { 'Content-Type': 'application/json', Origin: baseEnv.WEBAPP_ORIGIN },
       method: 'POST',
     })
     expect(landingResponse.status).toBe(204)
@@ -144,6 +148,8 @@ maybeDescribe('concealed operations API integration', () => {
     })
     const analytics = analyticsAdminOverviewSchema.parse(await analyticsResponse.json())
     expect(analyticsResponse.status).toBe(200)
+    expect(analytics.mode).toBe('aggregate')
+    expect(analytics.campaigns).toEqual([{ campaign: 'ad_01', landingViews: 1, tutorialClicks: 0 }])
     expect(analytics.steps.find((step) => step.event === 'landing_view')?.count).toBe(1)
     expect(analytics.botLandingViews).toBe(0)
     expect(JSON.stringify(analytics)).not.toMatch(/"(?:accountId|cookie|email|ipAddress|journeyId|login|rawEvents|userId)"/i)

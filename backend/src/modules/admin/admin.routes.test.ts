@@ -78,6 +78,8 @@ const feedbackQueue = {
 
 const analyticsOverview = {
   botLandingViews: 2,
+  campaigns: [],
+  mode: 'consented' as const,
   daily: [{ count: 10, date: '2026-08-03', event: 'landing_view' as const }],
   generatedAt: '2026-08-03T12:00:00.000Z',
   sources: [{ category: 'direct' as const, landingViews: 10 }],

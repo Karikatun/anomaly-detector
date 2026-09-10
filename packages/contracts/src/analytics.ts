@@ -46,6 +46,11 @@ export const analyticsLandingViewSchema = z.object({
   referrerDomain: analyticsReferrerDomainSchema,
 }).strict()
 
+export const analyticsAggregateEventSchema = z.enum(['landing_view', 'tutorial_cta'])
+export const analyticsAggregateEventCommandSchema = analyticsLandingViewSchema.extend({
+  event: analyticsAggregateEventSchema,
+}).strict()
+
 export const analyticsConsentCommandSchema = analyticsLandingViewSchema.extend({
   commandId: z.string().uuid(),
 }).strict()
@@ -64,9 +69,25 @@ export const analyticsAdminQuerySchema = z.object({
 }).strict()
 
 const analyticsCountSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+const analyticsStepSchema = z.object({
+  count: analyticsCountSchema,
+  event: analyticsFunnelEventSchema,
+}).strict()
+const analyticsTransitionSchema = z.object({
+  conversionRate: z.number().finite().min(0).max(1),
+  count: analyticsCountSchema,
+  from: analyticsFunnelEventSchema,
+  to: analyticsFunnelEventSchema,
+}).strict()
 
 export const analyticsAdminOverviewSchema = z.object({
   botLandingViews: analyticsCountSchema,
+  mode: z.enum(['aggregate', 'consented']).default('consented'),
+  campaigns: z.array(z.object({
+    campaign: z.string().min(1).max(64).regex(/^[a-z0-9_-]+$/),
+    landingViews: analyticsCountSchema,
+    tutorialClicks: analyticsCountSchema,
+  }).strict()).max(100).default([]),
   daily: z.array(z.object({
     count: analyticsCountSchema,
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -77,16 +98,8 @@ export const analyticsAdminOverviewSchema = z.object({
     category: analyticsSourceCategorySchema,
     landingViews: analyticsCountSchema,
   }).strict()).max(4),
-  steps: z.array(z.object({
-    count: analyticsCountSchema,
-    event: analyticsFunnelEventSchema,
-  }).strict()).max(5),
-  transitions: z.array(z.object({
-    conversionRate: z.number().finite().min(0).max(1),
-    count: analyticsCountSchema,
-    from: analyticsFunnelEventSchema,
-    to: analyticsFunnelEventSchema,
-  }).strict()).max(4),
+  steps: z.array(analyticsStepSchema).max(5),
+  transitions: z.array(analyticsTransitionSchema).max(4),
   windowDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
 }).strict()
 
@@ -95,6 +108,7 @@ export type AnalyticsLinkedEvent = z.infer<typeof analyticsLinkedEventSchema>
 export type AnalyticsSourceCategory = z.infer<typeof analyticsSourceCategorySchema>
 export type AnalyticsTrafficClass = z.infer<typeof analyticsTrafficClassSchema>
 export type AnalyticsLandingView = z.infer<typeof analyticsLandingViewSchema>
+export type AnalyticsAggregateEvent = z.infer<typeof analyticsAggregateEventSchema>
 export type AnalyticsConsentCommand = z.infer<typeof analyticsConsentCommandSchema>
 export type AnalyticsEventCommand = z.infer<typeof analyticsEventCommandSchema>
 export type AnalyticsConsentStatus = z.infer<typeof analyticsConsentStatusSchema>

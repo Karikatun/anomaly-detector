@@ -469,6 +469,7 @@ function templateKindLabel(kind: MailOperationsView['delivery']['groups'][number
 }
 
 function requestBudgetSurfaceLabel(surface: RequestBudgetOverview['groups'][number]['surface']) {
+  if (surface === 'analytics') return 'Аналитика'
   if (surface === 'authentication') return 'Аутентификация'
   if (surface === 'transactional_mail') return 'Транзакционная почта'
   if (surface === 'room_join') return 'Вход в комнату'

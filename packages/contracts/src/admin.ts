@@ -141,6 +141,7 @@ export const mailDeliveryOverviewSchema = z.object({
 }).strict()
 
 const requestBudgetSurfaceSchema = z.enum([
+  'analytics',
   'authentication',
   'transactional_mail',
   'room_join',

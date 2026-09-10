@@ -30,6 +30,7 @@ type Options = {
   campaignAllowlist: ReadonlySet<string>
   clock?: { now(): Date }
   fingerprintKey: string
+  mode?: 'aggregate' | 'consented'
 }
 
 const systemClock = { now: () => new Date() }
@@ -41,6 +42,27 @@ export function createPrismaAnalytics(db: DbClient, options: Options): Analytics
   )
 
   return {
+    async recordAggregateEvent(input) {
+      const normalizedCampaign = input.campaign?.toLowerCase()
+      const campaign = normalizedCampaign && campaignAllowlist.has(normalizedCampaign) ? normalizedCampaign : null
+      const identity = {
+        day: utcDay(clock.now()),
+        metric: `aggregate:${input.event}`,
+        sourceCategory: classifyAnalyticsSource({ ...input, campaignAllowlist }),
+        trafficClass: input.trafficClass,
+      }
+      await db.$transaction(async (tx) => {
+        await incrementAggregate(tx, identity)
+        if (campaign) {
+          const campaignIdentity = { day: identity.day, metric: identity.metric, campaign, trafficClass: identity.trafficClass }
+          await tx.analyticsCampaignDailyAggregate.upsert({
+            where: { day_metric_campaign_trafficClass: campaignIdentity },
+            create: { ...campaignIdentity, count: 1 },
+            update: { count: { increment: 1 } },
+          })
+        }
+      })
+    },
     async recordLandingView(input) {
       const now = clock.now()
       const sourceCategory = classifyAnalyticsSource({ ...input, campaignAllowlist })
@@ -152,10 +174,29 @@ export function createPrismaAnalytics(db: DbClient, options: Options): Analytics
       const firstDay = utcDay(new Date(
         generatedAt.getTime() - (query.windowDays - 1) * 24 * 60 * 60 * 1_000,
       ))
-      const rows = await db.analyticsDailyAggregate.findMany({
-        where: { day: { gte: firstDay } },
+      const [rows, campaignRows] = await db.$transaction([
+        db.analyticsDailyAggregate.findMany({ where: { day: { gte: firstDay } } }),
+        db.analyticsCampaignDailyAggregate.findMany({
+          where: { day: { gte: firstDay }, campaign: { in: [...campaignAllowlist] }, trafficClass: 'human' },
+        }),
+      ], { isolationLevel: 'RepeatableRead' })
+      if (options.mode !== 'aggregate') {
+        return analyticsAdminOverviewSchema.parse(projectOverview(rows, query.windowDays, generatedAt))
+      }
+      const aggregateOverview = projectOverview(rows
+        .filter((row) => row.metric === 'aggregate:landing_view' || row.metric === 'aggregate:tutorial_cta')
+        .map((row) => ({ ...row, metric: row.metric.replace(/^aggregate:/, 'event:') })), query.windowDays, generatedAt)
+      return analyticsAdminOverviewSchema.parse({
+        ...aggregateOverview,
+        campaigns: [...campaignAllowlist].sort().map((campaign) => ({
+          campaign,
+          landingViews: sum(campaignRows.filter((row) => row.campaign === campaign && row.metric === 'aggregate:landing_view')),
+          tutorialClicks: sum(campaignRows.filter((row) => row.campaign === campaign && row.metric === 'aggregate:tutorial_cta')),
+        })),
+        mode: 'aggregate',
+        steps: aggregateOverview.steps.filter((step) => step.event === 'landing_view' || step.event === 'tutorial_cta'),
+        transitions: [],
       })
-      return analyticsAdminOverviewSchema.parse(projectOverview(rows, query.windowDays, generatedAt))
     },
 
     async cleanup(now) {
@@ -238,6 +279,8 @@ function projectOverview(
   return {
     botLandingViews: sum(rows.filter((row) =>
       row.trafficClass === 'known_bot' && row.metric === eventMetric('landing_view'))),
+    campaigns: [],
+    mode: 'consented',
     daily,
     generatedAt: generatedAt.toISOString(),
     sources: sourceCategories.map((category) => ({

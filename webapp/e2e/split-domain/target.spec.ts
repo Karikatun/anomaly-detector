@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { createPrisma } from '../../../backend/src/db'
 
 import { e2ePassword, registerBrowserUser, uniqueLogin } from '../helpers/test'
 
@@ -17,6 +18,56 @@ const legacyPlayerPaths = [
   '/personal-data-consent',
   '/terms',
 ]
+
+test('persists anonymous advertisement views and clicks across HTTPS origins without analytics cookies', async ({ page, context }) => {
+  const databaseUrl = requiredEnvironment('TEST_DATABASE_URL')
+  if (!new URL(databaseUrl).pathname.endsWith('_test')) throw new Error('Anonymous analytics E2E requires an isolated test database')
+  const prisma = createPrisma(databaseUrl)
+  const campaign = 'ad_03'
+  const counter = async (metric: string) => (await prisma.analyticsCampaignDailyAggregate.findMany({
+    where: { campaign, metric, trafficClass: 'human' },
+  })).reduce((count, row) => count + row.count, 0)
+  const beforeViews = await counter('aggregate:landing_view')
+  const beforeClicks = await counter('aggregate:tutorial_cta')
+  const submitted: Array<{ body: unknown; cookiePresent: boolean }> = []
+  page.on('request', async (request) => {
+    if (request.method() !== 'POST' || !request.url().endsWith('/api/analytics/events/aggregate')) return
+    submitted.push({ body: request.postDataJSON(), cookiePresent: Boolean((await request.allHeaders()).cookie) })
+  })
+  try {
+    const viewed = page.waitForResponse((response) => response.url().endsWith('/api/analytics/events/aggregate')
+      && response.request().method() === 'POST')
+    await page.goto(`${origins.root}/?utm_campaign=${campaign}&yclid=synthetic-click-do-not-store`)
+    expect((await viewed).status()).toBe(204)
+    await expect(page.locator('[data-analytics-consent]')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toHaveCount(0)
+    expect((await context.cookies()).filter((cookie) => cookie.name.startsWith('anomaly_detector_analytics'))).toHaveLength(0)
+    await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
+    await expect(page).toHaveURL(`${origins.app}/?continue=tutorial`)
+    await expect.poll(() => counter('aggregate:landing_view')).toBe(beforeViews + 1)
+    await expect.poll(() => counter('aggregate:tutorial_cta')).toBe(beforeClicks + 1)
+    expect(await prisma.analyticsJourney.count()).toBe(0)
+    expect(await prisma.analyticsEvent.count()).toBe(0)
+    await expect.poll(() => submitted.length).toBe(2)
+    expect(submitted).toEqual([
+      { body: { campaign, event: 'landing_view', referrerDomain: null }, cookiePresent: false },
+      { body: { campaign, event: 'tutorial_cta', referrerDomain: null }, cookiePresent: false },
+    ])
+    const linkedStatus = await page.evaluate(async (api) =>
+      (await fetch(`${api}/api/analytics/consent/status`, { credentials: 'omit' })).status, origins.api)
+    expect(linkedStatus).toBe(404)
+  } finally {
+    await prisma.$disconnect()
+  }
+})
+
+test('preserves the CTA when anonymous analytics is unavailable', async ({ page }) => {
+  await page.route('**/api/analytics/events/aggregate', (route) => route.abort())
+  await page.goto(`${origins.root}/?utm_campaign=ad_06`)
+  await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
+  await expect(page).toHaveURL(`${origins.app}/?continue=tutorial`)
+  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
+})
 
 test('serves the public root, redirects every legacy deep link, and enforces target CSP', async ({ page }) => {
   const rootResponse = await page.goto(origins.root)

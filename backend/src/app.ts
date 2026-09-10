@@ -131,9 +131,18 @@ export function createApp({
   const analytics = env.ANALYTICS_ENABLED
     ? createAnalyticsModule({
         campaignAllowlist: new Set(env.ANALYTICS_CAMPAIGN_ALLOWLIST),
+        clientAddress: (context) => clientAddress(context, {
+          trustProxy: env.TRUST_PROXY,
+          trustedProxyClientIpHeader: env.TRUSTED_PROXY_CLIENT_IP_HEADER,
+          trustedProxyClientIpPosition: env.TRUSTED_PROXY_CLIENT_IP_POSITION,
+        }),
         cookieSecure: env.COOKIE_SECURE,
         db: prisma,
         fingerprintKey: env.JWT_SECRET,
+        origins: new Set(env.ANALYTICS_ORIGINS),
+        mode: env.ANALYTICS_MODE,
+        requestBudget,
+        requestBudgetPolicies,
       })
     : null
   const admin = createAdminModule({
