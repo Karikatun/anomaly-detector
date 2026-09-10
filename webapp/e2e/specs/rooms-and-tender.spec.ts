@@ -906,6 +906,7 @@ test('keeps a four-player completed leaderboard compact after an early finish', 
       await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
       await guestPage.getByLabel('Код комнаты').fill(roomJoinCode)
       await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+      await expect(guestPage.getByRole('heading', { name: 'Лобби', exact: true })).toBeVisible()
     }
     for (let index = 0; index < guestPages.length; index += 1) {
       const guestPage = guestPages[index]!
