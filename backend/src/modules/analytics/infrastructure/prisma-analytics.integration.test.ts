@@ -21,6 +21,7 @@ maybeDescribe('Prisma privacy-aware analytics', () => {
     await prisma.analyticsEvent.deleteMany()
     await prisma.analyticsJourney.deleteMany()
     await prisma.analyticsDailyAggregate.deleteMany()
+    await prisma.analyticsCampaignDailyAggregate.deleteMany()
   })
 
   afterAll(async () => {
@@ -44,6 +45,30 @@ maybeDescribe('Prisma privacy-aware analytics', () => {
     })
   })
 
+  test('counts anonymous views and clicks per approved advertisement without a visitor or raw event', async () => {
+    const advertising = createPrismaAnalytics(prisma, {
+      campaignAllowlist: new Set(['ad_01', 'ad_02']),
+      clock: { now: () => now },
+      fingerprintKey: 'analytics-test-secret-at-least-32-bytes',
+      mode: 'aggregate',
+    })
+    for (const campaign of ['ad_01', 'AD_01', 'ad_02']) {
+      await advertising.recordAggregateEvent({ campaign, event: 'landing_view', referrerDomain: null, trafficClass: 'human' })
+    }
+    await advertising.recordAggregateEvent({ campaign: 'ad_01', event: 'tutorial_cta', referrerDomain: null, trafficClass: 'human' })
+    expect(await advertising.readOverview({ windowDays: 7 })).toMatchObject({
+      campaigns: [
+        { campaign: 'ad_01', landingViews: 2, tutorialClicks: 1 },
+        { campaign: 'ad_02', landingViews: 1, tutorialClicks: 0 },
+      ],
+      mode: 'aggregate',
+      steps: [{ event: 'landing_view', count: 3 }, { event: 'tutorial_cta', count: 1 }],
+      transitions: [],
+    })
+    expect(await prisma.analyticsJourney.count()).toBe(0)
+    expect(await prisma.analyticsEvent.count()).toBe(0)
+  })
+
   test('grants consent idempotently while persisting only HMAC derivatives', async () => {
     const command = {
       campaign: 'launch_ru',
@@ -65,6 +90,42 @@ maybeDescribe('Prisma privacy-aware analytics', () => {
     expect(stored.grantCommandKey).toMatch(/^[a-f0-9]{64}$/)
     expect(JSON.stringify(stored)).not.toContain(first.token)
     expect(JSON.stringify(stored)).not.toContain(command.commandId)
+  })
+
+  test('excludes unknown campaign keys, old linked events and known bots from anonymous advertisement counts', async () => {
+    const advertising = createPrismaAnalytics(prisma, {
+      campaignAllowlist: new Set(['ad_01']), clock: { now: () => now },
+      fingerprintKey: 'analytics-test-secret-at-least-32-bytes', mode: 'aggregate',
+    })
+    await advertising.recordAggregateEvent({ campaign: 'unapproved_private_value', event: 'landing_view', referrerDomain: null, trafficClass: 'human' })
+    await advertising.recordAggregateEvent({ campaign: 'ad_01', event: 'landing_view', referrerDomain: null, trafficClass: 'known_bot' })
+    await analytics.recordLandingView({ campaign: null, referrerDomain: null, trafficClass: 'human' })
+    const overview = await advertising.readOverview({ windowDays: 30 })
+    expect(overview.botLandingViews).toBe(1)
+    expect(overview.campaigns).toEqual([{ campaign: 'ad_01', landingViews: 0, tutorialClicks: 0 }])
+    expect(overview.steps).toEqual([{ event: 'landing_view', count: 1 }, { event: 'tutorial_cta', count: 0 }])
+    expect(await prisma.analyticsCampaignDailyAggregate.count({ where: { campaign: 'unapproved_private_value' } })).toBe(0)
+    expect(JSON.stringify(overview)).not.toContain('unapproved_private_value')
+  })
+
+  test('counts concurrent anonymous increments and expires advertisement aggregates after 13 months', async () => {
+    const advertising = createPrismaAnalytics(prisma, {
+      campaignAllowlist: new Set(['ad_01']), clock: { now: () => now },
+      fingerprintKey: 'analytics-test-secret-at-least-32-bytes', mode: 'aggregate',
+    })
+    await Promise.all(Array.from({ length: 8 }, () => advertising.recordAggregateEvent({
+      campaign: 'ad_01', event: 'landing_view', referrerDomain: null, trafficClass: 'human',
+    })))
+    expect((await advertising.readOverview({ windowDays: 7 })).campaigns).toEqual([
+      { campaign: 'ad_01', landingViews: 8, tutorialClicks: 0 },
+    ])
+    await prisma.analyticsCampaignDailyAggregate.createMany({ data: [
+      { campaign: 'ad_01', count: 2, day: new Date('2025-07-22'), metric: 'aggregate:landing_view', trafficClass: 'human' },
+      { campaign: 'ad_01', count: 3, day: new Date('2025-07-23'), metric: 'aggregate:landing_view', trafficClass: 'human' },
+    ] })
+    expect(await advertising.cleanup(now)).toEqual({ aggregates: 1, journeys: 0 })
+    expect(await prisma.analyticsCampaignDailyAggregate.count()).toBe(2)
+    expect(await advertising.cleanup(now)).toEqual({ aggregates: 0, journeys: 0 })
   })
 
   test('rejects a reused consent command with different normalized source data', async () => {

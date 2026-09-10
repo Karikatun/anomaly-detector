@@ -165,6 +165,9 @@ describe('runCronTask', () => {
             return { count: 10 }
           },
         },
+        analyticsCampaignDailyAggregate: {
+          deleteMany: async () => ({ count: 0 }),
+        },
         analyticsJourney: {
           deleteMany: async (input: unknown) => {
             analyticsJourneyCalls.push(input)

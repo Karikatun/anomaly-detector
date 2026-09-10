@@ -37,6 +37,7 @@ maybeDescribe('auth API integration', () => {
     JWT_SECRET: TEST_ACCOUNT_LIFECYCLE_SECRET,
     ADMIN_USER_IDS: [],
     ANALYTICS_ENABLED: false,
+    ANALYTICS_MODE: 'aggregate',
     ROOM_BOT_CREATION_DISABLED: false,
     ANALYTICS_ORIGINS: [],
     ANALYTICS_CAMPAIGN_ALLOWLIST: [],

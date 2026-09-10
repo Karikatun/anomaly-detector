@@ -143,8 +143,8 @@ test('hard beats easy over 20 fixed configurations with both seat priorities', a
   }
   const summary = summarizePairedRatings(deltas)
   expect(summary.sampleSize).toBe(40)
-  expect(summary.meanDelta).toBeCloseTo(8.625, 8)
-  expect(summary.standardError).toBeCloseTo(0.2834935444, 8)
+  expect(summary.meanDelta).toBeCloseTo(9, 8)
+  expect(summary.standardError).toBeCloseTo(0.2148344622, 8)
   expect(summary.wins).toBe(40)
   expect(summary.losses).toBe(0)
 })

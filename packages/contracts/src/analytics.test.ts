@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   analyticsAdminOverviewSchema,
   analyticsAdminQuerySchema,
+  analyticsAggregateEventCommandSchema,
   analyticsConsentCommandSchema,
   analyticsConsentStatusSchema,
   analyticsEventCommandSchema,
@@ -10,6 +11,19 @@ import {
 } from './analytics'
 
 describe('analytics player contracts', () => {
+  test('anonymous counters accept only views and clicks with bounded source metadata', () => {
+    expect(analyticsAggregateEventCommandSchema.parse({
+      campaign: 'ad_01', event: 'tutorial_cta', referrerDomain: null,
+    })).toEqual({ campaign: 'ad_01', event: 'tutorial_cta', referrerDomain: null })
+    for (const extra of [
+      { event: 'registration_complete' }, { event: 'tutorial_complete' },
+      { journeyId: 'visitor' }, { yclid: 'ad-click-identifier' }, { accountId: 'player' },
+    ]) {
+      expect(analyticsAggregateEventCommandSchema.safeParse({
+        campaign: 'ad_01', event: 'landing_view', referrerDomain: null, ...extra,
+      }).success).toBe(false)
+    }
+  })
   test('accepts only bounded consent, source and funnel fields', () => {
     expect(analyticsLandingViewSchema.parse({
       campaign: 'launch_ru',

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { tenderViewSchema } from '@anomaly-detector/contracts'
 
 import { expect, registerBrowserUser, test } from '../helpers/test'
+import { inspectCompletedTender } from '../helpers/completed-tender'
 
 type Session = { accessToken: string; apiOrigin: string; playerId: string }
 
@@ -120,10 +121,17 @@ test('two humans complete a mixed easy and hard bot Tender', async ({ browser, p
   expect([...observedRounds].sort()).toEqual([1, 2, 3, 4, 5])
   await expect(page.locator('#completed-tender-heading')).toBeVisible()
   await expect(guestPage.locator('#completed-tender-heading')).toBeVisible()
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await inspectCompletedTender(page, 'Бот · сложный')
   await page.goto('/')
   await page.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()
   await expect(page.getByRole('table')).toContainText('Бот · лёгкий')
   await expect(page.getByRole('table')).toContainText('Бот · сложный')
+  await page.getByRole('button', { name: 'Открыть результаты', exact: true }).click()
+  await expect(page.locator('#completed-tender-heading')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Разобрать результат игрока Владелец mixed E2E', exact: true }))
+    .toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('tabpanel', { name: 'Очки и ресурсы', exact: true })).toBeVisible()
 
   await guestPage.goto('/')
   await guestPage.getByRole('button', { name: 'ИСТОРИЯ МАТЧЕЙ' }).click()

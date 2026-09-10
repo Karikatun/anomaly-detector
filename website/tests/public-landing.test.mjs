@@ -17,7 +17,7 @@ let html = ''
 let robots = ''
 let sitemap = ''
 
-const buildEnvironment = ({ analyticsApiUrl, campaignAllowlist } = {}) => {
+const buildEnvironment = ({ analyticsApiUrl, campaignAllowlist, analyticsMode } = {}) => {
   const env = {
     ...process.env,
     PUBLIC_WEBSITE_URL: publicWebsiteUrl,
@@ -27,8 +27,10 @@ const buildEnvironment = ({ analyticsApiUrl, campaignAllowlist } = {}) => {
   delete env.WEBSITE_RELEASE_BUILD
   delete env.PUBLIC_ANALYTICS_API_URL
   delete env.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST
+  delete env.PUBLIC_ANALYTICS_MODE
   if (analyticsApiUrl) env.PUBLIC_ANALYTICS_API_URL = analyticsApiUrl
   if (campaignAllowlist) env.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST = campaignAllowlist
+  if (analyticsMode) env.PUBLIC_ANALYTICS_MODE = analyticsMode
   return env
 }
 
@@ -85,7 +87,7 @@ test('renders an equal-choice first-party consent panel only when explicitly ena
   const analyticsApiUrl = 'https://api.anomaly-detector.ru'
   const build = spawnSync('bun', ['run', 'build'], {
     cwd: websiteRoot,
-    env: buildEnvironment({ analyticsApiUrl, campaignAllowlist: 'launch_ru' }),
+    env: buildEnvironment({ analyticsApiUrl, campaignAllowlist: 'launch_ru', analyticsMode: 'consented' }),
     encoding: 'utf8',
   })
   expect(build.status, build.stderr).toBe(0)
@@ -98,6 +100,25 @@ test('renders an equal-choice first-party consent panel only when explicitly ena
   expect(enabledHtml).not.toContain('от landing до обучения')
   expect(enabledHtml).toContain(`data-api-url="${analyticsApiUrl}"`)
   expect(enabledHtml).not.toMatch(/google-analytics|googletagmanager|mc\.yandex|metrika|session.?replay/i)
+})
+
+test('releases only an anonymous counter without a consent panel or analytics identifier', async () => {
+  const build = spawnSync('bun', ['run', 'build:release:analytics'], {
+    cwd: websiteRoot,
+    env: buildEnvironment({
+      analyticsApiUrl: 'https://api.anomaly-detector.ru',
+      campaignAllowlist: 'ad_01,ad_02,ad_03,ad_04,ad_05,ad_06',
+      analyticsMode: 'aggregate',
+    }),
+    encoding: 'utf8',
+  })
+  expect(build.status, build.stderr).toBe(0)
+  const enabledHtml = await readFile(resolve(buildOutput, 'index.html'), 'utf8')
+  expect(enabledHtml).toContain('data-analytics-counter')
+  expect(enabledHtml).toContain('data-analytics-event="tutorial_cta"')
+  expect(enabledHtml).not.toContain('data-analytics-consent')
+  expect(enabledHtml).not.toContain('Разрешить аналитику')
+  expect(enabledHtml).not.toContain('Только необходимые')
 })
 
 test('publishes complete social metadata backed by a real image asset', async () => {

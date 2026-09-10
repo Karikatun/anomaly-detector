@@ -42,17 +42,18 @@ const commandBase = (view: TenderView, options: ChooseBotCommandOptions) => ({
 
 const isSequentialTurn = (view: TenderView, playerId: string) => view.activePlayerId === playerId
 
-const allocationForRound = (view: TenderView) => {
+const allocationForRound = (view: TenderView, difficulty: BotDifficulty) => {
   const samples = new Set(view.privateSamples).size
   const reconnaissance = Math.min(2, 6 - samples)
+  const contracts = difficulty === 'hard' ? 1 : 0
   if (view.round === 1) return { contracts: 0, laboratory: 2, modelAnalysis: 0, reconnaissance: 2, reserve: 0 }
-  if (view.round === 2) return { contracts: 1, laboratory: 0, modelAnalysis: 1, reconnaissance, reserve: 4 - reconnaissance - 2 }
+  if (view.round === 2) return { contracts, laboratory: 0, modelAnalysis: 1, reconnaissance, reserve: 3 - reconnaissance - contracts }
   if (view.round === 3) {
     const laboratory = samples + reconnaissance >= 2 ? 2 : 0
     return { contracts: 0, laboratory, modelAnalysis: 0, reconnaissance, reserve: 4 - reconnaissance - laboratory }
   }
-  if (view.round === 4) return { contracts: 1, laboratory: 0, modelAnalysis: 2, reconnaissance: 0, reserve: 1 }
-  return { contracts: 1, laboratory: 0, modelAnalysis: 1, reconnaissance: 0, reserve: 2 }
+  if (view.round === 4) return { contracts, laboratory: 0, modelAnalysis: 2, reconnaissance: 0, reserve: 2 - contracts }
+  return { contracts, laboratory: 0, modelAnalysis: 1, reconnaissance: 0, reserve: 3 - contracts }
 }
 
 const thesisFor = (view: TenderView, options: ChooseBotCommandOptions, signalId: SignalId) => {
@@ -80,7 +81,7 @@ export const chooseBotV1Command = (view: TenderView, options: ChooseBotCommandOp
 
   if (view.phase === 'power-allocation') {
     if (player.powerAllocationConfirmed) return null
-    return { ...base, allocation: allocationForRound(view), type: 'allocate-power' }
+    return { ...base, allocation: allocationForRound(view, options.difficulty), type: 'allocate-power' }
   }
 
   if (view.phase === 'reconnaissance') {
@@ -140,6 +141,8 @@ export const chooseBotV1Command = (view: TenderView, options: ChooseBotCommandOp
   }
 
   if (view.phase === 'contracts') {
+    // Old saved allocations/reservations finish through the ordinary deadline.
+    if (options.difficulty === 'easy') return null
     if (!isSequentialTurn(view, options.playerId)) return null
     const contracts = [...view.publicContracts, ...(view.publicFinalContract ? [view.publicFinalContract] : [])]
     const reserved = contracts.find((contract) => contract.reservedByPlayerId === options.playerId && contract.bidOutcome === undefined)
@@ -199,7 +202,7 @@ const v2Allocation = (view: TenderView) => {
   const reconnaissance = Math.min(2, 6 - sampleCount)
   if (sampleCount < 6) return { contracts: 0, laboratory: 2, modelAnalysis: 0, reconnaissance, reserve: 2 - reconnaissance }
   if (view.round < 5) return { contracts: 0, laboratory: 2, modelAnalysis: 2, reconnaissance: 0, reserve: 0 }
-  return { contracts: 1, laboratory: 0, modelAnalysis: 2, reconnaissance: 0, reserve: 1 }
+  return { contracts: 0, laboratory: 0, modelAnalysis: 2, reconnaissance: 0, reserve: 2 }
 }
 
 const legalLaboratoryObservations = (view: TenderView, playerId: string, power: number): LaboratoryObservation[] => {

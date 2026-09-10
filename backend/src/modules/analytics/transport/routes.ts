@@ -1,4 +1,5 @@
 import {
+  analyticsAggregateEventCommandSchema,
   analyticsConsentCommandSchema,
   analyticsConsentStatusSchema,
   analyticsEventCommandSchema,
@@ -7,6 +8,7 @@ import {
 import { OpenAPIHono } from '@hono/zod-openapi'
 import type { Context } from 'hono'
 import { getCookie, setCookie } from 'hono/cookie'
+import { AppError } from '../../../http/errors'
 
 import { classifyAnalyticsTraffic } from '../application/classification'
 import type { AnalyticsStore } from '../application/ports'
@@ -17,15 +19,40 @@ const COOKIE_PATH = '/api/analytics'
 const COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 
 export function createAnalyticsRoutes(input: {
+  checkBudget(context: Context): Promise<{ allowed: boolean; retryAfterSeconds: number }>
   cookieSecure: boolean
+  origins: ReadonlySet<string>
+  mode?: 'aggregate' | 'consented'
   store: AnalyticsStore
 }) {
   const routes = new OpenAPIHono()
 
   routes.use('*', async (c, next) => {
     c.header('Cache-Control', 'no-store')
+    if (!input.origins.has(c.req.header('origin') ?? '')) {
+      throw new AppError(403, 'FORBIDDEN', 'Analytics requests require a trusted Origin')
+    }
+    if (!c.req.path.endsWith('/consent/necessary') && !c.req.path.endsWith('/consent/revoke')) {
+      const budget = await input.checkBudget(c)
+      if (!budget.allowed) {
+        c.header('Retry-After', String(budget.retryAfterSeconds))
+        throw new AppError(429, 'RATE_LIMITED', 'Too many analytics requests', undefined, 'analytics_budget')
+      }
+    }
     await next()
   })
+
+  if (input.mode === 'aggregate') {
+    routes.post('/events/aggregate', async (c) => {
+      const event = analyticsAggregateEventCommandSchema.parse(await c.req.json())
+      await input.store.recordAggregateEvent({
+        ...event,
+        trafficClass: classifyAnalyticsTraffic(c.req.header('user-agent')),
+      })
+      return c.body(null, 204)
+    })
+    return routes
+  }
 
   routes.post('/events/landing', async (c) => {
     const event = analyticsLandingViewSchema.parse(await c.req.json())

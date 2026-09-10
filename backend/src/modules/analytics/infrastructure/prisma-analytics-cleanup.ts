@@ -8,9 +8,10 @@ export async function cleanupAnalyticsData(db: DbClient, now: Date) {
     now.getUTCMonth() - AGGREGATE_RETENTION_MONTHS,
     now.getUTCDate(),
   ))
-  const [journeys, aggregates] = await Promise.all([
+  const [journeys, aggregates, campaignAggregates] = await Promise.all([
     db.analyticsJourney.deleteMany({ where: { expiresAt: { lte: now } } }),
     db.analyticsDailyAggregate.deleteMany({ where: { day: { lt: aggregateCutoff } } }),
+    db.analyticsCampaignDailyAggregate.deleteMany({ where: { day: { lt: aggregateCutoff } } }),
   ])
-  return { aggregates: aggregates.count, journeys: journeys.count }
+  return { aggregates: aggregates.count + campaignAggregates.count, journeys: journeys.count }
 }

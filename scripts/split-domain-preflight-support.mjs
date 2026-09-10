@@ -3,6 +3,7 @@ export const disabledWebappAnalyticsEnvironment = [
 ]
 
 export const disabledWebsiteAnalyticsEnvironment = [
+  'PUBLIC_ANALYTICS_MODE',
   'PUBLIC_ANALYTICS_API_URL',
   'PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST',
 ]
