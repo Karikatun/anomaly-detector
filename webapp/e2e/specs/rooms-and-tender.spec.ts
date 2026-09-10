@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 import { createPrisma } from '../../../backend/src/db'
 import { defaultDatabaseUrl } from '../env'
 import { expect, registerBrowserUser, test } from '../helpers/test'
+import { inspectCompletedTender } from '../helpers/completed-tender'
 
 const uxAuditDirectory = process.env.UX_AUDIT_DIR
 
@@ -928,12 +929,14 @@ test('keeps a four-player completed leaderboard compact after an early finish', 
 
     await expect(page.getByRole('heading', { name: 'Тендер завершён' })).toBeVisible()
     await expect(page.getByText('Вы победили', { exact: true })).toBeVisible()
-    const ranking = page.locator('details[data-audit-section="ranking"]')
-    await expect(ranking.locator('ol > li')).toHaveCount(4)
-    await expect(ranking.getByText('Исследователь с очен', { exact: true })).toBeVisible()
+    const desktopRanking = page.getByRole('region', { name: 'Участники', exact: true })
+    await expect(desktopRanking.getByRole('button', { name: /^Разобрать результат игрока / })).toHaveCount(4)
+    await expect(desktopRanking.getByText('Исследователь с очен', { exact: true })).toBeVisible()
+    await inspectCompletedTender(page, 'Хост 4P E2E')
     await auditCheckpoint(page, '14-completed-audit-four-player-desktop-1440x900')
 
     await page.setViewportSize({ width: 360, height: 800 })
+    const ranking = page.locator('details[data-audit-section="ranking"]')
     const rankingSummary = ranking.locator(':scope > summary')
     await expect(rankingSummary).toContainText('4 участника')
     await rankingSummary.press('Enter')
@@ -1055,6 +1058,9 @@ test('explains a completed Tender and conceals its participant audit from outsid
       await page.evaluate(() => new Promise<void>((resolveFrame) => {
         requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()))
       }))
+      if (viewport.width >= 768) {
+        await page.getByRole('button', { name: 'Полный разбор партии', exact: true }).click()
+      }
       if (!await ranking.evaluate((element) => (element as HTMLDetailsElement).open)) {
         await rankingSummary.focus()
         await expect(rankingSummary).toBeFocused()
@@ -1074,6 +1080,9 @@ test('explains a completed Tender and conceals its participant audit from outsid
       await expect.poll(() => ranking.evaluate(
         (element) => element.scrollWidth <= element.clientWidth,
       )).toBe(true)
+      if (viewport.width >= 768) {
+        await page.getByRole('button', { name: 'Закрыть полный разбор', exact: true }).click()
+      }
       await auditCheckpoint(page, checkpoint)
     }
 
@@ -1664,15 +1673,12 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expect(guestFullAudit.getByRole('option', { name: 'Все игроки' })).toHaveCount(1)
     await fullAuditSummary.press('Enter')
     await expect(guestFullAudit).not.toHaveAttribute('open', '')
-    await expect(page.getByRole('heading', { name: 'Итоговый рейтинг', exact: true })).toBeVisible()
-    await expect(page.getByText('Подробнее', { exact: true }).first()).toBeVisible()
-    await expect(page.getByLabel('Из чего сложились очки игрока Хост E2E')).toContainText(
+    await inspectCompletedTender(page, 'Гость E2E')
+    await expect(page.getByRole('tabpanel', { name: 'Очки и ресурсы', exact: true })).toContainText(
       /Начислений очков нет|Верные тезисы|Выполненные контракты|Верные свойства модели|Полностью раскрытые сигналы|Бонус полной модели/,
     )
-    await expect(page.getByRole('heading', { name: 'Конфигурация аномалии' })).toBeVisible()
-    await expect(page.getByText('Раскрытые свойства шести сигналов', { exact: true })).toBeVisible()
-    await expect(page.getByText('Финальная модель не отправлена')).toHaveCount(0)
-    await expect(page.getByText('Аудит по раундам', { exact: true })).toBeVisible()
+    await page.locator('summary').filter({ hasText: 'Конфигурация аномалии' }).click()
+    await expect(page.getByText('Aster', { exact: true }).last()).toBeVisible()
     await page.setViewportSize({ width: 768, height: 1024 })
     await auditCheckpoint(page, '12a-completed-audit-tablet-768x1024')
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -1681,9 +1687,11 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await auditCheckpoint(guestPage, '13a-completed-audit-mobile-360x800')
     await guestPage.setViewportSize({ width: 390, height: 844 })
     await auditCheckpoint(guestPage, '13-completed-audit-mobile-390x844')
-    const secondRoundAudit = page.locator('details[data-audit-round="2"]')
+    await page.getByRole('button', { name: 'Полный разбор партии', exact: true }).click()
+    const secondRoundAudit = page.getByRole('dialog').locator('details[data-audit-round="2"]')
     await secondRoundAudit.locator('summary').click()
     await expect(secondRoundAudit.getByText('Широкое исследование', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Закрыть полный разбор', exact: true }).click()
 
     await page.getByRole('button', { name: 'Правила' }).click()
     await expect(page.getByRole('dialog').getByRole('heading', { name: 'Справочник правил' })).toBeVisible()

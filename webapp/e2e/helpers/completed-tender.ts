@@ -1,0 +1,31 @@
+import { expect, type Page } from '@playwright/test'
+
+export async function inspectCompletedTender(page: Page, playerName: string) {
+  const playerButton = page.getByRole('button', { name: `Разобрать результат игрока ${playerName}`, exact: true })
+  await playerButton.click()
+  await expect(playerButton).toHaveAttribute('aria-pressed', 'true')
+  const inspector = page.getByRole('region', { name: 'Разбор участника', exact: true })
+  await expect(inspector.getByRole('heading', { name: playerName, exact: true })).toBeVisible()
+  const scores = inspector.getByRole('tab', { name: 'Очки и ресурсы', exact: true })
+  const model = inspector.getByRole('tab', { name: 'Финальная модель', exact: true })
+  await scores.click()
+  await expect(inspector.getByRole('tabpanel', { name: 'Очки и ресурсы', exact: true })).toBeVisible()
+  await expect(inspector.getByRole('tabpanel', { name: 'Финальная модель', exact: true })).toBeHidden()
+  await scores.press('ArrowRight')
+  await expect(model).toBeFocused()
+  await expect(model).toHaveAttribute('aria-selected', 'true')
+  await expect(inspector.getByRole('tabpanel', { name: 'Финальная модель', exact: true })).toBeVisible()
+  await expect(inspector.getByRole('tabpanel', { name: 'Очки и ресурсы', exact: true })).toBeHidden()
+  await model.press('ArrowLeft')
+  await expect(scores).toHaveAttribute('aria-selected', 'true')
+
+  const fullAudit = page.getByRole('button', { name: 'Полный разбор партии', exact: true })
+  await fullAudit.click()
+  const dialog = page.getByRole('dialog', { name: 'Полный разбор партии', exact: true })
+  await expect(dialog.getByRole('heading', { name: 'Аудит по раундам', exact: true })).toBeVisible()
+  await expect(dialog.getByRole('combobox', { name: 'Фильтр итогового аудита по игроку' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(fullAudit).toBeFocused()
+  await expect(playerButton).toHaveAttribute('aria-pressed', 'true')
+}

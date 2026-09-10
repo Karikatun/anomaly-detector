@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { TenderView } from '@anomaly-detector/contracts'
 
 import { CompletedTenderPanel } from '../src/features/tender/components/CompletedTenderPanel'
+import { CompletedTenderDesktop } from '../src/features/tender/components/CompletedTenderDesktop'
 import { TenderPlayers } from '../src/features/tender/components/TenderOverview'
 import { I18nProvider } from '../src/platform/i18n'
 
@@ -179,6 +180,40 @@ const view = {
   version: 1,
   winnerPlayerIds: ['player-a'],
 } satisfies TenderView
+
+test('desktop opens the current participant with accessible score and model tabs', () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <CompletedTenderDesktop currentUserId="player-b" view={{ ...view, audit: view.audit }}>
+        <span>Full audit</span>
+      </CompletedTenderDesktop>
+    </I18nProvider>,
+  )
+  expect(html).toContain('aria-label="Разобрать результат игрока Бета" aria-pressed="true"')
+  expect(html).toContain('role="tablist"')
+  expect(html).toContain('role="tab" aria-selected="true"')
+  expect(html).toContain('Очки и ресурсы')
+  expect(html).toContain('Финальная модель')
+  expect(html).toContain('aria-hidden="true" inert=""')
+  expect(html).toContain('Начислений очков нет')
+  expect(html).toContain('Финальная модель не отправлена')
+  expect(html).toContain('Полный разбор партии')
+  expect(html).not.toContain('Full audit')
+})
+
+test('desktop does not label a participant as winner or place them when the party has no winner', () => {
+  const html = renderToStaticMarkup(
+    <I18nProvider>
+      <CompletedTenderDesktop currentUserId="player-a" view={{ ...view, audit: { ...view.audit, completionReason: 'no_human_players' }, winnerPlayerIds: [] }}>
+        <span>Full audit</span>
+      </CompletedTenderDesktop>
+    </I18nProvider>,
+  )
+  expect(html).toContain('Партия без победителя')
+  expect(html).not.toContain('Вы победили')
+  expect(html).not.toContain('1 место')
+  expect(html).not.toContain('data-winner="true"')
+})
 
 test('shows what contributed to every player rating in the final audit', () => {
   const html = renderToStaticMarkup(

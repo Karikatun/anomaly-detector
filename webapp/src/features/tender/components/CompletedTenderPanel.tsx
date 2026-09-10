@@ -26,8 +26,8 @@ import {
   signalLabelKeys,
 } from '../catalog'
 import { presentCompletedTender, tenderPointUnit } from '../completed-tender-presenter'
-import { SignalGlyph } from './SignalGlyph'
-import { signalAccent } from './signal-visuals'
+import { CompletedTenderConfiguration, CompletedTenderModels } from './CompletedTenderEvidence'
+import { CompletedTenderDesktop } from './CompletedTenderDesktop'
 import styles from './CompletedTenderPanel.module.css'
 
 type Props = {
@@ -137,7 +137,9 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
     winnerNames,
   } = presentation
   const [selectedPlayerId, setSelectedPlayerId] = useState(currentPlayer?.playerId ?? 'all')
-  const [desktopAudit, setDesktopAudit] = useState(false)
+  const [desktopAudit, setDesktopAudit] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 48rem)').matches,
+  )
 
   useEffect(() => {
     const media = window.matchMedia('(min-width: 48rem)')
@@ -186,71 +188,19 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
     translate('tender.completedTenderPanel.player.many'),
   )
   const renderPlayerModels = (players: typeof rankedPlayers) => (
-    <div className={styles.auditPlayerList}>
-      {players.map((player) => {
-        const result = view.audit.finalScientificModelsByPlayer[player.playerId]
-        return (
-          <article key={player.playerId} className={styles.auditPlayer}>
-            <Typography as="h4" variant="bodySmMedium">
-              {player.bot
-                ? translate(`tender.player.bot.${player.bot.difficulty}`)
-                : player.displayName ?? player.playerId.slice(0, 8)}
-            </Typography>
-            {!result?.submitted ? (
-              <Typography variant="caption" tone="muted">{translate('tender.completedTenderPanel.copy.023')}</Typography>
-            ) : (
-              <ul className={styles.auditEntries}>
-                {signalIds.map((signal) => {
-                  const claim = result.signals[signal]
-                  if (!claim) return null
-                  const correctProperties = Number(Boolean(claim.fieldTypeCorrect))
-                    + Number(Boolean(claim.polarityCorrect))
-                  return (
-                    <li
-                      key={signal}
-                      className={styles.signalAuditEntry}
-                      data-signal-score={correctProperties}
-                      style={{ '--signal-accent': signalAccent(signal) } as CSSProperties}
-                    >
-                      <SignalGlyph signal={signal} className={styles.auditSignalGlyph} />
-                      <span className={styles.auditEntryCopy}>
-                        <span className={styles.signalAuditHeading}>
-                          <Typography as="strong" variant="bodySmMedium">
-                            {t(signalLabelKeys[signal])} · {correctProperties}/2
-                          </Typography>
-                        </span>
-                        <span className={styles.correctness}>
-                          {claim.fieldType && (
-                            <Typography as="span" variant="caption" data-correct={String(Boolean(claim.fieldTypeCorrect))}>
-                              {claim.fieldTypeCorrect ? '✓' : '×'} {t(fieldTypeLabelKeys[claim.fieldType])} · {claim.fieldTypeCorrect ? translate('tender.completedTenderPanel.correct') : translate('tender.completedTenderPanel.incorrect')}
-                            </Typography>
-                          )}
-                          {claim.polarity && (
-                            <Typography as="span" variant="caption" data-correct={String(Boolean(claim.polarityCorrect))}>
-                              {claim.polarityCorrect ? '✓' : '×'} {t(polarityLabelKeys[claim.polarity])} · {claim.polarityCorrect ? translate('tender.completedTenderPanel.correct') : translate('tender.completedTenderPanel.incorrect')}
-                            </Typography>
-                          )}
-                        </span>
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </article>
-        )
-      })}
-    </div>
+    <CompletedTenderModels view={view} players={players} />
   )
 
-  return (
-    <section className={styles.panel} aria-labelledby="completed-tender-heading">
+  const headingId = desktopAudit ? 'completed-full-audit-heading' : 'completed-tender-heading'
+  const ownResultId = desktopAudit ? 'completed-full-audit-own-result-heading' : 'completed-own-result-heading'
+  const panel = (
+    <section className={styles.panel} aria-labelledby={headingId}>
       <header className={styles.hero}>
         <span className={styles.completionIcon}>
           <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={1.8} aria-hidden="true" />
         </span>
         <span className={styles.heroCopy}>
-          <Typography id="completed-tender-heading" as="h2" variant="h3">
+          <Typography id={headingId} as="h2" variant="h3">
             
             {translate('tender.completedTenderPanel.copy.029')}
           </Typography>
@@ -275,7 +225,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
         <section
           className={styles.ownResult}
           data-winner={currentPlayerIsWinner || undefined}
-          aria-labelledby="completed-own-result-heading"
+          aria-labelledby={ownResultId}
         >
           <span className={styles.ownResultSummary}>
             <span className={styles.ownResultLabel}>
@@ -286,7 +236,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                   : translate('tender.completedTenderPanel.currentPlayerResult')}
               </Typography>
             </span>
-            <Typography id="completed-own-result-heading" as="h3" variant="h4">
+            <Typography id={ownResultId} as="h3" variant="h4">
               {translate('tender.completedTenderPanel.placementAndPoints', {
                 value1: currentPlacement ?? '—',
                 value2: formatPoints(currentRating ?? 0),
@@ -507,27 +457,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
               <Typography as="span" variant="caption" className={styles.count}>6 / 6</Typography>
             </div>
 
-            <div className={styles.signalGrid}>
-              {signalIds.map((signal) => {
-                const properties = view.audit.anomalyConfiguration.signals[signal]
-                return (
-                  <article
-                    key={signal}
-                    className={styles.signalCard}
-                    style={{ '--signal-accent': signalAccent(signal) } as CSSProperties}
-                  >
-                    <SignalGlyph signal={signal} className={styles.signalGlyph} />
-                    <span className={styles.signalCopy}>
-                      <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[signal])}</Typography>
-                      <span className={styles.signalProperties}>
-                        <Typography as="span" variant="caption">{t(fieldTypeLabelKeys[properties.fieldType])}</Typography>
-                        <Typography as="span" variant="caption">{t(polarityLabelKeys[properties.polarity])}</Typography>
-                      </span>
-                    </span>
-                  </article>
-                )
-              })}
-            </div>
+            <CompletedTenderConfiguration view={view} />
           </section>
         </div>
       </details>
@@ -1007,4 +937,10 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
       </details>
     </section>
   )
+
+  return desktopAudit ? (
+    <CompletedTenderDesktop key={view.tenderId} currentUserId={currentUserId} view={view}>
+      {panel}
+    </CompletedTenderDesktop>
+  ) : panel
 }
