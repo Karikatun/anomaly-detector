@@ -67,6 +67,11 @@ test.each(seatPermutations)('mixed five-round game completes legally: $compositi
     expect(projected?.bot).toEqual({ difficulty: participant.difficulty!, strategyVersion: 'bot-v2' })
     expect(projected?.displayName).toBe(`Бот · ${participant.difficulty === 'easy' ? 'лёгкий' : 'сложный'}`)
     expect(view.audit?.ratingBreakdownByPlayer[participant.id]?.total).toBe(projected?.rating)
+    if (participant.difficulty === 'easy') {
+      expect(view.audit?.ratingBreakdownByPlayer[participant.id]?.contractPoints).toBe(0)
+      expect(view.audit?.rounds.flatMap((round) => round.contracts)
+        .filter((contract) => contract.playerId === participant.id)).toEqual([])
+    }
     expect(view.audit?.finalScientificModelsByPlayer[participant.id]).toMatchObject({ submitted: expect.any(Boolean) })
   }
 })

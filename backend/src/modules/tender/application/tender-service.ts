@@ -1191,6 +1191,11 @@ export function createTenderService({
         })
       }
 
+      if (player.bot?.difficulty === 'easy'
+        && (command.type === 'reserve-contract' || command.type === 'submit-contract-bid')) {
+        throw new TenderFailure('invalid_tender_state', 'Easy bots cannot take Contracts')
+      }
+
       if (command.type === 'reserve-contract') {
         if (tender.phase !== 'contracts') {
           throw new TenderFailure('invalid_tender_state', 'Contracts are closed')
