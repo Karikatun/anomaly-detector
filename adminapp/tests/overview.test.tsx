@@ -38,7 +38,7 @@ test('renders operational data without mutation controls', () => {
   expect(html).toContain('Все пользователи')
   expect(html).toContain('Политика почты')
   expect(html).toContain('Обратная связь')
-  expect(html).toContain('Путь MVP')
+  expect(html).toContain('Аналитика')
   expect(html).toContain('Ожидают игроков')
   expect(html).toContain('Идут сейчас')
   expect(html).toContain('Завершены')

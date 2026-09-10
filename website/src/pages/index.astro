@@ -6,6 +6,7 @@ import reconnaissanceMobile from '../assets/landing/mobile/reconnaissance.png'
 import laboratoryMobile from '../assets/landing/mobile/laboratory.png'
 import completedTenderMobile from '../assets/landing/mobile/completed-tender.png'
 import AnalyticsConsent from '../components/AnalyticsConsent.astro'
+import AnalyticsCounter from '../components/AnalyticsCounter.astro'
 
 const title = 'Anomaly Detector — бесплатная браузерная игра на дедукцию'
 const description = 'Исследуйте аномалию, проверяйте гипотезы и опередите соперников в научной игре на дедукцию для 2–4 друзей.'
@@ -14,6 +15,7 @@ const publicWebappUrl = import.meta.env.PUBLIC_WEBAPP_URL
 const analyticsApiUrl = import.meta.env.PUBLIC_ANALYTICS_API_URL
 	? new URL(import.meta.env.PUBLIC_ANALYTICS_API_URL).origin
 	: undefined
+const analyticsMode = import.meta.env.PUBLIC_ANALYTICS_MODE ?? 'aggregate'
 const analyticsCampaignAllowlist = (import.meta.env.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST ?? '')
 	.split(',')
 	.map((item: string) => item.trim().toLowerCase())
@@ -137,7 +139,11 @@ const structuredData = [
 								<figcaption>Собирайте образцы. Соперники видят результат, но не ваши выводы.</figcaption>
 							</figure>
 						</section>
-						{analyticsApiUrl && <AnalyticsConsent
+						{analyticsApiUrl && analyticsMode === 'aggregate' && <AnalyticsCounter
+							apiUrl={analyticsApiUrl}
+							campaignAllowlist={analyticsCampaignAllowlist}
+						/>}
+						{analyticsApiUrl && analyticsMode === 'consented' && <AnalyticsConsent
 							apiUrl={analyticsApiUrl}
 							campaignAllowlist={analyticsCampaignAllowlist}
 							privacyUrl={legalUrl('/privacy')}

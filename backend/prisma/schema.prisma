@@ -311,6 +311,18 @@ model AnalyticsDailyAggregate {
   @@map("analytics_daily_aggregates")
 }
 
+model AnalyticsCampaignDailyAggregate {
+  day          DateTime @db.Date
+  metric       String   @db.VarChar(96)
+  campaign     String   @db.VarChar(64)
+  trafficClass String   @map("traffic_class") @db.VarChar(16)
+  count        Int      @default(0)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@id([day, metric, campaign, trafficClass], map: "analytics_campaign_daily_aggregates_pkey")
+  @@map("analytics_campaign_daily_aggregates")
+}
+
 model FeedbackReport {
   id                      String                    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   publicNumber            String                    @unique(map: "feedback_reports_public_number_key") @map("public_number") @db.VarChar(13)

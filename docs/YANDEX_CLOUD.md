@@ -164,6 +164,7 @@ ADMIN_USER_IDS=<comma-separated-operator-user-uuids>
 CORS_ORIGINS=https://app.anomaly-detector.ru,https://ops.anomaly-detector.ru
 WEBAPP_ORIGIN=https://app.anomaly-detector.ru
 ANALYTICS_ENABLED=false
+ANALYTICS_MODE=aggregate
 ANALYTICS_ORIGINS=
 ANALYTICS_CAMPAIGN_ALLOWLIST=
 ACCESS_TOKEN_TTL_SECONDS=900
@@ -256,12 +257,12 @@ the active production `WEBAPP_ORIGIN` and player entry in `CORS_ORIGINS` remain
 the current root origin. `WEBAPP_ORIGIN` is mandatory in production, must be an
 origin-only HTTPS URL, and must also appear in `CORS_ORIGINS`.
 
-Keep `ANALYTICS_ENABLED=false` and both client build flags absent until issues
-#2 and #31 close the legal-copy and split-domain gates. After approval, set
-`ANALYTICS_ORIGINS=https://anomaly-detector.ru,https://app.anomaly-detector.ru`
-and only safe reviewed slugs in `ANALYTICS_CAMPAIGN_ALLOWLIST`. The public root
-must remain absent from general `CORS_ORIGINS`: it receives credentialed CORS
-only on `/api/analytics/*`, while auth and operator routes continue to reject it.
+Анонимные счётчики включаются отдельным профилем из [ANALYTICS.md](ANALYTICS.md):
+`ANALYTICS_ENABLED=true`, `ANALYTICS_MODE=aggregate`, точные origins и allowlist
+объявлений. По умолчанию сбор выключен. Публичный root остаётся вне общих
+`CORS_ORIGINS`; отдельный список действует только на `/api/analytics/*`.
+Клиент счётчиков отправляет запросы без credentials. Связанный путь и панель
+согласия этим релизом не включаются; их прежние owner/legal gates сохраняются.
 
 When Yandex ID is enabled, keep the provider callback on the API host while the
 post-login destination comes from `WEBAPP_ORIGIN`:
@@ -341,8 +342,8 @@ backend latency. Use `https://api.anomaly-detector.ru` as both `VITE_API_URL`
 and `VITE_OAUTH_API_URL`. Before ADR 0014 migration, the webapp origin is
 `https://anomaly-detector.ru`; after the coordinated migration it is
 `https://app.anomaly-detector.ru`. The public root remains excluded from general
-credentialed `CORS_ORIGINS`. Once issue #2 and #31 approve production analytics,
-list it only in `ANALYTICS_ORIGINS`; the composition root applies that allowlist
+credentialed `CORS_ORIGINS`. Для счётчиков из [ANALYTICS.md](ANALYTICS.md)
+публичный origin включается только в `ANALYTICS_ORIGINS`; the composition root applies that allowlist
 exclusively to `/api/analytics/*`. Never enable credentialed wildcard CORS.
 
 ### Edge abuse-protection profile
@@ -1190,27 +1191,17 @@ For the prepared ADR 0014 target, `PUBLIC_WEBSITE_URL` remains
 `https://app.anomaly-detector.ru`. These build values do not prove that the
 target routing is already deployed.
 
-The prepared `build:release` guards reject all client analytics flags so an
-ambient shell or `.env.production` cannot enable collection accidentally. Only
-after issues #2 and #31 are accepted, change those guards and their tests in a
-separate reviewed release, then add `VITE_ANALYTICS_ENABLED=true` to the complete
-webapp command and enable the website client in the same exact-SHA release:
+Обычные `build:release` сохраняют запрет аналитических переменных. Для
+анонимных просмотров и нажатий используйте отдельный website-профиль
+`build:release:analytics` с `PUBLIC_ANALYTICS_MODE=aggregate` из
+[ANALYTICS.md](ANALYTICS.md). Не добавляйте `VITE_ANALYTICS_ENABLED` в player build.
+Там же зафиксированы шесть ссылок, порядок совместимого выпуска adminapp/API,
+аддитивная миграция, cleanup, откат и обязательные live-проверки.
 
-```bash
-PUBLIC_WEBSITE_URL=https://anomaly-detector.ru \
-PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
-PUBLIC_ANALYTICS_API_URL=https://api.anomaly-detector.ru \
-PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST='<reviewed-safe-slugs>' \
-bun run build:website:release
-```
-
-Omitting these client variables is the supported disabled state: the landing
-contains no consent panel or analytics script, the player client sends no funnel
-event, and the backend routes remain absent while `ANALYTICS_ENABLED=false`.
-Before activation verify consent, refusal and revoke in a real browser; confirm
-the 30-day HttpOnly cookie is absent before consent and deleted on revoke; prove
-the public origin cannot call auth/operator routes; run `analytics:cleanup`; and
-check that the operator view exposes only 7/30/90-day aggregates.
+Выключенное состояние: обычная сборка лендинга без аналитических переменных,
+игровой клиент без отправки аналитики и `ANALYTICS_ENABLED=false` у backend.
+Режим связанного пути `consented` не разрешён текущим release-профилем лендинга;
+его включение требует отдельного решения о согласии, legal copy и проверках.
 
 Before uploading, create a Yandex Object Storage static access key for a service account and configure the AWS CLI with it. Yandex's Object Storage docs recommend `aws configure` with the static key and `ru-central1` as the region.
 

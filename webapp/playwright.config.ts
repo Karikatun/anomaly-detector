@@ -49,6 +49,7 @@ function normalizeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 
 const backendEnv = normalizeEnv(e2eBackendEnv({
   ANALYTICS_ENABLED: 'true',
+  ANALYTICS_MODE: 'consented',
   ANALYTICS_ORIGINS: [frontendUrl, websiteUrl].join(','),
   ANALYTICS_CAMPAIGN_ALLOWLIST: 'e2e_launch',
   OPERATIONAL_METRICS_PORT: String(operationalMetricsPort),
@@ -125,6 +126,7 @@ export default defineConfig({
         PUBLIC_WEBSITE_URL: websiteUrl,
         PUBLIC_WEBAPP_URL: frontendUrl,
         PUBLIC_ANALYTICS_API_URL: backendUrl,
+        PUBLIC_ANALYTICS_MODE: 'consented',
         PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'e2e_launch',
       }),
       url: websiteUrl,

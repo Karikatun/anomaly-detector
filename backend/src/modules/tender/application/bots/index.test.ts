@@ -5,6 +5,32 @@ import { createTenderModule } from '../../index'
 import { chooseBotCommand } from './index'
 
 describe('chooseBotCommand', () => {
+  test.each(['bot-v1', 'bot-v2'] as const)('%s easy bots never allocate Power to Contracts in any round', async (strategyVersion) => {
+    const tender = createTenderModule()
+    const { tenderId } = await tender.createTender({ players: [
+      { id: 'human', tiePriority: 1 },
+      { id: 'bot', tiePriority: 2, bot: { difficulty: 'easy', strategyVersion } },
+    ] })
+    const view = await tender.readTenderView({ playerId: 'bot', tenderId })
+    const signals: SignalId[] = ['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro']
+
+    for (const round of [1, 2, 3, 4, 5]) {
+      for (const sampleCount of [0, 3, 6]) {
+        const command = chooseBotCommand({
+          ...view, phase: 'power-allocation', round, privateSamples: signals.slice(0, sampleCount),
+        }, {
+          commandId: `easy-power-${round}-${sampleCount}`, difficulty: 'easy', playerId: 'bot',
+          seed: 'easy-contract-restriction', strategyVersion,
+        })
+
+        expect(command?.type).toBe('allocate-power')
+        if (command?.type !== 'allocate-power') throw new Error('Expected Power allocation')
+        expect(command.allocation.contracts).toBe(0)
+        expect(Object.values(command.allocation).reduce((total, power) => total + power, 0)).toBe(4)
+      }
+    }
+  })
+
   test('never requests a priced Access Slot when its projected Budget is zero', async () => {
     const tender = createTenderModule()
     const { tenderId } = await tender.createTender({
@@ -139,9 +165,10 @@ describe('chooseBotCommand', () => {
       'conduct-reconnaissance',
       'run-laboratory-test',
       'submit-thesis',
-      'skip-contract',
       'submit-scientific-model',
     ]))
+    expect(commandTypes.has('reserve-contract')).toBe(false)
+    expect(commandTypes.has('submit-contract-bid')).toBe(false)
   })
 
   test('completes bounded multi-seed games with one stored bot and one human autopolicy', async () => {

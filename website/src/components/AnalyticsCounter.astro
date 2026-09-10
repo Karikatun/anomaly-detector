@@ -1,0 +1,44 @@
+---
+type Props = {
+	apiUrl: string
+	campaignAllowlist: string[]
+}
+const { apiUrl, campaignAllowlist } = Astro.props
+---
+
+<div hidden data-analytics-counter data-api-url={apiUrl} data-campaign-allowlist={JSON.stringify(campaignAllowlist)}></div>
+
+<script>
+	const root = document.querySelector<HTMLElement>('[data-analytics-counter]')
+	if (root) {
+		const apiUrl = root.dataset.apiUrl?.replace(/\/$/, '') ?? ''
+		const campaigns: unknown = JSON.parse(root.dataset.campaignAllowlist ?? '[]')
+		const allowlist = new Set(Array.isArray(campaigns) ? campaigns.filter((value): value is string => typeof value === 'string') : [])
+		const candidate = new URLSearchParams(location.search).get('utm_campaign')?.toLowerCase() ?? null
+		const campaign = candidate && allowlist.has(candidate) ? candidate : null
+		let referrerDomain: string | null = null
+		try {
+			referrerDomain = document.referrer ? new URL(document.referrer).hostname.toLowerCase() : null
+		} catch {
+			referrerDomain = null
+		}
+		const record = (event: 'landing_view' | 'tutorial_cta') => {
+			void fetch(`${apiUrl}/api/analytics/events/aggregate`, {
+				body: JSON.stringify({ campaign, event, referrerDomain }),
+				credentials: 'omit',
+				headers: { 'Content-Type': 'application/json' },
+				keepalive: true,
+				method: 'POST',
+			}).catch(() => undefined)
+		}
+		record('landing_view')
+		let clicked = false
+		for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-analytics-event="tutorial_cta"]')) {
+			link.addEventListener('click', () => {
+				if (clicked) return
+				clicked = true
+				record('tutorial_cta')
+			})
+		}
+	}
+</script>

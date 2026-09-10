@@ -36,6 +36,17 @@ button, input, select, textarea { font: inherit; }
 .analytics-transition strong { color: #eef6fd; font-variant-numeric: tabular-nums; }
 .analytics-transition small { grid-column: 1 / -1; color: #7890a5; }
 .analytics-bots { margin-top: .25rem; padding-top: .85rem; border-top: 1px solid rgba(103, 137, 168, .18); }
+.analytics-summary-aggregate { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.analytics-layout-aggregate { grid-template-columns: 1fr; }
+.analytics-campaign-panel { margin-bottom: .85rem; }
+.analytics-campaigns { margin: 0; padding: 0; list-style: none; }
+.analytics-campaign { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 1rem; align-items: center; padding: 1rem 1.15rem; border-bottom: 1px solid rgba(103, 137, 168, .14); }
+.analytics-campaign:last-child { border-bottom: 0; }
+.analytics-campaign-name h3 { margin: 0 0 .4rem; color: #edf6fd; font-size: .9rem; font-weight: 500; line-height: 1.45; }
+.analytics-campaign-name code { font-size: .75rem; }
+.analytics-campaign-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; margin: 0; }
+.analytics-campaign-counts dt { color: #89a0b5; font-size: .72rem; line-height: 1.4; }
+.analytics-campaign-counts dd { margin: .4rem 0 0; color: #eef6fd; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 .metric-card, .panel, .login-card, .state-card { border: 1px solid rgba(103, 137, 168, .24); border-radius: .8rem; background: rgba(6, 14, 24, .9); }
 .metric-card { padding: 1.15rem; }
 .metric-card p { margin: 0; }
@@ -152,6 +163,7 @@ code { color: #a8c6dd; }
 .mail-health-details dd { margin: .3rem 0 0; overflow-wrap: anywhere; color: #c4d1dc; font-size: .82rem; }
 
 @media (max-width: 760px) {
+  .analytics-campaign { grid-template-columns: 1fr; }
   .page-header { align-items: start; flex-direction: column; }
   .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .analytics-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }

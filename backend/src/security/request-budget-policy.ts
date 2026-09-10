@@ -22,6 +22,8 @@ export const REQUEST_BUDGET_SCOPES = [
   'room_join',
   'tender_command',
   'realtime_ticket_issue',
+  'analytics_ingest',
+  'analytics_consent',
 ] as const
 
 export type RequestBudgetScope = typeof REQUEST_BUDGET_SCOPES[number]
@@ -32,6 +34,7 @@ export type RequestBudgetSurface =
   | 'room_join'
   | 'tender_command'
   | 'realtime'
+  | 'analytics'
 
 export type RequestBudgetAdminAggregation = 'authenticated_only' | 'excluded'
 
@@ -89,6 +92,8 @@ export function createRequestBudgetPolicyCatalog(
   const recoveryLoginIpDayLimit = configuredLimit(config, 'ANTI_ABUSE_RECOVERY_LOGIN_IP_DAY_LIMIT', 30)
 
   return Object.freeze({
+    analytics_ingest: policy('analytics_ingest', 'analytics', 120, minuteMs, 'excluded'),
+    analytics_consent: policy('analytics_consent', 'analytics', 20, hourMs, 'excluded'),
     authenticated_mutation: policy(
       'authenticated_mutation',
       'authentication',

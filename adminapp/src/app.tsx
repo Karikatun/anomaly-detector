@@ -36,6 +36,7 @@ export default function App() {
   const [state, setState] = useState<AppState>({ kind: 'bootstrapping' })
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isAnalyticsRefreshing, setIsAnalyticsRefreshing] = useState(false)
+  const [analyticsError, setAnalyticsError] = useState<string>()
   const [view, setView] = useState<ReadyView>('overview')
 
   const loadWorkspace = useCallback(async () => {
@@ -146,9 +147,12 @@ export default function App() {
   }
   const reloadAnalytics = async (windowDays = state.analytics?.windowDays ?? 30) => {
     setIsAnalyticsRefreshing(true)
+    setAnalyticsError(undefined)
     try {
       const analytics = await api.getAnalytics(windowDays)
       setState((current) => current.kind === 'ready' ? { ...current, analytics } : current)
+    } catch {
+      setAnalyticsError('Не удалось обновить статистику. Показаны последние загруженные данные. Попробуйте ещё раз.')
     } finally {
       setIsAnalyticsRefreshing(false)
     }
@@ -158,6 +162,7 @@ export default function App() {
     return (
       <AnalyticsScreen
         data={state.analytics}
+        error={analyticsError}
         isRefreshing={isAnalyticsRefreshing}
         onBack={() => setView('overview')}
         onLogout={() => void logout()}

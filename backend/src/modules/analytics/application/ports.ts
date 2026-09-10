@@ -1,6 +1,7 @@
 import type {
   AnalyticsAdminOverview,
   AnalyticsAdminQuery,
+  AnalyticsAggregateEvent,
   AnalyticsConsentStatus,
   AnalyticsLinkedEvent,
   AnalyticsTrafficClass,
@@ -26,6 +27,7 @@ export type AnalyticsStore = {
   grant(input: AnalyticsGrantInput): Promise<AnalyticsGrant>
   readOverview(query: AnalyticsAdminQuery): Promise<AnalyticsAdminOverview>
   recordEvent(token: string, event: AnalyticsLinkedEvent): Promise<boolean>
+  recordAggregateEvent(input: AnalyticsSourceInput & { event: AnalyticsAggregateEvent }): Promise<void>
   recordLandingView(input: AnalyticsSourceInput): Promise<void>
   revoke(token: string): Promise<boolean>
   status(token: string): Promise<AnalyticsConsentStatus>
