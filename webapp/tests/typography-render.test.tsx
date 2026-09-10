@@ -1,77 +1,19 @@
-import { expect, mock, test } from 'bun:test'
-import * as React from 'react'
+import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-type PrimitiveProps = React.HTMLAttributes<HTMLElement> & {
-  asChild?: boolean
-  children?: React.ReactNode
-}
+import { Button } from '../src/components/ui/button'
+import { Dialog, DialogDescription, DialogTitle } from '../src/components/ui/dialog'
 
-function Primitive(tag: keyof React.JSX.IntrinsicElements) {
-  return function Component({ asChild, ...props }: PrimitiveProps) {
-    void asChild
-    return React.createElement(tag, props)
-  }
-}
-
-function Portal({ children }: { children?: React.ReactNode }) {
-  return <>{children}</>
-}
-
-function Root({ children }: { children?: React.ReactNode }) {
-  return <>{children}</>
-}
-
-function SlotRoot({
-  children,
-  className,
-  ...props
-}: PrimitiveProps) {
-  const child = React.Children.only(children)
-
-  if (!React.isValidElement<{ className?: string }>(child)) {
-    return null
-  }
-
-  return React.cloneElement(child, {
-    ...props,
-    ...child.props,
-    className: [className, child.props.className].filter(Boolean).join(' '),
-  })
-}
-
-const div = Primitive('div')
-const h2 = Primitive('h2')
-const p = Primitive('p')
-
-mock.module('radix-ui', () => ({
-  Dialog: {
-    Close: Primitive('button'),
-    Content: div,
-    Description: p,
-    Overlay: div,
-    Portal,
-    Root,
-    Title: h2,
-    Trigger: Primitive('button'),
-  },
-  Slot: {
-    Root: SlotRoot,
-  },
-}))
-
-test('wrapped Radix-like primitives keep child slots and Typography classes at runtime', async () => {
-  const { Button } = await import('../src/components/ui/button')
-  const { DialogDescription, DialogTitle } = await import(
-    '../src/components/ui/dialog'
-  )
+test('Radix primitives keep child slots and Typography classes at runtime', () => {
   const markup = renderToStaticMarkup(
     <>
       <Button asChild className="text-background">
         <a href="/settings">Settings</a>
       </Button>
-      <DialogTitle className="custom-title">Title</DialogTitle>
-      <DialogDescription>Description</DialogDescription>
+      <Dialog>
+        <DialogTitle className="custom-title">Title</DialogTitle>
+        <DialogDescription>Description</DialogDescription>
+      </Dialog>
     </>,
   )
 
