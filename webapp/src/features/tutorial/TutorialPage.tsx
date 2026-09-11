@@ -124,8 +124,6 @@ function AccountTutorial({ playerId, entry }: { playerId: string; entry: 'public
           {completionSaved ? (
             <>
               <Typography>{t('tutorial.complete.description')}</Typography>
-              <Typography tone="muted">{t('tutorial.complete.contracts')}</Typography>
-              <Typography tone="muted">{t('tutorial.complete.realMatch')}</Typography>
               <Typography>{t('tutorial.complete.nextMatch')}</Typography>
             </>
           ) : !completionFailed ? (
@@ -152,6 +150,12 @@ function AccountTutorial({ playerId, entry }: { playerId: string; entry: 'public
                 restart()
               }}>{t('tutorial.complete.repeat')}</Button>
             </div>
+          )}
+          {completionSaved && (
+            <>
+              <Typography tone="muted">{t('tutorial.complete.contracts')}</Typography>
+              <Typography tone="muted">{t('tutorial.complete.realMatch')}</Typography>
+            </>
           )}
           {showAccountProtectionInvitation && (
             <section
@@ -247,7 +251,6 @@ function GuestTutorial() {
           </CardHeader>
           <CardContent className={styles.completeContent}>
             <Typography>{t('tutorial.complete.description')}</Typography>
-            <Typography tone="muted">{t('tutorial.complete.realMatch')}</Typography>
             <Typography>{t('tutorial.guest.next')}</Typography>
             <div className={styles.completeActions}>
               <Button asChild>
@@ -262,6 +265,7 @@ function GuestTutorial() {
               </Button>
               <Button variant="ghost" onClick={restart}>{t('tutorial.complete.repeat')}</Button>
             </div>
+            <Typography tone="muted">{t('tutorial.complete.realMatch')}</Typography>
           </CardContent>
         </TutorialStateCard>
       )}

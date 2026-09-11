@@ -1373,7 +1373,7 @@ test('keeps completion actions available when account protection lookup fails', 
   await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeEnabled()
 })
 
-test('keeps the primary completion action stable while account protection loads on mobile', async ({ page }) => {
+test('keeps the primary completion action stable while account protection loads on mobile', async ({ page }, testInfo) => {
   const viewport = { width: 390, height: 844 }
   await page.setViewportSize(viewport)
   await registerBrowserUser(page, 'Ученик с задержкой защиты', 'tutorial-protection-delayed')
@@ -1400,6 +1400,7 @@ test('keeps the primary completion action stable while account protection loads 
   await expect(createTenderAction).toBeVisible()
   await expect(protectionInvitation).toHaveCount(0)
   const beforeResponse = await elementBox(createTenderAction)
+  await page.screenshot({ path: testInfo.outputPath('completion-before-protection.png'), fullPage: true })
   expectBoxWithinViewport(beforeResponse, viewport)
 
   releaseAccountProtectionResponse()
@@ -1451,7 +1452,7 @@ for (const viewport of [
   { height: 900, label: '1440x900', slug: '1440', width: 1440 },
   { height: 768, label: '1024x768', slug: '1024', width: 1024 },
 ] as const) {
-  test(`keeps completion actions available with the account protection invitation at ${viewport.label}`, async ({ page }) => {
+  test(`keeps completion actions available with the account protection invitation at ${viewport.label}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await registerBrowserUser(page, `Ученик ${viewport.slug}`, `tutorial-protect-${viewport.slug}`)
     await openSavedCompletionWithAccountProtection(page, { state: 'password_unprotected' })
@@ -1466,6 +1467,7 @@ for (const viewport of [
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await expectTouchTargetsMeetMinimum(page)
     await expectNoAxeViolations(page)
+    await page.screenshot({ path: testInfo.outputPath('completion-with-protection.png'), fullPage: true })
   })
 }
 
