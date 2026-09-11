@@ -107,7 +107,7 @@
 
 @media (max-width: 47.999rem) {
   .completeActions { display: grid; }
-  .completeActions button { width: 100%; }
+  .completeActions > * { width: 100%; }
   .coachCard {
     width: 100%;
     max-height: none;

@@ -24,6 +24,14 @@ test('ignores arbitrary redirect values and clears stale browser data', () => {
   expect(consumePostAuthContinuation(storage)).toBeNull()
 })
 
+test('returns to the completed tutorial after a same-tab OAuth round trip', () => {
+  const storage = new MemoryStorage()
+  expect(capturePostAuthContinuation(storage, new URL('https://app.example/?continue=tutorial-complete'))).toBe('tutorial-complete')
+  expect(capturePostAuthContinuation(storage, new URL('https://app.example/?auth_error=oauth_registration_consent_required'))).toBe('tutorial-complete')
+  expect(consumePostAuthContinuation(storage)).toBe('/tutorial')
+  expect(consumePostAuthContinuation(storage)).toBeNull()
+})
+
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>()
   get length() { return this.values.size }

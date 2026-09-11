@@ -169,11 +169,12 @@ async function expectTouchTargetsMeetMinimum(page: Page) {
   expect(undersizedTargets).toEqual([])
 }
 
-async function startTutorial(page: Parameters<typeof registerBrowserUser>[0]) {
-  await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
+async function startTutorial(page: Parameters<typeof registerBrowserUser>[0], guest = false) {
+  if (guest) await page.goto('/learn')
+  else await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
   const prologue = page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
   await expect(prologue).toContainText('Корпорация объявила Тендер')
-  await expect(prologue.getByRole('button', { name: 'Вернуться в главное меню' })).toBeVisible()
+  await expect(prologue.getByRole('button', { name: guest ? 'Перейти ко входу' : 'Вернуться в главное меню' })).toBeVisible()
   const startAction = () => prologue.getByRole('button', { name: 'Начать обучение' }).click()
   if ((page.viewportSize()?.width ?? 0) <= 600) {
     const requests = await captureScrollRequests(page, startAction)
@@ -214,7 +215,6 @@ async function openSavedCompletionWithAccountProtection(
     sessionStorage.setItem(key, JSON.stringify(state))
   })
   await page.reload()
-  await page.getByRole('button', { name: 'Сохранить отметку' }).click()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
 }
 
@@ -1125,7 +1125,8 @@ test('preserves the mobile step through dynamic viewport and orientation changes
   await expectTouchTargetsMeetMinimum(page)
 })
 
-test('completes the two-round tutorial, restores its tab-local step, and records only completion', async ({ page }) => {
+for (const guest of [false, true]) {
+test(`completes the two-round tutorial, restores its tab-local step, and records only completion (${guest ? 'guest' : 'account'})`, async ({ page }) => {
   test.setTimeout(120_000)
   page.setDefaultTimeout(15_000)
   const analyticsEvents: string[] = []
@@ -1135,16 +1136,22 @@ test('completes the two-round tutorial, restores its tab-local step, and records
     if (payload.event) analyticsEvents.push(payload.event)
   })
   await page.setViewportSize({ width: 1440, height: 900 })
-  await registerBrowserUser(page, 'Ученик E2E', 'tutorial-happy')
+  if (!guest) await registerBrowserUser(page, 'Ученик E2E', 'tutorial-happy')
   const runtimeErrors = captureRuntimeErrors(page)
+  const protectedRequests: string[] = []
+  page.on('request', (request) => {
+    if (/\/api\/(rooms|profile|tenders)(\/|$)/.test(new URL(request.url()).pathname)) protectedRequests.push(request.method())
+  })
 
+  if (!guest) {
   await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
   await page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
     .getByRole('button', { name: 'Вернуться в главное меню' })
     .click()
   await expect(page).toHaveURL(/\/$/)
-  await startTutorial(page)
-  await expect(page).toHaveURL(/\/tutorial\/?$/)
+  }
+  await startTutorial(page, guest)
+  await expect(page).toHaveURL(guest ? /\/learn\/?$/ : /\/tutorial\/?$/)
   await expect(page.getByRole('button', { name: 'Рабочая модель' })).toBeVisible()
   await expect(page.getByTestId('working-model-table')).toBeHidden()
   await expectCoachWithinViewport(page)
@@ -1299,6 +1306,18 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await finalSubmit.click()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
   await expect(page.getByText('В настоящем Тендере будет пять раундов', { exact: false })).toBeVisible()
+  if (guest) {
+    await expect(page.getByRole('link', { name: 'Создать аккаунт', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Уже есть аккаунт', exact: true })).toBeVisible()
+    expect(protectedRequests).toEqual([])
+    await expect.poll(() => analyticsEvents.filter((event) => event === 'tutorial_complete')).toHaveLength(1)
+    await page.reload()
+    await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+    expect(analyticsEvents.filter((event) => event === 'tutorial_complete')).toHaveLength(1)
+    await expectNoAxeViolations(page)
+    expect(runtimeErrors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+    return
+  }
   await expect(page.getByText('Лёгкому Контракту нужен один подходящий опыт', { exact: false })).toBeVisible()
   const protectionInvitation = page.getByRole('region', {
     name: accountProtectionInvitation.title,
@@ -1341,6 +1360,7 @@ test('completes the two-round tutorial, restores its tab-local step, and records
   await expect.poll(() => analyticsEvents).toContain('tutorial_complete')
   expect(runtimeErrors).toEqual([])
 })
+}
 
 test('keeps completion actions available when account protection lookup fails', async ({ page }) => {
   await registerBrowserUser(page, 'Ученик без статуса защиты', 'tutorial-protection-unavailable')

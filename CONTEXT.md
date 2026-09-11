@@ -5,15 +5,15 @@ The shared language for the competitive research game in `docs/GAME_DESIGN_BRIEF
 ## Identity And Abuse Protection
 
 **Public MVP Journey**:
-The measurable path in which a person discovers Anomaly Detector through public search or an AI agent, understands its value, registers, reaches First Player Value, and is then invited to confirm a Recovery Email for optional self-service access restoration.
+Путь, в котором человек находит Anomaly Detector, проходит одиночное обучение без регистрации, достигает First Player Value, затем создаёт аккаунт или входит и переходит к партии с ботами или друзьями. Recovery Email остаётся добровольной защитой password-аккаунта после обучения и входа.
 _Avoid_: landing funnel, registration funnel, website visit
 
 **First Player Value**:
-Completion of the solo tutorial, where a new player experiences the core deduction loop before entering a standard multiplayer Tender.
+Завершение одиночного обучения: новый игрок пробует основной цикл дедукции до регистрации и первой полноценной партии с ботами или друзьями.
 _Avoid_: registration, first login, page view
 
 **MVP Initiator**:
-The primary Russian-speaking player who enjoys board games, science fiction, and logical deduction, learns the game through the solo tutorial, and then brings one to three acquaintances into a standard Tender.
+Русскоязычный игрок, которому нравятся настольные игры, научная фантастика и дедукция. Он знакомится с игрой через обучение, затем может начать с ботами или пригласить от одного до трёх знакомых в Тендер.
 _Avoid_: casual gamer, ready-made group, all gamers
 
 **Account Email**:
