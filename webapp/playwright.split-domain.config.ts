@@ -75,6 +75,7 @@ const webServers: WebServerConfig[] = [
       E2E_STATIC_PORT: String(portPlan.webPort),
       SPLIT_DOMAIN_BUILD_OUT_DIR: resolve(artifactRoot, 'webapp'),
       VITE_API_URL: apiOrigin,
+      VITE_PUBLIC_WEBSITE_URL: rootOrigin,
       VITE_ANALYTICS_ENABLED: '',
       VITE_BUILD_SHA: 'e'.repeat(40),
       VITE_OAUTH_API_URL: apiOrigin,
