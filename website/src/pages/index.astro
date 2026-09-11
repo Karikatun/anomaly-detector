@@ -9,7 +9,7 @@ import AnalyticsConsent from '../components/AnalyticsConsent.astro'
 import AnalyticsCounter from '../components/AnalyticsCounter.astro'
 
 const title = 'Anomaly Detector — бесплатная браузерная игра на дедукцию'
-const description = 'Исследуйте аномалию, проверяйте гипотезы и опередите соперников в научной игре на дедукцию для 2–4 друзей.'
+const description = 'Бесплатная браузерная игра на дедукцию: исследуйте аномалию с друзьями или в одиночку против ботов. Начните с обучения без регистрации.'
 const publicWebsiteUrl = import.meta.env.PUBLIC_WEBSITE_URL
 const publicWebappUrl = import.meta.env.PUBLIC_WEBAPP_URL
 const analyticsApiUrl = import.meta.env.PUBLIC_ANALYTICS_API_URL
@@ -23,7 +23,7 @@ const analyticsCampaignAllowlist = (import.meta.env.PUBLIC_ANALYTICS_CAMPAIGN_AL
 const canonicalUrl = publicWebsiteUrl
 	? new URL(Astro.url.pathname, publicWebsiteUrl).toString()
 	: undefined
-const tutorialUrl = publicWebappUrl ? new URL('/?continue=tutorial', publicWebappUrl).toString() : '#launch-pending'
+const tutorialUrl = publicWebappUrl ? new URL('/learn', publicWebappUrl).toString() : '#launch-pending'
 const loginUrl = publicWebappUrl ? new URL('/', publicWebappUrl).toString() : '#launch-pending'
 const socialImageUrl = publicWebsiteUrl ? new URL(reconnaissance.src, publicWebsiteUrl).toString() : undefined
 const socialImageAlt = 'Экран Разведки Anomaly Detector: выбор сигналов, игроки и Рабочая модель'
@@ -32,8 +32,8 @@ const legalUrl = (path: string) => publicWebappUrl ? new URL(path, publicWebappU
 const faq = [
 	['Игра бесплатная?', 'Да. Участие в Anomaly Detector бесплатно.'],
 	['Нужно что-то скачивать?', 'Нет. Игра работает прямо в современном браузере.'],
-	['Сколько человек нужно для игры?', 'Для Тендера нужны 2–4 игрока. Перед первой партией можно пройти короткое одиночное обучение.'],
-	['Нужна регистрация?', 'Да. Аккаунт сохраняет ваш прогресс и позволяет присоединяться к частным Тендерам.'],
+	['Сколько человек нужно для игры?', 'Можно играть одному против ботов, с друзьями или смешанным составом. В Тендере участвуют от 2 до 4 исследователей, включая ботов.'],
+	['Нужна регистрация?', 'Обучение доступно без регистрации. Для партии с ботами или друзьями нужен аккаунт: он сохраняет историю игр и отметку о прохождении обучения.'],
 	['Как пригласить друзей?', 'Создайте частный Тендер и передайте друзьям код приглашения. Посторонние игроки не увидят вашу комнату.'],
 	['Как восстановить доступ?', 'Для аккаунта с паролем доступ можно восстановить через активную почту восстановления или сохранённый резервный код. Для аккаунта Яндекс ID вход и восстановление выполняются на стороне Яндекса.'],
 ] as const
@@ -44,8 +44,8 @@ const structuredData = [
 		name: 'Anomaly Detector',
 		description,
 		genre: ['Дедукция', 'Научная фантастика', 'Стратегия'],
-		playMode: 'MultiPlayer',
-		numberOfPlayers: { '@type': 'QuantitativeValue', minValue: 2, maxValue: 4 },
+		playMode: ['SinglePlayer', 'MultiPlayer'],
+		numberOfPlayers: { '@type': 'QuantitativeValue', minValue: 1, maxValue: 4 },
 		url: canonicalUrl,
 	},
 	{
@@ -121,14 +121,14 @@ const structuredData = [
 					<article class="landing">
 						<section class="a-hero">
 							<div class="a-copy">
-								<p class="kicker">Научная дедукция · 2–4 игрока</p>
+								<p class="kicker">Научная дедукция · С друзьями или ботами</p>
 								<h1>Разгадайте аномалию раньше соперников</h1>
-								<p class="lead">Научная игра на дедукцию для 2–4 друзей прямо в браузере. Освойте правила в коротком одиночном обучении.</p>
+								<p class="lead">Исследуйте сигналы, проверяйте гипотезы и опережайте соперников. Играйте с друзьями или в одиночку против ботов — прямо в браузере.</p>
 								<div class="actions">
-									<a class="primary-action" href={tutorialUrl} data-analytics-event={analyticsApiUrl ? 'tutorial_cta' : undefined}>Пройти обучение</a>
+									<div class="primary-entry"><a class="primary-action" href={tutorialUrl} data-analytics-event={analyticsApiUrl ? 'tutorial_cta' : undefined}>Пройти обучение</a><span>Без регистрации</span></div>
 									<a class="secondary-action" href="#how">Как проходит игра</a>
 								</div>
-								<p class="facts">Бесплатно · без скачивания · 2–4 игрока</p>
+								<p class="facts">Бесплатно · без скачивания</p>
 							</div>
 							<figure class="screen-frame screen-frame-command">
 								<div class="screen-status"><span>Тендер 01</span><span>Ваш ход</span></div>
@@ -181,14 +181,14 @@ const structuredData = [
 							</figure>
 						</section>
 						<section class="journey" aria-labelledby="journey-title">
-							<div class="section-heading"><p class="section-index">03 / ПЕРВЫЙ ЗАПУСК</p><h2 id="journey-title">От обучения к частному Тендеру</h2></div>
-							<ol><li><span>01</span><strong>Пройдите обучение</strong><p>Разберите базовый цикл в одиночном сценарии.</p></li><li><span>02</span><strong>Создайте Тендер</strong><p>Настройте частную игровую комнату для своей компании.</p></li><li><span>03</span><strong>Пригласите друзей</strong><p>Передайте код и начните исследование, когда все готовы.</p></li></ol>
+							<div class="section-heading"><p class="section-index">03 / ПЕРВЫЙ ЗАПУСК</p><h2 id="journey-title">От обучения к первой партии</h2></div>
+							<ol><li><span>01</span><strong>Попробуйте без регистрации</strong><p>Разберите базовый цикл в обучении с подсказками.</p></li><li><span>02</span><strong>Создайте аккаунт</strong><p>Сохраните отметку об обучении и переходите к первой партии.</p></li><li><span>03</span><strong>Выберите соперников</strong><p>Добавьте ботов в комнату или пригласите друзей по коду.</p></li></ol>
 						</section>
 						<section id="faq" class="faq" aria-labelledby="faq-title">
 							<div class="section-heading"><p class="section-index">04 / ПЕРЕД СТАРТОМ</p><h2 id="faq-title">Частые вопросы</h2></div>
 							<div class="faq-list">{faq.map(([question, answer]) => <details><summary>{question}</summary><p>{answer}</p></details>)}</div>
 						</section>
-						<section class="final-cta"><p class="kicker">Готовы начать исследование?</p><h2>Сначала — короткое обучение</h2><p>Освойте правила в одиночку, затем соберите друзей в частном Тендере.</p><a class="primary-action" href={tutorialUrl} data-analytics-event={analyticsApiUrl ? 'tutorial_cta' : undefined}>Пройти обучение</a></section>
+						<section class="final-cta"><p class="kicker">Готовы начать исследование?</p><h2>Сначала — короткое обучение</h2><p>Попробуйте игру без регистрации. Затем создайте аккаунт и сыграйте с ботами или друзьями.</p><a class="primary-action" href={tutorialUrl} data-analytics-event={analyticsApiUrl ? 'tutorial_cta' : undefined}>Пройти обучение</a></section>
 					</article>
 		</main>
 		<footer><a class="wordmark" href="#top"><span>Anomaly</span><strong>Detector</strong></a><div><a href={legalUrl('/terms')}>Условия использования</a><a href={legalUrl('/privacy')}>Политика конфиденциальности</a><a href={legalUrl('/personal-data-consent')}>Согласие на обработку данных</a></div><a href="mailto:support@anomaly-detector.ru">support@anomaly-detector.ru</a></footer>
@@ -218,7 +218,9 @@ const structuredData = [
 	h1 { margin: 0; letter-spacing: -.045em; }
 	h2 { margin: 0; font-size: clamp(2rem, 4vw, 3.75rem); line-height: 1.02; letter-spacing: -.04em; }
 	.lead { color: #aab5c5; font-size: clamp(1rem, 1.6vw, 1.2rem); line-height: 1.65; }
-	.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+	.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+	.primary-entry { display: grid; gap: 8px; text-align: center; }
+	.primary-entry > span { color: #aab5c5; font-size: .82rem; }
 	.primary-action, .secondary-action { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; padding: 0 22px; border-radius: 8px; text-decoration: none; }
 	.primary-action { background: #38bdf8; color: #07121a; font-weight: 750; box-shadow: 0 0 0 1px rgb(125 211 252 / 34%), 0 14px 40px rgb(14 165 233 / 18%); }
 	.secondary-action { border: 1px solid rgb(148 163 184 / 25%); }
@@ -286,7 +288,7 @@ const structuredData = [
 		.a-hero { min-height: auto; padding-block: 56px 40px; }
 		.a-cycle { padding-block: 64px 112px; }
 		.actions { align-items: stretch; }
-		.actions > a { width: 100%; }
+		.actions > a, .actions > .primary-entry { width: 100%; }
 		.a-proof figcaption { grid-template-columns: 1fr; }
 	}
 	@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

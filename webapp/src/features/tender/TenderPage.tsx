@@ -120,6 +120,7 @@ function WaitingForTurn({
 
 export function PhasePanel({
   view,
+  playerId,
   disabled,
   pending = false,
   error,
@@ -132,6 +133,7 @@ export function PhasePanel({
   onReturnToHistory,
 }: {
   view: TenderView
+  playerId: string | undefined
   disabled: boolean
   pending?: boolean
   error: string | null
@@ -154,8 +156,7 @@ export function PhasePanel({
     untimed?: boolean
   }
 }) {
-  const auth = useAuth()
-  const myPlayer = view.players.find((p) => p.playerId === auth.user?.id)
+  const myPlayer = view.players.find((p) => p.playerId === playerId)
   const mySamples = myPlayer ? view.privateSamples : []
   const myPower = myPlayer?.powerAllocation
   const activePlayer = view.players.find((player) => player.playerId === activePlayerId)
@@ -166,7 +167,7 @@ export function PhasePanel({
   const isWaitingForTurn = sequentialPhases.has(view.phase)
     && !isSharedModelAnalysis
     && !isSharedFinalScientificModel
-    && activePlayerId !== auth.user?.id
+    && activePlayerId !== playerId
   const withWaitingState = (content: ReactNode) => (
     <>
       {isWaitingForTurn && (
@@ -187,7 +188,7 @@ export function PhasePanel({
           budget={myPlayer?.budget ?? 0}
           disabled={disabled || myPlayer?.requestedAccessSlot !== undefined}
           confirmedSlot={myPlayer?.requestedAccessSlot}
-          currentUserId={auth.user?.id}
+          currentUserId={playerId}
           error={error}
           onConfirm={(slot) => onCommand({ type: 'request-access-slot', slot })}
           tiePriorityOrder={view.players}
@@ -202,7 +203,7 @@ export function PhasePanel({
       return (
         <PowerAllocationPanel
           confirmedAllocation={myPlayer?.powerAllocation}
-          currentUserId={auth.user?.id}
+          currentUserId={playerId}
           sampleCount={mySamples.length}
           disabled={disabled || myPlayer?.powerAllocation !== undefined}
           error={error}
@@ -233,7 +234,7 @@ export function PhasePanel({
         <LaboratoryPanel
           journal={view.publicScientificJournal}
           mySamples={mySamples}
-          playerId={auth.user?.id ?? ''}
+          playerId={playerId ?? ''}
           privateMeasurements={view.privateMeasurements}
           powerAllocation={labPower}
           ruleset={view.ruleset}
@@ -297,7 +298,7 @@ export function PhasePanel({
           contracts={[...view.publicContracts, ...(view.publicFinalContract ? [view.publicFinalContract] : [])]}
           journal={view.publicScientificJournal ?? []}
           maxPower={effective}
-          playerId={auth.user?.id ?? ''}
+          playerId={playerId ?? ''}
           players={view.players}
           privateUsedContractEvidenceTestIds={view.privateUsedContractEvidenceTestIds ?? []}
           round={view.round}
@@ -338,7 +339,7 @@ export function PhasePanel({
 
     case 'complete':
       return view.audit ? (
-        <CompletedTenderPanel currentUserId={auth.user?.id} view={{ ...view, audit: view.audit }} />
+        <CompletedTenderPanel currentUserId={playerId} view={{ ...view, audit: view.audit }} />
       ) : (
         <TenderTerminalState
           kind="audit"
@@ -912,6 +913,7 @@ function TenderContent() {
               />
             )}
             <PhasePanel
+              playerId={auth.user?.id}
               view={tenderView}
               disabled={mutationLocked || !connected}
               pending={mutationLocked}

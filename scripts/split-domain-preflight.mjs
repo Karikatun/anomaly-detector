@@ -62,7 +62,7 @@ try {
   const websiteOutput = readTextOutput(websiteOutputDirectory)
   for (const expected of [
     `<link rel="canonical" href="${productionRootOrigin}/">`,
-    `${productionAppOrigin}/?continue=tutorial`,
+    `${productionAppOrigin}/learn`,
     `${productionAppOrigin}/terms`,
     `${productionAppOrigin}/privacy`,
     `${productionAppOrigin}/personal-data-consent`,

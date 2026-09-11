@@ -17,6 +17,19 @@ describe('webapp split-domain release environment', () => {
     expect(() => validateWebappReleaseEnvironment(validEnvironment)).not.toThrow()
   })
 
+  test('accepts the public website origin and rejects other tutorial exit targets', () => {
+    expect(() => validateWebappReleaseEnvironment({
+      ...validEnvironment,
+      VITE_PUBLIC_WEBSITE_URL: 'https://anomaly-detector.ru',
+    })).not.toThrow()
+    for (const url of ['http://localhost:4321', 'https://app.anomaly-detector.ru', 'https://anomaly-detector.ru.evil.example', 'javascript:alert(1)']) {
+      expect(() => validateWebappReleaseEnvironment({
+        ...validEnvironment,
+        VITE_PUBLIC_WEBSITE_URL: url,
+      })).toThrow('VITE_PUBLIC_WEBSITE_URL must equal https://anomaly-detector.ru')
+    }
+  })
+
   test('rejects an ambient analytics client flag in the prepared release', () => {
     expect(() => validateWebappReleaseEnvironment({
       ...validEnvironment,

@@ -26,7 +26,9 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
   const auth = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>(() => {
     if (typeof window === 'undefined') return 'login'
-    return capturePostAuthContinuation(sessionStorage, new URL(window.location.href)) === 'tutorial'
+    const url = new URL(window.location.href)
+    const continuation = capturePostAuthContinuation(sessionStorage, url)
+    return continuation && url.searchParams.get('auth') !== 'login'
       ? 'register'
       : 'login'
   })

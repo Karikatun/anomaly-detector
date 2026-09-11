@@ -4,6 +4,7 @@ import { createPrisma } from '../../../backend/src/db'
 import { e2ePassword, registerBrowserUser, uniqueLogin } from '../helpers/test'
 
 const origins = splitDomainOrigins()
+test.use({ screenshot: 'off', trace: 'off' })
 const legacyPlayerPaths = [
   '/app',
   '/profile',
@@ -12,6 +13,7 @@ const legacyPlayerPaths = [
   '/rooms/legacy-room',
   '/tenders/legacy-tender',
   '/tutorial',
+  '/learn',
   '/recover/code',
   '/recover/password',
   '/privacy',
@@ -43,7 +45,7 @@ test('persists anonymous advertisement views and clicks across HTTPS origins wit
     await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toHaveCount(0)
     expect((await context.cookies()).filter((cookie) => cookie.name.startsWith('anomaly_detector_analytics'))).toHaveLength(0)
     await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
-    await expect(page).toHaveURL(`${origins.app}/?continue=tutorial`)
+    await expect(page).toHaveURL(`${origins.app}/learn`)
     await expect.poll(() => counter('aggregate:landing_view')).toBe(beforeViews + 1)
     await expect.poll(() => counter('aggregate:tutorial_cta')).toBe(beforeClicks + 1)
     expect(await prisma.analyticsJourney.count()).toBe(0)
@@ -65,8 +67,9 @@ test('preserves the CTA when anonymous analytics is unavailable', async ({ page 
   await page.route('**/api/analytics/events/aggregate', (route) => route.abort())
   await page.goto(`${origins.root}/?utm_campaign=ad_06`)
   await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
-  await expect(page).toHaveURL(`${origins.app}/?continue=tutorial`)
-  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(`${origins.app}/learn`)
+  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveCount(0)
 })
 
 test('serves the public root, redirects every legacy deep link, and enforces target CSP', async ({ page }) => {
@@ -154,11 +157,18 @@ test('keeps the public root outside credentialed CORS and fixes both OAuth retur
   expect(page.url()).toBe(`${origins.app}/?auth_error=cancelled`)
 })
 
-test('continues the public CTA into tutorial and keeps the secure refresh cookie host-only', async ({ page, context }) => {
+test('opens and exits the guest lesson, preserves legacy sign-in continuation and keeps the secure refresh cookie host-only', async ({ page, context }) => {
   await page.goto(origins.root)
   const tutorialLink = page.getByRole('link', { name: 'Пройти обучение' }).first()
-  await expect(tutorialLink).toHaveAttribute('href', `${origins.app}/?continue=tutorial`)
+  await expect(tutorialLink).toHaveAttribute('href', `${origins.app}/learn`)
   await tutorialLink.click()
+  await expect(page).toHaveURL(`${origins.app}/learn`)
+  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toBeVisible()
+  expect((await context.cookies()).some((cookie) => cookie.name === 'anomaly_detector_refresh')).toBe(false)
+  await page.getByRole('button', { name: 'Вернуться на сайт', exact: true }).click()
+  await expect(page).toHaveURL(`${origins.root}/`)
+  // Existing links still support signing in before an account lesson.
+  await page.goto(`${origins.app}/?continue=tutorial`)
   await expect(page).toHaveURL(`${origins.app}/?continue=tutorial`)
   await expect(page.getByRole('tab', { name: 'Регистрация', exact: true }))
     .toHaveAttribute('aria-selected', 'true')

@@ -37,8 +37,12 @@ including where their documented policy permits model training. This does not
 extend to player, API or operator surfaces. Keep the same useful copy visible
 to people and crawlers; do not add hidden bot-only text or doorway pages.
 
-The CTA passes only a bounded continuation intent for the solo tutorial to the
-player app. Before analytics consent, the site may record only unrelated
+CTA «Пройти обучение» открывает `/learn` игрового приложения без регистрации.
+После завершения пользователь создаёт аккаунт или входит и сохраняет отметку
+о прохождении. Полноценные партии с ботами или друзьями требуют аккаунта;
+подробности — [ADR 0019](../docs/adr/0019-guest-tutorial-before-registration.md).
+
+Before analytics consent, the site may record only unrelated
 aggregate views. A first-party `journey_id` is created only after a separate
 affirmative choice, expires with raw events within 30 days, and must not affect
 CTA, registration or play when absent or revoked.

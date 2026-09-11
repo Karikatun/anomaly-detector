@@ -85,6 +85,12 @@ const tutorialRoute = createRoute({
   component: lazyRouteComponent(() => import('./features/tutorial/public/tutorial'), 'TutorialRoute'),
 })
 
+const guestTutorialRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/learn',
+  component: lazyRouteComponent(() => import('./features/tutorial/public/tutorial'), 'GuestTutorialRoute'),
+})
+
 const privacyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/privacy',
@@ -117,6 +123,7 @@ const routeTree = rootRoute.addChildren([
   roomLobbyRoute,
   tenderRoute,
   tutorialRoute,
+  guestTutorialRoute,
   privacyRoute,
   personalDataConsentRoute,
   termsRoute,

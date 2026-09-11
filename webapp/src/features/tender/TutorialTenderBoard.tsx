@@ -280,6 +280,7 @@ export function TutorialTenderBoard({
               className="grid min-w-0 self-start gap-4"
             >
               <PhasePanel
+                playerId={myPlayer?.playerId}
                 view={view}
                 disabled={interpretationRequired}
                 error={commandError}

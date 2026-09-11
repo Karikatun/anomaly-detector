@@ -10,6 +10,10 @@ const requiredLegalValues = [
 export function validateWebappReleaseEnvironment(
   environment: Record<string, string | undefined>,
 ) {
+  if (environment.VITE_PUBLIC_WEBSITE_URL
+    && environment.VITE_PUBLIC_WEBSITE_URL !== 'https://anomaly-detector.ru') {
+    throw new Error('VITE_PUBLIC_WEBSITE_URL must equal https://anomaly-detector.ru for the split-domain release')
+  }
   for (const name of ['VITE_API_URL', 'VITE_OAUTH_API_URL'] as const) {
     if (environment[name] !== productionApiOrigin) {
       throw new Error(`${name} must equal ${productionApiOrigin} for the split-domain release`)

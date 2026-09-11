@@ -12,7 +12,7 @@
 
 anomaly-detector.ru {
 	@legacyPlayerRoutes {
-		path /app /profile /feedback /rooms /rooms/* /tenders/* /tutorial /recover/code /recover/password /privacy /personal-data-consent /terms
+		path /app /profile /feedback /rooms /rooms/* /tenders/* /tutorial /learn /recover/code /recover/password /privacy /personal-data-consent /terms
 	}
 	header @legacyPlayerRoutes Cache-Control "no-store"
 	redir @legacyPlayerRoutes https://app.anomaly-detector.ru{uri} temporary
