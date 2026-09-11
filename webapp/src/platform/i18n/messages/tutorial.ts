@@ -95,7 +95,7 @@ export const tutorialMessages = {
   'tutorial.guest.next': 'Создайте аккаунт, чтобы сыграть с ботами или друзьями. Отметка о прохождении сохранится в профиле — повторять обучение не придётся.',
   'tutorial.guest.register': 'Создать аккаунт',
   'tutorial.guest.existingAccount': 'Уже есть аккаунт',
-  'tutorial.guest.login': 'Перейти ко входу',
+  'tutorial.guest.website': 'Вернуться на сайт',
   'tutorial.joyride.back': 'Назад',
   'tutorial.joyride.close': 'Закрыть',
   'tutorial.joyride.last': 'Завершить',

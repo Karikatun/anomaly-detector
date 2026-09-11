@@ -25,6 +25,61 @@ async function openGuestCompletion(page: Page) {
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
 }
 
+for (const signedIn of [false, true]) {
+for (const width of [1440, 390]) {
+  test(`public learning exits to the website with signedIn=${signedIn} at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const websiteUrl = process.env.E2E_WEBSITE_URL
+    if (!websiteUrl) throw new Error('Public website origin is required')
+    if (signedIn) await registerBrowserUser(page, 'Ученик с сессией', 'guest-exit')
+    for (const startLesson of [false, true]) {
+      await page.goto(websiteUrl)
+      await page.getByRole('link', { name: 'Пройти обучение', exact: true }).first().click()
+      const prologue = page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
+      await expect(prologue).toBeVisible()
+      if (startLesson) {
+        await page.getByRole('button', { name: 'Начать обучение', exact: true }).click()
+        await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+        await page.locator('[data-testid="floater"]').getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
+        await page.getByRole('button', { name: 'Выйти и сбросить', exact: true }).click()
+      } else {
+        await prologue.getByRole('button', { name: 'Вернуться на сайт', exact: true }).click()
+      }
+      await expect(page).toHaveURL(`${websiteUrl}/`)
+      await expect(page.getByRole('heading', { name: 'Разгадайте аномалию раньше соперников' })).toBeVisible()
+    }
+    if (signedIn) {
+      await page.goto('/tutorial')
+      await page.getByRole('button', { name: 'Вернуться в главное меню', exact: true }).click()
+      await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toBeVisible()
+    } else {
+      expect((await page.context().cookies()).some((cookie) => cookie.name === 'anomaly_detector_refresh')).toBe(false)
+      const backendUrl = process.env.E2E_BACKEND_URL
+      const webappUrl = process.env.E2E_WEB_URL
+      if (!backendUrl || !webappUrl) throw new Error('API and app origins are required')
+      const headers = { Origin: webappUrl }
+      const roomId = '00000000-0000-4000-8000-000000000001'
+      for (const path of [`/api/rooms/${roomId}`, `/api/tenders/${roomId}`, '/api/profile']) {
+        expect((await page.request.get(`${backendUrl}${path}`, { headers })).status()).toBe(401)
+      }
+      for (const [path, data] of [
+        ['/api/rooms', { capacity: 2, allowBots: true }],
+        [`/api/rooms/${roomId}/start`, {}],
+        [`/api/tenders/${roomId}/commands`, {}],
+        ['/api/profile/tutorial/completion', {}],
+      ] as const) {
+        expect((await page.request.post(`${backendUrl}${path}`, { headers, data })).status()).toBe(401)
+      }
+      for (const path of ['/', '/tutorial', '/rooms/00000000-0000-4000-8000-000000000001', '/tenders/00000000-0000-4000-8000-000000000001']) {
+        await page.goto(path)
+        await expect(page.getByRole('tab', { name: 'Вход', exact: true })).toBeVisible()
+        await expect(page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' })).toHaveCount(0)
+      }
+    }
+  })
+}
+}
+
 for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 390, height: 844 }]) {
   test(`opens public learning without account operations at ${viewport.width}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport)

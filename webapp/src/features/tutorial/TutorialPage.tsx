@@ -9,6 +9,7 @@ import { AuthSessionGate, ProtectedPage, useAuth } from '@/features/auth'
 import { ProfileApi, useAccountProtectionQuery, useCompleteTutorialMutation } from '@/features/profile'
 import { CreateRoomDialog, RoomsApi, useCurrentMatchQuery } from '@/features/rooms'
 import { useI18n } from '@/platform/i18n'
+import { getPublicWebsiteUrl } from '@/platform/public-website-url'
 import { createTutorialState, type TutorialState } from './scenario'
 import {
   beginGuestTutorialHandoff,
@@ -23,24 +24,24 @@ import { TutorialStateCard } from './TutorialStateCard'
 import styles from './TutorialPage.module.css'
 
 export function TutorialPage() {
-  return <ProtectedPage><AuthenticatedTutorial /></ProtectedPage>
+  return <ProtectedPage><AuthenticatedTutorial entry="account" /></ProtectedPage>
 }
 
 export function GuestTutorialPage() {
   return (
     <AuthSessionGate anonymous={<GuestTutorial />}>
-      {() => <AuthenticatedTutorial />}
+      {() => <AuthenticatedTutorial entry="public" />}
     </AuthSessionGate>
   )
 }
 
-function AuthenticatedTutorial() {
+function AuthenticatedTutorial({ entry }: { entry: 'public' | 'account' }) {
   const auth = useAuth()
   // Remount the local scenario when the authenticated account changes.
-  return auth.user ? <AccountTutorial key={auth.user.id} playerId={auth.user.id} /> : null
+  return auth.user ? <AccountTutorial key={auth.user.id} playerId={auth.user.id} entry={entry} /> : null
 }
 
-function AccountTutorial({ playerId }: { playerId: string }) {
+function AccountTutorial({ playerId, entry }: { playerId: string; entry: 'public' | 'account' }) {
   const auth = useAuth()
   const navigate = useNavigate()
   const { t } = useI18n()
@@ -64,6 +65,10 @@ function AccountTutorial({ playerId }: { playerId: string }) {
   const saveState = useRef<'idle' | 'pending' | 'saved'>('idle')
   const accountProtection = useAccountProtectionQuery(profileApi, completionSaveStatus === 'saved')
   const [createRoomOpen, setCreateRoomOpen] = useState(false)
+  const exitTutorial = () => {
+    if (entry === 'public') window.location.assign(getPublicWebsiteUrl())
+    else void navigate({ to: '/' })
+  }
 
   const persistCompletion = useCallback(() => {
     if (saveState.current !== 'idle') return Promise.resolve()
@@ -140,7 +145,7 @@ function AccountTutorial({ playerId }: { playerId: string }) {
           {completionSaved && (
             <div className={styles.completeActions}>
               <Button onClick={() => setCreateRoomOpen(true)}>{t('tutorial.complete.create')}</Button>
-              <Button variant="outline" onClick={() => void navigate({ to: '/' })}>{t('tutorial.complete.home')}</Button>
+              <Button variant="outline" onClick={exitTutorial}>{t(entry === 'public' ? 'tutorial.guest.website' : 'tutorial.complete.home')}</Button>
               <Button variant="ghost" onClick={() => {
                 saveState.current = 'idle'
                 setCompletionSaveStatus('idle')
@@ -220,22 +225,21 @@ function AccountTutorial({ playerId }: { playerId: string }) {
     <TutorialExperience
       initialState={initialState}
       onComplete={saveCompletion}
-      onExit={() => void navigate({ to: '/' })}
-      exitLabel="tutorial.prologue.home"
+      onExit={exitTutorial}
+      exitLabel={entry === 'public' ? 'tutorial.guest.website' : 'tutorial.prologue.home'}
       renderCompletion={renderCompletion}
     />
   )
 }
 
 function GuestTutorial() {
-  const navigate = useNavigate()
   const { t } = useI18n()
   const [initialState] = useState(() => loadTutorialSession(sessionStorage, guestTutorialPlayerId))
   return (
     <TutorialExperience
       initialState={initialState}
-      onExit={() => void navigate({ to: '/' })}
-      exitLabel="tutorial.guest.login"
+      onExit={() => window.location.assign(getPublicWebsiteUrl())}
+      exitLabel="tutorial.guest.website"
       renderCompletion={(restart) => (
         <TutorialStateCard alignCardToTop showExpeditionBackground={false}>
           <CardHeader>

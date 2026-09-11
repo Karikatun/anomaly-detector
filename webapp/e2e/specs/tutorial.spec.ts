@@ -174,7 +174,7 @@ async function startTutorial(page: Parameters<typeof registerBrowserUser>[0], gu
   else await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' }).click()
   const prologue = page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })
   await expect(prologue).toContainText('Корпорация объявила Тендер')
-  await expect(prologue.getByRole('button', { name: guest ? 'Перейти ко входу' : 'Вернуться в главное меню' })).toBeVisible()
+  await expect(prologue.getByRole('button', { name: guest ? 'Вернуться на сайт' : 'Вернуться в главное меню' })).toBeVisible()
   const startAction = () => prologue.getByRole('button', { name: 'Начать обучение' }).click()
   if ((page.viewportSize()?.width ?? 0) <= 600) {
     const requests = await captureScrollRequests(page, startAction)
