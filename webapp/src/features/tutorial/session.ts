@@ -7,6 +7,15 @@ import {
 } from './scenario'
 
 const storageKey = 'anomaly-detector:tutorial-session'
+const guestStorageKey = 'anomaly-detector:guest-tutorial-session'
+const guestHandoffKey = 'anomaly-detector:guest-tutorial-completion'
+export const guestTutorialPlayerId = 'tutorial-guest'
+
+const guestHandoffSchema = z.object({ userId: z.string().min(1).max(128).nullable() }).strict()
+
+function sessionKey(playerId: string) {
+  return playerId === guestTutorialPlayerId ? guestStorageKey : storageKey
+}
 
 const tutorialStateSchema = z.object({
   budget: z.number().int(),
@@ -61,7 +70,7 @@ const tutorialStateSchema = z.object({
 }).strict()
 
 export function loadTutorialSession(storage: Storage, playerId: string): TutorialState {
-  const serialized = storage.getItem(storageKey)
+  const serialized = storage.getItem(sessionKey(playerId))
   if (!serialized) return createTutorialState(playerId)
   try {
     const parsed = tutorialStateSchema.safeParse(JSON.parse(serialized))
@@ -73,9 +82,44 @@ export function loadTutorialSession(storage: Storage, playerId: string): Tutoria
 }
 
 export function saveTutorialSession(storage: Storage, state: TutorialState) {
-  storage.setItem(storageKey, JSON.stringify(tutorialStateSchema.parse(state)))
+  storage.setItem(sessionKey(state.playerId), JSON.stringify(tutorialStateSchema.parse(state)))
 }
 
-export function clearTutorialSession(storage: Storage) {
-  storage.removeItem(storageKey)
+export function clearTutorialSession(storage: Storage, playerId = '') {
+  storage.removeItem(sessionKey(playerId))
+  if (playerId === guestTutorialPlayerId) storage.removeItem(guestHandoffKey)
+}
+
+export function prepareTutorialEntry(storage: Storage, playerId: string) {
+  if (loadTutorialSession(storage, playerId).step === 'complete') {
+    clearTutorialSession(storage, playerId)
+  }
+}
+
+export function beginGuestTutorialHandoff(storage: Storage): boolean {
+  if (loadTutorialSession(storage, guestTutorialPlayerId).step !== 'complete') return false
+  storage.setItem(guestHandoffKey, JSON.stringify({ userId: null }))
+  return true
+}
+
+export function claimGuestTutorialCompletion(storage: Storage, userId: string): boolean {
+  if (loadTutorialSession(storage, guestTutorialPlayerId).step !== 'complete') return false
+  const handoff = readGuestHandoff(storage)
+  if (!handoff || (handoff.userId !== null && handoff.userId !== userId)) return false
+  storage.setItem(guestHandoffKey, JSON.stringify({ userId }))
+  return true
+}
+
+export function finishGuestTutorialHandoff(storage: Storage, userId: string) {
+  if (readGuestHandoff(storage)?.userId !== userId) return
+  clearTutorialSession(storage, guestTutorialPlayerId)
+}
+
+function readGuestHandoff(storage: Storage) {
+  try {
+    const parsed = guestHandoffSchema.safeParse(JSON.parse(storage.getItem(guestHandoffKey) ?? 'null'))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
 }

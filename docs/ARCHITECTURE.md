@@ -241,8 +241,16 @@ Do not create a new form, query, auth, or API abstraction until the existing pat
 
 `website` prerenders to static HTML by default. Keep the landing and other anonymous public content static until a real request-specific requirement justifies an Astro runtime adapter. SEO-critical content must be present in initial HTML, including title, description, canonical URL, social preview metadata, and the actual public product copy. The public site does not own player authentication or duplicate interactive game flows from `webapp`.
 
-The website sends the visitor to the app with a bounded tutorial continuation
-intent. It may count unrelated aggregate views without client identity. A
+Лендинг открывает публичный `/learn` игрового клиента. Общий `TutorialExperience`
+исполняет учебный сценарий локально; оболочка аккаунта отдельно владеет проверкой
+текущей партии и сохранением завершения. После гостевого обучения ограниченное
+намерение `tutorial-complete` возвращает пользователя из регистрации или входа
+к результату на `/tutorial`; старое `tutorial` тоже поддерживается. В профиль
+переносится только отметка, без учебных очков и моделей. Черновик и ожидающая
+отметка живут в текущей вкладке; правила привязки, восстановления и выпуска —
+в [ADR 0019](adr/0019-guest-tutorial-before-registration.md).
+
+The website may count unrelated aggregate views without client identity. A
 30-day first-party journey identifier and cross-surface funnel events require a
 separate affirmative analytics choice; refusal is a fully supported path. The
 password-reset page loads neither this analytics client nor third-party

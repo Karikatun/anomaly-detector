@@ -82,7 +82,7 @@ test('shows the primary sign-in paths immediately and exposes accurate auth head
   await expect(page.getByRole('button', { name: 'Яндекс ID' })).toBeVisible()
 })
 
-test('continues a landing registration into tutorial and ignores unknown destinations', async ({ page }) => {
+test('opens guest learning from the landing and ignores unknown destinations', async ({ page }) => {
   await page.goto('/?continue=admin')
   await expect(page.getByRole('tab', { name: 'Вход', exact: true })).toHaveAttribute('aria-selected', 'true')
 
@@ -115,26 +115,14 @@ test('continues a landing registration into tutorial and ignores unknown destina
   const tutorialLink = page.getByRole('link', { name: 'Пройти обучение' }).first()
   await expect(tutorialLink).toHaveAttribute(
     'href',
-    new URL('/?continue=tutorial', webappUrl).toString(),
+    new URL('/learn', webappUrl).toString(),
   )
   await tutorialLink.click()
-  await expect(page).toHaveURL(new URL('/?continue=tutorial', webappUrl).toString())
-  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
-
-  const login = uniqueLogin('landing-tutorial')
-  await page.getByLabel('Логин').fill(login)
-  await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
-  await page.getByLabel('Имя').fill('Исследователь лендинга')
-  await page.getByRole('checkbox', { name: 'Я даю согласие на обработку персональных данных' }).check()
-  await page.getByRole('checkbox', { name: 'Я принимаю Пользовательское соглашение' }).check()
-  await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
-
-  await expect(page).toHaveURL('/tutorial')
-  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toBeVisible()
-  await expect.poll(() => analyticsEvents).toEqual(expect.arrayContaining([
-    'tutorial_cta',
-    'registration_complete',
-  ]))
+  await expect(page).toHaveURL(new URL('/learn', webappUrl).toString())
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('tab')).toHaveCount(0)
+  await expect.poll(() => analyticsEvents).toContain('tutorial_cta')
+  expect(analyticsEvents).not.toContain('registration_complete')
 
   await page.goto(websiteUrl)
   await expect(page.getByRole('button', { name: 'Отключить аналитику' })).toBeVisible()
@@ -158,8 +146,9 @@ test('keeps the landing journey available after choosing only necessary function
     cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
 
   await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
-  await expect(page).toHaveURL(new URL('/?continue=tutorial', webappUrl).toString())
-  await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(new URL('/learn', webappUrl).toString())
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('tab')).toHaveCount(0)
 })
 
 test('explains how to register when a Yandex ID has no game account', async ({ page }) => {

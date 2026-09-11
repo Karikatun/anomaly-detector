@@ -34,6 +34,7 @@ import {
   useCurrentMatchQuery,
 } from '@/features/rooms'
 import { RulesReferenceDialog } from '@/features/rules'
+import { prepareTutorialEntry } from '@/features/tutorial/public/session'
 import { useI18n } from '@/platform/i18n'
 import styles from './pages.module.css'
 
@@ -179,7 +180,11 @@ function AuthenticatedHome({
                 fullRow
                 title={t(tutorialProgress.data?.completedAt ? 'tutorial.menu.repeat' : 'tutorial.menu.start')}
                 icon={Mortarboard01Icon}
-                onClick={() => void navigate({ to: '/tutorial' })}
+                onClick={() => {
+                  if (!auth.user) return
+                  prepareTutorialEntry(sessionStorage, auth.user.id)
+                  void navigate({ to: '/tutorial' })
+                }}
               />
             </>
           )}

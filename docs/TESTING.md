@@ -31,7 +31,7 @@ Client E2E should cover valuable user journeys, including non-happy-path states 
 ### Public MVP Journey coverage
 
 When the approved MVP slices are implemented, use one representative browser
-journey for landing CTA → registration → tutorial completion → Recovery Email
+journey for landing CTA → guest tutorial completion → registration/login → Recovery Email
 offer and a separate reset-password journey. Keep the exhaustive security
 matrix at contract/backend integration level:
 
