@@ -93,8 +93,11 @@ test('loads Metrika only after explicit consent and sends one allowlisted CTA go
     },
   ])
 
-  await page.locator('[data-analytics-event="tutorial_cta"]').first().dispatchEvent('click')
-  await page.locator('[data-analytics-event="tutorial_cta"]').first().dispatchEvent('click')
+  await page.locator('[data-analytics-event="tutorial_cta"]').first().evaluate((link) => {
+    link.addEventListener('click', (event) => event.preventDefault())
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  })
   const queue = await page.evaluate(() => (window as Window & { ym?: { a?: unknown[][] } }).ym?.a ?? [])
   expect(queue.filter((entry) => entry[1] === 'reachGoal')).toEqual([
     [112719766, 'reachGoal', 'tutorial_cta'],
@@ -113,6 +116,9 @@ test('configures the player Metrika client without loading it before consent', a
   expect(tagRequests).toBe(0)
   expect(await page.evaluate(() => 'ym' in window)).toBe(false)
 
+  await page.getByRole('button', { name: 'Начать обучение' }).click()
+  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toHaveCount(0)
+  await expect(page.locator('[data-metrika-consent]')).toBeVisible()
   await page.getByRole('button', { name: 'Разрешить аналитику' }).click()
   await expect.poll(() => tagRequests).toBe(1)
 })

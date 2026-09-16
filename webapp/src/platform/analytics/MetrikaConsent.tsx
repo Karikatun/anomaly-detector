@@ -30,7 +30,7 @@ export function MetrikaConsent() {
 
   return (
     <aside
-      className="border-t border-cyan-300/20 bg-slate-950/95 px-5 py-4 text-slate-300"
+      className="relative z-[110] border-t border-cyan-300/20 bg-slate-950/95 px-5 py-4 text-slate-300"
       data-metrika-consent
       aria-labelledby="metrika-consent-title"
     >
