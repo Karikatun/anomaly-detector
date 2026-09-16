@@ -4,6 +4,7 @@ import { createPrisma } from '../../../backend/src/db'
 import { e2ePassword, registerBrowserUser, uniqueLogin } from '../helpers/test'
 
 const origins = splitDomainOrigins()
+const uxAuditDir = process.env.UX_AUDIT_DIR
 test.use({ screenshot: 'off', trace: 'off' })
 const legacyPlayerPaths = [
   '/app',
@@ -112,16 +113,59 @@ test('configures the player Metrika client without loading it before consent', a
   })
   await page.goto(`${origins.app}/learn`)
 
+  const consent = page.locator('[data-metrika-consent]')
   await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
+  await expect.poll(async () => (await consent.boundingBox())?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(448)
+  if (uxAuditDir) await page.screenshot({ path: `${uxAuditDir}/consent-inline-desktop.png`, fullPage: true })
   expect(tagRequests).toBe(0)
   expect(await page.evaluate(() => 'ym' in window)).toBe(false)
 
+  await page.getByRole('button', { name: 'Разрешить аналитику' }).click()
+  await expect(consent).toHaveCount(0)
+  if (uxAuditDir) await page.screenshot({ path: `${uxAuditDir}/consent-allowed-desktop.png`, fullPage: true })
+  await expect.poll(() => tagRequests).toBe(1)
+
   await page.getByRole('button', { name: 'Начать обучение' }).click()
   await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toHaveCount(0)
-  await expect(page.locator('[data-testid="floater"]')).toBeVisible()
-  await expect(page.locator('[data-metrika-consent]')).toBeVisible()
-  await page.getByRole('button', { name: 'Разрешить аналитику' }).click()
-  await expect.poll(() => tagRequests).toBe(1)
+  const coach = page.locator('[data-testid="floater"]')
+  await expect(coach).toBeVisible()
+  await coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await expect(page.locator('[data-tutorial-step="interaction-guide"]')).toHaveCount(0)
+
+  await page.goto(`${origins.app}/privacy`)
+  await expect(page.getByRole('heading', { name: 'Настройки аналитики' })).toBeVisible()
+  await page.getByRole('button', { name: 'Отключить аналитику' }).click()
+  await expect(page.getByText('Яндекс Метрика выключена.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
+  await page.goto(`${origins.app}/learn`)
+  await expect(page.locator('[data-metrika-consent]')).toHaveCount(0)
+  expect(tagRequests).toBe(1)
+})
+
+test('keeps the tutorial coach actionable before the analytics choice on desktop and mobile', async ({ page }) => {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport)
+    await page.goto(`${origins.app}/learn`)
+    await page.evaluate(() => window.localStorage.removeItem('anomaly-detector:metrika-consent'))
+    await page.evaluate(() => window.sessionStorage.clear())
+    await page.reload()
+
+    const consent = page.locator('[data-metrika-consent]')
+    await expect(consent).toBeVisible()
+    if (uxAuditDir) {
+      await page.screenshot({ path: `${uxAuditDir}/consent-inline-${viewport.width}.png` })
+    }
+    await page.getByRole('button', { name: 'Начать обучение' }).click()
+
+    const coach = page.locator('[data-testid="floater"]')
+    await expect(coach).toBeVisible()
+    await expect(consent).toBeHidden()
+    if (uxAuditDir) {
+      await page.screenshot({ path: `${uxAuditDir}/tutorial-${viewport.width}.png` })
+    }
+    await coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+    await expect(page.locator('[data-tutorial-step="interaction-guide"]')).toHaveCount(0)
+  }
 })
 
 test('preserves the CTA when anonymous analytics is unavailable', async ({ page }) => {

@@ -7,6 +7,7 @@ import personalDataConsent from '../../../../docs/personal-data-consent.md?raw'
 import privacyPolicy from '../../../../docs/privacy-policy.md?raw'
 import termsOfUse from '../../../../docs/terms-of-use.md?raw'
 import { Typography } from '@/components/ui/typography'
+import { MetrikaPrivacySettings } from '@/platform/analytics/MetrikaConsent'
 import { useI18n } from '@/platform/i18n'
 import styles from './LegalDocumentPage.module.css'
 import {
@@ -52,6 +53,7 @@ export function LegalDocumentPage({ documentId }: { documentId: LegalDocumentId 
           <Typography variant="h1">{title}</Typography>
         </header>
         <div className={styles.surface}>
+          {documentId === 'privacy' && <MetrikaPrivacySettings />}
           <MarkdownBlocks lines={publicationLines} />
         </div>
       </article>
