@@ -258,3 +258,26 @@ test('does not let one concurrent OAuth cleanup erase the current marker', () =>
   expect(readMetrikaOAuthPending(unavailableStorage)).toBe('registration:second')
   clearMetrikaOAuthPending(unavailableStorage)
 })
+
+test('prefers a newer in-memory marker when a later storage write fails', () => {
+  let stored: string | null = null
+  let failWrites = false
+  const storage = {
+    getItem: () => stored,
+    removeItem: () => { stored = null },
+    setItem: (_key: string, value: string) => {
+      if (failWrites) throw new Error('storage unavailable')
+      stored = value
+    },
+  }
+
+  writeMetrikaOAuthPending('login:first', storage)
+  failWrites = true
+  writeMetrikaOAuthPending('registration:second', storage)
+
+  expect(readMetrikaOAuthPending(storage)).toBe('registration:second')
+  clearMetrikaOAuthPending(storage, 'login:first')
+  expect(readMetrikaOAuthPending(storage)).toBe('registration:second')
+  clearMetrikaOAuthPending(storage, 'registration:second')
+  expect(readMetrikaOAuthPending(storage)).toBeNull()
+})

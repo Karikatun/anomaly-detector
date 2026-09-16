@@ -68,15 +68,16 @@ export function writeMetrikaOAuthPending(value: string, storage = browserSession
 }
 
 export function readMetrikaOAuthPending(storage = browserSessionStorage()) {
+  const inMemory = inMemoryPendingFor(storage)
+  if (inMemory !== null) return inMemory
   try {
     const stored = storage?.getItem(metrikaOAuthPendingStorageKey)
     if (stored !== null && stored !== undefined) {
-      if (inMemoryMetrikaOAuthPending?.storage === storage) inMemoryMetrikaOAuthPending = null
       return stored
     }
-    return inMemoryPendingFor(storage)
+    return null
   } catch {
-    return inMemoryPendingFor(storage)
+    return null
   }
 }
 
