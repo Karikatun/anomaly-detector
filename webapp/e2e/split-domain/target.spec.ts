@@ -118,6 +118,7 @@ test('configures the player Metrika client without loading it before consent', a
 
   await page.getByRole('button', { name: 'Начать обучение' }).click()
   await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toHaveCount(0)
+  await expect(page.locator('[data-testid="floater"]')).toBeVisible()
   await expect(page.locator('[data-metrika-consent]')).toBeVisible()
   await page.getByRole('button', { name: 'Разрешить аналитику' }).click()
   await expect.poll(() => tagRequests).toBe(1)
