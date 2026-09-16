@@ -102,12 +102,14 @@ PUBLIC_WEBAPP_URL=https://app.anomaly-detector.ru \
 PUBLIC_ANALYTICS_API_URL=https://api.anomaly-detector.ru \
 PUBLIC_ANALYTICS_MODE=aggregate \
 PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST=ad_01,ad_02,ad_03,ad_04,ad_05,ad_06 \
+PUBLIC_METRIKA_COUNTER_ID=112719766 \
 bun run build:release:analytics
 ```
 
 Обычный `build:release` сохраняет запрет случайного включения аналитики.
-Игровой клиент собирается обычным release-профилем без `VITE_ANALYTICS_ENABLED`,
-с утверждёнными legal values и полным SHA релиза из runbook. Операторский клиент
+Игровой клиент с Метрикой собирается отдельным `build:release:analytics` с
+`VITE_METRIKA_COUNTER_ID=112719766`; без этого значения используется обычный
+`build:release` без `VITE_ANALYTICS_ENABLED`. Операторский клиент
 тоже пересобирается: новый контракт добавляет режим и строки объявлений.
 Новый adminapp читает старый ответ API, поэтому его можно опубликовать первым;
 старый строгий клиент не читает новый ответ.

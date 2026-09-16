@@ -41,6 +41,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const bootstrapGeneration = useRef(0)
   const sentRegistrationAnalyticsVersion = useRef(0)
   const [passwordLoginTransition, setPasswordLoginTransition] = useState(0)
+  const [oauthCallbackSearch] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return window.location.search
+  })
   const [registrationAnalyticsVersion, setRegistrationAnalyticsVersion] = useState(() => {
     if (typeof window === 'undefined') return 0
     return new URL(window.location.href).searchParams.get('analytics_registration') === '1' ? 1 : 0
@@ -144,10 +148,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const transitionId = sessionStorage.getItem(metrikaOAuthPendingStorageKey)
     if (!transitionId) return
     sessionStorage.removeItem(metrikaOAuthPendingStorageKey)
-    if (isMetrikaOAuthLoginSuccess(window.location.search)) {
+    if (isMetrikaOAuthLoginSuccess(oauthCallbackSearch)) {
       metrika.record('login_success', `oauth:${transitionId}`)
     }
-  }, [meQuery.data?.user])
+  }, [meQuery.data?.user, oauthCallbackSearch])
 
   useEffect(() => {
     if (

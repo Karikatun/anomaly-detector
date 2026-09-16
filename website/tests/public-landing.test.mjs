@@ -112,7 +112,7 @@ test('renders an equal-choice first-party consent panel only when explicitly ena
   expect(enabledHtml).not.toMatch(/google-analytics|googletagmanager|mc\.yandex|metrika|session.?replay/i)
 })
 
-test('releases only an anonymous counter without a consent panel or analytics identifier', async () => {
+test('releases the anonymous counter with an explicit Metrika consent panel', async () => {
   const build = spawnSync('bun', ['run', 'build:release:analytics'], {
     cwd: websiteRoot,
     env: buildEnvironment({
