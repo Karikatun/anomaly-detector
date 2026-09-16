@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   METRIKA_GOALS,
   MetrikaClient,
+  isMetrikaOAuthLoginSuccess,
   isMetrikaSafePath,
   sanitizeMetrikaCounterId,
 } from '../src/platform/analytics/metrika'
@@ -15,6 +16,7 @@ function fakeBrowser() {
     location?: { pathname: string; search: string; hash: string }
     history?: { state: unknown; replaceState: (state: unknown, unused: string, url?: string) => void }
   } = {}
+  browserWindow.location = { pathname: '/', search: '', hash: '' }
   const browserDocument = {
     createElement: () => ({ async: false, src: '' }),
     head: {
@@ -130,6 +132,40 @@ describe('MetrikaClient', () => {
     expect(browser.scripts).toHaveLength(0)
     expect(browser.calls).toHaveLength(0)
   })
+
+  test('does not initialize on private paths or record after private navigation', () => {
+    const browser = fakeBrowser()
+    const client = new MetrikaClient({
+      counterId: '112719766',
+      document: browser.browserDocument,
+      enabled: true,
+      onCommand: (...args) => browser.calls.push(args),
+      window: browser.browserWindow,
+    })
+
+    client.enable()
+    browser.browserWindow.location = { pathname: '/rooms/private-room', search: '', hash: '' }
+    client.record('tutorial_complete')
+
+    expect(browser.scripts).toHaveLength(1)
+    expect(browser.calls).toHaveLength(1)
+  })
+
+  test('does not initialize on a private path', () => {
+    const browser = fakeBrowser()
+    browser.browserWindow.location = { pathname: '/rooms/private-room', search: '', hash: '' }
+    const client = new MetrikaClient({
+      counterId: '112719766',
+      document: browser.browserDocument,
+      enabled: true,
+      window: browser.browserWindow,
+    })
+
+    client.enable()
+
+    expect(browser.scripts).toHaveLength(0)
+    expect(browser.browserWindow.ym).toBeUndefined()
+  })
 })
 
 test('accepts only a numeric counter id', () => {
@@ -144,4 +180,9 @@ test('allows Metrika only on public auth and tutorial paths', () => {
   expect(isMetrikaSafePath('/tutorial')).toBe(true)
   expect(isMetrikaSafePath('/rooms/private-room')).toBe(false)
   expect(isMetrikaSafePath('/tenders/private-tender')).toBe(false)
+})
+
+test('does not classify OAuth registration as a login success', () => {
+  expect(isMetrikaOAuthLoginSuccess('?analytics_registration=1')).toBe(false)
+  expect(isMetrikaOAuthLoginSuccess('')).toBe(true)
 })

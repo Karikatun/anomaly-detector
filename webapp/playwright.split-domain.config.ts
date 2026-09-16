@@ -79,6 +79,7 @@ const webServers: WebServerConfig[] = [
       VITE_ANALYTICS_ENABLED: '',
       VITE_BUILD_SHA: 'e'.repeat(40),
       VITE_OAUTH_API_URL: apiOrigin,
+      ...(mode === 'target' ? { VITE_METRIKA_COUNTER_ID: '112719766' } : {}),
     }),
     url: portPlan.webUrl,
     reuseExistingServer: false,

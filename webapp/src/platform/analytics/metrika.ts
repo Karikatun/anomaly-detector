@@ -38,6 +38,10 @@ export function isMetrikaSafePath(pathname: string) {
   return pathname === '/' || pathname === '/learn' || pathname === '/tutorial'
 }
 
+export function isMetrikaOAuthLoginSuccess(search: string) {
+  return new URLSearchParams(search).get('analytics_registration') !== '1'
+}
+
 export class MetrikaClient {
   private readonly counterId: number
   private readonly document: MetrikaDocument | undefined
@@ -63,7 +67,7 @@ export class MetrikaClient {
   }
 
   enable() {
-    if (!this.enabled || this.initialized) return
+    if (!this.enabled || this.initialized || !this.isSafePath()) return
     this.initialized = true
     this.stripLocationSuffix()
     this.command = this.window?.ym ?? this.createQueue()
@@ -79,7 +83,7 @@ export class MetrikaClient {
 
   record(goal: MetrikaGoal, dedupeKey: string = goal) {
     const eventKey = `${goal}:${dedupeKey}`
-    if (!this.initialized || !METRIKA_GOALS.includes(goal) || this.sentGoals.has(eventKey)) return
+    if (!this.initialized || !this.isSafePath() || !METRIKA_GOALS.includes(goal) || this.sentGoals.has(eventKey)) return
     this.sentGoals.add(eventKey)
     this.dispatch('reachGoal', goal)
   }
@@ -102,6 +106,11 @@ export class MetrikaClient {
     const history = this.window?.history
     if (!location || !history || (!location.search && !location.hash)) return
     history.replaceState(history.state, '', location.pathname)
+  }
+
+  private isSafePath() {
+    const pathname = this.window?.location?.pathname
+    return typeof pathname === 'string' && isMetrikaSafePath(pathname)
   }
 }
 

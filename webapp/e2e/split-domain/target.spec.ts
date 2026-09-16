@@ -101,6 +101,22 @@ test('loads Metrika only after explicit consent and sends one allowlisted CTA go
   ])
 })
 
+test('configures the player Metrika client without loading it before consent', async ({ page }) => {
+  let tagRequests = 0
+  await page.route('https://mc.yandex.ru/metrika/tag.js', async (route) => {
+    tagRequests += 1
+    await route.fulfill({ body: '/* test tag */', contentType: 'application/javascript' })
+  })
+  await page.goto(`${origins.app}/learn`)
+
+  await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
+  expect(tagRequests).toBe(0)
+  expect(await page.evaluate(() => 'ym' in window)).toBe(false)
+
+  await page.getByRole('button', { name: 'Разрешить аналитику' }).click()
+  await expect.poll(() => tagRequests).toBe(1)
+})
+
 test('preserves the CTA when anonymous analytics is unavailable', async ({ page }) => {
   await page.route('**/api/analytics/events/aggregate', (route) => route.abort())
   await page.goto(`${origins.root}/?utm_campaign=ad_06`)

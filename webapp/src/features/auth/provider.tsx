@@ -16,7 +16,7 @@ import {
 } from 'react'
 
 import { productAnalytics } from '@/platform/analytics/product-analytics'
-import { metrika } from '@/platform/analytics/metrika'
+import { isMetrikaOAuthLoginSuccess, metrika } from '@/platform/analytics/metrika'
 import { AuthApi } from './api'
 import {
   clearAuthenticatedSession,
@@ -29,6 +29,8 @@ import {
 import { AuthContext, type AuthContextValue } from './context'
 import { bootstrapAuthSession } from './bootstrap'
 import { subscribeToBrowserSessionChanges } from './session-coordinator'
+
+const metrikaOAuthPendingStorageKey = 'anomaly-detector:metrika-oauth-pending'
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient()
@@ -128,7 +130,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && new URL(window.location.href).searchParams.has('auth_error')) {
-      sessionStorage.removeItem('anomaly-detector:metrika-oauth-pending')
+      clearMetrikaOAuthPending()
     }
   }, [])
 
@@ -139,10 +141,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!meQuery.data?.user || typeof window === 'undefined') return
-    const transitionId = sessionStorage.getItem('anomaly-detector:metrika-oauth-pending')
+    const transitionId = sessionStorage.getItem(metrikaOAuthPendingStorageKey)
     if (!transitionId) return
-    sessionStorage.removeItem('anomaly-detector:metrika-oauth-pending')
-    metrika.record('login_success', `oauth:${transitionId}`)
+    sessionStorage.removeItem(metrikaOAuthPendingStorageKey)
+    if (isMetrikaOAuthLoginSuccess(window.location.search)) {
+      metrika.record('login_success', `oauth:${transitionId}`)
+    }
   }, [meQuery.data?.user])
 
   useEffect(() => {
@@ -169,6 +173,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const register = useCallback(
     async (input: RegisterRequest) => {
+      clearMetrikaOAuthPending()
       await registerAsync(input)
       setRegistrationAnalyticsVersion((version) => version + 1)
     },
@@ -177,6 +182,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const login = useCallback(
     async (input: LoginRequest) => {
+      clearMetrikaOAuthPending()
       await loginAsync(input)
       setPasswordLoginTransition((transition) => transition + 1)
     },
@@ -189,12 +195,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       registration?: OAuthStartRequest['registration'],
     ) => {
       if (typeof window !== 'undefined') {
-        sessionStorage.setItem('anomaly-detector:metrika-oauth-pending', crypto.randomUUID())
+        sessionStorage.setItem(metrikaOAuthPendingStorageKey, crypto.randomUUID())
       }
       try {
         await api.startOAuth(provider, registration)
       } catch (error) {
-        sessionStorage.removeItem('anomaly-detector:metrika-oauth-pending')
+        clearMetrikaOAuthPending()
         throw error
       }
     },
@@ -249,6 +255,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+function clearMetrikaOAuthPending() {
+  if (typeof window !== 'undefined') sessionStorage.removeItem(metrikaOAuthPendingStorageKey)
 }
 
 function toOptionalError(error: unknown) {
