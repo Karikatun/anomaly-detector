@@ -4,6 +4,7 @@ import {
   METRIKA_GOALS,
   MetrikaClient,
   isMetrikaOAuthLoginSuccess,
+  isMetrikaOAuthRegistration,
   isMetrikaSafePath,
   sanitizeMetrikaCounterId,
 } from '../src/platform/analytics/metrika'
@@ -186,4 +187,11 @@ test('allows Metrika only on public auth and tutorial paths', () => {
 test('does not classify OAuth registration as a login success', () => {
   expect(isMetrikaOAuthLoginSuccess('?analytics_registration=1')).toBe(false)
   expect(isMetrikaOAuthLoginSuccess('')).toBe(true)
+})
+
+test('classifies only a pending OAuth registration callback', () => {
+  expect(isMetrikaOAuthRegistration('?analytics_registration=1', 'registration:transition')).toBe(true)
+  expect(isMetrikaOAuthRegistration('?analytics_registration=1', 'login:transition')).toBe(false)
+  expect(isMetrikaOAuthRegistration('?analytics_registration=1', null)).toBe(false)
+  expect(isMetrikaOAuthRegistration('', 'registration:transition')).toBe(false)
 })

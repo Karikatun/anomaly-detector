@@ -16,7 +16,11 @@ import {
 } from 'react'
 
 import { productAnalytics } from '@/platform/analytics/product-analytics'
-import { isMetrikaOAuthLoginSuccess, metrika } from '@/platform/analytics/metrika'
+import {
+  isMetrikaOAuthLoginSuccess,
+  isMetrikaOAuthRegistration,
+  metrika,
+} from '@/platform/analytics/metrika'
 import { AuthApi } from './api'
 import {
   clearAuthenticatedSession,
@@ -47,7 +51,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   })
   const [registrationAnalyticsVersion, setRegistrationAnalyticsVersion] = useState(() => {
     if (typeof window === 'undefined') return 0
-    return new URL(window.location.href).searchParams.get('analytics_registration') === '1' ? 1 : 0
+    return isMetrikaOAuthRegistration(
+      window.location.search,
+      readMetrikaOAuthPending(),
+    ) ? 1 : 0
   })
 
   const setAccessToken = useCallback(
@@ -199,7 +206,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       registration?: OAuthStartRequest['registration'],
     ) => {
       if (typeof window !== 'undefined') {
-        sessionStorage.setItem(metrikaOAuthPendingStorageKey, crypto.randomUUID())
+        sessionStorage.setItem(
+          metrikaOAuthPendingStorageKey,
+          `${registration ? 'registration' : 'login'}:${crypto.randomUUID()}`,
+        )
       }
       try {
         await api.startOAuth(provider, registration)
@@ -263,6 +273,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
 function clearMetrikaOAuthPending() {
   if (typeof window !== 'undefined') sessionStorage.removeItem(metrikaOAuthPendingStorageKey)
+}
+
+function readMetrikaOAuthPending() {
+  try {
+    return sessionStorage.getItem(metrikaOAuthPendingStorageKey)
+  } catch {
+    return null
+  }
 }
 
 function toOptionalError(error: unknown) {

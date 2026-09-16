@@ -43,6 +43,11 @@ export function isMetrikaOAuthLoginSuccess(search: string) {
   return new URLSearchParams(search).get('analytics_registration') !== '1'
 }
 
+export function isMetrikaOAuthRegistration(search: string, pending: string | null) {
+  return new URLSearchParams(search).get('analytics_registration') === '1'
+    && pending?.startsWith('registration:') === true
+}
+
 export class MetrikaClient {
   private readonly counterId: number
   private readonly document: MetrikaDocument | undefined
