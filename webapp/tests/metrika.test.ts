@@ -225,3 +225,36 @@ test('keeps the OAuth classification in memory when storage fails in the same na
   clearMetrikaOAuthPending(unavailableStorage)
   expect(readMetrikaOAuthPending(unavailableStorage)).toBeNull()
 })
+
+test('does not cross-contaminate in-memory markers between storage contexts', () => {
+  const firstStorage = {
+    getItem: () => { throw new Error('storage unavailable') },
+    removeItem: () => { throw new Error('storage unavailable') },
+    setItem: () => { throw new Error('storage unavailable') },
+  }
+  const secondStorage = {
+    getItem: () => { throw new Error('storage unavailable') },
+    removeItem: () => { throw new Error('storage unavailable') },
+    setItem: () => { throw new Error('storage unavailable') },
+  }
+
+  writeMetrikaOAuthPending('registration:first', firstStorage)
+
+  expect(readMetrikaOAuthPending(secondStorage)).toBeNull()
+  expect(readMetrikaOAuthPending(firstStorage)).toBe('registration:first')
+})
+
+test('does not let one concurrent OAuth cleanup erase the current marker', () => {
+  const unavailableStorage = {
+    getItem: () => { throw new Error('storage unavailable') },
+    removeItem: () => { throw new Error('storage unavailable') },
+    setItem: () => { throw new Error('storage unavailable') },
+  }
+
+  writeMetrikaOAuthPending('login:first', unavailableStorage)
+  writeMetrikaOAuthPending('registration:second', unavailableStorage)
+  clearMetrikaOAuthPending(unavailableStorage, 'login:first')
+
+  expect(readMetrikaOAuthPending(unavailableStorage)).toBe('registration:second')
+  clearMetrikaOAuthPending(unavailableStorage)
+})

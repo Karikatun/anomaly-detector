@@ -11,7 +11,10 @@ const approvedMetrikaCounterId = '112719766'
 export const metrikaOAuthPendingStorageKey = 'anomaly-detector:metrika-oauth-pending'
 
 type MetrikaStorage = Pick<Storage, 'getItem' | 'removeItem' | 'setItem'>
-let inMemoryMetrikaOAuthPending: string | null = null
+let inMemoryMetrikaOAuthPending: {
+  storage: MetrikaStorage | undefined
+  value: string
+} | null = null
 
 type MetrikaCommand = ((counterId: number, method: 'init' | 'reachGoal', ...args: unknown[]) => void) & {
   a?: unknown[][]
@@ -54,29 +57,46 @@ export function isMetrikaOAuthRegistration(search: string, pending: string | nul
 }
 
 export function writeMetrikaOAuthPending(value: string, storage = browserSessionStorage()) {
-  inMemoryMetrikaOAuthPending = value
   try {
-    storage?.setItem(metrikaOAuthPendingStorageKey, value)
+    if (!storage) throw new Error('session storage unavailable')
+    storage.setItem(metrikaOAuthPendingStorageKey, value)
+    if (inMemoryMetrikaOAuthPending?.storage === storage) inMemoryMetrikaOAuthPending = null
   } catch {
+    inMemoryMetrikaOAuthPending = { storage, value }
     // Analytics state must not block authentication when storage is unavailable.
   }
 }
 
 export function readMetrikaOAuthPending(storage = browserSessionStorage()) {
   try {
-    return storage?.getItem(metrikaOAuthPendingStorageKey) ?? inMemoryMetrikaOAuthPending
+    const stored = storage?.getItem(metrikaOAuthPendingStorageKey)
+    if (stored !== null && stored !== undefined) {
+      if (inMemoryMetrikaOAuthPending?.storage === storage) inMemoryMetrikaOAuthPending = null
+      return stored
+    }
+    return inMemoryPendingFor(storage)
   } catch {
-    return inMemoryMetrikaOAuthPending
+    return inMemoryPendingFor(storage)
   }
 }
 
-export function clearMetrikaOAuthPending(storage = browserSessionStorage()) {
-  inMemoryMetrikaOAuthPending = null
+export function clearMetrikaOAuthPending(
+  storage = browserSessionStorage(),
+  expectedValue?: string,
+) {
+  if (expectedValue !== undefined && readMetrikaOAuthPending(storage) !== expectedValue) return
+  if (inMemoryMetrikaOAuthPending?.storage === storage) inMemoryMetrikaOAuthPending = null
   try {
     storage?.removeItem(metrikaOAuthPendingStorageKey)
   } catch {
     // Analytics state is best effort and may be unavailable in restricted browsers.
   }
+}
+
+function inMemoryPendingFor(storage: MetrikaStorage | undefined) {
+  const memory = inMemoryMetrikaOAuthPending
+  if (!memory || memory.storage !== storage) return null
+  return memory.value
 }
 
 export class MetrikaClient {

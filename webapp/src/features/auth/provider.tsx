@@ -155,7 +155,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!meQuery.data?.user || typeof window === 'undefined') return
     const transitionId = readMetrikaOAuthPending()
     if (!transitionId) return
-    clearMetrikaOAuthPending()
+    clearMetrikaOAuthPending(undefined, transitionId)
     if (isMetrikaOAuthLoginSuccess(oauthCallbackSearch)) {
       metrika.record('login_success', `oauth:${transitionId}`)
     }
@@ -206,15 +206,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
       provider: OAuthProviderId,
       registration?: OAuthStartRequest['registration'],
     ) => {
+      const pendingMarker = `${registration ? 'registration' : 'login'}:${crypto.randomUUID()}`
       if (typeof window !== 'undefined') {
-        writeMetrikaOAuthPending(
-          `${registration ? 'registration' : 'login'}:${crypto.randomUUID()}`,
-        )
+        writeMetrikaOAuthPending(pendingMarker)
       }
       try {
         await api.startOAuth(provider, registration)
       } catch (error) {
-        clearMetrikaOAuthPending()
+        clearMetrikaOAuthPending(undefined, pendingMarker)
         throw error
       }
     },
