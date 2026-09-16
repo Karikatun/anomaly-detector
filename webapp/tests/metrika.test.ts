@@ -207,6 +207,21 @@ test('keeps authentication independent from unavailable session storage', () => 
   }
 
   expect(() => writeMetrikaOAuthPending('login:transition', unavailableStorage)).not.toThrow()
-  expect(readMetrikaOAuthPending(unavailableStorage)).toBeNull()
   expect(() => clearMetrikaOAuthPending(unavailableStorage)).not.toThrow()
+  expect(readMetrikaOAuthPending(unavailableStorage)).toBeNull()
+})
+
+test('keeps the OAuth classification in memory when storage fails in the same navigation', () => {
+  const unavailableStorage = {
+    getItem: () => { throw new Error('storage unavailable') },
+    removeItem: () => { throw new Error('storage unavailable') },
+    setItem: () => { throw new Error('storage unavailable') },
+  }
+
+  writeMetrikaOAuthPending('registration:transition', unavailableStorage)
+
+  expect(isMetrikaOAuthRegistration('?analytics_registration=1', readMetrikaOAuthPending(unavailableStorage))).toBe(true)
+
+  clearMetrikaOAuthPending(unavailableStorage)
+  expect(readMetrikaOAuthPending(unavailableStorage)).toBeNull()
 })

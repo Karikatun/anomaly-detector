@@ -11,6 +11,7 @@ const approvedMetrikaCounterId = '112719766'
 export const metrikaOAuthPendingStorageKey = 'anomaly-detector:metrika-oauth-pending'
 
 type MetrikaStorage = Pick<Storage, 'getItem' | 'removeItem' | 'setItem'>
+let inMemoryMetrikaOAuthPending: string | null = null
 
 type MetrikaCommand = ((counterId: number, method: 'init' | 'reachGoal', ...args: unknown[]) => void) & {
   a?: unknown[][]
@@ -53,6 +54,7 @@ export function isMetrikaOAuthRegistration(search: string, pending: string | nul
 }
 
 export function writeMetrikaOAuthPending(value: string, storage = browserSessionStorage()) {
+  inMemoryMetrikaOAuthPending = value
   try {
     storage?.setItem(metrikaOAuthPendingStorageKey, value)
   } catch {
@@ -62,13 +64,14 @@ export function writeMetrikaOAuthPending(value: string, storage = browserSession
 
 export function readMetrikaOAuthPending(storage = browserSessionStorage()) {
   try {
-    return storage?.getItem(metrikaOAuthPendingStorageKey) ?? null
+    return storage?.getItem(metrikaOAuthPendingStorageKey) ?? inMemoryMetrikaOAuthPending
   } catch {
-    return null
+    return inMemoryMetrikaOAuthPending
   }
 }
 
 export function clearMetrikaOAuthPending(storage = browserSessionStorage()) {
+  inMemoryMetrikaOAuthPending = null
   try {
     storage?.removeItem(metrikaOAuthPendingStorageKey)
   } catch {
