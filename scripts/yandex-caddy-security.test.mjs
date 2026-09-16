@@ -54,8 +54,10 @@ test('Yandex VM Caddy config serves the public website without a private SPA fal
   expect(publicSite).toContain('X-Content-Type-Options "nosniff"')
 })
 
-test('Yandex VM Caddy config permits the public site to call only the first-party API', () => {
-  expect(publicSite).toContain("connect-src 'self' https://api.anomaly-detector.ru")
+test('Yandex VM Caddy config permits the public site to call only approved first-party and Metrika origins', () => {
+  expect(publicSite).toContain("connect-src 'self' https://api.anomaly-detector.ru https://mc.yandex.ru")
+  expect(publicSite).toContain('script-src \'self\' \'unsafe-inline\' https://mc.yandex.ru https://yastatic.net')
+  expect(publicSite).toContain('img-src \'self\' data: https://mc.yandex.ru')
   expect(publicSite).not.toMatch(/connect-src[^\"]*\*/)
 })
 
@@ -98,10 +100,12 @@ test('Yandex VM Caddy config protects and deindexes the player application', () 
   expect(playerSite).toContain('-Server')
 })
 
-test('Yandex VM Caddy config permits only the production API realtime origins', () => {
+test('Yandex VM Caddy config permits only production API realtime and approved Metrika origins', () => {
   expect(playerSite).toContain(
-    "connect-src 'self' https://api.anomaly-detector.ru wss://api.anomaly-detector.ru",
+    "connect-src 'self' https://api.anomaly-detector.ru https://mc.yandex.ru wss://api.anomaly-detector.ru",
   )
+  expect(playerSite).toContain('script-src \'self\' https://mc.yandex.ru https://yastatic.net')
+  expect(playerSite).toContain('img-src \'self\' data: blob: https://mc.yandex.ru')
 })
 
 test('Yandex VM Caddy config proxies the API through the Compose network', () => {

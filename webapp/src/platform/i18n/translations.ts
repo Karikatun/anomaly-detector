@@ -2,6 +2,7 @@ import { appMessages } from './messages/app'
 import { authMessages } from './messages/auth'
 import { feedbackMessages } from './messages/feedback'
 import { legalMessages } from './messages/legal'
+import { metrikaMessages } from './messages/metrika'
 import { profileMessages } from './messages/profile'
 import { roomsMessages } from './messages/rooms'
 import { rulesMessages } from './messages/rules'
@@ -14,6 +15,7 @@ export const messages = {
   ...authMessages,
   ...feedbackMessages,
   ...legalMessages,
+  ...metrikaMessages,
   ...profileMessages,
   ...roomsMessages,
   ...rulesMessages,

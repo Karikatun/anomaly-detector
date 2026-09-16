@@ -101,6 +101,7 @@ if (mode === 'target') {
       PUBLIC_ANALYTICS_API_URL: apiOrigin,
       PUBLIC_ANALYTICS_MODE: 'aggregate',
       PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'ad_01,ad_02,ad_03,ad_04,ad_05,ad_06',
+      PUBLIC_METRIKA_COUNTER_ID: '112719766',
     }),
     url: portPlan.websiteUrl,
     reuseExistingServer: false,

@@ -42,7 +42,8 @@ test('persists anonymous advertisement views and clicks across HTTPS origins wit
     await page.goto(`${origins.root}/?utm_campaign=${campaign}&yclid=synthetic-click-do-not-store`)
     expect((await viewed).status()).toBe(204)
     await expect(page.locator('[data-analytics-consent]')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toHaveCount(1)
+    await page.getByRole('button', { name: 'Только необходимые' }).click()
     expect((await context.cookies()).filter((cookie) => cookie.name.startsWith('anomaly_detector_analytics'))).toHaveLength(0)
     await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
     await expect(page).toHaveURL(`${origins.app}/learn`)
@@ -63,6 +64,43 @@ test('persists anonymous advertisement views and clicks across HTTPS origins wit
   }
 })
 
+test('loads Metrika only after explicit consent and sends one allowlisted CTA goal', async ({ page }) => {
+  let tagRequests = 0
+  await page.route('https://mc.yandex.ru/metrika/tag.js', async (route) => {
+    tagRequests += 1
+    await route.fulfill({ body: '/* test tag */', contentType: 'application/javascript' })
+  })
+  await page.goto(origins.root)
+
+  await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
+  expect(tagRequests).toBe(0)
+  expect(await page.evaluate(() => 'ym' in window)).toBe(false)
+
+  await page.getByRole('button', { name: 'Разрешить аналитику' }).click()
+  await expect.poll(() => tagRequests).toBe(1)
+  const initialQueue = await page.evaluate(() => (window as Window & { ym?: { a?: unknown[][] } }).ym?.a ?? [])
+  expect(initialQueue[0]).toEqual([
+    112719766,
+    'init',
+    {
+      accurateTrackBounce: true,
+      clickmap: true,
+      defer: true,
+      ecommerce: false,
+      sendTitle: false,
+      trackLinks: false,
+      webvisor: false,
+    },
+  ])
+
+  await page.locator('[data-analytics-event="tutorial_cta"]').first().dispatchEvent('click')
+  await page.locator('[data-analytics-event="tutorial_cta"]').first().dispatchEvent('click')
+  const queue = await page.evaluate(() => (window as Window & { ym?: { a?: unknown[][] } }).ym?.a ?? [])
+  expect(queue.filter((entry) => entry[1] === 'reachGoal')).toEqual([
+    [112719766, 'reachGoal', 'tutorial_cta'],
+  ])
+})
+
 test('preserves the CTA when anonymous analytics is unavailable', async ({ page }) => {
   await page.route('**/api/analytics/events/aggregate', (route) => route.abort())
   await page.goto(`${origins.root}/?utm_campaign=ad_06`)
@@ -81,7 +119,7 @@ test('serves the public root, redirects every legacy deep link, and enforces tar
 
   const rootHeaders = await rootResponse?.allHeaders()
   expect(rootHeaders?.['content-security-policy']).toContain(
-    `connect-src 'self' ${origins.api}`,
+    `connect-src 'self' ${origins.api} https://mc.yandex.ru`,
   )
   expect(rootHeaders?.['content-security-policy']).not.toContain('*')
   expect(rootHeaders?.['x-robots-tag']).toBeUndefined()
@@ -121,7 +159,7 @@ test('serves the public root, redirects every legacy deep link, and enforces tar
   const playerHeaders = await playerResponse?.allHeaders()
   expect(playerHeaders?.['x-robots-tag']).toBe('noindex, nofollow, noarchive')
   expect(playerHeaders?.['content-security-policy']).toContain(
-    `connect-src 'self' ${origins.api} ${origins.api.replace(/^http/, 'ws')}`,
+    `connect-src 'self' ${origins.api} https://mc.yandex.ru ${origins.api.replace(/^http/, 'ws')}`,
   )
 
   const violatedDirective = await page.evaluate(() => new Promise<string>((resolveViolation, reject) => {

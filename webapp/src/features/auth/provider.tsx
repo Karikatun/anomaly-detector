@@ -16,6 +16,7 @@ import {
 } from 'react'
 
 import { productAnalytics } from '@/platform/analytics/product-analytics'
+import { metrika } from '@/platform/analytics/metrika'
 import { AuthApi } from './api'
 import {
   clearAuthenticatedSession,
@@ -37,6 +38,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const bootstrapGeneration = useRef(0)
   const sentRegistrationAnalyticsVersion = useRef(0)
+  const [passwordLoginTransition, setPasswordLoginTransition] = useState(0)
   const [registrationAnalyticsVersion, setRegistrationAnalyticsVersion] = useState(() => {
     if (typeof window === 'undefined') return 0
     return new URL(window.location.href).searchParams.get('analytics_registration') === '1' ? 1 : 0
@@ -125,6 +127,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const { mutateAsync: deleteAccountAsync } = useDeleteAccountMutation({ api, setAccessToken })
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && new URL(window.location.href).searchParams.has('auth_error')) {
+      sessionStorage.removeItem('anomaly-detector:metrika-oauth-pending')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (passwordLoginTransition === 0) return
+    metrika.record('login_success', `password:${passwordLoginTransition}`)
+  }, [passwordLoginTransition])
+
+  useEffect(() => {
+    if (!meQuery.data?.user || typeof window === 'undefined') return
+    const transitionId = sessionStorage.getItem('anomaly-detector:metrika-oauth-pending')
+    if (!transitionId) return
+    sessionStorage.removeItem('anomaly-detector:metrika-oauth-pending')
+    metrika.record('login_success', `oauth:${transitionId}`)
+  }, [meQuery.data?.user])
+
+  useEffect(() => {
     if (
       registrationAnalyticsVersion === 0
       || !meQuery.data?.user
@@ -135,6 +156,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     url.searchParams.delete('analytics_registration')
     window.history.replaceState(window.history.state, '', url)
     void productAnalytics.record('registration_complete')
+    metrika.record('registration_complete', `registration:${registrationAnalyticsVersion}`)
   }, [meQuery.data?.user, registrationAnalyticsVersion])
 
   const updateProfile = useCallback(
@@ -156,6 +178,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const login = useCallback(
     async (input: LoginRequest) => {
       await loginAsync(input)
+      setPasswordLoginTransition((transition) => transition + 1)
     },
     [loginAsync],
   )
@@ -165,7 +188,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
       provider: OAuthProviderId,
       registration?: OAuthStartRequest['registration'],
     ) => {
-      await api.startOAuth(provider, registration)
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('anomaly-detector:metrika-oauth-pending', crypto.randomUUID())
+      }
+      try {
+        await api.startOAuth(provider, registration)
+      } catch (error) {
+        sessionStorage.removeItem('anomaly-detector:metrika-oauth-pending')
+        throw error
+      }
     },
     [api],
   )
