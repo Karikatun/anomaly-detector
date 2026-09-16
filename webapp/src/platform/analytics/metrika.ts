@@ -8,6 +8,10 @@ export const METRIKA_GOALS = [
 
 export type MetrikaGoal = typeof METRIKA_GOALS[number]
 const approvedMetrikaCounterId = '112719766'
+export const metrikaOAuthPendingStorageKey = 'anomaly-detector:metrika-oauth-pending'
+
+type MetrikaStorage = Pick<Storage, 'getItem' | 'removeItem' | 'setItem'>
+
 type MetrikaCommand = ((counterId: number, method: 'init' | 'reachGoal', ...args: unknown[]) => void) & {
   a?: unknown[][]
 }
@@ -46,6 +50,30 @@ export function isMetrikaOAuthLoginSuccess(search: string) {
 export function isMetrikaOAuthRegistration(search: string, pending: string | null) {
   return new URLSearchParams(search).get('analytics_registration') === '1'
     && pending?.startsWith('registration:') === true
+}
+
+export function writeMetrikaOAuthPending(value: string, storage = browserSessionStorage()) {
+  try {
+    storage?.setItem(metrikaOAuthPendingStorageKey, value)
+  } catch {
+    // Analytics state must not block authentication when storage is unavailable.
+  }
+}
+
+export function readMetrikaOAuthPending(storage = browserSessionStorage()) {
+  try {
+    return storage?.getItem(metrikaOAuthPendingStorageKey) ?? null
+  } catch {
+    return null
+  }
+}
+
+export function clearMetrikaOAuthPending(storage = browserSessionStorage()) {
+  try {
+    storage?.removeItem(metrikaOAuthPendingStorageKey)
+  } catch {
+    // Analytics state is best effort and may be unavailable in restricted browsers.
+  }
 }
 
 export class MetrikaClient {
@@ -135,4 +163,13 @@ function browserDocument(): MetrikaDocument | undefined {
 
 function browserWindow(): MetrikaWindow | undefined {
   return typeof window === 'undefined' ? undefined : window as unknown as MetrikaWindow
+}
+
+function browserSessionStorage(): MetrikaStorage | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    return window.sessionStorage
+  } catch {
+    return undefined
+  }
 }

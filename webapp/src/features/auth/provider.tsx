@@ -17,9 +17,12 @@ import {
 
 import { productAnalytics } from '@/platform/analytics/product-analytics'
 import {
+  clearMetrikaOAuthPending,
   isMetrikaOAuthLoginSuccess,
   isMetrikaOAuthRegistration,
   metrika,
+  readMetrikaOAuthPending,
+  writeMetrikaOAuthPending,
 } from '@/platform/analytics/metrika'
 import { AuthApi } from './api'
 import {
@@ -33,8 +36,6 @@ import {
 import { AuthContext, type AuthContextValue } from './context'
 import { bootstrapAuthSession } from './bootstrap'
 import { subscribeToBrowserSessionChanges } from './session-coordinator'
-
-const metrikaOAuthPendingStorageKey = 'anomaly-detector:metrika-oauth-pending'
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient()
@@ -152,9 +153,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!meQuery.data?.user || typeof window === 'undefined') return
-    const transitionId = sessionStorage.getItem(metrikaOAuthPendingStorageKey)
+    const transitionId = readMetrikaOAuthPending()
     if (!transitionId) return
-    sessionStorage.removeItem(metrikaOAuthPendingStorageKey)
+    clearMetrikaOAuthPending()
     if (isMetrikaOAuthLoginSuccess(oauthCallbackSearch)) {
       metrika.record('login_success', `oauth:${transitionId}`)
     }
@@ -206,8 +207,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       registration?: OAuthStartRequest['registration'],
     ) => {
       if (typeof window !== 'undefined') {
-        sessionStorage.setItem(
-          metrikaOAuthPendingStorageKey,
+        writeMetrikaOAuthPending(
           `${registration ? 'registration' : 'login'}:${crypto.randomUUID()}`,
         )
       }
@@ -269,18 +269,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-function clearMetrikaOAuthPending() {
-  if (typeof window !== 'undefined') sessionStorage.removeItem(metrikaOAuthPendingStorageKey)
-}
-
-function readMetrikaOAuthPending() {
-  try {
-    return sessionStorage.getItem(metrikaOAuthPendingStorageKey)
-  } catch {
-    return null
-  }
 }
 
 function toOptionalError(error: unknown) {

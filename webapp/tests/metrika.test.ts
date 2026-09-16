@@ -6,7 +6,10 @@ import {
   isMetrikaOAuthLoginSuccess,
   isMetrikaOAuthRegistration,
   isMetrikaSafePath,
+  clearMetrikaOAuthPending,
+  readMetrikaOAuthPending,
   sanitizeMetrikaCounterId,
+  writeMetrikaOAuthPending,
 } from '../src/platform/analytics/metrika'
 
 function fakeBrowser() {
@@ -194,4 +197,16 @@ test('classifies only a pending OAuth registration callback', () => {
   expect(isMetrikaOAuthRegistration('?analytics_registration=1', 'login:transition')).toBe(false)
   expect(isMetrikaOAuthRegistration('?analytics_registration=1', null)).toBe(false)
   expect(isMetrikaOAuthRegistration('', 'registration:transition')).toBe(false)
+})
+
+test('keeps authentication independent from unavailable session storage', () => {
+  const unavailableStorage = {
+    getItem: () => { throw new Error('storage unavailable') },
+    removeItem: () => { throw new Error('storage unavailable') },
+    setItem: () => { throw new Error('storage unavailable') },
+  }
+
+  expect(() => writeMetrikaOAuthPending('login:transition', unavailableStorage)).not.toThrow()
+  expect(readMetrikaOAuthPending(unavailableStorage)).toBeNull()
+  expect(() => clearMetrikaOAuthPending(unavailableStorage)).not.toThrow()
 })
