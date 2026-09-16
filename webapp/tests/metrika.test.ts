@@ -7,6 +7,7 @@ import {
   isMetrikaOAuthRegistration,
   isMetrikaSafePath,
   clearMetrikaOAuthPending,
+  createMetrikaOAuthPendingMarker,
   readMetrikaOAuthPending,
   sanitizeMetrikaCounterId,
   writeMetrikaOAuthPending,
@@ -197,6 +198,11 @@ test('classifies only a pending OAuth registration callback', () => {
   expect(isMetrikaOAuthRegistration('?analytics_registration=1', 'login:transition')).toBe(false)
   expect(isMetrikaOAuthRegistration('?analytics_registration=1', null)).toBe(false)
   expect(isMetrikaOAuthRegistration('', 'registration:transition')).toBe(false)
+})
+
+test('keeps OAuth authentication unblocked when marker identity generation fails', () => {
+  expect(createMetrikaOAuthPendingMarker(true, () => 'attempt-id')).toBe('registration:attempt-id')
+  expect(createMetrikaOAuthPendingMarker(false, () => { throw new Error('crypto unavailable') })).toBeNull()
 })
 
 test('keeps authentication independent from unavailable session storage', () => {

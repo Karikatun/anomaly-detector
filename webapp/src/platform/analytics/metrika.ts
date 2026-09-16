@@ -56,6 +56,18 @@ export function isMetrikaOAuthRegistration(search: string, pending: string | nul
     && pending?.startsWith('registration:') === true
 }
 
+export function createMetrikaOAuthPendingMarker(
+  registration: boolean,
+  randomUuid: () => string = browserRandomUuid,
+) {
+  try {
+    return `${registration ? 'registration' : 'login'}:${randomUuid()}`
+  } catch {
+    // Analytics state must not block authentication when Web Crypto is unavailable.
+    return null
+  }
+}
+
 export function writeMetrikaOAuthPending(value: string, storage = browserSessionStorage()) {
   try {
     if (!storage) throw new Error('session storage unavailable')
@@ -196,4 +208,10 @@ function browserSessionStorage(): MetrikaStorage | undefined {
   } catch {
     return undefined
   }
+}
+
+function browserRandomUuid() {
+  const cryptoApi = typeof globalThis.crypto === 'undefined' ? undefined : globalThis.crypto
+  if (typeof cryptoApi?.randomUUID !== 'function') throw new Error('Web Crypto unavailable')
+  return cryptoApi.randomUUID()
 }

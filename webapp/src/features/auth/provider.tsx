@@ -18,6 +18,7 @@ import {
 import { productAnalytics } from '@/platform/analytics/product-analytics'
 import {
   clearMetrikaOAuthPending,
+  createMetrikaOAuthPendingMarker,
   isMetrikaOAuthLoginSuccess,
   isMetrikaOAuthRegistration,
   metrika,
@@ -36,6 +37,8 @@ import {
 import { AuthContext, type AuthContextValue } from './context'
 import { bootstrapAuthSession } from './bootstrap'
 import { subscribeToBrowserSessionChanges } from './session-coordinator'
+
+const oauthStartInFlight = new WeakMap<AuthApi, Promise<void>>()
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient()
@@ -206,16 +209,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       provider: OAuthProviderId,
       registration?: OAuthStartRequest['registration'],
     ) => {
-      const pendingMarker = `${registration ? 'registration' : 'login'}:${crypto.randomUUID()}`
-      if (typeof window !== 'undefined') {
-        writeMetrikaOAuthPending(pendingMarker)
-      }
-      try {
-        await api.startOAuth(provider, registration)
-      } catch (error) {
-        clearMetrikaOAuthPending(undefined, pendingMarker)
-        throw error
-      }
+      await runOAuthStartWithLock(api, provider, registration)
     },
     [api],
   )
@@ -272,6 +266,33 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
 function toOptionalError(error: unknown) {
   return error === null || error === undefined ? null : toError(error)
+}
+
+async function runOAuthStartWithLock(
+  api: AuthApi,
+  provider: OAuthProviderId,
+  registration?: OAuthStartRequest['registration'],
+) {
+  const inFlight = oauthStartInFlight.get(api)
+  if (inFlight) return inFlight
+  const attempt = (async () => {
+    const pendingMarker = createMetrikaOAuthPendingMarker(Boolean(registration))
+    if (pendingMarker && typeof window !== 'undefined') {
+      writeMetrikaOAuthPending(pendingMarker)
+    }
+    try {
+      await api.startOAuth(provider, registration)
+    } catch (error) {
+      if (pendingMarker) clearMetrikaOAuthPending(undefined, pendingMarker)
+      throw error
+    }
+  })()
+  oauthStartInFlight.set(api, attempt)
+  try {
+    await attempt
+  } finally {
+    if (oauthStartInFlight.get(api) === attempt) oauthStartInFlight.delete(api)
+  }
 }
 
 function toError(error: unknown) {
