@@ -10,7 +10,11 @@ import {
 function fakeBrowser() {
   const calls: unknown[][] = []
   const scripts: Array<{ async?: boolean; src?: string }> = []
-  const browserWindow: { ym?: (...args: unknown[]) => void } = {}
+  const browserWindow: {
+    ym?: (...args: unknown[]) => void
+    location?: { pathname: string; search: string; hash: string }
+    history?: { state: unknown; replaceState: (state: unknown, unused: string, url?: string) => void }
+  } = {}
   const browserDocument = {
     createElement: () => ({ async: false, src: '' }),
     head: {
@@ -58,7 +62,7 @@ describe('MetrikaClient', () => {
       'init',
       {
         accurateTrackBounce: true,
-        clickmap: true,
+        clickmap: false,
         defer: true,
         ecommerce: false,
         sendTitle: false,
@@ -66,6 +70,26 @@ describe('MetrikaClient', () => {
         webvisor: false,
       },
     ]])
+  })
+
+  test('removes query and fragment before enabling the tag', () => {
+    const browser = fakeBrowser()
+    const replaced: unknown[] = []
+    browser.browserWindow.location = { pathname: '/', search: '?continue=tutorial-complete', hash: '#private' }
+    browser.browserWindow.history = {
+      state: { page: 1 },
+      replaceState: (...args) => replaced.push(args),
+    }
+    const client = new MetrikaClient({
+      counterId: '112719766',
+      document: browser.browserDocument,
+      enabled: true,
+      window: browser.browserWindow,
+    })
+
+    client.enable()
+
+    expect(replaced).toEqual([[{ page: 1 }, '', '/']])
   })
 
   test('queues only allowlisted goals and ignores duplicate delivery', () => {

@@ -65,6 +65,7 @@ const { counterId } = Astro.props
 			if (enabled || initialized || !/^\d{1,12}$/.test(counterId)) return
 			enabled = true
 			initialized = true
+			if (location.search || location.hash) history.replaceState(history.state, '', location.pathname)
 			browserWindow.ym = browserWindow.ym || function (...args: unknown[]) {
 				const queue = browserWindow.ym as QueuedMetrika
 				queue.a = queue.a || []
@@ -72,7 +73,7 @@ const { counterId } = Astro.props
 			}
 			browserWindow.ym?.(Number(counterId), 'init', {
 				accurateTrackBounce: true,
-				clickmap: true,
+				clickmap: false,
 				defer: true,
 				ecommerce: false,
 				sendTitle: false,

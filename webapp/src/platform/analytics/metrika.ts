@@ -10,7 +10,11 @@ export type MetrikaGoal = typeof METRIKA_GOALS[number]
 type MetrikaCommand = ((counterId: number, method: 'init' | 'reachGoal', ...args: unknown[]) => void) & {
   a?: unknown[][]
 }
-type MetrikaWindow = { ym?: MetrikaCommand }
+type MetrikaWindow = {
+  ym?: MetrikaCommand
+  location?: { pathname: string; search: string; hash: string }
+  history?: { state: unknown; replaceState: (state: unknown, unused: string, url?: string) => void }
+}
 type MetrikaDocument = {
   createElement: (tagName: string) => { async?: boolean; src?: string }
   head?: { appendChild: (element: { async?: boolean; src?: string }) => void }
@@ -18,7 +22,7 @@ type MetrikaDocument = {
 
 const metrikaInitOptions = {
   accurateTrackBounce: true,
-  clickmap: true,
+  clickmap: false,
   defer: true,
   ecommerce: false,
   sendTitle: false,
@@ -61,6 +65,7 @@ export class MetrikaClient {
   enable() {
     if (!this.enabled || this.initialized) return
     this.initialized = true
+    this.stripLocationSuffix()
     this.command = this.window?.ym ?? this.createQueue()
     if (this.window && !this.window.ym) this.window.ym = this.command
     this.dispatch('init', metrikaInitOptions)
@@ -90,6 +95,13 @@ export class MetrikaClient {
   private dispatch(method: 'init' | 'reachGoal', ...args: unknown[]) {
     this.onCommand?.(this.counterId, method, ...args)
     this.command?.(this.counterId, method, ...args)
+  }
+
+  private stripLocationSuffix() {
+    const location = this.window?.location
+    const history = this.window?.history
+    if (!location || !history || (!location.search && !location.hash)) return
+    history.replaceState(history.state, '', location.pathname)
   }
 }
 

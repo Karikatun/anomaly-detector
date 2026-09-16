@@ -84,7 +84,7 @@ test('loads Metrika only after explicit consent and sends one allowlisted CTA go
     'init',
     {
       accurateTrackBounce: true,
-      clickmap: true,
+      clickmap: false,
       defer: true,
       ecommerce: false,
       sendTitle: false,
