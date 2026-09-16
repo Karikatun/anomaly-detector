@@ -16,6 +16,15 @@ import {
 } from 'react'
 
 import { productAnalytics } from '@/platform/analytics/product-analytics'
+import {
+  clearMetrikaOAuthPending,
+  createMetrikaOAuthPendingMarker,
+  isMetrikaOAuthLoginSuccess,
+  isMetrikaOAuthRegistration,
+  metrika,
+  readMetrikaOAuthPending,
+  writeMetrikaOAuthPending,
+} from '@/platform/analytics/metrika'
 import { AuthApi } from './api'
 import {
   clearAuthenticatedSession,
@@ -29,6 +38,8 @@ import { AuthContext, type AuthContextValue } from './context'
 import { bootstrapAuthSession } from './bootstrap'
 import { subscribeToBrowserSessionChanges } from './session-coordinator'
 
+const oauthStartInFlight = new WeakMap<AuthApi, Promise<void>>()
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient()
   const [accessToken, setAccessTokenState] = useState<string | null>(null)
@@ -37,9 +48,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0)
   const bootstrapGeneration = useRef(0)
   const sentRegistrationAnalyticsVersion = useRef(0)
+  const [passwordLoginTransition, setPasswordLoginTransition] = useState(0)
+  const [oauthCallbackSearch] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return window.location.search
+  })
   const [registrationAnalyticsVersion, setRegistrationAnalyticsVersion] = useState(() => {
     if (typeof window === 'undefined') return 0
-    return new URL(window.location.href).searchParams.get('analytics_registration') === '1' ? 1 : 0
+    return isMetrikaOAuthRegistration(
+      window.location.search,
+      readMetrikaOAuthPending(),
+    ) ? 1 : 0
   })
 
   const setAccessToken = useCallback(
@@ -125,6 +144,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const { mutateAsync: deleteAccountAsync } = useDeleteAccountMutation({ api, setAccessToken })
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && new URL(window.location.href).searchParams.has('auth_error')) {
+      clearMetrikaOAuthPending()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (passwordLoginTransition === 0) return
+    metrika.record('login_success', `password:${passwordLoginTransition}`)
+  }, [passwordLoginTransition])
+
+  useEffect(() => {
+    if (!meQuery.data?.user || typeof window === 'undefined') return
+    const transitionId = readMetrikaOAuthPending()
+    if (!transitionId) return
+    clearMetrikaOAuthPending(undefined, transitionId)
+    if (isMetrikaOAuthLoginSuccess(oauthCallbackSearch)) {
+      metrika.record('login_success', `oauth:${transitionId}`)
+    }
+  }, [meQuery.data?.user, oauthCallbackSearch])
+
+  useEffect(() => {
     if (
       registrationAnalyticsVersion === 0
       || !meQuery.data?.user
@@ -135,6 +175,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     url.searchParams.delete('analytics_registration')
     window.history.replaceState(window.history.state, '', url)
     void productAnalytics.record('registration_complete')
+    metrika.record('registration_complete', `registration:${registrationAnalyticsVersion}`)
   }, [meQuery.data?.user, registrationAnalyticsVersion])
 
   const updateProfile = useCallback(
@@ -147,6 +188,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const register = useCallback(
     async (input: RegisterRequest) => {
+      clearMetrikaOAuthPending()
       await registerAsync(input)
       setRegistrationAnalyticsVersion((version) => version + 1)
     },
@@ -155,7 +197,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const login = useCallback(
     async (input: LoginRequest) => {
+      clearMetrikaOAuthPending()
       await loginAsync(input)
+      setPasswordLoginTransition((transition) => transition + 1)
     },
     [loginAsync],
   )
@@ -165,7 +209,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       provider: OAuthProviderId,
       registration?: OAuthStartRequest['registration'],
     ) => {
-      await api.startOAuth(provider, registration)
+      await runOAuthStartWithLock(api, provider, registration)
     },
     [api],
   )
@@ -222,6 +266,33 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
 function toOptionalError(error: unknown) {
   return error === null || error === undefined ? null : toError(error)
+}
+
+async function runOAuthStartWithLock(
+  api: AuthApi,
+  provider: OAuthProviderId,
+  registration?: OAuthStartRequest['registration'],
+) {
+  const inFlight = oauthStartInFlight.get(api)
+  if (inFlight) return inFlight
+  const attempt = (async () => {
+    const pendingMarker = createMetrikaOAuthPendingMarker(Boolean(registration))
+    if (pendingMarker && typeof window !== 'undefined') {
+      writeMetrikaOAuthPending(pendingMarker)
+    }
+    try {
+      await api.startOAuth(provider, registration)
+    } catch (error) {
+      if (pendingMarker) clearMetrikaOAuthPending(undefined, pendingMarker)
+      throw error
+    }
+  })()
+  oauthStartInFlight.set(api, attempt)
+  try {
+    await attempt
+  } finally {
+    if (oauthStartInFlight.get(api) === attempt) oauthStartInFlight.delete(api)
+  }
 }
 
 function toError(error: unknown) {

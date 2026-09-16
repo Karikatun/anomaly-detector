@@ -7,6 +7,7 @@ import laboratoryMobile from '../assets/landing/mobile/laboratory.png'
 import completedTenderMobile from '../assets/landing/mobile/completed-tender.png'
 import AnalyticsConsent from '../components/AnalyticsConsent.astro'
 import AnalyticsCounter from '../components/AnalyticsCounter.astro'
+import MetrikaConsent from '../components/MetrikaConsent.astro'
 
 const title = 'Anomaly Detector — бесплатная браузерная игра на дедукцию'
 const description = 'Бесплатная браузерная игра на дедукцию: исследуйте аномалию с друзьями или в одиночку против ботов. Начните с обучения без регистрации.'
@@ -20,6 +21,9 @@ const analyticsCampaignAllowlist = (import.meta.env.PUBLIC_ANALYTICS_CAMPAIGN_AL
 	.split(',')
 	.map((item: string) => item.trim().toLowerCase())
 	.filter((item: string) => /^[a-z0-9_-]{1,64}$/.test(item))
+const metrikaCounterId = import.meta.env.PUBLIC_METRIKA_COUNTER_ID === '112719766'
+	? import.meta.env.PUBLIC_METRIKA_COUNTER_ID
+	: undefined
 const canonicalUrl = publicWebsiteUrl
 	? new URL(Astro.url.pathname, publicWebsiteUrl).toString()
 	: undefined
@@ -114,7 +118,7 @@ const structuredData = [
 					<nav aria-label="Основная навигация">
 						<a href="#how">Как играть</a><a href="#why">Почему интересно</a><a href="#faq">FAQ</a>
 					</nav>
-					<a class="header-login" href={loginUrl}>Войти</a>
+					<a class="header-login" href={loginUrl} data-analytics-event={metrikaCounterId ? 'login_cta' : undefined}>Войти</a>
 		</header>
 
 		<main id="top" class="site-shell">
@@ -148,6 +152,7 @@ const structuredData = [
 							campaignAllowlist={analyticsCampaignAllowlist}
 							privacyUrl={legalUrl('/privacy')}
 						/>}
+						{metrikaCounterId && <MetrikaConsent counterId={metrikaCounterId} />}
 						<section id="how" class="a-cycle" aria-labelledby="cycle-title">
 							<div><p class="section-index">01 / ЦИКЛ ИССЛЕДОВАНИЯ</p><h2 id="cycle-title">Каждый факт меняет вашу модель</h2></div>
 							<ol>

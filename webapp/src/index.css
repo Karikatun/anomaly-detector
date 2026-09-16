@@ -118,6 +118,7 @@
     --layer-overlay: 50;
     --layer-system: 60;
     --layer-tutorial: 101;
+    --layer-consent: 110;
     --sidebar: oklch(0.15 0.02 260);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.65 0.15 230);

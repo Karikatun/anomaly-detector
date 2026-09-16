@@ -9,6 +9,7 @@ const requiredLegalValues = [
 
 export function validateWebappReleaseEnvironment(
   environment: Record<string, string | undefined>,
+  { analytics = false }: { analytics?: boolean } = {},
 ) {
   if (environment.VITE_PUBLIC_WEBSITE_URL
     && environment.VITE_PUBLIC_WEBSITE_URL !== 'https://anomaly-detector.ru') {
@@ -26,6 +27,13 @@ export function validateWebappReleaseEnvironment(
 
   if (environment.VITE_ANALYTICS_ENABLED?.trim()) {
     throw new Error('VITE_ANALYTICS_ENABLED must be absent until production analytics is approved')
+  }
+  if (analytics) {
+    if (environment.VITE_METRIKA_COUNTER_ID !== '112719766') {
+      throw new Error('VITE_METRIKA_COUNTER_ID must equal 112719766 for the analytics release')
+    }
+  } else if (environment.VITE_METRIKA_COUNTER_ID?.trim()) {
+    throw new Error('VITE_METRIKA_COUNTER_ID must be absent until production analytics is approved')
   }
 
   for (const name of requiredLegalValues) {

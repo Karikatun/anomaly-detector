@@ -1193,13 +1193,16 @@ target routing is already deployed.
 
 Обычные `build:release` сохраняют запрет аналитических переменных. Для
 анонимных просмотров и нажатий используйте отдельный website-профиль
-`build:release:analytics` с `PUBLIC_ANALYTICS_MODE=aggregate` из
-[ANALYTICS.md](ANALYTICS.md). Не добавляйте `VITE_ANALYTICS_ENABLED` в player build.
-Там же зафиксированы шесть ссылок, порядок совместимого выпуска adminapp/API,
+`build:release:analytics` с `PUBLIC_ANALYTICS_MODE=aggregate` и
+`PUBLIC_METRIKA_COUNTER_ID=112719766` из [ANALYTICS.md](ANALYTICS.md). Для
+игрового клиента с тем же счётчиком используйте `build:release:analytics` с
+`VITE_METRIKA_COUNTER_ID=112719766`. Не добавляйте `VITE_ANALYTICS_ENABLED` в
+player build. Там же зафиксированы шесть ссылок, порядок совместимого выпуска adminapp/API,
 аддитивная миграция, cleanup, откат и обязательные live-проверки.
 
 Выключенное состояние: обычная сборка лендинга без аналитических переменных,
-игровой клиент без отправки аналитики и `ANALYTICS_ENABLED=false` у backend.
+игровой клиент через обычный `build:release` без `VITE_METRIKA_COUNTER_ID` и
+`VITE_ANALYTICS_ENABLED`, а также `ANALYTICS_ENABLED=false` у backend.
 Режим связанного пути `consented` не разрешён текущим release-профилем лендинга;
 его включение требует отдельного решения о согласии, legal copy и проверках.
 

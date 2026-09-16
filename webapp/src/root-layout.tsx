@@ -4,6 +4,7 @@ import { Typography } from '@/components/ui/typography'
 import { useAuth, useLogoutAction } from '@/features/auth'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n } from '@/platform/i18n'
+import { MetrikaConsent } from '@/platform/analytics/MetrikaConsent'
 
 export function RootLayout() {
   const auth = useAuth()
@@ -53,6 +54,7 @@ export function RootLayout() {
       <main>
         <Outlet />
       </main>
+      <MetrikaConsent />
     </div>
   )
 }
