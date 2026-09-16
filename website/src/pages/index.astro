@@ -21,7 +21,7 @@ const analyticsCampaignAllowlist = (import.meta.env.PUBLIC_ANALYTICS_CAMPAIGN_AL
 	.split(',')
 	.map((item: string) => item.trim().toLowerCase())
 	.filter((item: string) => /^[a-z0-9_-]{1,64}$/.test(item))
-const metrikaCounterId = /^\d{1,12}$/.test(import.meta.env.PUBLIC_METRIKA_COUNTER_ID ?? '')
+const metrikaCounterId = import.meta.env.PUBLIC_METRIKA_COUNTER_ID === '112719766'
 	? import.meta.env.PUBLIC_METRIKA_COUNTER_ID
 	: undefined
 const canonicalUrl = publicWebsiteUrl

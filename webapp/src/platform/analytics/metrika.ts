@@ -7,6 +7,7 @@ export const METRIKA_GOALS = [
 ] as const
 
 export type MetrikaGoal = typeof METRIKA_GOALS[number]
+const approvedMetrikaCounterId = '112719766'
 type MetrikaCommand = ((counterId: number, method: 'init' | 'reachGoal', ...args: unknown[]) => void) & {
   a?: unknown[][]
 }
@@ -31,11 +32,11 @@ const metrikaInitOptions = {
 } as const
 
 export function sanitizeMetrikaCounterId(value: string | undefined) {
-  return value && /^\d{1,12}$/.test(value) ? value : undefined
+  return value === approvedMetrikaCounterId ? value : undefined
 }
 
 export function isMetrikaSafePath(pathname: string) {
-  return pathname === '/' || pathname === '/learn' || pathname === '/tutorial'
+  return pathname === '/' || pathname === '/learn'
 }
 
 export function isMetrikaOAuthLoginSuccess(search: string) {

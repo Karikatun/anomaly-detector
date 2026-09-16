@@ -170,6 +170,7 @@ describe('MetrikaClient', () => {
 
 test('accepts only a numeric counter id', () => {
   expect(sanitizeMetrikaCounterId('112719766')).toBe('112719766')
+  expect(sanitizeMetrikaCounterId('123456789')).toBeUndefined()
   expect(sanitizeMetrikaCounterId('112719766?goal=secret')).toBeUndefined()
   expect(sanitizeMetrikaCounterId('')).toBeUndefined()
 })
@@ -177,7 +178,7 @@ test('accepts only a numeric counter id', () => {
 test('allows Metrika only on public auth and tutorial paths', () => {
   expect(isMetrikaSafePath('/')).toBe(true)
   expect(isMetrikaSafePath('/learn')).toBe(true)
-  expect(isMetrikaSafePath('/tutorial')).toBe(true)
+  expect(isMetrikaSafePath('/tutorial')).toBe(false)
   expect(isMetrikaSafePath('/rooms/private-room')).toBe(false)
   expect(isMetrikaSafePath('/tenders/private-tender')).toBe(false)
 })
