@@ -24,6 +24,7 @@ describe('website split-domain release environment', () => {
       PUBLIC_ANALYTICS_API_URL: 'https://api.anomaly-detector.ru',
       PUBLIC_ANALYTICS_MODE: 'aggregate',
       PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'ad_01,ad_02',
+      PUBLIC_METRIKA_COUNTER_ID: '112719766',
     }
     expect(() => validateWebsiteReleaseEnvironment(environment)).toThrow()
     expect(() => validateWebsiteReleaseEnvironment(environment, { analytics: true })).not.toThrow()
@@ -36,9 +37,23 @@ describe('website split-domain release environment', () => {
     }
   })
 
+  test('accepts the approved Metrika counter only in the explicit analytics release profile', () => {
+    const environment = {
+      ...validEnvironment,
+      PUBLIC_ANALYTICS_API_URL: 'https://api.anomaly-detector.ru',
+      PUBLIC_ANALYTICS_MODE: 'aggregate',
+      PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'ad_01',
+      PUBLIC_METRIKA_COUNTER_ID: '112719766',
+    }
+    expect(() => validateWebsiteReleaseEnvironment(environment)).toThrow()
+    expect(() => validateWebsiteReleaseEnvironment(environment, { analytics: true })).not.toThrow()
+    expect(() => validateWebsiteReleaseEnvironment({ ...environment, PUBLIC_METRIKA_COUNTER_ID: '112719766?goal=secret' }, { analytics: true })).toThrow('PUBLIC_METRIKA_COUNTER_ID must equal 112719766')
+  })
+
   test.each([
     ['PUBLIC_ANALYTICS_API_URL', 'https://api.anomaly-detector.ru'],
     ['PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST', 'launch_ru'],
+    ['PUBLIC_METRIKA_COUNTER_ID', '112719766'],
   ])('rejects an ambient owner-gated %s value', (name, value) => {
     expect(() => validateWebsiteReleaseEnvironment({
       ...validEnvironment,

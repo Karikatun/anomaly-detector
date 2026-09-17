@@ -34,14 +34,18 @@ describe('split-domain release artifact policy', () => {
       VITE_ANALYTICS_ENABLED: 'true',
       PUBLIC_ANALYTICS_API_URL: 'https://attacker.example',
       PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST: 'ambient',
+      VITE_METRIKA_COUNTER_ID: '112719766',
+      PUBLIC_METRIKA_COUNTER_ID: '112719766',
     }
     const webapp = withoutEnvironment(inherited, { RELEASE: 'webapp' }, disabledWebappAnalyticsEnvironment)
     const website = withoutEnvironment(inherited, { RELEASE: 'website' }, disabledWebsiteAnalyticsEnvironment)
 
     expect(webapp.VITE_ANALYTICS_ENABLED).toBeUndefined()
+    expect(webapp.VITE_METRIKA_COUNTER_ID).toBeUndefined()
     expect(webapp.KEEP).toBe('value')
     expect(website.PUBLIC_ANALYTICS_API_URL).toBeUndefined()
     expect(website.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST).toBeUndefined()
+    expect(website.PUBLIC_METRIKA_COUNTER_ID).toBeUndefined()
     expect(website.KEEP).toBe('value')
   })
 })

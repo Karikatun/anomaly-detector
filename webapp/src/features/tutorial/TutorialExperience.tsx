@@ -20,7 +20,9 @@ import {
   type TenderCommandInput,
 } from '@/features/tender/public/tutorial-board'
 import { useI18n } from '@/platform/i18n'
+import { MetrikaConsent } from '@/platform/analytics/MetrikaConsent'
 import { productAnalytics } from '@/platform/analytics/product-analytics'
+import { metrika } from '@/platform/analytics/metrika'
 import {
   advanceTutorial,
   createTutorialState,
@@ -191,6 +193,7 @@ export function TutorialExperience({
 
     if (result.state.step === 'complete' && state.step !== 'complete') {
       void productAnalytics.record('tutorial_complete')
+      metrika.record('tutorial_complete')
       await onComplete?.()
     }
 
@@ -229,6 +232,7 @@ export function TutorialExperience({
             <div className={styles.stateContent}>
               <Typography>{t('tutorial.prologue.mission')}</Typography>
               <Typography tone="muted">{t('tutorial.prologue.goal')}</Typography>
+              <MetrikaConsent inline />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={onExit}>

@@ -1,0 +1,135 @@
+---
+type Props = {
+	counterId: string
+}
+
+const { counterId } = Astro.props
+---
+
+<section class="metrika-consent" data-metrika-consent data-counter-id={counterId} aria-labelledby="metrika-consent-title">
+	<div class="metrika-copy">
+		<p class="metrika-index">НЕОБЯЗАТЕЛЬНАЯ АНАЛИТИКА</p>
+		<h2 id="metrika-consent-title">Помогите улучшить первый запуск</h2>
+		<p>С разрешения Яндекс Метрика учитывает обезличенные переходы и важные шаги игры. Логины, почта, комнаты и игровые данные не передаются.</p>
+		<a href="https://yandex.ru/support/metrica/ru/general/notification">Подробнее о согласии</a>
+	</div>
+	<div class="metrika-controls">
+		<div class="metrika-choice" data-metrika-panel="undecided">
+			<button type="button" data-metrika-action="allow">Разрешить аналитику</button>
+			<button type="button" data-metrika-action="necessary">Только необходимые</button>
+		</div>
+		<div class="metrika-choice" data-metrika-panel="necessary" hidden>
+			<p>Выбраны только необходимые функции. Сайт и обучение доступны полностью.</p>
+			<button type="button" data-metrika-action="allow">Разрешить аналитику</button>
+		</div>
+		<div class="metrika-choice" data-metrika-panel="allowed" hidden>
+			<p>Аналитика включена. Вы можете изменить выбор в любой момент.</p>
+			<button type="button" data-metrika-action="revoke">Отключить аналитику</button>
+		</div>
+		<p class="metrika-status" data-metrika-status aria-live="polite"></p>
+	</div>
+</section>
+
+<script>
+	type ConsentChoice = 'allowed' | 'necessary' | 'undecided'
+	type MetrikaGoal = 'tutorial_cta' | 'login_cta'
+	type QueuedMetrika = ((...args: unknown[]) => void) & { a?: unknown[][] }
+	const storageKey = 'anomaly-detector:metrika-consent'
+	type YandexWindow = Window & { ym?: QueuedMetrika }
+	const root = document.querySelector<HTMLElement>('[data-metrika-consent]')
+	if (root) {
+		const browserWindow = window as YandexWindow
+		const counterId = root.dataset.counterId ?? ''
+		const statusNode = root.querySelector<HTMLElement>('[data-metrika-status]')
+		const panels = [...root.querySelectorAll<HTMLElement>('[data-metrika-panel]')]
+		const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-metrika-action]')]
+		let enabled = false
+		let initialized = false
+		const sentGoals = new Set<MetrikaGoal>()
+
+		const setChoice = (choice: ConsentChoice, message = '') => {
+			for (const panel of panels) panel.hidden = panel.dataset.metrikaPanel !== choice
+			if (statusNode) statusNode.textContent = message
+		}
+		const saveChoice = (choice: Exclude<ConsentChoice, 'undecided'>) => {
+			try { localStorage.setItem(storageKey, choice) } catch { /* page-only choice is sufficient */ }
+			setChoice(choice, choice === 'allowed' ? 'Выбор сохранён.' : 'Сохранены только необходимые функции.')
+			if (choice === 'allowed') enable()
+		}
+		const record = (goal: MetrikaGoal) => {
+			if (!enabled || sentGoals.has(goal)) return
+			sentGoals.add(goal)
+			browserWindow.ym?.(Number(counterId), 'reachGoal', goal)
+		}
+		function enable() {
+			if (enabled || initialized || !/^\d{1,12}$/.test(counterId)) return
+			enabled = true
+			initialized = true
+			if (location.search || location.hash) history.replaceState(history.state, '', location.pathname)
+			browserWindow.ym = browserWindow.ym || function (...args: unknown[]) {
+				const queue = browserWindow.ym as QueuedMetrika
+				queue.a = queue.a || []
+				queue.a.push(args)
+			}
+			browserWindow.ym?.(Number(counterId), 'init', {
+				accurateTrackBounce: true,
+				clickmap: false,
+				defer: true,
+				ecommerce: false,
+				sendTitle: false,
+				trackLinks: false,
+				webvisor: false,
+			})
+			const script = document.createElement('script')
+			script.async = true
+			script.src = 'https://mc.yandex.ru/metrika/tag.js'
+			document.head.appendChild(script)
+		}
+
+		let choice: ConsentChoice = 'undecided'
+		try {
+			const stored = localStorage.getItem(storageKey)
+			if (stored === 'allowed' || stored === 'necessary') choice = stored
+		} catch { /* keep the default disabled state */ }
+		setChoice(choice)
+		if (choice === 'allowed') enable()
+
+		for (const button of buttons) {
+			button.addEventListener('click', () => {
+				const action = button.dataset.metrikaAction
+				if (action === 'allow') saveChoice('allowed')
+				if (action === 'necessary') saveChoice('necessary')
+				if (action === 'revoke') {
+					try { localStorage.setItem(storageKey, 'necessary') } catch { /* keep the tag disabled for this page */ }
+					location.reload()
+				}
+			})
+		}
+		for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-analytics-event="tutorial_cta"]')) {
+			link.addEventListener('click', () => record('tutorial_cta'))
+		}
+		for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-analytics-event="login_cta"]')) {
+			link.addEventListener('click', () => record('login_cta'))
+		}
+	}
+</script>
+
+<style>
+	.metrika-consent { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, .9fr); gap: clamp(28px, 5vw, 72px); align-items: center; margin: 0; padding: 32px clamp(20px, 5vw, 72px); border-block: 1px solid rgb(56 189 248 / 18%); background: #050c16; }
+	.metrika-copy { display: grid; gap: 10px; max-width: 780px; }
+	.metrika-index { margin: 0; color: #67e8f9; font: 600 .7rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; }
+	.metrika-copy h2 { margin: 0; font-size: clamp(1.3rem, 2.2vw, 2rem); line-height: 1.1; letter-spacing: -.025em; }
+	.metrika-copy p:not(.metrika-index), .metrika-choice p, .metrika-status { margin: 0; color: #94a3b8; font-size: .86rem; line-height: 1.55; text-wrap: pretty; }
+	.metrika-copy a { width: fit-content; color: #bae6fd; font-size: .82rem; text-underline-offset: 4px; }
+	.metrika-copy a:focus-visible { outline: 3px solid #7dd3fc; outline-offset: 4px; }
+	.metrika-controls { display: grid; gap: 10px; }
+	.metrika-choice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+	.metrika-choice[hidden] { display: none; }
+	.metrika-choice p { grid-column: 1 / -1; }
+	.metrika-choice button { min-height: 48px; padding: 10px 14px; border: 1px solid rgb(125 211 252 / 42%); border-radius: 8px; background: rgb(14 116 144 / 16%); color: #e0f2fe; font: 650 .84rem/1.3 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+	.metrika-choice button:hover { border-color: #7dd3fc; background: rgb(14 116 144 / 26%); }
+	.metrika-choice button:focus-visible { outline: 3px solid #7dd3fc; outline-offset: 3px; }
+	.metrika-status { min-height: 1.4em; }
+	@media (max-width: 760px) { .metrika-consent { grid-template-columns: 1fr; } }
+	@media (max-width: 420px) { .metrika-choice { grid-template-columns: 1fr; } }
+</style>
