@@ -1,11 +1,13 @@
 export const disabledWebappAnalyticsEnvironment = [
   'VITE_ANALYTICS_ENABLED',
+  'VITE_METRIKA_COUNTER_ID',
 ]
 
 export const disabledWebsiteAnalyticsEnvironment = [
   'PUBLIC_ANALYTICS_MODE',
   'PUBLIC_ANALYTICS_API_URL',
   'PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST',
+  'PUBLIC_METRIKA_COUNTER_ID',
 ]
 
 export function withoutEnvironment(baseEnvironment, overrides, names) {

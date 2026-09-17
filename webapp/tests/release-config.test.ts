@@ -37,6 +37,21 @@ describe('webapp split-domain release environment', () => {
     })).toThrow('VITE_ANALYTICS_ENABLED must be absent until production analytics is approved')
   })
 
+  test('accepts the approved Metrika counter only in the explicit analytics release profile', () => {
+    expect(() => validateWebappReleaseEnvironment({
+      ...validEnvironment,
+      VITE_METRIKA_COUNTER_ID: '112719766',
+    })).toThrow('VITE_METRIKA_COUNTER_ID must be absent until production analytics is approved')
+    expect(() => validateWebappReleaseEnvironment({
+      ...validEnvironment,
+      VITE_METRIKA_COUNTER_ID: '112719766',
+    }, { analytics: true })).not.toThrow()
+    expect(() => validateWebappReleaseEnvironment({
+      ...validEnvironment,
+      VITE_METRIKA_COUNTER_ID: '112719766?goal=secret',
+    }, { analytics: true })).toThrow('VITE_METRIKA_COUNTER_ID must equal 112719766')
+  })
+
   test.each([
     ['VITE_API_URL', undefined],
     ['VITE_API_URL', 'http://localhost:3000'],

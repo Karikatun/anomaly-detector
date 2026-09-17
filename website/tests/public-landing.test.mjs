@@ -17,7 +17,7 @@ let html = ''
 let robots = ''
 let sitemap = ''
 
-const buildEnvironment = ({ analyticsApiUrl, campaignAllowlist, analyticsMode } = {}) => {
+const buildEnvironment = ({ analyticsApiUrl, campaignAllowlist, analyticsMode, metrikaCounterId } = {}) => {
   const env = {
     ...process.env,
     PUBLIC_WEBSITE_URL: publicWebsiteUrl,
@@ -28,9 +28,11 @@ const buildEnvironment = ({ analyticsApiUrl, campaignAllowlist, analyticsMode } 
   delete env.PUBLIC_ANALYTICS_API_URL
   delete env.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST
   delete env.PUBLIC_ANALYTICS_MODE
+  delete env.PUBLIC_METRIKA_COUNTER_ID
   if (analyticsApiUrl) env.PUBLIC_ANALYTICS_API_URL = analyticsApiUrl
   if (campaignAllowlist) env.PUBLIC_ANALYTICS_CAMPAIGN_ALLOWLIST = campaignAllowlist
   if (analyticsMode) env.PUBLIC_ANALYTICS_MODE = analyticsMode
+  if (metrikaCounterId) env.PUBLIC_METRIKA_COUNTER_ID = metrikaCounterId
   return env
 }
 
@@ -68,6 +70,8 @@ test('publishes solo bot play and a direct guest tutorial entry in initial HTML'
   expect(html).not.toContain('№1')
   expect(html).not.toContain('Разрешить аналитику')
   expect(html).not.toContain('data-analytics-consent')
+  expect(html).not.toContain('data-metrika-consent')
+  expect(html).not.toContain('mc.yandex.ru')
   for (const legalPath of ['/terms', '/privacy', '/personal-data-consent']) {
     expect(html).toContain(`href="${publicWebappUrl}${legalPath}"`)
   }
@@ -108,13 +112,14 @@ test('renders an equal-choice first-party consent panel only when explicitly ena
   expect(enabledHtml).not.toMatch(/google-analytics|googletagmanager|mc\.yandex|metrika|session.?replay/i)
 })
 
-test('releases only an anonymous counter without a consent panel or analytics identifier', async () => {
+test('releases the anonymous counter with an explicit Metrika consent panel', async () => {
   const build = spawnSync('bun', ['run', 'build:release:analytics'], {
     cwd: websiteRoot,
     env: buildEnvironment({
       analyticsApiUrl: 'https://api.anomaly-detector.ru',
       campaignAllowlist: 'ad_01,ad_02,ad_03,ad_04,ad_05,ad_06',
       analyticsMode: 'aggregate',
+      metrikaCounterId: '112719766',
     }),
     encoding: 'utf8',
   })
@@ -122,9 +127,13 @@ test('releases only an anonymous counter without a consent panel or analytics id
   const enabledHtml = await readFile(resolve(buildOutput, 'index.html'), 'utf8')
   expect(enabledHtml).toContain('data-analytics-counter')
   expect(enabledHtml).toContain('data-analytics-event="tutorial_cta"')
+  expect(enabledHtml).toContain('data-analytics-event="login_cta"')
+  expect(enabledHtml).toContain('data-metrika-consent')
+  expect(enabledHtml).toContain('data-metrika-action="allow"')
+  expect(enabledHtml).toContain('localStorage.setItem')
+  expect(enabledHtml).toContain('reachGoal')
+  expect(enabledHtml).toContain('112719766')
   expect(enabledHtml).not.toContain('data-analytics-consent')
-  expect(enabledHtml).not.toContain('Разрешить аналитику')
-  expect(enabledHtml).not.toContain('Только необходимые')
 })
 
 test('publishes complete social metadata backed by a real image asset', async () => {

@@ -14,8 +14,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig(({ command, mode }) => {
   const environmentDirectory = process.env.LOCAL_MVP_ENV_DIR ?? __dirname
   const environment = loadEnv(mode, environmentDirectory, '')
-  if (command === 'build' && environment.WEBAPP_RELEASE_BUILD === 'true') {
-    validateWebappReleaseEnvironment(environment)
+  if (command === 'build' && ['true', 'analytics'].includes(environment.WEBAPP_RELEASE_BUILD ?? '')) {
+    validateWebappReleaseEnvironment(environment, { analytics: environment.WEBAPP_RELEASE_BUILD === 'analytics' })
   }
 
   return {

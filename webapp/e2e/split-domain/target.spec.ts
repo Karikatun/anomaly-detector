@@ -4,6 +4,7 @@ import { createPrisma } from '../../../backend/src/db'
 import { e2ePassword, registerBrowserUser, uniqueLogin } from '../helpers/test'
 
 const origins = splitDomainOrigins()
+const uxAuditDir = process.env.UX_AUDIT_DIR
 test.use({ screenshot: 'off', trace: 'off' })
 const legacyPlayerPaths = [
   '/app',
@@ -42,7 +43,8 @@ test('persists anonymous advertisement views and clicks across HTTPS origins wit
     await page.goto(`${origins.root}/?utm_campaign=${campaign}&yclid=synthetic-click-do-not-store`)
     expect((await viewed).status()).toBe(204)
     await expect(page.locator('[data-analytics-consent]')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toHaveCount(1)
+    await page.getByRole('button', { name: 'Только необходимые' }).click()
     expect((await context.cookies()).filter((cookie) => cookie.name.startsWith('anomaly_detector_analytics'))).toHaveLength(0)
     await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
     await expect(page).toHaveURL(`${origins.app}/learn`)
@@ -60,6 +62,109 @@ test('persists anonymous advertisement views and clicks across HTTPS origins wit
     expect(linkedStatus).toBe(404)
   } finally {
     await prisma.$disconnect()
+  }
+})
+
+test('loads Metrika only after explicit consent and sends one allowlisted CTA goal', async ({ page }) => {
+  let tagRequests = 0
+  await page.route('https://mc.yandex.ru/metrika/tag.js', async (route) => {
+    tagRequests += 1
+    await route.fulfill({ body: '/* test tag */', contentType: 'application/javascript' })
+  })
+  await page.goto(origins.root)
+
+  await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
+  expect(tagRequests).toBe(0)
+  expect(await page.evaluate(() => 'ym' in window)).toBe(false)
+
+  await page.getByRole('button', { name: 'Разрешить аналитику' }).click()
+  await expect.poll(() => tagRequests).toBe(1)
+  const initialQueue = await page.evaluate(() => (window as Window & { ym?: { a?: unknown[][] } }).ym?.a ?? [])
+  expect(initialQueue[0]).toEqual([
+    112719766,
+    'init',
+    {
+      accurateTrackBounce: true,
+      clickmap: false,
+      defer: true,
+      ecommerce: false,
+      sendTitle: false,
+      trackLinks: false,
+      webvisor: false,
+    },
+  ])
+
+  await page.locator('[data-analytics-event="tutorial_cta"]').first().evaluate((link) => {
+    link.addEventListener('click', (event) => event.preventDefault())
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  })
+  const queue = await page.evaluate(() => (window as Window & { ym?: { a?: unknown[][] } }).ym?.a ?? [])
+  expect(queue.filter((entry) => entry[1] === 'reachGoal')).toEqual([
+    [112719766, 'reachGoal', 'tutorial_cta'],
+  ])
+})
+
+test('configures the player Metrika client without loading it before consent', async ({ page }) => {
+  let tagRequests = 0
+  await page.route('https://mc.yandex.ru/metrika/tag.js', async (route) => {
+    tagRequests += 1
+    await route.fulfill({ body: '/* test tag */', contentType: 'application/javascript' })
+  })
+  await page.goto(`${origins.app}/learn`)
+
+  const consent = page.locator('[data-metrika-consent]')
+  await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
+  await expect.poll(async () => (await consent.boundingBox())?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(448)
+  if (uxAuditDir) await page.screenshot({ path: `${uxAuditDir}/consent-inline-desktop.png`, fullPage: true })
+  expect(tagRequests).toBe(0)
+  expect(await page.evaluate(() => 'ym' in window)).toBe(false)
+
+  await page.getByRole('button', { name: 'Разрешить аналитику' }).click()
+  await expect(consent).toHaveCount(0)
+  if (uxAuditDir) await page.screenshot({ path: `${uxAuditDir}/consent-allowed-desktop.png`, fullPage: true })
+  await expect.poll(() => tagRequests).toBe(1)
+
+  await page.getByRole('button', { name: 'Начать обучение' }).click()
+  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toHaveCount(0)
+  const coach = page.locator('[data-testid="floater"]')
+  await expect(coach).toBeVisible()
+  await coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await expect(page.locator('[data-tutorial-step="interaction-guide"]')).toHaveCount(0)
+
+  await page.goto(`${origins.app}/privacy`)
+  await expect(page.getByRole('heading', { name: 'Настройки аналитики' })).toBeVisible()
+  await page.getByRole('button', { name: 'Отключить аналитику' }).click()
+  await expect(page.getByText('Яндекс Метрика выключена.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
+  await page.goto(`${origins.app}/learn`)
+  await expect(page.locator('[data-metrika-consent]')).toHaveCount(0)
+  expect(tagRequests).toBe(1)
+})
+
+test('keeps the tutorial coach actionable before the analytics choice on desktop and mobile', async ({ page }) => {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport)
+    await page.goto(`${origins.app}/learn`)
+    await page.evaluate(() => window.localStorage.removeItem('anomaly-detector:metrika-consent'))
+    await page.evaluate(() => window.sessionStorage.clear())
+    await page.reload()
+
+    const consent = page.locator('[data-metrika-consent]')
+    await expect(consent).toBeVisible()
+    if (uxAuditDir) {
+      await page.screenshot({ path: `${uxAuditDir}/consent-inline-${viewport.width}.png` })
+    }
+    await page.getByRole('button', { name: 'Начать обучение' }).click()
+
+    const coach = page.locator('[data-testid="floater"]')
+    await expect(coach).toBeVisible()
+    await expect(consent).toBeHidden()
+    if (uxAuditDir) {
+      await page.screenshot({ path: `${uxAuditDir}/tutorial-${viewport.width}.png` })
+    }
+    await coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+    await expect(page.locator('[data-tutorial-step="interaction-guide"]')).toHaveCount(0)
   }
 })
 
@@ -81,7 +186,7 @@ test('serves the public root, redirects every legacy deep link, and enforces tar
 
   const rootHeaders = await rootResponse?.allHeaders()
   expect(rootHeaders?.['content-security-policy']).toContain(
-    `connect-src 'self' ${origins.api}`,
+    `connect-src 'self' ${origins.api} https://mc.yandex.ru`,
   )
   expect(rootHeaders?.['content-security-policy']).not.toContain('*')
   expect(rootHeaders?.['x-robots-tag']).toBeUndefined()
@@ -121,7 +226,7 @@ test('serves the public root, redirects every legacy deep link, and enforces tar
   const playerHeaders = await playerResponse?.allHeaders()
   expect(playerHeaders?.['x-robots-tag']).toBe('noindex, nofollow, noarchive')
   expect(playerHeaders?.['content-security-policy']).toContain(
-    `connect-src 'self' ${origins.api} ${origins.api.replace(/^http/, 'ws')}`,
+    `connect-src 'self' ${origins.api} https://mc.yandex.ru ${origins.api.replace(/^http/, 'ws')}`,
   )
 
   const violatedDirective = await page.evaluate(() => new Promise<string>((resolveViolation, reject) => {
