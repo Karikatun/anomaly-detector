@@ -63,6 +63,10 @@ test('publishes solo bot play and a direct guest tutorial entry in initial HTML'
   expect(html).toContain('Ограниченная Мощность')
   expect(html).toContain('От обучения к первой партии')
   expect(html).toContain('Частые вопросы')
+  for (const section of ['how', 'why', 'faq']) {
+    expect(html).toContain(`href="#${section}"`)
+  }
+  expect(html.match(new RegExp(`href="${publicWebappUrl}/learn"`, 'g'))).toHaveLength(3)
   expect(html.match(/<img /g)).toHaveLength(3)
   expect(html).not.toContain('Утверждённый прототип')
   expect(html).not.toContain('№1')
@@ -121,7 +125,7 @@ test('releases only an anonymous counter without a consent panel or analytics id
   expect(build.status, build.stderr).toBe(0)
   const enabledHtml = await readFile(resolve(buildOutput, 'index.html'), 'utf8')
   expect(enabledHtml).toContain('data-analytics-counter')
-  expect(enabledHtml).toContain('data-analytics-event="tutorial_cta"')
+  expect(enabledHtml.match(/<a[^>]+data-analytics-event="tutorial_cta"/g)).toHaveLength(3)
   expect(enabledHtml).not.toContain('data-analytics-consent')
   expect(enabledHtml).not.toContain('Разрешить аналитику')
   expect(enabledHtml).not.toContain('Только необходимые')
