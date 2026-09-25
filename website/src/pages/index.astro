@@ -268,6 +268,10 @@ const structuredData = [
 	footer > div { display: flex; flex-wrap: wrap; gap: 16px; }
 	footer a { text-underline-offset: 4px; }
 
+	@media (min-width: 901px) and (max-height: 800px) {
+		.a-hero { padding-block: 56px; }
+		.a-copy { gap: 16px; }
+	}
 	@media (max-width: 900px) {
 		.a-hero, .a-cycle, .a-proof { grid-template-columns: 1fr; }
 		.value-grid, .journey ol { grid-template-columns: 1fr; }
