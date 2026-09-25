@@ -93,6 +93,33 @@ test('uses dedicated portrait game renders for mobile screenshots', async () => 
   }
 })
 
+test('explains the first-party path before the proof gallery and links to full images for each layout', async () => {
+  const journeyStart = html.indexOf('id="journey-title"')
+  const proofStart = html.indexOf('class="a-proof"')
+  expect(journeyStart).toBeGreaterThan(0)
+  expect(journeyStart).toBeLessThan(proofStart)
+
+  const figures = [...html.matchAll(/<figure class="screen-frame[^"]*"[^>]*>([\s\S]*?)<\/figure>/g)]
+  expect(figures).toHaveLength(3)
+  for (const figure of figures) {
+    const content = figure[1]
+    const captionStart = content.search(/<figcaption\b/)
+    const pictureStart = content.search(/<picture\b/)
+    expect(captionStart).toBeGreaterThanOrEqual(0)
+    expect(pictureStart).toBeGreaterThan(captionStart)
+
+    const mobileSource = content.match(/<source media="\(max-width: 640px\)" srcset="([^"]+)"/)?.[1]
+    const desktopSource = content.match(/<img src="([^"]+)"/)?.[1]
+    expect(mobileSource).toBeDefined()
+    expect(desktopSource).toBeDefined()
+    for (const [variant, source] of [['mobile', mobileSource], ['desktop', desktopSource]]) {
+      expect(content).toContain(`class="full-screen-link full-screen-link-${variant}" href="${source}"`)
+      const image = await readFile(resolve(buildOutput, source.slice(1)))
+      expect(image.subarray(1, 4).toString()).toBe('PNG')
+    }
+  }
+})
+
 test('renders an equal-choice first-party consent panel only when explicitly enabled', async () => {
   const analyticsApiUrl = 'https://api.anomaly-detector.ru'
   const build = spawnSync('bun', ['run', 'build'], {
