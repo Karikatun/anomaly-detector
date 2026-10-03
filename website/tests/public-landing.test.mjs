@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -120,7 +120,7 @@ test('explains the first-party path before the proof gallery and links to full i
   }
 })
 
-test('renders an equal-choice first-party consent panel only when explicitly enabled', async () => {
+test('keeps the legacy consented configuration inactive without a prompt or linked collector', async () => {
   const analyticsApiUrl = 'https://api.anomaly-detector.ru'
   const build = spawnSync('bun', ['run', 'build'], {
     cwd: websiteRoot,
@@ -130,13 +130,18 @@ test('renders an equal-choice first-party consent panel only when explicitly ena
   expect(build.status, build.stderr).toBe(0)
   const enabledHtml = await readFile(resolve(buildOutput, 'index.html'), 'utf8')
 
-  expect(enabledHtml).toContain('data-analytics-consent')
-  expect(enabledHtml).toContain('Разрешить аналитику')
-  expect(enabledHtml).toContain('Только необходимые')
-  expect(enabledHtml).toContain('от публичного лендинга до обучения')
-  expect(enabledHtml).not.toContain('от landing до обучения')
-  expect(enabledHtml).toContain(`data-api-url="${analyticsApiUrl}"`)
-  expect(enabledHtml).not.toMatch(/google-analytics|googletagmanager|mc\.yandex|metrika|session.?replay/i)
+  expect(enabledHtml).not.toContain('data-analytics-consent')
+  expect(enabledHtml).not.toContain('Разрешить аналитику')
+  expect(enabledHtml).not.toContain('Только необходимые')
+  expect(enabledHtml).not.toContain('data-analytics-counter')
+  expect(enabledHtml).not.toContain(`data-api-url="${analyticsApiUrl}"`)
+  expect(enabledHtml.match(new RegExp(`href="${publicWebappUrl}/learn"`, 'g'))).toHaveLength(3)
+
+  const scriptFiles = (await readdir(resolve(buildOutput, '_astro'))).filter((file) => file.endsWith('.js'))
+  const scripts = await Promise.all(scriptFiles.map((file) => readFile(resolve(buildOutput, '_astro', file), 'utf8')))
+  const output = [enabledHtml, ...scripts].join('\n')
+  expect(output).not.toMatch(/data-analytics-consent|\/api\/analytics\//)
+  expect(output).not.toMatch(/google-analytics|googletagmanager|mc\.yandex|metrika|session.?replay/i)
 })
 
 test('releases only an anonymous counter without a consent panel or analytics identifier', async () => {

@@ -5,7 +5,6 @@ import completedTender from '../assets/landing/completed-tender.png'
 import reconnaissanceMobile from '../assets/landing/mobile/reconnaissance.png'
 import laboratoryMobile from '../assets/landing/mobile/laboratory.png'
 import completedTenderMobile from '../assets/landing/mobile/completed-tender.png'
-import AnalyticsConsent from '../components/AnalyticsConsent.astro'
 import AnalyticsCounter from '../components/AnalyticsCounter.astro'
 
 const title = 'Anomaly Detector — бесплатная браузерная игра на дедукцию'
@@ -144,11 +143,6 @@ const structuredData = [
 						{analyticsApiUrl && analyticsMode === 'aggregate' && <AnalyticsCounter
 							apiUrl={analyticsApiUrl}
 							campaignAllowlist={analyticsCampaignAllowlist}
-						/>}
-						{analyticsApiUrl && analyticsMode === 'consented' && <AnalyticsConsent
-							apiUrl={analyticsApiUrl}
-							campaignAllowlist={analyticsCampaignAllowlist}
-							privacyUrl={legalUrl('/privacy')}
 						/>}
 						<section id="how" class="a-cycle" aria-labelledby="cycle-title">
 							<div><p class="section-index">01 / ЦИКЛ ИССЛЕДОВАНИЯ</p><h2 id="cycle-title">Каждый факт меняет вашу модель</h2></div>
