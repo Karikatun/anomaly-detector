@@ -10,6 +10,8 @@
 - [ ] Определить этап и touched surfaces: contracts, backend, DB/migrations,
       webapp, website, adminapp, auth/privacy, storage, infrastructure, legal.
 - [ ] Назвать основной observable signal.
+- [ ] По [issue workflow](issue-tracker.md) выбрать соразмерный формат задачи и
+      до реализации связать критерии с границей, ожидаемым результатом и проверкой.
 - [ ] Автоматически выбрать `ordinary`, только если high-risk триггеров нет;
       иначе выбрать и совместить все сработавшие профили из карты аудитов.
 - [ ] Для `ordinary` выбрать 1–3 проверки, которые лучше всего могут опровергнуть
@@ -62,6 +64,9 @@ performance-sensitive path или regression, release/production и incident. О
       `$anomaly-security-review`.
 - [ ] Task-scoped diff и обязательные gates проверены. Commit создаётся только
       в рамках действующих Git-инструкций; push/deploy требуют отдельного запроса.
+- [ ] Перед закрытием Issue связать результаты критериев с версией спецификации
+      и проверенной ревизией; обязательный FAIL/UNKNOWN блокирует закрытие.
+      Для родителя доказать сквозной пользовательский сигнал по issue workflow.
 
 ```text
 Audit profiles and touched surfaces: <profiles; surfaces>
