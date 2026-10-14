@@ -44,6 +44,8 @@ export type TutorialStep =
   | 'round-2-power'
   | 'round-2-recon'
   | 'round-2-lab'
+  | 'round-2-research'
+  | 'round-2-research-open'
   | 'round-2-working-model'
   | 'round-2-thesis'
   | 'round-2-contracts-intro'
@@ -73,9 +75,11 @@ export type TutorialUiAction =
   | { type: 'open-help-menu' }
   | { type: 'open-interpretation' }
   | { type: 'open-interpretation-direct' }
+  | { type: 'open-working-model' }
   | { type: 'close-interpretation' }
   | { type: 'open-research-results' }
   | { type: 'close-research-results' }
+  | { type: 'close-journal'; workingModel: WorkingModel }
   | { type: 'open-contracts-review' }
   | { type: 'close-contracts-review' }
 
@@ -114,14 +118,46 @@ export function createTutorialState(playerId: string): TutorialState {
   }
 }
 
+// Resume named stages from this same lesson; never reinterpret an ordinal as a new exercise.
+export function resumeTutorialState(state: TutorialState): TutorialState {
+  const resumedSteps: Partial<Record<TutorialStep, TutorialStep>> = {
+    'interaction-guide': 'round-1-access',
+    'round-1-header': 'round-1-access',
+    'round-1-sidebar': 'round-1-access',
+    'round-1-contracts': 'round-1-access',
+    'round-1-access-intro': 'round-1-access',
+    'round-1-power-intro': 'round-1-power',
+    'round-1-recon-intro': 'round-1-recon',
+    'round-1-lab-intro': 'round-1-lab-mode',
+    'research-results-open': 'research-results',
+    'help-menu': 'research-results',
+    'interpretation-open': 'interpretation',
+    'round-1-model-intro': 'round-1-working-model',
+    'round-1-thesis-result': 'round-2-access',
+    'round-1-thesis-result-open': 'round-2-access',
+    'round-2-contracts-review-open': 'round-2-contracts-review',
+    'round-2-research-open': 'round-2-research',
+    'round-2-contracts-intro': 'round-2-contract-reserve',
+    'final-model-intro': 'final-model',
+  }
+  const step = resumedSteps[state.step]
+  if (!step) return state
+  return { ...state, step, ...(step === 'round-2-access' ? { round: 2 } : {}) }
+}
+
 export function advanceTutorial(
   state: TutorialState,
   action: TutorialAction,
 ): TutorialAdvanceResult {
+  if (action.type === 'update-working-model'
+    && phaseForStep(state.step) !== 'final-scientific-model'
+    && phaseForStep(state.step) !== 'complete') {
+    return { progressed: false, state: { ...state, workingModel: action.workingModel } }
+  }
   switch (state.step) {
     case 'prologue':
       return action.type === 'start-tutorial'
-        ? progressed(state, { step: 'interaction-guide' })
+        ? progressed(state, { step: 'round-1-access' })
         : unchanged(state)
     case 'interaction-guide':
       return continueTo(state, action, 'round-1-header')
@@ -135,19 +171,19 @@ export function advanceTutorial(
       return continueTo(state, action, 'round-1-access')
     case 'round-1-access':
       return action.type === 'request-access-slot' && action.slot === 5
-        ? progressed(state, { step: 'round-1-power-intro' })
+        ? progressed(state, { step: 'round-1-power' })
         : unchanged(state)
     case 'round-1-power-intro':
       return continueTo(state, action, 'round-1-power')
     case 'round-1-power':
       return action.type === 'allocate-power' && allocationMatches(action.allocation, [1, 2, 1, 0])
-        ? progressed(state, { step: 'round-1-recon-intro' })
+        ? progressed(state, { step: 'round-1-recon' })
         : unchanged(state)
     case 'round-1-recon-intro':
       return continueTo(state, action, 'round-1-recon')
     case 'round-1-recon':
       return isUnknownRecon(action)
-        ? progressed(state, { step: 'round-1-lab-intro' })
+        ? progressed(state, { step: 'round-1-lab-mode' })
         : unchanged(state)
     case 'round-1-lab-intro':
       return continueTo(state, action, 'round-1-lab-mode')
@@ -167,8 +203,10 @@ export function advanceTutorial(
         ? progressed(state, { step: 'research-results-open' })
         : unchanged(state)
     case 'research-results-open':
-      return action.type === 'close-research-results'
-        ? progressed(state, { step: 'help-menu' })
+      return action.type === 'open-interpretation'
+        ? progressed(state, { step: 'interpretation-open' })
+        : action.type === 'close-research-results' || action.type === 'close-journal'
+          ? progressed(state, { step: 'research-results' })
         : unchanged(state)
     case 'help-menu':
       return action.type === 'open-help-menu'
@@ -181,18 +219,20 @@ export function advanceTutorial(
         ? progressed(state, { step: 'interpretation-open' })
         : unchanged(state)
     case 'interpretation-open':
-      return action.type === 'close-interpretation'
-        ? progressed(state, { step: 'round-1-model-intro' })
+      return action.type === 'open-working-model'
+        ? progressed(state, { step: 'round-1-working-model' })
+        : action.type === 'close-interpretation' || action.type === 'close-journal'
+          ? progressed(state, { step: 'interpretation' })
         : unchanged(state)
     case 'round-1-model-intro':
       return continueTo(state, action, 'round-1-working-model')
     case 'round-1-working-model':
-      return action.type === 'update-working-model'
-        && hypothesisMatches(action.workingModel, 'aster')
-        ? progressed(state, { step: 'round-1-thesis', workingModel: action.workingModel })
+      return (action.type === 'close-research-results' || action.type === 'close-journal')
+        && hasHypothesis(action.type === 'close-journal' ? action.workingModel : state.workingModel, 'aster')
+        ? progressed(state, { step: 'round-1-thesis', ...(action.type === 'close-journal' ? { workingModel: action.workingModel } : {}) })
         : unchanged(state)
     case 'round-1-thesis':
-      return resolveThesis(state, action, 'aster', 'round-1-thesis-result')
+      return resolveThesis(state, action, 'aster', 'round-2-access')
     case 'round-1-thesis-result':
       return action.type === 'open-research-results'
         ? progressed(state, { step: 'round-1-thesis-result-open' })
@@ -226,15 +266,25 @@ export function advanceTutorial(
         && 'laboratory' in action
         && action.laboratory.mode === 'impulse'
         && pairMatches(action.laboratory.pair, 'boreal', 'cinder')
-        ? progressed(state, { step: 'round-2-working-model' })
+        ? progressed(state, { step: 'round-2-research' })
         : unchanged(state)
+    case 'round-2-research':
+      return action.type === 'open-research-results'
+        ? progressed(state, { step: 'round-2-research-open' })
+        : unchanged(state)
+    case 'round-2-research-open':
+      return action.type === 'open-working-model'
+        ? progressed(state, { step: 'round-2-working-model' })
+        : action.type === 'close-research-results' || action.type === 'close-journal'
+          ? progressed(state, { step: 'round-2-research' })
+          : unchanged(state)
     case 'round-2-working-model':
-      return action.type === 'update-working-model'
-        && hypothesisMatches(action.workingModel, 'boreal')
-        ? progressed(state, { step: 'round-2-thesis', workingModel: action.workingModel })
+      return (action.type === 'close-research-results' || action.type === 'close-journal')
+        && hasHypothesis(action.type === 'close-journal' ? action.workingModel : state.workingModel, 'boreal')
+        ? progressed(state, { step: 'round-2-thesis', ...(action.type === 'close-journal' ? { workingModel: action.workingModel } : {}) })
         : unchanged(state)
     case 'round-2-thesis':
-      return resolveThesis(state, action, 'boreal', 'round-2-contracts-intro')
+      return resolveThesis(state, action, 'boreal', 'round-2-contract-reserve')
     case 'round-2-contracts-intro':
       return continueTo(state, action, 'round-2-contract-reserve')
     case 'round-2-contract-reserve':
@@ -249,7 +299,7 @@ export function advanceTutorial(
         ? progressed(state, {
           corporateTrust: state.corporateTrust + 1,
           rating: state.rating + 2,
-          step: 'final-model-intro',
+          step: 'final-model',
         })
         : unchanged(state)
     case 'final-model-intro':
@@ -294,7 +344,7 @@ function resolveThesis(
         hintLevel: 0,
         privateTheses: [...state.privateTheses, thesis],
         rating: state.rating + 1,
-        round: state.round,
+        round: nextStep === 'round-2-access' ? 2 : state.round,
         step: nextStep,
         thesisAttempts: 0,
       }),
@@ -339,10 +389,9 @@ function pairMatches(
   return pair.sourceSignal === sourceSignal && pair.receiverSignal === receiverSignal
 }
 
-function hypothesisMatches(model: WorkingModel, signalId: SignalId) {
-  const expected = signalProperties[signalId]
+function hasHypothesis(model: WorkingModel, signalId: SignalId) {
   const hypothesis = model.signals[signalId]?.hypothesis
-  return hypothesis?.fieldType === expected.fieldType && hypothesis.polarity === expected.polarity
+  return hypothesis?.fieldType !== undefined && hypothesis.polarity !== undefined
 }
 
 function finalModelMatches(signals: Record<string, { fieldType?: FieldType; polarity?: Polarity } | undefined>) {
@@ -400,6 +449,8 @@ const orderedSteps: TutorialStep[] = [
   'round-2-power',
   'round-2-recon',
   'round-2-lab',
+  'round-2-research',
+  'round-2-research-open',
   'round-2-working-model',
   'round-2-thesis',
   'round-2-contracts-intro',
@@ -418,7 +469,7 @@ export function tutorialView(state: TutorialState): TenderView {
   const hasRoundOneTest = stepIndex >= orderedSteps.indexOf('research-results')
   const hasAsterThesis = stepIndex >= orderedSteps.indexOf('round-1-thesis-result')
   const hasCinder = stepIndex >= orderedSteps.indexOf('round-2-lab')
-  const hasRoundTwoTest = stepIndex >= orderedSteps.indexOf('round-2-working-model')
+  const hasRoundTwoTest = stepIndex >= orderedSteps.indexOf('round-2-research')
   const hasBorealThesis = stepIndex >= orderedSteps.indexOf('round-2-contracts-intro')
   const roundOnePower = {
     contracts: 0,
@@ -588,7 +639,7 @@ function phaseForStep(step: TutorialStep): TenderPhase {
   if (step === 'round-1-lab-intro'
     || step === 'round-1-lab-mode'
     || step === 'round-1-lab-pair') return 'laboratory'
-  if (step === 'research-results' || step === 'research-results-open') return 'laboratory'
+  if (step === 'research-results' || step === 'research-results-open') return 'model-analysis'
   if (step === 'round-1-model-intro') return 'model-analysis'
   if (step === 'round-1-thesis-result' || step === 'round-1-thesis-result-open') return 'model-analysis'
   if (step === 'round-2-contracts-review' || step === 'round-2-contracts-review-open') return 'power-allocation'

@@ -42,6 +42,7 @@ function JournalPanel({ active, children, onElementChange, onPositionChange, get
 export function TenderJournalDialog({
   actionError, disabled, modelTabDisabled, interpretationDisabled, onOpenChange, onTabChange,
   open, openDisabled, owner, tab, view, highlightResult, triggerTestId, showTimerWarning = true,
+  currentPlayerId, urgent = false,
 }: {
   actionError?: string | null
   disabled?: boolean
@@ -57,6 +58,8 @@ export function TenderJournalDialog({
   showTimerWarning?: boolean
   highlightResult?: 'reflection'
   triggerTestId?: string
+  currentPlayerId?: string
+  urgent?: boolean
 }) {
   const { t } = useI18n()
   const scroll = useRef<Partial<Record<TenderJournalTab, number>>>({})
@@ -125,6 +128,7 @@ export function TenderJournalDialog({
           <DialogTitle>{t('tender.journal.title')}</DialogTitle>
           <DialogDescription className={styles.description}>{t('tender.journal.description')}</DialogDescription>
           {showTimerWarning && <Typography role="status" variant="caption" tone="muted">{t('rules.timerContinues')}</Typography>}
+          {urgent && <Typography role="status" variant="caption" tone="muted">{t('tender.journal.urgent')}</Typography>}
         </DialogHeader>
         <Tabs.Root value={tab} onValueChange={(value) => { rememberPosition(); onTabChange(value as TenderJournalTab) }} className={styles.tabs}>
           <Tabs.List aria-label={t('tender.journal.sections')} className={styles.tablist}>
@@ -137,7 +141,7 @@ export function TenderJournalDialog({
             {actionError && <Typography role="alert" variant="bodySm" tone="destructive">{actionError}</Typography>}
             <WorkingModelEditor disabled={disabled} knownSignals={view.privateSamples} owner={owner} />
           </>)}
-          {panel('research', <TenderEvidence data={view} />)}
+          {panel('research', <TenderEvidence data={view} currentPlayerId={currentPlayerId} />)}
           {panel('interpretation', <LaboratoryInterpretation ruleset={view.ruleset} highlightResult={highlightResult} />)}
         </Tabs.Root>
       </DialogContent>

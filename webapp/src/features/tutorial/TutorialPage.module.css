@@ -33,8 +33,46 @@
 .completeActions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .saveError { display: grid; gap: .75rem; padding: .9rem; border: 1px solid rgba(248, 113, 113, .5); border-radius: .6rem; }
 
+/* Required confirmations cover the phase header; reading workspaces keep
+   their existing header and coach composition. */
+:global([data-tutorial-board] > header) {
+  z-index: var(--tutorial-header-layer, var(--layer-system));
+}
+
+.exitDialog {
+  min-width: 0;
+  width: min(28rem, calc(100vw - 2 * var(--space-4)));
+  max-width: calc(100vw - 2 * var(--space-4));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  padding-top: calc(2.75rem + var(--space-4));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+}
+
+.exitDialog > :global([data-slot='dialog-header']),
+.exitDialog > :global([data-slot='dialog-footer']) {
+  min-width: 0;
+}
+
+.exitDialog > :global([data-slot='dialog-footer']) > button {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 2.75rem;
+  flex-shrink: 1;
+  padding-block: var(--space-3);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 :global(html[data-tutorial-autoscrolling]) :global(.react-joyride__spotlight) {
   visibility: hidden;
+}
+/* The primary spotlight stays unchanged. Only the allowed Journal button is
+   excluded from Joyride's background pointer blocker by its viewport owner. */
+:global(body:has([data-tutorial-board]) .react-joyride__overlay [fill-rule='evenodd']) {
+  clip-path: var(--tutorial-journal-entry-cutout, none);
 }
 .coachCard {
   width: min(24rem, calc(100vw - 1.5rem));
@@ -42,7 +80,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.coach { display: grid; max-width: 24rem; gap: .55rem; text-align: left; }
+.coach { display: grid; min-width: 0; max-width: 24rem; gap: .55rem; text-align: left; overflow-wrap: anywhere; }
 .coach button { width: fit-content; }
 .coachActions {
   display: flex;
@@ -114,8 +152,9 @@
   .completeActions > * { width: 100%; }
   .coachCard {
     width: 100%;
-    max-height: none;
-    overflow: clip !important;
+    max-height: min(25dvh, var(--tutorial-mobile-coach-max-height, 14rem));
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
   }
 
   :global([data-testid='floater']) {
@@ -155,6 +194,11 @@
     height: auto !important;
   }
 
+  :global([data-tutorial-board][data-tutorial-action-pinned] [data-tutorial-action-container]) {
+    position: var(--tutorial-mobile-action-position, fixed) !important;
+    inset: var(--tutorial-mobile-action-inset, auto .75rem .75rem) !important;
+  }
+
   :global(body:has([data-tutorial-action-pinned]) [data-testid='floater']) {
     inset: auto .75rem calc(var(--tutorial-mobile-action-height, 5rem) + 1.5rem) !important;
   }
@@ -191,6 +235,12 @@
 }
 
 @media (max-width: 47.999rem) {
+  /* A closed Journal keeps its fixed entry beside the coach, including when
+     the current spotlight is a phase input or a Thesis repair. */
+  :global(body:not(:has([data-tutorial-journal][data-state='open'])) [data-testid='floater']) {
+    right: calc(var(--space-5) + 3.5rem + var(--space-4)) !important;
+  }
+
   /* Reading and editing share the small viewport with a scrollable coach. */
   :global(body:has([data-tutorial-journal][data-state='open'])) .coachCard {
     max-height: min(25dvh, 14rem);

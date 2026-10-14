@@ -39,3 +39,23 @@ export function shouldLockPhaseOverlays({
 }) {
   return phase !== 'complete' && remainingSeconds <= 10
 }
+
+export function getTenderJournalAccess({
+  phase,
+  remainingSeconds,
+  connected,
+  turnLocked,
+}: {
+  phase: TenderPhase
+  remainingSeconds: number
+  connected: boolean
+  turnLocked: boolean
+}) {
+  const researchOnly = shouldLockPhaseOverlays({ phase, remainingSeconds })
+  return {
+    canOpen: connected && phase !== 'complete',
+    researchOnly,
+    modelTabDisabled: !connected || researchOnly || (phase === 'model-analysis' && turnLocked),
+    interpretationDisabled: !connected || researchOnly || turnLocked,
+  }
+}

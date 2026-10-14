@@ -43,7 +43,6 @@ import { PhaseNotice, UnavailablePhaseCard } from './components/TenderActionPane
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import { TenderPhaseLayout } from './components/TenderPhaseLayout'
 import {
-  TenderLaboratoryJournal,
   TenderPlanningContext,
   TenderPlayers,
 } from './components/TenderOverview'
@@ -74,7 +73,7 @@ import {
 import styles from './TenderPage.module.css'
 import type { WorkingModelSaveStatus } from './working-model-draft'
 import { tenderRulesetPolicy } from './ruleset-policy'
-import { getPhaseContextMenuVisibility, shouldLockPhaseOverlays } from './phase-ui'
+import { getPhaseContextMenuVisibility, getTenderJournalAccess, shouldLockPhaseOverlays } from './phase-ui'
 
 const emptyWorkingModel: TenderView['privateWorkingModel'] = { signals: {} }
 
@@ -515,7 +514,7 @@ function TenderContent() {
     tenderView?.serverTime ?? '1970-01-01T00:00:00.000Z',
   )
 
-  const availabilityKey = `${tenderView?.phase}:${connected}:${tenderView ? shouldLockPhaseOverlays({ phase: tenderView.phase, remainingSeconds }) : true}`
+  const availabilityKey = `${tenderView?.phase}:${connected}`
   if (journalAvailability !== availabilityKey) {
     setJournalAvailability(availabilityKey)
     setJournalOpen(false)
@@ -688,6 +687,7 @@ function TenderContent() {
   })
   const referenceHelpLockedForTurn = isSequentialPhase && isMyTurn && Boolean(hasPendingAction)
   const referenceHelpLocked = referenceHelpUrgentlyLocked || referenceHelpLockedForTurn
+  const journalAccess = getTenderJournalAccess({ phase: tenderView.phase, remainingSeconds, connected, turnLocked: referenceHelpLockedForTurn })
   const setOverlayOpen = (
     kind: 'rules' | 'interpretation' | 'research' | 'working-model' | 'contracts',
     open: boolean,
@@ -695,7 +695,7 @@ function TenderContent() {
     setRulesOpen(open && kind === 'rules')
     const journalKind = kind === 'interpretation' || kind === 'research' || kind === 'working-model'
     setJournalOpen(open && journalKind)
-    if (open && journalKind) setJournalTab(kind)
+    if (open && journalKind) setJournalTab(journalAccess.researchOnly ? 'research' : kind)
     setContextModal(open && kind === 'contracts' ? kind : null)
     if (open) setOverlayPhase(tenderView.phase)
   }
@@ -703,9 +703,9 @@ function TenderContent() {
     setHelpMenuOpen(false)
     window.setTimeout(() => setOverlayOpen(kind, true), 0)
   }
-  const journalVisible = journalOpen && overlayPhase === tenderView.phase && connected && !referenceHelpUrgentlyLocked && !exitOpen
-  const journalInterpretationDisabled = referenceHelpLocked
-  const journalModelDisabled = tenderView.phase === 'model-analysis' && referenceHelpLocked
+  const journalVisible = journalOpen && overlayPhase === tenderView.phase && journalAccess.canOpen && !exitOpen
+  const journalInterpretationDisabled = journalAccess.interpretationDisabled
+  const journalModelDisabled = journalAccess.modelTabDisabled
   const visibleJournalTab = (journalTab === 'interpretation' && journalInterpretationDisabled)
     || (journalTab === 'working-model' && journalModelDisabled) ? 'research' : journalTab
 
@@ -954,18 +954,22 @@ function TenderContent() {
                 phase={tenderView.phase}
                 players={tenderView.players}
               />
-              <TenderLaboratoryJournal players={tenderView.players} results={tenderView.publicLaboratoryResults} />
               <TenderJournalDialog
+                currentPlayerId={auth.user?.id}
+                urgent={journalAccess.researchOnly}
                 view={tenderView} owner={workingModelOwner} tab={visibleJournalTab}
                 onTabChange={setJournalTab} open={journalVisible}
                 onOpenChange={(open) => {
-                  if (open) { setRulesOpen(false); setContextModal(null); setOverlayPhase(tenderView.phase) }
+                  if (open) {
+                    setRulesOpen(false); setContextModal(null); setOverlayPhase(tenderView.phase)
+                    if (journalAccess.researchOnly) setJournalTab('research')
+                  }
                   setJournalOpen(open)
                 }}
-                openDisabled={referenceHelpUrgentlyLocked || !connected}
+                openDisabled={!journalAccess.canOpen}
                 interpretationDisabled={journalInterpretationDisabled}
                 modelTabDisabled={journalModelDisabled}
-                disabled={!connected || mutationLocked || tenderView.phase === 'final-scientific-model'}
+                disabled={!connected || mutationLocked || journalAccess.researchOnly || tenderView.phase === 'final-scientific-model'}
               />
               {contextMenuVisibility.contracts && (
                 <ContractPlanningPanel

@@ -67,6 +67,8 @@ const taskKeys: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, Translati
   'round-2-power': 'tutorial.step.round2Power',
   'round-2-recon': 'tutorial.step.round2Recon',
   'round-2-lab': 'tutorial.step.round2Lab',
+  'round-2-research': 'tutorial.step.round2Research',
+  'round-2-research-open': 'tutorial.step.round2ResearchOpen',
   'round-2-working-model': 'tutorial.step.round2Model',
   'round-2-thesis': 'tutorial.step.round2Thesis',
   'round-2-contracts-intro': 'tutorial.step.contractsIntro',
@@ -129,11 +131,13 @@ export function TutorialExperience({
 }) {
   const { t } = useI18n()
   const [state, setState] = useState(initialState)
+  const [lesson, setLesson] = useState(() => new AbortController())
   const playerId = initialState.playerId
   const [commandError, setCommandError] = useState<string | null>(null)
   const [thesisFeedback, setThesisFeedback] = useState<NonNullable<TutorialAdvanceResult['thesisFeedback']> | null>(null)
   const [exitOpen, setExitOpen] = useState(false)
   const [requiredModalOpen, setRequiredModalOpen] = useState(false)
+  const [journalOpen, setJournalOpen] = useState(false)
   const [compactHeader, setCompactHeader] = useState(
     () => window.matchMedia('(max-width: 47.999rem)').matches,
   )
@@ -143,6 +147,13 @@ export function TutorialExperience({
   const [shortViewport, setShortViewport] = useState(
     () => window.matchMedia('(max-height: 32rem)').matches,
   )
+
+  useLayoutEffect(() => {
+    if (!exitOpen && !requiredModalOpen) return
+    const board = document.querySelector<HTMLElement>('[data-tutorial-board]')
+    board?.style.setProperty('--tutorial-header-layer', 'var(--layer-sticky)')
+    return () => { board?.style.removeProperty('--tutorial-header-layer') }
+  }, [exitOpen, requiredModalOpen])
 
   useLayoutEffect(() => {
     const media = window.matchMedia('(max-width: 47.999rem)')
@@ -169,6 +180,9 @@ export function TutorialExperience({
   }, [])
 
   const applyAction = async (action: TutorialAction) => {
+    // Disposal may flush a draft through an old callback after Exit or Repeat.
+    // Only callbacks belonging to the active lesson may persist or progress it.
+    if (lesson.signal.aborted) return false
     const result = advanceTutorial(state, action)
     setThesisFeedback(action.type === 'submit-thesis' && result.thesisFeedback && !result.progressed
       ? result.thesisFeedback
@@ -178,9 +192,10 @@ export function TutorialExperience({
       setState(result.state)
       saveTutorialSession(sessionStorage, result.state)
     }
-    const isDraftSave = action.type === 'update-scientific-model-draft'
+    const isDraftSave = action.type === 'update-scientific-model-draft' || action.type === 'update-working-model'
+    const isNavigation = action.type.startsWith('open-') || action.type.startsWith('close-')
     const isThesisAttempt = action.type === 'submit-thesis' && result.thesisFeedback !== undefined
-    setCommandError(result.progressed || isDraftSave || isThesisAttempt
+    setCommandError(result.progressed || isDraftSave || isThesisAttempt || isNavigation
       ? null
       : t(state.step === 'round-1-power'
         ? 'tutorial.coach.powerRound1Invalid'
@@ -199,6 +214,8 @@ export function TutorialExperience({
   }
 
   const restart = () => {
+    lesson.abort()
+    setLesson(new AbortController())
     clearTutorialSession(sessionStorage, playerId)
     const fresh = createTutorialState(playerId)
     saveTutorialSession(sessionStorage, fresh)
@@ -208,6 +225,7 @@ export function TutorialExperience({
   }
 
   const exit = () => {
+    lesson.abort()
     clearTutorialSession(sessionStorage, playerId)
     setExitOpen(false)
     onExit()
@@ -247,18 +265,14 @@ export function TutorialExperience({
 
   if (state.step === 'complete') return renderCompletion(restart)
 
-  const visibleSteps = (compactHeader
-    ? orderedSteps
-    : orderedSteps.filter((tutorialStep) => tutorialStep !== 'interpretation'))
-    .filter((tutorialStep) => tutorialStep !== 'interaction-guide')
-  const currentTaskKey: TranslationKey = (compactHeader ? mobileTaskKeys[state.step] : undefined)
-    ?? (state.step === 'help-menu' && !compactHeader
-      ? 'tutorial.step.helpDesktop'
-      : state.step === 'round-1-working-model' && !compactHeader
-        ? 'tutorial.step.round1ModelDesktop'
-        : state.step === 'round-2-working-model' && !compactHeader
-          ? 'tutorial.step.round2ModelDesktop'
-          : taskKeys[state.step])
+  const retiredSteps = new Set<TutorialStep>([
+    'interaction-guide', 'round-1-header', 'round-1-sidebar', 'round-1-contracts',
+    'round-1-access-intro', 'round-1-power-intro', 'round-1-recon-intro', 'round-1-lab-intro',
+    'help-menu', 'round-1-model-intro', 'round-1-thesis-result',
+    'round-1-thesis-result-open', 'round-2-contracts-intro', 'final-model-intro',
+  ])
+  const visibleSteps = orderedSteps.filter((tutorialStep) => !retiredSteps.has(tutorialStep))
+  const currentTaskKey: TranslationKey = (compactHeader ? mobileTaskKeys[state.step] : undefined) ?? taskKeys[state.step]
   const phaseTargetConfig: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, {
     anchor: string
     spotlight?: string
@@ -299,15 +313,15 @@ export function TutorialExperience({
     'help-menu': {
       anchor: compactHeader ? '[data-tutorial-help]' : '[data-tutorial-interpretation-direct]',
     },
-    interpretation: { anchor: '[data-tutorial-interpretation]' },
+    interpretation: { anchor: '[data-testid="tutorial-research-trigger"]' },
     'interpretation-open': {
       anchor: '[data-tender-journal]',
     },
     'round-1-model-intro': { anchor: '[data-tutorial-primary]' },
     'round-1-working-model': {
-      anchor: compactHeader
-        ? '[data-tutorial-working-model-trigger]'
-        : '[data-tutorial-working-model-row="aster"]',
+      anchor: journalOpen
+        ? '[data-tender-journal]'
+        : '[data-testid="tutorial-research-trigger"]',
     },
     'round-1-thesis': {
       anchor: '[data-tutorial-thesis]',
@@ -333,10 +347,12 @@ export function TutorialExperience({
       anchor: '[data-tutorial-lab-sample="boreal"]',
       spotlight: '[data-tutorial-lab-options]',
     },
+    'round-2-research': { anchor: '[data-testid="tutorial-research-trigger"]' },
+    'round-2-research-open': { anchor: '[data-tender-journal]' },
     'round-2-working-model': {
-      anchor: compactHeader
-        ? '[data-tutorial-working-model-trigger]'
-        : '[data-tutorial-working-model-row="boreal"]',
+      anchor: journalOpen
+        ? '[data-tender-journal]'
+        : '[data-testid="tutorial-research-trigger"]',
     },
     'round-2-thesis': {
       anchor: '[data-tutorial-thesis] select',
@@ -355,10 +371,7 @@ export function TutorialExperience({
     },
   }
   const targetConfig = phaseTargetConfig[state.step]
-  const readingDialogOpen = state.step === 'research-results-open'
-    || state.step === 'round-1-thesis-result-open'
-    || state.step === 'round-2-contracts-review-open'
-    || state.step === 'interpretation-open'
+  const readingDialogOpen = journalOpen || state.step === 'round-2-contracts-review-open'
   const presentation = resolveTutorialPresentation({
     anchor: targetConfig.anchor,
     compactGuidance,
@@ -386,6 +399,7 @@ export function TutorialExperience({
               || state.step === 'research-results-open'
               || state.step === 'round-1-thesis-result'
               || state.step === 'round-1-thesis-result-open'
+              || state.step === 'round-2-research' || state.step === 'round-2-research-open'
           ? 'research' as const
           : state.step === 'help-menu'
     ? 'help' as const
@@ -430,6 +444,7 @@ export function TutorialExperience({
           anchorSelector={presentation.positionTarget}
           coachAtTop={compactHeader && coachAtTop}
           compactLayout={compactHeader}
+          journalEntryAllowed={!informationalSteps.has(state.step)}
           spotlightSelector={targetConfig.spotlight}
         />
       )}
@@ -494,17 +509,18 @@ export function TutorialExperience({
         onDirectInterpretationOpened={() => void applyAction({ type: 'open-interpretation-direct' })}
         onContractsClosed={() => void applyAction({ type: 'close-contracts-review' })}
         onContractsOpened={() => void applyAction({ type: 'open-contracts-review' })}
-        onInterpretationClosed={() => void applyAction({ type: 'close-interpretation' })}
         onInterpretationOpened={() => void applyAction({ type: 'open-interpretation' })}
         onLaboratoryModeSelected={(mode) => void applyAction({ type: 'select-laboratory-mode', mode })}
-        onResearchClosed={() => void applyAction({ type: 'close-research-results' })}
+        onJournalClosed={(workingModel) => void applyAction({ type: 'close-journal', workingModel })}
+        onJournalOpenChange={setJournalOpen}
+        onWorkingModelOpened={() => void applyAction({ type: 'open-working-model' })}
         onResearchOpened={() => void applyAction({ type: 'open-research-results' })}
         onRequiredModalOpenChange={setRequiredModalOpen}
         onSaveWorkingModel={(workingModel) => applyAction({ type: 'update-working-model', workingModel })}
         view={tutorialView(state)}
       />
       <Dialog open={exitOpen} onOpenChange={setExitOpen}>
-        <DialogContent>
+        <DialogContent className={styles.exitDialog}>
           <DialogHeader>
             <DialogTitle>{t('tutorial.exit.title')}</DialogTitle>
             <DialogDescription>{t('tutorial.exit.description')}</DialogDescription>
@@ -524,12 +540,14 @@ function TutorialViewportAnchor({
   anchorSelector,
   coachAtTop,
   compactLayout,
+  journalEntryAllowed,
   spotlightSelector,
 }: {
   alignTargetStart: boolean
   anchorSelector: string
   coachAtTop: boolean
   compactLayout: boolean
+  journalEntryAllowed: boolean
   spotlightSelector?: string
 }) {
   useLayoutEffect(() => {
@@ -544,6 +562,55 @@ function TutorialViewportAnchor({
     let lastRequestScrollY: number | undefined
     let lastRequestedScrollTop: number | undefined
     let positionRetryCount = 0
+    // Joyride 3 has one spotlight. Preserve its blocking backdrop and carve
+    // only the permitted Journal button out of that backdrop's hit region.
+    const updateJournalInteraction = () => {
+      const entry = document.querySelector<HTMLButtonElement>('[data-testid="tutorial-research-trigger"]')
+      const svg = document.querySelector<SVGSVGElement>('.react-joyride__overlay svg')
+      const removeCutout = () => document.documentElement.style.removeProperty('--tutorial-journal-entry-cutout')
+      if (!journalEntryAllowed || !entry || entry.disabled || !svg
+        || entry.closest('[aria-hidden="true"], [inert]')
+        || getComputedStyle(entry).visibility !== 'visible') {
+        removeCutout()
+        return
+      }
+      const rect = entry.getBoundingClientRect()
+      const overlayRect = svg.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0 || overlayRect.width <= 0 || overlayRect.height <= 0) {
+        removeCutout()
+        return
+      }
+      // Ignore only Joyride's own backdrop. A native dialog, orientation or
+      // system blocker, or the coach itself, still denies this background hit.
+      const receiver = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+        .find((element) => !element.closest('.react-joyride__overlay'))
+      if (!receiver || !entry.contains(receiver)) {
+        removeCutout()
+        return
+      }
+      journalResizeObserver.observe(svg)
+      const left = rect.left - overlayRect.left
+      const top = rect.top - overlayRect.top
+      const right = left + rect.width
+      const bottom = top + rect.height
+      const radius = Math.min(Number.parseFloat(getComputedStyle(entry).borderTopLeftRadius) || 0,
+        rect.width / 2, rect.height / 2)
+      const path = `M0 0H${overlayRect.width}V${overlayRect.height}H0Z`
+        + ` M${left + radius} ${top}H${right - radius}A${radius} ${radius} 0 0 1 ${right} ${top + radius}`
+        + ` V${bottom - radius}A${radius} ${radius} 0 0 1 ${right - radius} ${bottom}`
+        + ` H${left + radius}A${radius} ${radius} 0 0 1 ${left} ${bottom - radius}`
+        + ` V${top + radius}A${radius} ${radius} 0 0 1 ${left + radius} ${top}Z`
+      document.documentElement.style.setProperty('--tutorial-journal-entry-cutout', `path(evenodd, "${path}")`)
+    }
+    // The portal mounts asynchronously; observe its insertion, then keep the
+    // cutout aligned when the fixed entry or document-sized SVG changes size.
+    const journalMutationObserver = new MutationObserver(updateJournalInteraction)
+    journalMutationObserver.observe(document.body, { childList: true, subtree: true })
+    const journalResizeObserver = new ResizeObserver(updateJournalInteraction)
+    const journalEntry = document.querySelector<HTMLElement>('[data-testid="tutorial-research-trigger"]')
+    if (journalEntry) journalResizeObserver.observe(journalEntry)
+    window.addEventListener('resize', updateJournalInteraction)
+    window.visualViewport?.addEventListener('resize', updateJournalInteraction)
     const revealSpotlight = () => {
       delete document.documentElement.dataset.tutorialAutoscrolling
     }
@@ -566,11 +633,47 @@ function TutorialViewportAnchor({
         const actionContainer = document.querySelector<HTMLElement>('[data-tutorial-action-container]')
         const coachRect = coach?.getBoundingClientRect()
         const headerRect = header?.getBoundingClientRect()
+        const journalEntry = document.querySelector<HTMLElement>('[data-testid="tutorial-research-trigger"]')
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight
         const anchorIsHeader = anchor === header
+        const actionIsPinned = Boolean(actionContainer?.closest('[data-tutorial-action-pinned]'))
+        const actionHeight = actionContainer?.getBoundingClientRect().height ?? 0
+        const coachCard = coach?.querySelector<HTMLElement>('[data-tutorial-step]')
+        const coachStyle = coachCard ? getComputedStyle(coachCard) : null
+        const minimumCoachHeight = (coachStyle ? Number.parseFloat(coachStyle.paddingTop)
+          + Number.parseFloat(coachStyle.paddingBottom) : 0)
+          + (coachCard?.querySelector('button')?.getBoundingClientRect().height ?? 44)
+        // Pinning is useful only while the header, current input, readable
+        // coach and complete command footer can share the viewport.
+        const actionInFlow = compactLayout && actionIsPinned && !coachAtTop
+          && viewportHeight - (headerRect?.bottom ?? 100) - actionHeight
+            - minimumCoachHeight - 56 < anchor.getBoundingClientRect().height
+        if (compactLayout) {
+          document.documentElement.style.setProperty('--tutorial-mobile-action-position',
+            actionInFlow ? 'static' : 'fixed')
+          document.documentElement.style.setProperty('--tutorial-mobile-action-inset',
+            actionInFlow ? 'auto' : 'auto .75rem .75rem')
+          // A constrained viewport scrolls the complete footer with the page;
+          // the coach keeps enough inner space for its original copy and Exit.
+          document.documentElement.style.setProperty(
+            '--tutorial-mobile-coach-max-height',
+            `${Math.max(minimumCoachHeight, viewportHeight - (headerRect?.bottom ?? 100)
+              - (actionInFlow ? 0 : actionHeight) - 100)}px`,
+          )
+          if (journalEntry) {
+            const entryRect = journalEntry.getBoundingClientRect()
+            const sharesCoachColumn = coachRect
+              && entryRect.left < coachRect.right && entryRect.right > coachRect.left
+            journalEntry.style.setProperty('--journal-tutorial-clearance',
+              sharesCoachColumn && !coachAtTop
+                ? `${Math.max(0, viewportHeight - coachRect.top + 12)}px`
+                : '0px')
+          }
+        }
         if (compactLayout && actionContainer) {
           document.documentElement.style.setProperty(
             '--tutorial-mobile-action-height',
-            `${actionContainer.getBoundingClientRect().height}px`,
+            `${actionInFlow ? 0 : actionHeight}px`,
           )
         }
         const safeTop = compactLayout
@@ -593,10 +696,11 @@ function TutorialViewportAnchor({
             ? spotlight
             : anchor
         if (compactLayout && preferredTarget.matches('[data-testid="tutorial-research-trigger"]')) {
-          preferredTarget.style.setProperty('--journal-tutorial-clearance', `${Math.max(0, window.innerHeight - safeBottom)}px`)
+          updateJournalInteraction()
           scheduleSpotlightReveal()
           return
         }
+        updateJournalInteraction()
         const rect = preferredTarget.getBoundingClientRect()
 
         if (compactLayout && coachAtTop && coachRect) {
@@ -663,6 +767,7 @@ function TutorialViewportAnchor({
       }
       window.addEventListener('scrollend', scrollEndHandler)
       scrollHandler = () => {
+        updateJournalInteraction()
         if ('tutorialAutoscrolling' in document.documentElement.dataset) {
           autoScrollObserved = true
           scheduleSpotlightReveal()
@@ -694,12 +799,20 @@ function TutorialViewportAnchor({
       if (scrollHandler) window.removeEventListener('scroll', scrollHandler)
       actionObserver?.disconnect()
       coachObserver?.disconnect()
+      journalMutationObserver.disconnect()
+      journalResizeObserver.disconnect()
+      window.removeEventListener('resize', updateJournalInteraction)
+      window.visualViewport?.removeEventListener('resize', updateJournalInteraction)
+      document.documentElement.style.removeProperty('--tutorial-journal-entry-cutout')
       revealSpotlight()
       document.documentElement.style.removeProperty('--tutorial-mobile-coach-bottom')
       document.documentElement.style.removeProperty('--tutorial-mobile-action-height')
+      document.documentElement.style.removeProperty('--tutorial-mobile-action-position')
+      document.documentElement.style.removeProperty('--tutorial-mobile-action-inset')
+      document.documentElement.style.removeProperty('--tutorial-mobile-coach-max-height')
       document.querySelector<HTMLElement>('[data-testid="tutorial-research-trigger"]')?.style.removeProperty('--journal-tutorial-clearance')
     }
-  }, [alignTargetStart, anchorSelector, coachAtTop, compactLayout, spotlightSelector])
+  }, [alignTargetStart, anchorSelector, coachAtTop, compactLayout, journalEntryAllowed, spotlightSelector])
 
   return null
 }
@@ -720,21 +833,14 @@ function CoachContent({
   progress: string
 }) {
   const { t } = useI18n()
-  const thesisFeedbackKey: TranslationKey | null = !thesisFeedback
-    ? null
-    : !thesisFeedback.fieldTypeCorrect && !thesisFeedback.polarityCorrect
-      ? 'tutorial.coach.thesisBothIncorrect'
-      : thesisFeedback.fieldTypeCorrect
-        ? 'tutorial.coach.thesisPolarityIncorrect'
-        : 'tutorial.coach.thesisFieldIncorrect'
   return (
     <div className={styles.coach}>
       <Typography variant="caption" tone="muted">{progress}</Typography>
       <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{t('tutorial.coach.task')}</Typography>
       <Typography variant="bodySm">{task}</Typography>
-      {thesisFeedbackKey && (
+      {thesisFeedback && (
         <Typography role="alert" variant="bodySm" className={styles.thesisFeedback}>
-          {t(thesisFeedbackKey)}
+          {t('tutorial.coach.thesisChecked')}
         </Typography>
       )}
       {hint && <Typography variant="bodySm" className={styles.hint}>{hint}</Typography>}

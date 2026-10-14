@@ -449,7 +449,10 @@ export function PowerAllocationPanel({
       )}
 
       <Dialog open={showUnallocatedWarning} onOpenChange={changeWarningOpen}>
-        <DialogContent closeLabel={t('tender.power.unallocatedWarning.cancel')}
+        <DialogContent
+          className={styles.unallocatedWarning}
+          data-tender-power-warning=""
+          closeLabel={t('tender.power.unallocatedWarning.cancel')}
           onCloseAutoFocus={(event) => {
             if (confirmButton.current?.isConnected && !confirmButton.current.disabled) {
               event.preventDefault()

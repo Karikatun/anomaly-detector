@@ -251,17 +251,23 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: .5rem;
 }
 
 .evidenceHeading h3 {
   color: rgba(224, 237, 245, .78);
   font-size: .72rem;
+  line-height: normal;
+  white-space: normal;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
 }
 
 .evidenceHeading > span {
   color: var(--primary);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .evidencePublicCountDesktop {

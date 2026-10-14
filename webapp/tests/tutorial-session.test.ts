@@ -30,6 +30,25 @@ test('tutorial ignores malformed browser session data', () => {
   expect(loadTutorialSession(storage, 'player-a')).toEqual(createTutorialState('player-a'))
 })
 
+test('resumes the former Power introduction at the corresponding action without losing its draft', () => {
+  const storage = new MemoryStorage()
+  const historical = {
+    ...createTutorialState('player-a'), step: 'round-1-power-intro' as const,
+    workingModel: { signals: { aster: { hypothesis: { fieldType: 'phase' as const, polarity: 'negative' as const } } } },
+  }
+  storage.setItem('anomaly-detector:tutorial-session', JSON.stringify(historical))
+  const restored = loadTutorialSession(storage, 'player-a')
+  expect(restored).toEqual({ ...historical, step: 'round-1-power' })
+})
+
+test('restores the second-round Journal entry independently of an account completion handoff', () => {
+  const storage = new MemoryStorage()
+  const state = { ...createTutorialState(guestTutorialPlayerId), round: 2 as const, step: 'round-2-research' as const }
+  saveTutorialSession(storage, state)
+  expect(loadTutorialSession(storage, guestTutorialPlayerId)).toEqual(state)
+  expect(beginGuestTutorialHandoff(storage)).toBe(false)
+})
+
 test('guest progress survives reload without overwriting an account draft', () => {
   const storage = new MemoryStorage()
   const account = { ...createTutorialState('player-a'), step: 'round-2-access' as const, round: 2 as const }

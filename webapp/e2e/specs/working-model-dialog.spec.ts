@@ -242,3 +242,76 @@ test('Journal keeps one ordered window and pending model edits through tabs, clo
     await guestContext.close()
   }
 })
+
+
+test('connected Research remains readable in the real last ten seconds of Laboratory and closes on the server phase transition', async ({ browser, page }) => {
+  test.setTimeout(180_000)
+  await registerBrowserUser(page, 'Хост срочного журнала', 'urgent-journal-host')
+  const webOrigin = new URL(page.url()).origin
+  const guestContext = await browser.newContext({ baseURL: webOrigin, viewport: { width: 390, height: 844 } })
+  const guest = await guestContext.newPage()
+  try {
+    await registerBrowserUser(guest, 'Гость срочного журнала', 'urgent-journal-guest', webOrigin)
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ', exact: true }).click()
+    await page.getByLabel('Количество игроков').selectOption('2')
+    await page.getByRole('button', { name: 'Создать команду', exact: true }).click()
+    const joinCode = await readRoomJoinCode(page)
+    await guest.getByRole('button', { name: 'ВОЙТИ ПО КОДУ', exact: true }).click()
+    await guest.getByLabel('Код комнаты').fill(joinCode)
+    await guest.getByRole('button', { name: 'Войти по коду', exact: true }).click()
+    await guest.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Начать игру', exact: true }).click()
+    await chooseAccessSlot(page, 6)
+    await chooseAccessSlot(guest, 5)
+    for (const player of [page, guest]) {
+      for (const [category, power] of [['Разведка', 1], ['Лаборатория', 2], ['Анализ модели', 1]] as const) {
+        for (let i = 0; i < power; i++) await player.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true }).click()
+      }
+      await player.getByRole('button', { name: 'Подтвердить распределение', exact: true }).click()
+    }
+    // Slot 5 acts before slot 6. Leave the host's Laboratory action unresolved for its real deadline.
+    for (const player of [guest, page]) {
+      await player.getByRole('button', { name: 'Сигнал для разведки: Aster', exact: true }).click()
+      await player.getByRole('button', { name: 'Исследовать', exact: true }).click()
+    }
+    await guest.getByRole('button', { name: /^Глубокое/ }).click()
+    const samples = guest.getByRole('button', { name: /^Образец:/ })
+    await expect(samples).toHaveCount(2)
+    // Selecting the source changes its accessible name; retain both identities first.
+    const sampleNames = await samples.evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')!))
+    for (const sampleName of sampleNames) {
+      await guest.getByRole('button', { name: sampleName, exact: true }).click()
+    }
+    const accepted = guest.waitForResponse((response) => response.url().includes('/commands') && response.request().postDataJSON()?.type === 'run-laboratory-test' && response.ok())
+    await guest.getByRole('button', { name: /^Провести опыт:/ }).click()
+    await accepted
+    await expect(page.getByRole('heading', { name: '4. Лаборатория', exact: true })).toBeVisible()
+    const entry = guest.getByRole('button', { name: 'Открыть журнал', exact: true })
+    await entry.click()
+    const journal = guest.getByRole('dialog', { name: 'Журнал исследований', exact: true })
+    await journal.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+    await expect(journal.locator('[data-own-experiment]')).toHaveCount(1)
+    await expect(journal).toContainText('Личные измерения')
+    await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+    await guest.keyboard.press('Escape')
+    await expect.poll(async () => {
+      const text = await guest.getByRole('timer', { name: 'До конца фазы', exact: true }).textContent()
+      const [minutes, seconds] = (text ?? '').split(':').map(Number)
+      return minutes! * 60 + seconds!
+    }, { timeout: 100_000, intervals: [1000] }).toBeLessThanOrEqual(10)
+    await expect(entry).toBeEnabled()
+    await entry.click()
+    await expect(journal.getByRole('tab', { name: 'Данные исследований', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(journal.getByRole('tab', { name: 'Рабочая модель', exact: true })).toBeDisabled()
+    await expect(journal.getByRole('tab', { name: 'Трактовка', exact: true })).toBeDisabled()
+    await expect(journal.locator('[data-own-experiment]')).toHaveCount(1)
+    await expect(journal).toContainText('Только вы')
+    await expect(guest.locator('[role="timer"]')).toBeVisible()
+    await expect(journal).toBeHidden({ timeout: 20_000 })
+    await expect(guest.getByRole('heading', { name: '4. Лаборатория', exact: true })).toBeHidden()
+    await expect(guest.getByRole('button', { name: 'Открыть журнал', exact: true })).toBeEnabled()
+  } finally {
+    await guestContext.close()
+  }
+})

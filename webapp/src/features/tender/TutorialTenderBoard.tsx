@@ -1,6 +1,6 @@
 import { FlaskConicalIcon, InformationCircleIcon, Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 
 import type { TenderView, WorkingModel } from '@anomaly-detector/contracts'
 
@@ -22,7 +22,7 @@ import type { TenderCommandInput } from './commands'
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import { TenderPhaseLayout } from './components/TenderPhaseLayout'
 import { TenderHeaderFrame } from './components/TenderHeaderFrame'
-import { TenderLaboratoryJournal, TenderPlayers } from './components/TenderOverview'
+import { TenderPlayers } from './components/TenderOverview'
 import { TenderJournalDialog, type TenderJournalTab } from './components/TenderJournalDialog'
 import { useWorkingModelDraft } from './use-working-model-draft'
 import { ContractPlanningPanel } from './components/ContractPlanningPanel'
@@ -54,10 +54,11 @@ export function TutorialTenderBoard({
   onDirectInterpretationOpened,
   onExitRequest,
   onHelpMenuOpened,
-  onInterpretationClosed,
   onInterpretationOpened,
   onLaboratoryModeSelected,
-  onResearchClosed,
+  onJournalClosed,
+  onJournalOpenChange,
+  onWorkingModelOpened,
   onResearchOpened,
   onRequiredModalOpenChange,
   onSaveWorkingModel,
@@ -74,10 +75,11 @@ export function TutorialTenderBoard({
   onDirectInterpretationOpened: () => void
   onExitRequest: () => void
   onHelpMenuOpened: () => void
-  onInterpretationClosed: () => void
   onInterpretationOpened: () => void
   onLaboratoryModeSelected: (mode: 'broad' | 'deep') => void
-  onResearchClosed: () => void
+  onJournalClosed: (workingModel: WorkingModel) => void
+  onJournalOpenChange: (open: boolean) => void
+  onWorkingModelOpened: () => void
   onResearchOpened: () => void
   onRequiredModalOpenChange: (open: boolean) => void
   onSaveWorkingModel: (workingModel: WorkingModel) => Promise<boolean>
@@ -87,7 +89,6 @@ export function TutorialTenderBoard({
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(false)
   const [journalTab, setJournalTab] = useState<TenderJournalTab>('working-model')
-  const readingPurpose = useRef<'research' | 'interpretation' | null>(null)
   const [contractsOpen, setContractsOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
 
@@ -100,44 +101,49 @@ export function TutorialTenderBoard({
     setHelpMenuOpen(false)
     setRulesOpen(false)
     setContractsOpen(false)
-    readingPurpose.current = 'interpretation'
     setJournalTab('interpretation')
     // Let the previous Help focus scope close before Journal captures the opener.
-    window.setTimeout(() => setJournalOpen(true), 0)
+    window.setTimeout(() => { setJournalOpen(true); onJournalOpenChange(true) }, 0)
     if (direct) onDirectInterpretationOpened()
     else onInterpretationOpened()
   }
 
   const openJournal = (open: boolean) => {
     setJournalOpen(open)
+    onJournalOpenChange(open)
     if (open) {
       setRulesOpen(false)
       setContractsOpen(false)
       if (highlight === 'research') {
-        readingPurpose.current = 'research'
         setJournalTab('research')
         onResearchOpened()
-      } else {
-        readingPurpose.current = null
+      } else if (highlight === 'interpretation') {
+        setJournalTab('interpretation')
+        onInterpretationOpened()
+      } else if (highlight === 'working-model') {
+        setJournalTab('working-model')
+        onWorkingModelOpened()
       }
     } else {
-      const purpose = readingPurpose.current
-      readingPurpose.current = null
-      if (purpose === 'research') onResearchClosed()
-      if (purpose === 'interpretation') onInterpretationClosed()
+      onJournalClosed(workingModelOwner.model)
     }
   }
 
+  const changeJournalTab = (tab: TenderJournalTab) => {
+    setJournalTab(tab)
+    if (tab === 'interpretation') onInterpretationOpened()
+    if (tab === 'working-model') onWorkingModelOpened()
+  }
+
   const openContracts = (open: boolean) => {
-    if (open) setJournalOpen(false)
+    if (open) { setJournalOpen(false); onJournalOpenChange(false) }
     setContractsOpen(open)
     if (open) onContractsOpened()
     else onContractsClosed()
   }
 
   const saveWorkingModel = async (workingModel: WorkingModel) => {
-    const progressed = await onSaveWorkingModel(workingModel)
-    if (progressed) setJournalOpen(false)
+    await onSaveWorkingModel(workingModel)
   }
 
   const workingModelOwner = useWorkingModelDraft(view.privateWorkingModel, saveWorkingModel)
@@ -326,12 +332,11 @@ export function TutorialTenderBoard({
                 phase={view.phase}
                 players={view.players}
               />
-              <TenderLaboratoryJournal players={view.players} results={view.publicLaboratoryResults} />
               <div data-tutorial-working-model={view.phase !== 'model-analysis' ? '' : undefined}>
                 <TenderJournalDialog
                   actionError={journalOpen ? commandError : null}
-                  view={view} owner={workingModelOwner} tab={journalTab}
-                  onTabChange={setJournalTab} open={journalOpen} onOpenChange={openJournal}
+                  view={view} owner={workingModelOwner} tab={journalTab} currentPlayerId={myPlayer?.playerId}
+                  onTabChange={changeJournalTab} open={journalOpen} onOpenChange={openJournal}
                   disabled={interpretationRequired || view.phase === 'final-scientific-model' || view.phase === 'complete'}
                   showTimerWarning={false} highlightResult="reflection" triggerTestId="tutorial-research-trigger"
                 />

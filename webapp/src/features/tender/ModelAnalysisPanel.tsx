@@ -1,7 +1,6 @@
 import { translate } from '../../platform/i18n'
 import { Alert01Icon, InformationCircleIcon, SignalFullIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import type { CSSProperties } from 'react'
 import { useState } from 'react'
 
 import type {
@@ -35,8 +34,6 @@ import {
   signalLabelKeys,
 } from './catalog'
 import styles from './components/PhasePanel.module.css'
-import { SignalGlyph } from './components/SignalGlyph'
-import { signalAccent } from './components/signal-visuals'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import { runTenderAction } from './run-tender-action'
 import type { WorkingModelSaveStatus } from './working-model-draft'
@@ -69,15 +66,10 @@ type ModelAnalysisPanelProps = {
   onSaveWorkingModel: (model: WorkingModel) => Promise<void>
 }
 
-const previewStyle = (signal?: SignalId) => ({
-  '--signal-accent': signal ? signalAccent(signal) : '#64788c',
-} as CSSProperties)
-
 export function ModelAnalysisPanel({
   knownSignals,
   maxTheses,
   model,
-  publicTheses,
   privateTheses,
   progress,
   round,
@@ -99,10 +91,6 @@ export function ModelAnalysisPanel({
   const isPrivateAnalysis = tenderRulesetPolicy(ruleset).sharedModelAnalysis
   const privateThesisHistory = privateTheses ?? []
   const currentRoundPrivateTheses = privateThesisHistory.filter((thesis) => thesis.round === round)
-  const visibleTheses = isPrivateAnalysis
-    ? privateThesisHistory
-    : publicTheses
-
   const handleSubmit = async () => {
     if (!isValid) return
     const succeeded = await runTenderAction(
@@ -192,20 +180,6 @@ export function ModelAnalysisPanel({
             </label>
           </div>
 
-          <div className={styles.preview} style={previewStyle(signalId || undefined)}>
-            <SignalGlyph signal={signalId || undefined} className={styles.signalGlyph} />
-            <span className={styles.previewCopy}>
-              <Typography as="strong" variant="bodySmMedium">
-                {signalId ? t(signalLabelKeys[signalId]) : translate('tender.modelAnalysisPanel.copy.003')}
-              </Typography>
-              <Typography variant="bodySm" tone="muted">
-                {fieldType ? t(fieldTypeLabelKeys[fieldType]) : translate('tender.modelAnalysisPanel.copy.004')}
-                {' · '}
-                {polarity ? t(polarityLabelKeys[polarity]) : translate('tender.modelAnalysisPanel.copy.005')}
-              </Typography>
-            </span>
-          </div>
-
           <div className={styles.warning}>
             <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
             <Typography variant="bodySm">
@@ -213,57 +187,6 @@ export function ModelAnalysisPanel({
                 ? t('tender.analysis.privateWarning')
                 : t('tender.analysis.publicWarning')}
             </Typography>
-          </div>
-          <div className={styles.analysisHistory}>
-            <div className={styles.sectionHeader}>
-              <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>
-                {t('tender.analysis.history')}
-              </Typography>
-              <Typography as="span" variant="caption" className={styles.sectionMeta}>
-                {isPrivateAnalysis
-                  ? t('tender.analysis.historyCount', {
-                      current: currentRoundPrivateTheses.length,
-                      max: maxTheses,
-                      total: visibleTheses.length,
-                    })
-                  : `${visibleTheses.length} / ${maxTheses}`}
-              </Typography>
-            </div>
-            {visibleTheses.length === 0 ? (
-              <Typography variant="bodySm" tone="muted">{t('tender.analysis.historyEmpty')}</Typography>
-            ) : (
-              <div className={styles.journalList}>
-                {visibleTheses.slice().reverse().map((thesis, index) => {
-                  const fieldTypeCorrect = 'fieldTypeCorrect' in thesis ? thesis.fieldTypeCorrect : thesis.correct
-                  const polarityCorrect = 'polarityCorrect' in thesis ? thesis.polarityCorrect : thesis.correct
-                  return (
-                  <div
-                    key={'id' in thesis ? thesis.id : `${thesis.playerId}-${thesis.signalId}-${index}`}
-                    className={styles.journalEntry}
-                    data-private-thesis={isPrivateAnalysis || undefined}
-                    data-public-thesis={!isPrivateAnalysis || undefined}
-                    style={previewStyle(thesis.signalId)}
-                  >
-                    <SignalGlyph signal={thesis.signalId} className={styles.signalGlyph} />
-                    <span className={styles.signalCopy}>
-                      <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[thesis.signalId])}</Typography>
-                      <Typography as="span" variant="caption" tone="muted">
-                        {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
-                      </Typography>
-                    </span>
-                    <span className={styles.journalMeta}>
-                      <Typography as="span" variant="caption" data-correct={fieldTypeCorrect || undefined}>
-                        {fieldTypeCorrect ? t('tender.analysis.typeCorrect') : t('tender.analysis.typeIncorrect')}
-                      </Typography>
-                      <Typography as="span" variant="caption" data-correct={polarityCorrect || undefined}>
-                        {polarityCorrect ? t('tender.analysis.polarityCorrect') : t('tender.analysis.polarityIncorrect')}
-                      </Typography>
-                    </span>
-                  </div>
-                  )
-                })}
-              </div>
-            )}
           </div>
           {isPrivateAnalysis && progress && (
             <Typography variant="bodySm" tone="muted">

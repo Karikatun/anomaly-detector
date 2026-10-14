@@ -39,7 +39,6 @@ for (const width of [1440, 390]) {
       await expect(prologue).toBeVisible()
       if (startLesson) {
         await page.getByRole('button', { name: 'Начать обучение', exact: true }).click()
-        await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
         await page.locator('[data-testid="floater"]').getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
         await page.getByRole('button', { name: 'Выйти и сбросить', exact: true }).click()
       } else {
@@ -99,10 +98,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768
     await page.screenshot({ path: testInfo.outputPath('guest-prologue.png') })
     await expect(page.getByRole('tab', { name: 'Регистрация' })).toHaveCount(0)
     await page.getByRole('button', { name: 'Начать обучение', exact: true }).click()
-    await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
-    await expect(page.locator('[data-tutorial-step="round-1-header"]')).toBeVisible()
+    await expect(page.locator('[data-tutorial-step="round-1-access"]')).toBeVisible()
     await page.reload()
-    await expect(page.locator('[data-tutorial-step="round-1-header"]')).toBeVisible()
+    await expect(page.locator('[data-tutorial-step="round-1-access"]')).toBeVisible()
     expect(protectedRequests).toEqual([])
     expect((await page.context().cookies()).some((cookie) => cookie.name === 'anomaly_detector_refresh')).toBe(false)
   })

@@ -821,6 +821,7 @@
 }
 
 .analysisModel {
+  display: none;
   align-content: start;
 }
 
@@ -1523,6 +1524,10 @@
     gap: .85rem;
   }
 
+  .analysisModel {
+    display: block;
+  }
+
   .analysisThesis {
     align-content: start;
   }
@@ -1627,4 +1632,8 @@
   .laboratorySplit {
     grid-template-columns: minmax(18rem, .7fr) minmax(27rem, 1fr);
   }
+}
+
+.analysisPanel .footer {
+  grid-template-columns: minmax(0, 1fr);
 }
