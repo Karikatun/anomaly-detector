@@ -133,6 +133,7 @@ export function TutorialExperience({
   const [commandError, setCommandError] = useState<string | null>(null)
   const [thesisFeedback, setThesisFeedback] = useState<NonNullable<TutorialAdvanceResult['thesisFeedback']> | null>(null)
   const [exitOpen, setExitOpen] = useState(false)
+  const [requiredModalOpen, setRequiredModalOpen] = useState(false)
   const [compactHeader, setCompactHeader] = useState(
     () => window.matchMedia('(max-width: 47.999rem)').matches,
   )
@@ -294,13 +295,13 @@ export function TutorialExperience({
       spotlight: '[data-tutorial-lab-pair]',
     },
     'research-results': { anchor: '[data-testid="tutorial-research-trigger"]' },
-    'research-results-open': { anchor: '[data-testid="tutorial-research-dialog"]' },
+    'research-results-open': { anchor: '[data-tender-journal]' },
     'help-menu': {
       anchor: compactHeader ? '[data-tutorial-help]' : '[data-tutorial-interpretation-direct]',
     },
     interpretation: { anchor: '[data-tutorial-interpretation]' },
     'interpretation-open': {
-      anchor: '[data-testid="tutorial-interpretation-dialog"]',
+      anchor: '[data-tender-journal]',
     },
     'round-1-model-intro': { anchor: '[data-tutorial-primary]' },
     'round-1-working-model': {
@@ -313,7 +314,7 @@ export function TutorialExperience({
       spotlight: '[data-tutorial-thesis]',
     },
     'round-1-thesis-result': { anchor: '[data-testid="tutorial-research-trigger"]' },
-    'round-1-thesis-result-open': { anchor: '[data-testid="tutorial-research-dialog"]' },
+    'round-1-thesis-result-open': { anchor: '[data-tender-journal]' },
     'round-2-access': {
       anchor: '[data-tutorial-access-slot="4"]',
       spotlight: '[data-tutorial-access-options]',
@@ -423,7 +424,7 @@ export function TutorialExperience({
 
   return (
     <>
-      {!readingDialogOpen && (
+      {!readingDialogOpen && !requiredModalOpen && (
         <TutorialViewportAnchor
           alignTargetStart={presentation.alignTargetStart}
           anchorSelector={presentation.positionTarget}
@@ -432,7 +433,7 @@ export function TutorialExperience({
           spotlightSelector={targetConfig.spotlight}
         />
       )}
-      {!exitOpen && <Joyride
+      {!exitOpen && !requiredModalOpen && <Joyride
         key={state.step}
         locale={{
           back: t('tutorial.joyride.back'),
@@ -473,6 +474,7 @@ export function TutorialExperience({
       />}
       <Typography aria-live="polite" variant="srOnly">{t(currentTaskKey)}</Typography>
       <TutorialTenderBoard
+        key={state.playerId}
         actionPanelPinned={mobileActionPinnedSteps.has(state.step)}
         commandError={commandError}
         highlight={exitOpen ? 'none' : highlight}
@@ -497,6 +499,7 @@ export function TutorialExperience({
         onLaboratoryModeSelected={(mode) => void applyAction({ type: 'select-laboratory-mode', mode })}
         onResearchClosed={() => void applyAction({ type: 'close-research-results' })}
         onResearchOpened={() => void applyAction({ type: 'open-research-results' })}
+        onRequiredModalOpenChange={setRequiredModalOpen}
         onSaveWorkingModel={(workingModel) => applyAction({ type: 'update-working-model', workingModel })}
         view={tutorialView(state)}
       />
@@ -589,6 +592,11 @@ function TutorialViewportAnchor({
           : spotlight && spotlight.getBoundingClientRect().height <= safeHeight
             ? spotlight
             : anchor
+        if (compactLayout && preferredTarget.matches('[data-testid="tutorial-research-trigger"]')) {
+          preferredTarget.style.setProperty('--journal-tutorial-clearance', `${Math.max(0, window.innerHeight - safeBottom)}px`)
+          scheduleSpotlightReveal()
+          return
+        }
         const rect = preferredTarget.getBoundingClientRect()
 
         if (compactLayout && coachAtTop && coachRect) {
@@ -689,6 +697,7 @@ function TutorialViewportAnchor({
       revealSpotlight()
       document.documentElement.style.removeProperty('--tutorial-mobile-coach-bottom')
       document.documentElement.style.removeProperty('--tutorial-mobile-action-height')
+      document.querySelector<HTMLElement>('[data-testid="tutorial-research-trigger"]')?.style.removeProperty('--journal-tutorial-clearance')
     }
   }, [alignTargetStart, anchorSelector, coachAtTop, compactLayout, spotlightSelector])
 

@@ -1,5 +1,5 @@
 import { translate } from '../../platform/i18n'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
 import type {
   FieldType,
@@ -21,10 +21,10 @@ import {
 } from './catalog'
 import { SignalGlyph } from './components/SignalGlyph'
 import {
-  WorkingModelDraftController,
   type WorkingModelSaveStatus,
 } from './working-model-draft'
 import styles from './WorkingModelPanel.module.css'
+import { useWorkingModelDraft, type WorkingModelDraft } from './use-working-model-draft'
 
 type SignalCell = NonNullable<WorkingModel['signals'][keyof WorkingModel['signals']]>
 
@@ -36,46 +36,24 @@ type WorkingModelPanelProps = {
   onSaveStatusChange?: (status: WorkingModelSaveStatus) => void
 }
 
-export function WorkingModelPanel({
-  model,
-  knownSignals,
-  disabled,
-  onSave,
-  onSaveStatusChange,
-}: WorkingModelPanelProps) {
+export function WorkingModelPanel(props: WorkingModelPanelProps) {
+  const owner = useWorkingModelDraft(props.model, props.onSave)
+  const { onSaveStatusChange } = props
+  useEffect(() => { onSaveStatusChange?.(owner.status) }, [onSaveStatusChange, owner.status])
+  return <WorkingModelEditor disabled={props.disabled} knownSignals={props.knownSignals} owner={owner} />
+}
+
+export function WorkingModelEditor({ disabled, knownSignals, owner }: {
+  disabled?: boolean
+  knownSignals: SignalId[]
+  owner: WorkingModelDraft
+}) {
   const { t } = useI18n()
-  const [draft, setDraft] = useState<WorkingModel>(model)
-  const [saveStatus, setSaveStatus] = useState<WorkingModelSaveStatus>({ state: 'idle' })
-  const [draftController] = useState(() => new WorkingModelDraftController({
-    cancel: (timer) => clearTimeout(timer),
-    initialModel: model,
-    onDraft: setDraft,
-    onStatus: setSaveStatus,
-    save: onSave,
-    schedule: (callback, delayMs) => setTimeout(callback, delayMs),
-  }))
-
-  useEffect(() => {
-    draftController.setSave(onSave)
-  }, [draftController, onSave])
-
-  useEffect(() => {
-    draftController.receiveServerModel(model)
-  }, [draftController, model])
-
-  useEffect(() => {
-    onSaveStatusChange?.(saveStatus)
-  }, [onSaveStatusChange, saveStatus])
-
-  useEffect(() => {
-    draftController.resume()
-    return () => {
-      void draftController.dispose()
-    }
-  }, [draftController])
+  const draft = owner.model
+  const saveStatus = owner.status
 
   const updateSignal = (signal: SignalId, cell: SignalCell) => {
-    draftController.update({
+    owner.update({
       ...draft,
       signals: {
         ...draft.signals,
@@ -120,7 +98,7 @@ export function WorkingModelPanel({
             <Typography role="alert" variant="bodySm" tone="destructive">
               {saveStatus.message}
             </Typography>
-            <Button type="button" variant="outline" size="sm" onClick={() => void draftController.retry()}>
+            <Button type="button" variant="outline" size="sm" onClick={() => void owner.retry()}>
               
               {translate('tender.workingModelPanel.copy.002')}
             </Button>

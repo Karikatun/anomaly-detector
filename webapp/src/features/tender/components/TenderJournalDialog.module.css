@@ -1,0 +1,45 @@
+.trigger {
+  width: 100%;
+  justify-content: flex-start;
+  background: var(--surface-control);
+  border-color: var(--border-game-strong);
+}
+.dialog {
+  container-type: inline-size;
+  container-name: tender-journal;
+  top: calc(var(--tender-sticky-header-height, 5.75rem) + var(--space-4));
+  left: var(--space-2);
+  width: calc(100vw - var(--space-5));
+  max-width: calc(100vw - var(--space-5));
+  height: calc(100dvh - var(--tender-sticky-header-height, 5.75rem) - var(--space-7) - env(safe-area-inset-bottom, 0px));
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-4);
+  padding: var(--space-4);
+  overflow: hidden;
+  background: var(--background);
+  box-shadow: var(--shadow-overlay);
+}
+.header { padding-right: var(--space-8); }
+.tabs { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; gap: var(--space-4); }
+.tablist { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-1); border-bottom: 1px solid var(--border-game); }
+.tab { min-width: 0; min-height: 2.75rem; padding: var(--space-2); font: inherit; font-size: .875rem; border-radius: var(--radius-control) var(--radius-control) 0 0; color: var(--muted-foreground); cursor: pointer; }
+.tab:hover:not(:disabled) { background: var(--surface-control); color: var(--foreground); }
+.tab[data-state='active'] { color: var(--primary); background: var(--surface-game); box-shadow: inset 0 -2px 0 var(--primary); }
+.tab:focus-visible { outline: none; box-shadow: var(--focus-ring-inset); }
+.tab:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+.panel { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.panel[hidden] { display: none; }
+@media (min-width: 48rem) {
+  .dialog { left: max(var(--space-5), calc((100vw - 72rem) / 2)); width: min(72rem, calc(100vw - var(--space-8))); max-width: none; padding: var(--space-6); }
+}
+@media (max-width: 47.999rem) {
+  .trigger { position: fixed; right: var(--space-5); bottom: calc(var(--space-5) + env(safe-area-inset-bottom, 0px) + max(var(--journal-action-clearance, 0px), var(--journal-tutorial-clearance, 0px))); z-index: var(--layer-sticky); width: 3.5rem; height: 3.5rem; min-width: 3.5rem; justify-content: center; border-radius: var(--radius-full); box-shadow: var(--shadow-overlay); }
+  .description { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .trigger[data-state='open'] { visibility: hidden; }
+  .triggerText { display: none; }
+}
+
+@container tender-journal (max-width: 13em) {
+  .tablist { grid-template-columns: minmax(0, 1fr); }
+  .tab { padding: var(--space-1); }
+}

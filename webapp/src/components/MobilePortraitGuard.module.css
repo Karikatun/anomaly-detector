@@ -1,0 +1,22 @@
+.guard {
+  inset: 0;
+  z-index: calc(var(--layer-tutorial) + 1);
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  border-radius: 0;
+  background: var(--background);
+  color: var(--foreground);
+  padding: max(var(--space-7), env(safe-area-inset-top)) max(var(--space-8), env(safe-area-inset-right)) max(var(--space-7), env(safe-area-inset-bottom)) max(var(--space-8), env(safe-area-inset-left));
+  place-items: center;
+  overflow-y: auto;
+  animation: none;
+}
+
+.message {
+  display: grid;
+  gap: var(--space-5);
+  max-width: 32rem;
+  text-align: center;
+  text-wrap: balance;
+}

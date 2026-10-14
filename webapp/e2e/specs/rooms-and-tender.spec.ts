@@ -326,10 +326,10 @@ async function verifyWorkingModelModal(page: Page) {
     await page.getByRole('button', { name: 'Справка' }).click()
     const helpDialog = page.getByRole('dialog', { name: 'Справка' })
     await helpDialog.getByRole('button', { name: 'Трактовка анализов' }).click()
-    const laboratoryDialog = page.getByRole('dialog', { name: 'Трактовка лабораторных анализов' })
+    const laboratoryDialog = page.getByRole('dialog', { name: 'Журнал исследований' })
     const laboratoryWarning = laboratoryDialog.getByRole('status')
     const laboratoryCopy = laboratoryDialog.getByText('Источник и приёмник нельзя менять местами при трактовке результата.')
-    const laboratoryClose = laboratoryDialog.getByRole('button', { name: 'Закрыть трактовку анализов' })
+    const laboratoryClose = laboratoryDialog.getByRole('button', { name: 'Закрыть журнал' })
     const [warningBox, copyBox, closeBox] = await Promise.all([
       laboratoryWarning.boundingBox(),
       laboratoryCopy.boundingBox(),
@@ -346,8 +346,9 @@ async function verifyWorkingModelModal(page: Page) {
     await laboratoryClose.click()
     await expect(laboratoryDialog).toBeHidden()
 
-    const workingModelTrigger = page.getByRole('button', { name: /Рабочая модель/ })
+    const workingModelTrigger = page.getByRole('button', { name: 'Открыть журнал', exact: true })
     await workingModelTrigger.click()
+    await page.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true)
@@ -1439,7 +1440,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expectPhase(guestPage, headings.access)
     await expectSynchronizedTimers(page, guestPage)
     await expect(page.getByRole('heading', { name: 'Ваши образцы' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /^Данные исследований/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Открыть журнал', exact: true })).toBeVisible()
     await expect(page.getByText('Хост E2E → Гость E2E', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', {
       name: 'Слот доступа 5: Ночной. Порядок действия: 5. Компенсация: 1 образец сигнала',
@@ -1520,13 +1521,14 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await expectPhase(guestPage, headings.access)
       await expectSynchronizedTimers(page, guestPage)
       await expect(page.getByRole('heading', { name: 'Ваши образцы' })).toBeVisible()
-      const researchButton = page.getByRole('button', { name: /^Данные исследований/ })
+      const researchButton = page.getByRole('button', { name: 'Открыть журнал', exact: true })
       await expect(researchButton).toBeVisible()
       if (round > 2) {
         await researchButton.click()
+    await page.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
         const researchDialog = page.getByRole('dialog')
         await expect(researchDialog.locator('[data-private-thesis]')).toHaveCount(round - 2)
-        await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+        await page.getByRole('button', { name: 'Закрыть журнал' }).click()
       }
       await chooseAccessSlot(page, 1)
       await chooseAccessSlot(guestPage, 2)
@@ -1566,7 +1568,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
         await expectPhase(page, headings.analysis)
       }
       await expect(guestPage.getByText('История лаборатории')).toHaveCount(0)
-      await expect(guestPage.getByRole('button', { name: /^Данные исследований/ })).toBeVisible()
+      await expect(guestPage.getByRole('button', { name: 'Открыть журнал', exact: true })).toBeVisible()
       if (round === 2) {
         const mobileActionFooter = guestPage
           .getByRole('button', { name: 'Выдвинуть тезис' })
@@ -1615,17 +1617,31 @@ test('two players complete every Tender stage and receive each realtime phase tr
       return minutes * 60 + seconds
     }).toBeGreaterThan(170)
     await expect(page.getByRole('heading', { name: 'Игроки' })).toHaveCount(1)
-    const hostResearchButton = page.getByRole('button', { name: /^Данные исследований/ })
+    const hostResearchButton = page.getByRole('button', { name: 'Открыть журнал', exact: true })
     await expect(hostResearchButton).toBeVisible()
     await expect(page.getByText('Рабочая модель', { exact: true })).toHaveCount(0)
     await hostResearchButton.click()
+    await page.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+    await expect(page.getByRole('dialog').getByRole('button', { name: /: гипотеза,/ }).first()).toBeDisabled()
+    await page.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
     await expect(page.getByRole('dialog').locator('[data-private-thesis]')).toHaveCount(4)
-    await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
-    const guestResearchButton = guestPage.getByRole('button', { name: /^Данные исследований/ })
+    await page.getByRole('button', { name: 'Закрыть журнал' }).click()
+    const guestResearchButton = guestPage.getByRole('button', { name: 'Открыть журнал', exact: true })
     await expect(guestResearchButton).toBeVisible()
     await guestResearchButton.click()
+    await guestPage.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
     await expect(guestPage.getByRole('dialog').locator('[data-private-thesis]')).toHaveCount(4)
-    await guestPage.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+    const researchPanel = guestPage.getByRole('tabpanel', { name: 'Данные исследований', exact: true })
+    const researchScrollTop = await researchPanel.evaluate((panel) => {
+      panel.scrollTop = 120
+      return panel.scrollTop
+    })
+    expect(researchScrollTop).toBeGreaterThan(0)
+    await guestPage.getByRole('tab', { name: 'Трактовка', exact: true }).click()
+    await guestPage.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+    await guestPage.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+    expect(await researchPanel.evaluate((panel) => panel.scrollTop)).toBe(researchScrollTop)
+    await guestPage.getByRole('button', { name: 'Закрыть журнал' }).click()
     await expect(guestPage.getByText('Подтвердили 0 из 2 исследователей').first()).toBeVisible()
     await expect(guestPage.getByRole('combobox', { name: 'Aster: тип поля', exact: true })).toBeVisible()
     await expect(guestPage.getByRole('combobox', { name: 'Aster: полярность', exact: true })).toBeVisible()

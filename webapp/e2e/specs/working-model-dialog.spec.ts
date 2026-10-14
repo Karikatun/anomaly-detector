@@ -79,10 +79,26 @@ async function expectWorkingModelTableToStayStillWhileSaving(page: Page) {
   await page.unrouteAll({ behavior: 'wait' })
 }
 
-test('keeps the Working Model dialog below the Tender header and inside the viewport', async ({
+test('Journal keeps one ordered window and pending model edits through tabs, close and server recovery', async ({
   browser,
   page,
 }) => {
+  const runtimeErrors: string[] = []
+  page.on('pageerror', (error) => runtimeErrors.push(error.message))
+  await page.context().addInitScript(() => {
+    const controlledWindow = window as Window & { __e2eWebSockets: WebSocket[] }
+    const NativeWebSocket = window.WebSocket
+    controlledWindow.__e2eWebSockets = []
+    Object.defineProperty(window, 'WebSocket', { configurable: true,
+      value: class TrackedWebSocket extends NativeWebSocket {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          if (protocols === undefined) super(url)
+          else super(url, protocols)
+          controlledWindow.__e2eWebSockets.push(this)
+        }
+      },
+    })
+  })
   await page.setViewportSize({ width: 390, height: 844 })
   await registerBrowserUser(page, 'Хост модалки', 'working-model-host')
   const webOrigin = new URL(page.url()).origin
@@ -113,14 +129,101 @@ test('keeps the Working Model dialog below the Tender header and inside the view
     await allocateReconnaissance(guestPage)
 
     await expect(page.getByRole('heading', { name: '3. Разведка' })).toBeVisible()
-    const workingModelButton = page.getByRole('button', { name: /Рабочая модель/ })
+    const workingModelButton = page.getByRole('button', { name: 'Открыть журнал', exact: true })
     await expect(workingModelButton).toBeEnabled()
     await page.getByRole('button', { name: /^Сигнал для разведки:/ }).first().click()
     await page.getByRole('button', { name: 'Исследовать' }).click()
     await expect(guestPage.getByRole('heading', { name: '3. Разведка' })).toBeVisible()
     await expect(workingModelButton).toBeEnabled()
     await workingModelButton.click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toHaveCount(1)
+    await expect(dialog.getByRole('tab')).toHaveText([
+      'Рабочая модель', 'Данные исследований', 'Трактовка',
+    ])
+    const hypothesis = dialog.getByRole('button', {
+      name: /: гипотеза, тип поля Инерционное$/,
+    }).first()
+    const acceptedSave = page.waitForResponse((response) => {
+      const command = response.request().postDataJSON() as { type?: string } | null
+      return response.url().includes('/commands') && command?.type === 'update-working-model' && response.ok()
+    })
+    await hypothesis.click()
+    await dialog.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+    await dialog.getByRole('tab', { name: 'Трактовка', exact: true }).click()
+    await expect(dialog).toHaveCount(1)
+    await dialog.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+    await expect(hypothesis).toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.press('Escape')
+    await workingModelButton.click()
+    await expect(hypothesis).toHaveAttribute('aria-pressed', 'true')
+    await acceptedSave
+    await page.reload()
+    await expect(workingModelButton).toBeEnabled()
+    await workingModelButton.click()
+    await expect(hypothesis).toHaveAttribute('aria-pressed', 'true')
     await expectWorkingModelTableToStayStillWhileSaving(page)
+    let rejectSave = true
+    await page.route('**/api/tenders/*/commands', async (route) => {
+      const command = route.request().postDataJSON() as { type?: string } | null
+      if (command?.type === 'update-working-model' && rejectSave) {
+        await route.fulfill({ status: 429, contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'Temporary test save rejection' } }) })
+      } else await route.continue()
+    })
+    await hypothesis.click()
+    await expect(dialog.getByRole('button', { name: 'Повторить сохранение' })).toBeVisible()
+    await dialog.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+    await page.keyboard.press('Escape')
+    await expect(workingModelButton).toBeFocused()
+    await workingModelButton.click()
+    await expect(dialog.getByRole('tab', { name: 'Данные исследований', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await dialog.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+    await expect(hypothesis).toHaveAttribute('aria-pressed', 'true')
+    const retriedSave = page.waitForResponse((response) => {
+      const command = response.request().postDataJSON() as { type?: string } | null
+      return response.url().includes('/commands') && command?.type === 'update-working-model' && response.ok()
+    })
+    rejectSave = false
+    await dialog.getByRole('button', { name: 'Повторить сохранение' }).click()
+    await retriedSave
+    await expect(dialog.getByRole('button', { name: 'Повторить сохранение' })).toBeHidden()
+    await page.unrouteAll({ behavior: 'wait' })
+    await page.route('**/api/realtime/tickets', async (route) => {
+      await route.fulfill({ status: 503, contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Test reconnect hold' } }) })
+    })
+    await page.evaluate(() => {
+      const sockets = (window as Window & { __e2eWebSockets: WebSocket[] }).__e2eWebSockets
+      const open = sockets.filter((socket) => socket.readyState === WebSocket.OPEN && socket.url.includes('/api/realtime/ws'))
+      if (open.length === 0) throw new Error('No open Tender WebSocket')
+      for (const socket of open) socket.close()
+    })
+    const reconnect = page.getByRole('alertdialog', { name: 'Связь с сервером прервана' })
+    await expect(reconnect).toBeVisible()
+    await expect(dialog).toBeHidden()
+    await page.unroute('**/api/realtime/tickets')
+    await reconnect.getByRole('button', { name: 'Переподключиться' }).click()
+    await expect(reconnect).toBeHidden()
+    await workingModelButton.click()
+    await expect(hypothesis).toHaveAttribute('aria-pressed', 'true')
+    const modelTab = dialog.getByRole('tab', { name: 'Рабочая модель', exact: true })
+    await modelTab.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(dialog.getByRole('tab', { name: 'Данные исследований', exact: true })).toBeFocused()
+    await page.keyboard.press('End')
+    await expect(dialog.getByRole('tab', { name: 'Трактовка', exact: true })).toBeFocused()
+    await page.keyboard.press('Home')
+    await expect(modelTab).toBeFocused()
+    await page.keyboard.press('Tab')
+    expect(await page.evaluate(() => document.activeElement?.closest('[hidden], [inert]') === null)).toBe(true)
+    await guestPage.getByRole('button', { name: /^Сигнал для разведки:/ }).first().click()
+    await guestPage.getByRole('button', { name: 'Исследовать' }).click()
+    await expect(guestPage.getByRole('heading', { name: '3. Разведка' })).toBeHidden()
+    await guestPage.getByRole('button', { name: 'Открыть журнал', exact: true }).click()
+    await guestPage.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+    await expect(guestPage.getByRole('dialog').getByRole('button', { name: /: гипотеза,/ }).first()).toHaveAttribute('aria-pressed', 'false')
+    await guestPage.keyboard.press('Escape')
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog')).toBeHidden()
 
@@ -132,8 +235,9 @@ test('keeps the Working Model dialog below the Tender header and inside the view
     await expectDialogInsideViewport(page)
 
     await page.setViewportSize({ width: 1280, height: 720 })
-    await expect(page.getByRole('button', { name: /Рабочая модель/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Открыть журнал', exact: true })).toBeVisible()
     await expect(page.getByTestId('working-model-table')).toHaveCount(0)
+    expect(runtimeErrors).toEqual([])
   } finally {
     await guestContext.close()
   }

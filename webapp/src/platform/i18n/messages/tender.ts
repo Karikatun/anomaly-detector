@@ -1,4 +1,15 @@
 export const tenderMessages = {
+  'tender.journal.open': 'Открыть журнал',
+  'tender.journal.close': 'Закрыть журнал',
+  'tender.journal.title': 'Журнал исследований',
+  'tender.journal.description': 'Рабочая модель, результаты исследований и трактовка текущего Тендера',
+  'tender.journal.sections': 'Разделы журнала',
+  'tender.journal.model': 'Рабочая модель',
+  'tender.journal.research': 'Данные исследований',
+  'tender.journal.interpretation': 'Трактовка',
+  'tender.journal.privateModel': 'Только вы · изменения сохраняются автоматически',
+  'tender.journal.readOnly': 'Только вы · рабочая модель доступна для просмотра',
+
   'tender.completed.desktop.participants': 'Участники',
   'tender.completed.desktop.choosePlayer': 'Выберите игрока для разбора',
   'tender.completed.desktop.selectPlayer': 'Разобрать результат игрока {player}',

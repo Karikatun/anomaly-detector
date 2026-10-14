@@ -64,17 +64,16 @@
   transform: none !important;
 }
 
-:global([data-testid='tutorial-research-dialog']),
-:global([data-testid='tutorial-contracts-dialog']),
-:global([data-testid='tutorial-interpretation-dialog']) {
+:global([data-tutorial-journal]),
+:global([data-testid='tutorial-contracts-dialog']) {
   z-index: 101 !important;
 }
 
 @media (min-width: 48rem) {
-  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
-  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='research-results-open']) [data-tutorial-journal]),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-tutorial-journal]),
   :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
-  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-tutorial-journal]) {
     inset: calc(var(--tender-sticky-header-height, 4.5rem) + 1rem) 26rem 1rem 1rem !important;
     width: auto !important;
     max-width: 72rem !important;
@@ -95,10 +94,10 @@
     width: 20rem !important;
   }
 
-  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
-  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='research-results-open']) [data-tutorial-journal]),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-tutorial-journal]),
   :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
-  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-tutorial-journal]) {
     right: 22rem !important;
   }
 }
@@ -137,10 +136,10 @@
     inset: .75rem .75rem auto !important;
   }
 
-  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
-  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
+  :global(body:has([data-tutorial-step='research-results-open']) [data-tutorial-journal]),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-tutorial-journal]),
   :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
-  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-tutorial-journal]) {
     top: calc(var(--tutorial-mobile-coach-bottom, 16.5rem) + .75rem) !important;
     bottom: .75rem !important;
     height: auto !important;
@@ -149,7 +148,7 @@
   :global(body:has(
     [data-tutorial-step='round-1-working-model'],
     [data-tutorial-step='round-2-working-model']
-  ) [data-working-model-dialog]) {
+  ) [data-tutorial-journal]) {
     z-index: 101 !important;
     top: calc(var(--tutorial-mobile-coach-bottom, 16.5rem) + .75rem) !important;
     bottom: .75rem !important;
@@ -188,5 +187,24 @@
 
   .coachActions {
     margin-top: 0;
+  }
+}
+
+@media (max-width: 47.999rem) {
+  /* Reading and editing share the small viewport with a scrollable coach. */
+  :global(body:has([data-tutorial-journal][data-state='open'])) .coachCard {
+    max-height: min(25dvh, 14rem);
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+
+  :global(body:has([data-tutorial-journal][data-state='open']) [data-testid='floater']) {
+    inset: .75rem .75rem auto !important;
+  }
+
+  :global(body:has([data-tutorial-journal][data-state='open']) [data-tutorial-journal]) {
+    top: calc(min(25dvh, 14rem) + 1.5rem) !important;
+    bottom: calc(.75rem + env(safe-area-inset-bottom, 0px)) !important;
+    height: auto !important;
   }
 }

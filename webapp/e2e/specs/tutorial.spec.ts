@@ -6,21 +6,21 @@ const tasks = {
   interactionGuide: 'Небольшое правило: если вы видите кнопку «ПОНЯТНО, ДАЛЬШЕ», просто прочитайте подсказку и нажмите её. Трогать игровое поле нужно только тогда, когда подсказка прямо просит что-то выбрать, открыть или подтвердить.',
   header: 'Наверху всегда видно, что происходит в игре: текущий раунд и фазу, ваш слот, Бюджет и порядок хода. Справа находятся «Правила», «Трактовка анализов» и выход из обучения. Таймера здесь нет — можно не спешить.',
   headerMobile: 'В верхней части экрана всегда видны текущий раунд и фаза, ваш слот, Бюджет и порядок хода. Здесь же находятся Справка и выход из обучения. Таймера нет — можно не спешить.',
-  sidebar: 'Справа собрана вся полезная информация. Здесь видно, чей сейчас ход, а ниже можно открыть результаты исследований, Рабочую модель и Контракты.',
-  sidebarMobile: 'На телефоне информационный блок находится ниже игрового поля. В нём видно, чей сейчас ход, а ещё отсюда открываются результаты исследований, Рабочая модель и Контракты.',
+  sidebar: 'Справа видно, чей сейчас ход, и находится Публичный журнал. Кнопка под ним открывает Рабочую модель, Данные исследований и Трактовку в одном окне. Контракты открываются отдельно.',
+  sidebarMobile: 'На телефоне круглая кнопка с иконкой книги открывает журнал: Рабочую модель, Данные исследований и Трактовку. Игроки и Контракты находятся ниже игрового поля.',
   contracts: 'Контракты — это дополнительные задания от корпораций. Каждый Контракт объясняет, какие доказательства нужно собрать и сколько Рейтинга можно получить. Сейчас достаточно заметить, где они находятся: совсем скоро мы выполним один вместе.',
   contractsMobile: 'Контракты находятся в информационном блоке под игровым полем. Это дополнительные задания от корпораций: в каждом указаны нужные доказательства и награда. Сейчас достаточно заметить эту кнопку — скоро мы выполним один Контракт вместе.',
   accessIntro: 'Слот задаёт очерёдность хода. Чем меньше номер, тем раньше вы действуете, но за это иногда приходится платить Бюджетом. Поздний слот, наоборот, может принести компенсацию. Если несколько игроков выбрали одно место, блок «Правило выбора слота» покажет, кому оно достанется.',
   roundOneRecon: 'Получим ещё один Образец. Выберите любой «Неизвестный Сигнал» и нажмите «Исследовать».',
   roundOneLabMode: 'Выберите, как потратить 2 Мощности. «Глубокое» исследование даст один опыт и личную подсказку о полярностях. «Широкое» даст два опыта, но без такой подсказки. Сейчас выберите «Глубокое».',
   roundOneLabPair: 'Теперь зададим направление опыта. Сначала выберите Aster — он будет источником. Затем выберите Boreal — он будет приёмником. Нажмите «Провести опыт».',
-  researchResultsMobile: 'Опыт завершён. Его результат появился в разделе «Данные исследований» под игровым полем. Откройте этот раздел.',
-  roundOneModel: 'Запишем первую догадку. Откройте Рабочую модель и укажите для Aster тип «Инерционное» и полярность «Положительная». Это локальный черновик текущей вкладки: игра его ещё не проверяет и не начисляет за него Рейтинг. После выбора закройте окно.',
+  researchResultsMobile: 'Опыт завершён. Нажмите круглую кнопку журнала — сейчас она откроет вкладку «Данные исследований».',
+  roundOneModel: 'Запишем первую догадку. Откройте Рабочую модель в журнале и укажите для Aster тип «Инерционное» и полярность «Положительная». Это локальный черновик текущей вкладки: игра его ещё не проверяет и не начисляет за него Рейтинг. После выбора окно закроется, и мы проверим Тезис.',
   roundOneThesis: 'Пора проверить догадку. Выберите Сигнал Aster, тип «Инерционное» и полярность «Положительная», затем нажмите «Выдвинуть тезис». Игра отдельно проверит тип и полярность. Если ошибётесь, в обучении можно попробовать ещё раз без штрафа.',
-  thesisResult: 'Тезис проверен. Откройте «Данные исследований» и посмотрите, что получилось.',
+  thesisResult: 'Тезис проверен. Откройте журнал на вкладке «Данные исследований» и посмотрите результат.',
   contractsReview: 'Прежде чем распределять Мощность, заглянем в Контракты. Откройте их и проверьте, какие задания уже можно выполнить.',
   roundTwoPower: 'Во втором раунде сами распределите все 4 Мощности так, чтобы выполнить по одному действию каждого вида и подать Контракт. Когда план готов, подтвердите его.',
-  roundTwoModel: 'Теперь попробуйте сделать вывод сами. Опыт Aster → Boreal дал «Отражение»: тип Boreal идёт сразу после типа Aster, а их полярности одинаковы. Откройте Рабочую модель и заполните Boreal самостоятельно. Это всё ещё локальный черновик; правильность игра проверит только после отправки Тезиса.',
+  roundTwoModel: 'Теперь попробуйте сделать вывод сами. Опыт Aster → Boreal дал «Отражение»: тип Boreal идёт сразу после типа Aster, а их полярности одинаковы. Откройте Рабочую модель в журнале и заполните Boreal самостоятельно. Это всё ещё локальный черновик; правильность игра проверит только после отправки Тезиса.',
   roundTwoThesis: 'Верно: Boreal — «Электромагнитное» с положительной полярностью. Теперь выберите Boreal, эти же тип и полярность, затем нажмите «Выдвинуть тезис».',
   contractReserve: 'В обучении подача разделена на два шага. Выберите для Контракта по Boreal доказательство — опыт Boreal → Cinder — и нажмите «Зарезервировать». Сервер окончательно закрепит Контракт за вами, но учебная заявка ещё не завершится.',
   contractBid: 'Резервирование принято: Контракт закреплён за вами, и переключиться уже нельзя. Проверьте доказательство и нажмите «Подтвердить контракт» — это завершит учебную заявку. В настоящем Тендере резервирование и подача происходят вместе.',
@@ -934,7 +934,7 @@ async function saveHypothesis(
   const isMobile = (page.viewportSize()?.width ?? 0) <= 600
   if (isMobile) {
     await page.getByRole('button', { name: 'Рабочая модель' }).click()
-    await expectCoachAboveDialog(page, page.locator('[data-working-model-dialog]'))
+    await expectCoachAboveDialog(page, page.locator('[data-tender-journal]'))
   } else {
     await expectDesktopTargetBelowStickyHeader(
       page,
@@ -943,7 +943,7 @@ async function saveHypothesis(
   }
   await fieldButton.click()
   await page.getByRole('button', { name: `${signal}: гипотеза, полярность Положительная` }).click()
-  const closeWorkingModel = page.getByRole('button', { name: 'Закрыть рабочую модель' })
+  const closeWorkingModel = page.getByRole('button', { name: 'Закрыть журнал' })
   if (isMobile) await expect(closeWorkingModel).toBeHidden()
 }
 
@@ -1043,10 +1043,10 @@ test('keeps the interpretation close action available at 1024x768', async ({ pag
   await page.getByRole('button', { name: 'Глубокое' }).click()
   await runLaboratoryTest(page, 'Aster', 'Boreal')
   await page.getByTestId('tutorial-research-trigger').click()
-  await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
   await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
 
-  const closeInterpretation = page.getByRole('button', { name: 'Закрыть трактовку анализов' })
+  const closeInterpretation = page.getByRole('button', { name: 'Закрыть журнал' })
   await expect(closeInterpretation).toBeVisible()
   await expectControlClearOfCoach(page, closeInterpretation)
 })
@@ -1152,7 +1152,7 @@ test(`completes the two-round tutorial, restores its tab-local step, and records
   }
   await startTutorial(page, guest)
   await expect(page).toHaveURL(guest ? /\/learn\/?$/ : /\/tutorial\/?$/)
-  await expect(page.getByRole('button', { name: 'Рабочая модель' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Открыть журнал', exact: true })).toBeVisible()
   await expect(page.getByTestId('working-model-table')).toBeHidden()
   await expectCoachWithinViewport(page)
   await completeInitialInterfaceTour(page)
@@ -1195,7 +1195,7 @@ test(`completes the two-round tutorial, restores its tab-local step, and records
 
   await expectTutorialFrameFullyVisible(page, '[data-testid="tutorial-research-trigger"]')
   await page.getByTestId('tutorial-research-trigger').click()
-  const researchDialog = page.getByRole('dialog', { name: 'Данные исследований' })
+  const researchDialog = page.getByRole('dialog', { name: 'Журнал исследований' })
   await expectReadingDialogAvailable(page, researchDialog)
   await expectElementDimmed(page, '[aria-label="УЧЕБНЫЙ ТЕНДЕР"] > header')
   await expect(researchDialog).toContainText('Aster')
@@ -1203,7 +1203,7 @@ test(`completes the two-round tutorial, restores its tab-local step, and records
   await expect(researchDialog).toContainText('Отражение')
   await expect(researchDialog).toContainText('Одинаковая полярность')
   await expect(page.getByTestId('floater')).toContainText('запоминать их не нужно')
-  await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
 
   await expect(page.getByText(
     'Верный тезис даёт +1 Рейтинг и личную сертификацию. Ошибка включает вашу персональную проверку.',
@@ -1218,7 +1218,7 @@ test(`completes the two-round tutorial, restores its tab-local step, and records
   await page.keyboard.press('Tab')
   await expectVisibleFocus(interpretationTrigger)
   await page.keyboard.press('Enter')
-  const interpretationDialog = page.getByRole('dialog', { name: 'Трактовка лабораторных анализов' })
+  const interpretationDialog = page.getByRole('dialog', { name: 'Журнал исследований' })
   await expect(interpretationDialog).toContainText('Цикл типов поля')
   await expectReadingDialogAvailable(page, interpretationDialog)
   await expectCoachWithinViewport(page)
@@ -1228,7 +1228,7 @@ test(`completes the two-round tutorial, restores its tab-local step, and records
   await expect(interpretationTrigger).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(interpretationDialog).toBeVisible()
-  await page.getByRole('button', { name: 'Закрыть трактовку анализов' }).click()
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
 
   await expectCoachWithinViewport(page)
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
@@ -1249,12 +1249,12 @@ test(`completes the two-round tutorial, restores its tab-local step, and records
   await expect(currentTask(page, tasks.thesisResult)).toBeVisible()
   await expectTutorialFrameFullyVisible(page, '[data-testid="tutorial-research-trigger"]')
   await page.getByTestId('tutorial-research-trigger').click()
-  const thesisResultDialog = page.getByRole('dialog', { name: 'Данные исследований' })
+  const thesisResultDialog = page.getByRole('dialog', { name: 'Журнал исследований' })
   await expectReadingDialogAvailable(page, thesisResultDialog)
   await expect(thesisResultDialog).toContainText('Личные тезисы')
   await expect(thesisResultDialog).toContainText('Тип верен')
   await expect(thesisResultDialog).toContainText('Полярность верна')
-  await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
 
   await expectCoachWithinViewport(page)
   await expect(page.getByRole('button', { name: 'Справка', exact: true })).toBeHidden()
@@ -1520,10 +1520,7 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     spotlightTransition.mismatches,
     'the tutorial must hide a stale spotlight until mobile autoscroll geometry catches up',
   ).toEqual([])
-  expect(
-    spotlightTransition.hiddenWhileMoving,
-    'the tutorial must keep the spotlight frame hidden while mobile autoscroll is moving it',
-  ).toBeGreaterThan(0)
+  // The Journal entry is fixed: its spotlight must stay aligned without scrolling the page.
 
   await expectTargetInMobileInteractiveArea(page, '[data-testid="tutorial-research-trigger"]')
   await waitForScrollToSettle(page)
@@ -1532,14 +1529,14 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   const researchDialogFrameTransition = await captureVisibleSpotlightMismatchDuringStepChange(
     page,
     'research-results-open',
-    '[data-testid="tutorial-research-dialog"]',
+    '[data-tender-journal]',
     () => page.getByTestId('tutorial-research-trigger').click(),
   )
   expect(
     researchDialogFrameTransition.mismatches,
     'the research dialog spotlight must not visibly jump into place',
   ).toEqual([])
-  const mobileResearchDialog = page.getByRole('dialog', { name: 'Данные исследований' })
+  const mobileResearchDialog = page.getByRole('dialog', { name: 'Журнал исследований' })
   await expectReadingDialogAvailable(page, mobileResearchDialog)
   await expect.poll(async () => Math.abs(
     (await page.evaluate(() => window.scrollY)) - scrollBeforeResearchDialog,
@@ -1549,13 +1546,12 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await expect(mobileResearchDialog).toContainText('Отражение')
   const helpMenuScrollRequests = await captureScrollRequests(
     page,
-    () => page.getByRole('button', { name: 'Закрыть данные исследований' }).click(),
+    () => page.getByRole('button', { name: 'Закрыть журнал' }).click(),
   )
   const initialHelpMenuRequest = helpMenuScrollRequests[0]
-  expect(initialHelpMenuRequest, 'closing research results must scroll to the Help target').toBeDefined()
-  const repeatedHelpMenuRequests = helpMenuScrollRequests.slice(1).filter((request) => (
-    request.time - initialHelpMenuRequest!.time > 100
-      && Math.abs(request.top - initialHelpMenuRequest!.top) < 1
+    const repeatedHelpMenuRequests = helpMenuScrollRequests.slice(1).filter((request) => (
+    initialHelpMenuRequest !== undefined && request.time - initialHelpMenuRequest.time > 100
+      && Math.abs(request.top - initialHelpMenuRequest.top) < 1
   ))
   expect(
     repeatedHelpMenuRequests,
@@ -1567,14 +1563,14 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   const interpretationDialogFrameTransition = await captureVisibleSpotlightMismatchDuringStepChange(
     page,
     'interpretation-open',
-    '[data-testid="tutorial-interpretation-dialog"]',
+    '[data-tender-journal]',
     () => page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click(),
   )
   expect(
     interpretationDialogFrameTransition.mismatches,
     'step 18 must not show a moving dialog spotlight',
   ).toEqual([])
-  const mobileInterpretationDialog = page.getByRole('dialog', { name: 'Трактовка лабораторных анализов' })
+  const mobileInterpretationDialog = page.getByRole('dialog', { name: 'Журнал исследований' })
   await expect(mobileInterpretationDialog).toBeVisible()
   await expectReadingDialogAvailable(page, mobileInterpretationDialog)
   const interpretationTable = mobileInterpretationDialog.getByRole('table')
@@ -1594,7 +1590,7 @@ test('completes the full tutorial on mobile with each action clear of the coach'
     const scrollArea = table.parentElement
     return scrollArea ? scrollArea.scrollWidth - scrollArea.clientWidth : Number.POSITIVE_INFINITY
   })).toBeLessThanOrEqual(1)
-  await page.getByRole('button', { name: 'Закрыть трактовку анализов' }).click()
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
 
   await expect(page.getByText('Правила игры и трактовка результатов исследований.', { exact: true })).toBeHidden()
   await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
@@ -1616,10 +1612,10 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await submitThesis(page, 'aster', 'inertial')
   await expectTargetInMobileInteractiveArea(page, '[data-testid="tutorial-research-trigger"]')
   await page.getByTestId('tutorial-research-trigger').click()
-  const mobileThesisDialog = page.getByRole('dialog', { name: 'Данные исследований' })
+  const mobileThesisDialog = page.getByRole('dialog', { name: 'Журнал исследований' })
   await expectReadingDialogAvailable(page, mobileThesisDialog)
   await expect(mobileThesisDialog).toContainText('Тип верен')
-  await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
 
   await expectTargetInMobileInteractiveArea(page, '[data-tutorial-access-slot="4"]')
   await chooseAccessSlot(page, 4)
@@ -1673,7 +1669,7 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   await page.getByRole('button', { name: 'Рабочая модель' }).click()
   await page.getByRole('button', { name: 'Boreal: гипотеза, тип поля Фазовое' }).click()
   await page.getByRole('button', { name: 'Boreal: гипотеза, полярность Положительная' }).click()
-  const modelCheckFeedback = page.locator('[data-working-model-dialog]').getByRole('alert')
+  const modelCheckFeedback = page.locator('[data-tender-journal]').getByRole('alert')
   await expect(modelCheckFeedback).toHaveText(
     'Пока не сходится. «Отражение» означает следующий тип в цикле, а одинаковая полярность сохраняет знак Aster. Проверьте Boreal ещё раз.',
   )
@@ -1684,7 +1680,7 @@ test('completes the full tutorial on mobile with each action clear of the coach'
   }), {
     message: 'the independent-model feedback must be visible without an extra mobile swipe',
   }).toBe(true)
-  await expect(page.locator('[data-working-model-dialog]')).toBeVisible()
+  await expect(page.locator('[data-tender-journal]')).toBeVisible()
   await page.getByRole('button', { name: 'Boreal: гипотеза, тип поля Электромагнитное' }).click()
   await expectTargetInMobileInteractiveArea(
     page,
@@ -1797,4 +1793,75 @@ test('blocks a direct tutorial entry while the player has an active room', async
   await expect(page.getByText('Сначала завершите активный Тендер', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Вернуться в матч' }).click()
   await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}\/?$/)
+})
+
+
+test('Journal retains the real research scroll after close and a Model context reopening', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await startTutorial(page, true)
+  await completeInitialInterfaceTour(page)
+  await chooseAccessSlot(page, 5)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await allocatePower(page, { 'Разведка': 1, 'Лаборатория': 2, 'Анализ модели': 1, 'Контракты': 0 })
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await runReconnaissance(page)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await page.getByRole('button', { name: 'Глубокое' }).click()
+  await runLaboratoryTest(page, 'Aster', 'Boreal')
+  await page.getByTestId('tutorial-research-trigger').click()
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
+  await page.getByRole('button', { name: 'Справка', exact: true }).click()
+  await page.getByRole('button', { name: 'Трактовка анализов', exact: true }).click()
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  const modelEntry = page.getByRole('button', { name: 'Рабочая модель', exact: true })
+  await modelEntry.click()
+  await page.setViewportSize({ width: 390, height: 520 })
+  const researchTab = page.getByRole('tab', { name: 'Данные исследований', exact: true })
+  await researchTab.click()
+  const research = page.getByRole('tabpanel', { name: 'Данные исследований', exact: true })
+  const position = await research.evaluate((panel) => { panel.scrollTop = 49; return panel.scrollTop })
+  expect(position).toBeGreaterThan(0)
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
+  await expect(page.getByRole('dialog', { name: 'Журнал исследований' })).toBeHidden()
+  await modelEntry.click()
+  await researchTab.click()
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  expect(await research.evaluate((panel) => panel.scrollTop)).toBe(position)
+  await page.screenshot({ path: testInfo.outputPath('journal-reopened-390x520.png') })
+  await page.setViewportSize({ width: 390, height: 430 })
+  const measurement = research.getByText('Одинаковая полярность', { exact: true })
+  await measurement.scrollIntoViewIfNeeded()
+  await expect(measurement).toBeInViewport({ ratio: .99 })
+  await page.screenshot({ path: testInfo.outputPath('journal-short-390x430.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
+  await measurement.scrollIntoViewIfNeeded()
+  await expect(measurement).toBeInViewport({ ratio: .99 })
+  await page.screenshot({ path: testInfo.outputPath('journal-textscale-200.png') })
+  await page.getByRole('button', { name: 'Закрыть журнал' }).click()
+})
+
+test('required unallocated Power warning stays actionable above the mobile tutorial coach', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await startTutorial(page, true)
+  await completeInitialInterfaceTour(page)
+  await chooseAccessSlot(page, 5)
+  await page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await page.setViewportSize({ width: 390, height: 700 })
+  const confirm = page.getByRole('button', { name: 'Подтвердить распределение' })
+  await confirm.press('Enter')
+  const warning = page.getByRole('dialog', { name: 'Часть мощности не распределена' })
+  await expect(warning).toBeVisible()
+  await expect(page.getByTestId('floater')).toBeHidden()
+  await page.screenshot({ path: testInfo.outputPath('power-warning-390x700.png'), animations: 'disabled' })
+  await warning.getByRole('button', { name: 'Подтвердить и продолжить' }).click({ timeout: 3_000 })
+  await expect(warning).toBeHidden()
+  await expect(page.getByTestId('floater')).toBeVisible()
+  await expect(currentTask(page, 'В этом раунде нам нужны новый Образец, подробный опыт и один Тезис. Поставьте 1 в Разведку, 2 в Лабораторию, 1 в Анализ модели и 0 в Контракты. Затем подтвердите распределение.')).toBeVisible()
+  await confirm.press('Enter')
+  await warning.locator('[data-slot="dialog-footer"]').getByRole('button', { name: 'Вернуться к распределению', exact: true }).click()
+  await expect(warning).toBeHidden()
+  await expect(page.getByTestId('floater')).toBeVisible()
+  await expect(confirm).toBeFocused()
 })

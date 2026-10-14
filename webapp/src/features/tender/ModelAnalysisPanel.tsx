@@ -40,6 +40,7 @@ import { signalAccent } from './components/signal-visuals'
 import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import { runTenderAction } from './run-tender-action'
 import type { WorkingModelSaveStatus } from './working-model-draft'
+import type { WorkingModelDraft } from './use-working-model-draft'
 import { tenderRulesetPolicy } from './ruleset-policy'
 
 type ModelAnalysisPanelProps = {
@@ -55,6 +56,7 @@ type ModelAnalysisPanelProps = {
   workingModelDisabled?: boolean
   workingModelDialog?: {
     actionError?: string | null
+    owner?: WorkingModelDraft
     onOpenChange: (open: boolean) => void
     onSaveStatusChange: (status: WorkingModelSaveStatus) => void
     open: boolean

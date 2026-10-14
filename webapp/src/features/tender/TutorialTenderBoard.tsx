@@ -1,6 +1,6 @@
-import { InformationCircleIcon, Logout01Icon } from '@hugeicons/core-free-icons'
+import { FlaskConicalIcon, InformationCircleIcon, Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import type { TenderView, WorkingModel } from '@anomaly-detector/contracts'
 
@@ -15,17 +15,17 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Typography } from '@/components/ui/typography'
-import { LaboratoryInterpretationDialog, RulesReferenceDialog } from '@/features/rules'
+import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n, type TranslationKey } from '@/platform/i18n'
 import { PhasePanel } from './TenderPage'
 import type { TenderCommandInput } from './commands'
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import { TenderPhaseLayout } from './components/TenderPhaseLayout'
 import { TenderHeaderFrame } from './components/TenderHeaderFrame'
-import { TenderPlayers } from './components/TenderOverview'
-import { TenderResearchDialog } from './components/TenderResearchDialog'
+import { TenderLaboratoryJournal, TenderPlayers } from './components/TenderOverview'
+import { TenderJournalDialog, type TenderJournalTab } from './components/TenderJournalDialog'
+import { useWorkingModelDraft } from './use-working-model-draft'
 import { ContractPlanningPanel } from './components/ContractPlanningPanel'
-import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
 import styles from './TenderPage.module.css'
 import tutorialStyles from './TutorialTenderBoard.module.css'
 
@@ -59,6 +59,7 @@ export function TutorialTenderBoard({
   onLaboratoryModeSelected,
   onResearchClosed,
   onResearchOpened,
+  onRequiredModalOpenChange,
   onSaveWorkingModel,
   view,
 }: {
@@ -78,45 +79,57 @@ export function TutorialTenderBoard({
   onLaboratoryModeSelected: (mode: 'broad' | 'deep') => void
   onResearchClosed: () => void
   onResearchOpened: () => void
+  onRequiredModalOpenChange: (open: boolean) => void
   onSaveWorkingModel: (workingModel: WorkingModel) => Promise<boolean>
   view: TenderView
 }) {
   const { t } = useI18n()
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
-  const [interpretationOpen, setInterpretationOpen] = useState(false)
-  const [researchOpen, setResearchOpen] = useState(false)
+  const [journalOpen, setJournalOpen] = useState(false)
+  const [journalTab, setJournalTab] = useState<TenderJournalTab>('working-model')
+  const readingPurpose = useRef<'research' | 'interpretation' | null>(null)
   const [contractsOpen, setContractsOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
-  const [workingModelOpen, setWorkingModelOpen] = useState(false)
 
   const openHelp = (open: boolean) => {
     setHelpMenuOpen(open)
     if (open) onHelpMenuOpened()
   }
 
-  const openInterpretation = (open: boolean) => {
-    if (open) setHelpMenuOpen(false)
-    setInterpretationOpen(open)
-    if (open) onInterpretationOpened()
-    else {
-      setHelpMenuOpen(false)
-      onInterpretationClosed()
+  const openInterpretation = (direct = false) => {
+    setHelpMenuOpen(false)
+    setRulesOpen(false)
+    setContractsOpen(false)
+    readingPurpose.current = 'interpretation'
+    setJournalTab('interpretation')
+    // Let the previous Help focus scope close before Journal captures the opener.
+    window.setTimeout(() => setJournalOpen(true), 0)
+    if (direct) onDirectInterpretationOpened()
+    else onInterpretationOpened()
+  }
+
+  const openJournal = (open: boolean) => {
+    setJournalOpen(open)
+    if (open) {
+      setRulesOpen(false)
+      setContractsOpen(false)
+      if (highlight === 'research') {
+        readingPurpose.current = 'research'
+        setJournalTab('research')
+        onResearchOpened()
+      } else {
+        readingPurpose.current = null
+      }
+    } else {
+      const purpose = readingPurpose.current
+      readingPurpose.current = null
+      if (purpose === 'research') onResearchClosed()
+      if (purpose === 'interpretation') onInterpretationClosed()
     }
   }
 
-  const openDirectInterpretation = (open: boolean) => {
-    setInterpretationOpen(open)
-    if (open) onDirectInterpretationOpened()
-    else onInterpretationClosed()
-  }
-
-  const openResearch = (open: boolean) => {
-    setResearchOpen(open)
-    if (open) onResearchOpened()
-    else onResearchClosed()
-  }
-
   const openContracts = (open: boolean) => {
+    if (open) setJournalOpen(false)
     setContractsOpen(open)
     if (open) onContractsOpened()
     else onContractsClosed()
@@ -124,8 +137,10 @@ export function TutorialTenderBoard({
 
   const saveWorkingModel = async (workingModel: WorkingModel) => {
     const progressed = await onSaveWorkingModel(workingModel)
-    if (progressed) setWorkingModelOpen(false)
+    if (progressed) setJournalOpen(false)
   }
+
+  const workingModelOwner = useWorkingModelDraft(view.privateWorkingModel, saveWorkingModel)
 
   const myPlayer = view.players[0]
   const activePlayer = view.players.find((player) => player.playerId === view.activePlayerId)
@@ -224,7 +239,7 @@ export function TutorialTenderBoard({
                   data-tutorial-interpretation=""
                   type="button"
                   variant="outline"
-                  onClick={() => openInterpretation(true)}
+                  onClick={() => openInterpretation()}
                 >
                   {t('tender.tenderPage.copy.030')}
                 </Button>
@@ -243,16 +258,11 @@ export function TutorialTenderBoard({
             className={tutorialStyles.directInterpretation}
             data-tutorial-interpretation-direct=""
           >
-            <LaboratoryInterpretationDialog
-              belowTenderHeader
-              contentTestId="tutorial-interpretation-dialog"
-              highlightResult="reflection"
-              open={interpretationOpen}
-              onOpenChange={openDirectInterpretation}
-              ruleset="tender-v2"
-              triggerClassName={styles.laboratoryAction}
-              triggerTestId="tutorial-interpretation-direct"
-            />
+            <Button type="button" variant="outline" size="sm" className={styles.laboratoryAction}
+              data-testid="tutorial-interpretation-direct" onClick={() => openInterpretation(true)}>
+              <HugeiconsIcon icon={FlaskConicalIcon} strokeWidth={1.7} aria-hidden="true" />
+              <Typography as="span" variant="control">{t('rules.laboratory.open')}</Typography>
+            </Button>
           </div>
           <Button
             type="button"
@@ -288,14 +298,16 @@ export function TutorialTenderBoard({
                 onSaveWorkingModel={saveWorkingModel}
                 activePlayerId={view.activePlayerId}
                 workingModelDialog={{
-                  actionError: workingModelOpen ? commandError : null,
-                  onOpenChange: setWorkingModelOpen,
+                  actionError: journalOpen ? commandError : null,
+                  owner: workingModelOwner,
+                  onOpenChange: (open) => { setJournalTab('working-model'); openJournal(open) },
                   onSaveStatusChange: () => undefined,
-                  open: workingModelOpen,
+                  open: false,
                   openDisabled: interpretationRequired,
                 }}
                 training={{
                   laboratoryInitialMode,
+                  onRequiredModalOpenChange,
                   onLaboratoryModeSelect: onLaboratoryModeSelected,
                   separateContractReservation: true,
                   untimed: true,
@@ -314,29 +326,16 @@ export function TutorialTenderBoard({
                 phase={view.phase}
                 players={view.players}
               />
-              <div>
-                <TenderResearchDialog
-                  contentTestId="tutorial-research-dialog"
-                  open={researchOpen}
-                  onOpenChange={openResearch}
-                  triggerTestId="tutorial-research-trigger"
-                  view={view}
+              <TenderLaboratoryJournal players={view.players} results={view.publicLaboratoryResults} />
+              <div data-tutorial-working-model={view.phase !== 'model-analysis' ? '' : undefined}>
+                <TenderJournalDialog
+                  actionError={journalOpen ? commandError : null}
+                  view={view} owner={workingModelOwner} tab={journalTab}
+                  onTabChange={setJournalTab} open={journalOpen} onOpenChange={openJournal}
+                  disabled={interpretationRequired || view.phase === 'final-scientific-model' || view.phase === 'complete'}
+                  showTimerWarning={false} highlightResult="reflection" triggerTestId="tutorial-research-trigger"
                 />
               </div>
-              {view.phase !== 'model-analysis' && (
-                <div
-                  data-tutorial-working-model=""
-                >
-                  <WorkingModelWorkspace
-                    knownSignals={view.privateSamples}
-                    model={view.privateWorkingModel}
-                    onOpenChange={setWorkingModelOpen}
-                    onSave={saveWorkingModel}
-                    open={workingModelOpen}
-                    openDisabled={interpretationRequired}
-                  />
-                </div>
-              )}
               <div
                 data-tutorial-contracts=""
               >

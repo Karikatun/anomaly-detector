@@ -1,5 +1,5 @@
 import { translate } from '../../platform/i18n'
-import { InformationCircleIcon, Logout01Icon } from '@hugeicons/core-free-icons'
+import { FlaskConicalIcon, InformationCircleIcon, Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -43,14 +43,15 @@ import { PhaseNotice, UnavailablePhaseCard } from './components/TenderActionPane
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import { TenderPhaseLayout } from './components/TenderPhaseLayout'
 import {
+  TenderLaboratoryJournal,
   TenderPlanningContext,
   TenderPlayers,
 } from './components/TenderOverview'
-import { WorkingModelWorkspace } from './components/WorkingModelWorkspace'
+import { TenderJournalDialog, type TenderJournalTab } from './components/TenderJournalDialog'
+import { useWorkingModelDraft, type WorkingModelDraft } from './use-working-model-draft'
 import { CompletedTenderPanel } from './components/CompletedTenderPanel'
 import { ContractPlanningPanel } from './components/ContractPlanningPanel'
 import { TenderTerminalState } from './components/TenderTerminalState'
-import { TenderResearchDialog } from './components/TenderResearchDialog'
 import { TenderHeaderFrame } from './components/TenderHeaderFrame'
 import {
   shouldReconcileTenderCommandError,
@@ -74,6 +75,8 @@ import styles from './TenderPage.module.css'
 import type { WorkingModelSaveStatus } from './working-model-draft'
 import { tenderRulesetPolicy } from './ruleset-policy'
 import { getPhaseContextMenuVisibility, shouldLockPhaseOverlays } from './phase-ui'
+
+const emptyWorkingModel: TenderView['privateWorkingModel'] = { signals: {} }
 
 const phaseLabels: Record<string, string> = {
   'access-slot-selection': translate('tender.tenderPage.copy.001'),
@@ -142,6 +145,7 @@ export function PhasePanel({
   activePlayerId?: string
   workingModelDialog: {
     actionError?: string | null
+    owner?: WorkingModelDraft
     onOpenChange: (open: boolean) => void
     onSaveStatusChange: (status: WorkingModelSaveStatus) => void
     open: boolean
@@ -152,6 +156,7 @@ export function PhasePanel({
   training?: {
     laboratoryInitialMode?: 'broad' | 'deep'
     onLaboratoryModeSelect?: (mode: 'broad' | 'deep') => void
+    onRequiredModalOpenChange?: (open: boolean) => void
     separateContractReservation?: boolean
     untimed?: boolean
   }
@@ -202,6 +207,7 @@ export function PhasePanel({
     case 'power-allocation':
       return (
         <PowerAllocationPanel
+          onWarningOpenChange={training?.onRequiredModalOpenChange}
           confirmedAllocation={myPlayer?.powerAllocation}
           currentUserId={playerId}
           sampleCount={mySamples.length}
@@ -359,9 +365,11 @@ export function PhasePanel({
 }
 
 export function TenderPage() {
+  const { tenderId } = useParams({ strict: false })
+  const { user } = useAuth()
   return (
     <ProtectedPage>
-      <TenderContent />
+      <TenderContent key={`${tenderId}:${user?.id}`} />
     </ProtectedPage>
   )
 }
@@ -384,13 +392,13 @@ function TenderContent() {
   const [resuming, setResuming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
-  const [laboratoryHelpOpen, setLaboratoryHelpOpen] = useState(false)
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [exitOpen, setExitOpen] = useState(false)
-  const [workingModelOpen, setWorkingModelOpen] = useState(false)
-  const [contextModal, setContextModal] = useState<'research' | 'working-model' | 'contracts' | null>(null)
+  const [journalOpen, setJournalOpen] = useState(false)
+  const [journalAvailability, setJournalAvailability] = useState('')
+  const [journalTab, setJournalTab] = useState<TenderJournalTab>('working-model')
+  const [contextModal, setContextModal] = useState<'contracts' | null>(null)
   const [overlayPhase, setOverlayPhase] = useState<string | null>(null)
-  const [workingModelSaveError, setWorkingModelSaveError] = useState<string | null>(null)
   const commandGateRef = useRef(createExclusiveActionGate())
   const headerRef = useRef<HTMLElement>(null)
   const primaryContentRef = useRef<HTMLDivElement>(null)
@@ -507,6 +515,13 @@ function TenderContent() {
     tenderView?.serverTime ?? '1970-01-01T00:00:00.000Z',
   )
 
+  const availabilityKey = `${tenderView?.phase}:${connected}:${tenderView ? shouldLockPhaseOverlays({ phase: tenderView.phase, remainingSeconds }) : true}`
+  if (journalAvailability !== availabilityKey) {
+    setJournalAvailability(availabilityKey)
+    setJournalOpen(false)
+    setContextModal(null)
+  }
+
   useEffect(() => {
     const activePlayerId = tenderView?.activePlayerId
     const turnKey = tenderView
@@ -522,8 +537,8 @@ function TenderContent() {
     })) return
     requestAnimationFrame(() => {
       setRulesOpen(false)
-      setLaboratoryHelpOpen(false)
-      setWorkingModelOpen(false)
+      setJournalOpen(false)
+      setContextModal(null)
       primaryContentRef.current?.focus()
     })
   }, [auth.user?.id, tenderView])
@@ -576,6 +591,7 @@ function TenderContent() {
     },
     [connected, execute],
   )
+  const workingModelOwner = useWorkingModelDraft(tenderView?.privateWorkingModel ?? emptyWorkingModel, saveWorkingModel)
   const collapseMatch = useCallback(async () => {
     setExitOpen(false)
     await Promise.all([
@@ -677,22 +693,26 @@ function TenderContent() {
     open: boolean,
   ) => {
     setRulesOpen(open && kind === 'rules')
-    setLaboratoryHelpOpen(open && kind === 'interpretation')
-    setWorkingModelOpen(open && kind === 'working-model')
-    setContextModal(open && (kind === 'research' || kind === 'working-model' || kind === 'contracts') ? kind : null)
+    const journalKind = kind === 'interpretation' || kind === 'research' || kind === 'working-model'
+    setJournalOpen(open && journalKind)
+    if (open && journalKind) setJournalTab(kind)
+    setContextModal(open && kind === 'contracts' ? kind : null)
     if (open) setOverlayPhase(tenderView.phase)
   }
   const openReferenceFromHelp = (kind: 'rules' | 'interpretation') => {
     setHelpMenuOpen(false)
     window.setTimeout(() => setOverlayOpen(kind, true), 0)
   }
-  const handleWorkingModelSaveStatus = (status: WorkingModelSaveStatus) => {
-    setWorkingModelSaveError(status.state === 'error' ? status.message : null)
-  }
+  const journalVisible = journalOpen && overlayPhase === tenderView.phase && connected && !referenceHelpUrgentlyLocked && !exitOpen
+  const journalInterpretationDisabled = referenceHelpLocked
+  const journalModelDisabled = tenderView.phase === 'model-analysis' && referenceHelpLocked
+  const visibleJournalTab = (journalTab === 'interpretation' && journalInterpretationDisabled)
+    || (journalTab === 'working-model' && journalModelDisabled) ? 'research' : journalTab
 
   return (
     <section
       className={`${styles.page} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}
+      data-tender-page=""
       data-reconnecting={!connected || undefined}
     >
       <TenderHeaderFrame
@@ -815,16 +835,14 @@ function TenderContent() {
             triggerIcon="book"
             triggerIconOnly={isComplete}
           />
-          <LaboratoryInterpretationDialog
-            belowTenderHeader
-            disabled={referenceHelpLocked}
-            onOpenChange={(open) => setOverlayOpen('interpretation', open)}
-            open={laboratoryHelpOpen && overlayPhase === tenderView.phase && !referenceHelpLocked}
-            ruleset={tenderView.ruleset}
-            showTimerWarning={!isComplete}
-            triggerClassName={isComplete ? styles.completedReferenceAction : styles.laboratoryAction}
-            triggerIconOnly={isComplete}
-          />
+          {isComplete ? <LaboratoryInterpretationDialog
+            belowTenderHeader ruleset={tenderView.ruleset}
+            triggerClassName={styles.completedReferenceAction} triggerIconOnly
+          /> : <Button type="button" variant="outline" size="sm" className={styles.laboratoryAction}
+            disabled={referenceHelpLocked} onClick={() => setOverlayOpen('interpretation', true)}>
+            <HugeiconsIcon icon={FlaskConicalIcon} strokeWidth={1.7} aria-hidden="true" />
+            <Typography as="span" variant="control">{t('rules.laboratory.open')}</Typography>
+          </Button>}
           <Button
             type="button"
             variant="outline"
@@ -837,6 +855,7 @@ function TenderContent() {
               if (tenderView.phase === 'complete') {
                 void collapseMatch()
               } else {
+                setJournalOpen(false)
                 setExitOpen(true)
               }
             }}
@@ -890,9 +909,9 @@ function TenderContent() {
           open={!connected}
           onRetry={retry}
         />
-        {workingModelSaveError && (
+        {workingModelOwner.status.state === 'error' && !journalVisible && (
           <Typography role="alert" variant="bodySm" tone="destructive">
-            {workingModelSaveError}
+            {workingModelOwner.status.state === 'error' ? workingModelOwner.status.message : ''}
           </Typography>
         )}
 
@@ -905,13 +924,6 @@ function TenderContent() {
               data-tender-primary-content
               className="grid min-w-0 self-start gap-4 outline-none"
             >
-            {isSharedFinalScientificModel && (
-              <TenderResearchDialog
-                open={contextModal === 'research' && overlayPhase === tenderView.phase && !referenceHelpUrgentlyLocked}
-                onOpenChange={(open) => setOverlayOpen('research', open)}
-                view={tenderView}
-              />
-            )}
             <PhasePanel
               playerId={auth.user?.id}
               view={tenderView}
@@ -925,8 +937,9 @@ function TenderContent() {
               onReturnToHistory={returnToHistory}
               workingModelDialog={{
                 onOpenChange: (open) => setOverlayOpen('working-model', open),
-                onSaveStatusChange: handleWorkingModelSaveStatus,
-                open: workingModelOpen && overlayPhase === tenderView.phase && !referenceHelpLocked,
+                owner: workingModelOwner,
+                onSaveStatusChange: () => undefined,
+                open: false,
                 openDisabled: referenceHelpLocked,
               }}
             />
@@ -941,25 +954,19 @@ function TenderContent() {
                 phase={tenderView.phase}
                 players={tenderView.players}
               />
-              {!isSharedFinalScientificModel && (
-                <TenderResearchDialog
-                  open={contextModal === 'research' && overlayPhase === tenderView.phase && !referenceHelpUrgentlyLocked}
-                  onOpenChange={(open) => setOverlayOpen('research', open)}
-                  view={tenderView}
-                />
-              )}
-              {contextMenuVisibility.workingModel && (
-                <WorkingModelWorkspace
-                  disabled={!connected || mutationLocked}
-                  knownSignals={tenderView.privateSamples}
-                  model={tenderView.privateWorkingModel}
-                  onSave={saveWorkingModel}
-                  onOpenChange={(open) => setOverlayOpen('working-model', open)}
-                  onSaveStatusChange={handleWorkingModelSaveStatus}
-                  open={contextModal === 'working-model' && overlayPhase === tenderView.phase && !referenceHelpUrgentlyLocked}
-                  openDisabled={referenceHelpUrgentlyLocked}
-                />
-              )}
+              <TenderLaboratoryJournal players={tenderView.players} results={tenderView.publicLaboratoryResults} />
+              <TenderJournalDialog
+                view={tenderView} owner={workingModelOwner} tab={visibleJournalTab}
+                onTabChange={setJournalTab} open={journalVisible}
+                onOpenChange={(open) => {
+                  if (open) { setRulesOpen(false); setContextModal(null); setOverlayPhase(tenderView.phase) }
+                  setJournalOpen(open)
+                }}
+                openDisabled={referenceHelpUrgentlyLocked || !connected}
+                interpretationDisabled={journalInterpretationDisabled}
+                modelTabDisabled={journalModelDisabled}
+                disabled={!connected || mutationLocked || tenderView.phase === 'final-scientific-model'}
+              />
               {contextMenuVisibility.contracts && (
                 <ContractPlanningPanel
                   open={contextModal === 'contracts' && !referenceHelpUrgentlyLocked}

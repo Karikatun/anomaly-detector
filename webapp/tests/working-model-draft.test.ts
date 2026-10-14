@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 
 import type { WorkingModel } from '@anomaly-detector/contracts'
 
-import { WorkingModelDraftController } from '../src/features/tender/working-model-draft'
+import { WorkingModelDraftController, type WorkingModelSaveStatus } from '../src/features/tender/working-model-draft'
 
 test('Working Model keeps a dirty draft when an older realtime snapshot arrives', async () => {
   const saved: WorkingModel[] = []
@@ -92,3 +92,54 @@ function modelWithNote(note: string): WorkingModel {
     },
   }
 }
+
+
+test('one Working Model owner serializes the newest edit made during an accepted save', async () => {
+  let acceptFirst!: () => void
+  const firstAccepted = new Promise<void>((resolve) => { acceptFirst = resolve })
+  const saved: WorkingModel[] = []
+  const status: WorkingModelSaveStatus[] = []
+  const controller = createController(emptyModel(), {
+    onStatus: (next) => status.push(next),
+    save: async (draft) => {
+      saved.push(draft)
+      if (saved.length === 1) await firstAccepted
+    },
+  })
+  controller.update(modelWithNote('первая гипотеза'))
+  const saving = controller.flush()
+  controller.update(modelWithNote('последняя гипотеза'))
+  const latest = controller.flush()
+  expect(saved).toEqual([modelWithNote('первая гипотеза')])
+  acceptFirst()
+  await Promise.all([saving, latest])
+  expect(saved).toEqual([modelWithNote('первая гипотеза'), modelWithNote('последняя гипотеза')])
+  expect(status.at(-1)).toEqual({ state: 'idle' })
+  await controller.dispose()
+})
+
+test('Working Model keeps an unsaved edit through failure and stale refetch until retry succeeds', async () => {
+  let fail = true
+  const accepted: WorkingModel[] = []
+  const drafts: WorkingModel[] = []
+  const status: WorkingModelSaveStatus[] = []
+  const controller = createController(emptyModel(), {
+    onDraft: (draft) => drafts.push(draft),
+    onStatus: (next) => status.push(next),
+    save: async (draft) => {
+      if (fail) throw new Error('temporary transport failure')
+      accepted.push(draft)
+    },
+  })
+  const latest = modelWithNote('не потерять после ошибки')
+  controller.update(latest)
+  await controller.flush()
+  expect(status.at(-1)?.state).toBe('error')
+  controller.receiveServerModel(emptyModel())
+  expect(drafts.at(-1)).toEqual(latest)
+  fail = false
+  await controller.retry()
+  expect(accepted).toEqual([latest])
+  expect(status.at(-1)).toEqual({ state: 'idle' })
+  await controller.dispose()
+})
