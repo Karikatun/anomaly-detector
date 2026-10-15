@@ -438,7 +438,7 @@ export function TutorialExperience({
 
   return (
     <>
-      {!readingDialogOpen && !requiredModalOpen && (
+      {!exitOpen && !readingDialogOpen && !requiredModalOpen && (
         <TutorialViewportAnchor
           alignTargetStart={presentation.alignTargetStart}
           anchorSelector={presentation.positionTarget}

@@ -235,12 +235,6 @@
 }
 
 @media (max-width: 47.999rem) {
-  /* A closed Journal keeps its fixed entry beside the coach, including when
-     the current spotlight is a phase input or a Thesis repair. */
-  :global(body:not(:has([data-tutorial-journal][data-state='open'])) [data-testid='floater']) {
-    right: calc(var(--space-5) + 3.5rem + var(--space-4)) !important;
-  }
-
   /* Reading and editing share the small viewport with a scrollable coach. */
   :global(body:has([data-tutorial-journal][data-state='open'])) .coachCard {
     max-height: min(25dvh, 14rem);

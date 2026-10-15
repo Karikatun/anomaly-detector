@@ -160,7 +160,19 @@ async function chooseAccessSlot(page: Page, slot: number) {
 
 async function allocateFirstPower(page: Page) {
   for (const [category, power] of [['Разведка', 1], ['Лаборатория', 2], ['Анализ модели', 1]] as const) {
-    for (let i = 0; i < power; i++) await page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true }).click()
+    const increase = page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true })
+    if ((page.viewportSize()?.width ?? 1440) < 768) {
+      const scroll = await increase.evaluate((element) => {
+        const header = document.querySelector('[data-tutorial-board] > header')!.getBoundingClientRect()
+        const coach = document.querySelector('[data-testid="floater"]')!.getBoundingClientRect()
+        const target = element.getBoundingClientRect()
+        const readingAreaCenter = (header.bottom + coach.top) / 2
+        return { top: readingAreaCenter, distance: target.top + target.height / 2 - readingAreaCenter }
+      })
+      await page.mouse.move(24, scroll.top)
+      await page.mouse.wheel(0, scroll.distance)
+    }
+    for (let i = 0; i < power; i++) await increase.click()
   }
   await page.getByRole('button', { name: 'Подтвердить распределение', exact: true }).click()
 }
@@ -461,6 +473,36 @@ test('reflows at a 200% desktop zoom equivalent and honors reduced motion', asyn
   await page.getByTestId('tutorial-research-trigger').click()
   await expect(page.getByRole('tab', { name: 'Данные исследований', exact: true })).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
+test('guest Journal remains available after cancelling Exit on a short mobile screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await reachFirstResearch(page)
+  const firstModel = await openFirstModel(page)
+  await firstModel.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
+  await firstModel.getByRole('button', { name: 'Aster: гипотеза, полярность Положительная', exact: true }).click()
+  await firstModel.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('aster')
+  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('inertial')
+  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
+  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+  await chooseAccessSlot(page, 4)
+  await page.getByTestId('tutorial-contracts-trigger').click()
+  await page.getByRole('button', { name: 'Закрыть контракты', exact: true }).click()
+  for (const layout of [{ height: 430, textScale: '100%' }, { height: 844, textScale: '200%' }]) {
+    await page.setViewportSize({ width: 390, height: layout.height })
+    await page.evaluate((textScale) => { document.documentElement.style.fontSize = textScale }, layout.textScale)
+    // The player pauses to read the task before opening Exit.
+    await page.waitForTimeout(1_500)
+    const coach = page.getByTestId('floater')
+    await coach.getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
+    await page.getByRole('button', { name: 'Продолжить обучение', exact: true }).click()
+    await page.getByTestId('tutorial-research-trigger').click()
+    const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
+    await expect(journal).toBeVisible()
+    await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+    await expect(journal).toBeHidden()
+  }
 })
 
 test('preserves the first action through dynamic portrait viewport changes', async ({ page }) => {
