@@ -148,6 +148,7 @@ export function TutorialExperience({
   const [explanationStep, setExplanationStep] = useState<TutorialStep | null>(null)
   const [requiredModalOpen, setRequiredModalOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(false)
+  const prologueRef = useRef<HTMLDivElement>(null)
   const manualReadingTasks = useRef(new Set<string>())
   useLayoutEffect(() => { manualReadingTasks.current.clear() }, [lesson])
   const nearest = useTutorialNearestAction(state.step)
@@ -249,7 +250,13 @@ export function TutorialExperience({
         <ExpeditionBackground />
         <Dialog open>
           <DialogContent
+            ref={prologueRef}
+            className={styles.prologueDialog}
             showCloseButton={false}
+            onOpenAutoFocus={(event) => {
+              event.preventDefault()
+              prologueRef.current?.focus({ preventScroll: true })
+            }}
             onEscapeKeyDown={(event) => event.preventDefault()}
             onPointerDownOutside={(event) => event.preventDefault()}
           >
@@ -287,6 +294,7 @@ export function TutorialExperience({
   const currentTaskKey: TranslationKey = (compactHeader ? mobileTaskKeys[state.step] : undefined) ?? taskKeys[state.step]
   const phaseTargetConfig: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, {
     anchor: string
+    fallback?: string
     spotlight?: string
     secondary?: string
   }> = {
@@ -336,11 +344,13 @@ export function TutorialExperience({
     'round-1-model-intro': { anchor: '[data-tutorial-primary]' },
     'round-1-working-model': {
       anchor: journalOpen
-        ? '[data-tender-journal]'
+        ? '[data-tender-journal] [data-tutorial-working-model-row="aster"]'
         : '[data-testid="tutorial-research-trigger"]',
+      fallback: journalOpen ? '[data-tender-journal] [data-tutorial-working-model-row="aster"] [role="group"]:not([data-options])' : undefined,
     },
     'round-1-thesis': {
       anchor: '[data-tutorial-thesis]',
+      fallback: '[data-tutorial-thesis] select',
       spotlight: '[data-tutorial-thesis]',
     },
     'round-1-thesis-result': { anchor: '[data-testid="tutorial-research-trigger"]' },
@@ -370,19 +380,23 @@ export function TutorialExperience({
     },
     'round-2-working-model': {
       anchor: journalOpen
-        ? '[data-tender-journal]'
+        ? '[data-tender-journal] [data-tutorial-working-model-row="boreal"]'
         : '[data-testid="tutorial-research-trigger"]',
+      fallback: journalOpen ? '[data-tender-journal] [data-tutorial-working-model-row="boreal"] [role="group"]:not([data-options])' : undefined,
     },
     'round-2-thesis': {
-      anchor: '[data-tutorial-thesis] select',
+      anchor: '[data-tutorial-thesis]',
+      fallback: '[data-tutorial-thesis] select',
       spotlight: '[data-tutorial-thesis]',
     },
     'round-2-contracts-intro': { anchor: '[data-tutorial-primary]' },
     'round-2-contract-reserve': {
       anchor: '[data-contract-id="tutorial-light-contract"]',
+      fallback: '[data-contract-id="tutorial-light-contract"] select',
     },
     'round-2-contract-bid': {
       anchor: '[data-contract-id="tutorial-light-contract"]',
+      fallback: '[data-contract-id="tutorial-light-contract"] button',
     },
     'final-model-intro': { anchor: '[data-tutorial-primary]' },
     'final-model': {
@@ -467,7 +481,7 @@ export function TutorialExperience({
           manualReadingTasks={manualReadingTasks}
           anchorSelector={requestedTarget.anchor}
           secondarySelector={requestedTarget.secondary}
-          fallbackSelector={nearest?.fallbackSelector}
+          fallbackSelector={nearest?.fallbackSelector ?? phaseTargetConfig[state.step].fallback}
           onTargetResolved={resolveTarget}
           compactLayout={compactHeader}
           journalEntryAllowed={!informationalSteps.has(state.step)}
@@ -616,6 +630,22 @@ function useTutorialNearestAction(step: TutorialStep) {
         if (!board.querySelector('[data-tutorial-lab-sample="cinder"][data-role="receiver"]')) return { selector: '[data-tutorial-lab-sample="cinder"]' }
         return { selector: confirm }
       }
+      if (step === 'round-1-thesis' || step === 'round-2-thesis') {
+        const selector = '[data-tutorial-thesis]'
+        const fields = [...board.querySelectorAll<HTMLSelectElement>(`${selector} select`)]
+        const nextField = fields.findIndex((field) => !field.value)
+        return {
+          selector,
+          fallbackSelector: nextField < 0
+            ? '[data-tutorial-action-container] button'
+            : `${selector} > label:nth-child(${nextField + 1}) select`,
+        }
+      }
+      if (step === 'round-2-contract-reserve') {
+        const selector = '[data-contract-id="tutorial-light-contract"]'
+        const field = board.querySelector<HTMLSelectElement>(`${selector} select`)
+        return { selector, fallbackSelector: `${selector} ${field?.value ? 'button' : 'select'}` }
+      }
       return null
     }
     const sync = () => {
@@ -626,8 +656,9 @@ function useTutorialNearestAction(step: TutorialStep) {
     const observer = new MutationObserver(sync)
     observer.observe(board, { subtree: true, childList: true, attributes: true,
       attributeFilter: ['aria-pressed', 'data-tutorial-power-value', 'data-role', 'data-tutorial-confirm-ready'] })
+    board.addEventListener('change', sync)
     sync()
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); board.removeEventListener('change', sync) }
   }, [step])
   return selection?.step === step ? selection.action : null
 }
@@ -669,21 +700,71 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
         && ['fixed', 'sticky'].includes(getComputedStyle(node).position))
         .map((node) => node.getBoundingClientRect())
     }
-    // The Journal is in normal flow during training. Keep the original Joyride
-    // interaction gate and allow this explicit secondary entry when it is visible.
-    const updateJournalInteraction = () => {
-      const entry = query('[data-testid="tutorial-research-trigger"]')
+    // Keep Joyride's primary spotlight. Visible controls in the current form
+    // remain reversible, and the Journal stays an explicit secondary entry.
+    const clipId = 'tutorial-allowed-controls'
+    const updateAllowedInteractions = () => {
+      root.style.removeProperty('--tutorial-interaction-cutout')
       const svg = document.querySelector<SVGSVGElement>('.react-joyride__overlay svg')
-      root.style.removeProperty('--tutorial-journal-entry-cutout')
-      if (!journalEntryAllowed || !entry || !svg || entry.closest('[aria-hidden="true"], [inert]')) return
-      const rect = entry.getBoundingClientRect()
-      const hit = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-        .find((element) => !element.closest('.react-joyride__overlay'))
-      if (!hit || !entry.contains(hit)) return
-      const overlay = svg.getBoundingClientRect()
-      const left = rect.left - overlay.left, top = rect.top - overlay.top
-      const path = `M0 0H${overlay.width}V${overlay.height}H0Z M${left} ${top}h${rect.width}v${rect.height}h-${rect.width}Z`
-      root.style.setProperty('--tutorial-journal-entry-cutout', `path(evenodd, "${path}")`)
+      const matrix = svg?.getScreenCTM()
+      if (!svg || !matrix) return
+      const inverse = matrix.inverse()
+      const controls: HTMLElement[] = []
+      if (journalEntryAllowed) {
+        const entry = query('[data-testid="tutorial-research-trigger"]')
+        if (entry) controls.push(entry)
+      }
+      if (taskKey === 'round-1-thesis' || taskKey === 'round-2-thesis') {
+        controls.push(...document.querySelectorAll<HTMLElement>('[data-tutorial-board] [data-tutorial-thesis] select, [data-tutorial-board] [data-tutorial-action-container] button'))
+      }
+      if (taskKey === 'round-2-contract-reserve' || taskKey === 'round-2-contract-bid') {
+        controls.push(...document.querySelectorAll<HTMLElement>('[data-tutorial-board] [data-contract-id="tutorial-light-contract"] select, [data-tutorial-board] [data-contract-id="tutorial-light-contract"] button'))
+      }
+      const rectangle = (rect: { left: number; top: number; right: number; bottom: number }) => {
+        const points = [[rect.left, rect.top], [rect.right, rect.top], [rect.right, rect.bottom], [rect.left, rect.bottom]]
+          .map(([x, y]) => new DOMPoint(x, y).matrixTransform(inverse))
+        return `M${points.map((point) => `${point.x} ${point.y}`).join('L')}Z`
+      }
+      const holes: string[] = []
+      for (const control of controls) {
+        if (control.closest('[aria-hidden="true"], [inert]') || control.matches(':disabled')) continue
+        const bounds = control.getBoundingClientRect()
+        const vp = viewport()
+        const visible = { left: Math.max(bounds.left, vp.left), right: Math.min(bounds.right, vp.right),
+          top: Math.max(bounds.top, vp.top), bottom: Math.min(bounds.bottom, vp.bottom) }
+        for (let parent = control.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+          const style = getComputedStyle(parent)
+          const rect = parent.getBoundingClientRect()
+          if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) {
+            visible.left = Math.max(visible.left, rect.left + parent.clientLeft)
+            visible.right = Math.min(visible.right, rect.left + parent.clientLeft + parent.clientWidth)
+          }
+          if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) {
+            visible.top = Math.max(visible.top, rect.top + parent.clientTop)
+            visible.bottom = Math.min(visible.bottom, rect.top + parent.clientTop + parent.clientHeight)
+          }
+        }
+        if (visible.right <= visible.left || visible.bottom <= visible.top) continue
+        const hit = document.elementsFromPoint((visible.left + visible.right) / 2, (visible.top + visible.bottom) / 2)
+          .find((element) => !element.closest('.react-joyride__overlay'))
+        if (hit && control.contains(hit)) holes.push(rectangle(visible))
+      }
+      if (!holes.length) return
+      let definition = svg.querySelector<SVGDefsElement>('[data-tutorial-interaction-clip]')
+      if (!definition) {
+        definition = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
+        definition.setAttribute('data-tutorial-interaction-clip', '')
+        const clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath')
+        clip.id = clipId
+        clip.setAttribute('clipPathUnits', 'userSpaceOnUse')
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        path.setAttribute('clip-rule', 'evenodd')
+        clip.append(path)
+        definition.append(clip)
+        svg.append(definition)
+      }
+      definition.querySelector('path')!.setAttribute('d', rectangle(svg.getBoundingClientRect()) + holes.join(''))
+      root.style.setProperty('--tutorial-interaction-cutout', `url(#${clipId})`)
     }
     const position = () => {
       frame = 0
@@ -754,7 +835,7 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
           }
         }
       }
-      updateJournalInteraction()
+      updateAllowedInteractions()
       delete root.dataset.tutorialAutoscrolling
     }
     const schedule = () => { if (!frame) frame = requestAnimationFrame(position) }
@@ -784,13 +865,22 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       for (const node of [query(anchorSelector), query('[data-testid="floater"]'), query('[data-tutorial-board] > header'), query('[data-tutorial-action-container]')]) if (node) observer.observe(node)
       schedule()
     }
-    const mutations = new MutationObserver(observe)
+    const mutations = new MutationObserver((records) => {
+      // Updating our SVG interaction cutout is not a new reading task. In
+      // particular it must never pull a manually revealed control out of view.
+      const changed = records.some((record) => {
+        if (record.target instanceof Element && record.target.closest('[data-tutorial-interaction-clip]')) return false
+        return [...record.addedNodes, ...record.removedNodes].some((node) =>
+          !(node instanceof Element && node.matches('[data-tutorial-interaction-clip]')))
+      })
+      if (changed) observe()
+    })
     mutations.observe(document.body, { childList: true, subtree: true })
     for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown']) window.addEventListener(event, cancel, { passive: true })
     window.addEventListener('resize', layoutChanged)
     window.visualViewport?.addEventListener('resize', layoutChanged)
     window.visualViewport?.addEventListener('scroll', schedule)
-    window.addEventListener('scroll', updateJournalInteraction, { passive: true })
+    window.addEventListener('scroll', updateAllowedInteractions, { passive: true, capture: true })
     observe()
     settleTimer = window.setTimeout(schedule, 160)
     return () => {
@@ -802,8 +892,9 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       window.removeEventListener('resize', layoutChanged)
       window.visualViewport?.removeEventListener('resize', layoutChanged)
       window.visualViewport?.removeEventListener('scroll', schedule)
-      window.removeEventListener('scroll', updateJournalInteraction)
-      for (const name of ['--tutorial-journal-entry-cutout', '--tutorial-pilot-coach-height', '--tutorial-pilot-header-height', '--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom']) root.style.removeProperty(name)
+      window.removeEventListener('scroll', updateAllowedInteractions, true)
+      document.querySelectorAll('[data-tutorial-interaction-clip]').forEach((node) => node.remove())
+      for (const name of ['--tutorial-interaction-cutout', '--tutorial-pilot-coach-height', '--tutorial-pilot-header-height', '--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom']) root.style.removeProperty(name)
       root.removeAttribute('data-tutorial-pilot-constrained')
       delete root.dataset.tutorialAutoscrolling
     }

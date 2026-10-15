@@ -15,6 +15,26 @@
 }
 .stateLoading { display: flex; min-height: 6rem; align-items: center; justify-content: center; gap: var(--space-3); }
 .stateContent, .completeContent { display: grid; gap: 1rem; }
+.prologueDialog {
+  min-width: 0;
+  width: min(28rem, calc(100vw - 2 * var(--space-4)));
+  max-width: calc(100vw - 2 * var(--space-4));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  padding: var(--space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+}
+.prologueDialog > * { min-width: 0; }
+.prologueDialog > :global([data-slot='dialog-footer']) > button {
+  min-width: 0;
+  height: auto;
+  min-height: 2.75rem;
+  flex-shrink: 1;
+  padding-block: var(--space-3);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .accountProtectionInvitation {
   display: grid;
   gap: var(--space-3);
@@ -69,10 +89,10 @@
 :global(html[data-tutorial-autoscrolling]) :global(.react-joyride__spotlight) {
   visibility: hidden;
 }
-/* The primary spotlight stays unchanged. Only the allowed Journal button is
+/* The primary spotlight stays unchanged. Only allowed visible controls are
    excluded from Joyride's background pointer blocker by its viewport owner. */
 :global(body:has([data-tutorial-board]) .react-joyride__overlay [fill-rule='evenodd']) {
-  clip-path: var(--tutorial-journal-entry-cutout, none);
+  clip-path: var(--tutorial-interaction-cutout, none);
 }
 .coachCard {
   width: min(24rem, calc(100vw - 1.5rem));

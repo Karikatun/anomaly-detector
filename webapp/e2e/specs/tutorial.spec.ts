@@ -174,12 +174,132 @@ async function expectTouchTargetsMeetMinimum(page: Page) {
   expect(undersizedTargets).toEqual([])
 }
 
+async function setTutorialTextScaleBeforeNavigation(page: Page, scale: string) {
+  // Apply before the application can render, and keep the same scale on reload.
+  await page.addInitScript((textScale) => {
+    const apply = () => {
+      if (!document.documentElement) return false
+      document.documentElement.style.fontSize = textScale
+      return true
+    }
+    if (apply()) return
+    const observer = new MutationObserver(() => {
+      if (apply()) observer.disconnect()
+    })
+    observer.observe(document, { childList: true })
+  }, scale)
+}
+
+async function scrollIntroductionTo(page: Page, dialog: Locator, target: Locator) {
+  // A wheel models ordinary reading; locator.click/scrollIntoView must not rescue
+  // a clipped fixed dialog before we have established that its content is reachable.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const bounds = await target.boundingBox()
+    const viewport = page.viewportSize()!
+    if (bounds && bounds.y >= 0 && bounds.y + bounds.height <= viewport.height) break
+    const box = (await dialog.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, Math.max(0, box.y) + Math.min(box.height, viewport.height) / 2)
+    await page.mouse.wheel(0, bounds && bounds.y < 0 ? -240 : 240)
+    await page.waitForTimeout(50)
+  }
+  await expectTutorialActionAvailable(page, target)
+}
+
+async function readTutorialMeasurement(page: Page, panel: Locator, target: Locator) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const reading = (await panel.boundingBox())!
+    const text = (await target.boundingBox())!
+    if (text.y >= reading.y + 4 && text.y + text.height <= reading.y + reading.height - 4) break
+    await page.mouse.move(reading.x + reading.width / 2, reading.y + reading.height / 2)
+    await page.mouse.wheel(0, text.y + text.height / 2 - reading.y - reading.height / 2)
+    let previous: number | undefined
+    await expect.poll(async () => {
+      const position = await panel.evaluate((element) => element.scrollTop)
+      const settled = previous === position
+      previous = position
+      return settled
+    }, { intervals: [100] }).toBe(true)
+  }
+  await expectTutorialActionAvailable(page, target)
+  const position = await panel.evaluate((element) => element.scrollTop)
+  await page.waitForTimeout(250)
+  expect(await panel.evaluate((element) => element.scrollTop), 'Reading must not rebound after the last native wheel').toBe(position)
+}
+
+async function scrollToTutorialControl(page: Page, target: Locator) {
+  // Firefox's native wheel consumes line-sized increments even for a large
+  // requested delta. Stop on actual geometry, not a fixed gesture count.
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const geometry = await target.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const header = document.querySelector<HTMLElement>('[data-tutorial-board] > header')
+      const headerRect = header?.getBoundingClientRect()
+      const coach = document.querySelector('[data-testid="floater"]')?.getBoundingClientRect()
+      const top = header && ['sticky', 'fixed'].includes(getComputedStyle(header).position) && headerRect!.bottom > 0
+        ? headerRect!.bottom + 12 : 12
+      const bottom = coach && coach.top > top ? coach.top - 12 : innerHeight - 12
+      return { top, bottom, targetTop: rect.top, targetBottom: rect.bottom,
+        x: rect.left + rect.width / 2, delta: (rect.top + rect.bottom - top - bottom) / 2 }
+    })
+    if (geometry.targetTop >= geometry.top && geometry.targetBottom <= geometry.bottom) break
+    await page.mouse.move(geometry.x, (geometry.top + geometry.bottom) / 2)
+    const before = await page.evaluate(() => scrollY)
+    await page.mouse.wheel(0, geometry.delta)
+    await expect.poll(() => page.evaluate(() => scrollY)).not.toBe(before)
+    let previous: number | undefined
+    await expect.poll(async () => {
+      const position = await page.evaluate(() => scrollY)
+      const settled = previous === position
+      previous = position
+      return settled
+    }, { intervals: [50, 100] }).toBe(true)
+  }
+  await expectTutorialActionAvailable(page, target)
+  const position = await page.evaluate(() => scrollY)
+  await page.waitForTimeout(250)
+  expect(await page.evaluate(() => scrollY), 'Revealed control must not rebound after native reading scroll').toBe(position)
+}
+
+async function revisitTutorialField(page: Page, target: Locator) {
+  await scrollToTutorialControl(page, target)
+  await target.click()
+  await page.keyboard.press('Escape')
+}
+
+test('fresh tutorial introduction is readable and starts with 200% text', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await setTutorialTextScaleBeforeNavigation(page, '200%')
+  await page.goto('/learn')
+  const dialog = page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию', exact: true })
+  await expect(dialog).toBeVisible()
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe('32px')
+  await page.screenshot({ path: testInfo.outputPath('introduction-200-initial.png') })
+  await expectTutorialActionAvailable(page, dialog.getByRole('heading'))
+  const paragraphs = dialog.locator('p')
+  for (const paragraph of await paragraphs.all()) await scrollIntroductionTo(page, dialog, paragraph)
+  const start = dialog.getByRole('button', { name: 'Начать обучение', exact: true })
+  await scrollIntroductionTo(page, dialog, start)
+  expect(await start.evaluate((button) => {
+    const bounds = button.getBoundingClientRect()
+    const label = document.createRange()
+    label.selectNodeContents(button)
+    return [...label.getClientRects()].every((rect) => rect.left >= bounds.left && rect.right <= bounds.right
+      && rect.top >= bounds.top && rect.bottom <= bounds.bottom)
+  }), 'The enlarged Start label must fit its button').toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('introduction-200-start.png') })
+  await start.click()
+  await expectTutorialActionAvailable(page, page.locator('[data-tutorial-access-slot="5"]'))
+})
+
 async function startTutorial(page: Page, guest = false) {
   if (guest) await page.goto('/learn')
   else await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ', exact: true }).click()
   const prologue = page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию', exact: true })
   await expect(prologue).toContainText('Корпорация объявила Тендер')
-  await prologue.getByRole('button', { name: 'Начать обучение', exact: true }).click()
+  const start = prologue.getByRole('button', { name: 'Начать обучение', exact: true })
+  await scrollIntroductionTo(page, prologue, start)
+  await start.click()
   await expect(page.getByRole('button', { name: /^Слот доступа 5:/ })).toBeEnabled()
   await expect(page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ', exact: true })).toHaveCount(0)
 }
@@ -198,12 +318,57 @@ async function expectTutorialActionAvailable(page: Page, target: Locator) {
       const hit = document.elementFromPoint(rect.left + rect.width * x!, rect.top + rect.height * y!)
       return hit !== null && element.contains(hit)
     })
-  }), { message: 'Current tutorial action must be fully visible and unobscured before any helper scroll' }).toBe(true)
+  }), { message: 'Current tutorial action must be fully visible and unobscured before any helper scroll' }).toBe(true).catch(async (error) => {
+    console.log(JSON.stringify({ unavailableAction: await target.evaluate((element) => {
+      const bounds = (node: Element) => {
+        const box = node.getBoundingClientRect()
+        return { top: box.top, bottom: box.bottom, left: box.left, right: box.right, height: box.height }
+      }
+      const parents = []
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        parents.push({ tag: parent.tagName, role: parent.getAttribute('role'), bounds: bounds(parent),
+          scrollTop: parent.scrollTop, scrollHeight: parent.scrollHeight, clientHeight: parent.clientHeight,
+          overflow: getComputedStyle(parent).overflow })
+        if (parent.matches('[role="dialog"]')) break
+      }
+      const box = element.getBoundingClientRect()
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+      return { name: element.getAttribute('aria-label') ?? element.textContent, bounds: bounds(element), parents,
+        hit: hit && { tag: hit.tagName, overlay: Boolean(hit.closest('.react-joyride__overlay')), label: hit.getAttribute('aria-label') } }
+    }) }))
+    throw error
+  })
+}
+
+async function expectWorkingModelLabelsReadable(row: Locator) {
+  const measurements = await row.getByRole('button').evaluateAll((buttons) => buttons.map((button) => {
+    const bounds = button.getBoundingClientRect()
+    const label = button.querySelector('span')!
+    const range = document.createRange()
+    range.selectNodeContents(label)
+    const text = [...range.getClientRects()]
+    const overflows = text.some((rect) => rect.left < bounds.left - .5 || rect.right > bounds.right + .5
+      || rect.top < bounds.top - .5 || rect.bottom > bounds.bottom + .5)
+    const overlaps = text.some((rect) => buttons.some((other) => {
+      if (other === button) return false
+      const box = other.getBoundingClientRect()
+      return Math.min(rect.right, box.right) - Math.max(rect.left, box.left) > .5
+        && Math.min(rect.bottom, box.bottom) - Math.max(rect.top, box.top) > .5
+    }))
+    return { label: button.getAttribute('aria-label'), text: label.textContent,
+      button: { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: bounds.width, height: bounds.height },
+      textRects: text.map((rect) => ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height })), overflows, overlaps }
+  }))
+  await test.info().attach(`working-model-labels-${await row.getAttribute('data-tutorial-working-model-row')}`, {
+    body: JSON.stringify(measurements), contentType: 'application/json',
+  })
+  expect(measurements.filter(({ overflows, overlaps }) => overflows || overlaps),
+    'Every Working Model option label must fit its own control without overlapping another option').toEqual([])
 }
 
 async function expectTutorialSpotlightOnTarget(page: Page, target: Locator) {
   await expect.poll(async () => {
-    const spotlight = await page.locator('.react-joyride__spotlight path').last().evaluate((element) => {
+    const spotlight = await page.locator('.react-joyride__spotlight > path').last().evaluate((element) => {
       const path = element as SVGGraphicsElement
       const box = path.getBBox(), matrix = path.getScreenCTM()!
       const topLeft = new DOMPoint(box.x, box.y).matrixTransform(matrix)
@@ -313,9 +478,9 @@ async function allocateFirstPower(page: Page) {
 }
 
 async function reachFirstResearch(page: Page, guest = true, textScale?: string) {
+  if (textScale) await setTutorialTextScaleBeforeNavigation(page, textScale)
   await startTutorial(page, guest)
   if (textScale) {
-    await page.evaluate((scale) => { document.documentElement.style.fontSize = scale }, textScale)
     await expectTutorialActionAvailable(page, page.locator('[data-tutorial-access-slot="5"]'))
   }
   await chooseAccessSlot(page, 5)
@@ -410,14 +575,7 @@ for (const edge of [{ width: 384, height: 430, scale: '100%' }, { width: 390, he
     const measurement = journal.getByText('Одинаковая полярность', { exact: true })
     await expectTutorialActionAvailable(page, journal.locator('[data-research-experiment] > p').first())
     const reading = journal.locator('[role="tabpanel"][data-state="active"]')
-    const scroll = await reading.evaluate((element) => {
-      const panel = element.getBoundingClientRect()
-      const measurement = element.querySelector('[data-private]:not([data-private-thesis]) p')!.getBoundingClientRect()
-      return { x: panel.left + panel.width / 2, y: panel.top + panel.height / 2, distance: measurement.top - panel.top - panel.height / 2 }
-    })
-    await page.mouse.move(scroll.x, scroll.y)
-    await page.mouse.wheel(0, Math.max(0, scroll.distance))
-    await expectTutorialActionAvailable(page, measurement)
+    await readTutorialMeasurement(page, reading, measurement)
     await expect(measurement).toBeInViewport({ ratio: .99 })
     const readingPosition = await reading.evaluate((panel) => panel.scrollTop)
     await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
@@ -527,6 +685,21 @@ async function openFirstModel(page: Page) {
   return journal
 }
 
+async function submitTutorialThesis(page: Page, signal: string, fieldType: string, polarity: string) {
+  for (const [name, value] of [
+    ['Сигнал для тезиса', signal],
+    ['Тип поля для тезиса', fieldType],
+    ['Полярность для тезиса', polarity],
+  ]) {
+    const field = page.getByLabel(name!, { exact: true })
+    await expectTutorialActionAvailable(page, field)
+    await field.selectOption(value!)
+  }
+  const submit = page.getByRole('button', { name: 'Выдвинуть тезис', exact: true })
+  await expectTutorialActionAvailable(page, submit)
+  await submit.click()
+}
+
 async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?: string) => Promise<void> = async () => undefined) {
   await startTutorial(page, guest)
   await checkpoint()
@@ -565,6 +738,7 @@ async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?:
   await expect(journal).toContainText('Цикл типов поля')
   await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
   await checkpoint()
+  await expectWorkingModelLabelsReadable(journal.locator('[data-tutorial-working-model-row="aster"]'))
   await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
   await checkpoint()
   await journal.getByRole('button', { name: 'Aster: гипотеза, полярность Положительная', exact: true }).click()
@@ -581,10 +755,7 @@ async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?:
   await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
   await checkpoint()
   await expect(journal).toBeHidden()
-  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('aster')
-  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('inertial')
-  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
-  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+  await submitTutorialThesis(page, 'aster', 'inertial', 'positive')
   await checkpoint()
   await expect(journal).toBeHidden()
   await page.getByRole('button', { name: /^Слот доступа 4:/ }).click()
@@ -622,18 +793,17 @@ async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?:
   await expect(journal).toContainText('Раунд 1')
   await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
   await checkpoint()
+  await expectWorkingModelLabelsReadable(journal.locator('[data-tutorial-working-model-row="boreal"]'))
   await journal.getByRole('button', { name: 'Boreal: гипотеза, тип поля Электромагнитное', exact: true }).click()
   await checkpoint()
   await journal.getByRole('button', { name: 'Boreal: гипотеза, полярность Положительная', exact: true }).click()
   await checkpoint()
   await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
   await checkpoint()
-  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('boreal')
-  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('electromagnetic')
-  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
-  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+  await submitTutorialThesis(page, 'boreal', 'electromagnetic', 'positive')
   await checkpoint()
   await page.locator('[data-contract-id="tutorial-light-contract"]').getByLabel('Подходящее исследование для контракта Boreal · источник').selectOption('tutorial-test-2')
+  await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник', exact: true }))
   await page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник', exact: true }).click()
   await checkpoint()
   await page.getByRole('button', { name: 'Подтвердить контракт: Boreal · источник', exact: true }).click()
@@ -641,39 +811,52 @@ async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?:
   await page.getByRole('button', { name: 'Отправить финальную модель', exact: true }).click()
   await checkpoint()
 }
-for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
-  test(`tutorial named actions stay available through the full guest lesson at ${viewport.width}`, async ({ page }, testInfo) => {
+for (const viewport of [
+  { width: 390, height: 844, textScale: '100%' },
+  { width: 390, height: 844, textScale: '200%' },
+  { width: 1024, height: 768, textScale: '100%' },
+  { width: 1440, height: 900, textScale: '100%' },
+]) {
+  test(`tutorial named actions stay available through the full guest lesson at ${viewport.width} text ${viewport.textScale}`, async ({ page }, testInfo) => {
     test.setTimeout(120_000)
     await page.setViewportSize(viewport)
     await page.emulateMedia({ reducedMotion: 'reduce' })
+    await setTutorialTextScaleBeforeNavigation(page, viewport.textScale)
     const errors = captureRuntimeErrors(page)
     const seen = new Set<string>()
+    // Enlarged text uses the existing power-card fallback: its actual control
+    // group fits the reading zone while the explanation stays scrollable.
+    const powerTarget = `[data-tutorial-power-category="reconnaissance"]${viewport.textScale === '200%' ? ' [role="group"]' : ''}`
+    const resultTarget = `[data-tender-journal] [data-research-experiment]:first-child${viewport.textScale === '200%' ? ' > p:first-of-type' : ''}`
+    const thesisTarget = `[data-tutorial-thesis]${viewport.textScale === '200%' ? ' > label:first-child select' : ''}`
     const targets: Record<string, string> = {
       'round-1-access': '[data-tutorial-access-slot="5"]',
-      'round-1-power': '[data-tutorial-power-category="reconnaissance"]',
+      'round-1-power': powerTarget,
       'round-1-recon': '[data-tutorial-recon-anchor]',
       'round-1-lab-mode': '[data-tutorial-lab-modes] button:first-child',
       'round-1-lab-pair': '[data-tutorial-lab-sample="aster"]',
       'research-results': '[data-testid="tutorial-research-trigger"]',
-      'research-results-open': '[data-tender-journal] [data-research-experiment]',
+      'research-results-open': resultTarget,
       'interpretation-open': '[data-tutorial-journal-tab="working-model"]',
       'round-1-working-model': '[data-tender-journal] [data-tutorial-working-model-row="aster"] [role="group"]:not([data-options]) button:first-child',
-      'round-1-thesis': '[data-tutorial-thesis]',
+      'round-1-thesis': thesisTarget,
       'round-2-access': '[data-tutorial-access-slot="4"]',
       'round-2-contracts-review': '[data-testid="tutorial-contracts-trigger"]',
       'round-2-contracts-review-open': '[data-testid="tutorial-contracts-dialog"] [data-slot="dialog-close"]',
-      'round-2-power': '[data-tutorial-power-category="reconnaissance"]',
+      'round-2-power': powerTarget,
       'round-2-recon': '[data-tutorial-recon-anchor]',
       'round-2-lab': '[data-tutorial-lab-sample="boreal"]',
       'round-2-research': '[data-testid="tutorial-research-trigger"]',
-      'round-2-research-open': '[data-tender-journal] [data-research-experiment]:first-child',
+      'round-2-research-open': resultTarget,
       'round-2-working-model': '[data-tender-journal] [data-tutorial-working-model-row="boreal"] [role="group"]:not([data-options]) button:nth-child(2)',
-      'round-2-thesis': '[data-tutorial-thesis]',
-      'round-2-contract-reserve': '[data-contract-id="tutorial-light-contract"]',
-      'round-2-contract-bid': '[data-contract-id="tutorial-light-contract"]',
+      'round-2-thesis': thesisTarget,
+      'round-2-contract-reserve': `[data-contract-id="tutorial-light-contract"]${viewport.textScale === '200%' ? ' select' : ''}`,
+      'round-2-contract-bid': `[data-contract-id="tutorial-light-contract"]${viewport.textScale === '200%' ? ' button' : ''}`,
       'final-model': '[data-tutorial-final-submit]',
     }
     await playTwoRounds(page, true, async (expected) => {
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize))
+        .toBe(viewport.textScale === '200%' ? '32px' : '16px')
       if (!expected && !await page.locator('[data-tutorial-step]').count()) return
       if (expected) {
         await expect(page.getByTestId('tutorial-contracts-dialog')).toBeVisible()
@@ -705,6 +888,58 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 
     console.log(JSON.stringify({ viewport, activeSteps: [...seen], count: seen.size }))
   })
 }
+
+test('200% tutorial allows native correction of earlier Thesis and Contract fields', async ({ page }, testInfo) => {
+  test.setTimeout(120_000)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await setTutorialTextScaleBeforeNavigation(page, '200%')
+  page.setDefaultTimeout(10_000)
+  let correctedThesis = false
+  let correctedContract = false
+  await playTwoRounds(page, true, async () => {
+    const activeStep = page.locator('[data-tutorial-step]').first()
+    const step = await activeStep.count() ? await activeStep.getAttribute('data-tutorial-step') : null
+    if (step === 'round-1-thesis' && !correctedThesis) {
+      correctedThesis = true
+      await submitTutorialThesis(page, 'aster', 'phase', 'positive')
+      await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
+      await expect(page.getByTestId('floater').getByRole('alert')).toBeAttached()
+      const fieldType = page.getByLabel('Тип поля для тезиса', { exact: true })
+      await revisitTutorialField(page, fieldType)
+      await fieldType.selectOption('inertial')
+      await expect(fieldType).toHaveValue('inertial')
+      await page.screenshot({ path: testInfo.outputPath('thesis-earlier-field-corrected-200.png') })
+      await page.getByTestId('floater').getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
+      const exit = page.getByRole('dialog', { name: 'Выйти из обучения?', exact: true })
+      await expect(exit).toBeVisible()
+      expect(await fieldType.evaluate((field) => Boolean(field.closest('[aria-hidden="true"], [inert]')))).toBe(true)
+      await page.keyboard.press('Tab')
+      expect(await exit.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true)
+      await exit.getByRole('button', { name: 'Продолжить обучение', exact: true }).click()
+      // Restore empty editable choices through the same native correction path.
+      for (const name of ['Сигнал для тезиса', 'Тип поля для тезиса', 'Полярность для тезиса']) {
+        const field = page.getByLabel(name, { exact: true })
+        await revisitTutorialField(page, field)
+        await field.selectOption('')
+      }
+      await revisitTutorialField(page, page.getByLabel('Сигнал для тезиса', { exact: true }))
+    }
+    if (step === 'round-2-contract-reserve' && !correctedContract) {
+      correctedContract = true
+      const field = page.locator('[data-contract-id="tutorial-light-contract"] select')
+      await expectTutorialActionAvailable(page, field)
+      await field.selectOption('tutorial-test-2')
+      await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник', exact: true }))
+      await revisitTutorialField(page, field)
+      await field.selectOption('')
+      await expect(field).toHaveValue('')
+      await page.screenshot({ path: testInfo.outputPath('contract-earlier-field-cleared-200.png') })
+    }
+  })
+  expect(correctedThesis && correctedContract).toBe(true)
+  await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+})
 
 test('tutorial positions a fresh lesson after Repeat restores a new reading task', async ({ page }, testInfo) => {
   test.setTimeout(120_000)
@@ -917,6 +1152,7 @@ test('reflows at a 200% desktop zoom equivalent and honors reduced motion', asyn
 })
 
 test('guest Journal remains available after cancelling Exit on a short mobile screen', async ({ page }) => {
+  page.setDefaultTimeout(10_000)
   await page.setViewportSize({ width: 390, height: 844 })
   await reachFirstResearch(page)
   const firstModel = await openFirstModel(page)
@@ -937,8 +1173,13 @@ test('guest Journal remains available after cancelling Exit on a short mobile sc
     await page.waitForTimeout(1_500)
     const coach = page.getByTestId('floater')
     await coach.getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
-    await page.getByRole('button', { name: 'Продолжить обучение', exact: true }).click()
-    await page.getByTestId('tutorial-research-trigger').click()
+    const exit = page.getByRole('dialog', { name: 'Выйти из обучения?', exact: true })
+    await exit.getByRole('button', { name: 'Продолжить обучение', exact: true }).click()
+    await expect(exit).toBeHidden()
+    await expect.poll(() => page.evaluate(() => document.body.hasAttribute('data-scroll-locked'))).toBe(false)
+    const entry = page.getByTestId('tutorial-research-trigger')
+    await scrollToTutorialControl(page, entry)
+    await entry.click()
     const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
     await expect(journal).toBeVisible()
     await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
