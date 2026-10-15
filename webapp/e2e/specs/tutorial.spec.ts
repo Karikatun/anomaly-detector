@@ -2,6 +2,27 @@ import AxeBuilder from '@axe-core/playwright'
 import type { Locator, Page } from '@playwright/test'
 import { expect, registerBrowserUser, test } from '../helpers/test'
 
+// Explicit local guest fixture for a preserved live stand whose analytics flag is disabled.
+// Keep the normal E2E server path intact; this fixture never creates an authenticated session.
+test.beforeEach(async ({ page, baseURL }) => {
+  if (process.env.TUTORIAL_PILOT_GUEST_FIXTURE !== 'local-guest') return
+  if (!baseURL || new URL(baseURL).hostname !== '127.0.0.1') throw new Error('Guest fixture requires loopback')
+  const origin = new URL(baseURL).origin
+  await page.route('**/*', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (url.origin !== origin) return route.abort('blockedbyclient')
+    if (url.pathname === '/api/auth/refresh' && request.method() === 'POST') {
+      return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Anonymous guest fixture' } }) })
+    }
+    if (url.pathname === '/api/analytics/events' && request.method() === 'POST') {
+      return route.fulfill({ status: 204 })
+    }
+    if (url.pathname.startsWith('/api/')) return route.abort('blockedbyclient')
+    return route.continue()
+  })
+})
+
 const accountProtectionInvitation = {
   action: 'К ЗАЩИТЕ АККАУНТА',
   title: 'Необязательно: защитите аккаунт',
@@ -15,6 +36,16 @@ function captureRuntimeErrors(page: Page) {
   })
   page.on('pageerror', (error) => errors.push(`page: ${error.message}`))
   return errors
+}
+
+async function settleTutorialCapture(page: Page) {
+  const coach = page.getByTestId('floater')
+  await expect(coach).toBeVisible()
+  await expect.poll(() => coach.evaluate((element) => Number(getComputedStyle(element).opacity))).toBe(1)
+  await page.evaluate(async () => {
+    await Promise.all(document.getAnimations().filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime)).map((animation) => animation.finished.catch(() => undefined)))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  })
 }
 
 async function expectNoAxeViolations(page: Page) {
@@ -153,15 +184,40 @@ async function startTutorial(page: Page, guest = false) {
   await expect(page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ', exact: true })).toHaveCount(0)
 }
 
+test('first tutorial explanations preserve selection and advance only on the game command', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await startTutorial(page, true)
+  const coach = page.getByTestId('floater')
+  const explanation = coach.getByRole('button', { name: 'Подробнее', exact: true })
+  await expect(explanation).toHaveAttribute('aria-expanded', 'false')
+  const slot = page.getByRole('button', { name: /^Слот доступа 5:/ })
+  await slot.click()
+  await explanation.focus()
+  await page.keyboard.press('Enter')
+  await expect(explanation).toHaveAttribute('aria-expanded', 'true')
+  await expect(coach.getByRole('region', { name: 'Подробное объяснение' })).toContainText('Слот задаёт порядок хода')
+  await expect(slot).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('Space')
+  await expect(explanation).toHaveAttribute('aria-expanded', 'false')
+  await expect(slot).toHaveAttribute('aria-pressed', 'true')
+  await coach.getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
+  await page.getByRole('button', { name: 'Продолжить обучение', exact: true }).click()
+  await expect(slot).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Увеличить мощность: Разведка', exact: true })).toBeEnabled()
+  await expect(explanation).toHaveAttribute('aria-expanded', 'false')
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Увеличить мощность: Разведка', exact: true })).toBeEnabled()
+  await expect(explanation).toHaveAttribute('aria-expanded', 'false')
+})
+
 async function chooseAccessSlot(page: Page, slot: number) {
   await page.getByRole('button', { name: new RegExp(`^Слот доступа ${slot}:`) }).click()
   await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
 }
 
-async function allocateFirstPower(page: Page) {
-  for (const [category, power] of [['Разведка', 1], ['Лаборатория', 2], ['Анализ модели', 1]] as const) {
-    const increase = page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true })
-    if ((page.viewportSize()?.width ?? 1440) < 768) {
+async function revealPowerControl(page: Page, increase: Locator) {
+  if ((page.viewportSize()?.width ?? 1440) < 768) {
       const scroll = await increase.evaluate((element) => {
         const header = document.querySelector('[data-tutorial-board] > header')!.getBoundingClientRect()
         const coach = document.querySelector('[data-testid="floater"]')!.getBoundingClientRect()
@@ -172,13 +228,20 @@ async function allocateFirstPower(page: Page) {
       await page.mouse.move(24, scroll.top)
       await page.mouse.wheel(0, scroll.distance)
     }
+}
+
+async function allocateFirstPower(page: Page) {
+  for (const [category, power] of [['Разведка', 1], ['Лаборатория', 2], ['Анализ модели', 1]] as const) {
+    const increase = page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true })
+    await revealPowerControl(page, increase)
     for (let i = 0; i < power; i++) await increase.click()
   }
   await page.getByRole('button', { name: 'Подтвердить распределение', exact: true }).click()
 }
 
-async function reachFirstResearch(page: Page, guest = true) {
+async function reachFirstResearch(page: Page, guest = true, textScale?: string) {
   await startTutorial(page, guest)
+  if (textScale) await page.evaluate((scale) => { document.documentElement.style.fontSize = scale }, textScale)
   await chooseAccessSlot(page, 5)
   await allocateFirstPower(page)
   await page.getByRole('button', { name: /^Сигнал для разведки: Неизвестный/ }).first().click()
@@ -188,6 +251,98 @@ async function reachFirstResearch(page: Page, guest = true) {
   await page.getByRole('button', { name: 'Образец: Boreal', exact: true }).click()
   await page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Журнал исследований', exact: true })).toBeHidden()
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
+ test(`first result explanation stays inside Journal keyboard navigation at ${viewport.width}`, async ({ page }, testInfo) => {
+  await page.setViewportSize(viewport)
+  const errors = captureRuntimeErrors(page)
+  const failedResponses: string[] = []
+  page.on('response', (response) => {
+    if (response.status() >= 400) failedResponses.push(`${response.status()} ${new URL(response.url()).pathname}`)
+  })
+  const capture = async (name: string) => {
+    await settleTutorialCapture(page)
+    console.log(JSON.stringify({ capture: name, viewport, layout: await page.evaluate(() => {
+      const coach = document.querySelector<HTMLElement>('[data-testid="floater"]')!
+      const rect = coach.getBoundingClientRect()
+      return { scrollY, coach: { top: rect.top, bottom: rect.bottom, height: rect.height, left: rect.left, width: rect.width }, documentWidth: document.documentElement.scrollWidth, innerWidth }
+    }) }))
+    await page.screenshot({ path: testInfo.outputPath(`${name}-${viewport.width}.png`) })
+  }
+  await startTutorial(page, true)
+  const analyticsModule = await page.request.get('/src/platform/analytics/product-analytics.ts')
+  const compiledAnalytics = await analyticsModule.text()
+  const configuredAnalytics = compiledAnalytics.match(/"VITE_ANALYTICS_ENABLED"\s*:\s*"(true|false)"/)?.[1] ?? 'absent'
+  console.log(JSON.stringify({ fixture: 'compiled-client-feature-flag', configuredAnalytics }))
+  await capture('slot')
+  await page.getByTestId('floater').getByRole('button', { name: 'Подробнее', exact: true }).click()
+  await capture('slot-detail')
+  await page.getByTestId('floater').getByRole('button', { name: 'Подробнее', exact: true }).click()
+  await page.getByRole('button', { name: /^Слот доступа 5:/ }).click()
+  const beforeConfirmScroll = await page.evaluate(() => scrollY)
+  await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
+  const afterConfirmScroll = await page.evaluate(() => scrollY)
+  await page.waitForTimeout(300)
+  console.log(JSON.stringify({ transition: 'slot-to-power', viewport, beforeConfirmScroll, afterConfirmScroll, settledScroll: await page.evaluate(() => scrollY) }))
+  await capture('power')
+  await allocateFirstPower(page)
+  await page.getByRole('button', { name: /^Сигнал для разведки: Неизвестный/ }).first().click()
+  await page.getByRole('button', { name: 'Исследовать', exact: true }).click()
+  await page.getByRole('button', { name: /^Глубокое/ }).click()
+  await capture('first-experiment')
+  await page.getByRole('button', { name: 'Образец: Aster', exact: true }).click()
+  await page.getByRole('button', { name: 'Образец: Boreal', exact: true }).click()
+  await page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true }).click()
+  await capture('result-entry')
+  await page.getByTestId('tutorial-research-trigger').click()
+  const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
+  const explanation = journal.getByRole('button', { name: 'Подробнее', exact: true })
+  await expect(explanation).toHaveAttribute('aria-expanded', 'false')
+  await focusByTab(page, explanation, 40)
+  await page.keyboard.press('Enter')
+  await expect(explanation).toHaveAttribute('aria-expanded', 'true')
+  await expect(journal.getByRole('region', { name: 'Подробное объяснение' })).toContainText('Посмотрите направление опыта')
+  await expect(journal).toContainText('Одинаковая полярность')
+  await capture('result-detail')
+  await page.keyboard.press('Space')
+  await expect(explanation).toHaveAttribute('aria-expanded', 'false')
+  await capture('result')
+  await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+  await expect(journal).toBeHidden()
+  await page.getByTestId('tutorial-research-trigger').click()
+  await journal.getByRole('tab', { name: 'Трактовка', exact: true }).click()
+  await expect(journal).toContainText('Цикл типов поля')
+  await expect(page.getByTestId('floater')).toContainText('Перейдите во вкладку «Рабочая модель»')
+  expect(failedResponses.filter((response) => response !== '401 /api/auth/refresh')).toEqual([])
+  expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+ })
+}
+
+for (const edge of [{ width: 384, height: 430, scale: '100%' }, { width: 390, height: 844, scale: '200%' }]) {
+  test(`first pilot controls and Journal close remain reachable at ${edge.width}x${edge.height} text ${edge.scale}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: edge.width, height: edge.height })
+    await reachFirstResearch(page, true, edge.scale)
+    await page.getByTestId('tutorial-research-trigger').click()
+    const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
+    const measurement = journal.getByText('Одинаковая полярность', { exact: true })
+    await measurement.scrollIntoViewIfNeeded()
+    await expect(measurement).toBeInViewport({ ratio: .99 })
+    const explanation = journal.getByRole('button', { name: 'Подробнее', exact: true })
+    await explanation.click()
+    await expect(explanation).toHaveAttribute('aria-expanded', 'true')
+    await explanation.click()
+    await expect(explanation).toHaveAttribute('aria-expanded', 'false')
+    await settleTutorialCapture(page)
+    await page.screenshot({ path: testInfo.outputPath('edge-result.png') })
+    await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+    await expect(journal).toBeHidden()
+    await expect(page.getByTestId('tutorial-research-trigger')).toBeFocused()
+    await page.getByTestId('floater').getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
+    await page.getByRole('button', { name: 'Продолжить обучение', exact: true }).click()
+    await page.getByTestId('tutorial-research-trigger').click()
+    await expect(journal).toBeVisible()
+  })
 }
 
 for (const recovery of ['close', 'reload'] as const) {
@@ -239,10 +394,7 @@ async function playTwoRounds(page: Page, guest: boolean) {
   await startTutorial(page, guest)
   await page.getByRole('button', { name: /^Слот доступа 5:/ }).click()
   await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
-  for (const [category, power] of [['Разведка', 1], ['Лаборатория', 2], ['Анализ модели', 1]] as const) {
-    for (let i = 0; i < power; i++) await page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true }).click()
-  }
-  await page.getByRole('button', { name: 'Подтвердить распределение', exact: true }).click()
+  await allocateFirstPower(page)
   await page.reload()
   await page.getByRole('button', { name: /^Сигнал для разведки: Неизвестный/ }).first().click()
   await page.getByRole('button', { name: 'Исследовать', exact: true }).click()
@@ -282,7 +434,9 @@ async function playTwoRounds(page: Page, guest: boolean) {
   await page.getByTestId('tutorial-contracts-trigger').click()
   await page.getByRole('button', { name: 'Закрыть контракты', exact: true }).click()
   for (const category of ['Разведка', 'Лаборатория', 'Анализ модели', 'Контракты']) {
-    await page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true }).click()
+    const increase = page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true })
+    await revealPowerControl(page, increase)
+    await increase.click()
   }
   await page.getByRole('button', { name: 'Подтвердить распределение', exact: true }).click()
   await page.getByRole('button', { name: /^Сигнал для разведки: Неизвестный/ }).first().click()

@@ -1,5 +1,5 @@
 import { Joyride, type Step, type TooltipRenderProps } from 'react-joyride'
-import { type ReactNode, useLayoutEffect, useState } from 'react'
+import { type ReactNode, useLayoutEffect, useRef, useState } from 'react'
 
 import type { TranslationKey } from '@/platform/i18n/translations'
 import { ExpeditionBackground } from '@/components/ExpeditionBackground'
@@ -85,6 +85,17 @@ const mobileTaskKeys: Partial<Record<Exclude<TutorialStep, 'complete' | 'prologu
   'research-results': 'tutorial.step.researchResultsMobile',
 }
 
+// Only this first research cycle uses the pilot presentation; lesson policy stays in scenario.ts.
+const pilotCopy: Partial<Record<TutorialStep, { action: TranslationKey; why: TranslationKey }>> = {
+  'round-1-access': { action: 'tutorial.pilot.access.action', why: 'tutorial.pilot.access.why' },
+  'round-1-power': { action: 'tutorial.pilot.power.action', why: 'tutorial.pilot.power.why' },
+  'round-1-recon': { action: 'tutorial.pilot.recon.action', why: 'tutorial.pilot.recon.why' },
+  'round-1-lab-mode': { action: 'tutorial.pilot.mode.action', why: 'tutorial.pilot.mode.why' },
+  'round-1-lab-pair': { action: 'tutorial.pilot.pair.action', why: 'tutorial.pilot.pair.why' },
+  'research-results': { action: 'tutorial.pilot.result.action', why: 'tutorial.pilot.result.why' },
+  'research-results-open': { action: 'tutorial.pilot.read.action', why: 'tutorial.pilot.read.why' },
+}
+
 const orderedSteps = Object.keys(taskKeys) as Array<Exclude<TutorialStep, 'complete' | 'prologue'>>
 const spotlightRevealDelayMs = 140
 const positionRetryDelayMs = 120
@@ -136,6 +147,7 @@ export function TutorialExperience({
   const [commandError, setCommandError] = useState<string | null>(null)
   const [thesisFeedback, setThesisFeedback] = useState<NonNullable<TutorialAdvanceResult['thesisFeedback']> | null>(null)
   const [exitOpen, setExitOpen] = useState(false)
+  const [explanationStep, setExplanationStep] = useState<TutorialStep | null>(null)
   const [requiredModalOpen, setRequiredModalOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(false)
   const [compactHeader, setCompactHeader] = useState(
@@ -189,6 +201,7 @@ export function TutorialExperience({
       : null)
     const stateChanged = result.state !== state
     if (stateChanged) {
+      if (result.state.step !== state.step) setExplanationStep(null)
       setState(result.state)
       saveTutorialSession(sessionStorage, result.state)
     }
@@ -221,6 +234,7 @@ export function TutorialExperience({
     saveTutorialSession(sessionStorage, fresh)
     setCommandError(null)
     setThesisFeedback(null)
+    setExplanationStep(null)
     setState(fresh)
   }
 
@@ -370,6 +384,7 @@ export function TutorialExperience({
       anchor: '[data-tutorial-final-submit]',
     },
   }
+  const pilot = pilotCopy[state.step]
   const targetConfig = phaseTargetConfig[state.step]
   const readingDialogOpen = journalOpen || state.step === 'round-2-contracts-review-open'
   const presentation = resolveTutorialPresentation({
@@ -422,11 +437,17 @@ export function TutorialExperience({
           ? () => void applyAction({ type: 'continue' })
           : undefined}
         onExit={() => setExitOpen(true)}
+        pilot={pilot ? {
+          action: t(pilot.action),
+          why: t(pilot.why),
+          expanded: explanationStep === state.step,
+          onToggle: () => setExplanationStep(explanationStep === state.step ? null : state.step),
+        } : undefined}
         task={t(currentTaskKey)}
         thesisFeedback={thesisFeedback}
       />
     ),
-    data: { tutorialStep: state.step },
+    data: { tutorialStep: state.step, pilot: Boolean(pilot) },
     hideOverlay: presentation.hideOverlay,
     placement: 'auto',
     scrollOffset: 20,
@@ -436,10 +457,13 @@ export function TutorialExperience({
     target: targetConfig.anchor,
   }
 
+  const pilotJournalOpen = Boolean(pilot) && journalOpen
+
   return (
     <>
       {!exitOpen && !readingDialogOpen && !requiredModalOpen && (
         <TutorialViewportAnchor
+          pilot={Boolean(pilot)}
           alignTargetStart={presentation.alignTargetStart}
           anchorSelector={presentation.positionTarget}
           coachAtTop={compactHeader && coachAtTop}
@@ -448,7 +472,7 @@ export function TutorialExperience({
           spotlightSelector={targetConfig.spotlight}
         />
       )}
-      {!exitOpen && !requiredModalOpen && <Joyride
+      {!exitOpen && !requiredModalOpen && !pilotJournalOpen && <Joyride
         key={state.step}
         locale={{
           back: t('tutorial.joyride.back'),
@@ -487,9 +511,15 @@ export function TutorialExperience({
             : { stroke: '#38bdf8', strokeWidth: 3 },
         }}
       />}
-      <Typography aria-live="polite" variant="srOnly">{t(currentTaskKey)}</Typography>
+      <Typography aria-live="polite" variant="srOnly">{pilot ? `${t(pilot.action)} ${t(pilot.why)}` : t(currentTaskKey)}</Typography>
       <TutorialTenderBoard
         key={state.playerId}
+        journalGuidance={pilotJournalOpen && !exitOpen && !requiredModalOpen ? (
+          <Card className={`${styles.coachCard} ${styles.journalCoach}`} data-testid="floater"
+            data-tutorial-step={state.step} data-tutorial-pilot="true" size="sm" aria-labelledby="tutorial-coach-title">
+            <CardContent>{step.content}</CardContent>
+          </Card>
+        ) : undefined}
         actionPanelPinned={mobileActionPinnedSteps.has(state.step)}
         commandError={commandError}
         highlight={exitOpen ? 'none' : highlight}
@@ -536,6 +566,7 @@ export function TutorialExperience({
 }
 
 function TutorialViewportAnchor({
+  pilot,
   alignTargetStart,
   anchorSelector,
   coachAtTop,
@@ -543,6 +574,7 @@ function TutorialViewportAnchor({
   journalEntryAllowed,
   spotlightSelector,
 }: {
+  pilot: boolean
   alignTargetStart: boolean
   anchorSelector: string
   coachAtTop: boolean
@@ -635,6 +667,11 @@ function TutorialViewportAnchor({
         const headerRect = header?.getBoundingClientRect()
         const journalEntry = document.querySelector<HTMLElement>('[data-testid="tutorial-research-trigger"]')
         const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+        if (pilot && compactLayout) {
+          updateJournalInteraction()
+          revealSpotlight()
+          return
+        }
         const anchorIsHeader = anchor === header
         const actionIsPinned = Boolean(actionContainer?.closest('[data-tutorial-action-pinned]'))
         const actionHeight = actionContainer?.getBoundingClientRect().height ?? 0
@@ -812,7 +849,7 @@ function TutorialViewportAnchor({
       document.documentElement.style.removeProperty('--tutorial-mobile-coach-max-height')
       document.querySelector<HTMLElement>('[data-testid="tutorial-research-trigger"]')?.style.removeProperty('--journal-tutorial-clearance')
     }
-  }, [alignTargetStart, anchorSelector, coachAtTop, compactLayout, journalEntryAllowed, spotlightSelector])
+  }, [pilot, alignTargetStart, anchorSelector, coachAtTop, compactLayout, journalEntryAllowed, spotlightSelector])
 
   return null
 }
@@ -822,6 +859,7 @@ function CoachContent({
   onExit,
   onContinue,
   task,
+  pilot,
   thesisFeedback,
   progress,
 }: {
@@ -829,25 +867,78 @@ function CoachContent({
   onExit: () => void
   onContinue?: () => void
   task: string
+  pilot?: { action: string; why: string; expanded: boolean; onToggle: () => void }
   thesisFeedback: NonNullable<TutorialAdvanceResult['thesisFeedback']> | null
   progress: string
 }) {
   const { t } = useI18n()
+  const element = useRef<HTMLDivElement>(null)
+  const isPilot = Boolean(pilot)
+  useLayoutEffect(() => {
+    const card = element.current?.closest<HTMLElement>('[data-tutorial-pilot]')
+    if (!isPilot || !card) return
+    const header = document.querySelector<HTMLElement>('[data-tutorial-board] > header')
+    const action = document.querySelector<HTMLElement>('[data-tutorial-action-pinned] [data-tutorial-action-container]')
+    const entry = document.querySelector<HTMLElement>('[data-testid="tutorial-research-trigger"]')
+    const root = document.documentElement
+    const measure = () => {
+      const coachHeight = card.getBoundingClientRect().height
+      const headerHeight = header?.getBoundingClientRect().height ?? 0
+      const actionHeight = action?.getBoundingClientRect().height ?? 0
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+      // At enlarged text or short heights, let the complete command scroll with its form.
+      const actionInFlow = viewportHeight - coachHeight - headerHeight - actionHeight - 48 < 96
+      root.style.setProperty('--tutorial-pilot-coach-height', `${coachHeight}px`)
+      root.style.setProperty('--tutorial-pilot-header-height', `${headerHeight}px`)
+      root.style.setProperty('--tutorial-pilot-action-height', `${actionInFlow ? 0 : actionHeight}px`)
+      root.style.setProperty('--tutorial-pilot-action-position', actionInFlow ? 'static' : 'fixed')
+      root.toggleAttribute('data-tutorial-pilot-constrained',
+        window.matchMedia('(max-width: 47.999rem)').matches && viewportHeight - coachHeight - headerHeight - 48 < 96)
+      entry?.style.setProperty('--journal-tutorial-clearance', `${coachHeight + (actionInFlow ? 0 : actionHeight) + 24}px`)
+    }
+    const observer = new ResizeObserver(measure)
+    for (const target of [card, header, action]) if (target) observer.observe(target)
+    window.addEventListener('resize', measure)
+    window.visualViewport?.addEventListener('resize', measure)
+    measure()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+      window.visualViewport?.removeEventListener('resize', measure)
+      for (const name of ['coach-height', 'header-height', 'action-height', 'action-position']) {
+        root.style.removeProperty(`--tutorial-pilot-${name}`)
+      }
+      entry?.style.removeProperty('--journal-tutorial-clearance')
+      root.removeAttribute('data-tutorial-pilot-constrained')
+    }
+  }, [isPilot])
   return (
-    <div className={styles.coach}>
+    <div ref={element} className={styles.coach}>
       <Typography variant="caption" tone="muted">{progress}</Typography>
-      <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{t('tutorial.coach.task')}</Typography>
-      <Typography variant="bodySm">{task}</Typography>
+      {pilot ? <>
+        <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{pilot.action}</Typography>
+        <Typography variant="bodySm" tone="muted">{pilot.why}</Typography>
+        <div id="tutorial-coach-explanation" role="region" hidden={!pilot.expanded} aria-label={t('tutorial.pilot.explanation')}>
+          <Typography variant="bodySm">{task}</Typography>
+        </div>
+      </> : <>
+        <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{t('tutorial.coach.task')}</Typography>
+        <Typography variant="bodySm">{task}</Typography>
+      </>}
       {thesisFeedback && (
         <Typography role="alert" variant="bodySm" className={styles.thesisFeedback}>
           {t('tutorial.coach.thesisChecked')}
         </Typography>
       )}
       {hint && <Typography variant="bodySm" className={styles.hint}>{hint}</Typography>}
-      <Typography as="strong" variant="bodySmMedium" className={styles.confirmAction}>
+      {!pilot && <Typography as="strong" variant="bodySmMedium" className={styles.confirmAction}>
         {t('tutorial.coach.confirmAction')}
-      </Typography>
+      </Typography>}
       <div className={styles.coachActions}>
+        {pilot && <Button type="button" variant="outline" size="sm"
+          aria-expanded={pilot.expanded} aria-controls="tutorial-coach-explanation" onClick={pilot.onToggle}>
+          {t('tutorial.pilot.more')}
+        </Button>}
         <Button
           type="button"
           variant="ghost"
@@ -871,6 +962,7 @@ function TutorialTooltip({ index, step, tooltipProps }: TooltipRenderProps) {
       className={styles.coachCard}
       data-joyride-step={index}
       data-tutorial-step={step.data.tutorialStep}
+      data-tutorial-pilot={step.data.pilot || undefined}
       size="sm"
     >
       <CardContent>{step.content}</CardContent>

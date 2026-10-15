@@ -1,6 +1,6 @@
 import { FlaskConicalIcon, InformationCircleIcon, Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import type { TenderView, WorkingModel } from '@anomaly-detector/contracts'
 
@@ -48,6 +48,7 @@ export function TutorialTenderBoard({
   highlight,
   interpretationRequired,
   laboratoryInitialMode,
+  journalGuidance,
   onCommand,
   onContractsClosed,
   onContractsOpened,
@@ -69,6 +70,7 @@ export function TutorialTenderBoard({
   highlight: 'contracts' | 'header' | 'help' | 'interpretation' | 'none' | 'primary' | 'research' | 'sidebar' | 'working-model'
   interpretationRequired: boolean
   laboratoryInitialMode?: 'broad' | 'deep'
+  journalGuidance?: ReactNode
   onCommand: (command: TenderCommandInput) => Promise<void>
   onContractsClosed: () => void
   onContractsOpened: () => void
@@ -334,6 +336,7 @@ export function TutorialTenderBoard({
               />
               <div data-tutorial-working-model={view.phase !== 'model-analysis' ? '' : undefined}>
                 <TenderJournalDialog
+                  guidance={journalGuidance}
                   actionError={journalOpen ? commandError : null}
                   view={view} owner={workingModelOwner} tab={journalTab} currentPlayerId={myPlayer?.playerId}
                   onTabChange={changeJournalTab} open={journalOpen} onOpenChange={openJournal}

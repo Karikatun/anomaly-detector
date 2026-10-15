@@ -42,8 +42,9 @@ function JournalPanel({ active, children, onElementChange, onPositionChange, get
 export function TenderJournalDialog({
   actionError, disabled, modelTabDisabled, interpretationDisabled, onOpenChange, onTabChange,
   open, openDisabled, owner, tab, view, highlightResult, triggerTestId, showTimerWarning = true,
-  currentPlayerId, urgent = false,
+  currentPlayerId, urgent = false, guidance,
 }: {
+  guidance?: ReactNode
   actionError?: string | null
   disabled?: boolean
   modelTabDisabled?: boolean
@@ -115,7 +116,7 @@ export function TenderJournalDialog({
       </DialogTrigger>
       <DialogContent
         className={styles.dialog} placement="viewport" closeLabel={t('tender.journal.close')}
-        data-tender-journal="" data-tutorial-journal={triggerTestId ? '' : undefined}
+        data-tender-journal="" data-journal-guidance={guidance ? true : undefined} data-tutorial-journal={triggerTestId ? '' : undefined}
         onOpenAutoFocus={() => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null }}
         onCloseAutoFocus={(event) => {
           if (opener.current?.isConnected && !opener.current.hasAttribute('disabled')) {
@@ -144,6 +145,7 @@ export function TenderJournalDialog({
           {panel('research', <TenderEvidence data={view} currentPlayerId={currentPlayerId} />)}
           {panel('interpretation', <LaboratoryInterpretation ruleset={view.ruleset} highlightResult={highlightResult} />)}
         </Tabs.Root>
+        {guidance}
       </DialogContent>
     </Dialog>
   )

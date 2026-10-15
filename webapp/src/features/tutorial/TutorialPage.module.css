@@ -252,3 +252,56 @@
     height: auto !important;
   }
 }
+
+/* First-cycle pilot: one lower reading zone; the document remains user-scrollable. */
+.coachCard[data-tutorial-pilot='true'] {
+  padding-block: var(--space-3);
+}
+.coachCard[data-tutorial-pilot='true'] .coach { gap: var(--space-1); }
+.coachCard[data-tutorial-pilot='true'] .coachActions { margin-top: 0; }
+
+/* First-result guidance belongs to the modal's native focus scope. */
+:global([data-tutorial-journal][data-journal-guidance]) {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.journalCoach:global([data-testid='floater']) {
+  position: static !important;
+  width: 100% !important;
+  max-width: none;
+  transform: none !important;
+}
+
+@media (max-width: 47.999rem) {
+  :global(body:has([data-tutorial-pilot='true']) [data-testid='floater']) {
+    inset: auto .75rem calc(.75rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  :global(body:has([data-tutorial-pilot='true'])) .coachCard[data-tutorial-pilot='true'] {
+    max-height: min(45dvh, calc(100dvh - var(--tutorial-pilot-header-height, 9rem) - 2rem));
+    overflow-y: auto !important;
+  }
+  :global(body:has([data-tutorial-pilot='true']) [data-tutorial-board]) {
+    padding-bottom: calc(var(--tutorial-pilot-coach-height, 12rem) + var(--tutorial-pilot-action-height, 0px) + 4rem) !important;
+  }
+  :global(body:has([data-tutorial-pilot='true']) [data-tutorial-board][data-tutorial-action-pinned] [data-tutorial-action-container]) {
+    position: var(--tutorial-pilot-action-position, fixed) !important;
+    inset: auto .75rem calc(var(--tutorial-pilot-coach-height, 12rem) + 1.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  :global(body:has([data-tutorial-pilot='true']) [data-tutorial-journal][data-journal-guidance]) {
+    top: calc(var(--tutorial-pilot-header-height, 9rem) + .75rem) !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    bottom: 0 !important;
+    height: auto !important;
+    padding: .75rem;
+    padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px));
+  }
+  :global(html:has([data-tutorial-pilot='true'])) {
+    scroll-padding-top: calc(var(--tutorial-pilot-header-height, 9rem) + .75rem);
+    scroll-padding-bottom: calc(var(--tutorial-pilot-coach-height, 12rem) + var(--tutorial-pilot-action-height, 0px) + 2.25rem);
+  }
+}
+
+/* Enlarged text must leave both document content and the modal reachable. */
+:global(html[data-tutorial-pilot-constrained] [data-tutorial-board] > header) { position: relative; }
+:global(html[data-tutorial-pilot-constrained] [data-tutorial-journal][data-journal-guidance]) { top: .75rem !important; }
