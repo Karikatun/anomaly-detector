@@ -184,6 +184,93 @@ async function startTutorial(page: Page, guest = false) {
   await expect(page.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ', exact: true })).toHaveCount(0)
 }
 
+// Observe availability before Playwright can scroll a target into view for a click.
+async function expectTutorialActionAvailable(page: Page, target: Locator) {
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  await expect.poll(() => target.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    const viewport = window.visualViewport
+    const top = viewport?.offsetTop ?? 0
+    const left = viewport?.offsetLeft ?? 0
+    if (rect.top < top || rect.bottom > top + (viewport?.height ?? innerHeight)
+      || rect.left < left || rect.right > left + (viewport?.width ?? innerWidth)) return false
+    return [[.1, .1], [.9, .1], [.5, .5], [.1, .9], [.9, .9]].every(([x, y]) => {
+      const hit = document.elementFromPoint(rect.left + rect.width * x!, rect.top + rect.height * y!)
+      return hit !== null && element.contains(hit)
+    })
+  }), { message: 'Current tutorial action must be fully visible and unobscured before any helper scroll' }).toBe(true)
+}
+
+async function expectTutorialSpotlightOnTarget(page: Page, target: Locator) {
+  await expect.poll(async () => {
+    const spotlight = await page.locator('.react-joyride__spotlight path').last().evaluate((element) => {
+      const path = element as SVGGraphicsElement
+      const box = path.getBBox(), matrix = path.getScreenCTM()!
+      const topLeft = new DOMPoint(box.x, box.y).matrixTransform(matrix)
+      const bottomRight = new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(matrix)
+      return { top: topLeft.y, left: topLeft.x, bottom: bottomRight.y, right: bottomRight.x }
+    })
+    const bounds = await target.boundingBox()
+    if (!bounds) return false
+    return spotlight.top <= bounds.y && spotlight.bottom >= bounds.y + bounds.height
+      && spotlight.left <= bounds.x && spotlight.right >= bounds.x + bounds.width
+      && spotlight.bottom - spotlight.top <= bounds.height + 32
+      && spotlight.right - spotlight.left <= bounds.width + 32
+  }, { message: 'Spotlight must fit the actual current control in screen coordinates' }).toBe(true)
+}
+
+test('tutorial positions each nearest action before interaction and preserves manual scrolling', async ({ page, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  await page.route('**/*', (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (url.origin !== origin) return route.abort('blockedbyclient')
+    if (url.pathname === '/api/auth/refresh' && request.method() === 'POST') {
+      return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Anonymous tutorial' } }) })
+    }
+    if (url.pathname.startsWith('/api/')) return route.abort('blockedbyclient')
+    return route.continue()
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await startTutorial(page, true)
+  await expectTutorialActionAvailable(page, page.locator('[data-tutorial-access-slot="5"]'))
+  const details = page.getByRole('button', { name: 'Подробнее', exact: true })
+  // A player may read the prompt before asking for its explanation.
+  await page.waitForTimeout(500)
+  await details.click()
+  await page.waitForTimeout(250)
+  await expectTutorialActionAvailable(page, page.locator('[data-tutorial-access-slot="5"]'))
+  await details.click()
+  await page.locator('[data-tutorial-access-slot="5"]').click()
+  await expect(page.getByTestId('floater')).toContainText('Нажмите «Подтвердить выбор»')
+  await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Подтвердить выбор', exact: true }))
+  await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
+  for (const [category, count] of [['Разведка', 1], ['Лаборатория', 2], ['Анализ модели', 1]] as const) {
+    const increase = page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true })
+    await expectTutorialActionAvailable(page, increase.locator('xpath=ancestor::article'))
+    await expect(page.getByTestId('floater')).toContainText(`${category}: установите ${count}`)
+    for (let index = 0; index < count; index++) await increase.click()
+  }
+  await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Подтвердить распределение', exact: true }))
+  const collisions = await page.getByTestId('tutorial-research-trigger').evaluate((entry) => {
+    const a = entry.getBoundingClientRect()
+    return [...document.querySelectorAll('[data-tutorial-power-category] button')].some((control) => {
+      const b = control.getBoundingClientRect()
+      return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+    })
+  })
+  expect(collisions, 'Journal entry must not cover power controls').toBe(false)
+  const beforeManualScroll = await page.evaluate(() => scrollY)
+  await page.mouse.move(24, 320)
+  await page.mouse.wheel(0, -160)
+  await page.waitForTimeout(250)
+  const manualPosition = await page.evaluate(() => scrollY)
+  expect(Math.abs(manualPosition - beforeManualScroll)).toBeGreaterThan(1)
+  await page.waitForTimeout(750)
+  expect(await page.evaluate(() => scrollY)).toBe(manualPosition)
+})
+
 test('first tutorial explanations preserve selection and advance only on the game command', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await startTutorial(page, true)
@@ -216,24 +303,10 @@ async function chooseAccessSlot(page: Page, slot: number) {
   await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
 }
 
-async function revealPowerControl(page: Page, increase: Locator) {
-  if ((page.viewportSize()?.width ?? 1440) < 768) {
-      const scroll = await increase.evaluate((element) => {
-        const header = document.querySelector('[data-tutorial-board] > header')!.getBoundingClientRect()
-        const coach = document.querySelector('[data-testid="floater"]')!.getBoundingClientRect()
-        const target = element.getBoundingClientRect()
-        const readingAreaCenter = (header.bottom + coach.top) / 2
-        return { top: readingAreaCenter, distance: target.top + target.height / 2 - readingAreaCenter }
-      })
-      await page.mouse.move(24, scroll.top)
-      await page.mouse.wheel(0, scroll.distance)
-    }
-}
-
 async function allocateFirstPower(page: Page) {
   for (const [category, power] of [['Разведка', 1], ['Лаборатория', 2], ['Анализ модели', 1]] as const) {
     const increase = page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true })
-    await revealPowerControl(page, increase)
+    await expectTutorialActionAvailable(page, increase)
     for (let i = 0; i < power; i++) await increase.click()
   }
   await page.getByRole('button', { name: 'Подтвердить распределение', exact: true }).click()
@@ -241,7 +314,10 @@ async function allocateFirstPower(page: Page) {
 
 async function reachFirstResearch(page: Page, guest = true, textScale?: string) {
   await startTutorial(page, guest)
-  if (textScale) await page.evaluate((scale) => { document.documentElement.style.fontSize = scale }, textScale)
+  if (textScale) {
+    await page.evaluate((scale) => { document.documentElement.style.fontSize = scale }, textScale)
+    await expectTutorialActionAvailable(page, page.locator('[data-tutorial-access-slot="5"]'))
+  }
   await chooseAccessSlot(page, 5)
   await allocateFirstPower(page)
   await page.getByRole('button', { name: /^Сигнал для разведки: Неизвестный/ }).first().click()
@@ -249,8 +325,12 @@ async function reachFirstResearch(page: Page, guest = true, textScale?: string) 
   await page.getByRole('button', { name: /^Глубокое/ }).click()
   await page.getByRole('button', { name: 'Образец: Aster', exact: true }).click()
   await page.getByRole('button', { name: 'Образец: Boreal', exact: true }).click()
-  await page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true }).click()
+  const confirm = page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true })
+  await expectTutorialActionAvailable(page, confirm)
+  await expectTutorialSpotlightOnTarget(page, confirm)
+  await confirm.click()
   await expect(page.getByRole('dialog', { name: 'Журнал исследований', exact: true })).toBeHidden()
+  await expectTutorialActionAvailable(page, page.getByTestId('tutorial-research-trigger'))
 }
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
@@ -293,6 +373,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 
   await capture('first-experiment')
   await page.getByRole('button', { name: 'Образец: Aster', exact: true }).click()
   await page.getByRole('button', { name: 'Образец: Boreal', exact: true }).click()
+  await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true }))
+  await expectTutorialSpotlightOnTarget(page, page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true }))
   await page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true }).click()
   await capture('result-entry')
   await page.getByTestId('tutorial-research-trigger').click()
@@ -326,8 +408,26 @@ for (const edge of [{ width: 384, height: 430, scale: '100%' }, { width: 390, he
     await page.getByTestId('tutorial-research-trigger').click()
     const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
     const measurement = journal.getByText('Одинаковая полярность', { exact: true })
-    await measurement.scrollIntoViewIfNeeded()
+    await expectTutorialActionAvailable(page, journal.locator('[data-research-experiment] > p').first())
+    const reading = journal.locator('[role="tabpanel"][data-state="active"]')
+    const scroll = await reading.evaluate((element) => {
+      const panel = element.getBoundingClientRect()
+      const measurement = element.querySelector('[data-private]:not([data-private-thesis]) p')!.getBoundingClientRect()
+      return { x: panel.left + panel.width / 2, y: panel.top + panel.height / 2, distance: measurement.top - panel.top - panel.height / 2 }
+    })
+    await page.mouse.move(scroll.x, scroll.y)
+    await page.mouse.wheel(0, Math.max(0, scroll.distance))
+    await expectTutorialActionAvailable(page, measurement)
     await expect(measurement).toBeInViewport({ ratio: .99 })
+    const readingPosition = await reading.evaluate((panel) => panel.scrollTop)
+    await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+    await expect(journal).toBeHidden()
+    await page.getByTestId('tutorial-research-trigger').click()
+    await expect(journal.getByRole('tab', { name: 'Данные исследований', exact: true })).toHaveAttribute('data-state', 'active')
+    await settleTutorialCapture(page)
+    expect(await reading.evaluate((panel) => panel.scrollTop)).toBe(readingPosition)
+    await expectTutorialActionAvailable(page, measurement)
+    await expectTutorialActionAvailable(page, journal.getByRole('tab', { name: 'Трактовка', exact: true }))
     const explanation = journal.getByRole('button', { name: 'Подробнее', exact: true })
     await explanation.click()
     await expect(explanation).toHaveAttribute('aria-expanded', 'true')
@@ -342,6 +442,8 @@ for (const edge of [{ width: 384, height: 430, scale: '100%' }, { width: 390, he
     await page.getByRole('button', { name: 'Продолжить обучение', exact: true }).click()
     await page.getByTestId('tutorial-research-trigger').click()
     await expect(journal).toBeVisible()
+    await journal.getByRole('tab', { name: 'Трактовка', exact: true }).click()
+    await expectTutorialActionAvailable(page, journal.getByRole('tab', { name: 'Рабочая модель', exact: true }))
   })
 }
 
@@ -382,6 +484,41 @@ for (const recovery of ['close', 'reload'] as const) {
   })
 }
 
+test.describe('tutorial positions through phone orientation', () => {
+  test.use({ viewport: { width: 390, height: 844 }, screen: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  test('tutorial positions retain Journal selection and focus through the portrait guard', async ({ page, browserName }, testInfo) => {
+    test.skip(browserName !== 'chromium', 'Screen orientation emulation requires Chromium CDP')
+    const session = await page.context().newCDPSession(page)
+    const rotate = async (landscape: boolean) => {
+      const width = landscape ? 844 : 390, height = landscape ? 390 : 844
+      await page.setViewportSize({ width, height })
+      await session.send('Emulation.setDeviceMetricsOverride', {
+        width, height, screenWidth: width, screenHeight: height, deviceScaleFactor: 1, mobile: true,
+        screenOrientation: { type: landscape ? 'landscapePrimary' : 'portraitPrimary', angle: landscape ? 90 : 0 },
+      })
+    }
+    await rotate(false)
+    await reachFirstResearch(page, true)
+    const journal = await openFirstModel(page)
+    const hypothesis = journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true })
+    await hypothesis.click()
+    await expect(hypothesis).toBeFocused()
+    await rotate(true)
+    const guard = page.getByRole('dialog', { name: 'Поверните телефон вертикально', exact: true })
+    await expect(guard).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Tab')
+    await expect(guard).toBeFocused()
+    await page.screenshot({ path: testInfo.outputPath('landscape-guard.png') })
+    await rotate(false)
+    await expect(guard).toBeHidden()
+    await expect(journal).toBeVisible()
+    await expect(hypothesis).toHaveAttribute('aria-pressed', 'true')
+    await expect(hypothesis).toBeFocused()
+    await page.screenshot({ path: testInfo.outputPath('portrait-restored.png') })
+  })
+})
+
 async function openFirstModel(page: Page) {
   await page.getByTestId('tutorial-research-trigger').click()
   const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
@@ -390,78 +527,228 @@ async function openFirstModel(page: Page) {
   return journal
 }
 
-async function playTwoRounds(page: Page, guest: boolean) {
+async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?: string) => Promise<void> = async () => undefined) {
   await startTutorial(page, guest)
+  await checkpoint()
   await page.getByRole('button', { name: /^Слот доступа 5:/ }).click()
+  await checkpoint()
   await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
+  await checkpoint()
   await allocateFirstPower(page)
+  await checkpoint()
   await page.reload()
+  await checkpoint()
+  await page.getByRole('button', { name: /^Сигнал для разведки: Неизвестный/ }).first().click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Исследовать', exact: true }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: /^Глубокое/ }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Образец: Aster', exact: true }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Образец: Boreal', exact: true }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true }).click()
+  await checkpoint()
+  const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
+  await expect(journal).toBeHidden()
+  await expect(page.getByText('Публичный журнал', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('История тезисов', { exact: true })).toHaveCount(0)
+  await page.getByTestId('tutorial-research-trigger').click()
+  await checkpoint()
+  await expect(journal.getByRole('tab', { name: 'Данные исследований', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(journal).toContainText('Отражение')
+  await expect(journal).toContainText('Одинаковая полярность')
+  await expect(journal).toContainText('Ваш опыт')
+  await journal.getByRole('tab', { name: 'Трактовка', exact: true }).click()
+  await checkpoint()
+  await expect(journal).toContainText('Цикл типов поля')
+  await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+  await checkpoint()
+  await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
+  await checkpoint()
+  await journal.getByRole('button', { name: 'Aster: гипотеза, полярность Положительная', exact: true }).click()
+  await checkpoint()
+  await expect(journal).toBeVisible()
+  await journal.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+  await checkpoint()
+  await journal.getByRole('tab', { name: 'Трактовка', exact: true }).click()
+  await checkpoint()
+  await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+  await checkpoint()
+  await expect(journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  // Close while the debounce can still be pending: this is a local draft, never a Thesis.
+  await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+  await checkpoint()
+  await expect(journal).toBeHidden()
+  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('aster')
+  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('inertial')
+  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
+  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+  await checkpoint()
+  await expect(journal).toBeHidden()
+  await page.getByRole('button', { name: /^Слот доступа 4:/ }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
+  await checkpoint()
+  await page.getByTestId('tutorial-contracts-trigger').click()
+  await checkpoint('round-2-contracts-review-open')
+  await page.getByRole('button', { name: 'Закрыть контракты', exact: true }).click()
+  await checkpoint()
+  for (const category of ['Разведка', 'Лаборатория', 'Анализ модели', 'Контракты']) {
+    const increase = page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true })
+    await expectTutorialActionAvailable(page, increase)
+    await increase.click()
+    await checkpoint()
+  }
+  await page.getByRole('button', { name: 'Подтвердить распределение', exact: true }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: /^Сигнал для разведки: Неизвестный/ }).first().click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Исследовать', exact: true }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Образец: Boreal', exact: true }).click()
+  await checkpoint()
+  await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Образец: Cinder', exact: true }))
+  await page.getByRole('button', { name: 'Образец: Cinder', exact: true }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Провести опыт: Boreal → Cinder', exact: true }).click()
+  await checkpoint()
+  await expect(journal).toBeHidden()
+  await page.getByTestId('tutorial-research-trigger').click()
+  await checkpoint()
+  await expect(journal).toContainText('Личные тезисы')
+  await expect(journal).toContainText('Тип верен')
+  await expect(journal).toContainText('Раунд 1')
+  await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+  await checkpoint()
+  await journal.getByRole('button', { name: 'Boreal: гипотеза, тип поля Электромагнитное', exact: true }).click()
+  await checkpoint()
+  await journal.getByRole('button', { name: 'Boreal: гипотеза, полярность Положительная', exact: true }).click()
+  await checkpoint()
+  await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+  await checkpoint()
+  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('boreal')
+  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('electromagnetic')
+  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
+  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+  await checkpoint()
+  await page.locator('[data-contract-id="tutorial-light-contract"]').getByLabel('Подходящее исследование для контракта Boreal · источник').selectOption('tutorial-test-2')
+  await page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник', exact: true }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Подтвердить контракт: Boreal · источник', exact: true }).click()
+  await checkpoint()
+  await page.getByRole('button', { name: 'Отправить финальную модель', exact: true }).click()
+  await checkpoint()
+}
+for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
+  test(`tutorial named actions stay available through the full guest lesson at ${viewport.width}`, async ({ page }, testInfo) => {
+    test.setTimeout(120_000)
+    await page.setViewportSize(viewport)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    const errors = captureRuntimeErrors(page)
+    const seen = new Set<string>()
+    const targets: Record<string, string> = {
+      'round-1-access': '[data-tutorial-access-slot="5"]',
+      'round-1-power': '[data-tutorial-power-category="reconnaissance"]',
+      'round-1-recon': '[data-tutorial-recon-anchor]',
+      'round-1-lab-mode': '[data-tutorial-lab-modes] button:first-child',
+      'round-1-lab-pair': '[data-tutorial-lab-sample="aster"]',
+      'research-results': '[data-testid="tutorial-research-trigger"]',
+      'research-results-open': '[data-tender-journal] [data-research-experiment]',
+      'interpretation-open': '[data-tutorial-journal-tab="working-model"]',
+      'round-1-working-model': '[data-tender-journal] [data-tutorial-working-model-row="aster"] [role="group"]:not([data-options]) button:first-child',
+      'round-1-thesis': '[data-tutorial-thesis]',
+      'round-2-access': '[data-tutorial-access-slot="4"]',
+      'round-2-contracts-review': '[data-testid="tutorial-contracts-trigger"]',
+      'round-2-contracts-review-open': '[data-testid="tutorial-contracts-dialog"] [data-slot="dialog-close"]',
+      'round-2-power': '[data-tutorial-power-category="reconnaissance"]',
+      'round-2-recon': '[data-tutorial-recon-anchor]',
+      'round-2-lab': '[data-tutorial-lab-sample="boreal"]',
+      'round-2-research': '[data-testid="tutorial-research-trigger"]',
+      'round-2-research-open': '[data-tender-journal] [data-research-experiment]:first-child',
+      'round-2-working-model': '[data-tender-journal] [data-tutorial-working-model-row="boreal"] [role="group"]:not([data-options]) button:nth-child(2)',
+      'round-2-thesis': '[data-tutorial-thesis]',
+      'round-2-contract-reserve': '[data-contract-id="tutorial-light-contract"]',
+      'round-2-contract-bid': '[data-contract-id="tutorial-light-contract"]',
+      'final-model': '[data-tutorial-final-submit]',
+    }
+    await playTwoRounds(page, true, async (expected) => {
+      if (!expected && !await page.locator('[data-tutorial-step]').count()) return
+      if (expected) {
+        await expect(page.getByTestId('tutorial-contracts-dialog')).toBeVisible()
+        await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('anomaly-detector:guest-tutorial-session') ?? '{}').step)).toBe(expected)
+      }
+      else await settleTutorialCapture(page)
+      const coach = page.locator('[data-tutorial-step]').first()
+      const step = expected ?? await coach.getAttribute('data-tutorial-step')
+      if (!step || seen.has(step) || !targets[step]) return
+      await expectTutorialActionAvailable(page, page.locator(targets[step]!))
+      if (!expected && await page.locator('.react-joyride__spotlight path').count()) {
+        await expectTutorialSpotlightOnTarget(page, page.locator(targets[step]!))
+      }
+      seen.add(step)
+      await page.screenshot({ path: testInfo.outputPath(`${step}-${viewport.width}.png`) })
+      if (step === 'interpretation-open') {
+        await page.keyboard.press('Escape')
+        await expectTutorialActionAvailable(page, page.getByTestId('tutorial-research-trigger'))
+        await expect(page.locator('[data-tutorial-step="interpretation"]')).toBeVisible()
+        seen.add('interpretation')
+        await expectTutorialSpotlightOnTarget(page, page.getByTestId('tutorial-research-trigger'))
+        await page.screenshot({ path: testInfo.outputPath(`interpretation-${viewport.width}.png`) })
+        await page.getByTestId('tutorial-research-trigger').click()
+      }
+    })
+    await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+    expect([...seen].sort()).toEqual([...Object.keys(targets), 'interpretation'].sort())
+    expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+    console.log(JSON.stringify({ viewport, activeSteps: [...seen], count: seen.size }))
+  })
+}
+
+test('tutorial positions a fresh lesson after Repeat restores a new reading task', async ({ page }, testInfo) => {
+  test.setTimeout(120_000)
+  await page.setViewportSize({ width: 390, height: 520 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  let readPrivately = false
+  await playTwoRounds(page, true, async () => {
+    if (readPrivately || await page.locator('[data-tutorial-step="research-results-open"]').count() === 0) return
+    const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
+    const reading = journal.getByRole('tabpanel', { name: 'Данные исследований', exact: true })
+    const point = await reading.evaluate((panel) => {
+      const bounds = panel.getBoundingClientRect()
+      const measurement = panel.querySelector('[data-private]:not([data-private-thesis]) > p')!.getBoundingClientRect()
+      return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, distance: measurement.top - bounds.top - bounds.height / 2 }
+    })
+    await page.mouse.move(point.x, point.y)
+    await page.mouse.wheel(0, Math.max(0, point.distance))
+    await expectTutorialActionAvailable(page, journal.getByText('Одинаковая полярность', { exact: true }))
+    expect(await reading.evaluate((panel) => panel.scrollTop)).toBeGreaterThan(0)
+    readPrivately = true
+  })
+  expect(readPrivately).toBe(true)
+  await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ', exact: true }).click()
+  await page.getByRole('button', { name: 'Начать обучение', exact: true }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
+  await expectTutorialActionAvailable(page, page.locator('[data-tutorial-access-slot="5"]'))
+  await chooseAccessSlot(page, 5)
+  await allocateFirstPower(page)
   await page.getByRole('button', { name: /^Сигнал для разведки: Неизвестный/ }).first().click()
   await page.getByRole('button', { name: 'Исследовать', exact: true }).click()
   await page.getByRole('button', { name: /^Глубокое/ }).click()
   await page.getByRole('button', { name: 'Образец: Aster', exact: true }).click()
   await page.getByRole('button', { name: 'Образец: Boreal', exact: true }).click()
   await page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true }).click()
+  await expectTutorialActionAvailable(page, page.getByTestId('tutorial-research-trigger'))
+  await page.getByTestId('tutorial-research-trigger').click()
   const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
-  await expect(journal).toBeHidden()
-  await expect(page.getByText('Публичный журнал', { exact: true })).toHaveCount(0)
-  await expect(page.getByText('История тезисов', { exact: true })).toHaveCount(0)
-  await page.getByTestId('tutorial-research-trigger').click()
-  await expect(journal.getByRole('tab', { name: 'Данные исследований', exact: true })).toHaveAttribute('aria-selected', 'true')
-  await expect(journal).toContainText('Отражение')
-  await expect(journal).toContainText('Одинаковая полярность')
-  await expect(journal).toContainText('Ваш опыт')
-  await journal.getByRole('tab', { name: 'Трактовка', exact: true }).click()
-  await expect(journal).toContainText('Цикл типов поля')
-  await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
-  await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
-  await journal.getByRole('button', { name: 'Aster: гипотеза, полярность Положительная', exact: true }).click()
-  await expect(journal).toBeVisible()
-  await journal.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
-  await journal.getByRole('tab', { name: 'Трактовка', exact: true }).click()
-  await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
-  await expect(journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  // Close while the debounce can still be pending: this is a local draft, never a Thesis.
-  await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
-  await expect(journal).toBeHidden()
-  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('aster')
-  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('inertial')
-  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
-  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
-  await expect(journal).toBeHidden()
-  await page.getByRole('button', { name: /^Слот доступа 4:/ }).click()
-  await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
-  await page.getByTestId('tutorial-contracts-trigger').click()
-  await page.getByRole('button', { name: 'Закрыть контракты', exact: true }).click()
-  for (const category of ['Разведка', 'Лаборатория', 'Анализ модели', 'Контракты']) {
-    const increase = page.getByRole('button', { name: `Увеличить мощность: ${category}`, exact: true })
-    await revealPowerControl(page, increase)
-    await increase.click()
-  }
-  await page.getByRole('button', { name: 'Подтвердить распределение', exact: true }).click()
-  await page.getByRole('button', { name: /^Сигнал для разведки: Неизвестный/ }).first().click()
-  await page.getByRole('button', { name: 'Исследовать', exact: true }).click()
-  await page.getByRole('button', { name: 'Образец: Boreal', exact: true }).click()
-  await page.getByRole('button', { name: 'Образец: Cinder', exact: true }).click()
-  await page.getByRole('button', { name: 'Провести опыт: Boreal → Cinder', exact: true }).click()
-  await expect(journal).toBeHidden()
-  await page.getByTestId('tutorial-research-trigger').click()
-  await expect(journal).toContainText('Личные тезисы')
-  await expect(journal).toContainText('Тип верен')
-  await expect(journal).toContainText('Раунд 1')
-  await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
-  await journal.getByRole('button', { name: 'Boreal: гипотеза, тип поля Электромагнитное', exact: true }).click()
-  await journal.getByRole('button', { name: 'Boreal: гипотеза, полярность Положительная', exact: true }).click()
-  await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
-  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('boreal')
-  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('electromagnetic')
-  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
-  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
-  await page.locator('[data-contract-id="tutorial-light-contract"]').getByLabel('Подходящее исследование для контракта Boreal · источник').selectOption('tutorial-test-2')
-  await page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник', exact: true }).click()
-  await page.getByRole('button', { name: 'Подтвердить контракт: Boreal · источник', exact: true }).click()
-  await page.getByRole('button', { name: 'Отправить финальную модель', exact: true }).click()
-}
+  await expectTutorialActionAvailable(page, journal.locator('[data-research-experiment] > p').first())
+  await expectTutorialActionAvailable(page, journal.getByRole('tab', { name: 'Трактовка', exact: true }))
+  await settleTutorialCapture(page)
+  await page.screenshot({ path: testInfo.outputPath('repeat-fresh-reading-task.png') })
+})
 
 for (const scenario of [
   { guest: true, viewport: { width: 1440, height: 900 }, name: 'guest' },
@@ -663,8 +950,11 @@ test('preserves the first action through dynamic portrait viewport changes', asy
   await page.setViewportSize({ width: 390, height: 844 })
   await startTutorial(page, true)
   const slot = page.getByRole('button', { name: /^Слот доступа 5:/ })
-  await slot.click()
+  await expectTutorialActionAvailable(page, slot)
   await page.setViewportSize({ width: 390, height: 700 })
+  await expectTutorialActionAvailable(page, slot)
+  await slot.click()
+  await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Подтвердить выбор', exact: true }))
   await expect(slot).toHaveAttribute('aria-pressed', 'true')
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(slot).toHaveAttribute('aria-pressed', 'true')

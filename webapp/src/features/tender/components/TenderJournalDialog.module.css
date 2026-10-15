@@ -48,3 +48,25 @@
   .tabs { min-height: 8rem; }
   .panel { max-height: 60dvh; }
 }
+
+/* Training keeps the secondary Journal entry in its own normal-flow row. */
+.trigger[data-tutorial-journal-entry] {
+  position: static;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 2.75rem;
+  justify-content: flex-start;
+  border-radius: var(--radius-control);
+  box-shadow: none;
+}
+.trigger[data-tutorial-journal-entry] .triggerText {
+  display: inline;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 47.999rem) {
+  .dialog[data-tutorial-journal] .header { min-height: 2.75rem; }
+}

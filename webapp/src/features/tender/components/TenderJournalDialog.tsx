@@ -75,7 +75,7 @@ export function TenderJournalDialog({
     const button = trigger.current
     const board = button?.closest('[data-tender-page], [data-tutorial-board]')
     const footer = board?.querySelector<HTMLElement>('[data-tender-primary-content] footer, [data-tutorial-primary] footer')
-    if (!button || !footer) return
+    if (!button || !footer || button.hasAttribute('data-tutorial-journal-entry')) return
     const avoidAction = () => {
       const viewportHeight = window.visualViewport?.height ?? window.innerHeight
       const rect = footer.getBoundingClientRect()
@@ -109,6 +109,7 @@ export function TenderJournalDialog({
           ref={trigger} variant="outline" type="button" className={styles.trigger}
           disabled={openDisabled} aria-label={t('tender.journal.open')}
           title={t('tender.journal.open')} data-testid={triggerTestId}
+          data-tutorial-journal-entry={triggerTestId ? '' : undefined}
         >
           <HugeiconsIcon icon={BookOpen01Icon} strokeWidth={1.7} aria-hidden="true" />
           <Typography as="span" variant="bodySmMedium" className={styles.triggerText}>{t('tender.journal.title')}</Typography>
@@ -133,9 +134,9 @@ export function TenderJournalDialog({
         </DialogHeader>
         <Tabs.Root value={tab} onValueChange={(value) => { rememberPosition(); onTabChange(value as TenderJournalTab) }} className={styles.tabs}>
           <Tabs.List aria-label={t('tender.journal.sections')} className={styles.tablist}>
-            <Tabs.Trigger value="working-model" disabled={modelTabDisabled} className={styles.tab}>{t('tender.journal.model')}</Tabs.Trigger>
-            <Tabs.Trigger value="research" className={styles.tab}>{t('tender.journal.research')}</Tabs.Trigger>
-            <Tabs.Trigger value="interpretation" disabled={interpretationDisabled} className={styles.tab}>{t('tender.journal.interpretation')}</Tabs.Trigger>
+            <Tabs.Trigger data-tutorial-journal-tab={triggerTestId ? 'working-model' : undefined} value="working-model" disabled={modelTabDisabled} className={styles.tab}>{t('tender.journal.model')}</Tabs.Trigger>
+            <Tabs.Trigger data-tutorial-journal-tab={triggerTestId ? 'research' : undefined} value="research" className={styles.tab}>{t('tender.journal.research')}</Tabs.Trigger>
+            <Tabs.Trigger data-tutorial-journal-tab={triggerTestId ? 'interpretation' : undefined} value="interpretation" disabled={interpretationDisabled} className={styles.tab}>{t('tender.journal.interpretation')}</Tabs.Trigger>
           </Tabs.List>
           {panel('working-model', <>
             <Typography variant="caption" tone="muted">{t(disabled ? 'tender.journal.readOnly' : 'tender.journal.privateModel')}</Typography>

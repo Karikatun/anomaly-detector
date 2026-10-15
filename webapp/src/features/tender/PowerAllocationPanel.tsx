@@ -301,6 +301,7 @@ export function PowerAllocationPanel({
               key={key}
               className={styles.categoryCard}
               data-tutorial-power-category={key}
+              data-tutorial-power-value={value}
               data-allocated={value > 0 || undefined}
               data-invalid={isCategoryInvalid || undefined}
               style={categoryStyle(accent)}

@@ -146,7 +146,7 @@
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
   gap: var(--space-3);
 }
 
@@ -250,6 +250,7 @@
 
 .slotName {
   display: block;
+  overflow-wrap: anywhere;
   width: 100%;
   min-height: 1.15rem;
   font-size: .82rem;
@@ -271,6 +272,7 @@
 }
 
 .termsLabel {
+  overflow-wrap: anywhere;
   color: rgba(220, 233, 243, .86);
   font-size: .72rem;
   line-height: 1.25;

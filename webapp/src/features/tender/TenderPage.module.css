@@ -104,6 +104,18 @@
 
   .headerTimer {
     grid-area: timer;
+    min-width: 0;
+    justify-self: start;
+  }
+
+  .headerTimer > [data-slot="badge"] {
+    height: auto;
+    min-height: 1.25rem;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    text-align: center;
   }
 
   .headerMeta {

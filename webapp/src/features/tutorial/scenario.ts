@@ -12,6 +12,10 @@ import type { TenderCommandInput } from '@/features/tender/public/tutorial-board
 import { translate } from '@/platform/i18n'
 
 export const tutorialContractId = 'tutorial-light-contract'
+export const tutorialPowerGoals = {
+  'round-1-power': [1, 2, 1, 0],
+  'round-2-power': [1, 1, 1, 1],
+} as const
 
 export type TutorialStep =
   | 'prologue'
@@ -176,7 +180,7 @@ export function advanceTutorial(
     case 'round-1-power-intro':
       return continueTo(state, action, 'round-1-power')
     case 'round-1-power':
-      return action.type === 'allocate-power' && allocationMatches(action.allocation, [1, 2, 1, 0])
+      return action.type === 'allocate-power' && allocationMatches(action.allocation, tutorialPowerGoals['round-1-power'])
         ? progressed(state, { step: 'round-1-recon' })
         : unchanged(state)
     case 'round-1-recon-intro':
@@ -254,7 +258,7 @@ export function advanceTutorial(
         ? progressed(state, { step: 'round-2-power' })
         : unchanged(state)
     case 'round-2-power':
-      return action.type === 'allocate-power' && allocationMatches(action.allocation, [1, 1, 1, 1])
+      return action.type === 'allocate-power' && allocationMatches(action.allocation, tutorialPowerGoals['round-2-power'])
         ? progressed(state, { step: 'round-2-recon' })
         : unchanged(state)
     case 'round-2-recon':
@@ -366,7 +370,7 @@ function resolveThesis(
 
 function allocationMatches(
   allocation: Extract<TenderCommandInput, { type: 'allocate-power' }>['allocation'],
-  expected: [number, number, number, number],
+  expected: readonly [number, number, number, number],
 ) {
   return allocation.reconnaissance === expected[0]
     && allocation.laboratory === expected[1]
