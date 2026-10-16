@@ -733,7 +733,7 @@ async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?:
   await page.getByRole('button', { name: /^Слот доступа 5:/ }).click()
   await checkpoint()
   await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
-  await checkpoint()
+  await checkpoint('round-1-power')
   await allocateFirstPower(page)
   await checkpoint()
   await page.reload()
@@ -830,7 +830,7 @@ async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?:
   await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
   await checkpoint()
   await submitTutorialThesis(page, 'boreal', 'electromagnetic', 'positive')
-  await checkpoint()
+  await checkpoint('round-2-contract-reserve')
   await page.locator('[data-contract-id="tutorial-light-contract"]').getByLabel('Подходящее исследование для контракта Boreal · источник').selectOption('tutorial-test-2')
   await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник', exact: true }))
   await page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник', exact: true }).click()
@@ -887,16 +887,18 @@ for (const viewport of [
       expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize))
         .toBe(viewport.textScale === '200%' ? '32px' : '16px')
       if (!expected && !await page.locator('[data-tutorial-step]').count()) return
-      if (expected) {
+      if (expected === 'round-2-contracts-review-open') {
         await expect(page.getByTestId('tutorial-contracts-dialog')).toBeVisible()
         await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('anomaly-detector:guest-tutorial-session') ?? '{}').step)).toBe(expected)
+      } else {
+        if (expected) await expect(page.locator(`[data-tutorial-step="${expected}"]`)).toBeVisible()
+        await settleTutorialCapture(page)
       }
-      else await settleTutorialCapture(page)
       const coach = page.locator('[data-tutorial-step]').first()
-      const step = expected ?? await coach.getAttribute('data-tutorial-step')
+      const step = expected === 'round-2-contracts-review-open' ? expected : await coach.getAttribute('data-tutorial-step')
       if (!step || seen.has(step) || !targets[step]) return
       await expectTutorialActionAvailable(page, page.locator(targets[step]!))
-      if (!expected && await page.locator('.react-joyride__spotlight path').count()) {
+      if (expected !== 'round-2-contracts-review-open' && await page.locator('.react-joyride__spotlight path').count()) {
         await expectTutorialSpotlightOnTarget(page, page.locator(targets[step]!))
       }
       seen.add(step)
