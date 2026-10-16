@@ -1,0 +1,19 @@
+{
+  "exceptions": [
+    {
+      "advisory": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "version": "3.0.3",
+      "owner": "Karikatun",
+      "rationale": "Согласованное временное сохранение shadcn CLI: исправленной upstream-версии braces пока нет. Допускаются только два проверенных пути developer CLI; доверять входным данным CLI необходимо отдельно.",
+      "acceptedAt": "2026-10-16T00:00:00Z",
+      "expiresAt": "2026-10-30T23:59:59Z",
+      "workspace": "webapp",
+      "dependencyType": "devDependencies",
+      "paths": [
+        ["shadcn@4.7.0", "fast-glob@3.3.3", "micromatch@4.0.8", "braces@3.0.3"],
+        ["shadcn@4.7.0", "ts-morph@26.0.0", "@ts-morph/common@0.27.0", "fast-glob@3.3.3", "micromatch@4.0.8", "braces@3.0.3"]
+      ]
+    }
+  ]
+}
