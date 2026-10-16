@@ -69,6 +69,7 @@
     "security:secrets:staged": "bun scripts/secret-check.mjs --staged",
     "security:artifacts": "bun scripts/static-artifacts.mjs",
     "security:skills": "bun scripts/verify-skills.mjs",
+    "postsecurity:gitleaks": "bun test scripts/gitleaks-policy.test.mjs",
     "security:gitleaks": "bun scripts/security-scan.mjs gitleaks",
     "security:semgrep": "bun scripts/security-scan.mjs semgrep",
     "security:trivy:config": "bun scripts/security-scan.mjs trivy-config",

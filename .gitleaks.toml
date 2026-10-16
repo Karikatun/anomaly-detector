@@ -1,0 +1,18 @@
+# Owner-approved classification of the exact reviewed non-secret historical pair.
+# Non-secret TutorialStep comparisons, reviewed at immutable historical commit.
+# No numeric line filter is supported by this Gitleaks allowlist.
+title = "Exact classification of two non-secret historical tutorial comparisons"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Exact non-secret TutorialStep comparisons in reviewed immutable history"
+condition = "AND"
+commits = ["3f6eaad2585dd1f12c0759c3c0103ae344572316"]
+paths = ['''\Awebapp/src/features/tutorial/TutorialExperience\.tsx\z''']
+regexTarget = "match"
+regexes = ['''\AtaskKey === '(?:round-1-thesis|round-2-thesis)'\z''']
