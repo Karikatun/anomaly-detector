@@ -261,7 +261,7 @@ async function readTutorialMeasurement(page: Page, panel: Locator, target: Locat
   expect(await panel.evaluate((element) => element.scrollTop), 'Reading must not rebound after the last native wheel').toBe(position)
 }
 
-async function scrollToTutorialControl(page: Page, target: Locator) {
+async function revealTutorialControl(page: Page, target: Locator) {
   // Firefox's native wheel consumes line-sized increments even for a large
   // requested delta. Stop on actual geometry, not a fixed gesture count.
   for (let attempt = 0; attempt < 60; attempt++) {
@@ -290,6 +290,10 @@ async function scrollToTutorialControl(page: Page, target: Locator) {
     }, { intervals: [50, 100] }).toBe(true)
   }
   await expectTutorialActionAvailable(page, target)
+}
+
+async function scrollToTutorialControl(page: Page, target: Locator) {
+  await revealTutorialControl(page, target)
   const position = await page.evaluate(() => scrollY)
   await page.waitForTimeout(250)
   expect(await page.evaluate(() => scrollY), 'Revealed control must not rebound after native reading scroll').toBe(position)
@@ -659,6 +663,8 @@ for (const recovery of ['close', 'reload'] as const) {
     await journal.getByRole('button', { name: 'Aster: гипотеза, полярность Положительная', exact: true }).click()
     await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
     await expect(page.getByLabel('Сигнал для тезиса', { exact: true })).toBeEnabled()
+    await expect(page.locator('[data-tutorial-journal]')).toHaveCount(0)
+    await revealTutorialControl(page, entry)
     await entry.click()
     await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
     await expect(journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true })).toHaveAttribute('aria-pressed', 'true')
