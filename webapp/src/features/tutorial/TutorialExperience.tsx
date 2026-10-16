@@ -467,6 +467,7 @@ export function TutorialExperience({
     ),
     data: { tutorialStep: state.step, pilot: Boolean(pilot) },
     hideOverlay: presentation.hideOverlay,
+    floatingOptions: { autoUpdate: { elementResize: false } },
     placement: 'auto',
     scrollOffset: 20,
     scrollTarget: presentation.positionTarget,

@@ -29,13 +29,23 @@ const accountProtectionInvitation = {
   warning: 'Без подтверждённой почты самостоятельное восстановление доступа невозможно.',
 } as const
 
-function captureRuntimeErrors(page: Page) {
+async function captureRuntimeErrors(page: Page) {
   const errors: string[] = []
+  const windowErrors: string[] = []
+  await page.exposeFunction('captureTutorialWindowError', (message: string) => { windowErrors.push(message) })
+  await page.addInitScript(() => {
+    // Native ResizeObserver delivery errors can have a message without event.error,
+    // so Playwright's pageerror event and console listeners do not cover them.
+    window.addEventListener('error', (event) => {
+      void (window as Window & { captureTutorialWindowError: (message: string) => Promise<void> })
+        .captureTutorialWindowError(event.message)
+    })
+  })
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(`console: ${message.text()}`)
   })
   page.on('pageerror', (error) => errors.push(`page: ${error.message}`))
-  return errors
+  return { errors, windowErrors }
 }
 
 async function settleTutorialCapture(page: Page) {
@@ -193,14 +203,39 @@ async function setTutorialTextScaleBeforeNavigation(page: Page, scale: string) {
 async function scrollIntroductionTo(page: Page, dialog: Locator, target: Locator) {
   // A wheel models ordinary reading; locator.click/scrollIntoView must not rescue
   // a clipped fixed dialog before we have established that its content is reachable.
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const bounds = await target.boundingBox()
-    const viewport = page.viewportSize()!
-    if (bounds && bounds.y >= 0 && bounds.y + bounds.height <= viewport.height) break
-    const box = (await dialog.boundingBox())!
-    await page.mouse.move(box.x + box.width / 2, Math.max(0, box.y) + Math.min(box.height, viewport.height) / 2)
-    await page.mouse.wheel(0, bounds && bounds.y < 0 ? -240 : 240)
-    await page.waitForTimeout(50)
+  while (true) {
+    const reading = await dialog.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const viewport = window.visualViewport
+      const top = Math.max(rect.top + element.clientTop, viewport?.offsetTop ?? 0)
+      const left = Math.max(rect.left + element.clientLeft, viewport?.offsetLeft ?? 0)
+      const bottom = Math.min(rect.top + element.clientTop + element.clientHeight,
+        (viewport?.offsetTop ?? 0) + (viewport?.height ?? innerHeight))
+      const right = Math.min(rect.left + element.clientLeft + element.clientWidth,
+        (viewport?.offsetLeft ?? 0) + (viewport?.width ?? innerWidth))
+      return { top, bottom, left, right, position: element.scrollTop,
+        maximum: element.scrollHeight - element.clientHeight }
+    })
+    const bounds = (await target.boundingBox())!
+    if (bounds.y >= reading.top && bounds.y + bounds.height <= reading.bottom) break
+    if (reading.bottom <= reading.top || reading.right <= reading.left
+      || bounds.height > reading.bottom - reading.top) break
+    const delta = bounds.y + bounds.height > reading.bottom
+      ? Math.min(240, bounds.y + bounds.height - reading.bottom)
+      : Math.max(-240, bounds.y - reading.top)
+    if ((delta > 0 && reading.position >= reading.maximum)
+      || (delta < 0 && reading.position <= 0)) break
+    await page.mouse.move((reading.left + reading.right) / 2, (reading.top + reading.bottom) / 2)
+    await page.mouse.wheel(0, delta)
+    let previous: number | undefined
+    await expect.poll(async () => {
+      const position = await dialog.evaluate((element) => element.scrollTop)
+      const settled = previous === position
+      previous = position
+      return settled
+    }, { intervals: [50, 100] }).toBe(true)
+    const position = await dialog.evaluate((element) => element.scrollTop)
+    if ((position - reading.position) * Math.sign(delta) <= 0) break
   }
   await expectTutorialActionAvailable(page, target)
 }
@@ -490,7 +525,7 @@ async function reachFirstResearch(page: Page, guest = true, textScale?: string) 
 for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
  test(`first result explanation stays inside Journal keyboard navigation at ${viewport.width}`, async ({ page }, testInfo) => {
   await page.setViewportSize(viewport)
-  const errors = captureRuntimeErrors(page)
+  const { errors, windowErrors } = await captureRuntimeErrors(page)
   const failedResponses: string[] = []
   page.on('response', (response) => {
     if (response.status() >= 400) failedResponses.push(`${response.status()} ${new URL(response.url()).pathname}`)
@@ -552,12 +587,14 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 
   await expect(page.getByTestId('floater')).toContainText('Перейдите во вкладку «Рабочая модель»')
   expect(failedResponses.filter((response) => response !== '401 /api/auth/refresh')).toEqual([])
   expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+  expect(windowErrors).toEqual([])
  })
 }
 
 for (const edge of [{ width: 384, height: 430, scale: '100%' }, { width: 390, height: 844, scale: '200%' }]) {
   test(`first pilot controls and Journal close remain reachable at ${edge.width}x${edge.height} text ${edge.scale}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: edge.width, height: edge.height })
+    const { windowErrors } = await captureRuntimeErrors(page)
     await reachFirstResearch(page, true, edge.scale)
     await page.getByTestId('tutorial-research-trigger').click()
     const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
@@ -591,6 +628,7 @@ for (const edge of [{ width: 384, height: 430, scale: '100%' }, { width: 390, he
     await expect(journal).toBeVisible()
     await journal.getByRole('tab', { name: 'Трактовка', exact: true }).click()
     await expectTutorialActionAvailable(page, journal.getByRole('tab', { name: 'Рабочая модель', exact: true }))
+    expect(windowErrors).toEqual([])
   })
 }
 
@@ -813,7 +851,7 @@ for (const viewport of [
     await page.setViewportSize(viewport)
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await setTutorialTextScaleBeforeNavigation(page, viewport.textScale)
-    const errors = captureRuntimeErrors(page)
+    const { errors, windowErrors } = await captureRuntimeErrors(page)
     const seen = new Set<string>()
     // Enlarged text uses the existing power-card fallback: its actual control
     // group fits the reading zone while the explanation stays scrollable.
@@ -876,6 +914,7 @@ for (const viewport of [
     await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
     expect([...seen].sort()).toEqual([...Object.keys(targets), 'interpretation'].sort())
     expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+    expect(windowErrors).toEqual([])
     console.log(JSON.stringify({ viewport, activeSteps: [...seen], count: seen.size }))
   })
 }
@@ -984,7 +1023,7 @@ for (const scenario of [
   test(`optimized ${scenario.name} Journal flow separates manual tabs, draft saves, Thesis commands and final submission`, async ({ page }) => {
     test.setTimeout(120_000)
     page.setDefaultTimeout(15_000)
-    const errors = captureRuntimeErrors(page)
+    const { errors, windowErrors } = await captureRuntimeErrors(page)
     const protectedRequests: string[] = []
     const analyticsEvents: string[] = []
     await page.setViewportSize(scenario.viewport)
@@ -1021,6 +1060,7 @@ for (const scenario of [
       await expect(page.locator('#account-protection').getByRole('heading', { name: 'Защита аккаунта' })).toBeVisible()
     }
     expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+    expect(windowErrors).toEqual([])
   })
 }
 
