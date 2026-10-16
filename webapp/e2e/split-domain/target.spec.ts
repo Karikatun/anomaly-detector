@@ -129,7 +129,11 @@ test('configures the player Metrika client without loading it before consent', a
   await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toHaveCount(0)
   const coach = page.locator('[data-testid="floater"]')
   await expect(coach).toBeVisible()
-  await coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+  await expect(coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' })).toHaveCount(0)
+  const firstAction = page.getByRole('button', { name: /^Слот доступа 5:/ })
+  await firstAction.click()
+  await expect(firstAction).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: 'Подтвердить выбор', exact: true })).toBeEnabled()
   await expect(page.locator('[data-tutorial-step="interaction-guide"]')).toHaveCount(0)
 
   await page.goto(`${origins.app}/privacy`)
@@ -142,7 +146,7 @@ test('configures the player Metrika client without loading it before consent', a
   expect(tagRequests).toBe(1)
 })
 
-test('keeps the tutorial coach actionable before the analytics choice on desktop and mobile', async ({ page }) => {
+test('keeps the first tutorial action available before the analytics choice on desktop and mobile', async ({ page }) => {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport)
     await page.goto(`${origins.app}/learn`)
@@ -163,7 +167,11 @@ test('keeps the tutorial coach actionable before the analytics choice on desktop
     if (uxAuditDir) {
       await page.screenshot({ path: `${uxAuditDir}/tutorial-${viewport.width}.png` })
     }
-    await coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' }).click()
+    await expect(coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' })).toHaveCount(0)
+    const firstAction = page.getByRole('button', { name: /^Слот доступа 5:/ })
+    await firstAction.click()
+    await expect(firstAction).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('button', { name: 'Подтвердить выбор', exact: true })).toBeEnabled()
     await expect(page.locator('[data-tutorial-step="interaction-guide"]')).toHaveCount(0)
   }
 })

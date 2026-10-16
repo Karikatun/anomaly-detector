@@ -11,12 +11,60 @@ const approvedMetrikaCounterId = '112719766'
 export const metrikaOAuthPendingStorageKey = 'anomaly-detector:metrika-oauth-pending'
 
 type MetrikaStorage = Pick<Storage, 'getItem' | 'removeItem' | 'setItem'>
+export type MetrikaConsentChoice = 'allowed' | 'necessary' | 'undecided'
+const consentStorageKey = 'anomaly-detector:metrika-consent'
+
+export class MetrikaConsentStorage {
+  private choice: MetrikaConsentChoice | undefined
+  private readonly storage: MetrikaStorage | undefined
+
+  constructor(storage = browserLocalStorage()) {
+    this.storage = storage
+  }
+
+  read(): MetrikaConsentChoice {
+    if (this.choice) return this.choice
+    try {
+      const stored = this.storage?.getItem(consentStorageKey)
+      return stored === 'allowed' || stored === 'necessary' ? stored : 'undecided'
+    } catch {
+      return 'undecided'
+    }
+  }
+
+  save(choice: Exclude<MetrikaConsentChoice, 'undecided'>): boolean {
+    this.choice = 'necessary'
+    let priorGrantRemoved = false
+    if (choice === 'necessary') {
+      try {
+        if (this.storage) {
+          this.storage.removeItem(consentStorageKey)
+          priorGrantRemoved = true
+        }
+      } catch {
+        // A denial write can still replace the grant if removal is blocked.
+      }
+    }
+    try {
+      if (!this.storage) return false
+      this.storage.setItem(consentStorageKey, choice)
+      this.choice = choice
+      return true
+    } catch {
+      // Removing the grant is sufficient to keep subsequent documents disabled.
+      return priorGrantRemoved
+    }
+  }
+}
+
+export const metrikaConsent = new MetrikaConsentStorage()
+
 let inMemoryMetrikaOAuthPending: {
   storage: MetrikaStorage | undefined
   value: string
 } | null = null
 
-type MetrikaCommand = ((counterId: number, method: 'init' | 'reachGoal', ...args: unknown[]) => void) & {
+type MetrikaCommand = ((counterId: number, method: 'init' | 'reachGoal' | 'destruct', ...args: unknown[]) => void) & {
   a?: unknown[][]
 }
 type MetrikaWindow = {
@@ -25,7 +73,7 @@ type MetrikaWindow = {
   history?: { state: unknown; replaceState: (state: unknown, unused: string, url?: string) => void }
 }
 type MetrikaDocument = {
-  createElement: (tagName: string) => { async?: boolean; src?: string }
+  createElement: (tagName: string) => { async?: boolean; src?: string; remove?: () => void }
   head?: { appendChild: (element: { async?: boolean; src?: string }) => void }
 }
 
@@ -121,6 +169,8 @@ export class MetrikaClient {
   private readonly sentGoals = new Set<string>()
   private command: MetrikaCommand | undefined
   private initialized = false
+  private disabled = false
+  private script: ReturnType<MetrikaDocument['createElement']> | undefined
 
   constructor(input: {
     counterId: string
@@ -137,6 +187,7 @@ export class MetrikaClient {
   }
 
   enable() {
+    if (this.disabled) return false
     if (!this.enabled || this.initialized || !this.isSafePath()) return
     this.initialized = true
     this.stripLocationSuffix()
@@ -146,14 +197,27 @@ export class MetrikaClient {
 
     const script = this.document?.createElement('script')
     if (!script || !this.document?.head) return
+    this.script = script
     script.async = true
     script.src = 'https://mc.yandex.ru/metrika/tag.js'
     this.document.head.appendChild(script)
   }
 
+  disable() {
+    if (this.disabled) return
+    this.disabled = true
+    this.script?.remove?.()
+    if (this.command?.a) this.command.a.length = 0
+    try {
+      if (this.initialized) this.window?.ym?.(this.counterId, 'destruct')
+    } catch {
+      // A provider failure must not prevent persisting withdrawal and reloading.
+    }
+  }
+
   record(goal: MetrikaGoal, dedupeKey: string = goal) {
     const eventKey = `${goal}:${dedupeKey}`
-    if (!this.initialized || !this.isSafePath() || !METRIKA_GOALS.includes(goal) || this.sentGoals.has(eventKey)) return
+    if (this.disabled || !this.initialized || !this.isSafePath() || !METRIKA_GOALS.includes(goal) || this.sentGoals.has(eventKey)) return
     this.sentGoals.add(eventKey)
     this.dispatch('reachGoal', goal)
   }
@@ -214,4 +278,13 @@ function browserRandomUuid() {
   const cryptoApi = typeof globalThis.crypto === 'undefined' ? undefined : globalThis.crypto
   if (typeof cryptoApi?.randomUUID !== 'function') throw new Error('Web Crypto unavailable')
   return cryptoApi.randomUUID()
+}
+
+function browserLocalStorage(): MetrikaStorage | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    return window.localStorage
+  } catch {
+    return undefined
+  }
 }

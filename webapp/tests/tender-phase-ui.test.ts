@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 
 import {
   getPhaseContextMenuVisibility,
+  getTenderJournalAccess,
   getTenderPhaseProgressStages,
   shouldLockPhaseOverlays,
 } from '../src/features/tender/phase-ui'
@@ -50,4 +51,20 @@ test('locks every phase overlay during the final ten seconds of an active phase'
   expect(shouldLockPhaseOverlays({ phase: 'laboratory', remainingSeconds: 11 })).toBe(false)
   expect(shouldLockPhaseOverlays({ phase: 'laboratory', remainingSeconds: 10 })).toBe(true)
   expect(shouldLockPhaseOverlays({ phase: 'complete', remainingSeconds: 0 })).toBe(false)
+})
+
+test('keeps connected Research readable in the last ten seconds without unlocking Model or Interpretation', () => {
+  expect(getTenderJournalAccess({ phase: 'laboratory', remainingSeconds: 10, connected: true, turnLocked: true })).toEqual({
+    canOpen: true,
+    researchOnly: true,
+    modelTabDisabled: true,
+    interpretationDisabled: true,
+  })
+  expect(getTenderJournalAccess({ phase: 'laboratory', remainingSeconds: 0, connected: true, turnLocked: false })).toEqual({
+    canOpen: true,
+    researchOnly: true,
+    modelTabDisabled: true,
+    interpretationDisabled: true,
+  })
+  expect(getTenderJournalAccess({ phase: 'laboratory', remainingSeconds: 11, connected: false, turnLocked: false }).canOpen).toBe(false)
 })

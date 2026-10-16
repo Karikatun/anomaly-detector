@@ -70,8 +70,15 @@ The remote static-security job runs full-history Gitleaks, repository-owned
 Semgrep rules, and Trivy configuration checks. After Docker smoke builds the
 exact backend image, Trivy scans its OS and application packages for high and
 critical vulnerabilities. Scanner containers are versioned and digest-pinned in
-`.security/tools.json`; Gitleaks exceptions identify only reviewed historical
-test-fixture fingerprints.
+`.security/tools.json`; Gitleaks fingerprint exceptions identify only reviewed historical test-fixture
+fingerprints. A separately owner-approved classification in `.gitleaks.toml`
+covers only the two proven non-secret `TutorialStep` comparisons in
+`webapp/src/features/tutorial/TutorialExperience.tsx` at immutable commit
+`3f6eaad2585dd1f12c0759c3c0103ae344572316`, using rule-specific AND-conjoined
+exact commit, path and full-match constraints while retaining all default rules.
+This narrow project rule overrides the security skill's fixture-only restriction
+solely for those two matches. Any widening requires a separate owner decision
+and review; exposed credentials are never covered.
 
 Use [`docs/AUDIT_GUIDE.md`](docs/AUDIT_GUIDE.md) to select security and adjacent
 product, architecture, UX, release, and operational checks by lifecycle stage.
@@ -86,6 +93,24 @@ operation from its generated scan document, destroys its test data afterward,
 and redacts the temporary access token from reports. Never point this command or
 the scheduled Dynamic Security workflow at production or shared development
 data.
+
+## Temporary Dependency Exception
+
+`bun run security:dependencies` runs the unfiltered Bun audit at severity `low`.
+The sole approved exception is GHSA-vfj7-8cjw-p6xm for `braces@3.0.3`, owned by
+`Karikatun`, accepted on 2026-10-16 and expiring at 2026-10-30T23:59:59Z. Its
+record in `.security/dependency-exceptions.json` identifies both reviewed paths
+through the pinned `webapp` developer CLI `shadcn@4.7.0`; it does not declare the
+upstream vulnerability fixed. Use trusted CLI inputs until an upstream fix can
+replace this exception.
+
+The gate rejects other advisories, version or ancestry drift, production
+manifest paths, known CLI package literals in application sources (allowing only
+the existing `shadcn/tailwind.css` import), missing or invalid exception metadata,
+expiry, audit errors and unknown output schemas. The literal guard is conservative
+and is not a general JavaScript reachability analysis. The raw audit continues to
+report the accepted advisory. Renewal, another exception or a broader scope
+requires a separate explicit owner decision and review; this record grants none.
 
 ## Mandatory Threat Review
 

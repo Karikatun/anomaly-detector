@@ -2,7 +2,7 @@
 .board {
   min-height: 100dvh;
 }
-.sidebar { display: grid; min-width: 0; gap: 1rem; }
+.sidebar { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 1rem; }
 
 [data-tutorial-highlight='primary'] [data-tutorial-action-container]:has([data-tutorial-confirm-ready='true']) {
   position: relative;

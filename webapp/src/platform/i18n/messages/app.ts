@@ -3,6 +3,8 @@ export const appMessages = {
   'app.brand.secondary': 'DETECTOR',
   'app.loading': 'Загрузка',
   'app.close': 'Закрыть',
+  'app.portrait.title': 'Поверните телефон вертикально',
+  'app.portrait.description': 'Игра продолжается. Верните телефон в вертикальное положение, чтобы продолжить',
   'app.logo': 'Anomaly Detector',
   'nav.rooms': 'Комнаты',
   'nav.matches': 'Мои матчи',

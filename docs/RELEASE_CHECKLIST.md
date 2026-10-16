@@ -8,6 +8,11 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 
 - [ ] Release scope and primary player-visible signal are explicit.
 - [ ] MVP plan/issues and player-facing rules match the released behavior.
+- [ ] For tasks governed by the spec-first [issue workflow](agents/issue-tracker.md),
+      criteria are tied to the agreed specification version, checked revision and
+      evidence; required criteria pass and a parent, when used, has end-to-end
+      player-visible proof. Historical Issues need no format-only backfill;
+      small Direct changes keep their narrow acceptance format.
 - [ ] Critical registration, login, room, Tender, reconnect, completion, history,
       and logout paths affected by the release are verified at the appropriate
       boundary.
@@ -33,8 +38,9 @@ the active provider runbook, currently [YANDEX_CLOUD.md](YANDEX_CLOUD.md).
 - [ ] `bun run preflight:split-domain` passed; its isolated temporary release
       artifacts were removed automatically and owner-approved artifacts were
       built separately.
-- [ ] Mandatory GitHub Actions checks `checks` and `e2e` are green for that exact
-      commit; branch protection did not rely on a manual bypass.
+- [ ] Mandatory GitHub Actions checks `security-static`, `checks`, and `e2e` are
+      green for that exact release commit; branch protection did not rely on a
+      manual bypass.
 - [ ] Dependency audit and tracked/staged secret hygiene passed without exposing
       findings in logs.
 - [ ] Backend image uses the full release SHA or immutable digest; static builds

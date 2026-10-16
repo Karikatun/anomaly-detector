@@ -5778,6 +5778,7 @@ maybeDescribe('auth API integration', () => {
 
   test('rejects a competing Yandex registration while preserving linked sign-in conflicts', async () => {
     const repository = createPrismaAuthRepository(prisma, env.JWT_SECRET)
+    const sessionExpiresAt = new Date(Date.now() + env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60_000)
     const complete = (
       suffix: string,
       canonicalKey = 'player@yandex.ru',
@@ -5799,7 +5800,7 @@ maybeDescribe('auth API integration', () => {
         login: `oauth-yandex-${suffix}`,
       },
       session: {
-        expiresAt: new Date('2026-09-22T12:00:00.000Z'),
+        expiresAt: sessionExpiresAt,
         metadata: {},
         refreshTokenFamilyHash: `family-${suffix}`,
         refreshTokenHash: `refresh-${suffix}`,
@@ -5864,7 +5865,7 @@ maybeDescribe('auth API integration', () => {
       accountEmail: { kind: 'candidate', canonicalKey, providerValue },
       identity: { provider: 'yandex', subject },
       session: {
-        expiresAt: new Date('2026-09-22T12:00:00.000Z'),
+        expiresAt: sessionExpiresAt,
         metadata: {},
         refreshTokenFamilyHash: `existing-family-${sessionSuffix}`,
         refreshTokenHash: `existing-refresh-${sessionSuffix}`,
@@ -5892,7 +5893,7 @@ maybeDescribe('auth API integration', () => {
       },
       identity: { provider: 'yandex', subject: managedIdentity.subject },
       session: {
-        expiresAt: new Date('2026-09-22T12:00:00.000Z'),
+        expiresAt: sessionExpiresAt,
         metadata: {},
         refreshTokenFamilyHash: `family-${winnerSuffix}`,
         refreshTokenHash: `refresh-${winnerSuffix}`,

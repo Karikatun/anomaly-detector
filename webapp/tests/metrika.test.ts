@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   METRIKA_GOALS,
   MetrikaClient,
+  MetrikaConsentStorage,
   isMetrikaOAuthLoginSuccess,
   isMetrikaOAuthRegistration,
   isMetrikaSafePath,
@@ -286,4 +287,96 @@ test('prefers a newer in-memory marker when a later storage write fails', () => 
   expect(readMetrikaOAuthPending(storage)).toBe('registration:second')
   clearMetrikaOAuthPending(storage, 'registration:second')
   expect(readMetrikaOAuthPending(storage)).toBeNull()
+})
+
+
+describe('MetrikaConsentStorage', () => {
+  function consentStorage(failures: { read?: boolean; write?: boolean; remove?: boolean } = {}) {
+    const values = new Map([['anomaly-detector:metrika-consent', 'allowed']])
+    return {
+      values,
+      getItem: (key: string) => {
+        if (failures.read) throw new Error('unavailable')
+        return values.get(key) ?? null
+      },
+      setItem: (key: string, value: string) => {
+        if (failures.write) throw new DOMException('Synthetic quota exhausted', 'QuotaExceededError')
+        values.set(key, value)
+      },
+      removeItem: (key: string) => {
+        if (failures.remove) throw new Error('unavailable')
+        values.delete(key)
+      },
+    }
+  }
+
+  test('withdraws a persisted grant across reload when quota prevents writes', () => {
+    const storage = consentStorage({ write: true })
+    const consent = new MetrikaConsentStorage(storage)
+    expect(consent.read()).toBe('allowed')
+
+    expect(consent.save('necessary')).toBe(true)
+
+    expect(consent.read()).toBe('necessary')
+    expect(new MetrikaConsentStorage(storage).read()).not.toBe('allowed')
+  })
+
+  test('can persist denial when removal is unavailable', () => {
+    const storage = consentStorage({ remove: true })
+    const consent = new MetrikaConsentStorage(storage)
+    expect(consent.save('necessary')).toBe(true)
+    expect(new MetrikaConsentStorage(storage).read()).toBe('necessary')
+  })
+
+  test('reports failure and keeps the document denied when both mutations fail', () => {
+    const consent = new MetrikaConsentStorage(consentStorage({ write: true, remove: true }))
+    expect(consent.save('necessary')).toBe(false)
+    expect(consent.read()).toBe('necessary')
+    expect(consent.save('allowed')).toBe(false)
+    expect(consent.read()).toBe('necessary')
+  })
+
+  test('never grants tracking from unreadable storage or an unsuccessful grant', () => {
+    const storage = consentStorage({ read: true, write: true })
+    const consent = new MetrikaConsentStorage(storage)
+    expect(consent.read()).toBe('undecided')
+    expect(consent.save('allowed')).toBe(false)
+    expect(consent.read()).toBe('necessary')
+  })
+
+  test('persists normal grant, refusal and withdrawal choices', () => {
+    const storage = consentStorage()
+    const consent = new MetrikaConsentStorage(storage)
+    for (const choice of ['necessary', 'allowed', 'necessary'] as const) {
+      expect(consent.save(choice)).toBe(true)
+      expect(new MetrikaConsentStorage(storage).read()).toBe(choice)
+    }
+  })
+})
+
+
+test('withdrawal stops a loaded counter and prevents goals or automatic reinitialization', () => {
+  const browser = fakeBrowser()
+  const providerCalls: unknown[][] = []
+  browser.browserWindow.ym = (...args) => providerCalls.push(args)
+  const client = new MetrikaClient({
+    counterId: '112719766', document: browser.browserDocument, enabled: true, window: browser.browserWindow,
+  })
+  client.enable()
+  client.disable()
+  client.record('tutorial_complete')
+  expect(client.enable()).toBe(false)
+  expect(providerCalls.map((call) => call[1])).toEqual(['init', 'destruct'])
+  expect(browser.scripts).toHaveLength(1)
+})
+
+test('withdrawal cancels pending initialization before the provider script loads', () => {
+  const browser = fakeBrowser()
+  const client = new MetrikaClient({
+    counterId: '112719766', document: browser.browserDocument, enabled: true, window: browser.browserWindow,
+  })
+  client.enable()
+  client.disable()
+  client.record('tutorial_complete')
+  expect((browser.browserWindow.ym as { a?: unknown[][] })?.a).toEqual([[112719766, 'destruct']])
 })

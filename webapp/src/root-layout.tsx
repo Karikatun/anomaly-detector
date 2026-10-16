@@ -1,4 +1,5 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
+import { MobilePortraitGuard } from '@/components/MobilePortraitGuard'
 import { Button } from '@/components/ui/button'
 import { Typography } from '@/components/ui/typography'
 import { useAuth, useLogoutAction } from '@/features/auth'
@@ -12,8 +13,10 @@ export function RootLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const logoutAction = useLogoutAction()
   const usesDefaultHeader = ['/privacy', '/personal-data-consent', '/terms'].includes(pathname)
+  const usesGameScreen = ['/learn', '/tutorial'].includes(pathname) || /^\/tenders\/[^/]+\/?$/.test(pathname)
 
   return (
+    <MobilePortraitGuard active={usesGameScreen}>
     <div className="min-h-svh min-w-0 overflow-x-clip bg-background/60 text-foreground">
       {auth.isAuthenticated && usesDefaultHeader && (
         <header className="border-b bg-background/95 backdrop-blur">
@@ -51,10 +54,11 @@ export function RootLayout() {
           </div>
         </header>
       )}
-      <main>
+      <main tabIndex={-1}>
         <Outlet />
       </main>
       <MetrikaConsent />
     </div>
+    </MobilePortraitGuard>
   )
 }

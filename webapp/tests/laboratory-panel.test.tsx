@@ -6,6 +6,7 @@ import {
   isLaboratoryPairResearched,
 } from '../src/features/tender/laboratory-pair'
 import { LaboratoryPanel } from '../src/features/tender/LaboratoryPanel'
+import { TenderEvidence } from '../src/features/tender/components/TenderOverview'
 import { I18nProvider } from '../src/platform/i18n'
 
 test('requires an explicit Laboratory mode before enabling sample selection for two Power', () => {
@@ -60,18 +61,12 @@ test('marks an own researched directed pair unavailable without blocking another
   })).toBe(false)
 })
 
-test('shows scan-friendly sample research status and the own directed-pair history', () => {
+test('keeps sample choices on the field and presents completed experiments only in Research', () => {
+  const journal = [{ playerId: 'player-a', protocol: 'continuous' as const, publicResult: 'reflection' as const, receiverSignal: 'boreal' as const, sourceSignal: 'aster' as const, testId: 'r1-t1' }]
   const html = renderToStaticMarkup(
     <I18nProvider>
       <LaboratoryPanel
-        journal={[{
-          playerId: 'player-a',
-          protocol: 'continuous',
-          publicResult: 'reflection',
-          receiverSignal: 'boreal',
-          sourceSignal: 'aster',
-          testId: 'r1-t1',
-        }]}
+        journal={journal}
         mySamples={['aster', 'boreal', 'cinder']}
         playerId="player-a"
         privateMeasurements={[]}
@@ -82,13 +77,16 @@ test('shows scan-friendly sample research status and the own directed-pair histo
     </I18nProvider>,
   )
 
-  expect(html).toContain('Исследовано')
-  expect(html).toContain('Не исследовано')
-  expect(html).toContain('Опытов: 1')
-  expect(html).toContain('Ваши проведённые опыты')
+  expect(html).not.toContain('Исследовано')
+  expect(html).not.toContain('Опытов:')
+  expect(html).not.toContain('Ваши проведённые опыты')
   expect(html).toContain('Aster')
   expect(html).toContain('Boreal')
-  expect(html).toContain('Отражение')
+  expect(html).not.toContain('Отражение')
+  const research = renderToStaticMarkup(<I18nProvider><TenderEvidence currentPlayerId="player-a" data={{ privateMeasurements: [], publicLaboratoryResults: [], publicTheses: [], publicScientificJournal: journal }} /></I18nProvider>)
+  expect(research).toContain('Отражение')
+  expect(research).toContain('Непрерывный')
+  expect(research).toContain('Ваш опыт')
 })
 
 test('explains the next step when there are not enough samples', () => {

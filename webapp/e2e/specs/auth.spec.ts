@@ -93,25 +93,23 @@ test('opens guest learning from the landing and ignores unknown destinations', a
   }
   expect(new URL(websiteUrl).origin).not.toBe(new URL(webappUrl).origin)
 
-  const analyticsEvents: string[] = []
+  const landingAnalyticsRequests: string[] = []
+  const websiteOrigin = new URL(websiteUrl).origin
   page.on('request', (request) => {
-    if (!request.url().endsWith('/api/analytics/events') || request.method() !== 'POST') return
-    const payload = request.postDataJSON() as { event?: string }
-    if (payload.event) analyticsEvents.push(payload.event)
+    const path = new URL(request.url()).pathname
+    if (request.headers()['origin'] === websiteOrigin && path.startsWith('/api/analytics/')) {
+      landingAnalyticsRequests.push(path)
+    }
   })
 
   await page.goto(`${websiteUrl}/?utm_campaign=e2e_launch`)
-  const undecidedAnalytics = page.locator('[data-analytics-panel="undecided"]')
-  await expect(undecidedAnalytics.getByRole('button', { name: 'Разрешить аналитику' })).toBeVisible()
-  await expect(undecidedAnalytics.getByRole('button', { name: 'Только необходимые' })).toBeVisible()
+  await expect(page.locator('[data-analytics-consent], [data-analytics-panel]')).toHaveCount(0)
+  await expect(page.getByRole('button', {
+    name: /^(Разрешить аналитику|Только необходимые|Отключить аналитику)$/,
+  })).toHaveCount(0)
   expect((await page.context().cookies()).some((cookie) =>
     cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
-  await undecidedAnalytics.getByRole('button', { name: 'Разрешить аналитику' }).click()
-  await expect(page.getByText('Выбор сохранён. Его можно изменить в любой момент.')).toBeVisible()
-  await expect.poll(async () =>
-    (await page.context().cookies()).some((cookie) =>
-      cookie.name === 'anomaly_detector_analytics_journey' && cookie.httpOnly),
-  ).toBe(true)
+  expect(landingAnalyticsRequests).toHaveLength(0)
   const tutorialLink = page.getByRole('link', { name: 'Пройти обучение' }).first()
   await expect(tutorialLink).toHaveAttribute(
     'href',
@@ -121,34 +119,52 @@ test('opens guest learning from the landing and ignores unknown destinations', a
   await expect(page).toHaveURL(new URL('/learn', webappUrl).toString())
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByRole('tab')).toHaveCount(0)
-  await expect.poll(() => analyticsEvents).toContain('tutorial_cta')
-  expect(analyticsEvents).not.toContain('registration_complete')
+  expect((await page.context().cookies()).some((cookie) =>
+    cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
+  expect(landingAnalyticsRequests).toHaveLength(0)
 
   await page.goto(websiteUrl)
-  await expect(page.getByRole('button', { name: 'Отключить аналитику' })).toBeVisible()
-  await page.getByRole('button', { name: 'Отключить аналитику' }).click()
-  await expect(page.getByText('Аналитика отключена, связанный 30-дневный идентификатор удалён.')).toBeVisible()
-  await expect.poll(async () =>
-    (await page.context().cookies()).some((cookie) =>
-      cookie.name === 'anomaly_detector_analytics_journey'),
-  ).toBe(false)
+  await expect(page.locator('[data-analytics-consent], [data-analytics-panel]')).toHaveCount(0)
+  await expect(page.getByRole('button', {
+    name: /^(Разрешить аналитику|Только необходимые|Отключить аналитику)$/,
+  })).toHaveCount(0)
+  expect((await page.context().cookies()).some((cookie) =>
+    cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
+  expect(landingAnalyticsRequests).toHaveLength(0)
 })
 
-test('keeps the landing journey available after choosing only necessary functions', async ({ page }) => {
+test('keeps the landing journey available without optional analytics', async ({ page }) => {
   const websiteUrl = process.env.E2E_WEBSITE_URL
   const webappUrl = process.env.E2E_WEB_URL
   if (!websiteUrl || !webappUrl) throw new Error('Public and player origins are required')
 
+  const landingAnalyticsRequests: string[] = []
+  const websiteOrigin = new URL(websiteUrl).origin
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname
+    if (request.headers()['origin'] === websiteOrigin && path.startsWith('/api/analytics/')) {
+      landingAnalyticsRequests.push(path)
+    }
+  })
+
   await page.goto(websiteUrl)
-  await page.getByRole('button', { name: 'Только необходимые' }).click()
-  await expect(page.getByText('Сохранены только необходимые функции.')).toBeVisible()
+  await expect(page.locator('[data-analytics-consent], [data-analytics-panel]')).toHaveCount(0)
+  await expect(page.getByRole('button', {
+    name: /^(Разрешить аналитику|Только необходимые|Отключить аналитику)$/,
+  })).toHaveCount(0)
   expect((await page.context().cookies()).some((cookie) =>
     cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
+  expect(landingAnalyticsRequests).toHaveLength(0)
 
-  await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
+  const tutorialLink = page.getByRole('link', { name: 'Пройти обучение' }).first()
+  await expect(tutorialLink).toHaveAttribute('href', new URL('/learn', webappUrl).toString())
+  await tutorialLink.click()
   await expect(page).toHaveURL(new URL('/learn', webappUrl).toString())
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByRole('tab')).toHaveCount(0)
+  expect((await page.context().cookies()).some((cookie) =>
+    cookie.name === 'anomaly_detector_analytics_journey')).toBe(false)
+  expect(landingAnalyticsRequests).toHaveLength(0)
 })
 
 test('explains how to register when a Yandex ID has no game account', async ({ page }) => {

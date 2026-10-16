@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { resolveTutorialPresentation } from '../src/features/tutorial/tutorial-layout'
+import { resolveTutorialPresentation, tutorialSafeVerticalBounds, tutorialScrollDelta } from '../src/features/tutorial/tutorial-layout'
 
 describe('tutorial responsive presentation', () => {
   test.each([
@@ -46,5 +46,32 @@ describe('tutorial responsive presentation', () => {
     })).toMatchObject({
       alignTargetStart: true,
     })
+  })
+})
+
+
+describe('tutorial target visibility', () => {
+  test('reserves the actual pinned command before the lower coach', () => {
+    expect(tutorialSafeVerticalBounds({
+      viewport: { top: 20, bottom: 864, left: 0, right: 390 },
+      target: { top: 795, bottom: 975, left: 12, right: 190 },
+      blockers: [
+        { top: 20, bottom: 157, left: 0, right: 390 },
+        { top: 675, bottom: 852, left: 12, right: 378 },
+        { top: 541, bottom: 663, left: 12, right: 378 },
+      ],
+    })).toEqual({ top: 169, bottom: 529 })
+  })
+  test('does not reserve a coach in another desktop column', () => {
+    expect(tutorialSafeVerticalBounds({
+      viewport: { top: 0, bottom: 900, left: 0, right: 1440 },
+      target: { top: 400, bottom: 450, left: 24, right: 700 },
+      blockers: [{ top: 600, bottom: 880, left: 1040, right: 1420 }],
+    })).toEqual({ top: 12, bottom: 888 })
+  })
+  test('moves only the distance needed and leaves a visible target alone', () => {
+    expect(tutorialScrollDelta({ top: 795, bottom: 975 }, { top: 169, bottom: 529 })).toBe(446)
+    expect(tutorialScrollDelta({ top: 120, bottom: 180 }, { top: 169, bottom: 529 })).toBe(-49)
+    expect(tutorialScrollDelta({ top: 200, bottom: 380 }, { top: 169, bottom: 529 })).toBe(0)
   })
 })

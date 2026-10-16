@@ -10,6 +10,22 @@ import { Typography } from "@/components/ui/typography"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Cancel01Icon } from "@hugeicons/core-free-icons"
 
+const DialogOpeningContext = React.createContext(false)
+
+function DialogOpeningBoundary({
+  deferNewDialogs,
+  children,
+}: {
+  deferNewDialogs: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <DialogOpeningContext.Provider value={deferNewDialogs}>
+      {children}
+    </DialogOpeningContext.Provider>
+  )
+}
+
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -56,16 +72,39 @@ function DialogContent({
   closeLabel = translate('app.close'),
   placement = "centered",
   showCloseButton = true,
+  ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   closeLabel?: string
   placement?: "centered" | "viewport"
   showCloseButton?: boolean
 }) {
+  const deferNewDialogs = React.useContext(DialogOpeningContext)
+  const [contentMounted, setContentMounted] = React.useState(false)
+  const contentRef = React.useCallback<React.RefCallback<HTMLDivElement>>((node) => {
+    setContentMounted(node !== null)
+    if (typeof ref === "function") {
+      const cleanup = ref(node)
+      if (typeof cleanup === "function") {
+        return () => {
+          setContentMounted(false)
+          cleanup()
+        }
+      }
+    } else if (ref) {
+      ref.current = node
+    }
+  }, [ref])
+
+  // An existing workspace stays mounted. A new lower-priority modal must not
+  // register its focus scope or hide the interrupting dialog before it can open.
+  if (deferNewDialogs && !contentMounted) return null
+
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
+        ref={contentRef}
         data-slot="dialog-content"
         className={cn(
           "fixed z-[var(--layer-overlay)] grid w-full gap-6 rounded-[var(--radius-elevated)] bg-popover p-6 text-popover-foreground ring-1 ring-foreground/5 duration-[var(--motion-slow)] ease-[var(--ease-emphasized)] outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:animate-none",
@@ -172,6 +211,7 @@ export {
   DialogFooter,
   DialogHeader,
   DialogOverlay,
+  DialogOpeningBoundary,
   DialogPortal,
   DialogTitle,
   DialogTrigger,

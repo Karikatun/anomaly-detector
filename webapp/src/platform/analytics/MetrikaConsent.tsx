@@ -3,15 +3,15 @@ import { Link, useRouterState } from '@tanstack/react-router'
 
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
-import { isMetrikaSafePath, metrika, metrikaConfigured } from './metrika'
+import { isMetrikaSafePath, metrika, metrikaConfigured, metrikaConsent, type MetrikaConsentChoice } from './metrika'
 
-const consentStorageKey = 'anomaly-detector:metrika-consent'
-type ConsentChoice = 'allowed' | 'necessary' | 'undecided'
+type ConsentChoice = MetrikaConsentChoice
 
 export function MetrikaConsent({ inline = false }: { inline?: boolean }) {
   const { t } = useI18n()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const [choice, setChoice] = useState<ConsentChoice>(() => readConsentChoice())
+  const [choice, setChoice] = useState<ConsentChoice>(() => metrikaConsent.read())
+  const [saveError, setSaveError] = useState(false)
 
   useEffect(() => {
     if (!isMetrikaSafePath(pathname)) return
@@ -26,13 +26,12 @@ export function MetrikaConsent({ inline = false }: { inline?: boolean }) {
   ) return null
 
   const choose = (nextChoice: Exclude<ConsentChoice, 'undecided'>) => {
+    if (nextChoice === 'necessary') metrika.disable()
+    const saved = metrikaConsent.save(nextChoice)
+    setSaveError(!saved)
+    if (!saved) return
     setChoice(nextChoice)
-    try {
-      window.localStorage.setItem(consentStorageKey, nextChoice)
-    } catch {
-      // A blocked storage still leaves the choice effective for this page.
-    }
-    if (nextChoice === 'allowed') metrika.enable()
+    if (nextChoice === 'allowed' && metrika.enable() === false) window.location.reload()
   }
 
   return (
@@ -56,6 +55,7 @@ export function MetrikaConsent({ inline = false }: { inline?: boolean }) {
             </Link>
           </Typography>
         </div>
+        {saveError && <Typography variant="bodySm" role="alert">{t('metrika.settings.saveError')}</Typography>}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -81,17 +81,16 @@ export function MetrikaConsent({ inline = false }: { inline?: boolean }) {
 
 export function MetrikaPrivacySettings() {
   const { t } = useI18n()
-  const [choice] = useState<ConsentChoice>(() => readConsentChoice())
+  const [choice] = useState<ConsentChoice>(() => metrikaConsent.read())
+  const [saveError, setSaveError] = useState(false)
 
   if (!metrikaConfigured) return null
 
   const updateChoice = (nextChoice: Exclude<ConsentChoice, 'undecided'>) => {
-    try {
-      window.localStorage.setItem(consentStorageKey, nextChoice)
-    } catch {
-      // Reload still clears an active counter from this page.
-    }
-    window.location.reload()
+    if (nextChoice === 'necessary') metrika.disable()
+    const saved = metrikaConsent.save(nextChoice)
+    setSaveError(!saved)
+    if (saved) window.location.reload()
   }
 
   return (
@@ -99,9 +98,10 @@ export function MetrikaPrivacySettings() {
       <div>
         <Typography asChild variant="h3"><h2 id="metrika-settings-title" className="!m-0">{t('metrika.settings.title')}</h2></Typography>
         <Typography variant="bodySm" tone="muted" className="mt-1">
-          {choice === 'allowed' ? t('metrika.settings.allowed') : t('metrika.settings.disabled')}
+          {saveError ? t('metrika.settings.disabled') : choice === 'allowed' ? t('metrika.settings.allowed') : t('metrika.settings.disabled')}
         </Typography>
       </div>
+      {saveError && <Typography variant="bodySm" role="alert">{t('metrika.settings.saveError')}</Typography>}
       <button
         type="button"
         className="min-h-11 w-fit rounded-md border border-slate-600 px-4 text-slate-200 hover:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-200"
@@ -114,14 +114,4 @@ export function MetrikaPrivacySettings() {
       </button>
     </section>
   )
-}
-
-function readConsentChoice(): ConsentChoice {
-  if (typeof window === 'undefined') return 'undecided'
-  try {
-    const stored = window.localStorage.getItem(consentStorageKey)
-    return stored === 'allowed' || stored === 'necessary' ? stored : 'undecided'
-  } catch {
-    return 'undecided'
-  }
 }

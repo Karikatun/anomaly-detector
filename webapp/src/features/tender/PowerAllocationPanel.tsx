@@ -15,7 +15,7 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { PowerAllocation, TenderView } from '@anomaly-detector/contracts'
 import type { CSSProperties } from 'react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -79,6 +79,7 @@ type PowerAllocationPanelProps = {
   players: TenderView['players']
   sampleCount: number
   onConfirm: (allocation: PowerAllocation) => Promise<void>
+  onWarningOpenChange?: (open: boolean) => void
 }
 
 const categoryStyle = (accent: string) => ({
@@ -114,6 +115,7 @@ export function PowerAllocationPanel({
   players,
   sampleCount,
   onConfirm,
+  onWarningOpenChange,
 }: PowerAllocationPanelProps) {
   const [allocation, setAllocation] = useState<PowerAllocationDraft>(() => ({
     reconnaissance: confirmedAllocation?.reconnaissance ?? 0,
@@ -122,6 +124,11 @@ export function PowerAllocationPanel({
     contracts: confirmedAllocation?.contracts ?? 0,
   }))
   const [showUnallocatedWarning, setShowUnallocatedWarning] = useState(false)
+  const confirmButton = useRef<HTMLButtonElement | null>(null)
+  const changeWarningOpen = (open: boolean) => {
+    setShowUnallocatedWarning(open)
+    onWarningOpenChange?.(open)
+  }
   const { t } = useI18n()
   const total = useMemo(() => actionPower(allocation), [allocation])
   const reserve = totalPower - total
@@ -166,7 +173,7 @@ export function PowerAllocationPanel({
 
   const requestConfirmation = () => {
     if (reserve > 0) {
-      setShowUnallocatedWarning(true)
+      changeWarningOpen(true)
       return
     }
     void confirmAllocation()
@@ -294,6 +301,7 @@ export function PowerAllocationPanel({
               key={key}
               className={styles.categoryCard}
               data-tutorial-power-category={key}
+              data-tutorial-power-value={value}
               data-allocated={value > 0 || undefined}
               data-invalid={isCategoryInvalid || undefined}
               style={categoryStyle(accent)}
@@ -409,6 +417,7 @@ export function PowerAllocationPanel({
             <Button
               type="button"
               size="lg"
+              ref={confirmButton}
               aria-label={t('tender.power.confirm')}
               className={styles.confirmButton}
               data-tutorial-confirm-ready={total === totalPower || undefined}
@@ -440,8 +449,18 @@ export function PowerAllocationPanel({
         </footer>
       )}
 
-      <Dialog open={showUnallocatedWarning} onOpenChange={setShowUnallocatedWarning}>
-        <DialogContent closeLabel={t('tender.power.unallocatedWarning.cancel')}>
+      <Dialog open={showUnallocatedWarning} onOpenChange={changeWarningOpen}>
+        <DialogContent
+          className={styles.unallocatedWarning}
+          data-tender-power-warning=""
+          closeLabel={t('tender.power.unallocatedWarning.cancel')}
+          onCloseAutoFocus={(event) => {
+            if (confirmButton.current?.isConnected && !confirmButton.current.disabled) {
+              event.preventDefault()
+              confirmButton.current.focus({ preventScroll: true })
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{t('tender.power.unallocatedWarning.title')}</DialogTitle>
             <DialogDescription>
@@ -452,7 +471,7 @@ export function PowerAllocationPanel({
             <Button
               type="button"
               variant="outline"
-              onClick={() => setShowUnallocatedWarning(false)}
+              onClick={() => changeWarningOpen(false)}
             >
               {t('tender.power.unallocatedWarning.cancel')}
             </Button>
@@ -460,7 +479,7 @@ export function PowerAllocationPanel({
               type="button"
               disabled={disabled}
               onClick={() => {
-                setShowUnallocatedWarning(false)
+                changeWarningOpen(false)
                 void confirmAllocation()
               }}
             >
