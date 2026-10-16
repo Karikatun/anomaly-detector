@@ -248,7 +248,12 @@
 
 .actionButton {
   width: 100%;
+  height: auto;
   min-height: 2.75rem;
+  padding-block: var(--space-2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
   border-radius: var(--radius-control);
   box-shadow: 0 .45rem 1.25rem rgba(13, 126, 255, .18);
 }
@@ -821,6 +826,7 @@
 }
 
 .analysisModel {
+  display: none;
   align-content: start;
 }
 
@@ -850,14 +856,17 @@
 
 .laboratoryModeSwitch {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
   gap: var(--space-2);
 }
 
 .laboratoryModeSwitch button {
   position: relative;
-  overflow: hidden;
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
   justify-items: start;
   align-content: start;
   gap: .2rem;
@@ -912,6 +921,8 @@
 .laboratoryModeHeader {
   display: flex;
   width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
@@ -1523,6 +1534,10 @@
     gap: .85rem;
   }
 
+  .analysisModel {
+    display: block;
+  }
+
   .analysisThesis {
     align-content: start;
   }
@@ -1627,4 +1642,8 @@
   .laboratorySplit {
     grid-template-columns: minmax(18rem, .7fr) minmax(27rem, 1fr);
   }
+}
+
+.analysisPanel .footer {
+  grid-template-columns: minmax(0, 1fr);
 }

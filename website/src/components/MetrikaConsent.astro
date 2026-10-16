@@ -45,16 +45,47 @@ const { counterId } = Astro.props
 		const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-metrika-action]')]
 		let enabled = false
 		let initialized = false
+		let tagScript: HTMLScriptElement | undefined
 		const sentGoals = new Set<MetrikaGoal>()
 
 		const setChoice = (choice: ConsentChoice, message = '') => {
 			for (const panel of panels) panel.hidden = panel.dataset.metrikaPanel !== choice
 			if (statusNode) statusNode.textContent = message
 		}
+		const saveStoredChoice = (choice: Exclude<ConsentChoice, 'undecided'>) => {
+			let priorGrantRemoved = false
+			if (choice === 'necessary') {
+				try {
+					localStorage.removeItem(storageKey)
+					priorGrantRemoved = true
+				} catch { /* a denial write may still replace the grant */ }
+			}
+			try {
+				localStorage.setItem(storageKey, choice)
+				return true
+			} catch {
+				return priorGrantRemoved
+			}
+		}
+		const stopTracking = () => {
+			if (!enabled) return
+			enabled = false
+			tagScript?.remove()
+			if (browserWindow.ym?.a) browserWindow.ym.a.length = 0
+			try {
+				if (initialized) browserWindow.ym?.(Number(counterId), 'destruct')
+			} catch { /* provider failure must not block withdrawal */ }
+		}
 		const saveChoice = (choice: Exclude<ConsentChoice, 'undecided'>) => {
-			try { localStorage.setItem(storageKey, choice) } catch { /* page-only choice is sufficient */ }
-			setChoice(choice, choice === 'allowed' ? 'Выбор сохранён.' : 'Сохранены только необходимые функции.')
-			if (choice === 'allowed') enable()
+			if (choice === 'necessary') stopTracking()
+			if (!saveStoredChoice(choice)) {
+				stopTracking()
+				setChoice('undecided', 'Не удалось сохранить выбор. Аналитика выключена на этой странице. Повторите попытку.')
+				return
+			}
+			setChoice(choice, choice === 'allowed' ? 'Выбор сохранён.' : '')
+			if (initialized) location.reload()
+			else if (choice === 'allowed') enable()
 		}
 		const record = (goal: MetrikaGoal) => {
 			if (!enabled || sentGoals.has(goal)) return
@@ -81,6 +112,7 @@ const { counterId } = Astro.props
 				webvisor: false,
 			})
 			const script = document.createElement('script')
+			tagScript = script
 			script.async = true
 			script.src = 'https://mc.yandex.ru/metrika/tag.js'
 			document.head.appendChild(script)
@@ -99,10 +131,7 @@ const { counterId } = Astro.props
 				const action = button.dataset.metrikaAction
 				if (action === 'allow') saveChoice('allowed')
 				if (action === 'necessary') saveChoice('necessary')
-				if (action === 'revoke') {
-					try { localStorage.setItem(storageKey, 'necessary') } catch { /* keep the tag disabled for this page */ }
-					location.reload()
-				}
+				if (action === 'revoke') saveChoice('necessary')
 			})
 		}
 		for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-analytics-event="tutorial_cta"]')) {

@@ -1,7 +1,7 @@
 import { translate } from '../../../platform/i18n'
 import type { CSSProperties } from 'react'
 
-import type { SignalId, TenderView } from '@anomaly-detector/contracts'
+import type { PublicLaboratoryResult, ScientificJournalEntry, SignalId, TenderView } from '@anomaly-detector/contracts'
 
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
@@ -158,20 +158,50 @@ export function TenderLaboratoryJournal({
 type EvidenceData = Pick<
   TenderView,
   'privateMeasurements' | 'privateTheses' | 'publicLaboratoryResults' | 'publicTheses'
->
+> & Partial<Pick<TenderView, 'players' | 'round' | 'publicScientificJournal' | 'privateUsedContractEvidenceTestIds'>>
+
+function laboratoryHistory(data: Pick<TenderView, 'publicLaboratoryResults' | 'publicScientificJournal'>) {
+  const history: Array<PublicLaboratoryResult | ScientificJournalEntry> = [...data.publicLaboratoryResults]
+  const journalOnly: ScientificJournalEntry[] = []
+  // New tests enter both public collections. Older persisted tests can lack
+  // journal metadata; match occurrences from the end, retaining every old row.
+  for (const entry of (data.publicScientificJournal ?? []).slice().reverse()) {
+    let matchingIndex = -1
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const result = history[index]!
+      if (!('testId' in result)
+        && result.playerId === entry.playerId
+        && result.protocol === entry.protocol
+        && result.publicResult === entry.publicResult
+        && result.sourceSignal === entry.sourceSignal
+        && result.receiverSignal === entry.receiverSignal) {
+        matchingIndex = index
+        break
+      }
+    }
+    if (matchingIndex >= 0) history[matchingIndex] = entry
+    else journalOnly.unshift(entry)
+  }
+  return [...history, ...journalOnly]
+}
 
 export function TenderEvidence({
   compactLaboratoryInsets = false,
+  currentPlayerId,
   data,
   laboratoryCountBelowResults = false,
 }: {
   compactLaboratoryInsets?: boolean
+  currentPlayerId?: string
   data: EvidenceData
   laboratoryCountBelowResults?: boolean
 }) {
   const { t } = useI18n()
+  const hasPrivateThesisHistory = data.privateTheses !== undefined
   const privateTheses = data.privateTheses ?? []
-  const isEmpty = data.publicLaboratoryResults.length === 0
+  const laboratoryResults = laboratoryHistory(data)
+  const modelPower = data.players?.find((player) => player.playerId === currentPlayerId)?.powerAllocation?.modelAnalysis
+  const isEmpty = laboratoryResults.length === 0
     && data.privateMeasurements.length === 0
     && privateTheses.length === 0
     && data.publicTheses.length === 0
@@ -182,21 +212,28 @@ export function TenderEvidence({
       data-compact-laboratory-insets={compactLaboratoryInsets || undefined}
       data-laboratory-count-below-results={laboratoryCountBelowResults || undefined}
     >
-      {isEmpty && (
+      {isEmpty && (!hasPrivateThesisHistory || modelPower === undefined) && (
         <Typography variant="bodySm" tone="muted">{translate('tender.tenderOverview.copy.023')}</Typography>
       )}
-      {data.publicLaboratoryResults.length > 0 && (
+      {laboratoryResults.length > 0 && (
         <section className={styles.evidenceSection}>
           <div className={styles.evidenceHeading}>
             <Typography as="h3" variant="control">{translate('tender.tenderOverview.copy.024')}</Typography>
             <Typography as="span" variant="caption" className={styles.evidencePublicCountMobile}>
               
-              {translate('tender.research.publicCount', { count: data.publicLaboratoryResults.length })}
+              {translate('tender.research.publicCount', { count: laboratoryResults.length })}
             </Typography>
           </div>
           <div className={styles.evidenceGrid}>
-            {data.publicLaboratoryResults.map((result, index) => (
-              <div key={index} className={styles.evidenceCard}>
+            {laboratoryResults.slice().reverse().map((result, index) => {
+              const isOwn = result.playerId === currentPlayerId
+              const player = data.players?.find((candidate) => candidate.playerId === result.playerId)
+              const author = isOwn ? t('tender.research.ownExperiment')
+                : player?.bot ? t(`tender.player.bot.${player.bot.difficulty}`)
+                  : player?.displayName ?? result.playerId.slice(0, 8)
+              const testId = 'testId' in result && typeof result.testId === 'string' ? result.testId : undefined
+              return (
+              <div key={testId ?? index} className={styles.evidenceCard} data-research-experiment="" data-own-experiment={isOwn || undefined}>
                 <span className={styles.evidenceRoute}>
                   <SignalGlyph signal={result.sourceSignal} />
                   <Typography as="strong" variant="caption">{t(signalLabelKeys[result.sourceSignal])}</Typography>
@@ -207,12 +244,20 @@ export function TenderEvidence({
                 <Typography variant="bodySmMedium">
                   {laboratoryResultLabels[result.publicResult] ?? result.publicResult}
                 </Typography>
+                <Typography variant="caption" tone="muted">
+                  {t(`tender.research.protocol.${result.protocol}`)} · {author} · {t('tender.research.public')}
+                </Typography>
+                {isOwn && testId && data.privateUsedContractEvidenceTestIds !== undefined && <Typography variant="caption" tone="muted">
+                  {t(data.privateUsedContractEvidenceTestIds?.includes(testId)
+                    ? 'tender.research.evidenceUsed' : 'tender.research.evidenceUnused')}
+                </Typography>}
               </div>
-            ))}
+              )
+            })}
           </div>
           <Typography as="span" variant="caption" className={styles.evidencePublicCountDesktop}>
             
-            {translate('tender.research.publicCount', { count: data.publicLaboratoryResults.length })}
+            {translate('tender.research.publicCount', { count: laboratoryResults.length })}
           </Typography>
         </section>
       )}
@@ -242,12 +287,17 @@ export function TenderEvidence({
         </section>
       )}
 
-      {privateTheses.length > 0 && (
+      {hasPrivateThesisHistory && (privateTheses.length > 0 || modelPower !== undefined) && (
         <section className={styles.evidenceSection}>
           <div className={styles.evidenceHeading}>
             <Typography as="h3" variant="control">{translate('tender.tenderOverview.copy.029')}</Typography>
-            <Typography as="span" variant="caption">{translate('tender.research.privateCount', { count: privateTheses.length })}</Typography>
+            <Typography as="span" variant="caption">
+              {modelPower !== undefined && data.round !== undefined
+                ? t('tender.research.thesisCount', { total: privateTheses.length, current: privateTheses.filter((thesis) => thesis.round === data.round).length, max: modelPower })
+                : t('tender.research.privateCount', { count: privateTheses.length })}
+            </Typography>
           </div>
+          {privateTheses.length === 0 && <Typography variant="bodySm" tone="muted">{t('tender.analysis.historyEmpty')}</Typography>}
           <div className={styles.evidenceGrid}>
             {privateTheses.slice().reverse().map((thesis) => (
               <div key={thesis.id} className={styles.evidenceCard} data-private data-private-thesis>
@@ -258,6 +308,7 @@ export function TenderEvidence({
                 <Typography variant="caption" tone="muted">
                   {t(fieldTypeLabelKeys[thesis.fieldType])} · {t(polarityLabelKeys[thesis.polarity])}
                 </Typography>
+                <Typography variant="caption" tone="muted">{t('tender.research.round', { round: thesis.round })}</Typography>
                 <span className={styles.thesisChecks}>
                   <Typography as="span" variant="caption" data-correct={thesis.fieldTypeCorrect}>
                     {thesis.fieldTypeCorrect ? translate('tender.tenderOverview.copy.031') : translate('tender.tenderOverview.copy.032')}
@@ -276,11 +327,11 @@ export function TenderEvidence({
         <section className={styles.evidenceSection}>
           <div className={styles.evidenceHeading}>
             <Typography as="h3" variant="control">{translate('tender.tenderOverview.copy.035')}</Typography>
-            <Typography as="span" variant="caption">{data.publicTheses.length}</Typography>
+            <Typography as="span" variant="caption">{t('tender.research.publicCount', { count: data.publicTheses.length })}</Typography>
           </div>
           <div className={styles.evidenceGrid}>
             {data.publicTheses.map((thesis, index) => (
-              <div key={index} className={styles.evidenceCard} data-correct={thesis.correct}>
+              <div key={index} className={styles.evidenceCard} data-public-thesis data-correct={thesis.correct}>
                 <span className={styles.evidenceSignal}>
                   <SignalGlyph signal={thesis.signalId} />
                   <Typography as="strong" variant="bodySmMedium">{t(signalLabelKeys[thesis.signalId])}</Typography>
@@ -304,7 +355,7 @@ export function TenderEvidence({
 }
 
 export function TenderResearchData({ view }: { view: TenderView }) {
-  const count = view.publicLaboratoryResults.length
+  const count = laboratoryHistory(view).length
     + view.privateMeasurements.length
     + (view.privateTheses?.length ?? 0)
     + view.publicTheses.length

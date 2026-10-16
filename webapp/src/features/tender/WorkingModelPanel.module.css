@@ -1,4 +1,5 @@
 .panel {
+  container: working-model / inline-size;
   position: relative;
   display: grid;
   min-width: 0;
@@ -156,4 +157,28 @@
     font-size: .65rem;
   }
 
+}
+
+/* Keep the signal and every option readable when text grows relative to the
+   editor's available width. Ordinary phone and desktop rows retain their layout. */
+@container working-model (max-width: 16rem) {
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .signal {
+    grid-row: auto;
+  }
+
+  .segmented button span {
+    display: block;
+  }
+
+  .signal strong,
+  .segmented button span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }

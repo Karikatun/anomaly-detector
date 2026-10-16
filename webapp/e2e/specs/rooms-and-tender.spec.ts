@@ -267,13 +267,25 @@ async function runReconnaissance(page: Page, signalCount = 2) {
 }
 
 async function selectLaboratoryPair(page: Page, pairIndex = 0) {
-  const samples = page.getByRole('button', { name: /^Образец:/ })
+  const samples = page.locator('[data-tutorial-lab-sample]')
+  await expect(samples.first()).toBeVisible()
+  await expect(samples.first()).toBeEnabled()
+  await expect.poll(() => samples.count()).toBeGreaterThanOrEqual(2)
   const sampleCount = await samples.count()
-  const sourceIndex = Math.floor(pairIndex / Math.max(1, sampleCount - 1)) % sampleCount
-  const receiverIndex = pairIndex % Math.max(1, sampleCount - 1)
-  await samples.nth(sourceIndex).click()
+  const sourceIndex = Math.floor(pairIndex / (sampleCount - 1)) % sampleCount
+  const receiverIndex = pairIndex % (sampleCount - 1)
+  const sourceSampleId = await samples.nth(sourceIndex).getAttribute('data-tutorial-lab-sample')
+  const receiverSampleId = await samples
+    .nth(receiverIndex >= sourceIndex ? receiverIndex + 1 : receiverIndex)
+    .getAttribute('data-tutorial-lab-sample')
+  expect(sourceSampleId).not.toBeNull()
+  expect(receiverSampleId).not.toBeNull()
+  expect(receiverSampleId).not.toBe(sourceSampleId)
+  const sourceSample = page.locator(`[data-tutorial-lab-sample="${sourceSampleId}"]`)
+  const receiverSample = page.locator(`[data-tutorial-lab-sample="${receiverSampleId}"]`)
+  await sourceSample.click()
   await expect(page.getByRole('button', { name: /^Источник:/ })).toHaveCount(1)
-  await page.getByRole('button', { name: /^Образец:/ }).nth(receiverIndex).click()
+  await receiverSample.click()
   await expect(page.getByRole('button', { name: /^Приёмник:/ })).toHaveCount(1)
 }
 
@@ -281,7 +293,20 @@ async function runLaboratory(page: Page, mode: 'broad' | 'deep' = 'deep', pairIn
   const modeButton = page.getByRole('button', {
     name: mode === 'broad' ? /^Широкое/ : /^Глубокое/,
   })
-  if (await modeButton.isVisible()) await modeButton.click()
+  if (mode === 'broad') {
+    await expect(modeButton).toBeVisible()
+    await expect(modeButton).toBeEnabled()
+    await modeButton.click()
+  } else {
+    const firstSample = page.getByRole('button', { name: /^Образец:/ }).first()
+    await expect(modeButton.or(firstSample).first()).toBeVisible()
+    if (await modeButton.isVisible()) {
+      await expect(modeButton).toBeEnabled()
+      await modeButton.click()
+    } else {
+      await expect(firstSample).toBeEnabled()
+    }
+  }
 
   if (mode === 'broad') {
     await selectLaboratoryPair(page, pairIndex)
@@ -326,10 +351,10 @@ async function verifyWorkingModelModal(page: Page) {
     await page.getByRole('button', { name: 'Справка' }).click()
     const helpDialog = page.getByRole('dialog', { name: 'Справка' })
     await helpDialog.getByRole('button', { name: 'Трактовка анализов' }).click()
-    const laboratoryDialog = page.getByRole('dialog', { name: 'Трактовка лабораторных анализов' })
+    const laboratoryDialog = page.getByRole('dialog', { name: 'Журнал исследований' })
     const laboratoryWarning = laboratoryDialog.getByRole('status')
     const laboratoryCopy = laboratoryDialog.getByText('Источник и приёмник нельзя менять местами при трактовке результата.')
-    const laboratoryClose = laboratoryDialog.getByRole('button', { name: 'Закрыть трактовку анализов' })
+    const laboratoryClose = laboratoryDialog.getByRole('button', { name: 'Закрыть журнал' })
     const [warningBox, copyBox, closeBox] = await Promise.all([
       laboratoryWarning.boundingBox(),
       laboratoryCopy.boundingBox(),
@@ -346,8 +371,9 @@ async function verifyWorkingModelModal(page: Page) {
     await laboratoryClose.click()
     await expect(laboratoryDialog).toBeHidden()
 
-    const workingModelTrigger = page.getByRole('button', { name: /Рабочая модель/ })
+    const workingModelTrigger = page.getByRole('button', { name: 'Открыть журнал', exact: true })
     await workingModelTrigger.click()
+    await page.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true)
@@ -1259,17 +1285,17 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     await page.getByRole('button', { name: 'Начать игру' }).click()
     await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
 
+    const tenderUrl = page.url()
     await page.setViewportSize({ width: 390, height: 844 })
     const tenderHeader = page.locator('header[aria-label="Текущая фаза игры"]')
     const leaveButton = page.getByRole('button', { name: 'Выйти из матча' })
     const helpButton = page.getByRole('button', { name: 'Справка' })
-    const [leaveBox, helpBox] = await Promise.all([
-      leaveButton.boundingBox(),
-      helpButton.boundingBox(),
-    ])
-    expect(leaveBox).not.toBeNull()
-    expect(helpBox).not.toBeNull()
-    expect(leaveBox!.y).toBeLessThan(helpBox!.y)
+    await expect(leaveButton).toBeVisible()
+    await expect(leaveButton).toBeEnabled()
+    await expectFullyInViewport(leaveButton)
+    await expect(helpButton).toBeVisible()
+    await expect(helpButton).toBeEnabled()
+    await expectFullyInViewport(helpButton)
     expect(await tenderHeader.evaluate((header) => header.scrollWidth <= header.clientWidth)).toBe(true)
     await helpButton.click()
     const helpDialog = page.getByRole('dialog', { name: 'Справка' })
@@ -1280,6 +1306,8 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     await expect(mobileRulesDialog).toBeVisible()
     await page.getByRole('button', { name: 'Закрыть правила' }).click()
     await expect(mobileRulesDialog).toBeHidden()
+    await expect(page).toHaveURL(tenderUrl)
+    await expectPhase(page, headings.access)
 
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.getByRole('button', { name: 'Правила', exact: true }).click()
@@ -1307,7 +1335,7 @@ test('opens the Rules Reference inside an active Tender without leaving it', asy
     )
     await expect(page.getByRole('button', { name: 'Закрыть правила' })).toBeInViewport()
     await page.getByRole('button', { name: 'Закрыть правила' }).click()
-    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    await expect(page).toHaveURL(tenderUrl)
     await expectPhase(page, headings.access)
   } finally {
     await guestContext.close()
@@ -1439,7 +1467,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
     await expectPhase(guestPage, headings.access)
     await expectSynchronizedTimers(page, guestPage)
     await expect(page.getByRole('heading', { name: 'Ваши образцы' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /^Данные исследований/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Открыть журнал', exact: true })).toBeVisible()
     await expect(page.getByText('Хост E2E → Гость E2E', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', {
       name: 'Слот доступа 5: Ночной. Порядок действия: 5. Компенсация: 1 образец сигнала',
@@ -1520,13 +1548,14 @@ test('two players complete every Tender stage and receive each realtime phase tr
       await expectPhase(guestPage, headings.access)
       await expectSynchronizedTimers(page, guestPage)
       await expect(page.getByRole('heading', { name: 'Ваши образцы' })).toBeVisible()
-      const researchButton = page.getByRole('button', { name: /^Данные исследований/ })
+      const researchButton = page.getByRole('button', { name: 'Открыть журнал', exact: true })
       await expect(researchButton).toBeVisible()
       if (round > 2) {
         await researchButton.click()
+        await page.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
         const researchDialog = page.getByRole('dialog')
         await expect(researchDialog.locator('[data-private-thesis]')).toHaveCount(round - 2)
-        await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+        await page.getByRole('button', { name: 'Закрыть журнал' }).click()
       }
       await chooseAccessSlot(page, 1)
       await chooseAccessSlot(guestPage, 2)
@@ -1556,7 +1585,43 @@ test('two players complete every Tender stage and receive each realtime phase tr
         await auditCheckpoint(guestPage, '06-laboratory-mobile-390x844')
       }
       await runLaboratory(page, 'deep', round - 1)
-      await expect(page.getByText('История', { exact: true })).toBeVisible()
+      await expect(page.getByText('История', { exact: true })).toHaveCount(0)
+      if (round === 2) {
+        await researchButton.click()
+        await page.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+        const ownerResearch = page.getByRole('dialog')
+        const ownerExperiments = ownerResearch.locator('[data-research-experiment]')
+        const ownExperiments = ownerResearch.locator('[data-own-experiment]')
+        await expect(ownerExperiments).toHaveCount(3)
+        await expect(ownExperiments).toHaveCount(2)
+        await expect(ownExperiments.filter({ hasText: 'Непрерывный · Ваш опыт · Видят все' })).toHaveCount(1)
+        await expect(ownExperiments.filter({ hasText: 'Импульсный · Ваш опыт · Видят все' })).toHaveCount(1)
+        await expect(ownerExperiments.filter({ hasText: 'Импульсный · Гость E2E · Видят все' })).toHaveCount(1)
+        for (const experiment of await ownerExperiments.all()) {
+          await expect(experiment.locator('strong')).toHaveCount(2)
+          await expect(experiment).toContainText('→')
+          await expect(experiment).toContainText(/Усиление|Ослабление|Отражение|Нестабильный срыв/)
+        }
+        await expect(ownerResearch.getByRole('heading', { name: 'Личные измерения', exact: true })).toBeVisible()
+        await expect(ownerResearch.locator('[data-private]')).toHaveCount(1)
+        await expect(ownerResearch.locator('[data-private]')).toContainText(/Одинаковая полярность|Разная полярность/)
+        await expect(ownerResearch.locator('[data-private]').locator('strong')).toHaveText(
+          await ownExperiments.filter({ hasText: 'Непрерывный' }).locator('strong').allTextContents(),
+        )
+        await page.getByRole('button', { name: 'Закрыть журнал' }).click()
+        await guestPage.getByRole('button', { name: 'Открыть журнал', exact: true }).click()
+        await guestPage.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+        const guestResearch = guestPage.getByRole('dialog')
+        const guestExperiments = guestResearch.locator('[data-research-experiment]')
+        await expect(guestExperiments).toHaveCount(3)
+        await expect(guestResearch.locator('[data-own-experiment]')).toHaveCount(1)
+        await expect(guestResearch.locator('[data-own-experiment]')).toContainText('Импульсный · Ваш опыт · Видят все')
+        await expect(guestExperiments.filter({ hasText: 'Непрерывный · Хост E2E · Видят все' })).toHaveCount(1)
+        await expect(guestExperiments.filter({ hasText: 'Импульсный · Хост E2E · Видят все' })).toHaveCount(1)
+        await expect(guestResearch.locator('[data-private]')).toHaveCount(0)
+        await expect(guestResearch.getByRole('heading', { name: 'Личные измерения', exact: true })).toHaveCount(0)
+        await guestPage.getByRole('button', { name: 'Закрыть журнал' }).click()
+      }
       await runLaboratory(guestPage, round === 2 ? 'broad' : 'deep', round === 2 ? 1 : round)
 
       await expectPhase(page, headings.analysis)
@@ -1566,7 +1631,7 @@ test('two players complete every Tender stage and receive each realtime phase tr
         await expectPhase(page, headings.analysis)
       }
       await expect(guestPage.getByText('История лаборатории')).toHaveCount(0)
-      await expect(guestPage.getByRole('button', { name: /^Данные исследований/ })).toBeVisible()
+      await expect(guestPage.getByRole('button', { name: 'Открыть журнал', exact: true })).toBeVisible()
       if (round === 2) {
         const mobileActionFooter = guestPage
           .getByRole('button', { name: 'Выдвинуть тезис' })
@@ -1575,12 +1640,13 @@ test('two players complete every Tender stage and receive each realtime phase tr
       }
       if (round > 2) {
         const previousThesisCount = round - 2
-        const thesisHistory = page
-          .getByText('История тезисов', { exact: true })
-          .locator('..')
-          .locator('..')
-        await expect(thesisHistory.locator('[data-private-thesis]')).toHaveCount(previousThesisCount)
-        await expect(page.getByText(`Всего: ${previousThesisCount} · раунд: 0/1`)).toBeVisible()
+        await expect(page.getByText('История тезисов', { exact: true })).toHaveCount(0)
+        await researchButton.click()
+        await page.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+        const thesisResearch = page.getByRole('dialog')
+        await expect(thesisResearch.locator('[data-private-thesis]')).toHaveCount(previousThesisCount)
+        await expect(thesisResearch.getByText(`Только вы · всего: ${previousThesisCount} · раунд: 0/1`, { exact: true })).toBeVisible()
+        await page.getByRole('button', { name: 'Закрыть журнал' }).click()
       }
       if (round === 2) await verifyWorkingModelModal(guestPage)
       if (round === 2) {
@@ -1615,17 +1681,37 @@ test('two players complete every Tender stage and receive each realtime phase tr
       return minutes * 60 + seconds
     }).toBeGreaterThan(170)
     await expect(page.getByRole('heading', { name: 'Игроки' })).toHaveCount(1)
-    const hostResearchButton = page.getByRole('button', { name: /^Данные исследований/ })
+    const hostResearchButton = page.getByRole('button', { name: 'Открыть журнал', exact: true })
     await expect(hostResearchButton).toBeVisible()
     await expect(page.getByText('Рабочая модель', { exact: true })).toHaveCount(0)
     await hostResearchButton.click()
+    await page.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+    await expect(page.getByRole('dialog').getByRole('button', { name: /: гипотеза,/ }).first()).toBeDisabled()
+    await page.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+    await expect(page.getByRole('dialog').locator('[data-research-experiment]')).toHaveCount(11)
+    await expect(page.getByRole('dialog').locator('[data-own-experiment]')).toHaveCount(5)
+    await expect(page.getByRole('dialog').locator('[data-research-experiment]').filter({ hasText: 'Гость E2E · Видят все' })).toHaveCount(6)
     await expect(page.getByRole('dialog').locator('[data-private-thesis]')).toHaveCount(4)
-    await page.getByRole('button', { name: 'Закрыть данные исследований' }).click()
-    const guestResearchButton = guestPage.getByRole('button', { name: /^Данные исследований/ })
+    await page.getByRole('button', { name: 'Закрыть журнал' }).click()
+    const guestResearchButton = guestPage.getByRole('button', { name: 'Открыть журнал', exact: true })
     await expect(guestResearchButton).toBeVisible()
     await guestResearchButton.click()
+    await guestPage.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+    await expect(guestPage.getByRole('dialog').locator('[data-research-experiment]')).toHaveCount(11)
+    await expect(guestPage.getByRole('dialog').locator('[data-own-experiment]')).toHaveCount(6)
+    await expect(guestPage.getByRole('dialog').locator('[data-research-experiment]').filter({ hasText: 'Хост E2E · Видят все' })).toHaveCount(5)
     await expect(guestPage.getByRole('dialog').locator('[data-private-thesis]')).toHaveCount(4)
-    await guestPage.getByRole('button', { name: 'Закрыть данные исследований' }).click()
+    const researchPanel = guestPage.getByRole('tabpanel', { name: 'Данные исследований', exact: true })
+    const researchScrollTop = await researchPanel.evaluate((panel) => {
+      panel.scrollTop = 120
+      return panel.scrollTop
+    })
+    expect(researchScrollTop).toBeGreaterThan(0)
+    await guestPage.getByRole('tab', { name: 'Трактовка', exact: true }).click()
+    await guestPage.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+    await guestPage.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+    expect(await researchPanel.evaluate((panel) => panel.scrollTop)).toBe(researchScrollTop)
+    await guestPage.getByRole('button', { name: 'Закрыть журнал' }).click()
     await expect(guestPage.getByText('Подтвердили 0 из 2 исследователей').first()).toBeVisible()
     await expect(guestPage.getByRole('combobox', { name: 'Aster: тип поля', exact: true })).toBeVisible()
     await expect(guestPage.getByRole('combobox', { name: 'Aster: полярность', exact: true })).toBeVisible()

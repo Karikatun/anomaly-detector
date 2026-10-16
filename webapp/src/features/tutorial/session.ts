@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import {
   createTutorialState,
+  resumeTutorialState,
   type TutorialState,
 } from './scenario'
 
@@ -56,6 +57,8 @@ const tutorialStateSchema = z.object({
     'round-2-power',
     'round-2-recon',
     'round-2-lab',
+    'round-2-research',
+    'round-2-research-open',
     'round-2-working-model',
     'round-2-thesis',
     'round-2-contracts-intro',
@@ -74,7 +77,7 @@ export function loadTutorialSession(storage: Storage, playerId: string): Tutoria
   if (!serialized) return createTutorialState(playerId)
   try {
     const parsed = tutorialStateSchema.safeParse(JSON.parse(serialized))
-    if (parsed.success && parsed.data.playerId === playerId) return parsed.data
+    if (parsed.success && parsed.data.playerId === playerId) return resumeTutorialState(parsed.data)
   } catch {
     // A broken tab-local draft is disposable; the tutorial safely restarts.
   }

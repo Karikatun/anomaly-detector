@@ -15,6 +15,26 @@
 }
 .stateLoading { display: flex; min-height: 6rem; align-items: center; justify-content: center; gap: var(--space-3); }
 .stateContent, .completeContent { display: grid; gap: 1rem; }
+.prologueDialog {
+  min-width: 0;
+  width: min(28rem, calc(100vw - 2 * var(--space-4)));
+  max-width: calc(100vw - 2 * var(--space-4));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  padding: var(--space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+}
+.prologueDialog > * { min-width: 0; }
+.prologueDialog > :global([data-slot='dialog-footer']) > button {
+  min-width: 0;
+  height: auto;
+  min-height: 2.75rem;
+  flex-shrink: 1;
+  padding-block: var(--space-3);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .accountProtectionInvitation {
   display: grid;
   gap: var(--space-3);
@@ -33,8 +53,46 @@
 .completeActions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .saveError { display: grid; gap: .75rem; padding: .9rem; border: 1px solid rgba(248, 113, 113, .5); border-radius: .6rem; }
 
+/* Required confirmations cover the phase header; reading workspaces keep
+   their existing header and coach composition. */
+:global([data-tutorial-board] > header) {
+  z-index: var(--tutorial-header-layer, var(--layer-system));
+}
+
+.exitDialog {
+  min-width: 0;
+  width: min(28rem, calc(100vw - 2 * var(--space-4)));
+  max-width: calc(100vw - 2 * var(--space-4));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  padding-top: calc(2.75rem + var(--space-4));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+}
+
+.exitDialog > :global([data-slot='dialog-header']),
+.exitDialog > :global([data-slot='dialog-footer']) {
+  min-width: 0;
+}
+
+.exitDialog > :global([data-slot='dialog-footer']) > button {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 2.75rem;
+  flex-shrink: 1;
+  padding-block: var(--space-3);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 :global(html[data-tutorial-autoscrolling]) :global(.react-joyride__spotlight) {
   visibility: hidden;
+}
+/* The primary spotlight stays unchanged. Only allowed visible controls are
+   excluded from Joyride's background pointer blocker by its viewport owner. */
+:global(body:has([data-tutorial-board]) .react-joyride__overlay [fill-rule='evenodd']) {
+  clip-path: var(--tutorial-interaction-cutout, none);
 }
 .coachCard {
   width: min(24rem, calc(100vw - 1.5rem));
@@ -42,7 +100,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.coach { display: grid; max-width: 24rem; gap: .55rem; text-align: left; }
+.coach { display: grid; min-width: 0; max-width: 24rem; gap: .55rem; text-align: left; overflow-wrap: anywhere; }
 .coach button { width: fit-content; }
 .coachActions {
   display: flex;
@@ -64,17 +122,16 @@
   transform: none !important;
 }
 
-:global([data-testid='tutorial-research-dialog']),
-:global([data-testid='tutorial-contracts-dialog']),
-:global([data-testid='tutorial-interpretation-dialog']) {
+:global([data-tutorial-journal]),
+:global([data-testid='tutorial-contracts-dialog']) {
   z-index: 101 !important;
 }
 
 @media (min-width: 48rem) {
-  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
-  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
-  :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
-  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+  :global(body:has([data-tutorial-step='research-results-open']) [data-tutorial-journal]),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-tutorial-journal]),
+  :global(body:has([data-testid='tutorial-contracts-trigger'][aria-expanded='true']) [data-testid='tutorial-contracts-dialog']),
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-tutorial-journal]) {
     inset: calc(var(--tender-sticky-header-height, 4.5rem) + 1rem) 26rem 1rem 1rem !important;
     width: auto !important;
     max-width: 72rem !important;
@@ -95,10 +152,10 @@
     width: 20rem !important;
   }
 
-  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
-  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
-  :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
-  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+  :global(body:has([data-tutorial-step='research-results-open']) [data-tutorial-journal]),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-tutorial-journal]),
+  :global(body:has([data-testid='tutorial-contracts-trigger'][aria-expanded='true']) [data-testid='tutorial-contracts-dialog']),
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-tutorial-journal]) {
     right: 22rem !important;
   }
 }
@@ -115,8 +172,9 @@
   .completeActions > * { width: 100%; }
   .coachCard {
     width: 100%;
-    max-height: none;
-    overflow: clip !important;
+    max-height: min(25dvh, var(--tutorial-mobile-coach-max-height, 14rem));
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
   }
 
   :global([data-testid='floater']) {
@@ -137,10 +195,9 @@
     inset: .75rem .75rem auto !important;
   }
 
-  :global(body:has([data-tutorial-step='research-results-open']) [data-testid='tutorial-research-dialog']),
-  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-testid='tutorial-research-dialog']),
-  :global(body:has([data-tutorial-step='round-2-contracts-review-open']) [data-testid='tutorial-contracts-dialog']),
-  :global(body:has([data-tutorial-step='interpretation-open']) [data-testid='tutorial-interpretation-dialog']) {
+  :global(body:has([data-tutorial-step='research-results-open']) [data-tutorial-journal]),
+  :global(body:has([data-tutorial-step='round-1-thesis-result-open']) [data-tutorial-journal]),
+  :global(body:has([data-tutorial-step='interpretation-open']) [data-tutorial-journal]) {
     top: calc(var(--tutorial-mobile-coach-bottom, 16.5rem) + .75rem) !important;
     bottom: .75rem !important;
     height: auto !important;
@@ -149,11 +206,16 @@
   :global(body:has(
     [data-tutorial-step='round-1-working-model'],
     [data-tutorial-step='round-2-working-model']
-  ) [data-working-model-dialog]) {
+  ) [data-tutorial-journal]) {
     z-index: 101 !important;
     top: calc(var(--tutorial-mobile-coach-bottom, 16.5rem) + .75rem) !important;
     bottom: .75rem !important;
     height: auto !important;
+  }
+
+  :global([data-tutorial-board][data-tutorial-action-pinned] [data-tutorial-action-container]) {
+    position: var(--tutorial-mobile-action-position, fixed) !important;
+    inset: var(--tutorial-mobile-action-inset, auto .75rem .75rem) !important;
   }
 
   :global(body:has([data-tutorial-action-pinned]) [data-testid='floater']) {
@@ -189,4 +251,103 @@
   .coachActions {
     margin-top: 0;
   }
+}
+
+@media (max-width: 47.999rem) {
+  /* Reading and editing share one stable zone with a scrollable coach. */
+  :global(body:has(
+    [data-tutorial-journal][data-state='open'],
+    [data-testid='tutorial-contracts-trigger'][aria-expanded='true']
+  )) .coachCard {
+    max-height: min(25dvh, 14rem);
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+
+  :global(body:has(
+    [data-tutorial-journal][data-state='open'],
+    [data-testid='tutorial-contracts-trigger'][aria-expanded='true']
+  ) [data-testid='floater']) {
+    inset: .75rem .75rem auto !important;
+  }
+
+  :global(body:has([data-tutorial-journal][data-state='open']) [data-tutorial-journal]),
+  :global(body:has([data-testid='tutorial-contracts-trigger'][aria-expanded='true']) [data-testid='tutorial-contracts-dialog']) {
+    top: calc(min(25dvh, 14rem) + 1.5rem) !important;
+    bottom: calc(.75rem + env(safe-area-inset-bottom, 0px)) !important;
+    height: auto !important;
+  }
+}
+
+/* First-cycle pilot: one lower reading zone; the document remains user-scrollable. */
+.coachCard[data-tutorial-pilot='true'] {
+  padding-block: var(--space-3);
+}
+.coachCard[data-tutorial-pilot='true'] .coach { gap: var(--space-1); }
+.coachCard[data-tutorial-pilot='true'] .coachActions { margin-top: 0; }
+
+/* First-result guidance belongs to the modal's native focus scope. */
+:global([data-tutorial-journal][data-journal-guidance]) {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.journalCoach:global([data-testid='floater']) {
+  position: static !important;
+  width: 100% !important;
+  max-width: none;
+  transform: none !important;
+}
+
+@media (max-width: 47.999rem) {
+  :global(body:has([data-tutorial-pilot='true']) [data-testid='floater']) {
+    inset: auto .75rem calc(.75rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  :global(body:has([data-tutorial-pilot='true'])) .coachCard[data-tutorial-pilot='true'] {
+    max-height: min(30dvh, calc(100dvh - 3rem));
+    overflow-y: auto !important;
+  }
+  :global(body:has([data-tutorial-pilot='true']) [data-tutorial-board]) {
+    padding-bottom: calc(var(--tutorial-pilot-coach-height, 12rem) + var(--tutorial-pilot-action-height, 0px) + 4rem) !important;
+  }
+  :global(body:has([data-tutorial-pilot='true']) [data-tutorial-board][data-tutorial-action-pinned] [data-tutorial-action-container]) {
+    position: var(--tutorial-pilot-action-position, fixed) !important;
+    inset: auto .75rem calc(var(--tutorial-pilot-coach-height, 12rem) + 1.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  :global(body:has([data-tutorial-pilot='true']) [data-tutorial-journal][data-journal-guidance]) {
+    top: .75rem !important;
+    bottom: 0 !important;
+    height: auto !important;
+    padding: .75rem;
+    padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px));
+  }
+  :global(html:has([data-tutorial-pilot='true'])) {
+    scroll-padding-top: calc(var(--tutorial-pilot-header-height, 9rem) + .75rem);
+    scroll-padding-bottom: calc(var(--tutorial-pilot-coach-height, 12rem) + var(--tutorial-pilot-action-height, 0px) + 2.25rem);
+  }
+}
+
+/* Enlarged text must leave both document content and the modal reachable. */
+:global(html[data-tutorial-pilot-constrained] [data-tutorial-board] > header) { position: relative; }
+:global(html[data-tutorial-pilot-constrained] [data-tutorial-journal][data-journal-guidance]) { top: .75rem !important; }
+
+/* The modal owns its guidance and focus scope at every lesson stage. */
+:global([data-tutorial-journal][data-journal-guidance]) {
+  inset: calc(var(--tender-sticky-header-height, 5.75rem) + var(--space-4)) var(--space-4) var(--space-4) !important;
+  width: auto !important;
+  max-width: 72rem !important;
+  height: auto !important;
+  margin-inline: auto;
+  translate: none !important;
+  transform: none !important;
+}
+.journalCoach { max-height: 25dvh; }
+@media (max-width: 47.999rem) {
+  :global(body [data-tutorial-journal][data-journal-guidance][data-state='open']) {
+    inset: .75rem .75rem calc(.75rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Native focus/scroll-into-view uses the same occupied layers as activation. */
+:global(html:has([data-tutorial-board])) {
+  scroll-padding-top: calc(var(--tutorial-pilot-header-height, 9rem) + .75rem);
+  scroll-padding-bottom: calc(var(--tutorial-pilot-coach-height, 14rem) + var(--tutorial-pilot-action-height, 0px) + 2.25rem);
 }

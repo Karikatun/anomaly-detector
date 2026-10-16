@@ -14,8 +14,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Typography } from '@/components/ui/typography'
-import { WorkingModelPanel } from '../WorkingModelPanel'
+import { WorkingModelEditor, WorkingModelPanel } from '../WorkingModelPanel'
 import type { WorkingModelSaveStatus } from '../working-model-draft'
+import type { WorkingModelDraft } from '../use-working-model-draft'
 import styles from './WorkingModelWorkspace.module.css'
 
 type Props = {
@@ -24,6 +25,7 @@ type Props = {
   inlineOnDesktop?: boolean
   knownSignals: SignalId[]
   model: WorkingModel
+  owner?: WorkingModelDraft
   onOpenChange?: (open: boolean) => void
   onSave: (model: WorkingModel) => Promise<void>
   onSaveStatusChange?: (status: WorkingModelSaveStatus) => void
@@ -60,7 +62,18 @@ export function WorkingModelWorkspace({
   onSaveStatusChange,
   open,
   openDisabled,
+  owner,
 }: Props) {
+  if (owner) return <>
+    {inlineOnDesktop && <div className={styles.desktopPanel}>
+      <WorkingModelEditor disabled={disabled} knownSignals={knownSignals} owner={owner} />
+    </div>}
+    <Button type="button" variant="outline" className={inlineOnDesktop ? styles.mobileTrigger : styles.trigger}
+      disabled={openDisabled} onClick={() => onOpenChange?.(true)} data-tutorial-working-model-trigger="">
+      <HugeiconsIcon icon={Analytics01Icon} strokeWidth={1.7} aria-hidden="true" />
+      <Typography as="span" variant="bodySmMedium">{translate('tender.workingModelWorkspace.copy.001')}</Typography>
+    </Button>
+  </>
   return (
     <>
       {inlineOnDesktop && (

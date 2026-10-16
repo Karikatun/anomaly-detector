@@ -22,27 +22,11 @@ const expectedRoundTwoPower = {
   reconnaissance: 1,
 }
 
-function continueTutorial(state: ReturnType<typeof createTutorialState>) {
-  const result = advanceTutorial(state, { type: 'continue' })
-  expect(result.progressed).toBe(true)
-  return result.state
-}
-
 test('player completes the deterministic two-round tutorial through real Tender actions', () => {
   let state = createTutorialState('player-a')
 
   expect(state.step).toBe('prologue')
   state = advanceTutorial(state, { type: 'start-tutorial' }).state
-  expect(state.step).toBe('interaction-guide')
-  state = continueTutorial(state)
-  expect(state.step).toBe('round-1-header')
-  state = continueTutorial(state)
-  expect(state.step).toBe('round-1-sidebar')
-  state = continueTutorial(state)
-  expect(state.step).toBe('round-1-contracts')
-  state = continueTutorial(state)
-  expect(state.step).toBe('round-1-access-intro')
-  state = continueTutorial(state)
   expect(state.step).toBe('round-1-access')
 
   const wrongSlot = advanceTutorial(state, { type: 'request-access-slot', slot: 1 })
@@ -50,14 +34,10 @@ test('player completes the deterministic two-round tutorial through real Tender 
   expect(wrongSlot.state.step).toBe('round-1-access')
 
   state = advanceTutorial(state, { type: 'request-access-slot', slot: 5 }).state
-  expect(state.step).toBe('round-1-power-intro')
-  state = continueTutorial(state)
+  expect(state.step).toBe('round-1-power')
   state = advanceTutorial(state, { type: 'allocate-power', allocation: expectedRoundOnePower }).state
-  expect(state.step).toBe('round-1-recon-intro')
-  state = continueTutorial(state)
+  expect(state.step).toBe('round-1-recon')
   state = advanceTutorial(state, { type: 'conduct-reconnaissance', targets: ['unknown-sector'] }).state
-  expect(state.step).toBe('round-1-lab-intro')
-  state = continueTutorial(state)
   expect(state.step).toBe('round-1-lab-mode')
   state = advanceTutorial(state, { type: 'select-laboratory-mode', mode: 'deep' }).state
   expect(state.step).toBe('round-1-lab-pair')
@@ -72,20 +52,16 @@ test('player completes the deterministic two-round tutorial through real Tender 
   expect(state.step).toBe('research-results')
   state = advanceTutorial(state, { type: 'open-research-results' }).state
   expect(state.step).toBe('research-results-open')
-  state = advanceTutorial(state, { type: 'close-research-results' }).state
-  expect(state.step).toBe('help-menu')
-  state = advanceTutorial(state, { type: 'open-help-menu' }).state
   state = advanceTutorial(state, { type: 'open-interpretation' }).state
   expect(state.step).toBe('interpretation-open')
-  state = advanceTutorial(state, { type: 'close-interpretation' }).state
-  expect(state.step).toBe('round-1-model-intro')
-  state = continueTutorial(state)
+  state = advanceTutorial(state, { type: 'open-working-model' }).state
   state = advanceTutorial(state, {
     type: 'update-working-model',
     workingModel: {
       signals: { aster: { hypothesis: { fieldType: 'inertial', polarity: 'positive' } } },
     },
   }).state
+  state = advanceTutorial(state, { type: 'close-research-results' }).state
   state = advanceTutorial(state, {
     type: 'submit-thesis',
     signalId: 'aster',
@@ -93,10 +69,6 @@ test('player completes the deterministic two-round tutorial through real Tender 
     polarity: 'positive',
   }).state
 
-  expect(state.step).toBe('round-1-thesis-result')
-  state = advanceTutorial(state, { type: 'open-research-results' }).state
-  expect(state.step).toBe('round-1-thesis-result-open')
-  state = advanceTutorial(state, { type: 'close-research-results' }).state
   expect(state.step).toBe('round-2-access')
   expect(state.round).toBe(2)
 
@@ -116,6 +88,9 @@ test('player completes the deterministic two-round tutorial through real Tender 
       pair: { sourceSignal: 'boreal', receiverSignal: 'cinder' },
     },
   }).state
+  expect(state.step).toBe('round-2-research')
+  state = advanceTutorial(state, { type: 'open-research-results' }).state
+  state = advanceTutorial(state, { type: 'open-working-model' }).state
   state = advanceTutorial(state, {
     type: 'update-working-model',
     workingModel: {
@@ -125,14 +100,14 @@ test('player completes the deterministic two-round tutorial through real Tender 
       },
     },
   }).state
+  state = advanceTutorial(state, { type: 'close-research-results' }).state
   state = advanceTutorial(state, {
     type: 'submit-thesis',
     signalId: 'boreal',
     fieldType: 'electromagnetic',
     polarity: 'positive',
   }).state
-  expect(state.step).toBe('round-2-contracts-intro')
-  state = continueTutorial(state)
+  expect(state.step).toBe('round-2-contract-reserve')
   state = advanceTutorial(state, { type: 'reserve-contract', contractId: tutorialContractId }).state
   state = advanceTutorial(state, {
     type: 'submit-contract-bid',
@@ -140,8 +115,6 @@ test('player completes the deterministic two-round tutorial through real Tender 
     evidenceTestIds: ['tutorial-test-2'],
   }).state
 
-  expect(state.step).toBe('final-model-intro')
-  state = continueTutorial(state)
   expect(state.step).toBe('final-model')
   const completed = advanceTutorial(state, {
     type: 'submit-scientific-model',
@@ -182,6 +155,55 @@ test('wrong Thesis returns separate feedback and progressively reveals a hint wi
   expect(second.state.hintLevel).toBe(1)
   expect(second.state.rating).toBe(0)
   expect(second.state.budget).toBe(first.state.budget)
+})
+
+test('saving a tutorial hypothesis preserves the draft without checking it or advancing to a Thesis', () => {
+  const state = { ...createTutorialState('player-a'), step: 'round-1-working-model' as const }
+  const workingModel = { signals: { aster: { hypothesis: { fieldType: 'phase' as const, polarity: 'negative' as const } } } }
+  const saved = advanceTutorial(state, { type: 'update-working-model', workingModel })
+  expect(saved.state.workingModel).toEqual(workingModel)
+  expect(saved.state.step).toBe('round-1-working-model')
+  expect(saved.state.privateTheses).toEqual([])
+  expect(saved.thesisFeedback).toBeUndefined()
+  const closed = advanceTutorial(saved.state, { type: 'close-research-results' })
+  expect(closed.state.step).toBe('round-1-thesis')
+  expect(closed.state.privateTheses).toEqual([])
+})
+
+test('the first laboratory result enters Analysis and teaches the Journal tabs in one reading session', () => {
+  const afterTest = advanceTutorial({ ...createTutorialState('player-a'), step: 'round-1-lab-pair' }, {
+    type: 'run-laboratory-test', laboratory: { mode: 'deep', pair: { sourceSignal: 'aster', receiverSignal: 'boreal' } },
+  }).state
+  expect(afterTest.step).toBe('research-results')
+  expect(tutorialView(afterTest).phase).toBe('model-analysis')
+  const opened = advanceTutorial(afterTest, { type: 'open-research-results' }).state
+  expect(advanceTutorial(opened, { type: 'close-research-results' }).state.step).toBe('research-results')
+  const interpretation = advanceTutorial(opened, { type: 'open-interpretation' }).state
+  expect(interpretation.step).toBe('interpretation-open')
+  const model = advanceTutorial(interpretation, { type: 'open-working-model' }).state
+  expect(model.step).toBe('round-1-working-model')
+  expect(model.privateTheses).toEqual([])
+})
+
+test('closing a reading Journal early returns to a manual entry without losing data or submitting a Thesis', () => {
+  const state = { ...createTutorialState('player-a'), step: 'research-results-open' as const }
+  const closed = advanceTutorial(state, { type: 'close-journal', workingModel: state.workingModel }).state
+  expect(closed.step).toBe('research-results')
+  expect(closed.privateTheses).toEqual([])
+  expect(tutorialView(closed).publicScientificJournal).toHaveLength(1)
+  const second = { ...state, round: 2 as const, step: 'round-2-research-open' as const }
+  expect(advanceTutorial(second, { type: 'close-journal', workingModel: second.workingModel }).state.step).toBe('round-2-research')
+})
+
+test('orientation text is attached to the actual first actions instead of Next-only pauses', () => {
+  let state = advanceTutorial(createTutorialState('player-a'), { type: 'start-tutorial' }).state
+  expect(state.step).toBe('round-1-access')
+  state = advanceTutorial(state, { type: 'request-access-slot', slot: 5 }).state
+  expect(state.step).toBe('round-1-power')
+  state = advanceTutorial(state, { type: 'allocate-power', allocation: expectedRoundOnePower }).state
+  expect(state.step).toBe('round-1-recon')
+  state = advanceTutorial(state, { type: 'conduct-reconnaissance', targets: ['unknown-sector'] }).state
+  expect(state.step).toBe('round-1-lab-mode')
 })
 
 test('tutorial projects valid participant-scoped Tender views without timers or hidden configuration', () => {

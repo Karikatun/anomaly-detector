@@ -1,5 +1,5 @@
 import { Joyride, type Step, type TooltipRenderProps } from 'react-joyride'
-import { type ReactNode, useLayoutEffect, useState } from 'react'
+import { type ReactNode, type RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react'
 
 import type { TranslationKey } from '@/platform/i18n/translations'
 import { ExpeditionBackground } from '@/components/ExpeditionBackground'
@@ -27,6 +27,7 @@ import {
   advanceTutorial,
   createTutorialState,
   tutorialView,
+  tutorialPowerGoals,
   type TutorialAdvanceResult,
   type TutorialAction,
   type TutorialStep,
@@ -36,7 +37,7 @@ import {
   clearTutorialSession,
   saveTutorialSession,
 } from './session'
-import { resolveTutorialPresentation } from './tutorial-layout'
+import { resolveTutorialPresentation, tutorialSafeVerticalBounds, tutorialScrollDelta } from './tutorial-layout'
 import styles from './TutorialPage.module.css'
 
 const taskKeys: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, TranslationKey> = {
@@ -69,6 +70,8 @@ const taskKeys: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, Translati
   'round-2-power': 'tutorial.step.round2Power',
   'round-2-recon': 'tutorial.step.round2Recon',
   'round-2-lab': 'tutorial.step.round2Lab',
+  'round-2-research': 'tutorial.step.round2Research',
+  'round-2-research-open': 'tutorial.step.round2ResearchOpen',
   'round-2-working-model': 'tutorial.step.round2Model',
   'round-2-thesis': 'tutorial.step.round2Thesis',
   'round-2-contracts-intro': 'tutorial.step.contractsIntro',
@@ -85,10 +88,18 @@ const mobileTaskKeys: Partial<Record<Exclude<TutorialStep, 'complete' | 'prologu
   'research-results': 'tutorial.step.researchResultsMobile',
 }
 
+// Only this first research cycle uses the pilot presentation; lesson policy stays in scenario.ts.
+const pilotCopy: Partial<Record<TutorialStep, { action: TranslationKey; why: TranslationKey }>> = {
+  'round-1-access': { action: 'tutorial.pilot.access.action', why: 'tutorial.pilot.access.why' },
+  'round-1-power': { action: 'tutorial.pilot.power.action', why: 'tutorial.pilot.power.why' },
+  'round-1-recon': { action: 'tutorial.pilot.recon.action', why: 'tutorial.pilot.recon.why' },
+  'round-1-lab-mode': { action: 'tutorial.pilot.mode.action', why: 'tutorial.pilot.mode.why' },
+  'round-1-lab-pair': { action: 'tutorial.pilot.pair.action', why: 'tutorial.pilot.pair.why' },
+  'research-results': { action: 'tutorial.pilot.result.action', why: 'tutorial.pilot.result.why' },
+  'research-results-open': { action: 'tutorial.pilot.read.action', why: 'tutorial.pilot.read.why' },
+}
+
 const orderedSteps = Object.keys(taskKeys) as Array<Exclude<TutorialStep, 'complete' | 'prologue'>>
-const spotlightRevealDelayMs = 140
-const positionRetryDelayMs = 120
-const maximumPositionRetries = 8
 const informationalSteps = new Set<TutorialStep>([
   'interaction-guide',
   'round-1-header',
@@ -131,19 +142,37 @@ export function TutorialExperience({
 }) {
   const { t } = useI18n()
   const [state, setState] = useState(initialState)
+  const [lesson, setLesson] = useState(() => new AbortController())
   const playerId = initialState.playerId
   const [commandError, setCommandError] = useState<string | null>(null)
   const [thesisFeedback, setThesisFeedback] = useState<NonNullable<TutorialAdvanceResult['thesisFeedback']> | null>(null)
   const [exitOpen, setExitOpen] = useState(false)
+  const [explanationStep, setExplanationStep] = useState<TutorialStep | null>(null)
+  const [requiredModalOpen, setRequiredModalOpen] = useState(false)
+  const [journalOpen, setJournalOpen] = useState(false)
+  const prologueRef = useRef<HTMLDivElement>(null)
+  const manualReadingTasks = useRef(new Set<string>())
+  useLayoutEffect(() => { manualReadingTasks.current.clear() }, [lesson])
+  const nearest = useTutorialNearestAction(state.step)
+  const [resolvedTarget, setResolvedTarget] = useState<{ requested: string; selector: string } | null>(null)
+  const resolveTarget = useCallback((requested: string, selector: string) => {
+    setResolvedTarget((current) => current?.requested === requested && current.selector === selector
+      ? current : { requested, selector })
+  }, [])
   const [compactHeader, setCompactHeader] = useState(
     () => window.matchMedia('(max-width: 47.999rem)').matches,
   )
   const [compactGuidance, setCompactGuidance] = useState(
     () => window.matchMedia('(max-width: 68rem)').matches,
   )
-  const [shortViewport, setShortViewport] = useState(
-    () => window.matchMedia('(max-height: 32rem)').matches,
-  )
+
+
+  useLayoutEffect(() => {
+    if (!exitOpen && !requiredModalOpen) return
+    const board = document.querySelector<HTMLElement>('[data-tutorial-board]')
+    board?.style.setProperty('--tutorial-header-layer', 'var(--layer-sticky)')
+    return () => { board?.style.removeProperty('--tutorial-header-layer') }
+  }, [exitOpen, requiredModalOpen])
 
   useLayoutEffect(() => {
     const media = window.matchMedia('(max-width: 47.999rem)')
@@ -161,27 +190,26 @@ export function TutorialExperience({
     return () => media.removeEventListener('change', syncViewport)
   }, [])
 
-  useLayoutEffect(() => {
-    const media = window.matchMedia('(max-height: 32rem)')
-    const syncViewport = () => setShortViewport(media.matches)
-    syncViewport()
-    media.addEventListener('change', syncViewport)
-    return () => media.removeEventListener('change', syncViewport)
-  }, [])
+
 
   const applyAction = async (action: TutorialAction) => {
+    // Disposal may flush a draft through an old callback after Exit or Repeat.
+    // Only callbacks belonging to the active lesson may persist or progress it.
+    if (lesson.signal.aborted) return false
     const result = advanceTutorial(state, action)
     setThesisFeedback(action.type === 'submit-thesis' && result.thesisFeedback && !result.progressed
       ? result.thesisFeedback
       : null)
     const stateChanged = result.state !== state
     if (stateChanged) {
+      if (result.state.step !== state.step) setExplanationStep(null)
       setState(result.state)
       saveTutorialSession(sessionStorage, result.state)
     }
-    const isDraftSave = action.type === 'update-scientific-model-draft'
+    const isDraftSave = action.type === 'update-scientific-model-draft' || action.type === 'update-working-model'
+    const isNavigation = action.type.startsWith('open-') || action.type.startsWith('close-')
     const isThesisAttempt = action.type === 'submit-thesis' && result.thesisFeedback !== undefined
-    setCommandError(result.progressed || isDraftSave || isThesisAttempt
+    setCommandError(result.progressed || isDraftSave || isThesisAttempt || isNavigation
       ? null
       : t(state.step === 'round-1-power'
         ? 'tutorial.coach.powerRound1Invalid'
@@ -201,15 +229,19 @@ export function TutorialExperience({
   }
 
   const restart = () => {
+    lesson.abort()
+    setLesson(new AbortController())
     clearTutorialSession(sessionStorage, playerId)
     const fresh = createTutorialState(playerId)
     saveTutorialSession(sessionStorage, fresh)
     setCommandError(null)
     setThesisFeedback(null)
+    setExplanationStep(null)
     setState(fresh)
   }
 
   const exit = () => {
+    lesson.abort()
     clearTutorialSession(sessionStorage, playerId)
     setExitOpen(false)
     onExit()
@@ -221,7 +253,13 @@ export function TutorialExperience({
         <ExpeditionBackground />
         <Dialog open>
           <DialogContent
+            ref={prologueRef}
+            className={styles.prologueDialog}
             showCloseButton={false}
+            onOpenAutoFocus={(event) => {
+              event.preventDefault()
+              prologueRef.current?.focus({ preventScroll: true })
+            }}
             onEscapeKeyDown={(event) => event.preventDefault()}
             onPointerDownOutside={(event) => event.preventDefault()}
           >
@@ -250,21 +288,19 @@ export function TutorialExperience({
 
   if (state.step === 'complete') return renderCompletion(restart)
 
-  const visibleSteps = (compactHeader
-    ? orderedSteps
-    : orderedSteps.filter((tutorialStep) => tutorialStep !== 'interpretation'))
-    .filter((tutorialStep) => tutorialStep !== 'interaction-guide')
-  const currentTaskKey: TranslationKey = (compactHeader ? mobileTaskKeys[state.step] : undefined)
-    ?? (state.step === 'help-menu' && !compactHeader
-      ? 'tutorial.step.helpDesktop'
-      : state.step === 'round-1-working-model' && !compactHeader
-        ? 'tutorial.step.round1ModelDesktop'
-        : state.step === 'round-2-working-model' && !compactHeader
-          ? 'tutorial.step.round2ModelDesktop'
-          : taskKeys[state.step])
+  const retiredSteps = new Set<TutorialStep>([
+    'interaction-guide', 'round-1-header', 'round-1-sidebar', 'round-1-contracts',
+    'round-1-access-intro', 'round-1-power-intro', 'round-1-recon-intro', 'round-1-lab-intro',
+    'help-menu', 'round-1-model-intro', 'round-1-thesis-result',
+    'round-1-thesis-result-open', 'round-2-contracts-intro', 'final-model-intro',
+  ])
+  const visibleSteps = orderedSteps.filter((tutorialStep) => !retiredSteps.has(tutorialStep))
+  const currentTaskKey: TranslationKey = (compactHeader ? mobileTaskKeys[state.step] : undefined) ?? taskKeys[state.step]
   const phaseTargetConfig: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, {
     anchor: string
+    fallback?: string
     spotlight?: string
+    secondary?: string
   }> = {
     'interaction-guide': { anchor: '[data-tutorial-access-intro]' },
     'round-1-header': { anchor: '[data-tutorial-highlight="header"] > header' },
@@ -298,26 +334,31 @@ export function TutorialExperience({
       spotlight: '[data-tutorial-lab-pair]',
     },
     'research-results': { anchor: '[data-testid="tutorial-research-trigger"]' },
-    'research-results-open': { anchor: '[data-testid="tutorial-research-dialog"]' },
+    'research-results-open': {
+      anchor: '[data-tender-journal] [data-research-experiment]:first-child > p:first-of-type',
+      secondary: '[data-tutorial-journal-tab="interpretation"]',
+    },
     'help-menu': {
       anchor: compactHeader ? '[data-tutorial-help]' : '[data-tutorial-interpretation-direct]',
     },
-    interpretation: { anchor: '[data-tutorial-interpretation]' },
+    interpretation: { anchor: '[data-testid="tutorial-research-trigger"]' },
     'interpretation-open': {
-      anchor: '[data-testid="tutorial-interpretation-dialog"]',
+      anchor: '[data-tutorial-journal-tab="working-model"]',
     },
     'round-1-model-intro': { anchor: '[data-tutorial-primary]' },
     'round-1-working-model': {
-      anchor: compactHeader
-        ? '[data-tutorial-working-model-trigger]'
-        : '[data-tutorial-working-model-row="aster"]',
+      anchor: journalOpen
+        ? '[data-tender-journal] [data-tutorial-working-model-row="aster"]'
+        : '[data-testid="tutorial-research-trigger"]',
+      fallback: journalOpen ? '[data-tender-journal] [data-tutorial-working-model-row="aster"] [role="group"]:not([data-options])' : undefined,
     },
     'round-1-thesis': {
       anchor: '[data-tutorial-thesis]',
+      fallback: '[data-tutorial-thesis] select',
       spotlight: '[data-tutorial-thesis]',
     },
     'round-1-thesis-result': { anchor: '[data-testid="tutorial-research-trigger"]' },
-    'round-1-thesis-result-open': { anchor: '[data-testid="tutorial-research-dialog"]' },
+    'round-1-thesis-result-open': { anchor: '[data-tender-journal]' },
     'round-2-access': {
       anchor: '[data-tutorial-access-slot="4"]',
       spotlight: '[data-tutorial-access-options]',
@@ -336,32 +377,42 @@ export function TutorialExperience({
       anchor: '[data-tutorial-lab-sample="boreal"]',
       spotlight: '[data-tutorial-lab-options]',
     },
+    'round-2-research': { anchor: '[data-testid="tutorial-research-trigger"]' },
+    'round-2-research-open': {
+      anchor: '[data-tender-journal] [data-research-experiment]:first-child > p:first-of-type',
+      secondary: '[data-tutorial-journal-tab="working-model"]',
+    },
     'round-2-working-model': {
-      anchor: compactHeader
-        ? '[data-tutorial-working-model-trigger]'
-        : '[data-tutorial-working-model-row="boreal"]',
+      anchor: journalOpen
+        ? '[data-tender-journal] [data-tutorial-working-model-row="boreal"]'
+        : '[data-testid="tutorial-research-trigger"]',
+      fallback: journalOpen ? '[data-tender-journal] [data-tutorial-working-model-row="boreal"] [role="group"]:not([data-options])' : undefined,
     },
     'round-2-thesis': {
-      anchor: '[data-tutorial-thesis] select',
+      anchor: '[data-tutorial-thesis]',
+      fallback: '[data-tutorial-thesis] select',
       spotlight: '[data-tutorial-thesis]',
     },
     'round-2-contracts-intro': { anchor: '[data-tutorial-primary]' },
     'round-2-contract-reserve': {
       anchor: '[data-contract-id="tutorial-light-contract"]',
+      fallback: '[data-contract-id="tutorial-light-contract"] select',
     },
     'round-2-contract-bid': {
       anchor: '[data-contract-id="tutorial-light-contract"]',
+      fallback: '[data-contract-id="tutorial-light-contract"] button',
     },
     'final-model-intro': { anchor: '[data-tutorial-primary]' },
     'final-model': {
       anchor: '[data-tutorial-final-submit]',
     },
   }
-  const targetConfig = phaseTargetConfig[state.step]
-  const readingDialogOpen = state.step === 'research-results-open'
-    || state.step === 'round-1-thesis-result-open'
-    || state.step === 'round-2-contracts-review-open'
-    || state.step === 'interpretation-open'
+  const pilot = pilotCopy[state.step]
+  const requestedTarget = nearest?.selector ? { anchor: nearest.selector } : phaseTargetConfig[state.step]
+  const targetConfig = resolvedTarget?.requested === requestedTarget.anchor
+    && resolvedTarget.selector !== requestedTarget.anchor
+    ? { anchor: resolvedTarget.selector } : requestedTarget
+  const readingDialogOpen = journalOpen || state.step === 'round-2-contracts-review-open'
   const presentation = resolveTutorialPresentation({
     anchor: targetConfig.anchor,
     compactGuidance,
@@ -369,14 +420,6 @@ export function TutorialExperience({
     spotlight: targetConfig.spotlight,
     step: state.step,
   })
-  const coachAtTop = (compactHeader && (
-    (shortViewport && state.step === 'interaction-guide')
-    || state.step === 'round-1-contracts'
-  ))
-    || readingDialogOpen
-    || state.step === 'round-1-working-model'
-    || state.step === 'round-2-working-model'
-    || state.step === 'final-model'
   const highlight = state.step === 'round-1-header'
     ? 'header' as const
     : state.step === 'round-1-sidebar'
@@ -389,6 +432,7 @@ export function TutorialExperience({
               || state.step === 'research-results-open'
               || state.step === 'round-1-thesis-result'
               || state.step === 'round-1-thesis-result-open'
+              || state.step === 'round-2-research' || state.step === 'round-2-research-open'
           ? 'research' as const
           : state.step === 'help-menu'
     ? 'help' as const
@@ -411,11 +455,17 @@ export function TutorialExperience({
           ? () => void applyAction({ type: 'continue' })
           : undefined}
         onExit={() => setExitOpen(true)}
+        pilot={pilot ? {
+          action: t(nearest?.action ?? pilot.action, nearest?.values),
+          why: t(pilot.why),
+          expanded: explanationStep === state.step,
+          onToggle: () => setExplanationStep(explanationStep === state.step ? null : state.step),
+        } : undefined}
         task={t(currentTaskKey)}
         thesisFeedback={thesisFeedback}
       />
     ),
-    data: { tutorialStep: state.step },
+    data: { tutorialStep: state.step, pilot: Boolean(pilot) },
     hideOverlay: presentation.hideOverlay,
     placement: 'auto',
     scrollOffset: 20,
@@ -425,19 +475,24 @@ export function TutorialExperience({
     target: targetConfig.anchor,
   }
 
+  const journalGuidanceOpen = journalOpen
+
   return (
     <>
-      {!readingDialogOpen && (
+      {!exitOpen && !requiredModalOpen && (
         <TutorialViewportAnchor
-          alignTargetStart={presentation.alignTargetStart}
-          anchorSelector={presentation.positionTarget}
-          coachAtTop={compactHeader && coachAtTop}
+          taskKey={state.step}
+          manualReadingTasks={manualReadingTasks}
+          anchorSelector={requestedTarget.anchor}
+          secondarySelector={requestedTarget.secondary}
+          fallbackSelector={nearest?.fallbackSelector ?? phaseTargetConfig[state.step].fallback}
+          onTargetResolved={resolveTarget}
           compactLayout={compactHeader}
-          spotlightSelector={targetConfig.spotlight}
+          journalEntryAllowed={!informationalSteps.has(state.step)}
         />
       )}
-      {!exitOpen && <Joyride
-        key={state.step}
+      {!exitOpen && !requiredModalOpen && !journalGuidanceOpen && <Joyride
+        key={`${state.step}:${targetConfig.anchor}`}
         locale={{
           back: t('tutorial.joyride.back'),
           close: t('tutorial.joyride.close'),
@@ -458,7 +513,7 @@ export function TutorialExperience({
           disableFocusTrap: true,
           dismissKeyAction: false,
           overlayClickAction: false,
-          overlayColor: 'rgba(0, 5, 12, .72)',
+          overlayColor: 'rgba(0, 5, 12, .38)',
           primaryColor: '#38bdf8',
           showProgress: false,
           skipBeacon: true,
@@ -475,8 +530,15 @@ export function TutorialExperience({
             : { stroke: '#38bdf8', strokeWidth: 3 },
         }}
       />}
-      <Typography aria-live="polite" variant="srOnly">{t(currentTaskKey)}</Typography>
+      <Typography aria-live="polite" variant="srOnly">{pilot ? `${t(nearest?.action ?? pilot.action, nearest?.values)} ${t(pilot.why)}` : t(currentTaskKey)}</Typography>
       <TutorialTenderBoard
+        key={state.playerId}
+        journalGuidance={journalGuidanceOpen && !exitOpen && !requiredModalOpen ? (
+          <Card className={`${styles.coachCard} ${styles.journalCoach}`} data-testid="floater"
+            data-tutorial-step={state.step} data-tutorial-pilot={Boolean(pilot) || undefined} size="sm" aria-labelledby="tutorial-coach-title">
+            <CardContent>{step.content}</CardContent>
+          </Card>
+        ) : undefined}
         actionPanelPinned={mobileActionPinnedSteps.has(state.step)}
         commandError={commandError}
         highlight={exitOpen ? 'none' : highlight}
@@ -496,16 +558,18 @@ export function TutorialExperience({
         onDirectInterpretationOpened={() => void applyAction({ type: 'open-interpretation-direct' })}
         onContractsClosed={() => void applyAction({ type: 'close-contracts-review' })}
         onContractsOpened={() => void applyAction({ type: 'open-contracts-review' })}
-        onInterpretationClosed={() => void applyAction({ type: 'close-interpretation' })}
         onInterpretationOpened={() => void applyAction({ type: 'open-interpretation' })}
         onLaboratoryModeSelected={(mode) => void applyAction({ type: 'select-laboratory-mode', mode })}
-        onResearchClosed={() => void applyAction({ type: 'close-research-results' })}
+        onJournalClosed={(workingModel) => void applyAction({ type: 'close-journal', workingModel })}
+        onJournalOpenChange={setJournalOpen}
+        onWorkingModelOpened={() => void applyAction({ type: 'open-working-model' })}
         onResearchOpened={() => void applyAction({ type: 'open-research-results' })}
+        onRequiredModalOpenChange={setRequiredModalOpen}
         onSaveWorkingModel={(workingModel) => applyAction({ type: 'update-working-model', workingModel })}
         view={tutorialView(state)}
       />
       <Dialog open={exitOpen} onOpenChange={setExitOpen}>
-        <DialogContent>
+        <DialogContent className={styles.exitDialog}>
           <DialogHeader>
             <DialogTitle>{t('tutorial.exit.title')}</DialogTitle>
             <DialogDescription>{t('tutorial.exit.description')}</DialogDescription>
@@ -520,182 +584,325 @@ export function TutorialExperience({
   )
 }
 
-function TutorialViewportAnchor({
-  alignTargetStart,
-  anchorSelector,
-  coachAtTop,
-  compactLayout,
-  spotlightSelector,
-}: {
-  alignTargetStart: boolean
+type NearestAction = { selector: string; fallbackSelector?: string; action?: TranslationKey; values?: Record<string, string | number> }
+
+// Read only semantic selection facts. The lesson owns the required values and
+// the form remains the only owner of its reversible selection.
+function useTutorialNearestAction(step: TutorialStep) {
+  const [selection, setSelection] = useState<{ step: TutorialStep; action: NearestAction } | null>(null)
+  useLayoutEffect(() => {
+    const board = document.querySelector('[data-tutorial-board]')
+    if (!board) return
+    const confirm = '[data-tutorial-action-container] button[data-tutorial-confirm-ready="true"]'
+    const resolve = (): NearestAction | null => {
+      if (step === 'round-1-access' || step === 'round-2-access') {
+        const slot = step === 'round-1-access' ? 5 : 4
+        return board.querySelector(`[data-tutorial-access-slot="${slot}"][aria-pressed="true"]`)
+          ? { selector: confirm, action: 'tutorial.pilot.access.confirm' }
+          : { selector: `[data-tutorial-access-slot="${slot}"]` }
+      }
+      if (step === 'round-1-power' || step === 'round-2-power') {
+        const categories = ['reconnaissance', 'laboratory', 'modelAnalysis', 'contracts'] as const
+        for (const [index, category] of categories.entries()) {
+          const card = board.querySelector<HTMLElement>(`[data-tutorial-power-category="${category}"]`)
+          if (card && Number(card.dataset.tutorialPowerValue) !== tutorialPowerGoals[step][index]) {
+            return {
+              selector: `[data-tutorial-power-category="${category}"]`,
+              fallbackSelector: `[data-tutorial-power-category="${category}"] [role="group"]`,
+              action: `tutorial.pilot.power.${category}`,
+              values: { count: tutorialPowerGoals[step][index]! },
+            }
+          }
+        }
+        return { selector: confirm, action: 'tutorial.pilot.power.confirm' }
+      }
+      if (step === 'round-1-recon' || step === 'round-2-recon') {
+        return board.querySelector(confirm)
+          ? { selector: confirm, action: 'tutorial.pilot.recon.confirm' }
+          : { selector: '[data-tutorial-recon-anchor]' }
+      }
+      if (step === 'round-1-lab-mode') return { selector: '[data-tutorial-lab-modes] button:first-child' }
+      if (step === 'round-1-lab-pair') {
+        const source = board.querySelector('[data-tutorial-lab-sample="aster"][data-role="source"]')
+        const receiver = board.querySelector('[data-tutorial-lab-sample="boreal"][data-role="receiver"]')
+        if (!source) return { selector: '[data-tutorial-lab-sample="aster"]', action: 'tutorial.pilot.pair.source' }
+        if (!receiver) return { selector: '[data-tutorial-lab-sample="boreal"]', action: 'tutorial.pilot.pair.receiver' }
+        return { selector: confirm, action: 'tutorial.pilot.pair.confirm' }
+      }
+      if (step === 'round-2-lab') {
+        if (!board.querySelector('[data-tutorial-lab-sample="boreal"][data-role="source"]')) return { selector: '[data-tutorial-lab-sample="boreal"]' }
+        if (!board.querySelector('[data-tutorial-lab-sample="cinder"][data-role="receiver"]')) return { selector: '[data-tutorial-lab-sample="cinder"]' }
+        return { selector: confirm }
+      }
+      if (step === 'round-1-thesis' || step === 'round-2-thesis') {
+        const selector = '[data-tutorial-thesis]'
+        const fields = [...board.querySelectorAll<HTMLSelectElement>(`${selector} select`)]
+        const nextField = fields.findIndex((field) => !field.value)
+        return {
+          selector,
+          fallbackSelector: nextField < 0
+            ? '[data-tutorial-action-container] button'
+            : `${selector} > label:nth-child(${nextField + 1}) select`,
+        }
+      }
+      if (step === 'round-2-contract-reserve') {
+        const selector = '[data-contract-id="tutorial-light-contract"]'
+        const field = board.querySelector<HTMLSelectElement>(`${selector} select`)
+        return { selector, fallbackSelector: `${selector} ${field?.value ? 'button' : 'select'}` }
+      }
+      return null
+    }
+    const sync = () => {
+      const action = resolve()
+      setSelection((current) => action && (current?.step !== step
+        || JSON.stringify(current.action) !== JSON.stringify(action)) ? { step, action } : current)
+    }
+    const observer = new MutationObserver(sync)
+    observer.observe(board, { subtree: true, childList: true, attributes: true,
+      attributeFilter: ['aria-pressed', 'data-tutorial-power-value', 'data-role', 'data-tutorial-confirm-ready'] })
+    board.addEventListener('change', sync)
+    sync()
+    return () => { observer.disconnect(); board.removeEventListener('change', sync) }
+  }, [step])
+  return selection?.step === step ? selection.action : null
+}
+
+function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed }: {
+  taskKey: TutorialStep
+  manualReadingTasks: RefObject<Set<string>>
   anchorSelector: string
-  coachAtTop: boolean
+  secondarySelector?: string
+  fallbackSelector?: string
+  onTargetResolved: (requested: string, selector: string) => void
   compactLayout: boolean
-  spotlightSelector?: string
+  journalEntryAllowed: boolean
 }) {
   useLayoutEffect(() => {
-    let actionObserver: ResizeObserver | undefined
-    let coachObserver: ResizeObserver | undefined
-    let layoutSettleTimer: number | undefined
-    let revealSpotlightTimer: number | undefined
-    let scrollEndHandler: (() => void) | undefined
-    let scrollHandler: (() => void) | undefined
-    let autoScrollPending = false
-    let autoScrollObserved = false
-    let lastRequestScrollY: number | undefined
-    let lastRequestedScrollTop: number | undefined
-    let positionRetryCount = 0
-    const revealSpotlight = () => {
-      delete document.documentElement.dataset.tutorialAutoscrolling
-    }
-    const scheduleSpotlightReveal = (delay = spotlightRevealDelayMs) => {
-      if (revealSpotlightTimer !== undefined) window.clearTimeout(revealSpotlightTimer)
-      revealSpotlightTimer = window.setTimeout(revealSpotlight, delay)
-    }
-    if (compactLayout) {
-      document.documentElement.dataset.tutorialAutoscrolling = ''
-    }
-    const frame = window.requestAnimationFrame(() => {
-      const positionTarget = () => {
-        const anchor = document.querySelector<HTMLElement>(anchorSelector)
-        if (!anchor) {
-          scheduleSpotlightReveal()
-          return
-        }
-        const coach = document.querySelector<HTMLElement>('[data-testid="floater"]')
-        const header = document.querySelector<HTMLElement>('[data-tutorial-board] > header')
-        const actionContainer = document.querySelector<HTMLElement>('[data-tutorial-action-container]')
-        const coachRect = coach?.getBoundingClientRect()
-        const headerRect = header?.getBoundingClientRect()
-        const anchorIsHeader = anchor === header
-        if (compactLayout && actionContainer) {
-          document.documentElement.style.setProperty(
-            '--tutorial-mobile-action-height',
-            `${actionContainer.getBoundingClientRect().height}px`,
-          )
-        }
-        const safeTop = compactLayout
-          ? anchorIsHeader
-            ? 0
-            : coachAtTop
-            ? (coachRect?.bottom ?? 276) + 12
-            : Math.max(12, (headerRect?.bottom ?? 100) + 20)
-          : 88
-        const safeBottom = compactLayout && !coachAtTop
-          ? (coachRect?.top ?? window.innerHeight - 276) - 12
-          : window.innerHeight - 12
-        const safeHeight = safeBottom - safeTop
-        const spotlight = spotlightSelector
-          ? document.querySelector<HTMLElement>(spotlightSelector)
-          : null
-        const preferredTarget = alignTargetStart
-          ? spotlight ?? anchor
-          : spotlight && spotlight.getBoundingClientRect().height <= safeHeight
-            ? spotlight
-            : anchor
-        const rect = preferredTarget.getBoundingClientRect()
-
-        if (compactLayout && coachAtTop && coachRect) {
-          document.documentElement.style.setProperty(
-            '--tutorial-mobile-coach-bottom',
-            `${coachRect.bottom}px`,
-          )
-        }
-        if (!alignTargetStart && rect.height > safeHeight) {
-          scheduleSpotlightReveal()
-          return
-        }
-        const shouldPositionTarget = alignTargetStart
-          ? Math.abs(rect.top - safeTop) > 1
-          : rect.top < safeTop || rect.bottom > safeBottom
-        if (shouldPositionTarget) {
-          const contentScrollLimit = Math.max(
-            0,
-            Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)
-              - window.innerHeight,
-          )
-          const targetScrollTop = Math.max(
-            0,
-            Math.min(window.scrollY + rect.top - safeTop, contentScrollLimit),
-          )
-          const repeatsLastTarget = lastRequestedScrollTop !== undefined
-            && Math.abs(lastRequestedScrollTop - targetScrollTop) < 1
-          const madeProgress = lastRequestScrollY !== undefined
-            && Math.abs(window.scrollY - targetScrollTop) + 1
-              < Math.abs(lastRequestScrollY - targetScrollTop)
-          if (repeatsLastTarget
-            && ((autoScrollObserved && madeProgress)
-              || Math.abs(window.scrollY - targetScrollTop) < 1)) return
-          lastRequestedScrollTop = targetScrollTop
-          lastRequestScrollY = window.scrollY
-          if (compactLayout) {
-            document.documentElement.dataset.tutorialAutoscrolling = ''
-            scheduleSpotlightReveal()
-          }
-          autoScrollPending = true
-          autoScrollObserved = false
-          window.scrollTo({
-            behavior: 'auto',
-            top: targetScrollTop,
-          })
-          if (compactLayout && positionRetryCount < maximumPositionRetries) {
-            if (layoutSettleTimer !== undefined) window.clearTimeout(layoutSettleTimer)
-            layoutSettleTimer = window.setTimeout(() => {
-              positionRetryCount += 1
-              positionTarget()
-            }, positionRetryDelayMs)
-          }
-        } else if ('tutorialAutoscrolling' in document.documentElement.dataset) {
-          positionRetryCount = 0
-          scheduleSpotlightReveal()
-        }
-      }
-
-      scrollEndHandler = () => {
-        if (!autoScrollPending) return
-        autoScrollPending = false
-        positionTarget()
-        scheduleSpotlightReveal()
-      }
-      window.addEventListener('scrollend', scrollEndHandler)
-      scrollHandler = () => {
-        if ('tutorialAutoscrolling' in document.documentElement.dataset) {
-          autoScrollObserved = true
-          scheduleSpotlightReveal()
-        }
-      }
-      window.addEventListener('scroll', scrollHandler, { passive: true })
-      const coach = document.querySelector<HTMLElement>('[data-testid="floater"]')
-      if (coach) {
-        coachObserver = new ResizeObserver(positionTarget)
-        coachObserver.observe(coach)
-      }
-      const actionContainer = document.querySelector<HTMLElement>('[data-tutorial-action-container]')
-      if (actionContainer) {
-        actionObserver = new ResizeObserver(positionTarget)
-        actionObserver.observe(actionContainer)
-      }
-      positionTarget()
-      if (compactLayout) {
-        if (layoutSettleTimer !== undefined) window.clearTimeout(layoutSettleTimer)
-        layoutSettleTimer = window.setTimeout(positionTarget, positionRetryDelayMs)
-      }
+    const root = document.documentElement
+    let frame = 0
+    let settleTimer = 0
+    const readingTask = `${taskKey}:${anchorSelector}`
+    const preserveReading = manualReadingTasks.current.has(readingTask)
+    let userScrolled = false
+    let layoutWritten = false
+    const query = (selector: string) => document.querySelector<HTMLElement>(selector)
+    const viewport = () => ({
+      top: window.visualViewport?.offsetTop ?? 0,
+      bottom: (window.visualViewport?.offsetTop ?? 0) + (window.visualViewport?.height ?? innerHeight),
+      left: window.visualViewport?.offsetLeft ?? 0,
+      right: (window.visualViewport?.offsetLeft ?? 0) + (window.visualViewport?.width ?? innerWidth),
     })
-
-    return () => {
-      window.cancelAnimationFrame(frame)
-      if (layoutSettleTimer !== undefined) window.clearTimeout(layoutSettleTimer)
-      if (revealSpotlightTimer !== undefined) window.clearTimeout(revealSpotlightTimer)
-      if (scrollEndHandler) window.removeEventListener('scrollend', scrollEndHandler)
-      if (scrollHandler) window.removeEventListener('scroll', scrollHandler)
-      actionObserver?.disconnect()
-      coachObserver?.disconnect()
-      revealSpotlight()
-      document.documentElement.style.removeProperty('--tutorial-mobile-coach-bottom')
-      document.documentElement.style.removeProperty('--tutorial-mobile-action-height')
+    const setStyle = (name: string, value: string) => {
+      if (root.style.getPropertyValue(name) !== value) {
+        root.style.setProperty(name, value)
+        layoutWritten = true
+      }
     }
-  }, [alignTargetStart, anchorSelector, coachAtTop, compactLayout, spotlightSelector])
-
+    const blockers = (target: HTMLElement) => {
+      const nodes = [query('[data-tutorial-board] > header'), query('[data-testid="floater"]'), query('[data-tutorial-action-container]')]
+      return nodes.filter((node): node is HTMLElement => !!node && !node.contains(target) && !target.contains(node)
+        && ['fixed', 'sticky'].includes(getComputedStyle(node).position))
+        .map((node) => node.getBoundingClientRect())
+    }
+    // Keep Joyride's primary spotlight. Visible controls in the current form
+    // remain reversible, and the Journal stays an explicit secondary entry.
+    const clipId = 'tutorial-allowed-controls'
+    const updateAllowedInteractions = () => {
+      root.style.removeProperty('--tutorial-interaction-cutout')
+      const svg = document.querySelector<SVGSVGElement>('.react-joyride__overlay svg')
+      const matrix = svg?.getScreenCTM()
+      if (!svg || !matrix) return
+      const inverse = matrix.inverse()
+      const controls: HTMLElement[] = []
+      if (journalEntryAllowed) {
+        const entry = query('[data-testid="tutorial-research-trigger"]')
+        if (entry) controls.push(entry)
+      }
+      if (taskKey === 'round-1-thesis' || taskKey === 'round-2-thesis') {
+        controls.push(...document.querySelectorAll<HTMLElement>('[data-tutorial-board] [data-tutorial-thesis] select, [data-tutorial-board] [data-tutorial-action-container] button'))
+      }
+      if (taskKey === 'round-2-contract-reserve' || taskKey === 'round-2-contract-bid') {
+        controls.push(...document.querySelectorAll<HTMLElement>('[data-tutorial-board] [data-contract-id="tutorial-light-contract"] select, [data-tutorial-board] [data-contract-id="tutorial-light-contract"] button'))
+      }
+      const rectangle = (rect: { left: number; top: number; right: number; bottom: number }) => {
+        const points = [[rect.left, rect.top], [rect.right, rect.top], [rect.right, rect.bottom], [rect.left, rect.bottom]]
+          .map(([x, y]) => new DOMPoint(x, y).matrixTransform(inverse))
+        return `M${points.map((point) => `${point.x} ${point.y}`).join('L')}Z`
+      }
+      const holes: string[] = []
+      for (const control of controls) {
+        if (control.closest('[aria-hidden="true"], [inert]') || control.matches(':disabled')) continue
+        const bounds = control.getBoundingClientRect()
+        const vp = viewport()
+        const visible = { left: Math.max(bounds.left, vp.left), right: Math.min(bounds.right, vp.right),
+          top: Math.max(bounds.top, vp.top), bottom: Math.min(bounds.bottom, vp.bottom) }
+        for (let parent = control.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+          const style = getComputedStyle(parent)
+          const rect = parent.getBoundingClientRect()
+          if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) {
+            visible.left = Math.max(visible.left, rect.left + parent.clientLeft)
+            visible.right = Math.min(visible.right, rect.left + parent.clientLeft + parent.clientWidth)
+          }
+          if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) {
+            visible.top = Math.max(visible.top, rect.top + parent.clientTop)
+            visible.bottom = Math.min(visible.bottom, rect.top + parent.clientTop + parent.clientHeight)
+          }
+        }
+        if (visible.right <= visible.left || visible.bottom <= visible.top) continue
+        const hit = document.elementsFromPoint((visible.left + visible.right) / 2, (visible.top + visible.bottom) / 2)
+          .find((element) => !element.closest('.react-joyride__overlay'))
+        if (hit && control.contains(hit)) holes.push(rectangle(visible))
+      }
+      if (!holes.length) return
+      let definition = svg.querySelector<SVGDefsElement>('[data-tutorial-interaction-clip]')
+      if (!definition) {
+        definition = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
+        definition.setAttribute('data-tutorial-interaction-clip', '')
+        const clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath')
+        clip.id = clipId
+        clip.setAttribute('clipPathUnits', 'userSpaceOnUse')
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        path.setAttribute('clip-rule', 'evenodd')
+        clip.append(path)
+        definition.append(clip)
+        svg.append(definition)
+      }
+      definition.querySelector('path')!.setAttribute('d', rectangle(svg.getBoundingClientRect()) + holes.join(''))
+      root.style.setProperty('--tutorial-interaction-cutout', `url(#${clipId})`)
+    }
+    const position = () => {
+      frame = 0
+      layoutWritten = false
+      let target = query(anchorSelector)
+      const coach = query('[data-testid="floater"]')
+      if (!target || !coach) return
+      const header = query('[data-tutorial-board] > header')
+      const action = query('[data-tutorial-action-container]')
+      const vp = viewport()
+      const coachHeight = coach.getBoundingClientRect().height
+      const headerHeight = header?.getBoundingClientRect().height ?? 0
+      const actionHeight = action?.getBoundingClientRect().height ?? 0
+      const available = tutorialSafeVerticalBounds({ viewport: vp, target: target.getBoundingClientRect(), blockers: blockers(target) })
+      const fallback = fallbackSelector && query(fallbackSelector)
+      const useFallback = !!fallback && target.getBoundingClientRect().height > available.bottom - available.top
+      if (useFallback) target = fallback
+      const targetHeight = target.getBoundingClientRect().height
+      if (compactLayout) {
+        const actionInFlow = !action?.contains(target)
+          && vp.bottom - vp.top - coachHeight - headerHeight - actionHeight - 48 < targetHeight
+        const constrained = vp.bottom - vp.top - coachHeight - headerHeight - 48 < targetHeight
+        if (root.hasAttribute('data-tutorial-pilot-constrained') !== constrained) {
+          root.toggleAttribute('data-tutorial-pilot-constrained', constrained)
+          layoutWritten = true
+        }
+        setStyle('--tutorial-pilot-coach-height', `${coachHeight}px`)
+        setStyle('--tutorial-pilot-header-height', `${headerHeight}px`)
+        setStyle('--tutorial-pilot-action-height', `${actionInFlow ? 0 : actionHeight}px`)
+        setStyle('--tutorial-pilot-action-position', actionInFlow ? 'static' : 'fixed')
+        setStyle('--tutorial-mobile-action-height', `${actionInFlow ? 0 : actionHeight}px`)
+        setStyle('--tutorial-mobile-action-position', actionInFlow ? 'static' : 'fixed')
+        setStyle('--tutorial-mobile-coach-bottom', `${coach.getBoundingClientRect().bottom}px`)
+      }
+      // A coach resize can move the fixed command without resizing it. Read
+      // that new position only after the CSS variable update has committed.
+      if (layoutWritten) {
+        schedule()
+        return
+      }
+      onTargetResolved(anchorSelector, useFallback ? fallbackSelector! : anchorSelector)
+      if (!userScrolled && getComputedStyle(target).position !== 'fixed') {
+        // Scroll the nearest actual scroll area first, then its ancestors. A
+        // modal's independently scrollable panel never scrolls the document.
+        for (const nestedTarget of [target, secondarySelector ? query(secondarySelector) : null]) {
+          if (!nestedTarget) continue
+          let parent = nestedTarget.parentElement
+          while (parent && parent !== document.body) {
+            const style = getComputedStyle(parent)
+            if (/(auto|scroll)/.test(style.overflowX) && parent.scrollWidth > parent.clientWidth + 1) {
+              const bounds = parent.getBoundingClientRect()
+              const rect = nestedTarget.getBoundingClientRect()
+              parent.scrollLeft += tutorialScrollDelta({ top: rect.left, bottom: rect.right }, { top: bounds.left + 4, bottom: bounds.right - 4 })
+            }
+            if (!preserveReading && /(auto|scroll)/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight + 1) {
+              const bounds = parent.getBoundingClientRect()
+              parent.scrollTop += tutorialScrollDelta(nestedTarget.getBoundingClientRect(), { top: bounds.top + 8, bottom: bounds.bottom - 8 })
+            }
+            if (parent.matches('[role="dialog"]')) break
+            parent = parent.parentElement
+          }
+        }
+        if (!target.closest('[role="dialog"]')) {
+          const bounds = tutorialSafeVerticalBounds({ viewport: vp, target: target.getBoundingClientRect(), blockers: blockers(target) })
+          const delta = tutorialScrollDelta(target.getBoundingClientRect(), bounds)
+          if (Math.abs(delta) > 1 && target.getBoundingClientRect().height <= bounds.bottom - bounds.top) {
+            window.scrollBy({ top: delta, behavior: 'instant' })
+          }
+        }
+      }
+      updateAllowedInteractions()
+      delete root.dataset.tutorialAutoscrolling
+    }
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(position) }
+    const layoutChanged = () => { userScrolled = false; schedule() }
+    const cancel = (event: Event) => {
+      if (event instanceof KeyboardEvent && !['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return
+      if (event instanceof PointerEvent && event.target instanceof Element
+        && event.target.closest('button, input, select, textarea, a, summary, [role="tab"]')) return
+      userScrolled = true
+      // Closing and reopening the same lesson must keep its restored reading
+      // position. A new lesson has a different key and may position its task.
+      if (query(anchorSelector)?.closest('[role="dialog"]')) manualReadingTasks.current.add(readingTask)
+      clearTimeout(settleTimer)
+    }
+    // Ignore observer notifications with unchanged sizes; scrolling is never a
+    // reason to bring the player back to the target.
+    const sizes = new WeakMap<Element, string>()
+    const observer = new ResizeObserver((entries) => {
+      let changed = false
+      for (const entry of entries) {
+        const size = `${entry.contentRect.width}:${entry.contentRect.height}`
+        if (sizes.get(entry.target) !== size) { sizes.set(entry.target, size); changed = true }
+      }
+      if (changed && !userScrolled) schedule()
+    })
+    const observe = () => {
+      for (const node of [query(anchorSelector), query('[data-testid="floater"]'), query('[data-tutorial-board] > header'), query('[data-tutorial-action-container]')]) if (node) observer.observe(node)
+      schedule()
+    }
+    const mutations = new MutationObserver((records) => {
+      // Updating our SVG interaction cutout is not a new reading task. In
+      // particular it must never pull a manually revealed control out of view.
+      const changed = records.some((record) => {
+        if (record.target instanceof Element && record.target.closest('[data-tutorial-interaction-clip]')) return false
+        return [...record.addedNodes, ...record.removedNodes].some((node) =>
+          !(node instanceof Element && node.matches('[data-tutorial-interaction-clip]')))
+      })
+      if (changed) observe()
+    })
+    mutations.observe(document.body, { childList: true, subtree: true })
+    for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown']) window.addEventListener(event, cancel, { passive: true })
+    window.addEventListener('resize', layoutChanged)
+    window.visualViewport?.addEventListener('resize', layoutChanged)
+    window.visualViewport?.addEventListener('scroll', schedule)
+    window.addEventListener('scroll', updateAllowedInteractions, { passive: true, capture: true })
+    observe()
+    settleTimer = window.setTimeout(schedule, 160)
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(settleTimer)
+      observer.disconnect()
+      mutations.disconnect()
+      for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown']) window.removeEventListener(event, cancel)
+      window.removeEventListener('resize', layoutChanged)
+      window.visualViewport?.removeEventListener('resize', layoutChanged)
+      window.visualViewport?.removeEventListener('scroll', schedule)
+      window.removeEventListener('scroll', updateAllowedInteractions, true)
+      document.querySelectorAll('[data-tutorial-interaction-clip]').forEach((node) => node.remove())
+      for (const name of ['--tutorial-interaction-cutout', '--tutorial-pilot-coach-height', '--tutorial-pilot-header-height', '--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom']) root.style.removeProperty(name)
+      root.removeAttribute('data-tutorial-pilot-constrained')
+      delete root.dataset.tutorialAutoscrolling
+    }
+  }, [taskKey, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed])
   return null
 }
 
@@ -704,6 +911,7 @@ function CoachContent({
   onExit,
   onContinue,
   task,
+  pilot,
   thesisFeedback,
   progress,
 }: {
@@ -711,32 +919,38 @@ function CoachContent({
   onExit: () => void
   onContinue?: () => void
   task: string
+  pilot?: { action: string; why: string; expanded: boolean; onToggle: () => void }
   thesisFeedback: NonNullable<TutorialAdvanceResult['thesisFeedback']> | null
   progress: string
 }) {
   const { t } = useI18n()
-  const thesisFeedbackKey: TranslationKey | null = !thesisFeedback
-    ? null
-    : !thesisFeedback.fieldTypeCorrect && !thesisFeedback.polarityCorrect
-      ? 'tutorial.coach.thesisBothIncorrect'
-      : thesisFeedback.fieldTypeCorrect
-        ? 'tutorial.coach.thesisPolarityIncorrect'
-        : 'tutorial.coach.thesisFieldIncorrect'
   return (
     <div className={styles.coach}>
       <Typography variant="caption" tone="muted">{progress}</Typography>
-      <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{t('tutorial.coach.task')}</Typography>
-      <Typography variant="bodySm">{task}</Typography>
-      {thesisFeedbackKey && (
+      {pilot ? <>
+        <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{pilot.action}</Typography>
+        <Typography variant="bodySm" tone="muted">{pilot.why}</Typography>
+        <div id="tutorial-coach-explanation" role="region" hidden={!pilot.expanded} aria-label={t('tutorial.pilot.explanation')}>
+          <Typography variant="bodySm">{task}</Typography>
+        </div>
+      </> : <>
+        <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{t('tutorial.coach.task')}</Typography>
+        <Typography variant="bodySm">{task}</Typography>
+      </>}
+      {thesisFeedback && (
         <Typography role="alert" variant="bodySm" className={styles.thesisFeedback}>
-          {t(thesisFeedbackKey)}
+          {t('tutorial.coach.thesisChecked')}
         </Typography>
       )}
       {hint && <Typography variant="bodySm" className={styles.hint}>{hint}</Typography>}
-      <Typography as="strong" variant="bodySmMedium" className={styles.confirmAction}>
+      {!pilot && <Typography as="strong" variant="bodySmMedium" className={styles.confirmAction}>
         {t('tutorial.coach.confirmAction')}
-      </Typography>
+      </Typography>}
       <div className={styles.coachActions}>
+        {pilot && <Button type="button" variant="ghost" size="sm"
+          aria-expanded={pilot.expanded} aria-controls="tutorial-coach-explanation" onClick={pilot.onToggle}>
+          {t('tutorial.pilot.more')}
+        </Button>}
         <Button
           type="button"
           variant="ghost"
@@ -760,6 +974,7 @@ function TutorialTooltip({ index, step, tooltipProps }: TooltipRenderProps) {
       className={styles.coachCard}
       data-joyride-step={index}
       data-tutorial-step={step.data.tutorialStep}
+      data-tutorial-pilot={step.data.pilot || undefined}
       size="sm"
     >
       <CardContent>{step.content}</CardContent>

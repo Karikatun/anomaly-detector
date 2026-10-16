@@ -1,5 +1,5 @@
 import { translate } from '../../platform/i18n'
-import { LockIcon, TestTube01Icon } from '@hugeicons/core-free-icons'
+import { TestTube01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { CSSProperties } from 'react'
 import { useState } from 'react'
@@ -40,7 +40,6 @@ export function LaboratoryPanel({
   journal,
   mySamples,
   playerId,
-  privateMeasurements,
   powerAllocation,
   ruleset,
   initialMode,
@@ -65,8 +64,6 @@ export function LaboratoryPanel({
   const requiresModeChoice = powerAllocation === 2 && policy.versionedLaboratory && mode === null
   const { t } = useI18n()
   const signalName = (signal: SignalId) => t(signalLabelKeys[signal])
-  const ownResearch = (journal ?? []).filter((entry) => entry.playerId === playerId)
-  const latestMeasurement = privateMeasurements.at(-1)
   const pairAlreadyResearched = isValid && isLaboratoryPairResearched({
     journal,
     playerId,
@@ -237,9 +234,6 @@ export function LaboratoryPanel({
               <div className={styles.choiceMatrix} data-tutorial-lab-pair="">
                 {mySamples.map((signal) => {
                   const role = source === signal ? 'source' : receiver === signal ? 'receiver' : undefined
-                  const researchCount = ownResearch.filter((entry) => (
-                    entry.sourceSignal === signal || entry.receiverSignal === signal
-                  )).length
                   const ariaLabel = role === 'source'
                     ? t('tender.lab.sourceAria', { signal: signalName(signal) })
                     : role === 'receiver'
@@ -264,14 +258,6 @@ export function LaboratoryPanel({
                       <span className={styles.sampleChoiceCopy}>
                         <Typography as="strong" variant="bodySmMedium" className={styles.sampleChoiceName}>
                           {signalName(signal)}
-                        </Typography>
-                        <Typography as="span" variant="caption" className={styles.sampleChoiceStatus}>
-                          {researchCount > 0
-                            ? t('tender.lab.sample.researched')
-                            : t('tender.lab.sample.unresearched')}
-                        </Typography>
-                        <Typography as="span" variant="caption" tone="muted">
-                          {t('tender.lab.sample.researchCount', { count: researchCount })}
                         </Typography>
                       </span>
                       {role && (
@@ -328,88 +314,7 @@ export function LaboratoryPanel({
             </span>
           </div>
 
-          <div className={styles.completedResearch}>
-            <div className={styles.completedResearchHeader}>
-              <Typography as="strong" variant="caption">{t('tender.lab.research.title')}</Typography>
-              <Typography as="span" variant="caption">{ownResearch.length}</Typography>
-            </div>
-            {ownResearch.length > 0 ? (
-              <div className={styles.completedResearchList}>
-                {ownResearch.slice().reverse().map((entry) => (
-                  <span key={entry.testId} className={styles.completedResearchEntry}>
-                    <span className={styles.completedResearchRoute}>
-                      <SignalGlyph signal={entry.sourceSignal} className={styles.measurementHistoryGlyph} />
-                      <Typography as="strong" variant="caption">{signalName(entry.sourceSignal)}</Typography>
-                      <Typography as="span" variant="bodySmMedium" className={styles.measurementArrow}>→</Typography>
-                      <SignalGlyph signal={entry.receiverSignal} className={styles.measurementHistoryGlyph} />
-                      <Typography as="strong" variant="caption">{signalName(entry.receiverSignal)}</Typography>
-                    </span>
-                    <Typography as="span" variant="caption" tone="muted">
-                      {t(`tender.result.${entry.publicResult}`)} · {t(`tender.protocol.${entry.protocol}`)}
-                    </Typography>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <Typography variant="caption" tone="muted">{t('tender.lab.research.empty')}</Typography>
-            )}
-          </div>
 
-          <div className={styles.laboratoryActions}>
-            <div className={styles.privateMeasurement}>
-              <span className={styles.privateMeasurementHeader}>
-                <span className={styles.privateMeasurementTitle}>
-                  <HugeiconsIcon icon={LockIcon} strokeWidth={1.7} aria-hidden="true" />
-                  <Typography as="strong" variant="caption">{translate('tender.laboratoryPanel.copy.008')}</Typography>
-                </span>
-                <Typography as="span" variant="caption" tone="muted">{translate('tender.laboratoryPanel.copy.009')}</Typography>
-              </span>
-              {latestMeasurement ? (
-                <>
-                  <span className={styles.privateMeasurementResult}>
-                    <span className={styles.measurementRoute}>
-                      <SignalGlyph signal={latestMeasurement.sourceSignal} className={styles.signalGlyph} />
-                      <Typography as="strong" variant="caption">{signalName(latestMeasurement.sourceSignal)}</Typography>
-                      <Typography as="span" variant="h5" className={styles.measurementArrow}>→</Typography>
-                      <SignalGlyph signal={latestMeasurement.receiverSignal} className={styles.signalGlyph} />
-                      <Typography as="strong" variant="caption">{signalName(latestMeasurement.receiverSignal)}</Typography>
-                    </span>
-                    <Typography variant="bodySmMedium" className={styles.measurementRelation}>
-                      {latestMeasurement.polarityRelation === 'same' ? translate('tender.laboratoryPanel.copy.010') : translate('tender.laboratoryPanel.copy.011')}
-                    </Typography>
-                  </span>
-                  <details className={styles.measurementHistory}>
-                    <summary>
-                      <Typography as="span" variant="caption">{translate('tender.laboratoryPanel.copy.012')}</Typography>
-                      <Typography as="span" variant="caption">{privateMeasurements.length}</Typography>
-                    </summary>
-                    <div>
-                      {privateMeasurements.slice().reverse().map((measurement, index) => (
-                        <span
-                          key={`${measurement.sourceSignal}-${measurement.receiverSignal}-${index}`}
-                          className={styles.measurementHistoryEntry}
-                        >
-                          <span className={styles.measurementRoute}>
-                            <SignalGlyph signal={measurement.sourceSignal} className={styles.measurementHistoryGlyph} />
-                            <Typography as="strong" variant="caption">{signalName(measurement.sourceSignal)}</Typography>
-                            <Typography as="span" variant="bodySmMedium" className={styles.measurementArrow}>→</Typography>
-                            <SignalGlyph signal={measurement.receiverSignal} className={styles.measurementHistoryGlyph} />
-                            <Typography as="strong" variant="caption">{signalName(measurement.receiverSignal)}</Typography>
-                          </span>
-                          <Typography as="span" variant="caption" tone="muted">
-                            {measurement.polarityRelation === 'same' ? translate('tender.laboratoryPanel.copy.013') : translate('tender.laboratoryPanel.copy.014')}
-                          </Typography>
-                        </span>
-                      ))}
-                    </div>
-                  </details>
-                </>
-              ) : (
-                <Typography variant="caption" tone="muted">{translate('tender.laboratoryPanel.copy.015')}</Typography>
-              )}
-            </div>
-
-          </div>
         </section>
       </div>
 

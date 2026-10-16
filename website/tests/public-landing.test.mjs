@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { runInNewContext } from 'node:vm'
 
 const websiteRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const publicWebsiteUrl = 'https://anomaly-detector.ru'
@@ -65,6 +66,10 @@ test('publishes solo bot play and a direct guest tutorial entry in initial HTML'
   expect(html).toContain('Ограниченная Мощность')
   expect(html).toContain('От обучения к первой партии')
   expect(html).toContain('Частые вопросы')
+  for (const section of ['how', 'why', 'faq']) {
+    expect(html).toContain(`href="#${section}"`)
+  }
+  expect(html.match(new RegExp(`href="${publicWebappUrl}/learn"`, 'g'))).toHaveLength(3)
   expect(html.match(/<img /g)).toHaveLength(3)
   expect(html).not.toContain('Утверждённый прототип')
   expect(html).not.toContain('№1')
@@ -93,7 +98,34 @@ test('uses dedicated portrait game renders for mobile screenshots', async () => 
   }
 })
 
-test('renders an equal-choice first-party consent panel only when explicitly enabled', async () => {
+test('explains the first-party path before the proof gallery and links to full images for each layout', async () => {
+  const journeyStart = html.indexOf('id="journey-title"')
+  const proofStart = html.indexOf('class="a-proof"')
+  expect(journeyStart).toBeGreaterThan(0)
+  expect(journeyStart).toBeLessThan(proofStart)
+
+  const figures = [...html.matchAll(/<figure class="screen-frame[^"]*"[^>]*>([\s\S]*?)<\/figure>/g)]
+  expect(figures).toHaveLength(3)
+  for (const figure of figures) {
+    const content = figure[1]
+    const captionStart = content.search(/<figcaption\b/)
+    const pictureStart = content.search(/<picture\b/)
+    expect(captionStart).toBeGreaterThanOrEqual(0)
+    expect(pictureStart).toBeGreaterThan(captionStart)
+
+    const mobileSource = content.match(/<source media="\(max-width: 640px\)" srcset="([^"]+)"/)?.[1]
+    const desktopSource = content.match(/<img src="([^"]+)"/)?.[1]
+    expect(mobileSource).toBeDefined()
+    expect(desktopSource).toBeDefined()
+    for (const [variant, source] of [['mobile', mobileSource], ['desktop', desktopSource]]) {
+      expect(content).toContain(`class="full-screen-link full-screen-link-${variant}" href="${source}"`)
+      const image = await readFile(resolve(buildOutput, source.slice(1)))
+      expect(image.subarray(1, 4).toString()).toBe('PNG')
+    }
+  }
+})
+
+test('keeps the legacy consented configuration inactive without a prompt or linked collector', async () => {
   const analyticsApiUrl = 'https://api.anomaly-detector.ru'
   const build = spawnSync('bun', ['run', 'build'], {
     cwd: websiteRoot,
@@ -103,13 +135,18 @@ test('renders an equal-choice first-party consent panel only when explicitly ena
   expect(build.status, build.stderr).toBe(0)
   const enabledHtml = await readFile(resolve(buildOutput, 'index.html'), 'utf8')
 
-  expect(enabledHtml).toContain('data-analytics-consent')
-  expect(enabledHtml).toContain('Разрешить аналитику')
-  expect(enabledHtml).toContain('Только необходимые')
-  expect(enabledHtml).toContain('от публичного лендинга до обучения')
-  expect(enabledHtml).not.toContain('от landing до обучения')
-  expect(enabledHtml).toContain(`data-api-url="${analyticsApiUrl}"`)
-  expect(enabledHtml).not.toMatch(/google-analytics|googletagmanager|mc\.yandex|metrika|session.?replay/i)
+  expect(enabledHtml).not.toContain('data-analytics-consent')
+  expect(enabledHtml).not.toContain('Разрешить аналитику')
+  expect(enabledHtml).not.toContain('Только необходимые')
+  expect(enabledHtml).not.toContain('data-analytics-counter')
+  expect(enabledHtml).not.toContain(`data-api-url="${analyticsApiUrl}"`)
+  expect(enabledHtml.match(new RegExp(`href="${publicWebappUrl}/learn"`, 'g'))).toHaveLength(3)
+
+  const scriptFiles = (await readdir(resolve(buildOutput, '_astro'))).filter((file) => file.endsWith('.js'))
+  const scripts = await Promise.all(scriptFiles.map((file) => readFile(resolve(buildOutput, '_astro', file), 'utf8')))
+  const output = [enabledHtml, ...scripts].join('\n')
+  expect(output).not.toMatch(/data-analytics-consent|\/api\/analytics\//)
+  expect(output).not.toMatch(/google-analytics|googletagmanager|mc\.yandex|metrika|session.?replay/i)
 })
 
 test('releases the anonymous counter with an explicit Metrika consent panel', async () => {
@@ -133,6 +170,8 @@ test('releases the anonymous counter with an explicit Metrika consent panel', as
   expect(enabledHtml).toContain('localStorage.setItem')
   expect(enabledHtml).toContain('reachGoal')
   expect(enabledHtml).toContain('112719766')
+  expect(enabledHtml.match(/<a[^>]+data-analytics-event="tutorial_cta"/g)).toHaveLength(3)
+
   expect(enabledHtml).not.toContain('data-analytics-consent')
 })
 
@@ -198,4 +237,113 @@ test('indexes only the public root and explicitly allows supported search and AI
   }
   expect(robots).toContain(`Sitemap: ${publicWebsiteUrl}/sitemap.xml`)
   expect(sitemap.match(/<loc>/g)).toHaveLength(1)
+})
+
+
+async function metrikaConsentPage(storage) {
+  const source = await readFile(resolve(websiteRoot, 'src/components/MetrikaConsent.astro'), 'utf8')
+  const script = source.match(/<script>([\s\S]*?)<\/script>/)?.[1]
+  const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(script)
+  const scripts = []
+  const commands = []
+  const handlers = new Map()
+  const goalHandlers = new Map()
+  const status = { textContent: '' }
+  let reloads = 0
+  const buttons = ['allow', 'necessary', 'revoke'].map((action) => ({
+    dataset: { metrikaAction: action },
+    addEventListener: (_event, handler) => handlers.set(action, handler),
+  }))
+  const panels = ['allowed', 'necessary', 'undecided'].map((choice) => ({
+    dataset: { metrikaPanel: choice }, hidden: false,
+  }))
+  const root = {
+    dataset: { counterId: '112719766' },
+    querySelector: () => status,
+    querySelectorAll: (selector) => selector === '[data-metrika-panel]' ? panels : buttons,
+  }
+  const location = { pathname: '/', search: '', hash: '', reload: () => { reloads += 1 } }
+  const browserWindow = { ym: (...args) => commands.push(args) }
+  runInNewContext(javascript, {
+    window: browserWindow,
+    localStorage: storage,
+    location,
+    document: {
+      querySelector: () => root,
+      querySelectorAll: (selector) => [{ addEventListener: (_event, handler) => goalHandlers.set(selector.includes('login_cta') ? 'login_cta' : 'tutorial_cta', handler) }],
+      createElement: () => ({ remove() {} }),
+      head: { appendChild: (script) => scripts.push(script) },
+    },
+  })
+  return { scripts, commands, status, panels, click: (action) => handlers.get(action)(), goal: (goal) => goalHandlers.get(goal)(), reloads: () => reloads }
+}
+
+test('withdrawal invalidates a prior grant before reload when storage quota prevents writes', async () => {
+  const values = new Map([['anomaly-detector:metrika-consent', 'allowed']])
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: () => { throw new DOMException('Synthetic quota exhausted', 'QuotaExceededError') },
+    removeItem: (key) => values.delete(key),
+  }
+  const page = await metrikaConsentPage(storage)
+  expect(page.scripts).toHaveLength(1)
+
+  page.click('revoke')
+
+  expect(storage.getItem('anomaly-detector:metrika-consent')).not.toBe('allowed')
+  expect(page.reloads()).toBe(1)
+  const reloaded = await metrikaConsentPage(storage)
+  expect(reloaded.scripts).toHaveLength(0)
+  expect(reloaded.commands).toHaveLength(0)
+})
+
+
+test('unavailable storage never reports a saved grant or forces a stale-grant reload', async () => {
+  const storage = {
+    getItem: () => 'allowed',
+    setItem: () => { throw new Error('unavailable') },
+    removeItem: () => { throw new Error('unavailable') },
+  }
+  const page = await metrikaConsentPage(storage)
+  page.click('revoke')
+  page.goal('tutorial_cta')
+  page.goal('login_cta')
+  expect(page.reloads()).toBe(0)
+  expect(page.commands.map((call) => call[1])).toEqual(['init', 'destruct'])
+  expect(page.status.textContent).toContain('Не удалось сохранить выбор')
+  page.click('allow')
+  expect(page.reloads()).toBe(0)
+  expect(page.commands.filter((call) => call[1] === 'init')).toHaveLength(1)
+})
+
+test('storage read and grant failures keep the landing usable without loading a counter', async () => {
+  const storage = {
+    getItem: () => { throw new Error('unavailable') },
+    setItem: () => { throw new Error('unavailable') },
+    removeItem: () => { throw new Error('unavailable') },
+  }
+  const page = await metrikaConsentPage(storage)
+  page.click('allow')
+  expect(page.scripts).toHaveLength(0)
+  expect(page.commands).toHaveLength(0)
+  expect(page.status.textContent).toContain('Не удалось сохранить выбор')
+})
+
+test('landing persists normal grant, refusal and withdrawal choices', async () => {
+  const values = new Map()
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+  }
+  const page = await metrikaConsentPage(storage)
+  page.click('necessary')
+  expect(storage.getItem('anomaly-detector:metrika-consent')).toBe('necessary')
+  expect(page.scripts).toHaveLength(0)
+  page.click('allow')
+  expect(storage.getItem('anomaly-detector:metrika-consent')).toBe('allowed')
+  expect(page.scripts).toHaveLength(1)
+  page.click('revoke')
+  expect(storage.getItem('anomaly-detector:metrika-consent')).toBe('necessary')
+  expect(page.reloads()).toBe(1)
 })

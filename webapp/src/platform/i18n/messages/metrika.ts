@@ -5,6 +5,7 @@ export const metrikaMessages = {
   'metrika.consent.allow': 'Разрешить аналитику',
   'metrika.consent.necessary': 'Только необходимые',
   'metrika.consent.revoke': 'Отключить аналитику',
+  'metrika.settings.saveError': 'Не удалось сохранить выбор. Аналитика выключена на этой странице. Повторите попытку.',
   'metrika.settings.title': 'Настройки аналитики',
   'metrika.settings.allowed': 'Яндекс Метрика включена. Здесь можно отозвать разрешение.',
   'metrika.settings.disabled': 'Яндекс Метрика выключена.',
