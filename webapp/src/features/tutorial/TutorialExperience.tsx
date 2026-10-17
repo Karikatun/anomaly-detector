@@ -1,5 +1,5 @@
-import { Joyride, type Step, type TooltipRenderProps } from 'react-joyride'
-import { type ReactNode, type RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { type MouseEvent, type ReactElement, type ReactNode, type RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react'
 
 import type { TranslationKey } from '@/platform/i18n/translations'
 import { ExpeditionBackground } from '@/components/ExpeditionBackground'
@@ -151,6 +151,34 @@ export function TutorialExperience({
   const [requiredModalOpen, setRequiredModalOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(false)
   const prologueRef = useRef<HTMLDivElement>(null)
+  const coachExitRef = useRef<HTMLButtonElement | null>(null)
+  const exitOpener = useRef<{ element: HTMLButtonElement; coach: boolean; readingOffset: number; closing: boolean } | null>(null)
+  const restoreExitFocus = useCallback(() => {
+    const opener = exitOpener.current
+    if (!opener?.closing) return
+    const target = opener.coach ? coachExitRef.current : opener.element
+    if (!target?.isConnected) return
+    if (opener.coach) {
+      const reading = target.closest<HTMLElement>('[data-tutorial-step]')
+      if (reading) reading.scrollTop = opener.readingOffset
+    }
+    target.focus({ preventScroll: true })
+    exitOpener.current = null
+  }, [])
+  const setCoachExitButton = useCallback((button: HTMLButtonElement | null) => {
+    coachExitRef.current = button
+    restoreExitFocus()
+  }, [restoreExitFocus])
+  const requestExit = (event?: MouseEvent<HTMLButtonElement>) => {
+    // Both concrete Exit buttons forward their click; only the coach unmounts.
+    const element = event?.currentTarget
+    exitOpener.current = element ? {
+      element, coach: element === coachExitRef.current,
+      readingOffset: element.closest<HTMLElement>('[data-tutorial-step]')?.scrollTop ?? 0,
+      closing: false,
+    } : null
+    setExitOpen(true)
+  }
   const manualReadingTasks = useRef(new Set<string>())
   useLayoutEffect(() => { manualReadingTasks.current.clear() }, [lesson])
   const nearest = useTutorialNearestAction(state.step)
@@ -197,9 +225,11 @@ export function TutorialExperience({
     // Only callbacks belonging to the active lesson may persist or progress it.
     if (lesson.signal.aborted) return false
     const result = advanceTutorial(state, action)
-    setThesisFeedback(action.type === 'submit-thesis' && result.thesisFeedback && !result.progressed
-      ? result.thesisFeedback
-      : null)
+    if (action.type === 'submit-thesis') {
+      setThesisFeedback(result.thesisFeedback && !result.progressed ? result.thesisFeedback : null)
+    } else if (result.state.step !== state.step) {
+      setThesisFeedback(null)
+    }
     const stateChanged = result.state !== state
     if (stateChanged) {
       if (result.state.step !== state.step) setExplanationStep(null)
@@ -241,6 +271,7 @@ export function TutorialExperience({
   }
 
   const exit = () => {
+    exitOpener.current = null
     lesson.abort()
     clearTutorialSession(sessionStorage, playerId)
     setExitOpen(false)
@@ -441,40 +472,30 @@ export function TutorialExperience({
       : state.step === 'round-1-working-model' || state.step === 'round-2-working-model'
         ? 'working-model' as const
         : 'primary' as const
-  const step: Step = {
-    content: (
-      <CoachContent
-        progress={state.step === 'interaction-guide'
-          ? t('tutorial.coach.beforeStart')
-          : t('tutorial.coach.progress', {
-            current: visibleSteps.indexOf(state.step) + 1,
-            total: visibleSteps.length,
-          })}
-        hint={state.hintLevel > 0 ? t('tutorial.coach.hint') : undefined}
-        onContinue={informationalSteps.has(state.step)
-          ? () => void applyAction({ type: 'continue' })
-          : undefined}
-        onExit={() => setExitOpen(true)}
-        pilot={pilot ? {
-          action: t(nearest?.action ?? pilot.action, nearest?.values),
-          why: t(pilot.why),
-          expanded: explanationStep === state.step,
-          onToggle: () => setExplanationStep(explanationStep === state.step ? null : state.step),
-        } : undefined}
-        task={t(currentTaskKey)}
-        thesisFeedback={thesisFeedback}
-      />
-    ),
-    data: { tutorialStep: state.step, pilot: Boolean(pilot) },
-    hideOverlay: presentation.hideOverlay,
-    floatingOptions: { autoUpdate: { elementResize: false } },
-    placement: 'auto',
-    scrollOffset: 20,
-    scrollTarget: presentation.positionTarget,
-    skipScroll: true,
-    spotlightTarget: presentation.spotlightTarget,
-    target: targetConfig.anchor,
-  }
+  const coachContent = (
+    <CoachContent
+      progress={state.step === 'interaction-guide'
+        ? t('tutorial.coach.beforeStart')
+        : t('tutorial.coach.progress', {
+          current: visibleSteps.indexOf(state.step) + 1,
+          total: visibleSteps.length,
+        })}
+      hint={state.hintLevel > 0 ? t('tutorial.coach.hint') : undefined}
+      onContinue={informationalSteps.has(state.step)
+        ? () => void applyAction({ type: 'continue' })
+        : undefined}
+      onExit={requestExit}
+      exitButtonRef={setCoachExitButton}
+      pilot={pilot ? {
+        action: t(nearest?.action ?? pilot.action, nearest?.values),
+        why: t(pilot.why),
+        expanded: explanationStep === state.step,
+        onToggle: () => setExplanationStep(explanationStep === state.step ? null : state.step),
+      } : undefined}
+      task={t(currentTaskKey)}
+      thesisFeedback={thesisFeedback}
+    />
+  )
 
   const journalGuidanceOpen = journalOpen
 
@@ -490,54 +511,25 @@ export function TutorialExperience({
           onTargetResolved={resolveTarget}
           compactLayout={compactHeader}
           journalEntryAllowed={!informationalSteps.has(state.step)}
+          spotlightSelector={presentation.spotlightTarget}
+          blockTargetInteraction={informationalSteps.has(state.step)}
+          showSpotlightStroke={!readingDialogOpen}
+          children={!journalGuidanceOpen ? (
+            <Card role="alertdialog" aria-modal="true" aria-labelledby="tutorial-coach-title"
+              className={styles.coachCard} data-tutorial-step={state.step}
+              data-tutorial-pilot={Boolean(pilot) || undefined} size="sm">
+              <CardContent>{coachContent}</CardContent>
+            </Card>
+          ) : undefined}
         />
       )}
-      {!exitOpen && !requiredModalOpen && !journalGuidanceOpen && <Joyride
-        key={`${state.step}:${targetConfig.anchor}`}
-        locale={{
-          back: t('tutorial.joyride.back'),
-          close: t('tutorial.joyride.close'),
-          last: t('tutorial.joyride.last'),
-          next: t('tutorial.joyride.next'),
-          nextWithProgress: t('tutorial.joyride.nextWithProgress'),
-          open: t('tutorial.joyride.open'),
-          skip: t('tutorial.joyride.skip'),
-        }}
-        run
-        steps={[step]}
-        tooltipComponent={TutorialTooltip}
-        options={{
-          arrowColor: 'var(--card)',
-          arrowSize: 0,
-          blockTargetInteraction: informationalSteps.has(state.step),
-          buttons: [],
-          disableFocusTrap: true,
-          dismissKeyAction: false,
-          overlayClickAction: false,
-          overlayColor: 'rgba(0, 5, 12, .38)',
-          primaryColor: '#38bdf8',
-          showProgress: false,
-          skipBeacon: true,
-          spotlightPadding: 8,
-          spotlightRadius: 10,
-          targetWaitTimeout: 3000,
-          textColor: '#e8f4ff',
-          backgroundColor: 'var(--card)',
-          zIndex: 100,
-        }}
-        styles={{
-          spotlight: readingDialogOpen
-            ? {}
-            : { stroke: '#38bdf8', strokeWidth: 3 },
-        }}
-      />}
       <Typography aria-live="polite" variant="srOnly">{pilot ? `${t(nearest?.action ?? pilot.action, nearest?.values)} ${t(pilot.why)}` : t(currentTaskKey)}</Typography>
       <TutorialTenderBoard
         key={state.playerId}
         journalGuidance={journalGuidanceOpen && !exitOpen && !requiredModalOpen ? (
           <Card className={`${styles.coachCard} ${styles.journalCoach}`} data-testid="floater"
             data-tutorial-step={state.step} data-tutorial-pilot={Boolean(pilot) || undefined} size="sm" aria-labelledby="tutorial-coach-title">
-            <CardContent>{step.content}</CardContent>
+            <CardContent>{coachContent}</CardContent>
           </Card>
         ) : undefined}
         actionPanelPinned={mobileActionPinnedSteps.has(state.step)}
@@ -554,7 +546,7 @@ export function TutorialExperience({
         onCommand={async (command: TenderCommandInput) => {
           await applyAction(command)
         }}
-        onExitRequest={() => setExitOpen(true)}
+        onExitRequest={requestExit}
         onHelpMenuOpened={() => void applyAction({ type: 'open-help-menu' })}
         onDirectInterpretationOpened={() => void applyAction({ type: 'open-interpretation-direct' })}
         onContractsClosed={() => void applyAction({ type: 'close-contracts-review' })}
@@ -570,7 +562,12 @@ export function TutorialExperience({
         view={tutorialView(state)}
       />
       <Dialog open={exitOpen} onOpenChange={setExitOpen}>
-        <DialogContent className={styles.exitDialog}>
+        <DialogContent className={styles.exitDialog} onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          if (exitOpener.current) exitOpener.current.closing = true
+          // Closing and the asynchronous coach remount can finish in either order.
+          restoreExitFocus()
+        }}>
           <DialogHeader>
             <DialogTitle>{t('tutorial.exit.title')}</DialogTitle>
             <DialogDescription>{t('tutorial.exit.description')}</DialogDescription>
@@ -668,7 +665,7 @@ function useTutorialNearestAction(step: TutorialStep) {
   return selection?.step === step ? selection.action : null
 }
 
-function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed }: {
+function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, blockTargetInteraction, showSpotlightStroke, children }: {
   taskKey: TutorialStep
   manualReadingTasks: RefObject<Set<string>>
   anchorSelector: string
@@ -677,13 +674,26 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
   onTargetResolved: (requested: string, selector: string) => void
   compactLayout: boolean
   journalEntryAllowed: boolean
+  spotlightSelector: string
+  blockTargetInteraction: boolean
+  showSpotlightStroke: boolean
+  children?: ReactElement
 }) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const identity = `${taskKey}:${anchorSelector}:${fallbackSelector}:${spotlightSelector}:${Boolean(children)}`
+  const [mask, setMask] = useState<{ identity: string; width: number; height: number; frame: string; spotlight: string; secondary: string } | null>(null)
+  const visibleMask = mask?.identity === identity ? mask : null
   useLayoutEffect(() => {
     const root = document.documentElement
     let frame = 0
     let settleTimer = 0
-    const readingTask = `${taskKey}:${anchorSelector}`
-    const preserveReading = manualReadingTasks.current.has(readingTask)
+    const readingTask = `${taskKey}:${fallbackSelector ?? anchorSelector}`
+    // A different selected control is a new action, even when an older control
+    // is revisited. Geometry resolving the same fallback is still one task.
+    for (const previous of manualReadingTasks.current) {
+      if (previous.startsWith(`${taskKey}:`) && previous !== readingTask) manualReadingTasks.current.delete(previous)
+    }
+    let preserveReading = manualReadingTasks.current.has(readingTask)
     let userScrolled = false
     let layoutWritten = false
     const query = (selector: string) => document.querySelector<HTMLElement>(selector)
@@ -705,12 +715,10 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
         && ['fixed', 'sticky'].includes(getComputedStyle(node).position))
         .map((node) => node.getBoundingClientRect())
     }
-    // Keep Joyride's primary spotlight. Visible controls in the current form
-    // remain reversible, and the Journal stays an explicit secondary entry.
-    const clipId = 'tutorial-allowed-controls'
+    // One owner measures the primary spotlight and reversible secondary controls.
+    // The SVG uses document coordinates so native scrolling cannot outrun its holes.
     const updateAllowedInteractions = () => {
-      root.style.removeProperty('--tutorial-interaction-cutout')
-      const svg = document.querySelector<SVGSVGElement>('.react-joyride__overlay svg')
+      const svg = svgRef.current
       const matrix = svg?.getScreenCTM()
       if (!svg || !matrix) return
       const inverse = matrix.inverse()
@@ -734,9 +742,9 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       for (const control of controls) {
         if (control.closest('[aria-hidden="true"], [inert]') || control.matches(':disabled')) continue
         const bounds = control.getBoundingClientRect()
-        const vp = viewport()
-        const visible = { left: Math.max(bounds.left, vp.left), right: Math.min(bounds.right, vp.right),
-          top: Math.max(bounds.top, vp.top), bottom: Math.min(bounds.bottom, vp.bottom) }
+        // Keep the full document-space hole when a native click scrolls a
+        // secondary control into view before the scroll listener refreshes it.
+        const visible = { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }
         for (let parent = control.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
           const style = getComputedStyle(parent)
           const rect = parent.getBoundingClientRect()
@@ -750,27 +758,34 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
           }
         }
         if (visible.right <= visible.left || visible.bottom <= visible.top) continue
-        const hit = document.elementsFromPoint((visible.left + visible.right) / 2, (visible.top + visible.bottom) / 2)
-          .find((element) => !element.closest('.react-joyride__overlay'))
-        if (hit && control.contains(hit)) holes.push(rectangle(visible))
+        const vp = viewport()
+        const onScreen = { left: Math.max(visible.left, vp.left), right: Math.min(visible.right, vp.right),
+          top: Math.max(visible.top, vp.top), bottom: Math.min(visible.bottom, vp.bottom) }
+        if (onScreen.right > onScreen.left && onScreen.bottom > onScreen.top) {
+          const hit = document.elementsFromPoint((onScreen.left + onScreen.right) / 2, (onScreen.top + onScreen.bottom) / 2)
+            .find((element) => !element.closest('[data-tutorial-overlay]'))
+          if (!hit || !control.contains(hit)) continue
+        }
+        holes.push(rectangle(visible))
       }
-      if (!holes.length) return
-      let definition = svg.querySelector<SVGDefsElement>('[data-tutorial-interaction-clip]')
-      if (!definition) {
-        definition = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
-        definition.setAttribute('data-tutorial-interaction-clip', '')
-        const clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath')
-        clip.id = clipId
-        clip.setAttribute('clipPathUnits', 'userSpaceOnUse')
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-        path.setAttribute('clip-rule', 'evenodd')
-        clip.append(path)
-        definition.append(clip)
-        svg.append(definition)
-      }
-      definition.querySelector('path')!.setAttribute('d', rectangle(svg.getBoundingClientRect()) + holes.join(''))
-      root.style.setProperty('--tutorial-interaction-cutout', `url(#${clipId})`)
+      const primary = query(spotlightSelector)
+      const bounds = primary?.getBoundingClientRect()
+      if (!bounds || bounds.width <= 0 || bounds.height <= 0 || primary?.closest('[aria-hidden="true"], [inert]')) return
+      const topLeft = new DOMPoint(bounds.left - 8, bounds.top - 8).matrixTransform(inverse)
+      const bottomRight = new DOMPoint(bounds.right + 8, bounds.bottom + 8).matrixTransform(inverse)
+      const left = topLeft.x, top = topLeft.y, right = bottomRight.x, bottom = bottomRight.y
+      const radius = Math.min(10, (right - left) / 2, (bottom - top) / 2)
+      const spotlight = `M${left + radius} ${top}H${right - radius}Q${right} ${top} ${right} ${top + radius}V${bottom - radius}Q${right} ${bottom} ${right - radius} ${bottom}H${left + radius}Q${left} ${bottom} ${left} ${bottom - radius}V${top + radius}Q${left} ${top} ${left + radius} ${top}Z`
+      // Measure the board rather than the previous mask, which must never
+      // keep an obsolete document height alive after a shorter step.
+      const boardBounds = query('[data-tutorial-board]')?.getBoundingClientRect()
+      const width = Math.max(root.clientWidth, (boardBounds?.right ?? 0) + window.scrollX)
+      const height = Math.max(root.clientHeight, (boardBounds?.bottom ?? 0) + window.scrollY)
+      const frame = `M0 0H${width}V${height}H0Z`
+      const next = { identity, width, height, frame, spotlight, secondary: frame + holes.join('') }
+      setMask((current) => current && JSON.stringify(current) === JSON.stringify(next) ? current : next)
     }
+
     const position = () => {
       frame = 0
       layoutWritten = false
@@ -785,7 +800,13 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       const actionHeight = action?.getBoundingClientRect().height ?? 0
       const available = tutorialSafeVerticalBounds({ viewport: vp, target: target.getBoundingClientRect(), blockers: blockers(target) })
       const fallback = fallbackSelector && query(fallbackSelector)
-      const useFallback = !!fallback && target.getBoundingClientRect().height > available.bottom - available.top
+      // Our own fixed/static layout changes can temporarily move blockers out
+      // of view. Keep the compact reading budget independent of that movement,
+      // so a later positioning pass cannot replace a pressed control with its form.
+      const availableHeight = compactLayout && !target.closest('[role="dialog"]')
+        ? vp.bottom - vp.top - coachHeight - headerHeight - actionHeight - 48
+        : available.bottom - available.top
+      const useFallback = !!fallback && target.getBoundingClientRect().height > availableHeight
       if (useFallback) target = fallback
       const targetHeight = target.getBoundingClientRect().height
       if (compactLayout) {
@@ -832,7 +853,7 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
             parent = parent.parentElement
           }
         }
-        if (!target.closest('[role="dialog"]')) {
+        if (!preserveReading && !target.closest('[role="dialog"]')) {
           const bounds = tutorialSafeVerticalBounds({ viewport: vp, target: target.getBoundingClientRect(), blockers: blockers(target) })
           const delta = tutorialScrollDelta(target.getBoundingClientRect(), bounds)
           if (Math.abs(delta) > 1 && target.getBoundingClientRect().height <= bounds.bottom - bounds.top) {
@@ -844,15 +865,22 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       delete root.dataset.tutorialAutoscrolling
     }
     const schedule = () => { if (!frame) frame = requestAnimationFrame(position) }
-    const layoutChanged = () => { userScrolled = false; schedule() }
+    const layoutChanged = () => {
+      userScrolled = false
+      preserveReading = false
+      manualReadingTasks.current.delete(readingTask)
+      schedule()
+    }
     const cancel = (event: Event) => {
       if (event instanceof KeyboardEvent && !['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return
       if (event instanceof PointerEvent && event.target instanceof Element
         && event.target.closest('button, input, select, textarea, a, summary, [role="tab"]')) return
       userScrolled = true
-      // Closing and reopening the same lesson must keep its restored reading
-      // position. A new lesson has a different key and may position its task.
-      if (query(anchorSelector)?.closest('[role="dialog"]')) manualReadingTasks.current.add(readingTask)
+      // Real reading gestures survive a same-task modal pause, including a
+      // coach remount. The next selected control or lesson gets its own key.
+      if (!(event instanceof PointerEvent) || query(anchorSelector)?.closest('[role="dialog"]')) {
+        manualReadingTasks.current.add(readingTask)
+      }
       clearTimeout(settleTimer)
     }
     // Ignore observer notifications with unchanged sizes; scrolling is never a
@@ -874,9 +902,9 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       // Updating our SVG interaction cutout is not a new reading task. In
       // particular it must never pull a manually revealed control out of view.
       const changed = records.some((record) => {
-        if (record.target instanceof Element && record.target.closest('[data-tutorial-interaction-clip]')) return false
+        if (record.target instanceof Element && record.target.closest('[data-tutorial-overlay]')) return false
         return [...record.addedNodes, ...record.removedNodes].some((node) =>
-          !(node instanceof Element && node.matches('[data-tutorial-interaction-clip]')))
+          !(node instanceof Element && node.matches('[data-tutorial-overlay]')))
       })
       if (changed) observe()
     })
@@ -898,18 +926,37 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       window.visualViewport?.removeEventListener('resize', layoutChanged)
       window.visualViewport?.removeEventListener('scroll', schedule)
       window.removeEventListener('scroll', updateAllowedInteractions, true)
-      document.querySelectorAll('[data-tutorial-interaction-clip]').forEach((node) => node.remove())
-      for (const name of ['--tutorial-interaction-cutout', '--tutorial-pilot-coach-height', '--tutorial-pilot-header-height', '--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom']) root.style.removeProperty(name)
+      for (const name of ['--tutorial-pilot-coach-height', '--tutorial-pilot-header-height', '--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom']) root.style.removeProperty(name)
       root.removeAttribute('data-tutorial-pilot-constrained')
       delete root.dataset.tutorialAutoscrolling
     }
-  }, [taskKey, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed])
-  return null
+  }, [taskKey, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, identity])
+  return children ? createPortal(<>
+    <div data-testid="overlay" data-tutorial-overlay="" className={styles.coachOverlay}
+      style={{ height: visibleMask?.height ?? 0, visibility: visibleMask ? 'visible' : 'hidden' }} aria-hidden="true">
+      <svg ref={svgRef} width={visibleMask?.width ?? window.innerWidth} height={visibleMask?.height ?? window.innerHeight}>
+        <defs>
+          <clipPath id="tutorial-allowed-controls" clipPathUnits="userSpaceOnUse">
+            <path d={visibleMask?.secondary ?? ''} clipRule="evenodd" />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#tutorial-allowed-controls)">
+          <path d={(visibleMask?.frame ?? '') + (visibleMask?.spotlight ?? '')} fill="rgba(0, 5, 12, .38)" fillRule="evenodd" pointerEvents="none" />
+          <path d={(visibleMask?.frame ?? '') + (blockTargetInteraction ? '' : visibleMask?.spotlight ?? '')} fill="transparent" fillRule="evenodd" pointerEvents="fill" />
+        </g>
+        <g data-tutorial-spotlight="" pointerEvents="none">
+          <path d={visibleMask?.spotlight ?? ''} fill="none" stroke={showSpotlightStroke ? '#38bdf8' : 'none'} strokeWidth={3} />
+        </g>
+      </svg>
+    </div>
+    <div data-testid="floater" style={{ opacity: visibleMask ? 1 : 0, pointerEvents: visibleMask ? 'auto' : 'none' }}>{children}</div>
+  </>, document.body) : null
 }
 
 function CoachContent({
   hint,
   onExit,
+  exitButtonRef,
   onContinue,
   task,
   pilot,
@@ -917,7 +964,8 @@ function CoachContent({
   progress,
 }: {
   hint?: string
-  onExit: () => void
+  onExit: (event: MouseEvent<HTMLButtonElement>) => void
+  exitButtonRef: (button: HTMLButtonElement | null) => void
   onContinue?: () => void
   task: string
   pilot?: { action: string; why: string; expanded: boolean; onToggle: () => void }
@@ -957,6 +1005,7 @@ function CoachContent({
           variant="ghost"
           size="sm"
           aria-label={t('tutorial.exit')}
+          ref={exitButtonRef}
           onClick={onExit}
         >
           {t('tutorial.exit.short')}
@@ -967,18 +1016,3 @@ function CoachContent({
   )
 }
 
-function TutorialTooltip({ index, step, tooltipProps }: TooltipRenderProps) {
-  return (
-    <Card
-      {...tooltipProps}
-      aria-labelledby="tutorial-coach-title"
-      className={styles.coachCard}
-      data-joyride-step={index}
-      data-tutorial-step={step.data.tutorialStep}
-      data-tutorial-pilot={step.data.pilot || undefined}
-      size="sm"
-    >
-      <CardContent>{step.content}</CardContent>
-    </Card>
-  )
-}

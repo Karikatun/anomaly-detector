@@ -93,7 +93,7 @@ async function expectNoAxeViolations(page: Page) {
   const previousStyles = await auditOnlyLayers.evaluateAll((elements) => elements.map((element) => (
     element.getAttribute('style')
   )))
-  // Agentation is an audit tool, not product UI. Keep the actual Joyride overlay in the scan after
+  // Agentation is an audit tool, not product UI. Keep the actual tutorial overlay in the scan after
   // proving that the coach is above it in the browser stacking order.
   await auditOnlyLayers.evaluateAll((elements) => {
     for (const element of elements) {
@@ -261,26 +261,109 @@ async function readTutorialMeasurement(page: Page, panel: Locator, target: Locat
   expect(await panel.evaluate((element) => element.scrollTop), 'Reading must not rebound after the last native wheel').toBe(position)
 }
 
+function tutorialControlGeometry(element: Element) {
+  const rect = element.getBoundingClientRect()
+  const viewport = window.visualViewport
+  const viewportTop = viewport?.offsetTop ?? 0
+  const viewportLeft = viewport?.offsetLeft ?? 0
+  const viewportBottom = viewportTop + (viewport?.height ?? innerHeight)
+  const viewportRight = viewportLeft + (viewport?.width ?? innerWidth)
+  const blockers = [...document.querySelectorAll<HTMLElement>('[data-tutorial-board] > header, [data-testid="floater"], [data-tutorial-action-container]')]
+    .filter((node) => !node.contains(element) && !element.contains(node)
+      && ['fixed', 'sticky'].includes(getComputedStyle(node).position))
+    .map((node) => node.getBoundingClientRect())
+    .filter((box) => box.right > rect.left && box.left < rect.right
+      && box.bottom > viewportTop && box.top < viewportBottom)
+  let top = viewportTop, bottom = viewportBottom
+  for (const box of blockers) {
+    if (box.top <= viewportTop) top = Math.max(top, box.bottom)
+    else bottom = Math.min(bottom, box.top)
+  }
+  let unclipped = element.isConnected && rect.width > 0 && rect.height > 0
+    && rect.top >= viewportTop && rect.bottom <= viewportBottom
+    && rect.left >= viewportLeft && rect.right <= viewportRight
+  let opacity = 1
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const style = getComputedStyle(node)
+    opacity *= Number(style.opacity)
+    if (style.visibility !== 'visible' || style.display === 'none' || Number(style.opacity) === 0) unclipped = false
+    // The root clips in visual-viewport coordinates, already checked above;
+    // its document-space rectangle moves with scrollY.
+    if (node === element || node === document.documentElement) continue
+    const box = node.getBoundingClientRect()
+    if (/(auto|scroll|hidden|clip)/.test(style.overflowY)
+      && (rect.top < box.top + node.clientTop || rect.bottom > box.top + node.clientTop + node.clientHeight)) unclipped = false
+    if (/(auto|scroll|hidden|clip)/.test(style.overflowX)
+      && (rect.left < box.left + node.clientLeft || rect.right > box.left + node.clientLeft + node.clientWidth)) unclipped = false
+  }
+  const available = unclipped && !blockers.some((box) => box.bottom > rect.top && box.top < rect.bottom)
+    && [[.1, .1], [.9, .1], [.5, .5], [.1, .9], [.9, .9]].every(([x, y]) => {
+      const hit = document.elementFromPoint(rect.left + rect.width * x!, rect.top + rect.height * y!)
+      return hit !== null && element.contains(hit)
+    })
+  return { top, bottom, targetTop: rect.top, targetBottom: rect.bottom,
+    x: rect.left + rect.width / 2, delta: (rect.top + rect.bottom - top - bottom) / 2,
+    position: scrollY, unclipped, opacity, available }
+}
+
 async function revealTutorialControl(page: Page, target: Locator) {
   // Firefox's native wheel consumes line-sized increments even for a large
   // requested delta. Stop on actual geometry, not a fixed gesture count.
   for (let attempt = 0; attempt < 60; attempt++) {
-    const geometry = await target.evaluate((element) => {
-      const rect = element.getBoundingClientRect()
-      const header = document.querySelector<HTMLElement>('[data-tutorial-board] > header')
-      const headerRect = header?.getBoundingClientRect()
-      const coach = document.querySelector('[data-testid="floater"]')?.getBoundingClientRect()
-      const top = header && ['sticky', 'fixed'].includes(getComputedStyle(header).position) && headerRect!.bottom > 0
-        ? headerRect!.bottom + 12 : 12
-      const bottom = coach && coach.top > top ? coach.top - 12 : innerHeight - 12
-      return { top, bottom, targetTop: rect.top, targetBottom: rect.bottom,
-        x: rect.left + rect.width / 2, delta: (rect.top + rect.bottom - top - bottom) / 2 }
-    })
-    if (geometry.targetTop >= geometry.top && geometry.targetBottom <= geometry.bottom) break
+    const geometry = await target.evaluate(tutorialControlGeometry)
+    if (geometry.available) break
     await page.mouse.move(geometry.x, (geometry.top + geometry.bottom) / 2)
     const before = await page.evaluate(() => scrollY)
     await page.mouse.wheel(0, geometry.delta)
-    await expect.poll(() => page.evaluate(() => scrollY)).not.toBe(before)
+    try {
+      await expect.poll(async () => {
+        const current = await target.evaluate(tutorialControlGeometry)
+        return current.position !== before || current.available
+      }).toBe(true)
+    } catch (error) {
+      // Keep the original native-scroll failure. Read only after its deadline;
+      // this snapshot cannot establish what happened at wheel-event time.
+      try {
+        const snapshot = await target.evaluate((element, previous) => {
+          const bounds = (node: Element | null) => node?.getBoundingClientRect().toJSON() ?? null
+          const describe = (node: Element | null) => node ? {
+            tag: node.tagName, label: node.getAttribute('aria-label')?.slice(0, 100),
+            selectedIndex: node instanceof HTMLSelectElement ? node.selectedIndex : undefined,
+            focused: node === document.activeElement, focusVisible: node.matches(':focus-visible'),
+          } : null
+          const path = document.querySelector<SVGGraphicsElement>('[data-tutorial-spotlight] > path')
+          const clip = document.querySelector('#tutorial-allowed-controls path')
+          const overlay = document.querySelector('[data-tutorial-overlay]')
+          const cutout = clip?.getAttribute('d') ?? ''
+          const box = path?.getBBox()
+          const matrix = path?.getScreenCTM()
+          return {
+            timing: 'After original native-scroll assertion failed; not event-time evidence', previous,
+            scrollY, maximum: document.documentElement.scrollHeight - innerHeight,
+            documentHeight: document.documentElement.scrollHeight, bodyHeight: document.body.scrollHeight,
+            innerHeight, target: describe(element), targetBounds: bounds(element),
+            active: describe(document.activeElement),
+            wheelPointHit: describe(document.elementFromPoint(previous.x, previous.y)),
+            header: bounds(document.querySelector('[data-tutorial-board] > header')),
+            coach: bounds(document.querySelector('[data-testid="floater"]')),
+            overlay: overlay && { bounds: bounds(overlay), pointerEvents: getComputedStyle(overlay).pointerEvents,
+              visibility: getComputedStyle(overlay).visibility },
+            primary: path && {
+              bounds: box && { x: box.x, y: box.y, width: box.width, height: box.height },
+              matrix: matrix && { a: matrix.a, b: matrix.b, c: matrix.c, d: matrix.d, e: matrix.e, f: matrix.f },
+              path: path.getAttribute('d')?.slice(0, 2048),
+            },
+            secondary: { path: cutout.slice(0, 2048), truncated: cutout.length > 2048 },
+          }
+        }, { before, x: geometry.x, y: (geometry.top + geometry.bottom) / 2, geometry })
+        await test.info().attach('native-wheel-post-failure', {
+          body: JSON.stringify(snapshot), contentType: 'application/json',
+        })
+      } catch (captureError) {
+        console.warn('Native-scroll post-failure snapshot unavailable:', captureError instanceof Error ? captureError.message : 'unknown capture error')
+      }
+      throw error
+    }
     let previous: number | undefined
     await expect.poll(async () => {
       const position = await page.evaluate(() => scrollY)
@@ -373,7 +456,7 @@ async function expectTutorialActionAvailable(page: Page, target: Locator) {
       const box = element.getBoundingClientRect()
       const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
       return { name: element.getAttribute('aria-label') ?? element.textContent, bounds: bounds(element), parents,
-        hit: hit && { tag: hit.tagName, overlay: Boolean(hit.closest('.react-joyride__overlay')), label: hit.getAttribute('aria-label') } }
+        hit: hit && { tag: hit.tagName, overlay: Boolean(hit.closest('[data-tutorial-overlay]')), label: hit.getAttribute('aria-label') } }
     }) }))
     throw error
   })
@@ -406,8 +489,9 @@ async function expectWorkingModelLabelsReadable(row: Locator) {
 }
 
 async function expectTutorialSpotlightOnTarget(page: Page, target: Locator) {
+  await expect(page.locator('[data-tutorial-spotlight] > path')).toBeAttached()
   await expect.poll(async () => {
-    const spotlight = await page.locator('.react-joyride__spotlight > path').last().evaluate((element) => {
+    const spotlight = await page.locator('[data-tutorial-spotlight] > path').last().evaluate((element) => {
       const path = element as SVGGraphicsElement
       const box = path.getBBox(), matrix = path.getScreenCTM()!
       const topLeft = new DOMPoint(box.x, box.y).matrixTransform(matrix)
@@ -718,7 +802,7 @@ async function openFirstModel(page: Page) {
   return journal
 }
 
-async function submitTutorialThesis(page: Page, signal: string, fieldType: string, polarity: string) {
+async function submitTutorialThesis(page: Page, signal: string, fieldType: string, polarity: string, pressDuration = 0) {
   for (const [name, value] of [
     ['Сигнал для тезиса', signal],
     ['Тип поля для тезиса', fieldType],
@@ -730,10 +814,10 @@ async function submitTutorialThesis(page: Page, signal: string, fieldType: strin
   }
   const submit = page.getByRole('button', { name: 'Выдвинуть тезис', exact: true })
   await expectTutorialActionAvailable(page, submit)
-  await submit.click()
+  await submit.click({ delay: pressDuration })
 }
 
-async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?: string) => Promise<void> = async () => undefined) {
+async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?: string) => Promise<void> = async () => undefined, heldThesis?: 'aster' | 'boreal') {
   await startTutorial(page, guest)
   await checkpoint()
   await page.getByRole('button', { name: /^Слот доступа 5:/ }).click()
@@ -786,10 +870,10 @@ async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?:
   await expect(journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true })).toHaveAttribute('aria-pressed', 'true')
   // Close while the debounce can still be pending: this is a local draft, never a Thesis.
   await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
-  await checkpoint()
+  await checkpoint('round-1-thesis')
   await expect(journal).toBeHidden()
-  await submitTutorialThesis(page, 'aster', 'inertial', 'positive')
-  await checkpoint()
+  await submitTutorialThesis(page, 'aster', 'inertial', 'positive', heldThesis === 'aster' ? 250 : 0)
+  await checkpoint('round-2-access')
   await expect(journal).toBeHidden()
   await page.getByRole('button', { name: /^Слот доступа 4:/ }).click()
   await checkpoint()
@@ -835,7 +919,7 @@ async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?:
   await checkpoint()
   await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
   await checkpoint()
-  await submitTutorialThesis(page, 'boreal', 'electromagnetic', 'positive')
+  await submitTutorialThesis(page, 'boreal', 'electromagnetic', 'positive', heldThesis === 'boreal' ? 250 : 0)
   await checkpoint('round-2-contract-reserve')
   await page.locator('[data-contract-id="tutorial-light-contract"]').getByLabel('Подходящее исследование для контракта Boreal · источник').selectOption('tutorial-test-2')
   await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Зарезервировать контракт: Boreal · источник', exact: true }))
@@ -846,6 +930,23 @@ async function playTwoRounds(page: Page, guest: boolean, checkpoint: (expected?:
   await page.getByRole('button', { name: 'Отправить финальную модель', exact: true }).click()
   await checkpoint()
 }
+for (const [round, signal] of [[1, 'aster'], [2, 'boreal']] as const) {
+  test(`tutorial accepts a held Thesis press through automatic positioning in round ${round}`, async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.setViewportSize({ width: 390, height: 520 })
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    const { errors, windowErrors } = await captureRuntimeErrors(page)
+    await playTwoRounds(page, true, async (expected) => {
+      if (expected === 'round-2-access' || expected === 'round-2-contract-reserve') {
+        await expect(page.locator(`[data-tutorial-step="${expected}"]`)).toBeVisible()
+      }
+    }, signal)
+    await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+    expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+    expect(windowErrors).toEqual([])
+  })
+}
+
 for (const viewport of [
   { width: 390, height: 844, textScale: '100%' },
   { width: 390, height: 844, textScale: '200%' },
@@ -904,8 +1005,13 @@ for (const viewport of [
       const step = expected === 'round-2-contracts-review-open' ? expected : await coach.getAttribute('data-tutorial-step')
       if (!step || seen.has(step) || !targets[step]) return
       await expectTutorialActionAvailable(page, page.locator(targets[step]!))
-      if (expected !== 'round-2-contracts-review-open' && await page.locator('.react-joyride__spotlight path').count()) {
-        await expectTutorialSpotlightOnTarget(page, page.locator(targets[step]!))
+      if (expected !== 'round-2-contracts-review-open') {
+        if (['research-results-open', 'interpretation-open', 'round-1-working-model', 'round-2-research-open', 'round-2-working-model'].includes(step)) {
+          await expect(page.getByRole('dialog', { name: 'Журнал исследований', exact: true })).toBeVisible()
+          await expect(page.locator('[data-tutorial-overlay]')).toHaveCount(0)
+        } else {
+          await expectTutorialSpotlightOnTarget(page, page.locator(targets[step]!))
+        }
       }
       seen.add(step)
       await page.screenshot({ path: testInfo.outputPath(`${step}-${viewport.width}.png`) })
@@ -927,6 +1033,192 @@ for (const viewport of [
   })
 }
 
+test('tutorial retains wrong Thesis feedback after a completed same-step working-model save', async ({ page }) => {
+  test.setTimeout(120_000)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const { errors, windowErrors } = await captureRuntimeErrors(page)
+  let checkedFeedback = false
+  await playTwoRounds(page, true, async (expected) => {
+    if (expected !== 'round-1-thesis' || checkedFeedback) return
+    checkedFeedback = true
+    const step = page.locator('[data-tutorial-step="round-1-thesis"]')
+    const feedback = page.getByTestId('floater').getByRole('alert')
+    await expect(step).toBeVisible()
+    await submitTutorialThesis(page, 'aster', 'phase', 'positive')
+    await expect(feedback).toBeAttached()
+    await page.getByTestId('tutorial-research-trigger').click()
+    const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
+    await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+    const persistedFieldType = () => page.evaluate(() => JSON.parse(
+      sessionStorage.getItem('anomaly-detector:guest-tutorial-session') ?? '{}',
+    ).workingModel?.signals?.aster?.hypothesis?.fieldType)
+    await expect.poll(persistedFieldType).toBe('inertial')
+    await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Фазовое', exact: true }).click()
+    // Keep the Journal open: only the background draft save can persist this edit.
+    await expect.poll(persistedFieldType).toBe('phase')
+    // Restore the real hypothesis so the unchanged full lesson can still finish.
+    await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
+    await expect.poll(persistedFieldType).toBe('inertial')
+    await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+    await expect(journal).toBeHidden()
+    await expect(step).toBeVisible()
+    await expect(feedback).toBeAttached()
+  })
+  expect(checkedFeedback).toBe(true)
+  await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+  expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+  expect(windowErrors).toEqual([])
+})
+
+test('200% tutorial keeps the secondary Journal accessible after a wrong Thesis', async ({ page }) => {
+  test.setTimeout(120_000)
+  page.setDefaultTimeout(10_000)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await setTutorialTextScaleBeforeNavigation(page, '200%')
+  const { errors, windowErrors } = await captureRuntimeErrors(page)
+  let checkedJournal = false
+  await playTwoRounds(page, true, async (expected) => {
+    if (expected !== 'round-1-thesis' || checkedJournal) return
+    checkedJournal = true
+    await submitTutorialThesis(page, 'aster', 'phase', 'positive')
+    await expect(page.getByTestId('floater').getByRole('alert')).toBeAttached()
+    await page.getByTestId('tutorial-research-trigger').click()
+    const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
+    await expect(journal).toBeVisible()
+    await journal.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+    await expect(journal).toContainText('Тип неверен')
+    await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+    await expect(journal).toBeHidden()
+    await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
+    await expect(page.getByTestId('floater').getByRole('alert')).toBeAttached()
+    // Return the editable choices through the same native path as the 200% correction test.
+    for (const name of ['Сигнал для тезиса', 'Тип поля для тезиса', 'Полярность для тезиса']) {
+      const field = page.getByLabel(name, { exact: true })
+      await revisitTutorialField(page, field)
+      await field.selectOption('')
+    }
+    await revisitTutorialField(page, page.getByLabel('Сигнал для тезиса', { exact: true }))
+  })
+  expect(checkedJournal).toBe(true)
+  await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+  expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+  expect(windowErrors).toEqual([])
+})
+
+test('200% tutorial restores keyboard focus to the remounted Exit after cancellation', async ({ page }, testInfo) => {
+  test.setTimeout(120_000)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await setTutorialTextScaleBeforeNavigation(page, '200%')
+  const { errors, windowErrors } = await captureRuntimeErrors(page)
+  const focusByTab = async (target: Locator, maximumTabs: number) => {
+    for (let attempt = 0; attempt < maximumTabs; attempt++) {
+      if (await target.evaluate((element) => element === document.activeElement)) return
+      await page.keyboard.press('Tab')
+    }
+    await expect(target).toBeFocused()
+  }
+  let checkedCancellation = false
+  await playTwoRounds(page, true, async (expected) => {
+    if (expected !== 'round-1-thesis' || checkedCancellation) return
+    checkedCancellation = true
+    await submitTutorialThesis(page, 'aster', 'phase', 'positive')
+    const coach = page.locator('[data-tutorial-step="round-1-thesis"]')
+    await expect(coach.getByRole('alert')).toBeAttached()
+    const fieldType = page.getByLabel('Тип поля для тезиса', { exact: true })
+    await revisitTutorialField(page, fieldType)
+    await expect.poll(() => fieldType.evaluate(tutorialControlGeometry))
+      .toMatchObject({ unclipped: true, available: true })
+    await fieldType.selectOption('inertial')
+    await expect(fieldType).toHaveValue('inertial')
+    // Read the long coach through its native inner scroll before opening Exit.
+    await coach.hover()
+    for (let readingPage = 0; readingPage < 12; readingPage++) {
+      const before = await coach.evaluate((node) => ({ top: node.scrollTop, height: node.clientHeight, maximum: node.scrollHeight - node.clientHeight }))
+      if (before.top >= before.maximum - 1) break
+      await page.mouse.wheel(0, before.height * 0.8)
+      await expect.poll(() => coach.evaluate((node) => node.scrollTop)).toBeGreaterThan(before.top)
+    }
+    await expect.poll(() => coach.evaluate((node) => node.scrollTop + node.clientHeight >= node.scrollHeight - 1)).toBe(true)
+    const opener = coach.getByRole('button', { name: 'Выйти из обучения', exact: true })
+    await focusByTab(opener, 40)
+    const documentPosition = await page.evaluate(() => scrollY)
+    const readingPosition = await coach.evaluate((node) => node.scrollTop)
+    await page.keyboard.press('Enter')
+    const dialog = page.getByRole('dialog', { name: 'Выйти из обучения?', exact: true })
+    await expect(dialog).toBeVisible()
+    expect(await fieldType.evaluate((field) => Boolean(field.closest('[aria-hidden="true"], [inert]')))).toBe(true)
+    // The same gameplay field is unavailable behind the active modal.
+    expect(await fieldType.evaluate(tutorialControlGeometry)).toMatchObject({ available: false })
+    await page.keyboard.press('Tab')
+    expect(await dialog.evaluate((node) => node.contains(document.activeElement))).toBe(true)
+    await focusByTab(dialog.getByRole('button', { name: 'Продолжить обучение', exact: true }), 4)
+    await page.keyboard.press('Enter')
+    await expect(dialog).toBeHidden()
+    await expect(coach).toBeVisible()
+    // The original DOM button was unmounted; the logical replacement owns the return.
+    await expect(opener).toBeFocused()
+    await expect.poll(() => opener.evaluate((button) => button.matches(':focus-visible'))).toBe(true)
+    await expect.poll(() => opener.evaluate((button) => {
+      const style = getComputedStyle(button)
+      const color = style.borderTopColor
+      const slashAlpha = color.match(/\/\s*([\d.]+)(%)?\s*\)$/)
+      const rgbaAlpha = color.match(/^rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)$/)
+      const alpha = color === 'transparent' ? 0
+        : slashAlpha ? Number(slashAlpha[1]) / (slashAlpha[2] ? 100 : 1)
+          : rgbaAlpha ? Number(rgbaAlpha[1]) : 1
+      // A transparent transition frame is not a perceivable focus indicator.
+      return style.borderTopStyle !== 'none' && Number.parseFloat(style.borderTopWidth) >= 1 && alpha >= 0.5
+    })).toBe(true)
+    await expect.poll(() => opener.evaluate((button) => {
+      const reading = button.closest('[data-tutorial-step]')!.getBoundingClientRect()
+      const rect = button.getBoundingClientRect()
+      return rect.top >= Math.max(0, reading.top) && rect.bottom <= Math.min(innerHeight, reading.bottom)
+    })).toBe(true)
+    await expect(fieldType).toHaveValue('inertial')
+    await expect(coach.getByRole('alert')).toBeAttached()
+    expect(await page.evaluate(() => scrollY)).toBe(documentPosition)
+    await expect.poll(() => coach.evaluate((node) => node.scrollTop)).toBe(readingPosition)
+    await expect.poll(() => coach.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const viewport = window.visualViewport
+      const top = viewport?.offsetTop ?? 0, left = viewport?.offsetLeft ?? 0
+      if (rect.width <= 0 || rect.height <= 0 || rect.top < top || rect.left < left
+        || rect.bottom > top + (viewport?.height ?? innerHeight)
+        || rect.right > left + (viewport?.width ?? innerWidth)) return false
+      let opacity = 1
+      for (let node: Element | null = element; node; node = node.parentElement) {
+        const style = getComputedStyle(node)
+        if (style.visibility !== 'visible' || style.display === 'none') return false
+        opacity *= Number(style.opacity)
+        if (node === element || node === document.documentElement) continue
+        const box = node.getBoundingClientRect()
+        if (/(auto|scroll|hidden|clip)/.test(style.overflowY)
+          && (rect.top < box.top + node.clientTop || rect.bottom > box.top + node.clientTop + node.clientHeight)) return false
+        if (/(auto|scroll|hidden|clip)/.test(style.overflowX)
+          && (rect.left < box.left + node.clientLeft || rect.right > box.left + node.clientLeft + node.clientWidth)) return false
+      }
+      return opacity >= .99 && [[.1, .1], [.9, .1], [.5, .5], [.1, .9], [.9, .9]].every(([x, y]) => {
+        const hit = document.elementFromPoint(rect.left + rect.width * x!, rect.top + rect.height * y!)
+        return hit !== null && element.contains(hit)
+      })
+    }), { message: 'The whole coach must be painted, unclipped and unobscured through its ancestors before the focus screenshot' }).toBe(true)
+    await page.screenshot({ path: testInfo.outputPath('exit-cancel-keyboard-return-200.png') })
+    for (const name of ['Сигнал для тезиса', 'Тип поля для тезиса', 'Полярность для тезиса']) {
+      const field = page.getByLabel(name, { exact: true })
+      await revisitTutorialField(page, field)
+      await field.selectOption('')
+    }
+    await revisitTutorialField(page, page.getByLabel('Сигнал для тезиса', { exact: true }))
+  })
+  expect(checkedCancellation).toBe(true)
+  await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
+  expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+  expect(windowErrors).toEqual([])
+})
+
 test('200% tutorial allows native correction of earlier Thesis and Contract fields', async ({ page }, testInfo) => {
   test.setTimeout(120_000)
   await page.setViewportSize({ width: 390, height: 844 })
@@ -935,10 +1227,9 @@ test('200% tutorial allows native correction of earlier Thesis and Contract fiel
   page.setDefaultTimeout(10_000)
   let correctedThesis = false
   let correctedContract = false
-  await playTwoRounds(page, true, async () => {
-    const activeStep = page.locator('[data-tutorial-step]').first()
-    const step = await activeStep.count() ? await activeStep.getAttribute('data-tutorial-step') : null
-    if (step === 'round-1-thesis' && !correctedThesis) {
+  await playTwoRounds(page, true, async (expected) => {
+    if (expected === 'round-1-thesis' && !correctedThesis) {
+      await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
       correctedThesis = true
       await submitTutorialThesis(page, 'aster', 'phase', 'positive')
       await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
@@ -963,7 +1254,8 @@ test('200% tutorial allows native correction of earlier Thesis and Contract fiel
       }
       await revisitTutorialField(page, page.getByLabel('Сигнал для тезиса', { exact: true }))
     }
-    if (step === 'round-2-contract-reserve' && !correctedContract) {
+    if (expected === 'round-2-contract-reserve' && !correctedContract) {
+      await expect(page.locator('[data-tutorial-step="round-2-contract-reserve"]')).toBeVisible()
       correctedContract = true
       const field = page.locator('[data-contract-id="tutorial-light-contract"] select')
       await expectTutorialActionAvailable(page, field)
@@ -983,6 +1275,7 @@ test('tutorial positions a fresh lesson after Repeat restores a new reading task
   test.setTimeout(120_000)
   await page.setViewportSize({ width: 390, height: 520 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
+  const { errors, windowErrors } = await captureRuntimeErrors(page)
   let readPrivately = false
   await playTwoRounds(page, true, async () => {
     if (readPrivately || await page.locator('[data-tutorial-step="research-results-open"]').count() === 0) return
@@ -1021,6 +1314,8 @@ test('tutorial positions a fresh lesson after Repeat restores a new reading task
   await expectTutorialActionAvailable(page, journal.getByRole('tab', { name: 'Трактовка', exact: true }))
   await settleTutorialCapture(page)
   await page.screenshot({ path: testInfo.outputPath('repeat-fresh-reading-task.png') })
+  expect(errors.filter((error) => error !== 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)')).toEqual([])
+  expect(windowErrors).toEqual([])
 })
 
 for (const scenario of [

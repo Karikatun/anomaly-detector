@@ -86,14 +86,14 @@
   overflow-wrap: anywhere;
 }
 
-:global(html[data-tutorial-autoscrolling]) :global(.react-joyride__spotlight) {
-  visibility: hidden;
+.coachOverlay {
+  position: absolute;
+  z-index: 100;
+  inset: 0 0 auto;
+  pointer-events: none;
 }
-/* The primary spotlight stays unchanged. Only allowed visible controls are
-   excluded from Joyride's background pointer blocker by its viewport owner. */
-:global(body:has([data-tutorial-board]) .react-joyride__overlay [fill-rule='evenodd']) {
-  clip-path: var(--tutorial-interaction-cutout, none);
-}
+.coachOverlay > svg { display: block; overflow: visible; }
+:global(html[data-tutorial-autoscrolling]) [data-tutorial-spotlight] { visibility: hidden; }
 .coachCard {
   width: min(24rem, calc(100vw - 1.5rem));
   max-height: calc(100dvh - 1rem);
