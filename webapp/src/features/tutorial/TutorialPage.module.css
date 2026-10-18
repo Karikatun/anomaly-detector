@@ -351,3 +351,10 @@
   scroll-padding-top: calc(var(--tutorial-pilot-header-height, 9rem) + .75rem);
   scroll-padding-bottom: calc(var(--tutorial-pilot-coach-height, 14rem) + var(--tutorial-pilot-action-height, 0px) + 2.25rem);
 }
+
+/* Leave native scrolling room for secondary controls behind a growing coach. */
+@media (min-width: 48rem) {
+  :global(body:has([data-tutorial-board]) [data-tutorial-board]) {
+    padding-bottom: calc(var(--tutorial-pilot-coach-height, 14rem) + 2.25rem) !important;
+  }
+}

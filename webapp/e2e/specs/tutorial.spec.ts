@@ -1414,8 +1414,15 @@ test('keeps prologue, Journal tabs, Escape and manual reentry keyboard accessibl
   await expect(journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true })).toBeEnabled()
 })
 
-test('wrong drafts remain editable and only an explicit Thesis creates scientific feedback in Research', async ({ page }) => {
-  await reachFirstResearch(page)
+for (const layout of [
+  { width: 1440, height: 900, textScale: '100%' },
+  { width: 1024, height: 768, textScale: '100%' },
+  { width: 390, height: 844, textScale: '100%' },
+  { width: 390, height: 844, textScale: '200%' },
+]) {
+ test(`wrong drafts remain editable and only an explicit Thesis creates scientific feedback in Research at ${layout.width} text ${layout.textScale}`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: layout.width, height: layout.height })
+  await reachFirstResearch(page, true, layout.textScale === '200%' ? layout.textScale : undefined)
   const journal = await openFirstModel(page)
   const wrong = journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Фазовое', exact: true })
   await wrong.click()
@@ -1432,17 +1439,31 @@ test('wrong drafts remain editable and only an explicit Thesis creates scientifi
   await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
   await expect(page.getByTestId('floater').getByRole('alert')).toContainText('Подробности находятся в «Данных исследований»')
   await expect(page.getByTestId('floater')).not.toContainText('тип поля неверен')
-  await page.getByTestId('tutorial-research-trigger').click()
+  const entry = page.getByTestId('tutorial-research-trigger')
+  // A real click must reveal the scientific feedback even after the coach grows.
+  await entry.click()
   await journal.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
   await expect(journal.locator('[data-private-thesis]')).toHaveCount(1)
   await expect(journal).toContainText('Тип неверен')
   await expect(journal).toContainText('Полярность неверна')
+  await settleTutorialCapture(page)
+  await page.screenshot({ path: testInfo.outputPath(`wrong-thesis-journal-${layout.width}-${layout.textScale}.png`) })
   await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+  await expect(entry).toBeFocused()
+  await expectTutorialActionAvailable(page, entry)
+  await settleTutorialCapture(page)
+  await page.screenshot({ path: testInfo.outputPath(`wrong-thesis-coach-${layout.width}-${layout.textScale}.png`) })
+  await entry.press('Enter')
+  await expect(journal).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(journal).toBeHidden()
+  await expect(entry).toBeFocused()
   await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('inertial')
   await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
   await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
   await expect(page.getByRole('button', { name: /^Слот доступа 4:/ })).toBeEnabled()
 })
+}
 
 test('Journal retains real Research scroll through tabs, early close and manual reopening on a short screen', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 })
@@ -1571,6 +1592,7 @@ test('exits the tutorial through its confirmation dialog and clears the saved st
 })
 
 test('confirmed account exit discards a pending partial model draft before SPA reentry', async ({ page }) => {
+  await page.clock.install()
   await page.setViewportSize({ width: 1440, height: 900 })
   await registerBrowserUser(page, 'Ученик с незавершённой гипотезой', 'tutorial-pending-exit')
   await reachFirstResearch(page, false)
@@ -1581,8 +1603,10 @@ test('confirmed account exit discards a pending partial model draft before SPA r
   const partialField = journal.getByRole('button', {
     name: 'Aster: гипотеза, тип поля Фазовое', exact: true,
   })
+  // Hold browser time before editing: the actual 800ms autosave cannot fire.
+  await page.clock.pauseAt(new Date(Date.now() + 60_000))
+  const editedAt = await page.evaluate(() => Date.now())
   await partialField.click()
-  const editedAt = Date.now()
   await expect(partialField).toHaveAttribute('aria-pressed', 'true')
   await expect(journal.getByRole('button', {
     name: 'Aster: гипотеза, полярность Положительная', exact: true,
@@ -1590,23 +1614,28 @@ test('confirmed account exit discards a pending partial model draft before SPA r
   await expect(journal.getByRole('button', {
     name: 'Aster: гипотеза, полярность Отрицательная', exact: true,
   })).toHaveAttribute('aria-pressed', 'false')
-  await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
-  await page.getByTestId('floater').getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
+  // Closing Journal persists immediately, so Exit must start inside the open
+  // Journal to keep this partial model genuinely unsaved until disposal.
+  await journal.getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
   await page.getByRole('dialog', { name: 'Выйти из обучения?', exact: true })
     .getByRole('button', { name: 'Выйти и сбросить', exact: true }).click()
-  expect(Date.now() - editedAt, 'Exit must exercise the pending autosave boundary').toBeLessThan(800)
+  expect(await page.evaluate(() => Date.now()), 'Exit must finish while the autosave timer is still held').toBe(editedAt)
   await expect(page).toHaveURL(/\/$/)
+  // Let the held debounce boundary elapse after disposal; it must not restore
+  // the previous lesson or leak its partial model into the next one.
+  await page.clock.runFor(800)
+  await page.clock.resume()
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('anomaly-detector:tutorial-session')))
     .toBeNull()
-  await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ', exact: true }).click()
-  const prologue = page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию', exact: true })
-  await expect(prologue).toBeVisible()
-  await prologue.getByRole('button', { name: 'Начать обучение', exact: true }).click()
-  await expect(page.getByRole('button', { name: /^Слот доступа 5:/ })).toBeEnabled()
-  await expect.poll(() => page.evaluate(() => {
-    const state = JSON.parse(sessionStorage.getItem('anomaly-detector:tutorial-session') ?? 'null')
-    return state?.step
-  })).toBe('round-1-access')
+  await reachFirstResearch(page, false)
+  const freshModel = await openFirstModel(page)
+  for (const name of [
+    'Aster: гипотеза, тип поля Фазовое',
+    'Aster: гипотеза, полярность Положительная',
+    'Aster: гипотеза, полярность Отрицательная',
+  ]) {
+    await expect(freshModel.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'false')
+  }
 })
 
 test('logged-in mobile lesson retains its draft after completion save fails and retries explicitly', async ({ page }) => {

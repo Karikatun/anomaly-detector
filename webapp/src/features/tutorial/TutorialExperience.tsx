@@ -149,7 +149,8 @@ export function TutorialExperience({
   const [exitOpen, setExitOpen] = useState(false)
   const [explanationStep, setExplanationStep] = useState<TutorialStep | null>(null)
   const [requiredModalOpen, setRequiredModalOpen] = useState(false)
-  const [journalOpen, setJournalOpen] = useState(false)
+  const [journal, setJournal] = useState<{ open: boolean; activityKey: string | null }>({ open: false, activityKey: null })
+  const journalOpen = journal.open
   const prologueRef = useRef<HTMLDivElement>(null)
   const coachExitRef = useRef<HTMLButtonElement | null>(null)
   const exitOpener = useRef<{ element: HTMLButtonElement; coach: boolean; readingOffset: number; closing: boolean } | null>(null)
@@ -440,6 +441,7 @@ export function TutorialExperience({
   }
   const pilot = pilotCopy[state.step]
   const requestedTarget = nearest?.selector ? { anchor: nearest.selector } : phaseTargetConfig[state.step]
+  const activityKey = `${state.step}:${nearest?.fallbackSelector ?? phaseTargetConfig[state.step].fallback ?? requestedTarget.anchor}`
   const targetConfig = resolvedTarget?.requested === requestedTarget.anchor
     && resolvedTarget.selector !== requestedTarget.anchor
     ? { anchor: resolvedTarget.selector } : requestedTarget
@@ -504,6 +506,8 @@ export function TutorialExperience({
       {!exitOpen && !requiredModalOpen && (
         <TutorialViewportAnchor
           taskKey={state.step}
+          activityKey={activityKey}
+          restoreJournalFocus={!journalOpen && journal.activityKey === activityKey}
           manualReadingTasks={manualReadingTasks}
           anchorSelector={requestedTarget.anchor}
           secondarySelector={requestedTarget.secondary}
@@ -554,7 +558,7 @@ export function TutorialExperience({
         onInterpretationOpened={() => void applyAction({ type: 'open-interpretation' })}
         onLaboratoryModeSelected={(mode) => void applyAction({ type: 'select-laboratory-mode', mode })}
         onJournalClosed={(workingModel) => void applyAction({ type: 'close-journal', workingModel })}
-        onJournalOpenChange={setJournalOpen}
+        onJournalOpenChange={(open) => setJournal((current) => ({ open, activityKey: open ? activityKey : current.activityKey }))}
         onWorkingModelOpened={() => void applyAction({ type: 'open-working-model' })}
         onResearchOpened={() => void applyAction({ type: 'open-research-results' })}
         onRequiredModalOpenChange={setRequiredModalOpen}
@@ -665,8 +669,10 @@ function useTutorialNearestAction(step: TutorialStep) {
   return selection?.step === step ? selection.action : null
 }
 
-function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, blockTargetInteraction, showSpotlightStroke, children }: {
+function TutorialViewportAnchor({ taskKey, activityKey, restoreJournalFocus, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, blockTargetInteraction, showSpotlightStroke, children }: {
   taskKey: TutorialStep
+  activityKey: string
+  restoreJournalFocus: boolean
   manualReadingTasks: RefObject<Set<string>>
   anchorSelector: string
   secondarySelector?: string
@@ -687,7 +693,7 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
     const root = document.documentElement
     let frame = 0
     let settleTimer = 0
-    const readingTask = `${taskKey}:${fallbackSelector ?? anchorSelector}`
+    const readingTask = activityKey
     // A different selected control is a new action, even when an older control
     // is revisited. Geometry resolving the same fallback is still one task.
     for (const previous of manualReadingTasks.current) {
@@ -809,6 +815,10 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       const useFallback = !!fallback && target.getBoundingClientRect().height > availableHeight
       if (useFallback) target = fallback
       const targetHeight = target.getBoundingClientRect().height
+      // Native focus/click scrolling also needs the occupied space on desktop.
+      // Feedback can grow the coach beyond the default scroll-padding budget.
+      setStyle('--tutorial-pilot-coach-height', `${coachHeight}px`)
+      setStyle('--tutorial-pilot-header-height', `${headerHeight}px`)
       if (compactLayout) {
         const actionInFlow = !action?.contains(target)
           && vp.bottom - vp.top - coachHeight - headerHeight - actionHeight - 48 < targetHeight
@@ -817,8 +827,6 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
           root.toggleAttribute('data-tutorial-pilot-constrained', constrained)
           layoutWritten = true
         }
-        setStyle('--tutorial-pilot-coach-height', `${coachHeight}px`)
-        setStyle('--tutorial-pilot-header-height', `${headerHeight}px`)
         setStyle('--tutorial-pilot-action-height', `${actionInFlow ? 0 : actionHeight}px`)
         setStyle('--tutorial-pilot-action-position', actionInFlow ? 'static' : 'fixed')
         setStyle('--tutorial-mobile-action-height', `${actionInFlow ? 0 : actionHeight}px`)
@@ -853,10 +861,14 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
             parent = parent.parentElement
           }
         }
-        if (!preserveReading && !target.closest('[role="dialog"]')) {
-          const bounds = tutorialSafeVerticalBounds({ viewport: vp, target: target.getBoundingClientRect(), blockers: blockers(target) })
-          const delta = tutorialScrollDelta(target.getBoundingClientRect(), bounds)
-          if (Math.abs(delta) > 1 && target.getBoundingClientRect().height <= bounds.bottom - bounds.top) {
+        // Journal returns focus without scrolling. Keep that reversible control
+        // visible when its modal closes, rather than repositioning the Thesis.
+        const focusedEntry = restoreJournalFocus ? query('[data-testid="tutorial-research-trigger"]') : null
+        const scrollTarget = focusedEntry === document.activeElement ? focusedEntry : target
+        if (scrollTarget && (!preserveReading || scrollTarget === focusedEntry) && !scrollTarget.closest('[role="dialog"]')) {
+          const bounds = tutorialSafeVerticalBounds({ viewport: vp, target: scrollTarget.getBoundingClientRect(), blockers: blockers(scrollTarget) })
+          const delta = tutorialScrollDelta(scrollTarget.getBoundingClientRect(), bounds)
+          if (Math.abs(delta) > 1 && scrollTarget.getBoundingClientRect().height <= bounds.bottom - bounds.top) {
             window.scrollBy({ top: delta, behavior: 'instant' })
           }
         }
@@ -865,6 +877,9 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       delete root.dataset.tutorialAutoscrolling
     }
     const schedule = () => { if (!frame) frame = requestAnimationFrame(position) }
+    const focusChanged = (event: FocusEvent) => {
+      if (restoreJournalFocus && event.target instanceof Element && event.target.matches('[data-testid="tutorial-research-trigger"]')) schedule()
+    }
     const layoutChanged = () => {
       userScrolled = false
       preserveReading = false
@@ -910,6 +925,7 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
     })
     mutations.observe(document.body, { childList: true, subtree: true })
     for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown']) window.addEventListener(event, cancel, { passive: true })
+    window.addEventListener('focusin', focusChanged)
     window.addEventListener('resize', layoutChanged)
     window.visualViewport?.addEventListener('resize', layoutChanged)
     window.visualViewport?.addEventListener('scroll', schedule)
@@ -922,6 +938,7 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       observer.disconnect()
       mutations.disconnect()
       for (const event of ['wheel', 'touchmove', 'keydown', 'pointerdown']) window.removeEventListener(event, cancel)
+      window.removeEventListener('focusin', focusChanged)
       window.removeEventListener('resize', layoutChanged)
       window.visualViewport?.removeEventListener('resize', layoutChanged)
       window.visualViewport?.removeEventListener('scroll', schedule)
@@ -930,7 +947,7 @@ function TutorialViewportAnchor({ taskKey, manualReadingTasks, anchorSelector, s
       root.removeAttribute('data-tutorial-pilot-constrained')
       delete root.dataset.tutorialAutoscrolling
     }
-  }, [taskKey, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, identity])
+  }, [taskKey, activityKey, restoreJournalFocus, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, identity])
   return children ? createPortal(<>
     <div data-testid="overlay" data-tutorial-overlay="" className={styles.coachOverlay}
       style={{ height: visibleMask?.height ?? 0, visibility: visibleMask ? 'visible' : 'hidden' }} aria-hidden="true">
