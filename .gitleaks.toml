@@ -12,7 +12,7 @@ id = "generic-api-key"
 [[rules.allowlists]]
 description = "Exact non-secret TutorialStep comparisons in reviewed immutable history"
 condition = "AND"
-commits = ["3f6eaad2585dd1f12c0759c3c0103ae344572316"]
+commits = ["3f6eaad2585dd1f12c0759c3c0103ae344572316", "f9e0806ff28e2def16dbac65f593c9c7c1e27a4b"]
 paths = ['''\Awebapp/src/features/tutorial/TutorialExperience\.tsx\z''']
 regexTarget = "match"
 regexes = ['''\AtaskKey === '(?:round-1-thesis|round-2-thesis)'\z''']
