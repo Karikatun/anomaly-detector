@@ -152,6 +152,16 @@ The integration and Docker smoke runners refuse database names that do not end w
 
 The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created. The image remains under `anomaly-detector-backend:smoke` long enough for the following Trivy image scan.
 
+Обе команды Trivy хранят общий кэш вне репозитория: в
+`~/Library/Caches/anomaly-detector/trivy` на macOS и
+`~/.cache/anomaly-detector/trivy` в остальных окружениях. `--dry-run` показывает
+Docker-команду без создания каталога. Если кэша нет, Trivy скачает необходимые
+базы при следующей проверке. При переносе сохраняйте весь каталог, включая
+`db/trivy.db` и `db/metadata.json`, и не объединяйте разные версии кэша. Для
+отката к прежнему расположению остановите сканирование, верните предыдущую
+версию скрипта и перенесите каталог обратно в `.scratch/security/trivy-cache`,
+только если этот путь свободен.
+
 Operational metrics use focused unit tests for Prometheus formatting, bounded
 labels, `5xx` observation through the error handler, worker staleness, reconnect
 classification and mail transitions. Tender aggregate counts are also exercised
