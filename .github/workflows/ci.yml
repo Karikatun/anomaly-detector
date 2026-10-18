@@ -131,6 +131,7 @@ jobs:
       - name: Webapp E2E smoke (${{ matrix.browser }})
         env:
           E2E_WORKERS: 1
+          PLAYWRIGHT_LIST_PRINT_FAILURES_INLINE: '1'
         run: bun run e2e:webapp -- --project=${{ matrix.browser }}
 
   e2e:
