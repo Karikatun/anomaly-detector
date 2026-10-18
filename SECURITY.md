@@ -73,11 +73,12 @@ critical vulnerabilities. Scanner containers are versioned and digest-pinned in
 `.security/tools.json`; Gitleaks fingerprint exceptions identify only reviewed historical test-fixture
 fingerprints. A separately owner-approved classification in `.gitleaks.toml`
 covers only the two proven non-secret `TutorialStep` comparisons in
-`webapp/src/features/tutorial/TutorialExperience.tsx` at immutable commit
-`3f6eaad2585dd1f12c0759c3c0103ae344572316`, using rule-specific AND-conjoined
+`webapp/src/features/tutorial/TutorialExperience.tsx` at each of the immutable commits
+`3f6eaad2585dd1f12c0759c3c0103ae344572316` and
+`f9e0806ff28e2def16dbac65f593c9c7c1e27a4b`, using rule-specific AND-conjoined
 exact commit, path and full-match constraints while retaining all default rules.
 This narrow project rule overrides the security skill's fixture-only restriction
-solely for those two matches. Any widening requires a separate owner decision
+solely for those two matches at each of these two commits. Any widening requires a separate owner decision
 and review; exposed credentials are never covered.
 
 Use [`docs/AUDIT_GUIDE.md`](docs/AUDIT_GUIDE.md) to select security and adjacent

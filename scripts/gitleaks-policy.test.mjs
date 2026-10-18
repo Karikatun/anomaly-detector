@@ -12,6 +12,7 @@ import { dirname, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const historicalCommit = "3f6eaad2585dd1f12c0759c3c0103ae344572316";
+const publicationCommit = "f9e0806ff28e2def16dbac65f593c9c7c1e27a4b";
 const historicalPath = "webapp/src/features/tutorial/TutorialExperience.tsx";
 const image = JSON.parse(
   readFileSync(resolve(root, ".security/tools.json"), "utf8"),
@@ -147,7 +148,7 @@ test("configuration retains defaults and one exact rule-specific AND classificat
     "regexes",
   ]);
   expect(allowlist.condition).toBe("AND");
-  expect(allowlist.commits).toEqual([historicalCommit]);
+  expect(allowlist.commits).toEqual([historicalCommit, publicationCommit]);
   expect(allowlist.paths).toEqual([
     String.raw`\Awebapp/src/features/tutorial/TutorialExperience\.tsx\z`,
   ]);
@@ -250,6 +251,13 @@ test("AND boundaries preserve all neighboring findings and inherited allowlists"
       ),
     ).toBe(false);
     const expected = defaults.filter((finding) => !approved.includes(finding));
+    expect(scan(repository, directory, "policy.toml")).toEqual(expected);
+    // Each explicit commit member must enforce the same exact match/path boundaries.
+    expect(policy.split(publicationCommit)).toHaveLength(2);
+    writeFileSync(
+      resolve(directory, "policy.toml"),
+      policy.replace(publicationCommit, allowedCommit),
+    );
     expect(scan(repository, directory, "policy.toml")).toEqual(expected);
   });
 }, 120_000);
