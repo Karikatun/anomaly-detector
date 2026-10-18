@@ -691,6 +691,16 @@ function TutorialViewportAnchor({ taskKey, activityKey, restoreJournalFocus, man
   const visibleMask = mask?.identity === identity ? mask : null
   useLayoutEffect(() => {
     const root = document.documentElement
+    // Keep measured document clearances while the selected control changes.
+    // Restoring fallback padding between measurements can clamp scrolling
+    // before Firefox updates the visual viewport's origin.
+    return () => {
+      root.style.removeProperty('--tutorial-pilot-coach-height')
+      root.style.removeProperty('--tutorial-pilot-header-height')
+    }
+  }, [])
+  useLayoutEffect(() => {
+    const root = document.documentElement
     let frame = 0
     let settleTimer = 0
     const readingTask = activityKey
@@ -943,7 +953,7 @@ function TutorialViewportAnchor({ taskKey, activityKey, restoreJournalFocus, man
       window.visualViewport?.removeEventListener('resize', layoutChanged)
       window.visualViewport?.removeEventListener('scroll', schedule)
       window.removeEventListener('scroll', updateAllowedInteractions, true)
-      for (const name of ['--tutorial-pilot-coach-height', '--tutorial-pilot-header-height', '--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom']) root.style.removeProperty(name)
+      for (const name of ['--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom']) root.style.removeProperty(name)
       root.removeAttribute('data-tutorial-pilot-constrained')
       delete root.dataset.tutorialAutoscrolling
     }

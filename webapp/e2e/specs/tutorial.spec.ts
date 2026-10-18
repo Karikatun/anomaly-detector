@@ -1465,6 +1465,63 @@ for (const layout of [
 })
 }
 
+test('submits a corrected Thesis after Journal cycles and viewport/text-size changes', async ({ page }, testInfo) => {
+  await reachFirstResearch(page)
+  const journal = await openFirstModel(page)
+  const wrong = journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Фазовое', exact: true })
+  await wrong.click()
+  await journal.getByRole('button', { name: 'Aster: гипотеза, полярность Отрицательная', exact: true }).click()
+  await journal.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+  await expect(journal.locator('[data-private-thesis]')).toHaveCount(0)
+  await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
+  await expect(wrong).toHaveAttribute('aria-pressed', 'true')
+  await expect(journal.getByRole('alert')).toHaveCount(0)
+  await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('aster')
+  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('phase')
+  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('negative')
+  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+  await expect(page.getByTestId('floater').getByRole('alert')).toContainText('Подробности находятся в «Данных исследований»')
+  await expect(page.getByTestId('floater')).not.toContainText('тип поля неверен')
+  const entry = page.getByTestId('tutorial-research-trigger')
+  for (const layout of [
+    { width: 1440, height: 900, textScale: '100%' },
+    { width: 1024, height: 768, textScale: '100%' },
+    { width: 390, height: 844, textScale: '100%' },
+    { width: 390, height: 844, textScale: '200%' },
+  ]) {
+    await page.setViewportSize({ width: layout.width, height: layout.height })
+    await page.evaluate((scale) => { document.documentElement.style.fontSize = scale }, layout.textScale)
+    // A real click must reveal the scientific feedback even after the coach grows.
+    await entry.click()
+    await journal.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
+    await expect(journal.locator('[data-private-thesis]')).toHaveCount(1)
+    await expect(journal).toContainText('Тип неверен')
+    await expect(journal).toContainText('Полярность неверна')
+    await page.screenshot({ path: testInfo.outputPath(`wrong-thesis-journal-${layout.width}-${layout.textScale}.png`) })
+    await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+    await expect(entry).toBeFocused()
+    await expectTutorialActionAvailable(page, entry)
+    await page.screenshot({ path: testInfo.outputPath(`wrong-thesis-coach-${layout.width}-${layout.textScale}.png`) })
+    await entry.press('Enter')
+    await expect(journal).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(journal).toBeHidden()
+    await expect(entry).toBeFocused()
+  }
+  for (let resize = 0; resize < 6; resize++) {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.evaluate(() => { document.documentElement.style.fontSize = '100%' })
+  }
+  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('inertial')
+  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
+  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+  await expect(page.getByRole('button', { name: /^Слот доступа 4:/ })).toBeEnabled()
+})
+
+
 test('Journal retains real Research scroll through tabs, early close and manual reopening on a short screen', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await reachFirstResearch(page)
