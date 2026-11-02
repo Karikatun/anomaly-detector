@@ -507,8 +507,10 @@ export function createTenderService({
       }
       const anomalyConfiguration = createAnomalyConfiguration(seedGenerator())
       const game = gameDescriptor(parsedInput.data.mode)
-      if (game.mode === 'simple' && (parsedInput.data.players.some((player) => player.bot) || parsedInput.data.ruleset === 'tender-v1')) {
-        throw new TenderFailure('invalid_create_tender', 'Simple requires human participants and current rules')
+      if ((game.mode === 'simple' && parsedInput.data.ruleset === 'tender-v1')
+        || parsedInput.data.players.some((player) => player.bot &&
+          ((game.mode === 'simple') !== (player.bot.strategyVersion === 'bot-simple-v1')))) {
+        throw new TenderFailure('invalid_create_tender', 'Bot strategy must match the immutable game mode and current simple rules')
       }
       const publicContracts = game.contracts ? createRoundContracts(1, parsedInput.data.players.length, anomalyConfiguration.seed) : []
       const publicFinalContract = !game.contracts ? undefined : {

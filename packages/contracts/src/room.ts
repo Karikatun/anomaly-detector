@@ -11,7 +11,7 @@ export const createRoomRequestSchema = z.object({
   allowBots: z.boolean().default(false),
   capacity: roomCapacitySchema,
   mode: gameModeSchema.optional(),
-}).strict().refine((room) => room.mode !== 'simple' || !room.allowBots, 'Simple bots are not available')
+}).strict()
 
 export const addRoomBotRequestSchema = z.object({
   difficulty: z.literal('easy'),

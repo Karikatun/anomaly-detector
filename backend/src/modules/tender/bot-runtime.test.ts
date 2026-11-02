@@ -3,6 +3,46 @@ import { createTenderModule } from './index'
 import { createInMemoryTenderStore } from './infrastructure/in-memory-tender-store'
 import { createTenderBotRunner } from './application/bot-runner'
 import { createCompletedTenderSummaryReader } from './application/tender-readers'
+import { createAnomalyConfiguration } from './domain/anomaly-configuration'
+import { chooseBotCommand } from './application/bots'
+
+test('simple decisions ignore another participant research and hidden configuration when the allowed projection is unchanged', async () => {
+  const store = createInMemoryTenderStore()
+  const tender = createTenderModule({ store, seedGenerator: () => 'original-private-world' })
+  const { tenderId } = await tender.createTender({ mode: 'simple', players: [
+    { id: 'human', tiePriority: 1 }, { id: 'bot', tiePriority: 2, bot: { difficulty: 'hard', strategyVersion: 'bot-simple-v1' } },
+  ] })
+  const initial = (await store.read(tenderId))!
+  await store.commit({ tenderId, expectedVersion: initial.version, auditEvents: [], nextTender: { ...initial,
+    phase: 'final-scientific-model', round: 3, privateThesesByPlayer: { bot: [{
+      id: 'own-proven-claim', signalId: 'aster', fieldType: 'phase', polarity: 'positive',
+      fieldTypeCorrect: true, polarityCorrect: true, fullyCorrect: true, round: 1,
+    }] },
+  } })
+  const first = await tender.readTenderView({ tenderId, playerId: 'bot' })
+  const state = (await store.read(tenderId))!
+  await store.commit({ tenderId, expectedVersion: state.version, auditEvents: [], nextTender: { ...state,
+    anomalyConfiguration: createAnomalyConfiguration('different-hidden-world'), sampleRandomSeed: 'different-acquisition-seed',
+    publicScientificJournal: [{ playerId: 'human', testId: 'other-private-test', protocol: 'impulse',
+      sourceSignal: 'aster', receiverSignal: 'boreal', publicResult: 'reflection' }],
+    samplesByPlayer: { ...state.samplesByPlayer, human: ['aster', 'boreal'] },
+    privateMeasurementsByPlayer: { ...state.privateMeasurementsByPlayer, human: [{ sourceSignal: 'aster', receiverSignal: 'boreal', polarityRelation: 'different' }] },
+    rawTelemetrySignalsByPlayer: { ...state.rawTelemetrySignalsByPlayer, human: ['ferro'] },
+    privateWorkingModelsByPlayer: { ...state.privateWorkingModelsByPlayer, human: { signals: { ferro: { hypothesis: { fieldType: 'inertial' } } } } },
+  } })
+  const second = await tender.readTenderView({ tenderId, playerId: 'bot' })
+  const normalize = (view: typeof first) => ({ ...view, serverTime: '', version: 0 })
+  expect(normalize(second)).toEqual(normalize(first))
+  const options = { playerId: 'bot', seed: 'private-independent-choice', commandId: 'same', difficulty: 'hard' as const, strategyVersion: 'bot-simple-v1' as const }
+  const before = chooseBotCommand(first, options)
+  const after = chooseBotCommand({ ...second, version: first.version }, options)
+  expect(after).toEqual(before)
+  expect(after?.type).toBe('submit-scientific-model')
+  if (after?.type !== 'submit-scientific-model') throw new Error('Expected a non-vacuous final inference decision')
+  expect(after.scientificModel.signals.aster).toEqual({ fieldType: 'phase', polarity: 'positive' })
+  expect(Object.keys(after.scientificModel.signals)).toHaveLength(6)
+  await expect(tender.execute(after, { expectedVersion: second.version })).resolves.toEqual({ tenderId, version: second.version + 1 })
+})
 
 test('a room bot remains an explicit participant in its saved and projected Tender', async () => {
   const store = createInMemoryTenderStore()

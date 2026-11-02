@@ -708,7 +708,7 @@ export function createPrismaTenderStore(
         where: {
           phase: { not: 'complete' },
           ...(afterId ? { id: { gt: afterId } } : {}),
-          OR: ['bot-v1', 'bot-v2'].map((strategyVersion) => ({
+          OR: ['bot-v1', 'bot-v2', 'bot-simple-v1'].map((strategyVersion) => ({
             state: { path: ['players'], array_contains: [{ bot: { strategyVersion } }] },
           })),
         },

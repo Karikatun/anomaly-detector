@@ -12,9 +12,10 @@ Player-facing wording: [RULES_REFERENCE.md](RULES_REFERENCE.md).
 
 The game borrows only the genre-level premise of deduction from incomplete experimental evidence. It has an original setting, terminology, directed experiments, tender structure, action flow, visual expression, and rules. Do not copy any text, art, terminology, components, scoring tables, formulas, turn structure, or app behaviour from *Alchemists*.
 
-В партии участвуют 2–4 исследователя. Стандартный режим поддерживает людей и
-ботов; простой режим в срезе #76 — комнаты с людьми. Поддержка simple-ботов
-реализуется отдельно в #77. Клиент адаптирован для телефона и desktop.
+В партии участвуют 2–4 исследователя. Оба режима поддерживают людей и
+серверных ботов easy/hard. Срез #77 добавляет простому режиму отдельную
+сохраняемую стратегию `bot-simple-v1`; версии standard не меняются.
+Клиент адаптирован для телефона и desktop.
 С публичного лендинга игрок может пройти одиночное обучение без регистрации,
 затем войти или создать аккаунт и перейти к настоящей партии. Защита аккаунта
 остаётся добровольной. Изменение учебного сценария — отдельные #75/#78/#79.

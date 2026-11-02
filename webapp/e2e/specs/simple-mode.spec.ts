@@ -2,16 +2,23 @@ import { expect, registerBrowserUser, test } from '../helpers/test'
 import { randomUUID } from 'node:crypto'
 import type { WebSocketRoute } from '@playwright/test'
 
-test('выбор простого режима отключает ботов и создаёт комнату выбранного режима', async ({ page }) => {
+test('простой режим сохраняет разрешение ботов и создаёт комнату выбранного режима', async ({ page }) => {
   await registerBrowserUser(page, 'Игрок E2E', 'simple-mode')
   await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
   const dialog = page.getByRole('dialog')
   const bots = dialog.getByRole('checkbox', { name: 'Возможность добавить ботов' })
   await bots.check()
   await dialog.getByLabel('Режим игры').selectOption('simple')
+  if (process.env.MODE77_UI_AUDIT_DIR) await page.screenshot({ path: `${process.env.MODE77_UI_AUDIT_DIR}/after-simple-create.png`, animations: 'disabled' })
+  await expect(bots).toBeChecked()
+  await expect(bots).toBeEnabled()
+  await bots.focus()
+  await expect(bots).toBeFocused()
+  await bots.press('Space')
   await expect(bots).not.toBeChecked()
-  await expect(bots).toBeDisabled()
-  await expect(dialog.getByText('Боты недоступны в этом режиме')).toBeVisible()
+  await bots.press('Space')
+  await expect(bots).toBeChecked()
+  await expect(dialog.getByText('Боты недоступны в этом режиме')).toHaveCount(0)
   await page.route('**/api/rooms', (route) => route.request().method() === 'POST'
     ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'Тестовая ошибка создания' } }) })
     : route.continue())
@@ -20,7 +27,7 @@ test('выбор простого режима отключает ботов и 
   await page.unroute('**/api/rooms')
   const request = page.waitForRequest((req) => req.method() === 'POST' && new URL(req.url()).pathname === '/api/rooms')
   await dialog.getByRole('button', { name: 'Создать команду' }).click()
-  expect((await request).postDataJSON()).toMatchObject({ mode: 'simple', allowBots: false })
+  expect((await request).postDataJSON()).toMatchObject({ mode: 'simple', allowBots: true })
   await expect(page.getByRole('heading', { name: 'Лобби' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Лобби', exact: true })).toBeVisible()
   await expect(page.getByText('Простой', { exact: true })).toBeVisible()
@@ -72,6 +79,7 @@ test('двое игроков завершают три раунда и видя
     const guest = await register(guestPage, 'Второй игрок')
     await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
     await page.getByLabel('Режим игры').selectOption('simple')
+    await page.getByRole('dialog').getByRole('checkbox', { name: 'Возможность добавить ботов' }).uncheck()
     await page.getByRole('dialog').getByRole('button', { name: 'Создать команду' }).click()
     const code = (await page.getByTestId('room-join-code').textContent())?.trim()
     if (!code) throw new Error('Нет кода комнаты')

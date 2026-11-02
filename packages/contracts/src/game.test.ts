@@ -2,11 +2,11 @@ import { expect, test } from 'bun:test'
 import { createRoomRequestSchema } from './room'
 import { gameDescriptorSchema } from './game'
 
-test('accepts simple human rooms and rejects unsupported simple bots', () => {
+test('accepts simple human and bot-enabled rooms', () => {
   expect(createRoomRequestSchema.parse({ capacity: 2, mode: 'simple' })).toEqual({
     allowBots: false, capacity: 2, mode: 'simple',
   })
-  expect(createRoomRequestSchema.safeParse({ capacity: 2, mode: 'simple', allowBots: true }).success).toBe(false)
+  expect(createRoomRequestSchema.safeParse({ capacity: 2, mode: 'simple', allowBots: true }).success).toBe(true)
   expect(createRoomRequestSchema.safeParse({ capacity: 2, mode: 'unknown' }).success).toBe(false)
 })
 

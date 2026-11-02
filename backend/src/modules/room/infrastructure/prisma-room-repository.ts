@@ -230,7 +230,7 @@ export function createPrismaRoomRepository(
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
-        if (room.mode === 'simple' || !room.allowBots) throw new RoomFailure('room_bots_not_allowed', 'Room does not allow bots')
+        if (!room.allowBots) throw new RoomFailure('room_bots_not_allowed', 'Room does not allow bots')
         const bots = roomBotSchema.array().parse(room.bots ?? [])
         if (room.members.length + bots.length >= room.capacity) {
           throw new RoomFailure('room_full', 'Room is already full')

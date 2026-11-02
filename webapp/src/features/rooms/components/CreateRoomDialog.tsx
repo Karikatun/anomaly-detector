@@ -70,7 +70,6 @@ export function CreateRoomDialog({
             <NativeSelect id="create-room-mode" value={mode} onChange={(event) => {
               const next = event.target.value as 'standard' | 'simple'
               setMode(next)
-              if (next === 'simple') setAllowBots(false)
             }}>
               <option value="standard">{t('rooms.create.mode.standard')}</option>
               <option value="simple">{t('rooms.create.mode.simple')}</option>
@@ -94,14 +93,12 @@ export function CreateRoomDialog({
             <Checkbox
               id="create-room-allow-bots"
               checked={allowBots}
-              disabled={mode === 'simple'}
               onCheckedChange={(checked) => setAllowBots(checked === true)}
             />
             <FieldLabel className={styles.label} htmlFor="create-room-allow-bots">
               {t('rooms.create.allowBots')}
             </FieldLabel>
           </Field>
-          {mode === 'simple' && <Typography variant="bodySm">{t('rooms.create.mode.noBots')}</Typography>}
           {error && <FieldError className={styles.error} errors={[{ message: error }]} />}
         </div>
 
