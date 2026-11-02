@@ -161,6 +161,7 @@ export function MatchHistoryList({
                   <Typography as="span" variant="caption" className={styles.time}>{date.time}</Typography>
                 </span>
                 <span className={styles.matchMeta}>
+                  <Typography as="span" variant="caption">{t(match.mode === 'simple' ? 'rooms.create.mode.simple' : 'rooms.create.mode.standard')}</Typography>
                   <Typography as="span" variant="caption" className={styles.status} data-complete={isComplete || undefined}>
                     <span className={styles.statusDot} aria-hidden="true" />
                     {status}

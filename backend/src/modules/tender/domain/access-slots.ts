@@ -14,6 +14,7 @@ export function rotateTiePriority(players: TenderPlayer[], round: number): Tende
 export function resolveAccessSlots(
   players: TenderPlayer[],
   requestedSlots: Record<string, number>,
+  freeFallbackOnly = false,
 ): Record<string, number> {
   const occupied = new Set<number>()
   const assignedSlots: Record<string, number> = {}
@@ -36,7 +37,7 @@ export function resolveAccessSlots(
   for (const player of displaced) {
     const requestedSlot = requestedSlots[player.id]
     const assignedSlot = Array.from({ length: accessSlotCount }, (_, index) => index + 1)
-      .filter((slot) => !occupied.has(slot))
+      .filter((slot) => !occupied.has(slot) && (!freeFallbackOnly || slot >= 3))
       .sort((left, right) => {
         const distanceOrder = Math.abs(left - requestedSlot) - Math.abs(right - requestedSlot)
         return distanceOrder || right - left

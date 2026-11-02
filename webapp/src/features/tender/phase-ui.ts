@@ -12,15 +12,16 @@ const roundStages = [
   { phase: 'contracts', shortLabel: translate('tender.phase-ui.copy.011'), label: translate('tender.phase-ui.copy.012') },
 ] as const
 
-export function getTenderPhaseProgressStages(phase: TenderPhase) {
+export function getTenderPhaseProgressStages(phase: TenderPhase, contractsAvailable = true) {
+  const stages = contractsAvailable ? roundStages : roundStages.filter((stage) => stage.phase !== 'contracts')
   if (phase === 'complete') return []
   if (phase === 'final-scientific-model') {
     return [
-      ...roundStages,
+      ...stages,
       { phase: 'final-scientific-model' as const, shortLabel: translate('tender.phase-ui.copy.013'), label: translate('tender.phase-ui.copy.014') },
     ]
   }
-  return roundStages
+  return stages
 }
 
 export function getPhaseContextMenuVisibility(phase: TenderPhase) {

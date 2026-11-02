@@ -1,4 +1,4 @@
-import type { ProfileStatistics } from '@anomaly-detector/contracts'
+import type { ProfileStatistics, ProfileStatisticsByMode } from '@anomaly-detector/contracts'
 
 import type {
   CompletedMatchPlayer,
@@ -18,7 +18,19 @@ export class ProfileStatisticsService {
   }
 
   async read(userId: string): Promise<ProfileStatistics> {
+    const matches = (await this.dependencies.completedTenderSummaryReader.listCompletedMatches(userId)).filter((match) => (match.mode ?? 'standard') === 'standard')
+    return this.aggregate(matches, userId)
+  }
+
+  async readByMode(userId: string): Promise<ProfileStatisticsByMode> {
     const matches = await this.dependencies.completedTenderSummaryReader.listCompletedMatches(userId)
+    const standard = this.aggregate(matches.filter((match) => (match.mode ?? 'standard') === 'standard'), userId)
+    const simpleStats = this.aggregate(matches.filter((match) => match.mode === 'simple'), userId)
+    const { averageRating: _rating, contractSuccessRate: _contracts, ...simple } = simpleStats
+    return { standard, simple }
+  }
+
+  private aggregate(matches: CompletedProfileMatch[], userId: string): ProfileStatistics {
     if (matches.length === 0) {
       return {
         averagePlacement: null,
@@ -33,11 +45,11 @@ export class ProfileStatisticsService {
 
     const placements = matches.map((match) => placementFor(match, userId))
     const performanceMatches = matches.filter((match) => !match.excludeFromPerformanceAverages)
-    const ratings = performanceMatches.map((match) => playerFor(match, userId).rating)
+    const ratings = performanceMatches.filter((match) => match.mode !== 'simple').map((match) => playerFor(match, userId).rating)
     const wins = matches.filter((match) => match.winnerPlayerIds.includes(userId)).length
     const submittedContracts = sum(matches.map((match) => match.playerResult.submittedContracts))
     const successfulContracts = sum(matches.map((match) => match.playerResult.successfulContracts))
-    const correctModelProperties = sum(matches.map((match) => match.playerResult.correctModelProperties))
+    const correctModelProperties = sum(performanceMatches.map((match) => match.playerResult.correctModelProperties))
 
     return {
       averagePlacement: average(placements),
@@ -55,6 +67,8 @@ export class ProfileStatisticsService {
 
 function placementFor(match: CompletedProfileMatch, userId: string) {
   const player = playerFor(match, userId)
+  if (player.placement !== undefined) return player.placement
+  if (match.mode === 'simple') throw new Error('Completed simple match is missing authoritative placement')
   return 1 + match.players.filter((candidate) => comparePlayers(candidate, player) < 0).length
 }
 

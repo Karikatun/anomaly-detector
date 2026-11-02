@@ -1,6 +1,6 @@
 import { isRetryableDatabaseTransactionConflict, type DbClient } from '../../../db'
 import { randomBytes } from 'node:crypto'
-import { roomBotSchema, type RoomBot } from '@anomaly-detector/contracts'
+import { gameModeSchema, roomBotSchema, type RoomBot } from '@anomaly-detector/contracts'
 import type { Prisma } from '../../../generated/prisma/client'
 import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import type { Clock, RoomRecord, RoomRepository } from '../application/ports'
@@ -16,6 +16,7 @@ export function toRoomRecord(
   overrides: Partial<Pick<RoomRecord, 'members' | 'startsAt' | 'status'>> = {},
 ): RoomRecord {
   return {
+    mode: gameModeSchema.parse(room.mode ?? 'standard'),
     allowBots: room.allowBots ?? false,
     bots: roomBotSchema.array().parse(room.bots ?? []),
     capacity: room.capacity as 2 | 3 | 4,
@@ -105,6 +106,7 @@ export function createPrismaRoomRepository(
             }
             const room = await tx.tenderRoom.create({
               data: {
+                mode: input.mode ?? 'standard',
                 allowBots: input.allowBots ?? false,
                 capacity: input.capacity,
                 hostId: input.hostId,
@@ -228,7 +230,7 @@ export function createPrismaRoomRepository(
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
-        if (!room.allowBots) throw new RoomFailure('room_bots_not_allowed', 'Room does not allow bots')
+        if (room.mode === 'simple' || !room.allowBots) throw new RoomFailure('room_bots_not_allowed', 'Room does not allow bots')
         const bots = roomBotSchema.array().parse(room.bots ?? [])
         if (room.members.length + bots.length >= room.capacity) {
           throw new RoomFailure('room_full', 'Room is already full')

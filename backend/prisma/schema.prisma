@@ -436,6 +436,7 @@ model Tender {
 }
 
 model TenderRoom {
+  mode            String             @default("standard")
   allowBots       Boolean            @default(false) @map("allow_bots")
   bots            Json               @default("[]")
   id             String             @id @default(dbgenerated("uuidv7()")) @db.Uuid

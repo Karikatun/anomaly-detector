@@ -10,6 +10,42 @@ The approach is **progressive DDD-lite**. Product contexts get explicit ownershi
 
 Do not hand-copy API shapes into clients. When a contract changes, validate producer and consumers in one pass: backend route/service and webapp API client/form. On the `mobile` branch, include the mobile API client/form in that same pass.
 
+### Неизменяемые правила режима
+
+`game.ts` в общих контрактах задаёт строгий `GameDescriptor`: режим, число
+раундов, мощность, наличие контрактов и способ подсчёта. HTTP создания комнаты
+принимает только `mode`; сервер строит описание и сохраняет его в Tender при
+обычном или отложенном старте. Команды игрока не могут подменить описание.
+Room хранит выбранный режим в `TenderRoom.mode`; Tender — точное описание в
+JSONB. Версия правил `tender-v1`/`tender-v2` остаётся отдельной осью. Отсутствие
+описания в старом Tender означает standard, отсутствие ruleset — tender-v1;
+неизвестное или противоречивое описание отклоняется, а не превращается в legacy.
+
+Simple хранит открытый пул прямых предложений, независимый приватный seed
+случайной выдачи и уникальный серверный порядок явных финальных сдач. Выдача
+детерминирована сохранённым seed, версией состояния, участником и номером
+получения внутри команды; retry и проигравший commit не создают новый draw.
+Seed выдачи не входит в live или participant audit. Отсутствие финального
+контракта simple сохраняется как отсутствие, legacy decoder не создаёт его.
+Проекции Tender применяют приватность до передачи в HTTP/realtime/клиент.
+
+Profile получает mode и порядок сдачи через существующий consumer-shaped
+reader. `GET /api/profile/statistics` сохраняет стандартную сводку;
+`GET /api/profile/statistics/by-mode` возвращает отдельные standard/simple
+сводки текущего авторизованного пользователя. Simple DTO не содержит рейтинга
+или контрактных показателей; матчи с ботами отсекаются Tender reader.
+Для simple reader передаёт уже рассчитанное доменом место: Profile не
+повторяет правило допуска явно сданной модели. При обычном завершении без
+единой явной сдачи отсутствие победителя является допустимым результатом.
+
+Миграция `20261102122404_add_room_game_mode` добавляет колонку с default
+standard, без изменения существующих матчей. Применение миграции предшествует
+запуску нового backend. Она аддитивна, но старый backend не понимает simple:
+откат на него недопустим, пока требуется обслуживать такие записи. При
+неисправности нужен совместимый forward fix либо отдельный согласованный план
+восстановления с сохранением данных; удалять simple или восстанавливать старую
+копию автоматически нельзя. В этой задаче production не мигрируется.
+
 ## Backend
 
 Backend product contexts live under `src/modules/<context>` and follow this flow:

@@ -4178,6 +4178,7 @@ maybeDescribe('auth API integration', () => {
     expect(createRoom.status).toBe(201)
     const room = await createRoom.json()
     expect(room).toEqual({
+      mode: 'standard',
       allowBots: false,
       bots: [],
       capacity: 2,

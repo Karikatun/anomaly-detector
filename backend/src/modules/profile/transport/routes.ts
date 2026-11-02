@@ -1,6 +1,7 @@
 import {
   apiErrorSchema,
   profileStatisticsSchema,
+  profileStatisticsByModeSchema,
   tutorialProgressSchema,
 } from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
@@ -26,6 +27,15 @@ const statisticsRoute = createRoute({
       content: { 'application/json': { schema: apiErrorSchema } },
       description: 'Authentication required',
     },
+  },
+})
+
+const statisticsByModeRoute = createRoute({
+  method: 'get',
+  path: '/statistics/by-mode',
+  responses: {
+    200: { content: { 'application/json': { schema: profileStatisticsByModeSchema } }, description: 'Authenticated player statistics separated by mode' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
   },
 })
 
@@ -72,6 +82,8 @@ export function createProfileRoutes(input: {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
   routes.use('*', input.authenticatedMutationBudget)
+  routes.openapi(statisticsByModeRoute, async (c) =>
+    c.json(await input.service.readByMode(c.var.user.id), 200))
   routes.openapi(statisticsRoute, async (c) =>
     c.json(await input.service.read(c.var.user.id), 200))
   routes.openapi(tutorialRoute, async (c) =>

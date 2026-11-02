@@ -60,7 +60,7 @@ export const createRatingBreakdownByPlayer = (
       if (typeof correctProperties === 'number' && Number.isInteger(correctProperties)) {
         breakdown.correctPropertyPoints += correctProperties
       }
-      if (typeof correctSignals === 'number' && Number.isInteger(correctSignals)) {
+      if (tender.game?.mode !== 'simple' && typeof correctSignals === 'number' && Number.isInteger(correctSignals)) {
         breakdown.correctSignalPoints += correctSignals
       }
     }
@@ -69,7 +69,7 @@ export const createRatingBreakdownByPlayer = (
   const finalStandingByPlayer = createFinalStandingByPlayer(tender)
   for (const player of tender.players) {
     const breakdown = breakdownByPlayer[player.id]
-    breakdown.thesisPoints = finalStandingByPlayer[player.id]?.correctTheses ?? 0
+    breakdown.thesisPoints = tender.game?.mode === 'simple' ? 0 : finalStandingByPlayer[player.id]?.correctTheses ?? 0
     const knownPoints = breakdown.completeModelBonus
       + breakdown.contractPoints
       + breakdown.correctPropertyPoints

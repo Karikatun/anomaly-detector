@@ -183,6 +183,6 @@ export function useCompleteTutorialMutation(api: ProfileApi) {
 export function useProfileStatisticsQuery(api: ProfileApi) {
   return useQuery({
     queryKey: profileQueryKeys.statistics(),
-    queryFn: () => api.getStatistics(),
+    queryFn: () => api.getStatisticsByMode(),
   })
 }

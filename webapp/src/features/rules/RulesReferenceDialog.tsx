@@ -122,6 +122,7 @@ export function RulesReferenceDialog({
   showTimerWarning = false,
   triggerIcon = 'information',
   ruleset,
+  simple = false,
 }: {
   belowTenderHeader?: boolean
   disabled?: boolean
@@ -130,6 +131,7 @@ export function RulesReferenceDialog({
   showTimerWarning?: boolean
   triggerIcon?: 'book' | 'information'
   ruleset?: TenderRuleset
+  simple?: boolean
   triggerVariant?: 'default' | 'outline' | 'ghost'
   triggerClassName?: string
   triggerIconOnly?: boolean
@@ -190,14 +192,20 @@ export function RulesReferenceDialog({
               {t('rules.timerContinues')}
             </Typography>
           )}
-          {ruleset && (
+          {ruleset && !simple && (
             <Typography variant="bodySm" tone="muted" className={styles.rulesetNotice}>
               {t(ruleset === 'tender-v1' ? 'rules.rulesetV1Notice' : 'rules.rulesetV2Notice')}
             </Typography>
           )}
 
           <div className={styles.scrollArea}>
-            <div className={styles.accordion}>
+            {simple ? <div className={styles.accordion}>
+              <Typography variant="bodySm">{t('rooms.simple.rules1')}</Typography>
+              <Typography variant="bodySm">{t('rooms.simple.rules2')}</Typography>
+              <Typography variant="bodySm">{t('rooms.simple.rules3')}</Typography>
+              <Typography variant="bodySm">{t('rooms.simple.rules4')}</Typography>
+              <Typography variant="bodySm">{t('rooms.simple.tieBreak')}</Typography>
+            </div> : <div className={styles.accordion}>
               {sections.map((section) => {
                 const isOpen = openSections.has(section.id)
                 const triggerId = `rules-${section.id}-trigger`
@@ -237,7 +245,7 @@ export function RulesReferenceDialog({
                   </section>
                 )
               })}
-            </div>
+            </div>}
           </div>
         </div>
 

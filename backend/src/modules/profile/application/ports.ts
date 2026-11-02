@@ -1,4 +1,7 @@
+import type { GameMode } from '@anomaly-detector/contracts'
+
 export type CompletedMatchPlayer = {
+  placement?: number
   budget: number
   correctTheses: number
   forfeitedAt?: string
@@ -7,6 +10,7 @@ export type CompletedMatchPlayer = {
 }
 
 export type CompletedProfileMatch = {
+  mode?: GameMode
   excludeFromPerformanceAverages: boolean
   players: CompletedMatchPlayer[]
   playerResult: {

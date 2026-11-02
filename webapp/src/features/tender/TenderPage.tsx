@@ -197,6 +197,12 @@ export function PhasePanel({
           onConfirm={(slot) => onCommand({ type: 'request-access-slot', slot })}
           tiePriorityOrder={view.players}
         >
+          {view.game?.scoring === 'properties-12' && mySamples.length < 6 && (
+            <Typography role="note">{translate('rooms.simple.slotBonus')}</Typography>
+          )}
+          {view.game?.scoring === 'properties-12' && mySamples.length === 6 && (
+            <Typography role="note">{translate('rooms.simple.fullSamples')}</Typography>
+          )}
           {view.round > 1 && (
             <TenderPlanningContext samples={mySamples} />
           )}
@@ -206,6 +212,8 @@ export function PhasePanel({
     case 'power-allocation':
       return (
         <PowerAllocationPanel
+          contractsAvailable={view.game?.contracts !== false}
+          budget={myPlayer?.budget}
           onWarningOpenChange={training?.onRequiredModalOpenChange}
           confirmedAllocation={myPlayer?.powerAllocation}
           currentUserId={playerId}
@@ -222,6 +230,7 @@ export function PhasePanel({
       return reconPower > 0 ? withWaitingState(
         <ReconnaissancePanel
           knownSignals={view.knownSignals}
+          availableSamplePool={view.availableSamplePool}
           mySamples={mySamples}
           maxSignals={reconPower}
           disabled={disabled || isWaitingForTurn}
@@ -237,6 +246,7 @@ export function PhasePanel({
       const labPower = myPower?.laboratory ?? 0
       return labPower > 0 ? withWaitingState(
         <LaboratoryPanel
+          privateResults={view.game?.scoring === 'properties-12'}
           journal={view.publicScientificJournal}
           mySamples={mySamples}
           playerId={playerId ?? ''}
@@ -271,6 +281,8 @@ export function PhasePanel({
       const maPower = myPower?.modelAnalysis ?? 0
       return maPower > 0 ? withWaitingState(
         <ModelAnalysisPanel
+          simpleScoring={view.game?.scoring === 'properties-12'}
+          budget={myPlayer?.budget}
           knownSignals={view.knownSignals}
           maxTheses={maPower}
           model={view.privateWorkingModel}
@@ -725,16 +737,14 @@ function TenderContent() {
               {translate('tender.results.title')}
             </Typography>
             <Typography as="span" variant="caption" tone="muted">
-              {translate('tender.results.headerMeta', {
-                value1: tenderView.round,
-                value2: mySlot ?? '—',
-              })}
+              {t('rooms.simple.roundSlot', { round: tenderView.round, total: tenderView.game?.rounds ?? 5, slot: mySlot ?? '—' })}
             </Typography>
           </> : <>
           <Typography variant="shortcut" tone="muted" className="uppercase">
             
-            {translate('tender.header.round', { round: tenderView.round })}
+            {t('rooms.simple.round', { round: tenderView.round, total: tenderView.game?.rounds ?? 5 })}
           </Typography>
+          <Typography variant="caption" tone="muted">{t(tenderView.game?.mode === 'simple' ? 'rooms.create.mode.simple' : 'rooms.create.mode.standard')}</Typography>
           <Typography as="h3" variant="bodySmMedium" className="truncate">{phase}</Typography>
           </>
         )}
@@ -825,6 +835,7 @@ function TenderContent() {
             </DialogContent>
           </Dialog>}
           <RulesReferenceDialog
+            simple={tenderView.game?.scoring === 'properties-12'}
             belowTenderHeader
             disabled={referenceHelpLocked}
             onOpenChange={(open) => setOverlayOpen('rules', open)}
@@ -916,7 +927,7 @@ function TenderContent() {
         )}
 
         <TenderPhaseLayout
-          progress={!isComplete ? <TenderPhaseProgress phase={tenderView.phase} /> : undefined}
+          progress={!isComplete ? <TenderPhaseProgress phase={tenderView.phase} contractsAvailable={tenderView.game?.contracts !== false} /> : undefined}
           primary={(
             <div
               ref={primaryContentRef}
@@ -971,7 +982,7 @@ function TenderContent() {
                 modelTabDisabled={journalModelDisabled}
                 disabled={!connected || mutationLocked || journalAccess.researchOnly || tenderView.phase === 'final-scientific-model'}
               />
-              {contextMenuVisibility.contracts && (
+              {tenderView.game?.contracts !== false && contextMenuVisibility.contracts && (
                 <ContractPlanningPanel
                   open={contextModal === 'contracts' && !referenceHelpUrgentlyLocked}
                   onOpenChange={(open) => setOverlayOpen('contracts', open)}

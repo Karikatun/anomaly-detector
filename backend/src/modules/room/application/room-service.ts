@@ -1,4 +1,4 @@
-import type { BotDifficulty, RoomView } from '@anomaly-detector/contracts'
+import type { BotDifficulty, GameMode, RoomView } from '@anomaly-detector/contracts'
 
 import { RoomFailure } from '../domain/errors'
 import type {
@@ -22,7 +22,8 @@ type TenderRoomServiceDependencies = {
 export class TenderRoomService {
   constructor(private readonly dependencies: TenderRoomServiceDependencies) {}
 
-  async createRoom(input: { allowBots?: boolean; capacity: 2 | 3 | 4; hostId: string }): Promise<RoomView> {
+  async createRoom(input: { mode?: GameMode; allowBots?: boolean; capacity: 2 | 3 | 4; hostId: string }): Promise<RoomView> {
+    if (input.mode === 'simple' && input.allowBots) throw new RoomFailure('room_bots_not_allowed', 'В простом режиме боты пока недоступны.')
     await this.releaseCompletedCurrentMatch(input.hostId)
     const room = await this.dependencies.repository.create(input)
     return this.toRoomView(room, input.hostId)
@@ -122,6 +123,7 @@ export class TenderRoomService {
     const userIds = room.members.map((member) => member.userId)
     const displayNames = await this.dependencies.memberIdentityReader.readDisplayNames(userIds)
     return {
+      mode: room.mode ?? 'standard',
       allowBots: room.allowBots ?? false,
       ...(room.bots === undefined ? {} : { bots: room.bots }),
       capacity: room.capacity,

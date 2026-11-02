@@ -594,7 +594,7 @@
   }
 }
 
-@media (min-width: 48rem) and (max-width: 79.999rem) {
+@media (min-width: 48rem) and (max-width: 89.999rem) {
   .slotCard {
     display: grid;
     min-height: 9.5rem;
@@ -637,7 +637,7 @@
   }
 }
 
-@media (min-width: 80rem) {
+@media (min-width: 90rem) {
   .slotGrid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 1rem;

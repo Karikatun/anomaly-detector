@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { NativeSelect } from '@/components/ui/native-select'
+import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
 import { useI18n } from '@/platform/i18n'
 import { RoomsApi } from '../api'
@@ -32,6 +33,7 @@ export function CreateRoomDialog({
   const auth = useAuth()
   const navigate = useNavigate()
   const [capacity, setCapacity] = useState<2 | 3 | 4>(2)
+  const [mode, setMode] = useState<'standard' | 'simple'>('standard')
   const [allowBots, setAllowBots] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const api = new RoomsApi(auth.transport)
@@ -39,7 +41,7 @@ export function CreateRoomDialog({
 
   const handleCreate = async () => {
     setError(null)
-    const result = createRoomRequestSchema.safeParse({ allowBots, capacity })
+    const result = createRoomRequestSchema.safeParse({ allowBots, capacity, mode })
     if (!result.success) {
       setError(t('rooms.create.error.invalid'))
       return
@@ -64,6 +66,19 @@ export function CreateRoomDialog({
 
         <div className={styles.form}>
           <Field className={styles.field}>
+            <FieldLabel className={styles.label} htmlFor="create-room-mode">{t('rooms.create.mode')}</FieldLabel>
+            <NativeSelect id="create-room-mode" value={mode} onChange={(event) => {
+              const next = event.target.value as 'standard' | 'simple'
+              setMode(next)
+              if (next === 'simple') setAllowBots(false)
+            }}>
+              <option value="standard">{t('rooms.create.mode.standard')}</option>
+              <option value="simple">{t('rooms.create.mode.simple')}</option>
+            </NativeSelect>
+            <Typography variant="bodySm">{t(mode === 'simple' ? 'rooms.create.mode.simpleDescription' : 'rooms.create.mode.standardDescription')}</Typography>
+            <details><summary><Typography as="span" variant="bodySm">{t('rooms.create.mode.details')}</Typography></summary><Typography variant="bodySm">{t(mode === 'simple' ? 'rooms.create.mode.simpleDetails' : 'rooms.create.mode.standardDetails')}</Typography></details>
+          </Field>
+          <Field className={styles.field}>
             <FieldLabel className={styles.label} htmlFor="create-room-capacity">{t('rooms.create.capacity')}</FieldLabel>
             <NativeSelect
               id="create-room-capacity"
@@ -79,12 +94,14 @@ export function CreateRoomDialog({
             <Checkbox
               id="create-room-allow-bots"
               checked={allowBots}
+              disabled={mode === 'simple'}
               onCheckedChange={(checked) => setAllowBots(checked === true)}
             />
             <FieldLabel className={styles.label} htmlFor="create-room-allow-bots">
               {t('rooms.create.allowBots')}
             </FieldLabel>
           </Field>
+          {mode === 'simple' && <Typography variant="bodySm">{t('rooms.create.mode.noBots')}</Typography>}
           {error && <FieldError className={styles.error} errors={[{ message: error }]} />}
         </div>
 

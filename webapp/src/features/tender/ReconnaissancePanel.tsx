@@ -18,6 +18,7 @@ import { runTenderAction } from './run-tender-action'
 import { PhaseNotice } from './components/TenderActionPanel'
 
 type ReconnaissancePanelProps = {
+  availableSamplePool?: SignalId[]
   mySamples: SignalId[]
   knownSignals: SignalId[]
   maxSignals: number
@@ -84,6 +85,7 @@ export function ReconnaissanceUnavailable({ mySamples }: { mySamples: SignalId[]
 }
 
 export function ReconnaissancePanel({
+  availableSamplePool,
   mySamples,
   knownSignals,
   maxSignals,
@@ -93,7 +95,9 @@ export function ReconnaissancePanel({
 }: ReconnaissancePanelProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const { t } = useI18n()
-  const available = availableReconnaissanceTargets({ knownSignals, mySamples })
+  const available = availableSamplePool === undefined
+    ? availableReconnaissanceTargets({ knownSignals, mySamples })
+    : [...Array.from({ length: Math.min(2, 6 - mySamples.length) }, (_, index) => `unknown-sector-${index + 1}`), ...availableSamplePool.filter((signal) => !mySamples.includes(signal))]
   const unknownTargets = available.filter((target) => target.startsWith('unknown-sector-'))
   const revealedTargets = available.filter(isSignalId)
   const signalName = (signal: SignalId) => t(signalLabelKeys[signal])
@@ -118,7 +122,7 @@ export function ReconnaissancePanel({
     const isAtLimit = !isSelected && selected.size >= maxSignals
     const label = signal
       ? signalName(signal)
-      : translate('tender.reconnaissancePanel.copy.007', { value1: String.fromCharCode(65 + index) })
+      : availableSamplePool !== undefined ? t('rooms.simple.randomTarget', { index: index + 1 }) : translate('tender.reconnaissancePanel.copy.007', { value1: String.fromCharCode(65 + index) })
 
     return (
       <button
@@ -139,7 +143,7 @@ export function ReconnaissancePanel({
         <span className={styles.signalCopy}>
           <span className={styles.targetStatusRow}>
             <Typography as="span" variant="caption" className={styles.targetType}>
-              {signal ? t('tender.recon.state.available') : t('tender.recon.state.unknown')}
+              {signal ? t('tender.recon.state.available') : availableSamplePool !== undefined ? t('rooms.simple.randomLabel') : t('tender.recon.state.unknown')}
             </Typography>
             {selectionIndex && (
               <Typography as="span" variant="caption" className={styles.selectionIndex}>
@@ -154,7 +158,7 @@ export function ReconnaissancePanel({
           </span>
           <Typography as="strong" variant="bodySmMedium" className={styles.signalName}>{label}</Typography>
           <Typography as="span" variant="caption" className={styles.signalDetail}>
-            {signal ? translate('tender.reconnaissancePanel.copy.008') : translate('tender.reconnaissancePanel.copy.009')}
+            {signal ? translate('tender.reconnaissancePanel.copy.008') : availableSamplePool !== undefined ? t('rooms.simple.randomDetail') : translate('tender.reconnaissancePanel.copy.009')}
           </Typography>
         </span>
       </button>
@@ -168,7 +172,7 @@ export function ReconnaissancePanel({
     const label = target
       ? signal
         ? signalName(signal)
-        : translate('tender.reconnaissancePanel.copy.007', { value1: String.fromCharCode(65 + unknownTargets.indexOf(target)) })
+        : availableSamplePool !== undefined ? t('rooms.simple.randomTarget', { index: unknownTargets.indexOf(target) + 1 }) : translate('tender.reconnaissancePanel.copy.007', { value1: String.fromCharCode(65 + unknownTargets.indexOf(target)) })
       : t('tender.recon.selectionEmpty')
 
     return (
@@ -195,6 +199,7 @@ export function ReconnaissancePanel({
           <Typography as="strong" variant="h4">{maxSignals}</Typography>
         </span>
       </header>
+      {availableSamplePool !== undefined && <Typography variant="bodySm" tone="muted">{t('rooms.simple.randomSearch')}</Typography>}
 
       <div className={styles.workspace}>
         <div className={styles.targetsSurface}>
@@ -205,8 +210,8 @@ export function ReconnaissancePanel({
               <section className={styles.targetGroup}>
               <div className={styles.sectionHeader}>
                   <span className={styles.sectionHeadingCopy}>
-                    <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{translate('tender.reconnaissancePanel.copy.012')}</Typography>
-                    <Typography as="span" variant="caption" tone="muted">{translate('tender.reconnaissancePanel.copy.013')}</Typography>
+                    <Typography as="h3" variant="bodySmMedium" className={styles.sectionTitle}>{t(availableSamplePool !== undefined ? 'rooms.simple.randomLabel' : 'tender.reconnaissancePanel.copy.012')}</Typography>
+                    <Typography as="span" variant="caption" tone="muted">{t(availableSamplePool !== undefined ? 'rooms.simple.randomDetail' : 'tender.reconnaissancePanel.copy.013')}</Typography>
                   </span>
               </div>
               <div className={styles.signalGrid}>

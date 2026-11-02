@@ -215,6 +215,68 @@ test('desktop does not label a participant as winner or place them when the part
   expect(html).not.toContain('data-winner="true"')
 })
 
+test('a simple match without submitted models has no winner or invented places on either layout', () => {
+  const noWinner = {
+    ...view,
+    game: { mode: 'simple', rounds: 3, powerPerRound: 4, contracts: false, scoring: 'properties-12' },
+    audit: {
+      ...view.audit,
+      completionReason: 'standard',
+      finalScientificModelsByPlayer: {
+        'player-a': { signals: {}, submitted: false },
+        'player-b': { signals: {}, submitted: false },
+      },
+      placementByPlayer: {},
+    },
+    winnerPlayerIds: [],
+  } as const satisfies TenderView & { audit: NonNullable<TenderView['audit']> }
+  const mobile = renderToStaticMarkup(<I18nProvider><CompletedTenderPanel currentUserId="player-a" view={noWinner} /></I18nProvider>)
+  const desktop = renderToStaticMarkup(<I18nProvider><CompletedTenderDesktop currentUserId="player-a" view={noWinner}><span /></CompletedTenderDesktop></I18nProvider>)
+  for (const html of [mobile, desktop]) {
+    expect(html).toContain('Партия без победителя')
+    expect(html).not.toContain('Вы победили')
+    expect(html).not.toContain('Победитель</')
+    expect(html).not.toContain('1 место')
+    expect(html).not.toContain('data-winner="true"')
+  }
+  expect(mobile).not.toContain('0/12 верно')
+  expect(mobile).toContain('Не отправлена')
+  expect(mobile).toContain('Финальная модель не отправлена')
+})
+
+test('audit shows contract power only when the game supports contracts', () => {
+  const round = view.audit.rounds[0]!
+  const audit = {
+    ...view.audit,
+    rounds: [{
+      ...round,
+      contracts: [],
+      reconnaissance: [{ playerId: 'player-a', resolution: 'completed' as const, targets: ['aster' as const, 'unknown-sector' as const] }],
+      powerAllocations: round.powerAllocations.map((entry) => ({
+        ...entry,
+        allocation: { ...entry.allocation, contracts: 0 },
+      })),
+    }],
+  }
+  const renderAudit = (game: TenderView['game']) => renderToStaticMarkup(
+    <I18nProvider><CompletedTenderPanel currentUserId="player-a" view={{ ...view, game, audit }} /></I18nProvider>,
+  )
+  const contractPower = /<small[^>]*>Контракты<\/small><strong[^>]*>0<\/strong>/
+  const standardAudit = renderAudit(undefined)
+  const simpleGame = { mode: 'simple', rounds: 3, powerPerRound: 4, contracts: false, scoring: 'properties-12' } as const
+  const simpleAudit = renderAudit(simpleGame)
+  expect(standardAudit).toMatch(contractPower)
+  expect(simpleAudit).not.toMatch(contractPower)
+  expect(standardAudit).toContain('Неизвестный сектор')
+  expect(simpleAudit).toContain('Случайный поиск')
+  expect(simpleAudit).toContain('Aster')
+  const renderDesktop = (game: TenderView['game']) => renderToStaticMarkup(
+    <I18nProvider><CompletedTenderDesktop currentUserId="player-a" view={{ ...view, game, audit }}><span /></CompletedTenderDesktop></I18nProvider>,
+  )
+  expect(renderDesktop(undefined)).toContain('Исследования, тезисы, контракты и начисление очков по раундам.')
+  expect(renderDesktop(simpleGame)).not.toContain('контракты и начисление очков')
+})
+
 test('shows what contributed to every player rating in the final audit', () => {
   const html = renderToStaticMarkup(
     <I18nProvider>

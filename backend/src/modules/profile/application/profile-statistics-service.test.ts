@@ -2,6 +2,23 @@ import { expect, test } from 'bun:test'
 
 import { ProfileStatisticsService } from './profile-statistics-service'
 
+test('uses authoritative simple placement and keeps its accuracy separate from standard ratings', async () => {
+  const service = new ProfileStatisticsService({ completedTenderSummaryReader: { listCompletedMatches: async () => [
+    { mode: 'simple', excludeFromPerformanceAverages: false, players: [
+      { playerId: 'a', rating: 8, budget: 5, correctTheses: 0, placement: 1 },
+      { playerId: 'b', rating: 8, budget: 5, correctTheses: 5, placement: 2 },
+    ], playerResult: { correctModelProperties: 8, submittedContracts: 0, successfulContracts: 0 }, winnerPlayerIds: ['a'] },
+    { excludeFromPerformanceAverages: false, players: [
+      { playerId: 'a', rating: 21, budget: 2, correctTheses: 2 },
+      { playerId: 'b', rating: 10, budget: 5, correctTheses: 0 },
+    ], playerResult: { correctModelProperties: 12, submittedContracts: 1, successfulContracts: 1 }, winnerPlayerIds: ['a'] },
+  ] } })
+  expect(await service.read('a')).toMatchObject({ matchesPlayed: 1, averageRating: 21, modelAccuracy: 1 })
+  const result = await service.readByMode('a')
+  expect(result.standard.matchesPlayed).toBe(1)
+  expect(result.simple).toEqual({ averagePlacement: 1, matchesPlayed: 1, modelAccuracy: 8 / 12, wins: 1, winRate: 1 })
+})
+
 test('aggregates completed match results with shared places and full shared wins', async () => {
   const service = new ProfileStatisticsService({
     completedTenderSummaryReader: {

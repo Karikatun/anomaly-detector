@@ -3,9 +3,11 @@ import {
   recoveryCodeSetResponseSchema,
   startRecoveryCodeReissueResponseSchema,
   profileStatisticsSchema,
+  profileStatisticsByModeSchema,
   recoveryEmailReplacementCommandResponseSchema,
   tutorialProgressSchema,
   type ProfileStatistics,
+  type ProfileStatisticsByMode,
   type AccountProtectionResponse,
   type ConfirmRecoveryCodeReissueRequest,
   type ConfirmRecoveryEmailReplacementRequest,
@@ -31,6 +33,10 @@ export class ProfileApi {
 
   getStatistics(): Promise<ProfileStatistics> {
     return this.transport.request('/api/profile/statistics', profileStatisticsSchema)
+  }
+
+  getStatisticsByMode(): Promise<ProfileStatisticsByMode> {
+    return this.transport.request('/api/profile/statistics/by-mode', profileStatisticsByModeSchema)
   }
 
   getAccountProtection(): Promise<AccountProtectionResponse> {

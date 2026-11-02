@@ -1,5 +1,6 @@
 import type {
   AdvanceDueTendersInput,
+  GameDescriptor,
   CommandReceipt,
   PowerAllocation,
   PublicContract,
@@ -29,6 +30,10 @@ export type StoredTenderCommand = {
 }
 
 export type StoredTender = {
+  game?: GameDescriptor
+  availableSamplePool?: SignalId[]
+  sampleRandomSeed?: string
+  finalSubmissionOrderByPlayer?: Record<string, number>
   accessSlots: Record<string, number>
   abandonmentDueAt: Date | null
   anomalyConfiguration: AnomalyConfiguration
@@ -53,7 +58,7 @@ export type StoredTender = {
   powerAllocations: Record<string, PowerAllocation>
   processedCommands: Record<string, StoredTenderCommand>
   publicContracts: PublicContract[]
-  publicFinalContract: PublicContract
+  publicFinalContract?: PublicContract
   publicLaboratoryResults: PublicLaboratoryResult[]
   publicScientificJournal: ScientificJournalEntry[]
   publicTheses: PublicThesis[]

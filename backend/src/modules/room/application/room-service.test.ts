@@ -59,6 +59,7 @@ test('creates a waiting private room with its host in the first seat', async () 
   })
 
   await expect(service.createRoom({ capacity: 3, hostId: 'user-1' })).resolves.toEqual({
+    mode: 'standard',
     allowBots: false,
     capacity: 3,
     hostId: 'user-1',
@@ -221,6 +222,7 @@ test('lists started matches for the requesting player', async () => {
   })
 
   await expect(service.listMatches('user-1')).resolves.toEqual([{
+    mode: 'standard',
     allowBots: false,
     capacity: 2,
     hostId: 'user-1',
@@ -382,6 +384,7 @@ test('schedules a full room start and exposes its server start time', async () =
   })
 
   await expect(service.startRoom({ actorId: 'user-1', roomId: 'room-1' })).resolves.toEqual({
+    mode: 'standard',
     allowBots: false,
     capacity: 2,
     hostId: 'user-1',
@@ -420,6 +423,7 @@ test('lets the host cancel a scheduled room start', async () => {
   })
 
   await expect(service.cancelRoomStart({ actorId: 'user-1', roomId: 'room-1' })).resolves.toEqual({
+    mode: 'standard',
     allowBots: false,
     capacity: 2,
     hostId: 'user-1',

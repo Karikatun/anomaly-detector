@@ -1,5 +1,5 @@
 import { isRetryableDatabaseTransactionConflict, type DbClient } from '../../../db'
-import { roomBotSchema } from '@anomaly-detector/contracts'
+import { gameModeSchema, roomBotSchema } from '@anomaly-detector/contracts'
 import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import { createPersistentTenderModule } from '../../tender'
 
@@ -77,6 +77,7 @@ async function startDueRoom(
         const displayNameById = new Map(users.map((user) => [user.id, user.displayName]))
         const tender = createPersistentTenderModule(tx as DbClient, accountLifecycleSecret)
         const { tenderId } = await tender.createTender({
+          mode: gameModeSchema.parse(room.mode ?? 'standard'),
           players: [
             ...room.members.map((member) => ({
               id: member.userId,

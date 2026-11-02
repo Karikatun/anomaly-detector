@@ -18,4 +18,11 @@ export const tutorialProgressSchema = z.object({
 }).strict()
 
 export type ProfileStatistics = z.infer<typeof profileStatisticsSchema>
+
+export const profileStatisticsByModeSchema = z.object({
+  standard: profileStatisticsSchema,
+  simple: profileStatisticsSchema.omit({ averageRating: true, contractSuccessRate: true }),
+}).strict()
+
+export type ProfileStatisticsByMode = z.infer<typeof profileStatisticsByModeSchema>
 export type TutorialProgress = z.infer<typeof tutorialProgressSchema>

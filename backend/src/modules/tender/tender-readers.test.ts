@@ -7,6 +7,17 @@ import {
   createTenderLifecycleReader,
 } from './application/tender-readers'
 
+for (const mode of ['simple', 'standard'] as const) test(`projects a legitimate abandoned ${mode} match without inventing a winner`, async () => {
+  const store = createInMemoryTenderStore()
+  const now = new Date('2026-11-02T12:00:00.000Z')
+  const tender = createTenderModule({ now: () => now, store })
+  const { tenderId } = await tender.createTender({ mode, players: [{ id: 'a', tiePriority: 1 }, { id: 'b', tiePriority: 2 }] })
+  for (const actorId of ['a', 'b']) await tender.execute({ actorId, commandId: `leave-${actorId}`, tenderId, type: 'leave-tender' })
+  await tender.advanceDueTenders({ now: new Date(now.getTime() + 6_000), limit: 10 })
+  expect(await tender.readTenderView({ tenderId, playerId: 'a' })).toMatchObject({ phase: 'complete', completionReason: 'all_players_left', winnerPlayerIds: [] })
+  expect(await createCompletedTenderSummaryReader(store).listCompletedForPlayer('a')).toMatchObject([{ mode, winnerPlayerIds: [] }])
+})
+
 test('projects completed match summaries without exposing stored Tender state', async () => {
   const store = createInMemoryTenderStore()
   const tender = createTenderModule({
@@ -28,6 +39,7 @@ test('projects completed match summaries without exposing stored Tender state', 
 
   await expect(createCompletedTenderSummaryReader(store).listCompletedForPlayer('player-a'))
     .resolves.toEqual([{
+      mode: 'standard',
       excludeFromPerformanceAverages: true,
       players: [
         {

@@ -65,6 +65,30 @@ maybeDescribe('profile statistics API integration', () => {
     await prisma.$disconnect()
   })
 
+  test('keeps both mode statistics readable after all participants abandon their matches', async () => {
+    const registration = await app.request('/api/auth/token/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'profile-abandoned', password: 'password123', privacyConsent: true, privacyConsentVersion: '1.1', termsAccepted: true, termsVersion: '1.1' }),
+    })
+    expect(registration.status).toBe(201)
+    const session = await registration.json() as { accessToken: string; user: { id: string } }
+    const guest = await prisma.user.create({ data: { login: 'profile-abandoned-guest', passwordHash: 'hash' } })
+    const now = new Date()
+    for (const mode of ['simple', 'standard'] as const) {
+      const module = createTenderModule({ now: () => now, store: createPrismaTenderStore(prisma) })
+      const { tenderId } = await module.createTender({ mode, players: [{ id: session.user.id, tiePriority: 1 }, { id: guest.id, tiePriority: 2 }] })
+      for (const actorId of [session.user.id, guest.id]) await module.execute({ actorId, commandId: `leave-${actorId}`, tenderId, type: 'leave-tender' })
+      await module.advanceDueTenders({ now: new Date(now.getTime() + 6_000), limit: 10 })
+      expect((await createTenderModule({ store: createPrismaTenderStore(prisma) }).readTenderView({ tenderId, playerId: session.user.id })).audit).toBeDefined()
+    }
+    const response = await app.request('/api/profile/statistics/by-mode', { headers: { Authorization: `Bearer ${session.accessToken}` } })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ standard: { matchesPlayed: 1, wins: 0 }, simple: { matchesPlayed: 1, wins: 0 } })
+    const legacyResponse = await app.request('/api/profile/statistics', { headers: { Authorization: `Bearer ${session.accessToken}` } })
+    expect(legacyResponse.status).toBe(200)
+    expect(await legacyResponse.json()).toMatchObject({ matchesPlayed: 1, wins: 0 })
+  })
+
   test('returns persisted completed-match statistics only to the authenticated player', async () => {
     const registration = await app.request('/api/auth/token/register', {
       method: 'POST',

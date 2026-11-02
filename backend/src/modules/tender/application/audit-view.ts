@@ -425,7 +425,7 @@ export function createParticipantAuditRounds(
         || thesis.fieldTypeCorrect !== event.payload.fieldTypeCorrect
         || thesis.polarityCorrect !== event.payload.polarityCorrect
         || thesis.fullyCorrect !== event.payload.fullyCorrect
-        || (recordedAward !== undefined && recordedAward !== (earnsReward ? 1 : 0))
+        || (recordedAward !== undefined && recordedAward !== (earnsReward && tender.game?.mode !== 'simple' ? 1 : 0))
       ) {
         throw participantAuditMismatch(event)
       }
@@ -434,7 +434,7 @@ export function createParticipantAuditRounds(
       if (earnsReward) {
         awardedSignals.add(thesis.signalId)
         awardedThesisSignalsByPlayer.set(playerId, awardedSignals)
-        round.ratingChanges.push({ playerId, points: 1, source: 'thesis' })
+        if (tender.game?.mode !== 'simple') round.ratingChanges.push({ playerId, points: 1, source: 'thesis' })
       }
       continue
     }
@@ -468,7 +468,7 @@ export function createParticipantAuditRounds(
         signalId: publicThesis.signalId,
       })
       if (publicThesis.correct) {
-        round.ratingChanges.push({ playerId, points: 1, source: 'thesis' })
+        if (tender.game?.mode !== 'simple') round.ratingChanges.push({ playerId, points: 1, source: 'thesis' })
       }
       continue
     }
