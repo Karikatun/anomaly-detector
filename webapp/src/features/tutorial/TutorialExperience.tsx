@@ -21,8 +21,6 @@ import {
 } from '@/features/tender/public/tutorial-board'
 import { useI18n } from '@/platform/i18n'
 import { MetrikaConsent } from '@/platform/analytics/MetrikaConsent'
-import { productAnalytics } from '@/platform/analytics/product-analytics'
-import { metrika } from '@/platform/analytics/metrika'
 import {
   advanceTutorial,
   createTutorialState,
@@ -36,6 +34,7 @@ import {
 import {
   clearTutorialSession,
   saveTutorialSession,
+  getTutorialStorage,
 } from './session'
 import { resolveTutorialPresentation, tutorialSafeVerticalBounds, tutorialScrollDelta } from './tutorial-layout'
 import styles from './TutorialPage.module.css'
@@ -79,6 +78,12 @@ const taskKeys: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, Translati
   'round-2-contract-bid': 'tutorial.step.contractBid',
   'final-model-intro': 'tutorial.step.finalModelIntro',
   'final-model': 'tutorial.step.finalModel',
+  'round-2-thesis-result': 'tutorial.base.round2Checked',
+  'round-3-access': 'tutorial.base.round3Access',
+  'round-3-power': 'tutorial.base.round3Power',
+  'round-3-recon': 'tutorial.base.round3Recon',
+  'round-3-lab': 'tutorial.base.round3Lab',
+  'round-3-thesis': 'tutorial.base.round3Thesis',
 }
 
 const mobileTaskKeys: Partial<Record<Exclude<TutorialStep, 'complete' | 'prologue'>, TranslationKey>> = {
@@ -112,6 +117,8 @@ const informationalSteps = new Set<TutorialStep>([
   'round-1-model-intro',
   'round-2-contracts-intro',
   'final-model-intro',
+  'round-1-thesis-result',
+  'round-2-thesis-result',
 ])
 const mobileActionPinnedSteps = new Set<TutorialStep>([
   'round-1-access-intro',
@@ -133,16 +140,25 @@ export function TutorialExperience({
   onExit,
   exitLabel,
   renderCompletion,
+  storageNotice,
 }: {
   initialState: TutorialState
-  onComplete?: () => Promise<void>
+  onComplete?: (state: TutorialState, signal: AbortSignal) => Promise<void>
   onExit: () => void
   exitLabel: TranslationKey
-  renderCompletion: (restart: () => void) => ReactNode
+  renderCompletion: (restart: () => void, state: TutorialState) => ReactNode
+  storageNotice?: string | null
 }) {
   const { t } = useI18n()
   const [state, setState] = useState(initialState)
+  const stateRef = useRef(initialState)
+  const [storage] = useState(getTutorialStorage)
+  const [storageUnavailable, setStorageUnavailable] = useState(false)
   const [lesson, setLesson] = useState(() => new AbortController())
+  const [runEpoch, setRunEpoch] = useState(0)
+  const lessonMounted = useRef(false)
+  useLayoutEffect(() => { lessonMounted.current = true; return () => { lessonMounted.current = false } }, [])
+  useLayoutEffect(() => { stateRef.current = state }, [state])
   const playerId = initialState.playerId
   const [commandError, setCommandError] = useState<string | null>(null)
   const [thesisFeedback, setThesisFeedback] = useState<NonNullable<TutorialAdvanceResult['thesisFeedback']> | null>(null)
@@ -224,18 +240,21 @@ export function TutorialExperience({
   const applyAction = async (action: TutorialAction) => {
     // Disposal may flush a draft through an old callback after Exit or Repeat.
     // Only callbacks belonging to the active lesson may persist or progress it.
-    if (lesson.signal.aborted) return false
-    const result = advanceTutorial(state, action)
+    if (!lessonMounted.current || lesson.signal.aborted) return false
+    if (action.type === 'restart-exercise') { lesson.abort(); setLesson(new AbortController()); setRunEpoch((epoch) => epoch + 1) }
+    const before = stateRef.current
+    const result = advanceTutorial(before, action)
     if (action.type === 'submit-thesis') {
-      setThesisFeedback(result.thesisFeedback && !result.progressed ? result.thesisFeedback : null)
+      setThesisFeedback(result.thesisFeedback ?? null)
     } else if (result.state.step !== state.step) {
       setThesisFeedback(null)
     }
     const stateChanged = result.state !== state
     if (stateChanged) {
       if (result.state.step !== state.step) setExplanationStep(null)
+      stateRef.current = result.state
       setState(result.state)
-      saveTutorialSession(sessionStorage, result.state)
+      if (!saveTutorialSession(storage, result.state)) setStorageUnavailable(true)
     }
     const isDraftSave = action.type === 'update-scientific-model-draft' || action.type === 'update-working-model'
     const isNavigation = action.type.startsWith('open-') || action.type.startsWith('close-')
@@ -251,9 +270,7 @@ export function TutorialExperience({
             : 'tutorial.coach.invalid'))
 
     if (result.state.step === 'complete' && state.step !== 'complete') {
-      void productAnalytics.record('tutorial_complete')
-      metrika.record('tutorial_complete')
-      await onComplete?.()
+      await onComplete?.(result.state, lesson.signal)
     }
 
     return result.progressed
@@ -262,9 +279,10 @@ export function TutorialExperience({
   const restart = () => {
     lesson.abort()
     setLesson(new AbortController())
-    clearTutorialSession(sessionStorage, playerId)
+    setRunEpoch((epoch) => epoch + 1)
+    clearTutorialSession(storage, playerId)
     const fresh = createTutorialState(playerId)
-    saveTutorialSession(sessionStorage, fresh)
+    saveTutorialSession(storage, fresh)
     setCommandError(null)
     setThesisFeedback(null)
     setExplanationStep(null)
@@ -274,7 +292,7 @@ export function TutorialExperience({
   const exit = () => {
     exitOpener.current = null
     lesson.abort()
-    clearTutorialSession(sessionStorage, playerId)
+    clearTutorialSession(storage, playerId)
     setExitOpen(false)
     onExit()
   }
@@ -301,6 +319,7 @@ export function TutorialExperience({
             </DialogHeader>
             <div className={styles.stateContent}>
               <Typography>{t('tutorial.prologue.mission')}</Typography>
+              {storageNotice && <Typography role="status">{storageNotice}</Typography>}
               <Typography tone="muted">{t('tutorial.prologue.goal')}</Typography>
               <MetrikaConsent inline />
             </div>
@@ -318,13 +337,14 @@ export function TutorialExperience({
     )
   }
 
-  if (state.step === 'complete') return renderCompletion(restart)
+  if (state.step === 'complete') return renderCompletion(restart, state)
 
   const retiredSteps = new Set<TutorialStep>([
     'interaction-guide', 'round-1-header', 'round-1-sidebar', 'round-1-contracts',
     'round-1-access-intro', 'round-1-power-intro', 'round-1-recon-intro', 'round-1-lab-intro',
-    'help-menu', 'round-1-model-intro', 'round-1-thesis-result',
+    'help-menu', 'round-1-model-intro',
     'round-1-thesis-result-open', 'round-2-contracts-intro', 'final-model-intro',
+    'round-2-contracts-review', 'round-2-contracts-review-open', 'round-2-recon', 'round-2-contract-reserve', 'round-2-contract-bid',
   ])
   const visibleSteps = orderedSteps.filter((tutorialStep) => !retiredSteps.has(tutorialStep))
   const currentTaskKey: TranslationKey = (compactHeader ? mobileTaskKeys[state.step] : undefined) ?? taskKeys[state.step]
@@ -343,7 +363,7 @@ export function TutorialExperience({
       spotlight: '[data-tutorial-access-options]',
     },
     'round-1-access': {
-      anchor: '[data-tutorial-access-slot="5"]',
+      anchor: '[data-tutorial-access-slot="6"]',
     },
     'round-1-power-intro': {
       anchor: compactGuidance ? '[data-tutorial-power-intro]' : '[data-tutorial-primary]',
@@ -354,7 +374,7 @@ export function TutorialExperience({
     },
     'round-1-recon-intro': { anchor: '[data-tutorial-primary]' },
     'round-1-recon': {
-      anchor: '[data-tutorial-recon-anchor]',
+      anchor: '[data-tutorial-recon-target="aster"]',
       spotlight: '[data-tutorial-recon-options]',
     },
     'round-1-lab-intro': { anchor: '[data-tutorial-primary]' },
@@ -392,7 +412,7 @@ export function TutorialExperience({
     'round-1-thesis-result': { anchor: '[data-testid="tutorial-research-trigger"]' },
     'round-1-thesis-result-open': { anchor: '[data-tender-journal]' },
     'round-2-access': {
-      anchor: '[data-tutorial-access-slot="4"]',
+      anchor: '[data-tutorial-access-slot="5"]',
       spotlight: '[data-tutorial-access-options]',
     },
     'round-2-contracts-review': { anchor: '[data-testid="tutorial-contracts-trigger"]' },
@@ -416,9 +436,9 @@ export function TutorialExperience({
     },
     'round-2-working-model': {
       anchor: journalOpen
-        ? '[data-tender-journal] [data-tutorial-working-model-row="boreal"]'
+        ? '[data-tender-journal] [data-tutorial-working-model-row="cinder"]'
         : '[data-testid="tutorial-research-trigger"]',
-      fallback: journalOpen ? '[data-tender-journal] [data-tutorial-working-model-row="boreal"] [role="group"]:not([data-options])' : undefined,
+      fallback: journalOpen ? '[data-tender-journal] [data-tutorial-working-model-row="cinder"] [role="group"]:not([data-options])' : undefined,
     },
     'round-2-thesis': {
       anchor: '[data-tutorial-thesis]',
@@ -435,9 +455,13 @@ export function TutorialExperience({
       fallback: '[data-contract-id="tutorial-light-contract"] button',
     },
     'final-model-intro': { anchor: '[data-tutorial-primary]' },
-    'final-model': {
-      anchor: '[data-tutorial-final-submit]',
-    },
+    'final-model': { anchor: '[data-tutorial-primary]' },
+    'round-2-thesis-result': { anchor: '[data-tutorial-primary]' },
+    'round-3-access': { anchor: '[data-tutorial-access-options]' },
+    'round-3-power': { anchor: '[data-tutorial-primary]' },
+    'round-3-recon': { anchor: '[data-tutorial-recon-anchor]' },
+    'round-3-lab': { anchor: '[data-tutorial-primary]' },
+    'round-3-thesis': { anchor: '[data-tutorial-thesis]' },
   }
   const pilot = pilotCopy[state.step]
   const requestedTarget = nearest?.selector ? { anchor: nearest.selector } : phaseTargetConfig[state.step]
@@ -482,7 +506,9 @@ export function TutorialExperience({
           current: visibleSteps.indexOf(state.step) + 1,
           total: visibleSteps.length,
         })}
-      hint={state.hintLevel > 0 ? t('tutorial.coach.hint') : undefined}
+      hint={state.hintLevel > 0 ? t(state.hintLevel === 1 ? 'tutorial.base.hint1' : 'tutorial.base.hint2') : undefined}
+      onHint={state.round === 2 && !state.independentCycle ? () => void applyAction({ type: 'request-hint' }) : undefined}
+      onReset={state.step.endsWith('thesis') && state.round < 3 && (state.thesisAttempts >= (state.allocation?.modelAnalysis ?? 0) || (state.corporateReviewActive && state.budget < 1)) ? () => void applyAction({ type: 'restart-exercise' }) : undefined}
       onContinue={informationalSteps.has(state.step)
         ? () => void applyAction({ type: 'continue' })
         : undefined}
@@ -503,6 +529,7 @@ export function TutorialExperience({
 
   return (
     <>
+      {(storageUnavailable || storageNotice) && <Typography role="status" variant="bodySm">{storageUnavailable ? t('tutorial.base.storage') : storageNotice}</Typography>}
       {!exitOpen && !requiredModalOpen && (
         <TutorialViewportAnchor
           taskKey={state.step}
@@ -529,7 +556,7 @@ export function TutorialExperience({
       )}
       <Typography aria-live="polite" variant="srOnly">{pilot ? `${t(nearest?.action ?? pilot.action, nearest?.values)} ${t(pilot.why)}` : t(currentTaskKey)}</Typography>
       <TutorialTenderBoard
-        key={state.playerId}
+        key={`${state.playerId}:${runEpoch}`}
         journalGuidance={journalGuidanceOpen && !exitOpen && !requiredModalOpen ? (
           <Card className={`${styles.coachCard} ${styles.journalCoach}`} data-testid="floater"
             data-tutorial-step={state.step} data-tutorial-pilot={Boolean(pilot) || undefined} size="sm" aria-labelledby="tutorial-coach-title">
@@ -598,13 +625,13 @@ function useTutorialNearestAction(step: TutorialStep) {
     const confirm = '[data-tutorial-action-container] button[data-tutorial-confirm-ready="true"]'
     const resolve = (): NearestAction | null => {
       if (step === 'round-1-access' || step === 'round-2-access') {
-        const slot = step === 'round-1-access' ? 5 : 4
+        const slot = step === 'round-1-access' ? 6 : 5
         return board.querySelector(`[data-tutorial-access-slot="${slot}"][aria-pressed="true"]`)
           ? { selector: confirm, action: 'tutorial.pilot.access.confirm' }
           : { selector: `[data-tutorial-access-slot="${slot}"]` }
       }
       if (step === 'round-1-power' || step === 'round-2-power') {
-        const categories = ['reconnaissance', 'laboratory', 'modelAnalysis', 'contracts'] as const
+        const categories = ['reconnaissance', 'laboratory', 'modelAnalysis'] as const
         for (const [index, category] of categories.entries()) {
           const card = board.querySelector<HTMLElement>(`[data-tutorial-power-category="${category}"]`)
           if (card && Number(card.dataset.tutorialPowerValue) !== tutorialPowerGoals[step][index]) {
@@ -616,13 +643,16 @@ function useTutorialNearestAction(step: TutorialStep) {
             }
           }
         }
-        return { selector: confirm, action: 'tutorial.pilot.power.confirm' }
+        // A valid allocation may deliberately keep reserve. The shared ready
+        // marker means every power was spent and is absent before its warning.
+        return { selector: '[data-tutorial-action-container] button', action: 'tutorial.pilot.power.confirm' }
       }
       if (step === 'round-1-recon' || step === 'round-2-recon') {
         return board.querySelector(confirm)
           ? { selector: confirm, action: 'tutorial.pilot.recon.confirm' }
-          : { selector: '[data-tutorial-recon-anchor]' }
+          : { selector: '[data-tutorial-recon-target="aster"]' }
       }
+      if (step === 'round-3-access' || step === 'round-3-power' || step === 'round-3-lab' || step === 'round-3-thesis') return null
       if (step === 'round-1-lab-mode') return { selector: '[data-tutorial-lab-modes] button:first-child' }
       if (step === 'round-1-lab-pair') {
         const source = board.querySelector('[data-tutorial-lab-sample="aster"][data-role="source"]')
@@ -985,6 +1015,8 @@ function CoachContent({
   onExit,
   exitButtonRef,
   onContinue,
+  onHint,
+  onReset,
   task,
   pilot,
   thesisFeedback,
@@ -994,6 +1026,8 @@ function CoachContent({
   onExit: (event: MouseEvent<HTMLButtonElement>) => void
   exitButtonRef: (button: HTMLButtonElement | null) => void
   onContinue?: () => void
+  onHint?: () => void
+  onReset?: () => void
   task: string
   pilot?: { action: string; why: string; expanded: boolean; onToggle: () => void }
   thesisFeedback: NonNullable<TutorialAdvanceResult['thesisFeedback']> | null
@@ -1001,7 +1035,20 @@ function CoachContent({
 }) {
   const { t } = useI18n()
   return (
-    <div className={styles.coach}>
+    <div className={styles.coach} onFocus={(event) => {
+      const control = event.target
+      if (!(control instanceof HTMLElement) || !control.matches('button:focus-visible')) return
+      const reading = event.currentTarget.closest<HTMLElement>('[data-tutorial-step]')
+      if (!reading) return
+      const viewport = reading.getBoundingClientRect()
+      const target = control.getBoundingClientRect()
+      const top = viewport.top + reading.clientTop + 4
+      const bottom = viewport.top + reading.clientTop + reading.clientHeight - 4
+      // Enlarged coach actions can wrap onto several rows. Native keyboard
+      // focus must reveal its own control without moving the lesson document.
+      if (target.top < top) reading.scrollTop += target.top - top
+      else if (target.bottom > bottom) reading.scrollTop += target.bottom - bottom
+    }}>
       <Typography variant="caption" tone="muted">{progress}</Typography>
       {pilot ? <>
         <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{pilot.action}</Typography>
@@ -1015,9 +1062,10 @@ function CoachContent({
       </>}
       {thesisFeedback && (
         <Typography role="alert" variant="bodySm" className={styles.thesisFeedback}>
-          {t('tutorial.coach.thesisChecked')}
+          {t(thesisFeedback.fieldTypeCorrect ? 'tutorial.base.fieldCorrect' : 'tutorial.coach.thesisFieldIncorrect')} {t(thesisFeedback.polarityCorrect ? 'tutorial.base.polarityCorrect' : 'tutorial.coach.thesisPolarityIncorrect')}
         </Typography>
       )}
+      {onReset && <Typography role="status" variant="bodySm">{t('tutorial.base.exhausted')}</Typography>}
       {hint && <Typography variant="bodySm" className={styles.hint}>{hint}</Typography>}
       {!pilot && <Typography as="strong" variant="bodySmMedium" className={styles.confirmAction}>
         {t('tutorial.coach.confirmAction')}
@@ -1037,6 +1085,8 @@ function CoachContent({
         >
           {t('tutorial.exit.short')}
         </Button>
+        {onHint && <Button type="button" size="sm" variant="outline" onClick={onHint}>{t('tutorial.base.hint')}</Button>}
+        {onReset && <Button type="button" size="sm" onClick={onReset}>{t('tutorial.base.retry')}</Button>}
         {onContinue && <Button type="button" size="sm" onClick={onContinue}>{t('tutorial.coach.continue')}</Button>}
       </div>
     </div>

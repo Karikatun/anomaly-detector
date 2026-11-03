@@ -32,6 +32,17 @@ test('returns to the completed tutorial after a same-tab OAuth round trip', () =
   expect(consumePostAuthContinuation(storage)).toBeNull()
 })
 
+test('unavailable storage never blocks login or fabricates a persisted continuation', () => {
+  const blocked = {
+    getItem() { throw new DOMException('blocked', 'SecurityError') },
+    setItem() { throw new DOMException('blocked', 'SecurityError') },
+    removeItem() { throw new DOMException('blocked', 'SecurityError') },
+  } as unknown as Storage
+  expect(capturePostAuthContinuation(blocked, new URL('https://app.example/?continue=tutorial-complete'))).toBeNull()
+  expect(peekPostAuthContinuation(blocked)).toBeNull()
+  expect(consumePostAuthContinuation(blocked)).toBeNull()
+})
+
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>()
   get length() { return this.values.size }

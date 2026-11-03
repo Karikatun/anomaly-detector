@@ -3,6 +3,8 @@ import {
   profileStatisticsSchema,
   profileStatisticsByModeSchema,
   tutorialProgressSchema,
+  tutorialLessonsProgressSchema,
+  tutorialProgressCommandSchema,
 } from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
@@ -73,6 +75,27 @@ const completeTutorialRoute = createRoute({
   },
 })
 
+const lessonsProgressRoute = createRoute({
+  method: 'get',
+  path: '/tutorial/progress',
+  responses: {
+    200: { content: { 'application/json': { schema: tutorialLessonsProgressSchema } }, description: 'Authenticated lesson progress with explicit provenance' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+  },
+})
+
+const recordLessonRoute = createRoute({
+  method: 'put',
+  path: '/tutorial/progress',
+  request: { body: { required: true, content: { 'application/json': { schema: tutorialProgressCommandSchema } } } },
+  responses: {
+    200: { content: { 'application/json': { schema: tutorialLessonsProgressSchema } }, description: 'First accepted completion or historical credit, without changing other lessons' },
+    400: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Invalid lesson or version' },
+    401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
+    429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
+  },
+})
+
 export function createProfileRoutes(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   requireAuth: MiddlewareHandler<AuthHttpEnv>
@@ -90,6 +113,10 @@ export function createProfileRoutes(input: {
     c.json(await input.tutorial.read(c.var.user.id), 200))
   routes.openapi(completeTutorialRoute, async (c) =>
     c.json(await executeTutorial(() => input.tutorial.complete(c.var.user.id)), 200))
+  routes.openapi(lessonsProgressRoute, async (c) =>
+    c.json(await executeTutorial(() => input.tutorial.readLessons(c.var.user.id)), 200))
+  routes.openapi(recordLessonRoute, async (c) =>
+    c.json(await executeTutorial(() => input.tutorial.recordLesson(c.var.user.id, c.req.valid('json'))), 200))
   return routes
 }
 

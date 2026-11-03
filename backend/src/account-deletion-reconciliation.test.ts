@@ -340,6 +340,7 @@ function emptyAccountErasureModels() {
     authIdentity: { deleteMany: async () => ({ count: 0 }) },
     authSession: { deleteMany: async () => ({ count: 0 }) },
     currentMatch: { deleteMany: async () => ({ count: 0 }) },
+    tutorialCompletionRecord: { deleteMany: async () => ({ count: 0 }) },
     feedbackAuditEvent: emptyOperatorAudit,
     feedbackOperatorCommand: emptyOperatorAudit,
     mailPolicyAuditEvent: emptyOperatorAudit,

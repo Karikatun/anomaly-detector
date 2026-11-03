@@ -1,3 +1,4 @@
+import { getSessionStorage } from '@/platform/session-storage'
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
@@ -27,8 +28,8 @@ export function AuthForm({ footerRulesAction }: { footerRulesAction?: ReactNode 
   const [mode, setMode] = useState<'login' | 'register'>(() => {
     if (typeof window === 'undefined') return 'login'
     const url = new URL(window.location.href)
-    const continuation = capturePostAuthContinuation(sessionStorage, url)
-    return continuation && url.searchParams.get('auth') !== 'login'
+    const continuation = capturePostAuthContinuation(getSessionStorage(), url)
+    return (continuation || url.searchParams.get('auth') === 'register') && url.searchParams.get('auth') !== 'login'
       ? 'register'
       : 'login'
   })

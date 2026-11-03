@@ -1,24 +1,18 @@
-import type {
-  FieldType,
-  PrivateThesis,
-  Polarity,
-  SignalId,
-  TenderPhase,
-  TenderView,
-  WorkingModel,
-} from '@anomaly-detector/contracts'
-
+import { powerAllocationSchema, scientificModelSchema } from '@anomaly-detector/contracts'
+import type { FieldType, Polarity, PowerAllocation, PrivateThesis, ScientificJournalEntry, ScientificModel, ScientificModelDraft, SignalId, TenderPhase, TenderView, WorkingModel } from '@anomaly-detector/contracts'
 import type { TenderCommandInput } from '@/features/tender/public/tutorial-board'
 import { translate } from '@/platform/i18n'
 
+export const baseScenarioVersion = 'base-simple-v1' as const
+// Kept for bounded decoding of the former lesson; the base lesson has no Contracts.
 export const tutorialContractId = 'tutorial-light-contract'
 export const tutorialPowerGoals = {
   'round-1-power': [1, 2, 1, 0],
-  'round-2-power': [1, 1, 1, 1],
+  'round-2-power': [0, 1, 2, 0],
+  'round-3-power': [0, 1, 1, 0],
 } as const
 
-export type TutorialStep =
-  | 'prologue'
+export type TutorialStep =| 'prologue'
   | 'interaction-guide'
   | 'round-1-header'
   | 'round-1-sidebar'
@@ -57,24 +51,43 @@ export type TutorialStep =
   | 'round-2-contract-bid'
   | 'final-model-intro'
   | 'final-model'
-  | 'complete'
+  | 'complete'  | 'round-2-thesis-result'
+  | 'round-3-access'
+  | 'round-3-power'
+  | 'round-3-recon'
+  | 'round-3-lab'
+  | 'round-3-thesis'
 
 export type TutorialState = {
+  lessonId: 'base'
+  scenarioVersion: typeof baseScenarioVersion
+  playerId: string
+  round: 1 | 2 | 3
+  step: TutorialStep
   budget: number
   corporateTrust: number
-  hintLevel: number
-  playerId: string
-  privateTheses: PrivateThesis[]
   rating: number
-  round: 1 | 2
-  step: TutorialStep
+  hintLevel: number
   thesisAttempts: number
+  corporateReviewActive: boolean
+  independentCycle: boolean
+  accessSlot: number | null
+  allocation: PowerAllocation | null
+  samples: SignalId[]
+  samplePool: SignalId[]
+  journal: ScientificJournalEntry[]
+  privateMeasurements: TenderView['privateMeasurements']
+  privateTheses: PrivateThesis[]
   workingModel: WorkingModel
+  finalDraft: ScientificModelDraft | null
+  finalSubmission: ScientificModel | null
 }
 
 export type TutorialUiAction =
   | { type: 'start-tutorial' }
   | { type: 'continue' }
+  | { type: 'restart-exercise' }
+  | { type: 'request-hint' }
   | { type: 'select-laboratory-mode'; mode: 'broad' | 'deep' }
   | { type: 'open-help-menu' }
   | { type: 'open-interpretation' }
@@ -86,18 +99,14 @@ export type TutorialUiAction =
   | { type: 'close-journal'; workingModel: WorkingModel }
   | { type: 'open-contracts-review' }
   | { type: 'close-contracts-review' }
-
 export type TutorialAction = TenderCommandInput | TutorialUiAction
-
 export type TutorialAdvanceResult = {
   progressed: boolean
   state: TutorialState
-  thesisFeedback?: {
-    fieldTypeCorrect: boolean
-    polarityCorrect: boolean
-  }
+  thesisFeedback?: { fieldTypeCorrect: boolean; polarityCorrect: boolean }
 }
 
+const signalIds: SignalId[] = ['aster', 'boreal', 'cinder', 'delta', 'eclipse', 'ferro']
 const signalProperties: Record<SignalId, { fieldType: FieldType; polarity: Polarity }> = {
   aster: { fieldType: 'inertial', polarity: 'positive' },
   boreal: { fieldType: 'electromagnetic', polarity: 'positive' },
@@ -109,556 +118,203 @@ const signalProperties: Record<SignalId, { fieldType: FieldType; polarity: Polar
 
 export function createTutorialState(playerId: string): TutorialState {
   return {
-    budget: 2,
-    corporateTrust: 0,
-    hintLevel: 0,
-    playerId,
-    privateTheses: [],
-    rating: 0,
-    round: 1,
-    step: 'prologue',
-    thesisAttempts: 0,
-    workingModel: { signals: {} },
+    lessonId: 'base', scenarioVersion: baseScenarioVersion, playerId, round: 1, step: 'prologue',
+    budget: 2, corporateTrust: 0, rating: 0, hintLevel: 0, thesisAttempts: 0,
+    corporateReviewActive: false, independentCycle: false, accessSlot: null, allocation: null,
+    samples: [], samplePool: [...signalIds], journal: [], privateMeasurements: [], privateTheses: [],
+    workingModel: { signals: {} }, finalDraft: null, finalSubmission: null,
   }
 }
 
-// Resume named stages from this same lesson; never reinterpret an ordinal as a new exercise.
 export function resumeTutorialState(state: TutorialState): TutorialState {
-  const resumedSteps: Partial<Record<TutorialStep, TutorialStep>> = {
-    'interaction-guide': 'round-1-access',
-    'round-1-header': 'round-1-access',
-    'round-1-sidebar': 'round-1-access',
-    'round-1-contracts': 'round-1-access',
-    'round-1-access-intro': 'round-1-access',
-    'round-1-power-intro': 'round-1-power',
-    'round-1-recon-intro': 'round-1-recon',
-    'round-1-lab-intro': 'round-1-lab-mode',
-    'research-results-open': 'research-results',
-    'help-menu': 'research-results',
-    'interpretation-open': 'interpretation',
-    'round-1-model-intro': 'round-1-working-model',
-    'round-1-thesis-result': 'round-2-access',
-    'round-1-thesis-result-open': 'round-2-access',
-    'round-2-contracts-review-open': 'round-2-contracts-review',
-    'round-2-research-open': 'round-2-research',
-    'round-2-contracts-intro': 'round-2-contract-reserve',
-    'final-model-intro': 'final-model',
-  }
-  const step = resumedSteps[state.step]
-  if (!step) return state
-  return { ...state, step, ...(step === 'round-2-access' ? { round: 2 } : {}) }
+  // Dialog visibility is ephemeral; a restored lesson must offer its real entry.
+  const step = state.step === 'research-results-open' ? 'research-results'
+    : state.step === 'interpretation-open' ? 'interpretation'
+      : state.step === 'round-2-research-open' ? 'round-2-research' : state.step
+  return step === state.step ? state : { ...state, step }
 }
+const unchanged = (state: TutorialState): TutorialAdvanceResult => ({ progressed: false, state })
+const progressed = (state: TutorialState, changes: Partial<TutorialState>): TutorialAdvanceResult => ({ progressed: true, state: { ...state, ...changes } })
 
-export function advanceTutorial(
-  state: TutorialState,
-  action: TutorialAction,
-): TutorialAdvanceResult {
-  if (action.type === 'update-working-model'
-    && phaseForStep(state.step) !== 'final-scientific-model'
-    && phaseForStep(state.step) !== 'complete') {
+export function advanceTutorial(state: TutorialState, action: TutorialAction): TutorialAdvanceResult {
+  if (action.type === 'close-journal' && !['final-model', 'complete'].includes(state.step)) state = { ...state, workingModel: action.workingModel }
+  if (action.type === 'update-working-model' && !['final-model', 'complete'].includes(state.step)) {
     return { progressed: false, state: { ...state, workingModel: action.workingModel } }
   }
-  switch (state.step) {
-    case 'prologue':
-      return action.type === 'start-tutorial'
-        ? progressed(state, { step: 'round-1-access' })
-        : unchanged(state)
-    case 'interaction-guide':
-      return continueTo(state, action, 'round-1-header')
-    case 'round-1-header':
-      return continueTo(state, action, 'round-1-sidebar')
-    case 'round-1-sidebar':
-      return continueTo(state, action, 'round-1-contracts')
-    case 'round-1-contracts':
-      return continueTo(state, action, 'round-1-access-intro')
-    case 'round-1-access-intro':
-      return continueTo(state, action, 'round-1-access')
-    case 'round-1-access':
-      return action.type === 'request-access-slot' && action.slot === 5
-        ? progressed(state, { step: 'round-1-power' })
-        : unchanged(state)
-    case 'round-1-power-intro':
-      return continueTo(state, action, 'round-1-power')
-    case 'round-1-power':
-      return action.type === 'allocate-power' && allocationMatches(action.allocation, tutorialPowerGoals['round-1-power'])
-        ? progressed(state, { step: 'round-1-recon' })
-        : unchanged(state)
-    case 'round-1-recon-intro':
-      return continueTo(state, action, 'round-1-recon')
-    case 'round-1-recon':
-      return isUnknownRecon(action)
-        ? progressed(state, { step: 'round-1-lab-mode' })
-        : unchanged(state)
-    case 'round-1-lab-intro':
-      return continueTo(state, action, 'round-1-lab-mode')
-    case 'round-1-lab-mode':
-      return action.type === 'select-laboratory-mode' && action.mode === 'deep'
-        ? progressed(state, { step: 'round-1-lab-pair' })
-        : unchanged(state)
-    case 'round-1-lab-pair':
-      return action.type === 'run-laboratory-test'
-        && 'laboratory' in action
-        && action.laboratory.mode === 'deep'
-        && pairMatches(action.laboratory.pair, 'aster', 'boreal')
-        ? progressed(state, { step: 'research-results' })
-        : unchanged(state)
-    case 'research-results':
-      return action.type === 'open-research-results'
-        ? progressed(state, { step: 'research-results-open' })
-        : unchanged(state)
-    case 'research-results-open':
-      return action.type === 'open-interpretation'
-        ? progressed(state, { step: 'interpretation-open' })
-        : action.type === 'close-research-results' || action.type === 'close-journal'
-          ? progressed(state, { step: 'research-results' })
-        : unchanged(state)
-    case 'help-menu':
-      return action.type === 'open-help-menu'
-        ? progressed(state, { step: 'interpretation' })
-        : action.type === 'open-interpretation-direct'
-          ? progressed(state, { step: 'interpretation-open' })
-          : unchanged(state)
-    case 'interpretation':
-      return action.type === 'open-interpretation'
-        ? progressed(state, { step: 'interpretation-open' })
-        : unchanged(state)
-    case 'interpretation-open':
-      return action.type === 'open-working-model'
-        ? progressed(state, { step: 'round-1-working-model' })
-        : action.type === 'close-interpretation' || action.type === 'close-journal'
-          ? progressed(state, { step: 'interpretation' })
-        : unchanged(state)
-    case 'round-1-model-intro':
-      return continueTo(state, action, 'round-1-working-model')
-    case 'round-1-working-model':
-      return (action.type === 'close-research-results' || action.type === 'close-journal')
-        && hasHypothesis(action.type === 'close-journal' ? action.workingModel : state.workingModel, 'aster')
-        ? progressed(state, { step: 'round-1-thesis', ...(action.type === 'close-journal' ? { workingModel: action.workingModel } : {}) })
-        : unchanged(state)
-    case 'round-1-thesis':
-      return resolveThesis(state, action, 'aster', 'round-2-access')
-    case 'round-1-thesis-result':
-      return action.type === 'open-research-results'
-        ? progressed(state, { step: 'round-1-thesis-result-open' })
-        : unchanged(state)
-    case 'round-1-thesis-result-open':
-      return action.type === 'close-research-results'
-        ? progressed(state, { round: 2, step: 'round-2-access' })
-        : unchanged(state)
-    case 'round-2-access':
-      return action.type === 'request-access-slot' && action.slot === 4
-        ? progressed(state, { budget: state.budget + 1, step: 'round-2-contracts-review' })
-        : unchanged(state)
-    case 'round-2-contracts-review':
-      return action.type === 'open-contracts-review'
-        ? progressed(state, { step: 'round-2-contracts-review-open' })
-        : unchanged(state)
-    case 'round-2-contracts-review-open':
-      return action.type === 'close-contracts-review'
-        ? progressed(state, { step: 'round-2-power' })
-        : unchanged(state)
-    case 'round-2-power':
-      return action.type === 'allocate-power' && allocationMatches(action.allocation, tutorialPowerGoals['round-2-power'])
-        ? progressed(state, { step: 'round-2-recon' })
-        : unchanged(state)
-    case 'round-2-recon':
-      return isUnknownRecon(action)
-        ? progressed(state, { step: 'round-2-lab' })
-        : unchanged(state)
-    case 'round-2-lab':
-      return action.type === 'run-laboratory-test'
-        && 'laboratory' in action
-        && action.laboratory.mode === 'impulse'
-        && pairMatches(action.laboratory.pair, 'boreal', 'cinder')
-        ? progressed(state, { step: 'round-2-research' })
-        : unchanged(state)
-    case 'round-2-research':
-      return action.type === 'open-research-results'
-        ? progressed(state, { step: 'round-2-research-open' })
-        : unchanged(state)
-    case 'round-2-research-open':
-      return action.type === 'open-working-model'
-        ? progressed(state, { step: 'round-2-working-model' })
-        : action.type === 'close-research-results' || action.type === 'close-journal'
-          ? progressed(state, { step: 'round-2-research' })
-          : unchanged(state)
-    case 'round-2-working-model':
-      return (action.type === 'close-research-results' || action.type === 'close-journal')
-        && hasHypothesis(action.type === 'close-journal' ? action.workingModel : state.workingModel, 'boreal')
-        ? progressed(state, { step: 'round-2-thesis', ...(action.type === 'close-journal' ? { workingModel: action.workingModel } : {}) })
-        : unchanged(state)
-    case 'round-2-thesis':
-      return resolveThesis(state, action, 'boreal', 'round-2-contract-reserve')
-    case 'round-2-contracts-intro':
-      return continueTo(state, action, 'round-2-contract-reserve')
-    case 'round-2-contract-reserve':
-      return action.type === 'reserve-contract' && action.contractId === tutorialContractId
-        ? progressed(state, { step: 'round-2-contract-bid' })
-        : unchanged(state)
-    case 'round-2-contract-bid':
-      return action.type === 'submit-contract-bid'
-        && action.contractId === tutorialContractId
-        && action.evidenceTestIds?.length === 1
-        && action.evidenceTestIds[0] === 'tutorial-test-2'
-        ? progressed(state, {
-          corporateTrust: state.corporateTrust + 1,
-          rating: state.rating + 2,
-          step: 'final-model',
-        })
-        : unchanged(state)
-    case 'final-model-intro':
-      return continueTo(state, action, 'final-model')
-    case 'final-model':
-      return action.type === 'update-scientific-model-draft'
-        ? unchanged(state)
-        : action.type === 'submit-scientific-model'
-          && finalModelMatches(action.scientificModel.signals)
-          ? progressed(state, { step: 'complete' })
-          : unchanged(state)
-    case 'complete':
-      return unchanged(state)
+  if (action.type === 'request-hint') return { progressed: false, state: { ...state, hintLevel: Math.min(2, state.hintLevel + 1) } }
+  if (action.type === 'restart-exercise' && state.step.endsWith('thesis') && state.round < 3) {
+    const target = state.round === 1 ? 'aster' : 'cinder'
+    const privateTheses = state.privateTheses.filter((thesis) => thesis.round !== state.round)
+    const spentOnReview = state.privateTheses.filter((thesis) => thesis.round === state.round).slice(1).length
+    const signals = { ...state.workingModel.signals }
+    delete signals[target]
+    return progressed(state, {
+      privateTheses, budget: state.budget + spentOnReview, thesisAttempts: 0, corporateReviewActive: false,
+      hintLevel: 0, workingModel: { signals }, step: state.round === 1 ? 'round-1-working-model' : 'round-2-working-model',
+    })
   }
-}
-
-function resolveThesis(
-  state: TutorialState,
-  action: TutorialAction,
-  signalId: 'aster' | 'boreal',
-  nextStep: TutorialStep,
-): TutorialAdvanceResult {
-  if (action.type !== 'submit-thesis' || action.signalId !== signalId) return unchanged(state)
-  const expected = signalProperties[signalId]
-  const thesisFeedback = {
-    fieldTypeCorrect: action.fieldType === expected.fieldType,
-    polarityCorrect: action.polarity === expected.polarity,
+  if (action.type === 'finish-model-analysis' && state.step === 'round-3-thesis' && state.allocation?.modelAnalysis === 2 && state.privateTheses.filter((thesis) => thesis.round === 3).length === 1) return enterFinal(state)
+  if (action.type === 'submit-thesis') return resolveThesis(state, action)
+  if (action.type === 'update-scientific-model-draft' && state.step === 'final-model') {
+    return { progressed: false, state: { ...state, finalDraft: action.scientificModelDraft } }
   }
-  const thesis: PrivateThesis = {
-    fieldType: action.fieldType,
-    fieldTypeCorrect: thesisFeedback.fieldTypeCorrect,
-    fullyCorrect: thesisFeedback.fieldTypeCorrect && thesisFeedback.polarityCorrect,
-    id: `tutorial-thesis-${state.privateTheses.length + 1}`,
-    polarity: action.polarity,
-    polarityCorrect: thesisFeedback.polarityCorrect,
-    round: state.round,
-    signalId,
+  if (action.type === 'submit-scientific-model' && state.step === 'final-model' && state.independentCycle) {
+    const parsed = scientificModelSchema.safeParse(action.scientificModel)
+    if (!parsed.success) return unchanged(state)
+    const rating = Object.entries(parsed.data.signals).reduce((score, [id, claim]) => {
+      const actual = signalProperties[id as SignalId]
+      return score + Number(claim?.fieldType === actual.fieldType) + Number(claim?.polarity === actual.polarity)
+    }, 0)
+    return progressed(state, { step: 'complete', rating, finalSubmission: parsed.data })
   }
-  if (thesisFeedback.fieldTypeCorrect && thesisFeedback.polarityCorrect) {
-    return {
-      ...progressed(state, {
-        hintLevel: 0,
-        privateTheses: [...state.privateTheses, thesis],
-        rating: state.rating + 1,
-        round: nextStep === 'round-2-access' ? 2 : state.round,
-        step: nextStep,
-        thesisAttempts: 0,
-      }),
-      thesisFeedback,
+  if (action.type === 'request-access-slot' && state.step.endsWith('access')) {
+    const required = state.round === 1 ? 6 : state.round === 2 ? 5 : null
+    const delta = action.slot === 1 ? -2 : action.slot === 2 ? -1 : [4, 6].includes(action.slot) ? 1 : 0
+    if ((required !== null && action.slot !== required) || state.budget + delta < 0) return unchanged(state)
+    const samples = [...state.samples]
+    if ([5, 6].includes(action.slot)) {
+      const next = state.round === 1 ? 'boreal' : state.round === 2 ? 'cinder' : signalIds.find((id) => !samples.includes(id))
+      if (next && !samples.includes(next)) samples.push(next)
     }
+    return progressed(state, { step: `round-${state.round}-power`, accessSlot: action.slot, budget: state.budget + delta, samples })
   }
-  const thesisAttempts = state.thesisAttempts + 1
-  return {
-    progressed: false,
-    state: {
-      ...state,
-      hintLevel: thesisAttempts >= 2 ? 1 : state.hintLevel,
-      privateTheses: [...state.privateTheses, thesis],
-      thesisAttempts,
-    },
-    thesisFeedback,
+  if (action.type === 'allocate-power' && state.step.endsWith('power')) {
+    const parsed = powerAllocationSchema.safeParse(action.allocation)
+    if (!parsed.success || parsed.data.contracts !== 0 || parsed.data.reconnaissance > 6 - state.samples.length) return unchanged(state)
+    const allocation = parsed.data
+    if (allocation.laboratory > 0 && state.samples.length + allocation.reconnaissance < 2) return unchanged(state)
+    if (state.round === 1 && !(allocation.reconnaissance === 1 && allocation.laboratory === 2 && allocation.modelAnalysis === 1)) return unchanged(state)
+    if (state.round === 2 && !(allocation.reconnaissance === 0 && allocation.laboratory === 1 && allocation.modelAnalysis === 2 && allocation.reserve === 1)) return unchanged(state)
+    const next = { ...state, allocation }
+    if (allocation.reconnaissance) return progressed(next, { step: state.round === 1 ? 'round-1-recon' : 'round-3-recon' })
+    return afterReconnaissance(next)
+  }
+  if (action.type === 'conduct-reconnaissance' && state.step.endsWith('recon')) {
+    const targets = action.targets ?? action.signals ?? []
+    if (targets.length !== state.allocation?.reconnaissance) return unchanged(state)
+    if (state.round === 1 && !(targets.length === 1 && targets[0] === 'aster')) return unchanged(state)
+    const samples = [...state.samples]
+    let samplePool = [...state.samplePool]
+    for (const target of targets) {
+      const id = target === 'unknown-sector' ? signalIds.find((candidate) => !samples.includes(candidate)) : target
+      if (!id || samples.includes(id) || (target !== 'unknown-sector' && !samplePool.includes(id))) return unchanged(state)
+      samples.push(id)
+      if (target !== 'unknown-sector') samplePool = samplePool.filter((candidate) => candidate !== id)
+    }
+    return afterReconnaissance({ ...state, samples, samplePool })
+  }
+  if (action.type === 'run-laboratory-test' && ['round-1-lab-pair', 'round-2-lab', 'round-3-lab'].includes(state.step)) return runTest(state, action)
+  switch (state.step) {
+    case 'prologue': return action.type === 'start-tutorial' ? progressed(state, { step: 'round-1-access' }) : unchanged(state)
+    case 'round-1-lab-mode': return action.type === 'select-laboratory-mode' && action.mode === 'deep' ? progressed(state, { step: 'round-1-lab-pair' }) : unchanged(state)
+    case 'research-results': return action.type === 'open-research-results' ? progressed(state, { step: 'research-results-open' }) : unchanged(state)
+    case 'research-results-open': return action.type === 'open-interpretation' ? progressed(state, { step: 'interpretation-open' }) : closeTo(state, action, 'research-results')
+    case 'interpretation': return action.type === 'open-interpretation' || action.type === 'open-interpretation-direct' ? progressed(state, { step: 'interpretation-open' }) : unchanged(state)
+    case 'interpretation-open': return action.type === 'open-working-model' ? progressed(state, { step: 'round-1-working-model' }) : closeTo(state, action, 'interpretation')
+    case 'round-1-working-model': return closeHypothesis(state, action, 'aster', 'round-1-thesis')
+    case 'round-2-working-model': return closeHypothesis(state, action, 'cinder', 'round-2-thesis')
+    case 'round-2-research': return action.type === 'open-research-results' ? progressed(state, { step: 'round-2-research-open' }) : unchanged(state)
+    case 'round-2-research-open': return action.type === 'open-working-model' ? progressed(state, { step: 'round-2-working-model' }) : closeTo(state, action, 'round-2-research')
+    case 'round-1-thesis-result': return action.type === 'continue' ? nextRound(state, 2) : unchanged(state)
+    case 'round-2-thesis-result': return action.type === 'continue' || action.type === 'finish-model-analysis' ? nextRound(state, 3) : unchanged(state)
+    default: return unchanged(state)
   }
 }
 
-function allocationMatches(
-  allocation: Extract<TenderCommandInput, { type: 'allocate-power' }>['allocation'],
-  expected: readonly [number, number, number, number],
-) {
-  return allocation.reconnaissance === expected[0]
-    && allocation.laboratory === expected[1]
-    && allocation.modelAnalysis === expected[2]
-    && allocation.contracts === expected[3]
-    && (allocation.reserve ?? 0) === 0
+function closeTo(state: TutorialState, action: TutorialAction, step: TutorialStep) {
+  return ['close-journal', 'close-research-results', 'close-interpretation'].includes(action.type) ? progressed(state, { step }) : unchanged(state)
 }
-
-function isUnknownRecon(action: TutorialAction) {
-  return action.type === 'conduct-reconnaissance'
-    && action.targets?.length === 1
-    && action.targets[0] === 'unknown-sector'
+function closeHypothesis(state: TutorialState, action: TutorialAction, signal: SignalId, step: TutorialStep) {
+  const model = action.type === 'close-journal' ? action.workingModel : state.workingModel
+  const hypothesis = model.signals[signal]?.hypothesis
+  return ['close-journal', 'close-research-results'].includes(action.type) && hypothesis?.fieldType && hypothesis.polarity
+    ? progressed(state, { step, workingModel: model }) : unchanged(state)
 }
-
-function pairMatches(
-  pair: { receiverSignal: SignalId; sourceSignal: SignalId },
-  sourceSignal: SignalId,
-  receiverSignal: SignalId,
-) {
-  return pair.sourceSignal === sourceSignal && pair.receiverSignal === receiverSignal
+function nextRound(state: TutorialState, round: 2 | 3) {
+  return progressed(state, { round, step: `round-${round}-access`, budget: state.budget + 1, accessSlot: null, allocation: null, corporateReviewActive: false, thesisAttempts: 0, hintLevel: 0, samplePool: [...signalIds] })
 }
-
-function hasHypothesis(model: WorkingModel, signalId: SignalId) {
-  const hypothesis = model.signals[signalId]?.hypothesis
-  return hypothesis?.fieldType !== undefined && hypothesis.polarity !== undefined
+function afterReconnaissance(state: TutorialState): TutorialAdvanceResult {
+  if (state.allocation?.laboratory) return progressed(state, { step: state.round === 1 ? 'round-1-lab-mode' : state.round === 2 ? 'round-2-lab' : 'round-3-lab' })
+  return afterLaboratory(state)
 }
-
-function finalModelMatches(signals: Record<string, { fieldType?: FieldType; polarity?: Polarity } | undefined>) {
-  return Object.keys(signals).length === 2
-    && signals.aster?.fieldType === signalProperties.aster.fieldType
-    && signals.aster?.polarity === signalProperties.aster.polarity
-    && signals.boreal?.fieldType === signalProperties.boreal.fieldType
-    && signals.boreal?.polarity === signalProperties.boreal.polarity
+function enterFinal(state: TutorialState): TutorialAdvanceResult {
+  const signals = Object.fromEntries(Object.entries(state.workingModel.signals).flatMap(([id, model]) => model.hypothesis && (model.hypothesis.fieldType || model.hypothesis.polarity) ? [[id, { ...model.hypothesis }]] : []))
+  return progressed(state, { step: 'final-model', budget: state.budget + 1, finalDraft: { signals } })
 }
-
-function progressed(state: TutorialState, changes: Partial<TutorialState>): TutorialAdvanceResult {
-  return { progressed: true, state: { ...state, ...changes } }
+function afterLaboratory(state: TutorialState): TutorialAdvanceResult {
+  if (state.round === 1) return progressed(state, { step: 'research-results' })
+  if (state.round === 2) return progressed(state, { step: 'round-2-research' })
+  return state.allocation?.modelAnalysis ? progressed(state, { step: 'round-3-thesis' }) : enterFinal(state)
 }
-
-function unchanged(state: TutorialState): TutorialAdvanceResult {
-  return { progressed: false, state }
+function runTest(state: TutorialState, action: Extract<TutorialAction, { type: 'run-laboratory-test' }>): TutorialAdvanceResult {
+  if (!('laboratory' in action)) return unchanged(state)
+  const lab = action.laboratory
+  const pairs = lab.mode === 'broad' ? lab.pairs : [lab.pair]
+  if ((lab.mode === 'impulse' ? 1 : 2) !== state.allocation?.laboratory) return unchanged(state)
+  if (pairs.some((pair) => pair.sourceSignal === pair.receiverSignal || !state.samples.includes(pair.sourceSignal) || !state.samples.includes(pair.receiverSignal))) return unchanged(state)
+  if (new Set(pairs.map((pair) => `${pair.sourceSignal}:${pair.receiverSignal}`)).size !== pairs.length) return unchanged(state)
+  if (state.round === 1 && !(lab.mode === 'deep' && pairs[0]?.sourceSignal === 'aster' && pairs[0].receiverSignal === 'boreal')) return unchanged(state)
+  if (state.round === 2 && !(lab.mode === 'impulse' && pairs[0]?.sourceSignal === 'boreal' && pairs[0].receiverSignal === 'cinder')) return unchanged(state)
+  if (pairs.some((pair) => state.journal.some((entry) => entry.sourceSignal === pair.sourceSignal && entry.receiverSignal === pair.receiverSignal && entry.protocol === (lab.mode === 'deep' ? 'continuous' : 'impulse')))) return unchanged(state)
+  const journal = pairs.map((pair, index) => ({ ...pair, playerId: state.playerId, protocol: lab.mode === 'deep' ? 'continuous' as const : 'impulse' as const, publicResult: fixtureResult(pair.sourceSignal, pair.receiverSignal), testId: `base-r${state.round}-${state.journal.length + index + 1}` }))
+  const privateMeasurements = lab.mode === 'deep' ? [...state.privateMeasurements, ...pairs.map((pair) => ({ ...pair, polarityRelation: signalProperties[pair.sourceSignal].polarity === signalProperties[pair.receiverSignal].polarity ? 'same' as const : 'different' as const }))] : state.privateMeasurements
+  return afterLaboratory({ ...state, journal: [...state.journal, ...journal], privateMeasurements })
 }
-
-function continueTo(
-  state: TutorialState,
-  action: TutorialAction,
-  step: TutorialStep,
-): TutorialAdvanceResult {
-  return action.type === 'continue' ? progressed(state, { step }) : unchanged(state)
+function fixtureResult(source: SignalId, receiver: SignalId): ScientificJournalEntry['publicResult'] {
+  const a = signalProperties[source], b = signalProperties[receiver]
+  const same = a.polarity === b.polarity
+  if (a.fieldType === b.fieldType) return same ? 'transmission_gain' : 'attenuation'
+  const types: FieldType[] = ['inertial', 'electromagnetic', 'phase']
+  const forward = (types.indexOf(a.fieldType) + 1) % 3 === types.indexOf(b.fieldType)
+  return forward ? same ? 'reflection' : 'unstable_collapse' : same ? 'attenuation' : 'transmission_gain'
 }
-
-const orderedSteps: TutorialStep[] = [
-  'prologue',
-  'interaction-guide',
-  'round-1-header',
-  'round-1-sidebar',
-  'round-1-contracts',
-  'round-1-access-intro',
-  'round-1-access',
-  'round-1-power-intro',
-  'round-1-power',
-  'round-1-recon-intro',
-  'round-1-recon',
-  'round-1-lab-intro',
-  'round-1-lab-mode',
-  'round-1-lab-pair',
-  'research-results',
-  'research-results-open',
-  'help-menu',
-  'interpretation',
-  'interpretation-open',
-  'round-1-model-intro',
-  'round-1-working-model',
-  'round-1-thesis',
-  'round-1-thesis-result',
-  'round-1-thesis-result-open',
-  'round-2-access',
-  'round-2-contracts-review',
-  'round-2-contracts-review-open',
-  'round-2-power',
-  'round-2-recon',
-  'round-2-lab',
-  'round-2-research',
-  'round-2-research-open',
-  'round-2-working-model',
-  'round-2-thesis',
-  'round-2-contracts-intro',
-  'round-2-contract-reserve',
-  'round-2-contract-bid',
-  'final-model-intro',
-  'final-model',
-  'complete',
-]
+function resolveThesis(state: TutorialState, action: Extract<TutorialAction, { type: 'submit-thesis' }>): TutorialAdvanceResult {
+  if (!state.step.endsWith('thesis') || !state.samples.includes(action.signalId)) return unchanged(state)
+  const target = state.round === 1 ? 'aster' : state.round === 2 ? 'cinder' : action.signalId
+  const attempts = state.privateTheses.filter((thesis) => thesis.round === state.round).length
+  if (action.signalId !== target || attempts >= (state.allocation?.modelAnalysis ?? 0) || (state.corporateReviewActive && state.budget < 1)) return unchanged(state)
+  const actual = signalProperties[action.signalId]
+  const thesisFeedback = { fieldTypeCorrect: action.fieldType === actual.fieldType, polarityCorrect: action.polarity === actual.polarity }
+  const fullyCorrect = thesisFeedback.fieldTypeCorrect && thesisFeedback.polarityCorrect
+  const thesis: PrivateThesis = { id: `base-r${state.round}-thesis-${attempts + 1}`, signalId: action.signalId, fieldType: action.fieldType, polarity: action.polarity, ...thesisFeedback, fullyCorrect, round: state.round }
+  const next = { ...state, budget: state.budget - Number(state.corporateReviewActive), corporateReviewActive: state.corporateReviewActive || !fullyCorrect, thesisAttempts: attempts + 1, privateTheses: [...state.privateTheses, thesis] }
+  if (state.round === 3) return attempts + 1 < (state.allocation?.modelAnalysis ?? 0) && (!next.corporateReviewActive || next.budget >= 1) ? { progressed: false, state: next, thesisFeedback } : { ...enterFinal(next), thesisFeedback }
+  if (fullyCorrect) return { ...progressed(next, { step: state.round === 1 ? 'round-1-thesis-result' : 'round-2-thesis-result', independentCycle: state.independentCycle || (state.round === 2 && Boolean(state.workingModel.signals.cinder?.hypothesis) && state.journal.some((entry) => entry.sourceSignal === 'boreal' && entry.receiverSignal === 'cinder')) }), thesisFeedback }
+  return { progressed: false, state: next, thesisFeedback }
+}
 
 export function tutorialView(state: TutorialState): TenderView {
   const phase = phaseForStep(state.step)
-  const stepIndex = orderedSteps.indexOf(state.step)
-  const hasRoundOneSample = stepIndex >= orderedSteps.indexOf('round-1-power-intro')
-  const hasBoreal = stepIndex >= orderedSteps.indexOf('round-1-lab-intro')
-  const hasRoundOneTest = stepIndex >= orderedSteps.indexOf('research-results')
-  const hasAsterThesis = stepIndex >= orderedSteps.indexOf('round-1-thesis-result')
-  const hasCinder = stepIndex >= orderedSteps.indexOf('round-2-lab')
-  const hasRoundTwoTest = stepIndex >= orderedSteps.indexOf('round-2-research')
-  const hasBorealThesis = stepIndex >= orderedSteps.indexOf('round-2-contracts-intro')
-  const roundOnePower = {
-    contracts: 0,
-    laboratory: 2,
-    modelAnalysis: 1,
-    reconnaissance: 1,
-  } as const
-  const roundTwoPower = {
-    contracts: 1,
-    laboratory: 1,
-    modelAnalysis: 1,
-    reconnaissance: 1,
-  } as const
-  const hasConfirmedPower = state.round === 1
-    ? stepIndex >= orderedSteps.indexOf('round-1-recon-intro')
-    : stepIndex >= orderedSteps.indexOf('round-2-recon')
-  const currentPower = state.round === 1 ? roundOnePower : roundTwoPower
-  const hasConfirmedAccessSlot = state.round === 1
-    ? stepIndex >= orderedSteps.indexOf('round-1-power-intro')
-    : stepIndex >= orderedSteps.indexOf('round-2-contracts-review')
-  const samples: SignalId[] = [
-    ...(hasRoundOneSample ? ['aster' as const] : []),
-    ...(hasBoreal ? ['boreal' as const] : []),
-    ...(hasCinder ? ['cinder' as const] : []),
-  ]
-  const knownSignals = [...new Set<SignalId>(['aster', 'boreal', ...samples])]
-  const journal = [
-    ...(hasRoundOneTest ? [{
-      playerId: state.playerId,
-      protocol: 'continuous' as const,
-      publicResult: 'reflection' as const,
-      receiverSignal: 'boreal' as const,
-      sourceSignal: 'aster' as const,
-      testId: 'tutorial-test-1',
-    }] : []),
-    ...(hasRoundTwoTest ? [{
-      playerId: state.playerId,
-      protocol: 'impulse' as const,
-      publicResult: 'unstable_collapse' as const,
-      receiverSignal: 'cinder' as const,
-      sourceSignal: 'boreal' as const,
-      testId: 'tutorial-test-2',
-    }] : []),
-  ]
-  const contractReserved = stepIndex >= orderedSteps.indexOf('round-2-contract-bid')
-
+  const attempts = state.privateTheses.filter((thesis) => thesis.round === state.round).length
+  const completedAnalysis = state.step.endsWith('thesis-result') || attempts >= (state.allocation?.modelAnalysis ?? 0) || (state.corporateReviewActive && state.budget < 1)
   return {
-    ...(isSequentialPhase(phase) ? { activePlayerId: state.playerId } : {}),
-    dueAt: null,
-    finalScientificModelProgress: phase === 'final-scientific-model'
-      ? { completed: 1, total: 2 }
-      : undefined,
-    knownSignals,
-    modelAnalysisProgress: phase === 'model-analysis'
-      ? { completed: 1, total: 2 }
-      : undefined,
-    phase,
-    players: [
-      {
-        ...(hasConfirmedAccessSlot
-          ? { accessSlot: state.round === 1 ? 5 : 4, requestedAccessSlot: state.round === 1 ? 5 : 4 }
-          : {}),
-        ...(hasConfirmedPower ? { powerAllocation: currentPower, powerAllocationConfirmed: true } : {}),
-        budget: state.budget,
-        contractPowerRestriction: 0,
-        corporateTrust: state.corporateTrust,
-        displayName: translate('tutorial.player.you'),
-        playerId: state.playerId,
-        rating: state.rating,
-        tiePriority: 1,
-      },
-      {
-        ...(hasConfirmedAccessSlot
-          ? { accessSlot: state.round === 1 ? 2 : 3, requestedAccessSlot: state.round === 1 ? 2 : 3 }
-          : {}),
-        ...(hasConfirmedPower ? { powerAllocation: currentPower, powerAllocationConfirmed: true } : {}),
-        budget: 2,
-        contractPowerRestriction: 0,
-        corporateTrust: 0,
-        displayName: translate('tutorial.player.opponent'),
-        playerId: 'tutorial-opponent',
-        rating: 0,
-        tiePriority: 2,
-      },
-    ],
-    privateFinalScientificModelDraft: phase === 'final-scientific-model'
-      ? {
-        signals: {
-          aster: { fieldType: 'inertial', polarity: 'positive' },
-          boreal: { fieldType: 'electromagnetic', polarity: 'positive' },
-        },
-      }
-      : undefined,
-    privateMeasurements: hasRoundOneTest
-      ? [{ receiverSignal: 'boreal', sourceSignal: 'aster', polarityRelation: 'same' }]
-      : [],
-    privateRawTelemetrySignals: [],
-    privateResearchCertifications: [
-      ...(hasAsterThesis ? ['aster' as const] : []),
-      ...(hasBorealThesis ? ['boreal' as const] : []),
-    ],
-    privateSamples: samples,
-    privateTheses: state.privateTheses,
-    privateUsedContractEvidenceTestIds: [],
-    privateWorkingModel: state.workingModel,
-    publicContracts: [{
-      contractId: 'tutorial-ready-contract',
-      eligibleForPlayer: hasRoundOneTest,
-      kind: 'light',
-      planning: {
-        eligible: hasRoundOneTest,
-        missingConditions: hasRoundOneTest ? [] : ['evidence'],
-        requiredPower: 1,
-        suitableEvidenceSelections: hasRoundOneTest ? [['tutorial-test-1']] : [],
-        suitableEvidenceTestIds: hasRoundOneTest ? ['tutorial-test-1'] : [],
-        suitableResearchCertificationSignals: [],
-      },
-      ratingReward: 2,
-      requiredPublicResult: 'reflection',
-      targetRole: 'source',
-      targetSignal: 'aster',
-    }, {
-      contractId: tutorialContractId,
-      eligibleForPlayer: hasRoundTwoTest,
-      kind: 'light',
-      planning: {
-        eligible: hasRoundTwoTest,
-        missingConditions: hasRoundTwoTest ? [] : ['evidence'],
-        requiredPower: 1,
-        suitableEvidenceSelections: hasRoundTwoTest ? [['tutorial-test-2']] : [],
-        suitableEvidenceTestIds: hasRoundTwoTest ? ['tutorial-test-2'] : [],
-        suitableResearchCertificationSignals: [],
-      },
-      ratingReward: 2,
-      requiredPublicResult: 'unstable_collapse',
-      ...(contractReserved ? { reservedByPlayerId: state.playerId } : {}),
-      targetRole: 'source',
-      targetSignal: 'boreal',
-    }],
-    publicLaboratoryResults: journal.map((entry) => ({
-      playerId: entry.playerId,
-      protocol: entry.protocol,
-      publicResult: entry.publicResult,
-      receiverSignal: entry.receiverSignal,
-      sourceSignal: entry.sourceSignal,
-    })),
-    publicScientificJournal: journal,
-    publicTheses: [],
-    round: state.round,
-    ruleset: 'tender-v2',
-    sequentialPhaseProgress: isSequentialPhase(phase) ? { completed: 1, total: 2 } : undefined,
-    serverTime: '2026-08-04T12:00:00.000Z',
-    tenderId: 'tutorial',
-    version: stepIndex,
+    game: { mode: 'simple', rounds: 3, powerPerRound: 4, contracts: false, scoring: 'properties-12' },
+    activePlayerId: ['reconnaissance', 'laboratory'].includes(phase) ? state.playerId : undefined,
+    dueAt: null, knownSignals: [...signalIds], availableSamplePool: state.samplePool,
+    corporateReviewActive: state.corporateReviewActive,
+    phase, players: [{
+      playerId: state.playerId, displayName: translate('tutorial.player.you'), tiePriority: 1,
+      budget: state.budget, corporateTrust: 0, rating: state.rating, contractPowerRestriction: 0,
+      ...(state.accessSlot !== null ? { accessSlot: state.accessSlot, requestedAccessSlot: state.accessSlot } : {}),
+      ...(state.allocation ? { powerAllocation: state.allocation, powerAllocationConfirmed: true } : {}),
+      ...(phase === 'model-analysis' ? { modelAnalysisCompleted: completedAnalysis } : {}),
+    }, { playerId: 'tutorial-opponent', displayName: translate('tutorial.player.opponent'), tiePriority: 2, budget: 2, corporateTrust: 0, rating: 0, contractPowerRestriction: 0 }],
+    privateSamples: state.samples, privateRawTelemetrySignals: [], privateMeasurements: state.privateMeasurements,
+    privateWorkingModel: state.workingModel, privateTheses: state.privateTheses,
+    privateResearchCertifications: [], privateUsedContractEvidenceTestIds: [],
+    ...(state.finalDraft ? { privateFinalScientificModelDraft: state.finalDraft } : {}),
+    ...(state.finalSubmission ? { privateFinalScientificModelSubmission: { scientificModel: state.finalSubmission, submittedAt: '2026-11-03T00:00:00.000Z' } } : {}),
+    publicContracts: [], publicLaboratoryResults: state.journal.map((entry) => ({ playerId: entry.playerId, protocol: entry.protocol, publicResult: entry.publicResult, sourceSignal: entry.sourceSignal, receiverSignal: entry.receiverSignal })), publicScientificJournal: state.journal, publicTheses: [],
+    round: state.round, ruleset: 'tender-v2', serverTime: '2026-11-03T00:00:00.000Z', tenderId: 'tutorial', version: state.journal.length + state.privateTheses.length,
+    ...(phase === 'model-analysis' ? { modelAnalysisProgress: { completed: Number(completedAnalysis), total: 1 } } : {}),
   }
 }
-
 function phaseForStep(step: TutorialStep): TenderPhase {
-  if (step === 'prologue'
-    || step === 'interaction-guide'
-    || step.startsWith('round-1-header')
-    || step.startsWith('round-1-sidebar')
-    || step.startsWith('round-1-contracts')
-    || step.startsWith('round-1-access')) return 'access-slot-selection'
-  if (step === 'round-1-power-intro') return 'power-allocation'
-  if (step === 'round-1-recon-intro') return 'reconnaissance'
-  if (step === 'round-1-lab-intro'
-    || step === 'round-1-lab-mode'
-    || step === 'round-1-lab-pair') return 'laboratory'
-  if (step === 'research-results' || step === 'research-results-open') return 'model-analysis'
-  if (step === 'round-1-model-intro') return 'model-analysis'
-  if (step === 'round-1-thesis-result' || step === 'round-1-thesis-result-open') return 'model-analysis'
-  if (step === 'round-2-contracts-review' || step === 'round-2-contracts-review-open') return 'power-allocation'
-  if (step === 'round-2-contracts-intro') return 'contracts'
-  if (step === 'final-model-intro') return 'final-scientific-model'
-  if (step.endsWith('access')) return 'access-slot-selection'
+  if (step === 'prologue' || step.endsWith('access')) return 'access-slot-selection'
   if (step.endsWith('power')) return 'power-allocation'
   if (step.endsWith('recon')) return 'reconnaissance'
-  if (step.endsWith('lab')) return 'laboratory'
-  if (step === 'round-2-contract-reserve' || step === 'round-2-contract-bid') return 'contracts'
+  if (step.includes('lab-mode') || step.includes('lab-pair') || step.endsWith('lab')) return 'laboratory'
   if (step === 'final-model') return 'final-scientific-model'
   if (step === 'complete') return 'complete'
   return 'model-analysis'
-}
-
-function isSequentialPhase(phase: TenderPhase) {
-  return phase === 'reconnaissance' || phase === 'laboratory' || phase === 'contracts'
 }

@@ -1,3 +1,4 @@
+import { getSessionStorage } from '@/platform/session-storage'
 import { Link, Navigate, useNavigate } from '@tanstack/react-router'
 import {
   Add01Icon,
@@ -25,7 +26,7 @@ import {
 import { captureFeedbackOrigin } from '@/features/feedback'
 import {
   ProfileApi,
-  useTutorialProgressQuery,
+  useTutorialLessonsProgressQuery,
 } from '@/features/profile'
 import {
   CreateRoomDialog,
@@ -61,8 +62,8 @@ function AuthenticatedHome({
 }) {
   const navigate = useNavigate()
   const [continuationPath] = useState(() => {
-    capturePostAuthContinuation(sessionStorage, new URL(window.location.href))
-    return consumePostAuthContinuation(sessionStorage)
+    capturePostAuthContinuation(getSessionStorage(), new URL(window.location.href))
+    return consumePostAuthContinuation(getSessionStorage())
   })
   const auth = useAuth()
   const { t } = useI18n()
@@ -72,7 +73,7 @@ function AuthenticatedHome({
   const roomsApi = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
   const profileApi = useMemo(() => new ProfileApi(auth.transport), [auth.transport])
   const currentMatch = useCurrentMatchQuery(roomsApi)
-  const tutorialProgress = useTutorialProgressQuery(profileApi)
+  const tutorialProgress = useTutorialLessonsProgressQuery(profileApi)
 
   if (continuationPath) return <Navigate to={continuationPath} replace />
 
@@ -178,11 +179,12 @@ function AuthenticatedHome({
               <MenuCard
                 accent="plain"
                 fullRow
-                title={t(tutorialProgress.data?.completedAt ? 'tutorial.menu.repeat' : 'tutorial.menu.start')}
+                description={tutorialProgress.data?.base.completion ? t('tutorial.base.actualDate', { date: new Date(tutorialProgress.data.base.completion.completedAt).toLocaleDateString('ru-RU') }) : tutorialProgress.data?.base.legacyCredit ? t('tutorial.base.legacy') : undefined}
+                title={t((tutorialProgress.data?.base.completion || tutorialProgress.data?.base.legacyCredit) ? 'tutorial.menu.repeat' : 'tutorial.menu.start')}
                 icon={Mortarboard01Icon}
                 onClick={() => {
                   if (!auth.user) return
-                  prepareTutorialEntry(sessionStorage, auth.user.id)
+                  prepareTutorialEntry(getSessionStorage(), auth.user.id)
                   void navigate({ to: '/tutorial' })
                 }}
               />
@@ -243,6 +245,8 @@ function MenuCard({
   return (
     <Button
       type="button"
+      aria-label={title}
+      aria-description={description}
       variant="ghost"
       className={`${styles.menuCard} ${styles[accent]} ${fullRow ? styles.fullRow : ''}`}
       disabled={disabled}

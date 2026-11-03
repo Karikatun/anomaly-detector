@@ -25,7 +25,9 @@ import styles from './RoomDialog.module.css'
 export function CreateRoomDialog({
   open,
   onOpenChange,
+  initialMode = 'standard',
 }: {
+  initialMode?: 'standard' | 'simple'
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
@@ -33,7 +35,7 @@ export function CreateRoomDialog({
   const auth = useAuth()
   const navigate = useNavigate()
   const [capacity, setCapacity] = useState<2 | 3 | 4>(2)
-  const [mode, setMode] = useState<'standard' | 'simple'>('standard')
+  const [mode, setMode] = useState<'standard' | 'simple'>(initialMode)
   const [allowBots, setAllowBots] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const api = new RoomsApi(auth.transport)

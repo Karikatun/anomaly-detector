@@ -1,7 +1,7 @@
 import { BookOpen01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Tabs } from 'radix-ui'
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useCallback, useLayoutEffect, useRef, type ReactNode } from 'react'
 import type { TenderView } from '@anomaly-detector/contracts'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -20,15 +20,15 @@ function JournalPanel({ active, children, onElementChange, onPositionChange, get
   children: ReactNode
   onElementChange: (element: HTMLDivElement | null) => void
   onPositionChange: (position: number) => void
-  getPosition: () => number
+  getPosition: (value: TenderJournalTab) => number
   value: TenderJournalTab
   visible: boolean
 }) {
   const element = useRef<HTMLDivElement | null>(null)
   useLayoutEffect(() => {
     // Restore after the portal and the visible panel have committed their layout.
-    if (active && element.current) element.current.scrollTop = getPosition()
-  }, [active, getPosition])
+    if (active && element.current) element.current.scrollTop = getPosition(value)
+  }, [active, getPosition, value])
   return <Tabs.Content value={value} forceMount hidden={!visible} inert={!visible}
     className={styles.panel} data-interpretation-scroll-area={value === 'interpretation' ? '' : undefined}
     ref={(node) => { element.current = node; onElementChange(node) }}
@@ -64,6 +64,7 @@ export function TenderJournalDialog({
 }) {
   const { t } = useI18n()
   const scroll = useRef<Partial<Record<TenderJournalTab, number>>>({})
+  const getPosition = useCallback((value: TenderJournalTab) => scroll.current[value] ?? 0, [])
   const panelElements = useRef<Partial<Record<TenderJournalTab, HTMLDivElement | null>>>({})
   const rememberPosition = () => {
     const element = panelElements.current[tab]
@@ -98,7 +99,7 @@ export function TenderJournalDialog({
   }, [view.phase, open])
   const panel = (value: TenderJournalTab, content: ReactNode) => (
     <JournalPanel key={value} value={value} active={open && tab === value} visible={tab === value}
-      getPosition={() => scroll.current[value] ?? 0}
+      getPosition={getPosition}
       onPositionChange={(position) => { scroll.current[value] = position }}
       onElementChange={(element) => { panelElements.current[value] = element }}>{content}</JournalPanel>
   )
@@ -134,8 +135,8 @@ export function TenderJournalDialog({
         </DialogHeader>
         <Tabs.Root value={tab} onValueChange={(value) => { rememberPosition(); onTabChange(value as TenderJournalTab) }} className={styles.tabs}>
           <Tabs.List aria-label={t('tender.journal.sections')} className={styles.tablist}>
-            <Tabs.Trigger data-tutorial-journal-tab={triggerTestId ? 'working-model' : undefined} value="working-model" disabled={modelTabDisabled} className={styles.tab}>{t('tender.journal.model')}</Tabs.Trigger>
-            <Tabs.Trigger data-tutorial-journal-tab={triggerTestId ? 'research' : undefined} value="research" className={styles.tab}>{t('tender.journal.research')}</Tabs.Trigger>
+            <Tabs.Trigger data-tutorial-journal-tab={triggerTestId ? 'working-model' : undefined} value="working-model" disabled={modelTabDisabled} className={styles.tab} aria-label={t('tender.journal.model')}><Typography as="span" variant="bodySm" className={styles.fullTabLabel}>{t('tender.journal.model')}</Typography><Typography as="span" variant="bodySm" className={styles.compactTabLabel}>{t('tender.journal.modelShort')}</Typography></Tabs.Trigger>
+            <Tabs.Trigger data-tutorial-journal-tab={triggerTestId ? 'research' : undefined} value="research" className={styles.tab} aria-label={t('tender.journal.research')}><Typography as="span" variant="bodySm" className={styles.fullTabLabel}>{t('tender.journal.research')}</Typography><Typography as="span" variant="bodySm" className={styles.compactTabLabel}>{t('tender.journal.researchShort')}</Typography></Tabs.Trigger>
             <Tabs.Trigger data-tutorial-journal-tab={triggerTestId ? 'interpretation' : undefined} value="interpretation" disabled={interpretationDisabled} className={styles.tab}>{t('tender.journal.interpretation')}</Tabs.Trigger>
           </Tabs.List>
           {panel('working-model', <>

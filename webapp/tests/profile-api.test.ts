@@ -3,6 +3,28 @@ import { expect, test } from 'bun:test'
 import { ProfileApi } from '../src/features/profile/api'
 import type { AuthenticatedTransport } from '../src/platform/api'
 
+test('lesson progress uses the separate strict boundary and preserves legacy plus actual completion', async () => {
+  const requests: Array<{ path: string; method?: string; body?: unknown }> = []
+  const progress = {
+    schemaVersion: 1,
+    base: {
+      legacyCredit: { origin: 'legacy', completedAt: null },
+      completion: { origin: 'scenario', scenarioVersion: 'base-simple-v1', completedAt: '2026-11-03T00:00:00.000Z' },
+    },
+    additional: { completion: null },
+  }
+  const api = new ProfileApi({ request: async (path, schema, options) => {
+    requests.push({ path, method: options?.method, body: options?.body })
+    return schema.parse(progress)
+  } } as AuthenticatedTransport)
+  expect(await api.getLessonsProgress()).toEqual(progress)
+  expect(await api.recordTutorialProgress({ kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' })).toEqual(progress)
+  expect(requests).toEqual([
+    { path: '/api/profile/tutorial/progress', method: undefined, body: undefined },
+    { path: '/api/profile/tutorial/progress', method: 'PUT', body: { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' } },
+  ])
+})
+
 test('profile API reads and validates authenticated statistics', async () => {
   const requests: string[] = []
   const api = new ProfileApi({

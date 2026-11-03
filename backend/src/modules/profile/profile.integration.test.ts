@@ -53,6 +53,15 @@ maybeDescribe('profile statistics API integration', () => {
   }
   const app = createApp({ env, prisma })
 
+  async function registerTutorialPlayer(login: string, target = app) {
+    const response = await target.request('/api/auth/token/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password: 'password123', privacyConsent: true, privacyConsentVersion: '1.1', termsAccepted: true, termsVersion: '1.1' }),
+    })
+    expect(response.status).toBe(201)
+    return await response.json() as { accessToken: string; user: { id: string } }
+  }
+
   beforeEach(async () => {
     await prisma.tenderRoom.deleteMany()
     await prisma.tender.deleteMany()
@@ -232,6 +241,143 @@ maybeDescribe('profile statistics API integration', () => {
 
     const stored = await app.request('/api/profile/tutorial', { headers })
     expect(await stored.json()).toEqual(firstMarker)
+  })
+
+  test('keeps actual base completion separate from a late legacy completion', async () => {
+    const registration = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        login: 'tutorial-versioned-player', password: 'password123', privacyConsent: true,
+        privacyConsentVersion: '1.1', termsAccepted: true, termsVersion: '1.1',
+      }),
+    })
+    expect(registration.status).toBe(201)
+    const { accessToken } = await registration.json()
+    const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+    const initial = await app.request('/api/profile/tutorial/progress', { headers })
+    expect(initial.status).toBe(200)
+    expect(await initial.json()).toEqual({
+      schemaVersion: 1,
+      base: { legacyCredit: null, completion: null },
+      additional: { completion: null },
+    })
+
+    const complete = () => app.request('/api/profile/tutorial/progress', {
+      method: 'PUT', headers,
+      body: JSON.stringify({ kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' }),
+    })
+    const first = await complete()
+    expect(first.status).toBe(200)
+    const firstProgress = await first.json()
+    expect(firstProgress.base.completion).toEqual({
+      origin: 'scenario', scenarioVersion: 'base-simple-v1', completedAt: expect.any(String),
+    })
+    expect(firstProgress.base.legacyCredit).toBeNull()
+    expect(await (await complete()).json()).toEqual(firstProgress)
+
+    const legacy = await app.request('/api/profile/tutorial/completion', { method: 'PUT', headers })
+    expect(legacy.status).toBe(200)
+    const legacyMarker = await legacy.json()
+    expect(Object.keys(legacyMarker)).toEqual(['completedAt'])
+    const merged = await app.request('/api/profile/tutorial/progress', { headers })
+    expect(await merged.json()).toEqual({
+      ...firstProgress,
+      base: { ...firstProgress.base, legacyCredit: { origin: 'legacy', completedAt: legacyMarker.completedAt } },
+    })
+    expect(await (await app.request('/api/profile/tutorial', { headers })).json()).toEqual(legacyMarker)
+  })
+
+  test('preserves unknown legacy credit and existing additional completion when base is completed', async () => {
+    const player = await registerTutorialPlayer('tutorial-legacy-unknown')
+    const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
+    const additionalAt = '2026-09-04T11:00:00.000Z'
+    await prisma.tutorialCompletionRecord.create({ data: {
+      userId: player.user.id, lessonId: 'additional', versionKey: 'additional-standard-v1', origin: 'scenario', completedAt: new Date(additionalAt),
+    } })
+    const save = (command: unknown) => app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify(command) })
+    const credit = await save({ kind: 'legacy-credit' })
+    expect(credit.status).toBe(200)
+    const credited = await credit.json()
+    expect(credited).toEqual({
+      schemaVersion: 1,
+      base: { legacyCredit: { origin: 'legacy', completedAt: null }, completion: null },
+      additional: { completion: { origin: 'scenario', scenarioVersion: 'additional-standard-v1', completedAt: additionalAt } },
+    })
+    expect(await (await save({ kind: 'legacy-credit' })).json()).toEqual(credited)
+    expect(await (await app.request('/api/profile/tutorial', { headers })).json()).toEqual({ completedAt: null })
+    const completed = await save({ kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' })
+    expect(completed.status).toBe(200)
+    const progress = await completed.json()
+    expect(progress.base.legacyCredit).toEqual({ origin: 'legacy', completedAt: null })
+    expect(progress.base.completion).toMatchObject({ origin: 'scenario', scenarioVersion: 'base-simple-v1' })
+    expect(progress.additional).toEqual(credited.additional)
+    expect(await (await save({ kind: 'legacy-credit' })).json()).toEqual(progress)
+  })
+
+  test('serializes duplicate new completions and old legacy writes across app instances', async () => {
+    const player = await registerTutorialPlayer('tutorial-parallel')
+    const competingPrisma = createPrisma(databaseUrl!)
+    const competingApp = createApp({ env, prisma: competingPrisma })
+    const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
+    const command = JSON.stringify({ kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' })
+    try {
+      const responses = await Promise.all([
+        app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: command }),
+        competingApp.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: command }),
+        competingApp.request('/api/profile/tutorial/completion', { method: 'PUT', headers }),
+      ])
+      expect(responses.map((response) => response.status)).toEqual([200, 200, 200])
+      const [first, second, legacy] = await Promise.all(responses.map((response) => response.json()))
+      expect(first.base.completion).toEqual(second.base.completion)
+      const latest = await (await app.request('/api/profile/tutorial/progress', { headers })).json()
+      expect(latest.base).toEqual({ legacyCredit: { origin: 'legacy', completedAt: legacy.completedAt }, completion: first.base.completion })
+    } finally {
+      await competingPrisma.$disconnect()
+    }
+  })
+
+  test('isolates progress by authenticated account and rejects unbounded completion payloads', async () => {
+    const owner = await registerTutorialPlayer('tutorial-owner')
+    const outsider = await registerTutorialPlayer('tutorial-outsider')
+    const headers = { Authorization: `Bearer ${owner.accessToken}`, 'Content-Type': 'application/json' }
+    expect((await app.request('/api/profile/tutorial/progress')).status).toBe(401)
+    expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status).toBe(401)
+    for (const command of [
+      { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'unknown' },
+      { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' },
+      { kind: 'legacy-credit', userId: outsider.user.id },
+      { kind: 'legacy-credit', completedAt: '2026-09-04T11:00:00.000Z' },
+    ]) expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify(command) })).status).toBe(400)
+    expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'legacy-credit' }) })).status).toBe(200)
+    const other = await app.request(`/api/profile/tutorial/progress?userId=${owner.user.id}`, { headers: { Authorization: `Bearer ${outsider.accessToken}` } })
+    expect(await other.json()).toEqual({ schemaVersion: 1, base: { legacyCredit: null, completion: null }, additional: { completion: null } })
+  })
+
+  test('shares mutation limits with lesson writes without limiting progress reads', async () => {
+    const constrainedApp = createApp({ env: { ...env, ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT: 2 }, prisma })
+    const player = await registerTutorialPlayer('tutorial-new-budget', constrainedApp)
+    const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect((await constrainedApp.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'legacy-credit' }) })).status).toBe(200)
+    }
+    const limited = await constrainedApp.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'legacy-credit' }) })
+    expect(limited.status).toBe(429)
+    expect(limited.headers.get('retry-after')).toBeTruthy()
+    expect((await constrainedApp.request('/api/profile/tutorial/progress', { headers })).status).toBe(200)
+  })
+
+  test('erases lesson records and denies replay after account deletion', async () => {
+    const player = await registerTutorialPlayer('tutorial-erasure')
+    const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
+    for (const command of [{ kind: 'legacy-credit' }, { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' }]) {
+      expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify(command) })).status).toBe(200)
+    }
+    expect((await app.request('/api/auth/account', { method: 'DELETE', headers })).status).toBe(204)
+    expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'legacy-credit' }) })).status).toBe(401)
+    expect((await app.request('/api/profile/tutorial/progress', { headers })).status).toBe(401)
+    // Data erasure itself cannot be proved by an inaccessible API response alone.
+    expect(await prisma.tutorialCompletionRecord.count({ where: { userId: player.user.id } })).toBe(0)
   })
 
   test('shares the authenticated mutation budget with tutorial completion', async () => {

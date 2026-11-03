@@ -138,9 +138,12 @@ test('Journal keeps one ordered window and pending model edits through tabs, clo
     await workingModelButton.click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toHaveCount(1)
-    await expect(dialog.getByRole('tab')).toHaveText([
-      'Рабочая модель', 'Данные исследований', 'Трактовка',
-    ])
+    const tabs = dialog.getByRole('tab')
+    await expect(tabs).toHaveCount(3)
+    for (const [index, name] of ['Рабочая модель', 'Данные исследований', 'Трактовка'].entries()) {
+      await expect(tabs.nth(index)).toHaveAccessibleName(name)
+      await expect(tabs.nth(index)).toBeVisible()
+    }
     const hypothesis = dialog.getByRole('button', {
       name: /: гипотеза, тип поля Инерционное$/,
     }).first()

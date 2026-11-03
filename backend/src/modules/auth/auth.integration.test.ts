@@ -8,6 +8,7 @@ import type { AppEnv } from '../../env'
 import { lockAccountLifecycleTransaction } from '../../security/account-lifecycle-lock'
 import type { SecurityEvent } from '../../security/events'
 import { createPrismaAuthRepository } from './infrastructure/auth-repository'
+import { eraseTutorialProgressInTransaction } from '../profile'
 import { signAccessToken } from './infrastructure/access-tokens'
 import {
   cleanupPrismaRoomsForAccountDeletion,
@@ -6355,6 +6356,68 @@ maybeDescribe('auth API integration', () => {
       releaseCleanup()
       await competingPrisma.$disconnect()
     }
+  })
+
+  test('does not resurrect lesson progress when deletion wins the lifecycle lock', async () => {
+    const { user, accessToken } = await registerTokenAccount('delete-lesson-race')
+    let cleanupStarted!: () => void
+    let releaseCleanup!: () => void
+    const started = new Promise<void>((resolve) => { cleanupStarted = resolve })
+    const released = new Promise<void>((resolve) => { releaseCleanup = resolve })
+    const deletionRepository = createPrismaAuthRepository(prisma, env.JWT_SECRET, {
+      accountDeletionCleanup: async (transaction) => {
+        cleanupStarted()
+        await released
+        await eraseTutorialProgressInTransaction(transaction, user.id)
+      },
+    })
+    const applicationName = 'mode78-lesson-deletion-race'
+    const competingUrl = new URL(databaseUrl!)
+    competingUrl.searchParams.set('application_name', applicationName)
+    const competingPrisma = createPrisma(competingUrl.toString())
+    const competingApp = createApp({ env, prisma: competingPrisma })
+    const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+    const deletion = deletionRepository.eraseUserIdentity({ userId: user.id, now: new Date('2026-11-03T08:00:00.000Z') })
+    let save: Promise<Response> | undefined
+    try {
+      await started
+      save = Promise.resolve(competingApp.request('/api/profile/tutorial/progress', {
+        method: 'PUT', headers,
+        body: JSON.stringify({ kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' }),
+      }))
+      // Synchronize on the actual competing DB lock, not a timing assumption.
+      let waiting = false
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const rows = await prisma.$queryRaw<Array<{ waiting: boolean }>>`
+          SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name = ${applicationName} AND wait_event = 'advisory') AS waiting
+        `
+        if (rows[0]?.waiting) { waiting = true; break }
+        await Bun.sleep(10)
+      }
+      expect(waiting).toBe(true)
+      releaseCleanup()
+      await deletion
+      expect((await save).status).toBe(401)
+      expect((await competingApp.request('/api/profile/tutorial/progress', { headers })).status).toBe(401)
+      expect(await prisma.tutorialCompletionRecord.count({ where: { userId: user.id } })).toBe(0)
+    } finally {
+      releaseCleanup()
+      await Promise.allSettled([deletion, ...(save ? [save] : [])])
+      await competingPrisma.$disconnect()
+    }
+  })
+
+  test('reconciliation removes lesson progress left on a previously anonymized account', async () => {
+    const user = await prisma.user.create({ data: {
+      login: 'deleted-lesson-reconcile', anonymizedAt: new Date('2026-11-03T07:00:00.000Z'),
+    } })
+    await prisma.tutorialCompletionRecord.createMany({ data: [
+      { userId: user.id, lessonId: 'base', versionKey: 'legacy', origin: 'legacy', completedAt: null },
+      { userId: user.id, lessonId: 'base', versionKey: 'base-simple-v1', origin: 'scenario', completedAt: new Date('2026-11-03T06:00:00.000Z') },
+    ] })
+    await reconcileDeletedAccount({ db: prisma, lifecycleSecret: env.JWT_SECRET, now: new Date('2026-11-03T08:00:00.000Z') }, user.id)
+    expect(await prisma.tutorialCompletionRecord.count({ where: { userId: user.id } })).toBe(0)
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).deletionCleanupCompletedAt).toBeInstanceOf(Date)
   })
 
   test('does not restore an OAuth session across JWT secret rotation while deletion holds the lifecycle lock', async () => {

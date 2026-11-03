@@ -172,7 +172,7 @@ export function TutorialTenderBoard({
         info={(
           <>
             <Typography variant="shortcut" tone="muted" className="uppercase">
-              {t('tender.header.round', { round: view.round })}
+              {t('rooms.simple.round', { round: view.round, total: view.game?.rounds ?? 3 })}
             </Typography>
             <Typography as="h3" variant="bodySmMedium" className="truncate">
               {t(phaseLabelKeys[view.phase])}
@@ -216,7 +216,7 @@ export function TutorialTenderBoard({
         actions={(
           <>
           <Badge variant="success" className={styles.connectionBadge}>
-            {t('tender.realtime.live')}
+            {t('tutorial.title')}
           </Badge>
           <Dialog open={helpMenuOpen} onOpenChange={openHelp}>
             <DialogTrigger asChild>
@@ -290,7 +290,7 @@ export function TutorialTenderBoard({
 
       <div className={styles.content}>
         <TenderPhaseLayout
-          progress={<TenderPhaseProgress phase={view.phase} />}
+          progress={<TenderPhaseProgress phase={view.phase} contractsAvailable={view.game?.contracts !== false} />}
           primary={(
             <div
               data-tutorial-primary=""
@@ -317,7 +317,7 @@ export function TutorialTenderBoard({
                   laboratoryInitialMode,
                   onRequiredModalOpenChange,
                   onLaboratoryModeSelect: onLaboratoryModeSelected,
-                  separateContractReservation: true,
+                  separateContractReservation: false,
                   untimed: true,
                 }}
               />
@@ -344,7 +344,7 @@ export function TutorialTenderBoard({
                   showTimerWarning={false} highlightResult="reflection" triggerTestId="tutorial-research-trigger"
                 />
               </div>
-              <div
+              {view.game?.contracts !== false && <div
                 data-tutorial-contracts=""
               >
                 <ContractPlanningPanel
@@ -363,7 +363,7 @@ export function TutorialTenderBoard({
                   triggerTestId="tutorial-contracts-trigger"
                   view={view}
                 />
-              </div>
+              </div>}
             </div>
           )}
         />

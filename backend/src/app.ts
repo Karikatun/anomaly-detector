@@ -22,7 +22,7 @@ import {
   unlinkFeedbackAccountInTransaction,
 } from './modules/feedback'
 import { createMailModule, type MxResolver } from './modules/mail'
-import { createProfileModule } from './modules/profile'
+import { createProfileModule, eraseTutorialProgressInTransaction } from './modules/profile'
 import {
   cleanupPrismaRoomBatchForAccountDeletion,
   createRoomModule,
@@ -82,6 +82,7 @@ export function createApp({
     accountDeletionCleanup: async (transaction, { now, userId }) => {
       await cleanupPrismaRoomBatchForAccountDeletion(transaction, userId)
       await unlinkFeedbackAccountInTransaction(transaction, userId)
+      await eraseTutorialProgressInTransaction(transaction, userId)
       return {
         afterCommit: async () => {
           await reconcileDeletedAccount({

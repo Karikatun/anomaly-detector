@@ -4,4 +4,6 @@ export {
   useAccountProtectionQuery,
   useCompleteTutorialMutation,
   useTutorialProgressQuery,
+  useTutorialLessonsProgressQuery,
+  useRecordTutorialProgressMutation,
 } from './queries'
