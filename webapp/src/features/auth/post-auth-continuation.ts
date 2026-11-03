@@ -1,5 +1,5 @@
 const storageKey = 'anomaly-detector:post-auth-continuation'
-const tutorialIntents = ['tutorial', 'tutorial-complete'] as const
+const tutorialIntents = ['tutorial', 'tutorial-complete', 'tutorial-additional-complete'] as const
 
 export type PostAuthContinuation = typeof tutorialIntents[number]
 
@@ -32,8 +32,8 @@ export function peekPostAuthContinuation(storage: Storage | undefined): PostAuth
   return null
 }
 
-export function consumePostAuthContinuation(storage: Storage | undefined): '/tutorial' | null {
+export function consumePostAuthContinuation(storage: Storage | undefined): '/tutorial' | '/tutorial?lesson=additional' | null {
   const continuation = peekPostAuthContinuation(storage)
   try { storage?.removeItem(storageKey) } catch { return null }
-  return continuation ? '/tutorial' : null
+  return continuation === 'tutorial-additional-complete' ? '/tutorial?lesson=additional' : continuation ? '/tutorial' : null
 }

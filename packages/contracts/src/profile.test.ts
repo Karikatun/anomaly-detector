@@ -44,15 +44,22 @@ test('lesson progress preserves unknown legacy dates independently from actual c
   expect(tutorialLessonsProgressSchema.safeParse({ ...progress, base: { ...progress.base, completion: { ...progress.base.completion, completedAt: null } } }).success).toBe(false)
 })
 
-test('lesson writes accept bounded base completion and legacy credit without actor or invented dates', () => {
+test('lesson writes accept paired scenario completions and legacy credit without actor or invented dates', () => {
   const complete = { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' } as const
+  const additional = { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' } as const
   expect(tutorialProgressCommandSchema.parse(complete)).toEqual(complete)
+  expect(tutorialProgressCommandSchema.parse(additional)).toEqual(additional)
   expect(tutorialProgressCommandSchema.parse({ kind: 'legacy-credit' })).toEqual({ kind: 'legacy-credit' })
   for (const command of [
     { ...complete, actorId: 'another-player' },
     { ...complete, completedAt: '2026-11-03T08:00:00.000Z' },
     { ...complete, scenarioVersion: 'additional-standard-v1' },
-    { ...complete, lessonId: 'additional', scenarioVersion: 'additional-standard-v1' },
+    { ...additional, scenarioVersion: 'base-simple-v1' },
+    { ...additional, scenarioVersion: 'additional-standard-v2' },
+    { ...additional, lessonId: 'other' },
+    { ...additional, actorId: 'another-player' },
+    { ...additional, completedAt: '2026-11-03T08:00:00.000Z' },
+    { ...additional, model: {} },
     { kind: 'legacy-credit', completedAt: '2026-11-03T08:00:00.000Z' },
     { kind: 'legacy-credit', lessonId: 'additional' },
   ]) expect(tutorialProgressCommandSchema.safeParse(command).success).toBe(false)

@@ -130,8 +130,10 @@ test('registers after guest learning and saves completion without restarting the
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
   await expect(page.getByRole('dialog', { name: 'Базовое обучение: исследуйте аномалию' })).toHaveCount(0)
   await page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' }).click()
-  await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeVisible()
-  await page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' }).click()
+  await page.getByRole('button', { name: 'Обучение', exact: true }).click()
+  const lessons = page.getByRole('dialog', { name: 'Выберите урок', exact: true })
+  await expect(lessons.getByRole('button', { name: 'Повторить: Базовое', exact: true })).toBeEnabled()
+  await lessons.getByRole('button', { name: 'Повторить: Базовое', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Базовое обучение: исследуйте аномалию' })).toBeVisible()
 })
 
@@ -195,7 +197,10 @@ test('resumes completed guest learning after a same-tab external sign-in return'
   await expect(page).toHaveURL('/tutorial')
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'В ГЛАВНОЕ МЕНЮ' }).click()
-  await expect(page.getByRole('button', { name: 'ПОВТОРИТЬ ОБУЧЕНИЕ' })).toBeVisible()
+  await page.getByRole('button', { name: 'Обучение', exact: true }).click()
+  const lessons = page.getByRole('dialog', { name: 'Выберите урок', exact: true })
+  await expect(lessons.getByRole('button', { name: 'Повторить: Базовое', exact: true })).toBeEnabled()
+  await page.keyboard.press('Escape')
 })
 
 test('a completion URL alone does not mark a lesson complete', async ({ page }) => {

@@ -45,9 +45,11 @@ const sequentialPhases = new Set<TenderView['phase']>(['reconnaissance', 'labora
 export function TutorialTenderBoard({
   actionPanelPinned,
   commandError,
+  documentFlow = false,
   highlight,
   interpretationRequired,
   laboratoryInitialMode,
+  lessonLabel = 'tutorial.title',
   journalGuidance,
   onCommand,
   onContractsClosed,
@@ -67,9 +69,11 @@ export function TutorialTenderBoard({
 }: {
   actionPanelPinned: boolean
   commandError: string | null
+  documentFlow?: boolean
   highlight: 'contracts' | 'header' | 'help' | 'interpretation' | 'none' | 'primary' | 'research' | 'sidebar' | 'working-model'
   interpretationRequired: boolean
   laboratoryInitialMode?: 'broad' | 'deep'
+  lessonLabel?: TranslationKey
   journalGuidance?: ReactNode
   onCommand: (command: TenderCommandInput) => Promise<void>
   onContractsClosed: () => void
@@ -160,9 +164,10 @@ export function TutorialTenderBoard({
   return (
     <section
       className={`${styles.page} ${tutorialStyles.board} mx-auto w-full min-w-0 max-w-[90rem] overflow-x-clip px-3 py-3 sm:px-5 sm:py-5`}
-      aria-label={t('tutorial.title')}
+      aria-label={t(lessonLabel)}
       data-tutorial-action-pinned={actionPanelPinned || undefined}
       data-tutorial-board
+      data-tutorial-document-flow={documentFlow || undefined}
       data-tutorial-highlight={highlight}
       data-tutorial-phase={view.phase}
       data-tutorial-round={view.round}
@@ -216,7 +221,7 @@ export function TutorialTenderBoard({
         actions={(
           <>
           <Badge variant="success" className={styles.connectionBadge}>
-            {t('tutorial.title')}
+            {t(lessonLabel)}
           </Badge>
           <Dialog open={helpMenuOpen} onOpenChange={openHelp}>
             <DialogTrigger asChild>
@@ -350,14 +355,6 @@ export function TutorialTenderBoard({
                 <ContractPlanningPanel
                   contentTestId="tutorial-contracts-dialog"
                   open={contractsOpen}
-                  onCloseAutoFocus={(event) => {
-                    event.preventDefault()
-                    window.requestAnimationFrame(() => {
-                      document.querySelector<HTMLButtonElement>(
-                        '[data-tutorial-power-category="reconnaissance"] button:not(:disabled)',
-                      )?.focus({ preventScroll: true })
-                    })
-                  }}
                   onOpenChange={openContracts}
                   playerId={view.players[0]?.playerId}
                   triggerTestId="tutorial-contracts-trigger"

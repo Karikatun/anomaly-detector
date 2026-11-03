@@ -31,7 +31,7 @@ test('keeps feedback voluntary and submits only approved fields with a copyable 
 
   await page.getByRole('button', { name: 'Отложить и вернуться в игру' }).click()
   await expect(page).toHaveURL('/')
-  await expect(page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Обучение', exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: 'СООБЩИТЬ О ПРОБЛЕМЕ ИЛИ ИДЕЕ' }).click()
   await page.getByRole('button', { name: 'Предложение' }).click()
@@ -102,7 +102,7 @@ test('keeps feedback voluntary and submits only approved fields with a copyable 
   }
 
   await page.getByRole('button', { name: 'Вернуться в меню' }).click()
-  await expect(page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Обучение', exact: true })).toBeVisible()
 })
 
 async function auditCheckpoint(page: Page, name: string) {

@@ -288,6 +288,47 @@ maybeDescribe('profile statistics API integration', () => {
     expect(await (await app.request('/api/profile/tutorial', { headers })).json()).toEqual(legacyMarker)
   })
 
+  test('records additional completion independently and keeps its first accepted date', async () => {
+    const player = await registerTutorialPlayer('tutorial-additional-completion')
+    const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
+    const save = (command: unknown) => app.request('/api/profile/tutorial/progress', {
+      method: 'PUT', headers, body: JSON.stringify(command),
+    })
+    expect((await save({ kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' })).status).toBe(200)
+    expect((await save({ kind: 'legacy-credit' })).status).toBe(200)
+    const before = await (await app.request('/api/profile/tutorial/progress', { headers })).json()
+
+    const command = { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' }
+    const first = await save(command)
+    expect(first.status).toBe(200)
+    const completed = await first.json()
+    expect(completed.base).toEqual(before.base)
+    expect(completed.additional.completion).toEqual({
+      origin: 'scenario', scenarioVersion: 'additional-standard-v1', completedAt: expect.any(String),
+    })
+    expect(Number.isFinite(Date.parse(completed.additional.completion.completedAt))).toBe(true)
+    expect(await (await save(command)).json()).toEqual(completed)
+    const restartedApp = createApp({ env, prisma })
+    expect(await (await restartedApp.request('/api/profile/tutorial/progress', { headers })).json()).toEqual(completed)
+  })
+
+  test('allows additional completion without creating base or legacy credit', async () => {
+    const player = await registerTutorialPlayer('tutorial-additional-only')
+    const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
+    const response = await app.request('/api/profile/tutorial/progress', {
+      method: 'PUT', headers,
+      body: JSON.stringify({ kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' }),
+    })
+    expect(response.status).toBe(200)
+    const progress = await response.json()
+    expect(progress.base).toEqual({ legacyCredit: null, completion: null })
+    expect(progress.additional.completion).toEqual({
+      origin: 'scenario', scenarioVersion: 'additional-standard-v1', completedAt: expect.any(String),
+    })
+    expect(await (await app.request('/api/profile/tutorial', { headers })).json()).toEqual({ completedAt: null })
+    expect(await prisma.tutorialCompletionRecord.count({ where: { userId: player.user.id } })).toBe(1)
+  })
+
   test('preserves unknown legacy credit and existing additional completion when base is completed', async () => {
     const player = await registerTutorialPlayer('tutorial-legacy-unknown')
     const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
@@ -321,17 +362,24 @@ maybeDescribe('profile statistics API integration', () => {
     const competingApp = createApp({ env, prisma: competingPrisma })
     const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
     const command = JSON.stringify({ kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' })
+    const additionalCommand = JSON.stringify({ kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' })
     try {
       const responses = await Promise.all([
         app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: command }),
         competingApp.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: command }),
         competingApp.request('/api/profile/tutorial/completion', { method: 'PUT', headers }),
+        app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: additionalCommand }),
+        competingApp.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: additionalCommand }),
+        competingApp.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'legacy-credit' }) }),
       ])
-      expect(responses.map((response) => response.status)).toEqual([200, 200, 200])
-      const [first, second, legacy] = await Promise.all(responses.map((response) => response.json()))
+      expect(responses.map((response) => response.status)).toEqual([200, 200, 200, 200, 200, 200])
+      const [first, second, legacy, additionalFirst, additionalSecond] = await Promise.all(responses.map((response) => response.json()))
       expect(first.base.completion).toEqual(second.base.completion)
+      expect(additionalFirst.additional.completion).toEqual(additionalSecond.additional.completion)
       const latest = await (await app.request('/api/profile/tutorial/progress', { headers })).json()
       expect(latest.base).toEqual({ legacyCredit: { origin: 'legacy', completedAt: legacy.completedAt }, completion: first.base.completion })
+      expect(latest.additional).toEqual(additionalFirst.additional)
+      expect(await prisma.tutorialCompletionRecord.count({ where: { userId: player.user.id } })).toBe(3)
     } finally {
       await competingPrisma.$disconnect()
     }
@@ -345,11 +393,16 @@ maybeDescribe('profile statistics API integration', () => {
     expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status).toBe(401)
     for (const command of [
       { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'unknown' },
-      { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' },
+      { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'base-simple-v1' },
+      { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'additional-standard-v1' },
+      { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1', userId: outsider.user.id },
+      { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1', completedAt: '2026-09-04T11:00:00.000Z' },
+      { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1', model: {} },
       { kind: 'legacy-credit', userId: outsider.user.id },
       { kind: 'legacy-credit', completedAt: '2026-09-04T11:00:00.000Z' },
     ]) expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify(command) })).status).toBe(400)
     expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'legacy-credit' }) })).status).toBe(200)
+    expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' }) })).status).toBe(200)
     const other = await app.request(`/api/profile/tutorial/progress?userId=${owner.user.id}`, { headers: { Authorization: `Bearer ${outsider.accessToken}` } })
     expect(await other.json()).toEqual({ schemaVersion: 1, base: { legacyCredit: null, completion: null }, additional: { completion: null } })
   })
@@ -358,8 +411,11 @@ maybeDescribe('profile statistics API integration', () => {
     const constrainedApp = createApp({ env: { ...env, ANTI_ABUSE_AUTHENTICATED_MUTATION_LIMIT: 2 }, prisma })
     const player = await registerTutorialPlayer('tutorial-new-budget', constrainedApp)
     const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
-    for (let attempt = 0; attempt < 2; attempt++) {
-      expect((await constrainedApp.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'legacy-credit' }) })).status).toBe(200)
+    for (const command of [
+      { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' },
+      { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' },
+    ]) {
+      expect((await constrainedApp.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify(command) })).status).toBe(200)
     }
     const limited = await constrainedApp.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'legacy-credit' }) })
     expect(limited.status).toBe(429)
@@ -370,11 +426,16 @@ maybeDescribe('profile statistics API integration', () => {
   test('erases lesson records and denies replay after account deletion', async () => {
     const player = await registerTutorialPlayer('tutorial-erasure')
     const headers = { Authorization: `Bearer ${player.accessToken}`, 'Content-Type': 'application/json' }
-    for (const command of [{ kind: 'legacy-credit' }, { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' }]) {
+    for (const command of [
+      { kind: 'legacy-credit' },
+      { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' },
+      { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' },
+    ]) {
       expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify(command) })).status).toBe(200)
     }
     expect((await app.request('/api/auth/account', { method: 'DELETE', headers })).status).toBe(204)
     expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'legacy-credit' }) })).status).toBe(401)
+    expect((await app.request('/api/profile/tutorial/progress', { method: 'PUT', headers, body: JSON.stringify({ kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' }) })).status).toBe(401)
     expect((await app.request('/api/profile/tutorial/progress', { headers })).status).toBe(401)
     // Data erasure itself cannot be proved by an inaccessible API response alone.
     expect(await prisma.tutorialCompletionRecord.count({ where: { userId: player.user.id } })).toBe(0)

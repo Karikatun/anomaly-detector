@@ -1026,6 +1026,7 @@
 }
 
 .contractCard {
+  container: contract-card / inline-size;
   --contract-accent: var(--primary);
   display: grid;
   min-width: 0;
@@ -1159,7 +1160,11 @@
 
 .contractResearch > button {
   width: 100%;
+  height: auto;
+  min-height: 2.75rem;
   margin-top: .1rem;
+  padding-block: .5rem;
+  white-space: normal;
 }
 
 .noSuitableEvidence {
@@ -1646,4 +1651,29 @@
 
 .analysisPanel .footer {
   grid-template-columns: minmax(0, 1fr);
+}
+
+
+/* Facts must remain readable inside a narrow card, including enlarged text.
+   The card width is the constraint in both the planning dialog and gameplay. */
+@container contract-card (max-width: 22rem) {
+  .contractHeader {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .contractReward {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: .35rem;
+  }
+  .contractFact {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .15rem;
+  }
+  .contractFact > span {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+  }
 }

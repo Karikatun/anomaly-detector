@@ -53,12 +53,17 @@ export const tutorialLessonsProgressSchema = z.object({
   }).strict(),
 }).strict()
 
-// Additional completion remains readable, but its write command belongs to #79.
-export const tutorialProgressCommandSchema = z.discriminatedUnion('kind', [
+// A scenario version is valid only for its own lesson; legacy credit is base-only.
+export const tutorialProgressCommandSchema = z.union([
   z.object({
     kind: z.literal('scenario-completed'),
     lessonId: z.literal('base'),
     scenarioVersion: z.literal('base-simple-v1'),
+  }).strict(),
+  z.object({
+    kind: z.literal('scenario-completed'),
+    lessonId: z.literal('additional'),
+    scenarioVersion: z.literal('additional-standard-v1'),
   }).strict(),
   z.object({ kind: z.literal('legacy-credit') }).strict(),
 ])

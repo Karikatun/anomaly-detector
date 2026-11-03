@@ -52,3 +52,12 @@ class MemoryStorage implements Storage {
   removeItem(key: string) { this.values.delete(key) }
   setItem(key: string, value: string) { this.values.set(key, value) }
 }
+
+
+test('additional completion returns only to its bounded lesson after OAuth', () => {
+  const storage = new MemoryStorage()
+  expect(capturePostAuthContinuation(storage, new URL('https://app.example/?continue=tutorial-additional-complete'))).toBe('tutorial-additional-complete')
+  expect(capturePostAuthContinuation(storage, new URL('https://app.example/?auth_error=oauth_registration_consent_required'))).toBe('tutorial-additional-complete')
+  expect(consumePostAuthContinuation(storage)).toBe('/tutorial?lesson=additional')
+  expect(consumePostAuthContinuation(storage)).toBeNull()
+})

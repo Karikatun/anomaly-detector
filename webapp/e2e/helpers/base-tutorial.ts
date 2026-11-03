@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test'
+import { openLessonFromMenu } from './lesson-menu'
 
 export type BaseTutorialCheckpoint = (step?: string) => Promise<void>
 const noCheckpoint: BaseTutorialCheckpoint = async () => undefined
@@ -36,7 +37,7 @@ export async function submitBaseThesis(page: Page, signal: string, fieldType: st
 }
 export async function reachBaseFirstResearch(page: Page, guest: boolean | 'current' = true, checkpoint: BaseTutorialCheckpoint = noCheckpoint) {
   if (guest === true) await page.goto('/learn')
-  else if (guest === false) await page.getByRole('button', { name: /ПРОЙТИ ОБУЧЕНИЕ|ПОВТОРИТЬ ОБУЧЕНИЕ/ }).click()
+  else if (guest === false) await openLessonFromMenu(page)
   await page.getByRole('button', { name: 'Начать обучение', exact: true }).click()
   await checkpoint()
   await chooseBaseSlot(page, 6, checkpoint)

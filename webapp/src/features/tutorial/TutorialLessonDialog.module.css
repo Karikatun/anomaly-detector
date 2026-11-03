@@ -1,0 +1,65 @@
+.content {
+  width: min(100% - 2rem, 48rem);
+  max-width: 48rem;
+  max-height: min(90dvh, 52rem);
+  overflow-y: auto;
+  gap: var(--space-6);
+}
+
+.header {
+  padding-right: var(--space-8);
+}
+
+.notice {
+  padding: var(--space-4);
+  border: 1px solid var(--border-game);
+  border-radius: var(--radius-control);
+}
+
+.lessons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.lesson {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--border-game);
+  border-radius: var(--radius-panel);
+  background: var(--card);
+}
+
+.lessonBody {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.status {
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.details {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--muted-foreground);
+}
+
+.action {
+  width: 100%;
+  min-height: 2.75rem;
+  white-space: normal;
+}
+
+@media (max-width: 640px) {
+  .content, .lesson { padding: var(--space-2); }
+  .lessons { grid-template-columns: minmax(0, 1fr); }
+}

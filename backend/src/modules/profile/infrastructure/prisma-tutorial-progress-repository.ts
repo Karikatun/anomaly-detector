@@ -51,7 +51,7 @@ export function createPrismaTutorialProgressRepository(
         await transaction.tutorialCompletionRecord.createMany({
           data: [{
             userId,
-            lessonId: 'base',
+            lessonId: command.kind === 'legacy-credit' ? 'base' : command.lessonId,
             versionKey: command.kind === 'legacy-credit' ? 'legacy' : command.scenarioVersion,
             origin: command.kind === 'legacy-credit' ? 'legacy' : 'scenario',
             completedAt: command.kind === 'legacy-credit' ? null : completedAt,

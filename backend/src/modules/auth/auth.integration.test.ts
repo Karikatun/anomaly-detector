@@ -6358,8 +6358,10 @@ maybeDescribe('auth API integration', () => {
     }
   })
 
-  test('does not resurrect lesson progress when deletion wins the lifecycle lock', async () => {
-    const { user, accessToken } = await registerTokenAccount('delete-lesson-race')
+  for (const [lessonId, scenarioVersion] of [
+    ['base', 'base-simple-v1'], ['additional', 'additional-standard-v1'],
+  ] as const) test(`does not resurrect ${lessonId} lesson progress when deletion wins the lifecycle lock`, async () => {
+    const { user, accessToken } = await registerTokenAccount(`delete-${lessonId}-lesson-race`)
     let cleanupStarted!: () => void
     let releaseCleanup!: () => void
     const started = new Promise<void>((resolve) => { cleanupStarted = resolve })
@@ -6371,7 +6373,7 @@ maybeDescribe('auth API integration', () => {
         await eraseTutorialProgressInTransaction(transaction, user.id)
       },
     })
-    const applicationName = 'mode78-lesson-deletion-race'
+    const applicationName = `mode79-${lessonId}-lesson-deletion-race`
     const competingUrl = new URL(databaseUrl!)
     competingUrl.searchParams.set('application_name', applicationName)
     const competingPrisma = createPrisma(competingUrl.toString())
@@ -6383,7 +6385,7 @@ maybeDescribe('auth API integration', () => {
       await started
       save = Promise.resolve(competingApp.request('/api/profile/tutorial/progress', {
         method: 'PUT', headers,
-        body: JSON.stringify({ kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' }),
+        body: JSON.stringify({ kind: 'scenario-completed', lessonId, scenarioVersion }),
       }))
       // Synchronize on the actual competing DB lock, not a timing assumption.
       let waiting = false
@@ -6398,6 +6400,9 @@ maybeDescribe('auth API integration', () => {
       releaseCleanup()
       await deletion
       expect((await save).status).toBe(401)
+      expect((await competingApp.request('/api/profile/tutorial/progress', {
+        method: 'PUT', headers, body: JSON.stringify({ kind: 'scenario-completed', lessonId, scenarioVersion }),
+      })).status).toBe(401)
       expect((await competingApp.request('/api/profile/tutorial/progress', { headers })).status).toBe(401)
       expect(await prisma.tutorialCompletionRecord.count({ where: { userId: user.id } })).toBe(0)
     } finally {
@@ -6414,6 +6419,7 @@ maybeDescribe('auth API integration', () => {
     await prisma.tutorialCompletionRecord.createMany({ data: [
       { userId: user.id, lessonId: 'base', versionKey: 'legacy', origin: 'legacy', completedAt: null },
       { userId: user.id, lessonId: 'base', versionKey: 'base-simple-v1', origin: 'scenario', completedAt: new Date('2026-11-03T06:00:00.000Z') },
+      { userId: user.id, lessonId: 'additional', versionKey: 'additional-standard-v1', origin: 'scenario', completedAt: new Date('2026-11-03T06:00:00.000Z') },
     ] })
     await reconcileDeletedAccount({ db: prisma, lifecycleSecret: env.JWT_SECRET, now: new Date('2026-11-03T08:00:00.000Z') }, user.id)
     expect(await prisma.tutorialCompletionRecord.count({ where: { userId: user.id } })).toBe(0)

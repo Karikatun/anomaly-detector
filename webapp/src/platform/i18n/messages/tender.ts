@@ -368,6 +368,7 @@ export const tenderMessages = {
   'tender.modelAnalysisPanel.copy.003': 'Выберите сигнал',
   'tender.modelAnalysisPanel.copy.004': 'Тип поля не выбран',
   'tender.modelAnalysisPanel.copy.005': 'полярность не выбрана',
+  'tender.contracts.selectedEvidence': 'Выбрано: {evidence}',
   'tender.contractsPanel.copy.001': '{value1} → {value2} · {value3} · {value4}',
   'tender.contractsPanel.copy.002': 'Доступные контракты',
   'tender.contractsPanel.copy.003': 'мощности',

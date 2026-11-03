@@ -1,3 +1,4 @@
+import { openLessonFromMenu } from '../helpers/lesson-menu'
 import AxeBuilder from '@axe-core/playwright'
 import type { Locator, Page } from '@playwright/test'
 import { expect, registerBrowserUser, test } from '../helpers/test'
@@ -518,7 +519,7 @@ test('fresh tutorial introduction is readable and starts with 200% text', async 
 
 async function startTutorial(page: Page, guest = false) {
   if (guest) await page.goto('/learn')
-  else await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ', exact: true }).click()
+  else await openLessonFromMenu(page)
   const prologue = page.getByRole('dialog', { name: 'Базовое обучение: исследуйте аномалию', exact: true })
   await expect(prologue).toContainText('Boreal')
   const start = prologue.getByRole('button', { name: 'Начать обучение', exact: true })
@@ -1691,7 +1692,7 @@ test('exits the tutorial through its confirmation dialog and clears the saved st
   const exit = page.getByRole('dialog', { name: 'Выйти из обучения?', exact: true })
   await exit.getByRole('button', { name: 'Выйти и сбросить', exact: true }).click()
   await expect(page).toHaveURL(/\/$/)
-  await page.getByRole('button', { name: 'ПРОЙТИ ОБУЧЕНИЕ', exact: true }).click()
+  await openLessonFromMenu(page)
   await expect(page.getByRole('dialog', { name: 'Базовое обучение: исследуйте аномалию', exact: true })).toBeVisible()
 })
 
