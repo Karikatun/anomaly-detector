@@ -95,23 +95,21 @@ and redacts the temporary access token from reports. Never point this command or
 the scheduled Dynamic Security workflow at production or shared development
 data.
 
-## Temporary Dependency Exception
+## Dependency Audit
 
 `bun run security:dependencies` runs the unfiltered Bun audit at severity `low`.
-The sole approved exception is GHSA-vfj7-8cjw-p6xm for `braces@3.0.3`, owned by
-`Karikatun`, accepted on 2026-10-16 and expiring at 2026-10-30T23:59:59Z. Its
-record in `.security/dependency-exceptions.json` identifies both reviewed paths
-through the pinned `webapp` developer CLI `shadcn@4.7.0`; it does not declare the
-upstream vulnerability fixed. Use trusted CLI inputs until an upstream fix can
-replace this exception.
+The policy in `.security/dependency-exceptions.json` permits zero exceptions.
+The former `braces@3.0.3` exception was retired after GitHub withdrew
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) on 2026-10-23.
 
-The gate rejects other advisories, version or ancestry drift, production
-manifest paths, known CLI package literals in application sources (allowing only
-the existing `shadcn/tailwind.css` import), missing or invalid exception metadata,
-expiry, audit errors and unknown output schemas. The literal guard is conservative
-and is not a general JavaScript reachability analysis. The raw audit continues to
-report the accepted advisory. Renewal, another exception or a broader scope
-requires a separate explicit owner decision and review; this record grants none.
+The gate rejects every advisory, audit process or output error, and nonempty or
+invalid policy records. It verifies manifest and lock consistency and rejects
+reintroduction of the retired `shadcn` package through dependency declarations,
+NPM aliases, overrides, locked instances, or package literals in application
+sources. The player build uses a verified local stylesheet with its MIT notice.
+Shared libraries from the old CLI graph remain subject to the full registry audit.
+The source check covers package literals, including the former CSS import.
+Any future exception requires a separate explicit owner decision and review.
 
 ## Mandatory Threat Review
 

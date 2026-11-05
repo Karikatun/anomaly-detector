@@ -18,7 +18,6 @@ This section may be updated during first-run bootstrap. If the root `README.md` 
 - TanStack Form
 - TanStack Router
 - Zod contracts from `@anomaly-detector/contracts`
-- shadcn CLI
 - Playwright
 - ESLint
 
@@ -32,7 +31,6 @@ bun run lint
 bun run test
 bun run e2e
 bun run e2e:ui
-bun run ui:info
 ```
 
 From the repository root, use `bun run dev:webapp`, `bun run build:webapp`, `bun run typecheck:webapp`, `bun run test:webapp`, and `bun run e2e:webapp`.
@@ -83,16 +81,17 @@ Use shadcn/ui for web interface primitives. Treat `src/components/ui` as the sha
 
 All web typography must go through `src/components/ui/typography.tsx`. Use `Typography` for page copy, headings `h1` through `h6`, labels, controls, captions, emphasis, shortcuts, code/kbd text, and screen-reader-only text. Do not add raw heading/paragraph/emphasis elements or Tailwind text-size/font/leading/tracking utilities in pages or UI components; the local ESLint typography policy enforces this.
 
-The current shadcn configuration is `radix-maia` with the `hugeicons` icon library and CSS variables, as recorded in `components.json`. The repository retains the full official shadcn component registry as its local UI foundation. Do not add community registries, blocks, or custom UI generator output unless the product needs them.
+`components.json` records the original `radix-maia` configuration with Hugeicons
+and CSS variables. Maintain the checked-in primitives directly in
+`src/components/ui` and review any proposed upstream refresh as a separate change.
 
-When adding or refreshing shadcn components:
-
-```bash
-bun run --cwd webapp ui:info
-bun run --cwd webapp ui:add -- <component>
-```
-
-Use the local `shadcn` devDependency pinned in `webapp/package.json` and `bun.lock`; do not use `shadcn@latest` for routine refreshes because it can produce registry output that no longer matches this repository. If generated files need compatibility fixes for current package versions, keep the edits small and leave app-specific composition outside `src/components/ui`.
+`src/index.css` imports a byte-for-byte copy of `dist/tailwind.css` from the
+[official `shadcn@4.7.0` npm archive](https://registry.npmjs.org/shadcn/-/shadcn-4.7.0.tgz).
+The stylesheet is [in this repository](src/styles/vendor/shadcn-tailwind-4.7.0.css)
+and its [MIT notice](public/licenses/shadcn-4.7.0.txt) is copied into the static
+build. The archive was verified against the npm integrity pinned in `bun.lock`
+at `a40d946`. The stylesheet SHA-256 is
+`146941ac3ff65496fdf1cb306e697255328e4dadc7c105d66e36bb031b00f6d6`.
 
 ## E2E
 
