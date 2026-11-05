@@ -1,5 +1,7 @@
 import {
   anomalyConfigurationSchema,
+  gameDescriptorSchema,
+  gameDescriptor,
   commandReceiptSchema,
   playerIdSchema,
   powerAllocationSchema,
@@ -45,6 +47,10 @@ import {
 
 type PersistedTenderState = Pick<
   StoredTender,
+  | 'game'
+  | 'availableSamplePool'
+  | 'sampleRandomSeed'
+  | 'finalSubmissionOrderByPlayer'
   | 'accessSlots'
   | 'anomalyConfiguration'
   | 'automaticOperationalSkipsByPlayer'
@@ -96,6 +102,10 @@ const automaticOperationalSkipSchema = z.object({
   round: z.number().int().min(1).max(5),
 }).strict()
 const persistedTenderStateSchema = z.object({
+  game: gameDescriptorSchema.optional(),
+  availableSamplePool: z.array(signalIdSchema).optional(),
+  sampleRandomSeed: z.string().min(1).max(1024).optional(),
+  finalSubmissionOrderByPlayer: z.record(playerIdSchema, z.number().int().positive()).optional(),
   accessSlots: z.record(playerIdSchema, z.number().int().min(1).max(6)),
   anomalyConfiguration: anomalyConfigurationSchema,
   automaticOperationalSkipsByPlayer: z.record(playerIdSchema, automaticOperationalSkipSchema).optional(),
@@ -140,6 +150,10 @@ const persistedTenderStateSchema = z.object({
 }).passthrough()
 
 const toPersistedState = (tender: StoredTender): PersistedTenderState => ({
+  game: tender.game,
+  availableSamplePool: tender.availableSamplePool,
+  sampleRandomSeed: tender.sampleRandomSeed,
+  finalSubmissionOrderByPlayer: tender.finalSubmissionOrderByPlayer,
   accessSlots: tender.accessSlots,
   anomalyConfiguration: tender.anomalyConfiguration,
   automaticOperationalSkipsByPlayer: tender.automaticOperationalSkipsByPlayer,
@@ -207,9 +221,17 @@ const toStoredTender = (record: {
   commands: Array<{ commandId: string; fingerprint: string; receipt: Prisma.JsonValue }>
 }): StoredTender => {
   const state = persistedTenderStateSchema.parse(record.state)
-  const publicContracts = state.publicContracts ?? createDefaultContracts(state.players.length)
-  const publicFinalContract = state.publicFinalContract ?? { contractId: 'final-contract', kind: 'final', ratingReward: 8, requiredPublicResult: 'reflection', requiredSecondaryPublicResult: 'attenuation', targetRole: 'source', targetSignal: 'ferro' }
+  const game = state.game ?? gameDescriptor()
+  if (game.mode === 'simple' && (!state.sampleRandomSeed || !state.availableSamplePool || state.ruleset !== 'tender-v2' || (state.round ?? 1) > game.rounds || state.publicFinalContract || (state.publicContracts?.length ?? 0) > 0)) {
+    throw new Error('Stored simple Tender is incompatible')
+  }
+  const publicContracts = game.contracts ? state.publicContracts ?? createDefaultContracts(state.players.length) : []
+  const publicFinalContract = !game.contracts ? undefined : state.publicFinalContract ?? { contractId: 'final-contract', kind: 'final', ratingReward: 8, requiredPublicResult: 'reflection', requiredSecondaryPublicResult: 'attenuation', targetRole: 'source', targetSignal: 'ferro' }
   return {
+    game,
+    availableSamplePool: state.availableSamplePool,
+    sampleRandomSeed: state.sampleRandomSeed,
+    finalSubmissionOrderByPlayer: state.finalSubmissionOrderByPlayer,
     accessSlots: state.accessSlots,
     abandonmentDueAt: record.abandonmentDueAt,
     anomalyConfiguration: state.anomalyConfiguration,
@@ -233,7 +255,7 @@ const toStoredTender = (record: {
     id: record.id,
     knownSignals: state.knownSignals ?? [
       ...new Set(
-        [...publicContracts.map((contract) => contract.targetSignal), publicFinalContract.targetSignal]
+        [...publicContracts.map((contract) => contract.targetSignal), publicFinalContract?.targetSignal]
           .filter((signal): signal is NonNullable<typeof signal> => signal !== undefined),
       ),
     ],
@@ -686,7 +708,7 @@ export function createPrismaTenderStore(
         where: {
           phase: { not: 'complete' },
           ...(afterId ? { id: { gt: afterId } } : {}),
-          OR: ['bot-v1', 'bot-v2'].map((strategyVersion) => ({
+          OR: ['bot-v1', 'bot-v2', 'bot-simple-v1'].map((strategyVersion) => ({
             state: { path: ['players'], array_contains: [{ bot: { strategyVersion } }] },
           })),
         },

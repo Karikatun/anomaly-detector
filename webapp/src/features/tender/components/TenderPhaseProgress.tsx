@@ -16,8 +16,8 @@ import { Typography } from '@/components/ui/typography'
 import { getTenderPhaseProgressStages } from '../phase-ui'
 import styles from './TenderPhaseProgress.module.css'
 
-export function TenderPhaseProgress({ phase }: { phase: string }) {
-  const stages = getTenderPhaseProgressStages(phase as never)
+export function TenderPhaseProgress({ phase, contractsAvailable = true }: { phase: string; contractsAvailable?: boolean }) {
+  const stages = getTenderPhaseProgressStages(phase as never, contractsAvailable)
   const activeIndex = stages.findIndex((stage) => stage.phase === phase)
   const activeStage = stages[activeIndex]
 

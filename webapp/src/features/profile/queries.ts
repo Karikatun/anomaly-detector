@@ -7,17 +7,21 @@ import type {
   StartRecoveryEmailReplacementRequest,
   StartRecoveryEmailRequest,
   StartRecoveryCodeReissueRequest,
+  TutorialProgressCommand,
+  TutorialLessonsProgress,
 } from '@anomaly-detector/contracts'
 
 import { sessionQueryKeys } from '@/platform/query'
 
 import type { ProfileApi } from './api'
+import { createTutorialProgressCacheWriter, mergeTutorialLessonsProgress } from './tutorial-progress-cache'
 
 export const profileQueryKeys = {
   all: [...sessionQueryKeys.all, 'profile'] as const,
   accountProtection: () => [...profileQueryKeys.all, 'account-protection'] as const,
   statistics: () => [...profileQueryKeys.all, 'statistics'] as const,
   tutorial: () => [...profileQueryKeys.all, 'tutorial'] as const,
+  lessons: () => [...profileQueryKeys.all, 'tutorial-lessons', 1] as const,
 }
 
 export function useAccountProtectionQuery(api: ProfileApi, enabled = true) {
@@ -172,6 +176,22 @@ export function useTutorialProgressQuery(api: ProfileApi) {
   })
 }
 
+export function useTutorialLessonsProgressQuery(api: ProfileApi) {
+  return useQuery({
+    queryKey: profileQueryKeys.lessons(),
+    queryFn: () => api.getLessonsProgress(),
+    structuralSharing: (current, incoming) => mergeTutorialLessonsProgress(current as TutorialLessonsProgress | undefined, incoming as TutorialLessonsProgress),
+  })
+}
+
+export function useRecordTutorialProgressMutation(api: ProfileApi) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (command: TutorialProgressCommand) => api.recordTutorialProgress(command),
+    ...createTutorialProgressCacheWriter(queryClient, profileQueryKeys.lessons()),
+  })
+}
+
 export function useCompleteTutorialMutation(api: ProfileApi) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -183,6 +203,6 @@ export function useCompleteTutorialMutation(api: ProfileApi) {
 export function useProfileStatisticsQuery(api: ProfileApi) {
   return useQuery({
     queryKey: profileQueryKeys.statistics(),
-    queryFn: () => api.getStatistics(),
+    queryFn: () => api.getStatisticsByMode(),
   })
 }

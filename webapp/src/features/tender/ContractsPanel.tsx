@@ -349,6 +349,14 @@ export function ContractsPanel({
                         </>
                       )}
 
+                      {bid.evidenceTestIds.length > 0 && <Typography variant="bodySm">
+                        {t('tender.contracts.selectedEvidence', {
+                          evidence: bid.evidenceTestIds.flatMap((id) => {
+                            const entry = evidenceById.get(id)
+                            return entry ? [evidenceLabel(entry)] : []
+                          }).join('; '),
+                        })}
+                      </Typography>}
                       <Button
                         type="button"
                         size="sm"

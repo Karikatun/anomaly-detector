@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { botParticipantSchema } from './bots'
+import { gameDescriptorSchema, gameModeSchema } from './game'
 
 export const tenderIdSchema = z.string().min(1).max(128)
 export const tenderResourceIdSchema = z.uuid()
@@ -27,6 +28,7 @@ export const tenderPlayerSchema = z.object({
 }).strict()
 
 export const createTenderSchema = z.object({
+  mode: gameModeSchema.optional(),
   players: z.array(tenderPlayerSchema).min(2).max(4),
   ruleset: tenderRulesetSchema.optional(),
 }).strict()
@@ -289,6 +291,7 @@ export const tenderPlayerViewSchema = z.object({
   powerAllocation: powerAllocationSchema.optional(),
   powerAllocationConfirmed: z.boolean().optional(),
   rating: z.number().int().min(0),
+  requestedAccessSlotConfirmed: z.boolean().optional(),
   requestedAccessSlot: z.number().int().min(1).max(6).optional(),
 }).strict()
 
@@ -467,6 +470,8 @@ export const tenderAuditRoundSchema = z.object({
 }).strict()
 
 export const tenderAuditViewSchema = z.object({
+  finalSubmissionOrderByPlayer: z.record(playerIdSchema, z.number().int().nonnegative()).optional(),
+  game: gameDescriptorSchema.optional(),
   anomalyConfiguration: anomalyConfigurationSchema,
   completionReason: z.enum([
     'standard',
@@ -489,6 +494,8 @@ export const tenderAuditViewSchema = z.object({
 }).strict()
 
 export const tenderViewSchema = z.object({
+  game: gameDescriptorSchema.optional(),
+  availableSamplePool: z.array(signalIdSchema).optional(),
   activePlayerId: playerIdSchema.optional(),
   abandonmentDueAt: z.string().datetime().nullable().optional(),
   completionReason: z.enum([
@@ -547,6 +554,9 @@ export const tenderViewSchema = z.object({
   audit: tenderAuditViewSchema.optional(),
   winnerPlayerIds: z.array(playerIdSchema).optional(),
 }).strict().superRefine((view, context) => {
+  if (view.game?.mode === 'simple' && (view.round > view.game.rounds || view.phase === 'contracts' || view.publicContracts.length > 0 || view.publicFinalContract !== undefined)) {
+    context.addIssue({ code: 'custom', message: 'Simple view contradicts its immutable game descriptor', path: ['game'] })
+  }
   if (view.phase !== 'complete' && view.audit !== undefined) {
     context.addIssue({
       code: 'custom',

@@ -1,11 +1,16 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const tools = JSON.parse(readFileSync(resolve(repositoryRoot, '.security/tools.json'), 'utf8'))
-const scratchRoot = resolve(repositoryRoot, '.scratch/security')
+const trivyCacheRoot = resolve(
+  homedir(),
+  process.platform === 'darwin' ? 'Library/Caches' : '.cache',
+  'anomaly-detector/trivy',
+)
 
 function sourceMount() {
   return `${repositoryRoot}:/src:ro`
@@ -58,13 +63,12 @@ function plan(scanner, positional) {
         ],
       }
     case 'trivy-config':
-      mkdirSync(resolve(scratchRoot, 'trivy-cache'), { recursive: true })
       return {
         command: 'docker',
         args: [
           'run', '--rm',
           '--volume', sourceMount(),
-          '--volume', `${resolve(scratchRoot, 'trivy-cache')}:/root/.cache/trivy`,
+          '--volume', `${trivyCacheRoot}:/root/.cache/trivy`,
           '--entrypoint', 'trivy',
           tools.trivy.image,
           'fs',
@@ -80,13 +84,12 @@ function plan(scanner, positional) {
     case 'trivy-image': {
       const image = positional[0]
       if (!image) throw new Error('trivy-image requires an image reference')
-      mkdirSync(resolve(scratchRoot, 'trivy-cache'), { recursive: true })
       return {
         command: 'docker',
         args: [
           'run', '--rm',
           '--volume', `${currentDockerSocket()}:/var/run/docker.sock`,
-          '--volume', `${resolve(scratchRoot, 'trivy-cache')}:/root/.cache/trivy`,
+          '--volume', `${trivyCacheRoot}:/root/.cache/trivy`,
           '--entrypoint', 'trivy',
           tools.trivy.image,
           'image',
@@ -124,6 +127,9 @@ if (import.meta.main) {
     if (dryRun) {
       process.stdout.write(`${JSON.stringify(scanPlan)}\n`)
     } else {
+      if (scanner === 'trivy-config' || scanner === 'trivy-image') {
+        mkdirSync(trivyCacheRoot, { recursive: true })
+      }
       run(scanPlan)
     }
   } catch (error) {

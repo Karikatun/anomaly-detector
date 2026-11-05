@@ -1,6 +1,6 @@
 import { isRetryableDatabaseTransactionConflict, type DbClient } from '../../../db'
 import { randomBytes } from 'node:crypto'
-import { roomBotSchema, type RoomBot } from '@anomaly-detector/contracts'
+import { gameModeSchema, roomBotSchema, type RoomBot } from '@anomaly-detector/contracts'
 import type { Prisma } from '../../../generated/prisma/client'
 import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import type { Clock, RoomRecord, RoomRepository } from '../application/ports'
@@ -16,6 +16,7 @@ export function toRoomRecord(
   overrides: Partial<Pick<RoomRecord, 'members' | 'startsAt' | 'status'>> = {},
 ): RoomRecord {
   return {
+    mode: gameModeSchema.parse(room.mode ?? 'standard'),
     allowBots: room.allowBots ?? false,
     bots: roomBotSchema.array().parse(room.bots ?? []),
     capacity: room.capacity as 2 | 3 | 4,
@@ -105,6 +106,7 @@ export function createPrismaRoomRepository(
             }
             const room = await tx.tenderRoom.create({
               data: {
+                mode: input.mode ?? 'standard',
                 allowBots: input.allowBots ?? false,
                 capacity: input.capacity,
                 hostId: input.hostId,

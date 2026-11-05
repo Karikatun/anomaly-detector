@@ -1,5 +1,5 @@
 const storageKey = 'anomaly-detector:post-auth-continuation'
-const tutorialIntents = ['tutorial', 'tutorial-complete'] as const
+const tutorialIntents = ['tutorial', 'tutorial-complete', 'tutorial-additional-complete'] as const
 
 export type PostAuthContinuation = typeof tutorialIntents[number]
 
@@ -8,28 +8,32 @@ function isTutorialIntent(value: string | null): value is PostAuthContinuation {
 }
 
 export function capturePostAuthContinuation(
-  storage: Storage,
+  storage: Storage | undefined,
   url: URL,
 ): PostAuthContinuation | null {
   const requested = url.searchParams.get('continue')
   if (requested === null) return peekPostAuthContinuation(storage)
   if (isTutorialIntent(requested)) {
-    storage.setItem(storageKey, requested)
-    return requested
+    try {
+      if (!storage) return null
+      storage.setItem(storageKey, requested)
+      return requested
+    } catch { return null }
   }
-  storage.removeItem(storageKey)
+  try { storage?.removeItem(storageKey) } catch { /* Navigation does not require storage. */ }
   return null
 }
 
-export function peekPostAuthContinuation(storage: Storage): PostAuthContinuation | null {
-  const stored = storage.getItem(storageKey)
+export function peekPostAuthContinuation(storage: Storage | undefined): PostAuthContinuation | null {
+  let stored: string | null
+  try { stored = storage?.getItem(storageKey) ?? null } catch { return null }
   if (isTutorialIntent(stored)) return stored
-  if (stored !== null) storage.removeItem(storageKey)
+  if (stored !== null) { try { storage?.removeItem(storageKey) } catch { /* Ignore disposable invalid data. */ } }
   return null
 }
 
-export function consumePostAuthContinuation(storage: Storage): '/tutorial' | null {
+export function consumePostAuthContinuation(storage: Storage | undefined): '/tutorial' | '/tutorial?lesson=additional' | null {
   const continuation = peekPostAuthContinuation(storage)
-  storage.removeItem(storageKey)
-  return continuation ? '/tutorial' : null
+  try { storage?.removeItem(storageKey) } catch { return null }
+  return continuation === 'tutorial-additional-complete' ? '/tutorial?lesson=additional' : continuation ? '/tutorial' : null
 }

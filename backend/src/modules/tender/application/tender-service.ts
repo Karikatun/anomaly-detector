@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type {
   AdvanceDueTendersInput,
   AdvanceDueTendersResult,
@@ -11,6 +12,7 @@ import type {
 } from '@anomaly-detector/contracts'
 import {
   createTenderSchema,
+  gameDescriptor,
   tenderAuditViewSchema,
   tenderCommandSchema,
   tenderViewQuerySchema,
@@ -81,6 +83,14 @@ const receivesAccessSlotSampleCompensation = (slot: number) => slot === 5 || slo
 const nextCompensationSample = (knownSignals: SignalId[], currentSamples: SignalId[]) =>
   signalIds.find((signalId) => !knownSignals.includes(signalId))
   ?? signalIds.find((signalId) => !currentSamples.includes(signalId))
+
+const drawMissingSample = (tender: StoredTender, playerId: string, samples: SignalId[], drawIndex = 0) => {
+  const missing = signalIds.filter((signal) => !samples.includes(signal))
+  if (missing.length === 0) return undefined
+  if (!tender.sampleRandomSeed) throw new Error('Simple sample randomness is missing')
+  const hash = createHash('sha256').update(JSON.stringify([tender.sampleRandomSeed, tender.version, playerId, drawIndex])).digest()
+  return missing[hash.readUInt32BE(0) % missing.length]
+}
 
 export function createTenderService({
   now = () => new Date(),
@@ -216,13 +226,13 @@ export function createTenderService({
   }
 
   const advanceAfterContracts = (tender: StoredTender): StoredTender => {
-    if (nextContractsPlayer(tender)) return { ...tender, phase: 'contracts' }
+    if (tender.game?.contracts !== false && nextContractsPlayer(tender)) return { ...tender, phase: 'contracts' }
     const budgetByPlayer = Object.fromEntries(tender.players.map((player) => [
       player.id,
       (tender.budgetByPlayer[player.id] ?? 0) + operationalGrantBudget,
     ]))
     const tenderAfterGrant = { ...tender, budgetByPlayer }
-    if (tender.round >= 5) return {
+    if (tender.round >= (tender.game?.rounds ?? 5)) return {
       ...tenderAfterGrant,
       finalScientificModelDraftsByPlayer: tender.ruleset === 'tender-v2'
         ? createFinalScientificModelDrafts(tenderAfterGrant)
@@ -230,7 +240,7 @@ export function createTenderService({
       phase: 'final-scientific-model',
     }
     const round = tender.round + 1
-    const publicContracts = createRoundContracts(
+    const publicContracts = tender.game?.contracts === false ? [] : createRoundContracts(
       round,
       tender.players.length,
       tender.anomalyConfiguration.seed,
@@ -239,6 +249,7 @@ export function createTenderService({
     return {
       ...tenderAfterGrant,
       accessSlots: {},
+      ...(tender.game?.mode === 'simple' ? { availableSamplePool: [...signalIds] } : {}),
       contractCompletedByPlayer: {},
       corporateReviewActive: false,
       corporateReviewByPlayer: {},
@@ -352,7 +363,7 @@ export function createTenderService({
     const remainingPlayers = activePlayers(tender)
     if (tender.phase === 'access-slot-selection') {
       if (!remainingPlayers.every((player) => tender.requestedSlots[player.id] !== undefined)) return tender
-      const accessSlots = resolveAccessSlots(rotateTiePriority(remainingPlayers, tender.round), tender.requestedSlots)
+      const accessSlots = resolveAccessSlots(rotateTiePriority(remainingPlayers, tender.round), tender.requestedSlots, tender.game?.mode === 'simple')
       const budgetByPlayer = {
         ...tender.budgetByPlayer,
         ...Object.fromEntries(remainingPlayers.map((player) => [
@@ -365,7 +376,9 @@ export function createTenderService({
       const knownSignals = [...tender.knownSignals]
       for (const player of remainingPlayers) {
         if (!receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
-        const nextSample = nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
+        const nextSample = tender.game?.mode === 'simple'
+          ? drawMissingSample(tender, player.id, samplesByPlayer[player.id] ?? [])
+          : nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
         if (!nextSample) continue
         samplesByPlayer[player.id] = [...(samplesByPlayer[player.id] ?? []), nextSample]
         rawTelemetrySignalsByPlayer[player.id] = [...(rawTelemetrySignalsByPlayer[player.id] ?? []), nextSample]
@@ -493,8 +506,14 @@ export function createTenderService({
         throw new TenderFailure('invalid_create_tender', 'Tender creation input is invalid')
       }
       const anomalyConfiguration = createAnomalyConfiguration(seedGenerator())
-      const publicContracts = createRoundContracts(1, parsedInput.data.players.length, anomalyConfiguration.seed)
-      const publicFinalContract = {
+      const game = gameDescriptor(parsedInput.data.mode)
+      if ((game.mode === 'simple' && parsedInput.data.ruleset === 'tender-v1')
+        || parsedInput.data.players.some((player) => player.bot &&
+          ((game.mode === 'simple') !== (player.bot.strategyVersion === 'bot-simple-v1')))) {
+        throw new TenderFailure('invalid_create_tender', 'Bot strategy must match the immutable game mode and current simple rules')
+      }
+      const publicContracts = game.contracts ? createRoundContracts(1, parsedInput.data.players.length, anomalyConfiguration.seed) : []
+      const publicFinalContract = !game.contracts ? undefined : {
         contractId: finalContractId,
         kind: 'final' as const,
         ratingReward: 8,
@@ -504,6 +523,8 @@ export function createTenderService({
         targetSignal: 'ferro' as const,
       }
       const tender = await store.create({
+        game,
+        ...(game.mode === 'simple' ? { availableSamplePool: [...signalIds], sampleRandomSeed: seedGenerator(), finalSubmissionOrderByPlayer: {} } : {}),
         accessSlots: {},
         abandonmentDueAt: null,
         anomalyConfiguration,
@@ -523,7 +544,7 @@ export function createTenderService({
         finalScientificModelsByPlayer: {},
         finalScientificModelSubmittedAtByPlayer: {},
         forfeitedAtByPlayer: {},
-        knownSignals: [...new Set([...publicContracts.map((contract) => contract.targetSignal), publicFinalContract.targetSignal])],
+        knownSignals: game.mode === 'simple' ? [...signalIds] : [...new Set([...publicContracts.map((contract) => contract.targetSignal), publicFinalContract!.targetSignal])],
         powerAllocations: {},
         publicContracts,
         publicFinalContract,
@@ -674,10 +695,13 @@ export function createTenderService({
         if (tender.phase !== 'access-slot-selection') {
           throw new TenderFailure('invalid_tender_state', 'Access Slot selection is closed')
         }
+        if (tender.game?.mode === 'simple' && (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(command.slot) < 0) {
+          throw new TenderFailure('invalid_tender_state', 'Access Slot requires more Budget')
+        }
         const requestedSlots = { ...tender.requestedSlots, [player.id]: command.slot }
         const currentActivePlayers = activePlayers(tender)
         const isReadyToResolve = currentActivePlayers.every((candidate) => requestedSlots[candidate.id] !== undefined)
-        const accessSlots = isReadyToResolve ? resolveAccessSlots(rotateTiePriority(currentActivePlayers, tender.round), requestedSlots) : tender.accessSlots
+        const accessSlots = isReadyToResolve ? resolveAccessSlots(rotateTiePriority(currentActivePlayers, tender.round), requestedSlots, tender.game?.mode === 'simple') : tender.accessSlots
         const budgetByPlayer = isReadyToResolve
           ? Object.fromEntries(tender.players.map((player) => [
             player.id,
@@ -690,7 +714,9 @@ export function createTenderService({
         if (isReadyToResolve) {
           for (const player of currentActivePlayers) {
             if (!receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
-            const nextSample = nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
+            const nextSample = tender.game?.mode === 'simple'
+          ? drawMissingSample(tender, player.id, samplesByPlayer[player.id] ?? [])
+          : nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
             if (!nextSample) continue
             sampleCompensationByPlayer[player.id] = nextSample
             samplesByPlayer[player.id] = [...(samplesByPlayer[player.id] ?? []), nextSample]
@@ -730,6 +756,9 @@ export function createTenderService({
       if (command.type === 'allocate-power') {
         if (tender.phase !== 'power-allocation') {
           throw new TenderFailure('invalid_tender_state', 'Power allocation is closed')
+        }
+        if (tender.game?.contracts === false && command.allocation.contracts !== 0) {
+          throw new TenderFailure('invalid_tender_state', 'Contracts are unavailable in simple mode')
         }
         if (tender.powerAllocations[player.id] !== undefined) {
           throw new TenderFailure('invalid_tender_state', 'Power allocation is already confirmed')
@@ -905,6 +934,7 @@ export function createTenderService({
           const fullyCorrect = fieldTypeCorrect && polarityCorrect
           const alreadyCertified = (tender.certifiedSignalsByPlayer[player.id] ?? []).includes(command.signalId)
           const earnsReward = fullyCorrect && !alreadyCertified
+          const ratingAward = tender.game?.scoring === 'properties-12' ? 0 : Number(earnsReward)
           const privateThesis = {
             fieldType: command.fieldType,
             fieldTypeCorrect,
@@ -944,10 +974,10 @@ export function createTenderService({
             corporateReviewByPlayer,
             modelAnalysisCompletedByPlayer,
             privateThesesByPlayer,
-            ratingByPlayer: earnsReward
+            ratingByPlayer: ratingAward > 0
               ? { ...tender.ratingByPlayer, [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + 1 }
               : tender.ratingByPlayer,
-            researchCertificationsByPlayer: earnsReward
+            researchCertificationsByPlayer: earnsReward && tender.game?.contracts !== false
               ? {
                   ...tender.researchCertificationsByPlayer,
                   [player.id]: [...(tender.researchCertificationsByPlayer[player.id] ?? []), command.signalId],
@@ -968,7 +998,7 @@ export function createTenderService({
                 fullyCorrect,
                 playerId: player.id,
                 polarityCorrect,
-                ratingAward: earnsReward ? 1 : 0,
+                ratingAward,
                 signalId: command.signalId,
                 thesisId: privateThesis.id,
               },
@@ -1143,14 +1173,16 @@ export function createTenderService({
           const actual = tender.anomalyConfiguration.signals[signalId]
           return claim?.fieldType === actual.fieldType && claim.polarity === actual.polarity
         })
-        const completeModelBonus = isCompleteModel ? completeScientificModelBonus : 0
-        const ratingAward = correctProperties + correctSignals + completeModelBonus
+        const completeModelBonus = tender.game?.scoring !== 'properties-12' && isCompleteModel ? completeScientificModelBonus : 0
+        const correctSignalPoints = tender.game?.scoring === 'properties-12' ? 0 : correctSignals
+        const ratingAward = correctProperties + correctSignalPoints + completeModelBonus
         const ratingByPlayer = {
           ...tender.ratingByPlayer,
           [player.id]: (tender.ratingByPlayer[player.id] ?? 0) + ratingAward,
         }
         const nextTender = {
           ...tender,
+          finalSubmissionOrderByPlayer: { ...tender.finalSubmissionOrderByPlayer, [player.id]: tender.version + 1 },
           finalScientificModelCompletedByPlayer: { ...tender.finalScientificModelCompletedByPlayer, [player.id]: true },
           finalScientificModelDraftsByPlayer: Object.fromEntries(
             Object.entries(tender.finalScientificModelDraftsByPlayer)
@@ -1176,7 +1208,7 @@ export function createTenderService({
             actorId: command.actorId,
             commandId: command.commandId,
             kind: 'scientific_model_scored',
-            payload: { completeModelBonus, correctProperties, correctSignals, isCompleteModel, playerId: player.id, ratingAward, scientificModel: command.scientificModel },
+            payload: { completeModelBonus, correctProperties, correctSignals: correctSignalPoints, isCompleteModel, playerId: player.id, ratingAward, scientificModel: command.scientificModel },
           }],
           command,
           commandFingerprint,
@@ -1191,6 +1223,9 @@ export function createTenderService({
         })
       }
 
+      if (tender.game?.contracts === false && ['reserve-contract', 'submit-contract-bid', 'skip-contract'].includes(command.type)) {
+        throw new TenderFailure('invalid_tender_state', 'Contracts are unavailable in simple mode')
+      }
       if (player.bot?.difficulty === 'easy'
         && (command.type === 'reserve-contract' || command.type === 'submit-contract-bid')) {
         throw new TenderFailure('invalid_tender_state', 'Easy bots cannot take Contracts')
@@ -1206,7 +1241,7 @@ export function createTenderService({
           ? tender.publicFinalContract
           : tender.publicContracts.find((candidate) => candidate.contractId === command.contractId)
         const alreadyReservedContract = tender.publicContracts.some((candidate) => candidate.reservedByPlayerId === player.id)
-          || tender.publicFinalContract.reservedByPlayerId === player.id
+          || tender.publicFinalContract?.reservedByPlayerId === player.id
         const canReserveFinalContract = tender.round === 5 && (tender.corporateTrustByPlayer[player.id] ?? 0) >= 2
         if (
           !contract
@@ -1222,7 +1257,7 @@ export function createTenderService({
         const publicContracts = tender.publicContracts.map((candidate) => candidate.contractId === command.contractId
           ? { ...candidate, reservedByPlayerId: player.id }
           : candidate)
-        const publicFinalContract = isFinalContract ? { ...tender.publicFinalContract, reservedByPlayerId: player.id } : tender.publicFinalContract
+        const publicFinalContract = isFinalContract ? { ...contract, reservedByPlayerId: player.id } : tender.publicFinalContract
         const nextTender = { ...tender, publicContracts, publicFinalContract }
         return commitCommand({
           auditEvents: [{
@@ -1242,7 +1277,7 @@ export function createTenderService({
         if (tender.phase !== 'contracts' || nextContractsPlayer(tender)?.id !== player.id) {
           throw new TenderFailure('invalid_tender_state', 'Contract skip is not available to this Player')
         }
-        const candidates = [...tender.publicContracts, tender.publicFinalContract]
+        const candidates = [...tender.publicContracts, ...(tender.publicFinalContract ? [tender.publicFinalContract] : [])]
         const alreadyReserved = candidates.some((contract) => contract.reservedByPlayerId === player.id)
         if (alreadyReserved || candidates.some((contract) => isContractEligible(tender, player.id, contract))) {
           throw new TenderFailure('invalid_tender_state', 'An eligible Contract is available to this Player')
@@ -1301,7 +1336,7 @@ export function createTenderService({
           : candidate)
         const publicFinalContract = isFinalContract
           ? {
-            ...tender.publicFinalContract,
+            ...tender.publicFinalContract!,
             ...(isAwarded ? { awardedToPlayerId: player.id } : {}),
             bidOutcome: isAwarded ? 'awarded' as const : 'failed' as const,
           }
@@ -1361,12 +1396,24 @@ export function createTenderService({
       const currentSamples = tender.samplesByPlayer[player.id] ?? []
       const knownSignals = [...tender.knownSignals]
       const acquiredSignals: SignalId[] = []
-      for (const target of targets) {
-        const signal = target === 'unknown-sector'
+      const availableSamplePool = [...(tender.availableSamplePool ?? [])]
+      const acquisitionTargets = tender.game?.mode === 'simple'
+        ? [...targets.filter((target) => target !== 'unknown-sector'), ...targets.filter((target) => target === 'unknown-sector')]
+        : targets
+      for (const target of acquisitionTargets) {
+        const signal = tender.game?.mode === 'simple' && target === 'unknown-sector'
+          ? drawMissingSample(tender, player.id, [...currentSamples, ...acquiredSignals], acquiredSignals.length)
+          : target === 'unknown-sector'
           ? signalIds.find((signalId) => !knownSignals.includes(signalId))
           : target
         if (!signal || (target !== 'unknown-sector' && (!knownSignals.includes(signal) || currentSamples.includes(signal)))) {
           throw new TenderFailure('invalid_tender_state', 'Reconnaissance target is not available to this Player')
+        }
+        if (tender.game?.mode === 'simple') {
+          if (currentSamples.includes(signal) || acquiredSignals.includes(signal) || (target !== 'unknown-sector' && !availableSamplePool.includes(signal))) {
+            throw new TenderFailure('invalid_tender_state', 'Sample is unavailable')
+          }
+          if (target !== 'unknown-sector') availableSamplePool.splice(availableSamplePool.indexOf(signal), 1)
         }
         acquiredSignals.push(signal)
         if (!knownSignals.includes(signal)) knownSignals.push(signal)
@@ -1379,6 +1426,7 @@ export function createTenderService({
       const reconnaissanceCompletedByPlayer = { ...tender.reconnaissanceCompletedByPlayer, [player.id]: true }
       const nextTender = {
         ...tender,
+        ...(tender.game?.mode === 'simple' ? { availableSamplePool } : {}),
         knownSignals,
         rawTelemetrySignalsByPlayer,
         reconnaissanceCompletedByPlayer,
@@ -1445,6 +1493,8 @@ export function createTenderService({
       let completedAudit: TenderView['audit']
       if (auditEvents !== undefined) {
         const createAuditProjection = (events: StoredTenderAuditEvent[]) => ({
+          game: tender.game ?? gameDescriptor(),
+          finalSubmissionOrderByPlayer: tender.finalSubmissionOrderByPlayer,
           anomalyConfiguration: tender.anomalyConfiguration,
           completionReason: tender.completionReason ?? 'standard',
           finalScientificModelsByPlayer: createFinalScientificModelAuditByPlayer(tender),
@@ -1541,6 +1591,8 @@ export function createTenderService({
         return theses.length >= 2 && !theses[0]?.fullyCorrect ? 1 : 0
       }
       return {
+        game: tender.game ?? gameDescriptor(),
+        ...(tender.game?.mode === 'simple' ? { availableSamplePool: tender.availableSamplePool ?? [] } : {}),
         ...(activePlayerId ? { activePlayerId } : {}),
         abandonmentDueAt: tender.abandonmentDueAt?.toISOString() ?? null,
         ...(tender.completionReason ? { completionReason: tender.completionReason } : {}),
@@ -1555,13 +1607,13 @@ export function createTenderService({
           eligibleForPlayer: isContractEligible(tender, playerId, contract),
           planning: createContractPlanning(tender, playerId, contract),
         })),
-        publicFinalContract: {
-          ...tender.publicFinalContract,
+        ...(tender.publicFinalContract ? { publicFinalContract: {
+          ...tender.publicFinalContract!,
           eligibleForPlayer: isContractEligible(tender, playerId, tender.publicFinalContract),
           planning: createContractPlanning(tender, playerId, tender.publicFinalContract),
-        },
-        publicLaboratoryResults: tender.publicLaboratoryResults,
-        publicScientificJournal: tender.publicScientificJournal,
+        } } : {}),
+        publicLaboratoryResults: tender.game?.mode === 'simple' ? tender.publicLaboratoryResults.filter((entry) => entry.playerId === playerId) : tender.publicLaboratoryResults,
+        publicScientificJournal: tender.game?.mode === 'simple' ? tender.publicScientificJournal.filter((entry) => entry.playerId === playerId) : tender.publicScientificJournal,
         round: tender.round,
         ruleset: tender.ruleset,
         ...(modelAnalysisProgress ? { modelAnalysisProgress } : {}),
@@ -1575,13 +1627,14 @@ export function createTenderService({
         players: tender.players.map((player) => ({
           ...(player.bot ? { bot: player.bot } : {}),
           playerId: player.id,
+          ...(tender.game?.mode === 'simple' && tender.phase === 'access-slot-selection' ? { requestedAccessSlotConfirmed: tender.requestedSlots[player.id] !== undefined } : {}),
           displayName: player.bot
             ? player.bot.difficulty === 'easy' ? 'Бот · лёгкий' : 'Бот · сложный'
             : player.displayName ?? player.id.slice(0, 8),
           tiePriority: tiePriorities[player.id],
           ...(tender.phase !== 'access-slot-selection' ? { accessSlot: tender.accessSlots[player.id] } : {}),
           ...(!isActivePlayer(tender, player.id) ? { forfeited: true } : {}),
-          budget: tender.ruleset === 'tender-v2'
+          budget: tender.game?.mode !== 'simple' && tender.ruleset === 'tender-v2'
             && tender.phase === 'model-analysis'
             && player.id !== playerId
             ? (tender.budgetByPlayer[player.id] ?? 0) + hiddenCurrentRoundBudget(player.id)
@@ -1589,10 +1642,10 @@ export function createTenderService({
           corporateTrust: tender.corporateTrustByPlayer[player.id] ?? 0,
           contractPowerRestriction: tender.contractPowerRestrictionsByPlayer[player.id] ?? 0,
           ...(tender.phase === 'final-scientific-model'
-            && (tender.ruleset === 'tender-v1' || player.id === playerId)
+            && (tender.game?.mode === 'simple' || tender.ruleset === 'tender-v1' || player.id === playerId)
             ? { finalScientificModelSubmitted: tender.finalScientificModelsByPlayer[player.id] !== undefined }
             : {}),
-          ...(tender.ruleset === 'tender-v2' && tender.phase === 'model-analysis' && player.id === playerId
+          ...(tender.ruleset === 'tender-v2' && tender.phase === 'model-analysis' && (tender.game?.mode === 'simple' || player.id === playerId)
             ? { modelAnalysisCompleted: tender.modelAnalysisCompletedByPlayer[player.id] ?? false }
             : {}),
           ...(tender.phase === 'power-allocation'
@@ -1601,6 +1654,7 @@ export function createTenderService({
           ...(tender.phase !== 'access-slot-selection'
             && tender.powerAllocations[player.id]
             && (tender.phase !== 'power-allocation' || player.id === playerId)
+            && (tender.game?.mode !== 'simple' || player.id === playerId || tender.phase === 'complete')
             ? { powerAllocation: tender.powerAllocations[player.id] }
             : {}),
           rating: tender.ruleset === 'tender-v2'
@@ -1795,16 +1849,16 @@ export function createTenderService({
         if (tender.phase === 'contracts') {
           const expectedPlayer = nextContractsPlayer(tender)
           if (!expectedPlayer) continue
-          const reservedContract = [...tender.publicContracts, tender.publicFinalContract]
+          const reservedContract = [...tender.publicContracts, ...(tender.publicFinalContract ? [tender.publicFinalContract] : [])]
             .find((contract) => contract.reservedByPlayerId === expectedPlayer.id)
           const publicContracts = tender.publicContracts.map((contract) =>
             contract.reservedByPlayerId === expectedPlayer.id
               ? Object.fromEntries(Object.entries(contract).filter(([key]) => key !== 'reservedByPlayerId'))
               : contract,
           ) as StoredTender['publicContracts']
-          const publicFinalContract = tender.publicFinalContract.reservedByPlayerId === expectedPlayer.id
+          const publicFinalContract = tender.publicFinalContract?.reservedByPlayerId === expectedPlayer.id
             ? Object.fromEntries(
-                Object.entries(tender.publicFinalContract).filter(([key]) => key !== 'reservedByPlayerId'),
+                Object.entries(tender.publicFinalContract!).filter(([key]) => key !== 'reservedByPlayerId'),
               ) as StoredTender['publicFinalContract']
             : tender.publicFinalContract
           const nextTender = {
@@ -1891,13 +1945,13 @@ export function createTenderService({
           ...tender.requestedSlots,
           ...Object.fromEntries(timedOutPlayers.map((player) => [player.id, 3])),
         }
-        const accessSlots = resolveAccessSlots(rotateTiePriority(currentActivePlayers, tender.round), requestedSlots)
+        const accessSlots = resolveAccessSlots(rotateTiePriority(currentActivePlayers, tender.round), requestedSlots, tender.game?.mode === 'simple')
         const timedOutPlayerIds = new Set(timedOutPlayers.map((player) => player.id))
         const budgetByPlayer = {
           ...tender.budgetByPlayer,
           ...Object.fromEntries(currentActivePlayers.map((player) => [
             player.id,
-            timedOutPlayerIds.has(player.id)
+            timedOutPlayerIds.has(player.id) && tender.game?.mode !== 'simple'
               ? tender.budgetByPlayer[player.id] ?? 0
               : (tender.budgetByPlayer[player.id] ?? 0) + accessSlotBudgetDelta(accessSlots[player.id] ?? 3),
           ])),
@@ -1907,8 +1961,10 @@ export function createTenderService({
         const knownSignals = [...tender.knownSignals]
         const sampleCompensationByPlayer: Record<string, SignalId> = {}
         for (const player of currentActivePlayers) {
-          if (timedOutPlayerIds.has(player.id) || !receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
-          const nextSample = nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
+          if ((timedOutPlayerIds.has(player.id) && tender.game?.mode !== 'simple') || !receivesAccessSlotSampleCompensation(accessSlots[player.id] ?? 3)) continue
+          const nextSample = tender.game?.mode === 'simple'
+          ? drawMissingSample(tender, player.id, samplesByPlayer[player.id] ?? [])
+          : nextCompensationSample(knownSignals, samplesByPlayer[player.id] ?? [])
           if (!nextSample) continue
           sampleCompensationByPlayer[player.id] = nextSample
           samplesByPlayer[player.id] = [...(samplesByPlayer[player.id] ?? []), nextSample]

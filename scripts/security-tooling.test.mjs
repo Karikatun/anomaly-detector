@@ -11,7 +11,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { runZapCleanupSteps } from './zap-cleanup.mjs'
@@ -69,6 +69,40 @@ test('Trivy image scanning requires an explicit local image', () => {
   const args = JSON.parse(planned.stdout).args
   expect(args).toContain('anomaly-detector-backend:test')
   expect(args.some((argument) => argument.endsWith(':/var/run/docker.sock'))).toBe(true)
+})
+
+test('both Trivy scans share the user cache outside the repository and retain scan policy', () => {
+  const cacheRoot = process.platform === 'darwin' ? 'Library/Caches' : '.cache'
+  const cache = resolve(homedir(), cacheRoot, 'anomaly-detector/trivy')
+  const tools = JSON.parse(readFileSync(resolve(root, '.security/tools.json'), 'utf8'))
+  const common = [
+    '--volume', `${cache}:/root/.cache/trivy`,
+    '--entrypoint', 'trivy', tools.trivy.image,
+  ]
+  const cases = [
+    ['trivy-config', [], [
+      'run', '--rm', '--volume', `${root}:/src:ro`, ...common,
+      'fs', '--scanners', 'misconfig', '--severity', 'HIGH,CRITICAL', '--exit-code', '1',
+      '--skip-dirs', '/src/.scratch', '--skip-dirs', '/src/node_modules',
+      '--skip-dirs', '/src/backend/src/generated', '/src',
+    ]],
+    ['trivy-image', ['anomaly-detector-backend:test'], [
+      'run', '--rm', '--volume', '/tmp/anomaly-security-test.sock:/var/run/docker.sock', ...common,
+      'image', '--scanners', 'vuln', '--pkg-types', 'os,library',
+      '--severity', 'HIGH,CRITICAL', '--exit-code', '1', 'anomaly-detector-backend:test',
+    ]],
+  ]
+
+  expect(cache.startsWith(`${root}/`)).toBe(false)
+  for (const [scanner, positional, expectedArgs] of cases) {
+    const result = spawnSync('bun', ['scripts/security-scan.mjs', scanner, ...positional, '--dry-run'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, DOCKER_HOST: 'unix:///tmp/anomaly-security-test.sock' },
+    })
+    expect(result.status).toBe(0)
+    expect(JSON.parse(result.stdout)).toEqual({ command: 'docker', args: expectedArgs })
+  }
 })
 
 test('backend runtime image upgrades Alpine security packages before dropping privileges', () => {

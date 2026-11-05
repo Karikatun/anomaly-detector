@@ -1,5 +1,6 @@
 import type {
   BotDifficulty,
+  GameMode,
   RoomMember,
   RoomBot,
   RoomView,
@@ -50,7 +51,7 @@ export type Clock = {
 
 export type RoomRepository = {
   addBot(input: { actorId: string; difficulty: 'easy'; roomId: string; seat: number }): Promise<RoomRecord>
-  create(input: { allowBots?: boolean; capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
+  create(input: { mode?: GameMode; allowBots?: boolean; capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
   cancelStart(input: { actorId: string; roomId: string }): Promise<RoomRecord>
   readCurrentForMember(userId: string): Promise<RoomRecord | null>
   listStartedForMember(userId: string): Promise<RoomRecord[]>

@@ -28,6 +28,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Typography } from '@/components/ui/typography'
 import { ProtectedPage, useAuth } from '@/features/auth'
 import { ApiRequestError } from '@/platform/api/http-client'
@@ -847,6 +848,7 @@ function StatisticsContent({
   statistics: ReturnType<typeof useProfileStatisticsQuery>
 }) {
   const { t } = useI18n()
+  const [mode, setMode] = useState<'standard' | 'simple'>('standard')
   if (statistics.isPending) {
     const skeletons = Array.from({ length: 7 }, (_, index) => (
       <span className={styles.skeleton} key={index} />
@@ -870,7 +872,7 @@ function StatisticsContent({
     )
   }
 
-  const data = statistics.data
+  const data = statistics.data[mode]
   const summary = [
     { label: t('profile.statistics.matches'), value: String(data.matchesPlayed) },
     { label: t('profile.statistics.wins'), value: String(data.wins) },
@@ -878,13 +880,20 @@ function StatisticsContent({
   ]
   const details = [
     { label: t('profile.statistics.averagePlacement'), value: formatAverage(data.averagePlacement) },
-    { label: t('profile.statistics.averageRating'), value: formatAverage(data.averageRating) },
     { label: t('profile.statistics.modelAccuracy'), value: formatPercent(data.modelAccuracy) },
-    { label: t('profile.statistics.contractSuccess'), value: formatPercent(data.contractSuccessRate) },
+    ...(mode === 'standard' ? [
+      { label: t('profile.statistics.averageRating'), value: formatAverage(statistics.data.standard.averageRating) },
+      { label: t('profile.statistics.contractSuccess'), value: formatPercent(statistics.data.standard.contractSuccessRate) },
+    ] : []),
   ]
 
   return (
     <>
+      <label htmlFor="statistics-mode"><Typography as="span" variant="bodySm">{t('rooms.create.mode')}</Typography></label>
+      <NativeSelect id="statistics-mode" value={mode} onChange={(event) => setMode(event.target.value as 'standard' | 'simple')}>
+        <option value="standard">{t('rooms.create.mode.standard')}</option>
+        <option value="simple">{t('rooms.create.mode.simple')}</option>
+      </NativeSelect>
       <div className={styles.summary}>
         {summary.map((item) => (
           <div className={styles.summaryItem} key={item.label}>

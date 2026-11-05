@@ -72,6 +72,8 @@ const categories = [
 ] as const
 
 type PowerAllocationPanelProps = {
+  contractsAvailable?: boolean
+  budget?: number
   confirmedAllocation?: PowerAllocation
   currentUserId?: string
   disabled?: boolean
@@ -108,6 +110,8 @@ function PowerCells({ count, filled }: { count: number; filled: number }) {
 }
 
 export function PowerAllocationPanel({
+  contractsAvailable = true,
+  budget,
   confirmedAllocation,
   currentUserId,
   disabled,
@@ -181,6 +185,7 @@ export function PowerAllocationPanel({
 
   return (
     <section className={styles.panel} aria-labelledby="power-allocation-heading">
+      {!contractsAvailable && budget === 0 && <Typography role="note">{t('rooms.simple.noBudgetWarning')}</Typography>}
       <Typography id="power-allocation-heading" variant="h3" className="sr-only">
         {t('tender.power.title')}
       </Typography>
@@ -288,7 +293,7 @@ export function PowerAllocationPanel({
         data-locked={isConfirmed || undefined}
         data-tutorial-power-options=""
       >
-        {categories.map(({ accent, icon, key, labelKey, oneEffectKey, twoEffectKey }) => {
+        {categories.filter(({ key }) => contractsAvailable || key !== 'contracts').map(({ accent, icon, key, labelKey, oneEffectKey, twoEffectKey }) => {
           const label = t(labelKey)
           const limit = limits[key]
           const value = isConfirmed ? confirmedAllocation[key] : allocation[key]
@@ -323,7 +328,7 @@ export function PowerAllocationPanel({
                   <Typography as="strong" variant="bodySmMedium" className={styles.effectLevel}>1</Typography>
                   <Typography as="span" variant="bodySm">
                     <Typography as="span" variant="caption" className="sr-only">1: </Typography>
-                    {standalonePowerEffect(t(oneEffectKey))}
+                    {standalonePowerEffect(t(!contractsAvailable && key === 'laboratory' ? 'rooms.simple.powerLabOne' : oneEffectKey))}
                   </Typography>
                 </li>
                 {twoEffectKey && (
@@ -331,7 +336,7 @@ export function PowerAllocationPanel({
                     <Typography as="strong" variant="bodySmMedium" className={styles.effectLevel}>2</Typography>
                     <Typography as="span" variant="bodySm">
                       <Typography as="span" variant="caption" className="sr-only">2: </Typography>
-                      {standalonePowerEffect(t(twoEffectKey))}
+                      {standalonePowerEffect(t(!contractsAvailable && key === 'laboratory' ? 'rooms.simple.powerLabTwo' : twoEffectKey))}
                     </Typography>
                   </li>
                 )}

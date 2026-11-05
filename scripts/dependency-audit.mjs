@@ -4,29 +4,10 @@ import { spawnSync } from 'node:child_process'
 
 const root = resolve(import.meta.dirname, '..')
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
-const dependencyPaths = [
-  ['shadcn@4.7.0', 'fast-glob@3.3.3', 'micromatch@4.0.8', 'braces@3.0.3'],
-  ['shadcn@4.7.0', 'ts-morph@26.0.0', '@ts-morph/common@0.27.0', 'fast-glob@3.3.3', 'micromatch@4.0.8', 'braces@3.0.3'],
-]
-const nodes = {
-  shadcn: 'shadcn@4.7.0',
-  'ts-morph': 'ts-morph@26.0.0',
-  '@ts-morph/common': '@ts-morph/common@0.27.0',
-  'fast-glob': 'fast-glob@3.3.3',
-  micromatch: 'micromatch@4.0.8',
-  braces: 'braces@3.0.3',
-}
-const edges = [
-  ['shadcn', 'dependencies', 'fast-glob', '^3.3.3'],
-  ['shadcn', 'dependencies', 'ts-morph', '^26.0.0'],
-  ['ts-morph', 'dependencies', '@ts-morph/common', '~0.27.0'],
-  ['@ts-morph/common', 'dependencies', 'fast-glob', '^3.3.3'],
-  ['fast-glob', 'dependencies', 'micromatch', '^4.0.8'],
-  ['micromatch', 'dependencies', 'braces', '^3.0.3'],
-]
 const sourceRoots = ['backend/src', 'webapp/src', 'adminapp/src', 'website/src', 'packages']
 const sourceExtension = /\.(?:[cm]?[jt]sx?|astro|css)$/
-const moduleLiteral = /["'`]((?:@ts-morph\/common|ts-morph|fast-glob|micromatch|braces|shadcn)(?:\/[^"'`\s]*)?)["'`]/g
+const retiredModuleLiteral = /(["'`])(?:npm:)?shadcn(?:[@/][^"'`\s]*)?\1/
+const retiredCssImport = /@import\s+url\(\s*(?:npm:)?shadcn(?:[@/][^\s)]+)?\s*\)/i
 
 function requireCondition(condition, message) {
   if (!condition) throw new Error(message)
@@ -46,50 +27,40 @@ function sortedEntries(value) {
   return Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
 }
 
-function validatePolicy(policy, now) {
+function validatePolicy(policy) {
   exactKeys(policy, ['exceptions'], 'exception policy')
-  requireCondition(Array.isArray(policy.exceptions) && policy.exceptions.length === 1, 'Expected one reviewed exception')
-  const entry = policy.exceptions[0]
-  exactKeys(entry, ['advisory', 'package', 'version', 'owner', 'rationale', 'acceptedAt', 'expiresAt', 'workspace', 'dependencyType', 'paths'], 'exception')
-  requireCondition(entry.advisory === 'GHSA-vfj7-8cjw-p6xm' && entry.package === 'braces' && entry.version === '3.0.3', 'Exception identity changed')
-  requireCondition(entry.workspace === 'webapp' && entry.dependencyType === 'devDependencies', 'Exception workspace scope changed')
-  requireCondition(JSON.stringify(entry.paths) === JSON.stringify(dependencyPaths), 'Exception paths changed')
-  for (const key of ['owner', 'rationale']) {
-    requireCondition(typeof entry[key] === 'string' && entry[key].trim().length > 0 && entry[key].length <= 1000, `Missing exception ${key}`)
+  requireCondition(Array.isArray(policy.exceptions) && policy.exceptions.length === 0, 'No dependency exceptions are approved')
+}
+
+function isRetiredPackage(name) {
+  return name === 'shadcn' || name.startsWith('shadcn@')
+}
+
+function requireNoRetiredDependencies(entries) {
+  for (const [name, specifier] of entries) {
+    requireCondition(!isRetiredPackage(name) && !/^npm:shadcn(?:@|$)/.test(specifier), 'Retired shadcn package referenced in dependency graph')
   }
-  requireCondition(entry.acceptedAt === '2026-10-16T00:00:00Z' && entry.expiresAt === '2026-10-30T23:59:59Z', 'Exception approval window changed')
-  const time = now.getTime()
-  requireCondition(Number.isFinite(time) && time >= Date.parse(entry.acceptedAt) && time < Date.parse(entry.expiresAt), 'Exception is not active or has expired')
-  return entry
 }
 
 function validateGraph(lock, manifests) {
   requireCondition(object(lock) && lock.lockfileVersion === 1 && lock.configVersion === 1 && object(lock.packages) && object(lock.workspaces), 'Unknown Bun lock schema')
   requireCondition(object(manifests) && object(manifests['']), 'Missing workspace manifests')
   requireCondition(JSON.stringify(Object.keys(lock.workspaces).sort()) === JSON.stringify(Object.keys(manifests).sort()), 'Workspace manifest set differs from lock')
-  requireCondition(JSON.stringify(sortedEntries(lock.overrides ?? {})) === JSON.stringify(sortedEntries(manifests[''].overrides ?? {})), 'Overrides differ from lock')
+  const overrides = sortedEntries(lock.overrides ?? {})
+  requireCondition(JSON.stringify(overrides) === JSON.stringify(sortedEntries(manifests[''].overrides ?? {})), 'Overrides differ from lock')
+  requireNoRetiredDependencies(overrides)
 
   for (const [workspace, manifest] of Object.entries(manifests)) {
     for (const section of sections) {
       const dependencies = sortedEntries(manifest[section] ?? {})
       requireCondition(JSON.stringify(dependencies) === JSON.stringify(sortedEntries(lock.workspaces[workspace][section] ?? {})), 'Workspace dependencies differ from lock')
-      for (const [name, range] of dependencies) {
-        if (Object.hasOwn(nodes, name) || Object.keys(nodes).some((node) => range.startsWith(`npm:${node}@`))) {
-          requireCondition(workspace === 'webapp' && section === 'devDependencies' && name === 'shadcn' && range === '4.7.0', 'CLI dependency has a new workspace or production path')
-        }
-      }
+      requireNoRetiredDependencies(dependencies)
     }
   }
 
-  const foundNodes = []
-  const foundEdges = []
   for (const [key, entry] of Object.entries(lock.packages)) {
     requireCondition(Array.isArray(entry) && typeof entry[0] === 'string', 'Unknown locked package schema')
-    const name = Object.keys(nodes).find((node) => entry[0].startsWith(`${node}@`))
-    if (name) {
-      requireCondition(key === name && entry[0] === nodes[name], 'CLI package version, alias or instance changed')
-      foundNodes.push(name)
-    }
+    requireCondition(!isRetiredPackage(key) && !isRetiredPackage(entry[0]), 'Retired shadcn package referenced in dependency graph')
     if (entry.length === 1 && entry[0].startsWith(`${key}@workspace:`)) {
       const workspace = entry[0].slice(`${key}@workspace:`.length)
       requireCondition(Object.hasOwn(lock.workspaces, workspace) && manifests[workspace].name === key, 'Unknown locked workspace link')
@@ -97,27 +68,15 @@ function validateGraph(lock, manifests) {
     }
     const metadata = entry[2]
     requireCondition(object(metadata), 'Unknown locked dependency schema')
-    for (const section of sections) {
-      for (const [dependency, range] of sortedEntries(metadata[section] ?? {})) {
-        if (Object.hasOwn(nodes, dependency) || Object.keys(nodes).some((node) => range.startsWith(`npm:${node}@`))) {
-          foundEdges.push([key, section, dependency, range])
-        }
-      }
-    }
+    for (const section of sections) requireNoRetiredDependencies(sortedEntries(metadata[section] ?? {}))
   }
-  requireCondition(JSON.stringify(foundNodes.sort()) === JSON.stringify(Object.keys(nodes).sort()), 'CLI ancestry is missing or duplicated')
-  const actualEdges = foundEdges.map((edge) => JSON.stringify(edge)).sort()
-  const expectedEdges = edges.map((edge) => JSON.stringify(edge)).sort()
-  requireCondition(JSON.stringify(actualEdges) === JSON.stringify(expectedEdges), 'CLI dependency ancestry changed')
 }
 
 function validateSources(sources) {
   requireCondition(Array.isArray(sources), 'Missing production source scope')
   for (const { path, content } of sources) {
     requireCondition(typeof path === 'string' && typeof content === 'string', 'Invalid source input')
-    for (const match of content.matchAll(moduleLiteral)) {
-      requireCondition(path === 'webapp/src/index.css' && match[1] === 'shadcn/tailwind.css', 'CLI package literal referenced from production source')
-    }
+    requireCondition(!retiredModuleLiteral.test(content) && !retiredCssImport.test(content), 'Retired shadcn package literal in production source')
   }
 }
 
@@ -144,14 +103,13 @@ function parseAudit(audit) {
   return findings
 }
 
-export function evaluateDependencyAudit({ audit, policy, lock, manifests, sources, now = new Date() }) {
-  const exception = validatePolicy(policy, now)
+export function evaluateDependencyAudit({ audit, policy, lock, manifests, sources }) {
+  validatePolicy(policy)
   validateGraph(lock, manifests)
   validateSources(sources)
   const findings = parseAudit(audit)
-  const allowed = findings.filter((finding) => finding.name === exception.package && finding.url === `https://github.com/advisories/${exception.advisory}`)
-  requireCondition(allowed.length <= 1 && findings.length === allowed.length, 'Unapproved dependency vulnerabilities remain')
-  return { advisories: findings.length, exceptions: allowed.length }
+  requireCondition(findings.length === 0, 'Unapproved dependency vulnerabilities remain')
+  return { advisories: findings.length, exceptions: 0 }
 }
 
 export function readProductionSources(repositoryRoot) {
@@ -205,8 +163,7 @@ if (import.meta.main) {
         cwd: root, encoding: 'utf8', timeout: 60000, maxBuffer: 8 * 1024 * 1024,
       }),
     })
-    process.stdout.write(`Dependency audit: ${result.advisories} advisory; ${result.exceptions} exact temporary exception; ${sources.length} source files checked.\n`)
-    if (result.exceptions) process.stdout.write('GHSA-vfj7-8cjw-p6xm / braces@3.0.3 / webapp developer CLI only; expires 2026-10-30T23:59:59Z.\n')
+    process.stdout.write(`Dependency audit: ${result.advisories} advisory; ${result.exceptions} approved exceptions; ${sources.length} source files checked.\n`)
   } catch (error) {
     // Registry output and source contents are never echoed into CI logs.
     process.stderr.write(`Dependency audit failed: ${error instanceof SyntaxError ? 'invalid JSON input' : error.message}\n`)

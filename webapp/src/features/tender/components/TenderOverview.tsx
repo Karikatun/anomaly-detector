@@ -65,7 +65,7 @@ export function TenderPlayers({
             ? translate(`tender.player.bot.${player.bot.difficulty}`)
             : player.displayName ?? player.playerId.slice(0, 8)
           const status = phase === 'access-slot-selection'
-            ? player.requestedAccessSlot !== undefined ? translate('tender.tenderOverview.copy.010') : translate('tender.tenderOverview.copy.011')
+            ? (player.requestedAccessSlotConfirmed || player.requestedAccessSlot !== undefined) ? translate('tender.tenderOverview.copy.010') : translate('tender.tenderOverview.copy.011')
             : phase === 'power-allocation'
               ? player.powerAllocationConfirmed ? translate('tender.tenderOverview.copy.012') : translate('tender.tenderOverview.copy.013')
               : isActive ? translate('tender.tenderOverview.copy.014') : translate('tender.tenderOverview.copy.015')
@@ -82,6 +82,7 @@ export function TenderPlayers({
               </Typography>
               <Typography as="span" variant="caption" className={styles.playerStatus}>
                 {player.accessSlot !== undefined ? translate('tender.tenderOverview.copy.017', { value1: player.accessSlot, value2: status }) : status}
+                {' · '}{translate('tender.header.budget', { budget: player.budget })}
               </Typography>
             </div>
           )
@@ -159,6 +160,7 @@ type EvidenceData = Pick<
   TenderView,
   'privateMeasurements' | 'privateTheses' | 'publicLaboratoryResults' | 'publicTheses'
 > & Partial<Pick<TenderView, 'players' | 'round' | 'publicScientificJournal' | 'privateUsedContractEvidenceTestIds'>>
+  & Partial<Pick<TenderView, 'game'>>
 
 function laboratoryHistory(data: Pick<TenderView, 'publicLaboratoryResults' | 'publicScientificJournal'>) {
   const history: Array<PublicLaboratoryResult | ScientificJournalEntry> = [...data.publicLaboratoryResults]
@@ -221,7 +223,7 @@ export function TenderEvidence({
             <Typography as="h3" variant="control">{translate('tender.tenderOverview.copy.024')}</Typography>
             <Typography as="span" variant="caption" className={styles.evidencePublicCountMobile}>
               
-              {translate('tender.research.publicCount', { count: laboratoryResults.length })}
+              {translate(data.game?.scoring === 'properties-12' ? 'tender.research.privateCount' : 'tender.research.publicCount', { count: laboratoryResults.length })}
             </Typography>
           </div>
           <div className={styles.evidenceGrid}>
@@ -245,9 +247,9 @@ export function TenderEvidence({
                   {laboratoryResultLabels[result.publicResult] ?? result.publicResult}
                 </Typography>
                 <Typography variant="caption" tone="muted">
-                  {t(`tender.research.protocol.${result.protocol}`)} · {author} · {t('tender.research.public')}
+                  {t(`tender.research.protocol.${result.protocol}`)} · {author} · {t(data.game?.scoring === 'properties-12' ? 'rooms.simple.private' : 'tender.research.public')}
                 </Typography>
-                {isOwn && testId && data.privateUsedContractEvidenceTestIds !== undefined && <Typography variant="caption" tone="muted">
+                {data.game?.contracts !== false && isOwn && testId && data.privateUsedContractEvidenceTestIds !== undefined && <Typography variant="caption" tone="muted">
                   {t(data.privateUsedContractEvidenceTestIds?.includes(testId)
                     ? 'tender.research.evidenceUsed' : 'tender.research.evidenceUnused')}
                 </Typography>}
@@ -257,7 +259,7 @@ export function TenderEvidence({
           </div>
           <Typography as="span" variant="caption" className={styles.evidencePublicCountDesktop}>
             
-            {translate('tender.research.publicCount', { count: laboratoryResults.length })}
+            {translate(data.game?.scoring === 'properties-12' ? 'tender.research.privateCount' : 'tender.research.publicCount', { count: laboratoryResults.length })}
           </Typography>
         </section>
       )}

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { botDifficultySchema } from './bots'
+import { gameModeSchema } from './game'
 
 export const roomCapacitySchema = z.union([z.literal(2), z.literal(3), z.literal(4)])
 export const roomIdSchema = z.string().uuid()
@@ -9,6 +10,7 @@ export const roomStatusSchema = z.enum(['waiting', 'starting', 'started'])
 export const createRoomRequestSchema = z.object({
   allowBots: z.boolean().default(false),
   capacity: roomCapacitySchema,
+  mode: gameModeSchema.optional(),
 }).strict()
 
 export const addRoomBotRequestSchema = z.object({
@@ -44,6 +46,7 @@ export const roomBotSchema = z.object({
 }).strict()
 
 export const roomViewSchema = z.object({
+  mode: gameModeSchema.optional(),
   allowBots: z.boolean(),
   bots: z.array(roomBotSchema).optional(),
   capacity: roomCapacitySchema,

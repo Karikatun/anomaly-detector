@@ -1,4 +1,7 @@
+import type { GameMode, TutorialLessonsProgress, TutorialProgressCommand } from '@anomaly-detector/contracts'
+
 export type CompletedMatchPlayer = {
+  placement?: number
   budget: number
   correctTheses: number
   forfeitedAt?: string
@@ -7,6 +10,7 @@ export type CompletedMatchPlayer = {
 }
 
 export type CompletedProfileMatch = {
+  mode?: GameMode
   excludeFromPerformanceAverages: boolean
   players: CompletedMatchPlayer[]
   playerResult: {
@@ -24,4 +28,6 @@ export type CompletedTenderSummaryReader = {
 export type TutorialProgressRepository = {
   complete(userId: string, completedAt: Date): Promise<Date | null>
   read(userId: string): Promise<Date | null>
+  readLessons(userId: string): Promise<TutorialLessonsProgress | null>
+  recordLesson(userId: string, command: TutorialProgressCommand, completedAt: Date): Promise<TutorialLessonsProgress | null>
 }

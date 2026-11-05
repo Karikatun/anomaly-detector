@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import "./styles/vendor/shadcn-tailwind-4.7.0.css";
 @import "@fontsource-variable/figtree";
 
 @custom-variant dark (&:is(.dark *));

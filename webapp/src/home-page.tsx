@@ -1,3 +1,4 @@
+import { getSessionStorage } from '@/platform/session-storage'
 import { Link, Navigate, useNavigate } from '@tanstack/react-router'
 import {
   Add01Icon,
@@ -8,7 +9,7 @@ import {
   UserCircleIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, type Ref } from 'react'
 
 import { ExpeditionBackground } from '@/components/ExpeditionBackground'
 import expeditionStyles from '@/components/ExpeditionShell.module.css'
@@ -25,7 +26,7 @@ import {
 import { captureFeedbackOrigin } from '@/features/feedback'
 import {
   ProfileApi,
-  useTutorialProgressQuery,
+  useTutorialLessonsProgressQuery,
 } from '@/features/profile'
 import {
   CreateRoomDialog,
@@ -35,6 +36,7 @@ import {
 } from '@/features/rooms'
 import { RulesReferenceDialog } from '@/features/rules'
 import { prepareTutorialEntry } from '@/features/tutorial/public/session'
+import { TutorialLessonDialog, tutorialLessonOptions } from '@/features/tutorial/public/lesson-dialog'
 import { useI18n } from '@/platform/i18n'
 import styles from './pages.module.css'
 
@@ -61,20 +63,22 @@ function AuthenticatedHome({
 }) {
   const navigate = useNavigate()
   const [continuationPath] = useState(() => {
-    capturePostAuthContinuation(sessionStorage, new URL(window.location.href))
-    return consumePostAuthContinuation(sessionStorage)
+    capturePostAuthContinuation(getSessionStorage(), new URL(window.location.href))
+    return consumePostAuthContinuation(getSessionStorage())
   })
   const auth = useAuth()
   const { t } = useI18n()
   const logoutAction = useLogoutAction()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false)
+  const [isLessonDialogOpen, setIsLessonDialogOpen] = useState(false)
+  const tutorialOpener = useRef<HTMLButtonElement | null>(null)
   const roomsApi = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
   const profileApi = useMemo(() => new ProfileApi(auth.transport), [auth.transport])
   const currentMatch = useCurrentMatchQuery(roomsApi)
-  const tutorialProgress = useTutorialProgressQuery(profileApi)
+  const tutorialProgress = useTutorialLessonsProgressQuery(profileApi)
 
-  if (continuationPath) return <Navigate to={continuationPath} replace />
+  if (continuationPath) return <Navigate to="/tutorial" search={{ lesson: continuationPath === '/tutorial?lesson=additional' ? 'additional' : undefined }} replace />
 
   const returnToCurrentMatch = () => {
     const match = currentMatch.data
@@ -178,13 +182,10 @@ function AuthenticatedHome({
               <MenuCard
                 accent="plain"
                 fullRow
-                title={t(tutorialProgress.data?.completedAt ? 'tutorial.menu.repeat' : 'tutorial.menu.start')}
+                title={t('tutorial.lessonMenu.button')}
                 icon={Mortarboard01Icon}
-                onClick={() => {
-                  if (!auth.user) return
-                  prepareTutorialEntry(sessionStorage, auth.user.id)
-                  void navigate({ to: '/tutorial' })
-                }}
+                buttonRef={tutorialOpener}
+                onClick={() => setIsLessonDialogOpen(true)}
               />
             </>
           )}
@@ -218,6 +219,17 @@ function AuthenticatedHome({
         </div>
         <CreateRoomDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
         <JoinRoomDialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen} />
+        <TutorialLessonDialog open={isLessonDialogOpen} onOpenChange={setIsLessonDialogOpen}
+          title={t('tutorial.lessonMenu.title')} description={t('tutorial.lessonMenu.description')} closeLabel={t('tutorial.lessonMenu.close')}
+          returnFocusTo={tutorialOpener}
+          lessons={tutorialLessonOptions(tutorialProgress.data, tutorialProgress.isPending ? 'loading' : tutorialProgress.isError ? 'error' : 'ready')}
+          notice={tutorialProgress.isPending ? t('tutorial.lessonMenu.loading') : tutorialProgress.isError ? t('tutorial.lessonMenu.error') : undefined}
+          onChoose={(lessonId) => {
+            if (!auth.user) return
+            prepareTutorialEntry(getSessionStorage(), auth.user.id, lessonId)
+            setIsLessonDialogOpen(false)
+            void navigate({ to: '/tutorial', search: { lesson: lessonId === 'additional' ? 'additional' : undefined } })
+          }} />
       </div>
     </section>
   )
@@ -231,6 +243,7 @@ function MenuCard({
   onClick,
   fullRow = false,
   disabled = false,
+  buttonRef,
 }: {
   accent: 'violet' | 'aqua' | 'plain'
   title: string
@@ -239,10 +252,14 @@ function MenuCard({
   onClick: () => void
   fullRow?: boolean
   disabled?: boolean
+  buttonRef?: Ref<HTMLButtonElement>
 }) {
   return (
     <Button
+      ref={buttonRef}
       type="button"
+      aria-label={title}
+      aria-description={description}
       variant="ghost"
       className={`${styles.menuCard} ${styles[accent]} ${fullRow ? styles.fullRow : ''}`}
       disabled={disabled}

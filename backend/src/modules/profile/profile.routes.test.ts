@@ -28,7 +28,9 @@ test('returns authenticated player statistics from compatible completed matches'
     accountLifecycleSecret: 'test-account-lifecycle-secret',
     authenticatedMutationBudget,
     completedTenderSummaryReader: {
-      listCompletedMatches: async () => [{
+      listCompletedMatches: async (userId) => {
+        expect(userId).toBe('player-a')
+        return [{
         excludeFromPerformanceAverages: false,
         players: [
           { budget: 2, correctTheses: 1, playerId: 'player-a', rating: 9 },
@@ -40,7 +42,8 @@ test('returns authenticated player statistics from compatible completed matches'
           successfulContracts: 1,
         },
         winnerPlayerIds: ['player-a'],
-      }],
+        }]
+      },
     },
     db,
     requireAuth,
@@ -60,6 +63,20 @@ test('returns authenticated player statistics from compatible completed matches'
     wins: 1,
     winRate: 1,
   })
+  const byMode = await profile.routes.request('/statistics/by-mode?userId=player-b')
+  expect(byMode.status).toBe(200)
+  expect(await byMode.json()).toMatchObject({ standard: { matchesPlayed: 1, averageRating: 9 }, simple: { matchesPlayed: 0, modelAccuracy: null } })
+})
+
+test('requires authentication before reading per-mode statistics', async () => {
+  const profile = createProfileModule({
+    accountLifecycleSecret: 'test-account-lifecycle-secret',
+    authenticatedMutationBudget,
+    completedTenderSummaryReader: { listCompletedMatches: async () => { throw new Error('Unauthorized reader reached') } },
+    db: {} as DbClient,
+    requireAuth: createMiddleware<AuthHttpEnv>(async (c) => c.json({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }, 401)),
+  })
+  expect((await profile.routes.request('/statistics/by-mode')).status).toBe(401)
 })
 
 test('reads and idempotently records the authenticated player tutorial completion', async () => {

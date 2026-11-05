@@ -3,6 +3,7 @@ import {
   type DbClient,
 } from './db'
 import { erasePrismaAccountIdentityInTransaction } from './modules/auth'
+import { eraseTutorialProgressInTransaction } from './modules/profile'
 import {
   anonymizePrismaFeedbackOperatorActorBatch,
   unlinkFeedbackAccountInTransaction,
@@ -216,6 +217,7 @@ export async function reconcileDeletedAccount(
         })
         if (!account) return null
 
+        await eraseTutorialProgressInTransaction(transaction, userId)
         await erasePrismaAccountIdentityInTransaction(transaction, {
           currentLogin: account.login,
           now: input.now,

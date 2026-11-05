@@ -47,9 +47,23 @@ model User {
   recoveryCodeReplacement        RecoveryCodeEmailReplacement?
   passwordResetCredential        PasswordResetCredential?
   linkedFeedbackReports          FeedbackReport[]              @relation("FeedbackReportLinkedUser")
+  tutorialCompletionRecords      TutorialCompletionRecord[]
 
   @@index([deletionCleanupAvailableAt, anonymizedAt, id], map: "users_deletion_cleanup_claim_idx", where: { anonymizedAt: { not: null }, deletionCleanupCompletedAt: null })
   @@map("users")
+}
+
+model TutorialCompletionRecord {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  lessonId    String    @map("lesson_id") @db.VarChar(32)
+  versionKey  String    @map("version_key") @db.VarChar(64)
+  origin      String    @db.VarChar(16)
+  completedAt DateTime? @map("completed_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "tutorial_completion_records_user_id_fkey")
+
+  @@unique([userId, lessonId, versionKey], map: "tutorial_completion_records_user_lesson_version_key")
+  @@map("tutorial_completion_records")
 }
 
 model RecoveryEmailChallenge {
@@ -436,6 +450,7 @@ model Tender {
 }
 
 model TenderRoom {
+  mode            String             @default("standard")
   allowBots       Boolean            @default(false) @map("allow_bots")
   bots            Json               @default("[]")
   id             String             @id @default(dbgenerated("uuidv7()")) @db.Uuid

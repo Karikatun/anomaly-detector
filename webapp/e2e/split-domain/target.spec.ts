@@ -126,11 +126,11 @@ test('configures the player Metrika client without loading it before consent', a
   await expect.poll(() => tagRequests).toBe(1)
 
   await page.getByRole('button', { name: 'Начать обучение' }).click()
-  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toHaveCount(0)
+  await expect(page.getByRole('dialog', { name: 'Базовое обучение: исследуйте аномалию' })).toHaveCount(0)
   const coach = page.locator('[data-testid="floater"]')
   await expect(coach).toBeVisible()
   await expect(coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' })).toHaveCount(0)
-  const firstAction = page.getByRole('button', { name: /^Слот доступа 5:/ })
+  const firstAction = page.getByRole('button', { name: /^Слот доступа 6:/ })
   await firstAction.click()
   await expect(firstAction).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('button', { name: 'Подтвердить выбор', exact: true })).toBeEnabled()
@@ -168,7 +168,7 @@ test('keeps the first tutorial action available before the analytics choice on d
       await page.screenshot({ path: `${uxAuditDir}/tutorial-${viewport.width}.png` })
     }
     await expect(coach.getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ' })).toHaveCount(0)
-    const firstAction = page.getByRole('button', { name: /^Слот доступа 5:/ })
+    const firstAction = page.getByRole('button', { name: /^Слот доступа 6:/ })
     await firstAction.click()
     await expect(firstAction).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByRole('button', { name: 'Подтвердить выбор', exact: true })).toBeEnabled()
@@ -181,7 +181,7 @@ test('preserves the CTA when anonymous analytics is unavailable', async ({ page 
   await page.goto(`${origins.root}/?utm_campaign=ad_06`)
   await page.getByRole('link', { name: 'Пройти обучение' }).first().click()
   await expect(page).toHaveURL(`${origins.app}/learn`)
-  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Базовое обучение: исследуйте аномалию' })).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Регистрация', exact: true })).toHaveCount(0)
 })
 
@@ -276,7 +276,7 @@ test('opens and exits the guest lesson, preserves legacy sign-in continuation an
   await expect(tutorialLink).toHaveAttribute('href', `${origins.app}/learn`)
   await tutorialLink.click()
   await expect(page).toHaveURL(`${origins.app}/learn`)
-  await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Базовое обучение: исследуйте аномалию' })).toBeVisible()
   expect((await context.cookies()).some((cookie) => cookie.name === 'anomaly_detector_refresh')).toBe(false)
   await page.getByRole('button', { name: 'Вернуться на сайт', exact: true }).click()
   await expect(page).toHaveURL(`${origins.root}/`)
@@ -297,7 +297,7 @@ test('opens and exits the guest lesson, preserves legacy sign-in continuation an
   await page.getByRole('button', { name: 'Регистрация', exact: true }).click()
   await expect(page).toHaveURL(`${origins.app}/tutorial`)
   await expect(page.getByRole('dialog', {
-    name: 'Добро пожаловать на исследовательскую станцию',
+    name: 'Базовое обучение: исследуйте аномалию',
   })).toBeVisible()
 
   const response = await registrationResponse

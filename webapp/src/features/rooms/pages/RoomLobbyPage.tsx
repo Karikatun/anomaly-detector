@@ -350,6 +350,10 @@ function RoomLobbyContent() {
               <Typography as="h2" className={styles.sectionTitle}>{t('lobby.settings.title')}</Typography>
               <dl className={styles.settingsList}>
                 <div>
+                  <Typography as="dt" variant="control">{t('rooms.create.mode')}</Typography>
+                  <Typography as="dd" variant="bodySm">{t(currentRoom.mode === 'simple' ? 'rooms.create.mode.simple' : 'rooms.create.mode.standard')}</Typography>
+                </div>
+                <div>
                   <Typography as="dt" variant="control">{t('lobby.settings.mode')}</Typography>
                   <Typography as="dd" variant="bodySm">{t('lobby.settings.mode.value')}</Typography>
                 </div>

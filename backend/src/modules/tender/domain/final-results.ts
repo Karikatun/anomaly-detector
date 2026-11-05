@@ -1,5 +1,7 @@
 import type {
   PublicThesis,
+  GameDescriptor,
+  ScientificModel,
   TenderPlayer,
   TenderRuleset,
 } from '@anomaly-detector/contracts'
@@ -7,6 +9,10 @@ import type {
 import type { SignalId } from './anomaly-configuration'
 
 type FinalResultState = {
+  completionReason?: string
+  finalScientificModelsByPlayer?: Record<string, ScientificModel>
+  game?: GameDescriptor
+  finalSubmissionOrderByPlayer?: Record<string, number>
   budgetByPlayer: Record<string, number>
   certifiedSignalsByPlayer: Record<string, SignalId[]>
   corporateTrustByPlayer: Record<string, number>
@@ -36,12 +42,14 @@ export const createFinalStandingByPlayer = (tender: FinalResultState) => Object.
 type FinalStandingByPlayer = ReturnType<typeof createFinalStandingByPlayer>
 
 const compareRankedStandings = (
+  tender: FinalResultState,
   standings: FinalStandingByPlayer,
   leftPlayerId: string,
   rightPlayerId: string,
 ) => standings[rightPlayerId]!.rating - standings[leftPlayerId]!.rating
-  || standings[rightPlayerId]!.correctTheses - standings[leftPlayerId]!.correctTheses
+  || (tender.game?.mode === 'simple' ? 0 : standings[rightPlayerId]!.correctTheses - standings[leftPlayerId]!.correctTheses)
   || standings[rightPlayerId]!.remainingBudget - standings[leftPlayerId]!.remainingBudget
+  || (tender.game?.mode === 'simple' ? (tender.finalSubmissionOrderByPlayer?.[leftPlayerId] ?? Number.MAX_SAFE_INTEGER) - (tender.finalSubmissionOrderByPlayer?.[rightPlayerId] ?? Number.MAX_SAFE_INTEGER) : 0)
 
 const compareFinalPlayers = (
   tender: FinalResultState,
@@ -55,7 +63,13 @@ const compareFinalPlayers = (
   if (leftForfeitedAt && rightForfeitedAt) {
     return Date.parse(rightForfeitedAt) - Date.parse(leftForfeitedAt)
   }
-  return compareRankedStandings(standings, left.id, right.id)
+  if (tender.game?.mode === 'simple' && tender.completionReason === undefined) {
+    const leftSubmitted = tender.finalScientificModelsByPlayer?.[left.id] !== undefined
+    const rightSubmitted = tender.finalScientificModelsByPlayer?.[right.id] !== undefined
+    if (leftSubmitted !== rightSubmitted) return leftSubmitted ? -1 : 1
+    if (!leftSubmitted) return 0
+  }
+  return compareRankedStandings(tender, standings, left.id, right.id)
 }
 
 export const createPlacementByPlayer = (tender: FinalResultState) => {
@@ -71,15 +85,16 @@ export const createPlacementByPlayer = (tender: FinalResultState) => {
 }
 
 export const resolveWinnerPlayerIds = (tender: FinalResultState) => {
-  const eligiblePlayers = tender.players.filter((player) => tender.forfeitedAtByPlayer[player.id] === undefined)
+  const eligiblePlayers = tender.players.filter((player) => tender.forfeitedAtByPlayer[player.id] === undefined
+    && (tender.game?.mode !== 'simple' || tender.completionReason !== undefined || tender.finalScientificModelsByPlayer?.[player.id] !== undefined))
   if (eligiblePlayers.length === 0) return []
   const standings = createFinalStandingByPlayer(tender)
   const leader = eligiblePlayers.reduce((currentLeader, candidate) =>
-    compareRankedStandings(standings, candidate.id, currentLeader.id) < 0
+    compareRankedStandings(tender, standings, candidate.id, currentLeader.id) < 0
       ? candidate
       : currentLeader,
   )
   return eligiblePlayers
-    .filter((player) => compareRankedStandings(standings, player.id, leader.id) === 0)
+    .filter((player) => compareRankedStandings(tender, standings, player.id, leader.id) === 0)
     .map((player) => player.id)
 }

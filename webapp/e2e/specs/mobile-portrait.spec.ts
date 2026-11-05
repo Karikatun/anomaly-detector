@@ -1,5 +1,6 @@
 import type { CDPSession, Page } from '@playwright/test'
 import { expect, registerBrowserUser, test } from '../helpers/test'
+import { reachBaseFirstResearch } from '../helpers/base-tutorial'
 
 const guardName = 'Поверните телефон вертикально'
 
@@ -19,19 +20,9 @@ async function rotatePhone(page: Page, session: CDPSession, landscape: boolean) 
 }
 
 async function openGuestModel(page: Page) {
-  await page.goto('/learn')
-  await page.getByRole('button', { name: 'Начать обучение', exact: true }).click()
-  // The full lesson is covered separately; resume its supported local draft at model editing.
-  await page.evaluate(() => {
-    const key = 'anomaly-detector:guest-tutorial-session'
-    const saved = sessionStorage.getItem(key)
-    if (!saved) throw new Error('Guest lesson draft is missing')
-    const state = JSON.parse(saved)
-    state.step = 'round-2-working-model'
-    sessionStorage.setItem(key, JSON.stringify(state))
-  })
-  await page.reload()
-  await page.getByRole('button', { name: 'Открыть журнал', exact: true }).click()
+  await reachBaseFirstResearch(page)
+  await page.getByTestId('tutorial-research-trigger').click()
+  await page.getByRole('tab', { name: 'Трактовка', exact: true }).click()
   await page.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
 }
 
@@ -87,7 +78,7 @@ test.describe('phone physical orientation', () => {
     await page.keyboard.press('Tab')
     await expect(guard).toBeFocused()
     await rotatePhone(page, session, false)
-    await expect(page.getByRole('dialog', { name: 'Добро пожаловать на исследовательскую станцию' })).toBeVisible()
+    await expect(page.getByRole('dialog', { name: 'Базовое обучение: исследуйте аномалию' })).toBeVisible()
     await rotatePhone(page, session, true)
     await page.goto('/')
     await expect(page.getByRole('tab', { name: 'Вход', exact: true })).toBeVisible()

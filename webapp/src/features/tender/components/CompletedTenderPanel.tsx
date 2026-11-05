@@ -336,7 +336,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                             [translate('tender.completedTenderPanel.copy.076'), entry.allocation.reconnaissance],
                             [translate('tender.completedTenderPanel.copy.077'), entry.allocation.laboratory],
                             [translate('tender.completedTenderPanel.copy.078'), entry.allocation.modelAnalysis],
-                            [translate('tender.completedTenderPanel.copy.079'), entry.allocation.contracts],
+                            ...(view.game?.contracts === false ? [] : [[translate('tender.completedTenderPanel.copy.079'), entry.allocation.contracts]]),
                           ].map(([label, value]) => (
                             <span key={label}>
                               <Typography as="small" variant="caption">{label}</Typography>
@@ -377,7 +377,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                           {entry.targets.length > 0 ? entry.targets.map((target, targetIndex) => (
                             <Typography key={`${target}-${targetIndex}`} as="span" variant="caption">
                               {target === 'unknown-sector'
-                                ? translate('tender.completedTenderPanel.copy.083')
+                                ? translate(view.game?.mode === 'simple' ? 'rooms.simple.randomLabel' : 'tender.completedTenderPanel.copy.083')
                                 : t(signalLabelKeys[target])}
                             </Typography>
                           )) : (
@@ -650,8 +650,9 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
           <Typography variant="bodySm" tone="muted">
             {completionReasonLabel}
           </Typography>
+          <Typography variant="caption" tone="muted">{translate(view.game?.mode === 'simple' ? 'rooms.create.mode.simple' : 'rooms.create.mode.standard')}</Typography>
         </span>
-        {!currentPlayerIsWinner && <span className={styles.winner}>
+        {!currentPlayerIsWinner && winnerNames.length > 0 && <span className={styles.winner}>
           <HugeiconsIcon icon={Award02Icon} strokeWidth={1.8} aria-hidden="true" />
           <span>
             <Typography as="small" variant="caption">
@@ -680,10 +681,12 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
               </Typography>
             </span>
             <Typography id="completed-own-result-heading" as="h3" variant="h4">
-              {translate('tender.completedTenderPanel.placementAndPoints', {
-                value1: currentPlacement ?? '—',
-                value2: formatPoints(currentRating ?? 0),
-              })}
+              {winnerNames.length > 0
+                ? translate('tender.completedTenderPanel.placementAndPoints', {
+                  value1: currentPlacement ?? '—',
+                  value2: formatPoints(currentRating ?? 0),
+                })
+                : translate('tender.completed.desktop.noWinner')}
             </Typography>
             <Typography as="span" variant="bodySm" className={styles.ownResultPlayer}>
               {currentPlayer.displayName ?? currentPlayer.playerId.slice(0, 8)}
@@ -743,11 +746,11 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
               {translate('tender.completedTenderPanel.finalStanding.title')}
             </Typography>
             <Typography variant="caption" tone="muted">
-              {translate('tender.completedTenderPanel.finalStanding.order')}
+              {translate(view.game?.scoring === 'properties-12' ? 'rooms.simple.tieBreak' : 'tender.completedTenderPanel.finalStanding.order')}
             </Typography>
           </div>
           <Typography variant="caption" className={styles.trustExplanation}>
-            {translate('tender.completedTenderPanel.finalStanding.trustExplanation')}
+            {view.game?.scoring !== 'properties-12' && translate('tender.completedTenderPanel.finalStanding.trustExplanation')}
           </Typography>
         </section>
 
@@ -757,7 +760,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
               ? translate(`tender.player.bot.${player.bot.difficulty}`)
               : player.displayName ?? player.playerId.slice(0, 8)
             const isWinner = winnerIds.has(player.playerId)
-            const placement = view.audit.placementByPlayer[player.playerId] ?? 1
+            const placement = view.audit.placementByPlayer[player.playerId]
             const earnedRating = ratingEntries(player.playerId)
             const finalStanding = presentation.standingFactors(player.playerId)
             return (
@@ -769,7 +772,7 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
               >
                 <div className={styles.playerSummary}>
                   <Typography as="span" variant="h5" className={styles.position}>
-                    {String(placement).padStart(2, '0')}
+                    {winnerNames.length > 0 && placement !== undefined ? String(placement).padStart(2, '0') : '—'}
                   </Typography>
                   <span className={styles.playerIdentity}>
                     <span className={styles.playerNameLine}>
@@ -797,12 +800,15 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
                       player: playerName,
                     })}
                   >
-                    {[
+                    {(view.game?.scoring === 'properties-12' ? [
+                      [translate('rooms.simple.points'), formatPoints(finalStanding.rating)],
+                      [translate('tender.completedTenderPanel.finalStanding.remainingBudget'), finalStanding.remainingBudget],
+                    ] : [
                       [translate('tender.completedTenderPanel.finalStanding.rating'), formatPoints(finalStanding.rating)],
                       [translate('tender.completedTenderPanel.finalStanding.correctTheses'), finalStanding.correctTheses],
                       [translate('tender.completedTenderPanel.finalStanding.remainingBudget'), finalStanding.remainingBudget],
                       [translate('tender.completedTenderPanel.finalStanding.corporateTrust'), finalStanding.corporateTrust],
-                    ].map(([label, value]) => (
+                    ]).map(([label, value]) => (
                       <li key={label}>
                         <Typography as="small" variant="caption">{label}</Typography>
                         <Typography as="strong" variant="bodySmMedium">{value}</Typography>
@@ -861,9 +867,9 @@ export function CompletedTenderPanel({ currentUserId, view }: Props) {
         <summary>
           <Typography as="strong" variant="bodySmMedium">{translate('tender.completedTenderPanel.copy.036')}</Typography>
           <Typography as="span" variant="caption">
-            {translate('tender.completedTenderPanel.modelPreview', {
-              value1: currentPlayer ? modelCorrectness(currentPlayer.playerId) : 0,
-            })} ›
+            {currentPlayer && view.audit.finalScientificModelsByPlayer[currentPlayer.playerId]?.submitted
+              ? translate('tender.completedTenderPanel.modelPreview', { value1: modelCorrectness(currentPlayer.playerId) })
+              : translate('rooms.simple.modelNotSubmitted')} ›
           </Typography>
         </summary>
         <div className={styles.disclosureBody}>

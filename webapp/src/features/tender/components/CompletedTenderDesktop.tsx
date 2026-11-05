@@ -51,6 +51,7 @@ export function CompletedTenderDesktop({ currentUserId, view, children }: {
             {t('tender.completedTenderPanel.copy.029')}
           </Typography>
           <Typography variant="bodySm" tone="muted">{t(presentation.completionReasonKey)}</Typography>
+          <Typography variant="caption" tone="muted">{t(view.game?.mode === 'simple' ? 'rooms.create.mode.simple' : 'rooms.create.mode.standard')}</Typography>
         </span>
         {!currentPlayerIsWinner && winnerNames.length > 0 && (
           <span className={shared.winner}>
@@ -118,7 +119,7 @@ export function CompletedTenderDesktop({ currentUserId, view, children }: {
                   </span>
                   <span className={styles.playerRating}>
                     <Typography as="strong" variant="h5">{player.rating}</Typography>
-                    <Typography as="small" variant="caption" tone="muted">{t('tender.completedTenderPanel.finalStanding.rating')}</Typography>
+                    <Typography as="small" variant="caption" tone="muted">{t(view.game?.scoring === 'properties-12' ? 'rooms.simple.points' : 'tender.completedTenderPanel.finalStanding.rating')}</Typography>
                   </span>
                 </button>
               </li>
@@ -126,7 +127,7 @@ export function CompletedTenderDesktop({ currentUserId, view, children }: {
           </ol>
           <details className={styles.standingRules}>
             <summary><Typography as="span" variant="caption">{t('tender.completedTenderPanel.finalStanding.title')}</Typography></summary>
-            <Typography variant="caption" tone="muted">{t('tender.completedTenderPanel.finalStanding.order')}</Typography>
+            <Typography variant="caption" tone="muted">{t(view.game?.scoring === 'properties-12' ? 'rooms.simple.tieBreak' : 'tender.completedTenderPanel.finalStanding.order')}</Typography>
           </details>
         </section>
 
@@ -159,20 +160,22 @@ export function CompletedTenderDesktop({ currentUserId, view, children }: {
                       <li><Typography variant="bodySm" tone="muted">{t('tender.completedTenderPanel.copy.056')}</Typography></li>
                     )}
                     <li className={styles.scoreTotal}>
-                      <Typography as="span" variant="bodySmMedium">{t('tender.completedTenderPanel.finalStanding.rating')}</Typography>
+                      <Typography as="span" variant="bodySmMedium">{t(view.game?.scoring === 'properties-12' ? 'rooms.simple.points' : 'tender.completedTenderPanel.finalStanding.rating')}</Typography>
                       <Typography as="strong" variant="bodySmMedium">{points(selectedPlayer.rating)}</Typography>
                     </li>
                   </ul>
                   <dl className={styles.resources}>
-                    {[
+                    {(view.game?.scoring === 'properties-12' ? [
+                      [t('tender.completedTenderPanel.finalStanding.remainingBudget'), factors.remainingBudget],
+                    ] : [
                       [t('tender.completedTenderPanel.finalStanding.correctTheses'), factors.correctTheses],
                       [t('tender.completedTenderPanel.finalStanding.remainingBudget'), factors.remainingBudget],
                       [t('tender.completedTenderPanel.finalStanding.corporateTrust'), factors.corporateTrust],
-                    ].map(([label, value]) => (
+                    ]).map(([label, value]) => (
                       <div key={label}><Typography as="dt" variant="caption" tone="muted">{label}</Typography><Typography as="dd" variant="bodySmMedium">{value}</Typography></div>
                     ))}
                   </dl>
-                  <Typography variant="caption" tone="muted">{t('tender.completedTenderPanel.finalStanding.trustExplanation')}</Typography>
+                  <Typography variant="caption" tone="muted">{t(view.game?.scoring === 'properties-12' ? 'rooms.simple.tieBreak' : 'tender.completedTenderPanel.finalStanding.trustExplanation')}</Typography>
                 </Tabs.Content>
                 <Tabs.Content className={styles.tabPanel} value="model" forceMount aria-hidden={tab !== 'model'} inert={tab !== 'model'} tabIndex={tab === 'model' ? 0 : -1}>
                   <CompletedTenderModels view={view} players={[selectedPlayer]} showPlayerNames={false} />
@@ -191,13 +194,13 @@ export function CompletedTenderDesktop({ currentUserId, view, children }: {
         <div className={styles.configurationBody}><CompletedTenderConfiguration view={view} /></div>
       </details>
       <footer className={styles.footer}>
-        <Typography variant="caption" tone="muted">{t('tender.completed.desktop.auditHint')}</Typography>
+        <Typography variant="caption" tone="muted">{t(view.game?.contracts === false ? 'rooms.simple.auditHint' : 'tender.completed.desktop.auditHint')}</Typography>
         <Dialog>
           <DialogTrigger asChild><Button variant="outline">{t('tender.completed.desktop.fullAudit')}</Button></DialogTrigger>
           <DialogContent className={styles.auditDialog} placement="viewport" closeLabel={t('tender.completed.desktop.closeAudit')}>
             <DialogHeader className={styles.auditHeader}>
               <DialogTitle>{t('tender.completed.desktop.fullAudit')}</DialogTitle>
-              <DialogDescription>{t('tender.completed.desktop.auditHint')}</DialogDescription>
+              <DialogDescription>{t(view.game?.contracts === false ? 'rooms.simple.auditHint' : 'tender.completed.desktop.auditHint')}</DialogDescription>
             </DialogHeader>
             <div className={styles.auditBody}>{children}</div>
           </DialogContent>

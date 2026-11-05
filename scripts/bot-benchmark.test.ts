@@ -15,6 +15,13 @@ test('bot benchmark uses the known t(7) interval for eight seed clusters', () =>
   expect(interval.upper).toBeCloseTo(6.54815008, 6)
 })
 
+test('expanded simple results use the NIST t(15) interval for sixteen independent seed blocks', () => {
+  const interval = ci95(Array.from({ length: 16 }, (_, index) => index + 1))
+  expect(interval.mean).toBe(8.5)
+  expect(interval.lower).toBeCloseTo(5.963602669795865, 6)
+  expect(interval.upper).toBeCloseTo(11.036397330204135, 6)
+})
+
 test('holdout aggregation accepts only the complete frozen matrix', () => {
   expect(() => assertCompleteHoldoutMatrix(holdoutCaseMatrix)).not.toThrow()
   expect(() => assertCompleteHoldoutMatrix(holdoutCaseMatrix.slice(1))).toThrow('frozen case matrix')

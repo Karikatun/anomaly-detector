@@ -11,53 +11,38 @@ const advisory = {
   cwe: ['CWE-674'],
   cvss: { score: 7.5, vectorString: null },
 }
-const paths = [
-  ['shadcn@4.7.0', 'fast-glob@3.3.3', 'micromatch@4.0.8', 'braces@3.0.3'],
-  ['shadcn@4.7.0', 'ts-morph@26.0.0', '@ts-morph/common@0.27.0', 'fast-glob@3.3.3', 'micromatch@4.0.8', 'braces@3.0.3'],
-]
+const retiredException = {
+  advisory: 'GHSA-vfj7-8cjw-p6xm', package: 'braces', version: '3.0.3',
+  owner: 'Karikatun', rationale: 'Historical CLI exception.',
+  acceptedAt: '2026-10-16T00:00:00Z', expiresAt: '2026-10-30T23:59:59Z',
+  workspace: 'webapp', dependencyType: 'devDependencies',
+  paths: [
+    ['shadcn@4.7.0', 'fast-glob@3.3.3', 'micromatch@4.0.8', 'braces@3.0.3'],
+    ['shadcn@4.7.0', 'ts-morph@26.0.0', '@ts-morph/common@0.27.0', 'fast-glob@3.3.3', 'micromatch@4.0.8', 'braces@3.0.3'],
+  ],
+}
 
 function fixture() {
   return {
-    audit: { status: 1, stdout: JSON.stringify({ braces: [advisory] }), stderr: 'bun audit v1.3.14 (d1632b29)\n' },
-    policy: {
-      exceptions: [{
-        advisory: 'GHSA-vfj7-8cjw-p6xm', package: 'braces', version: '3.0.3',
-        owner: 'Karikatun', rationale: 'Retain the reviewed developer CLI until an upstream fix is available.',
-        acceptedAt: '2026-10-16T00:00:00Z', expiresAt: '2026-10-30T23:59:59Z',
-        workspace: 'webapp', dependencyType: 'devDependencies', paths: structuredClone(paths),
-      }],
-    },
+    audit: { status: 0, stdout: '{}', stderr: 'bun audit v1.3.14 (d1632b29)\n' },
+    policy: { exceptions: [] },
     lock: {
       lockfileVersion: 1, configVersion: 1, overrides: {},
-      workspaces: { '': {}, webapp: { devDependencies: { shadcn: '4.7.0' } }, backend: {} },
+      workspaces: { '': {}, webapp: { devDependencies: { 'fast-glob': '^3.3.3' } }, backend: {} },
       packages: {
-        shadcn: ['shadcn@4.7.0', '', { dependencies: { 'fast-glob': '^3.3.3', 'ts-morph': '^26.0.0' } }],
-        'ts-morph': ['ts-morph@26.0.0', '', { dependencies: { '@ts-morph/common': '~0.27.0' } }],
-        '@ts-morph/common': ['@ts-morph/common@0.27.0', '', { dependencies: { 'fast-glob': '^3.3.3' } }],
         'fast-glob': ['fast-glob@3.3.3', '', { dependencies: { micromatch: '^4.0.8' } }],
         micromatch: ['micromatch@4.0.8', '', { dependencies: { braces: '^3.0.3' } }],
         braces: ['braces@3.0.3', '', { dependencies: { 'fill-range': '^7.1.1' } }],
       },
     },
-    manifests: { '': { overrides: {} }, webapp: { devDependencies: { shadcn: '4.7.0' } }, backend: {} },
-    sources: [{ path: 'webapp/src/index.css', content: '@import "shadcn/tailwind.css";' }],
-    now: new Date('2026-10-16T12:00:00Z'),
+    manifests: { '': { overrides: {} }, webapp: { devDependencies: { 'fast-glob': '^3.3.3' } }, backend: {} },
+    sources: [{ path: 'webapp/src/index.css', content: '@import "./styles/vendor/shadcn-tailwind-4.7.0.css";' }],
   }
 }
 
-test('allows exactly the reviewed advisory, version, CLI ancestry and CSS export', () => {
-  expect(evaluateDependencyAudit(fixture())).toEqual({ advisories: 1, exceptions: 1 })
-})
-
-test('accepts a successful empty raw audit without manufacturing an exception match', () => {
-  const input = fixture()
-  input.audit = { status: 0, stdout: '{}', stderr: '' }
-  expect(evaluateDependencyAudit(input)).toEqual({ advisories: 0, exceptions: 0 })
-})
-
-test('the durable exception matches the reviewed bounded policy', () => {
+test('accepts a clean raw audit without the retired CLI under the zero-exceptions policy', () => {
   const policy = JSON.parse(readFileSync(new URL('../.security/dependency-exceptions.json', import.meta.url), 'utf8'))
-  expect(evaluateDependencyAudit({ ...fixture(), policy }).exceptions).toBe(1)
+  expect(evaluateDependencyAudit({ ...fixture(), policy })).toEqual({ advisories: 0, exceptions: 0 })
 })
 
 test('accepts the repository Bun workspace links and reads the real source scope', () => {
@@ -69,82 +54,85 @@ test('accepts the repository Bun workspace links and reads the real source scope
   ]))
   input.sources = readProductionSources(root)
   expect(input.sources.length).toBeGreaterThan(0)
-  expect(evaluateDependencyAudit(input).exceptions).toBe(1)
+  expect(evaluateDependencyAudit(input)).toEqual({ advisories: 0, exceptions: 0 })
 })
 
-test('blocks every other advisory including another advisory on braces and low severity', () => {
-  for (const extra of [
-    { braces: [advisory, { ...advisory, id: 1, url: 'https://github.com/advisories/GHSA-aaaa-bbbb-cccc' }] },
-    { braces: [advisory], other: [{ ...advisory, severity: 'low' }] },
+test('blocks every advisory including the former braces ID and unrelated low severity findings', () => {
+  for (const findings of [
+    { braces: [advisory] },
+    { braces: [{ ...advisory, id: 1, url: 'https://github.com/advisories/GHSA-aaaa-bbbb-cccc' }] },
+    { other: [{ ...advisory, severity: 'low' }] },
   ]) {
-    const input = fixture(); input.audit.stdout = JSON.stringify(extra)
-    expect(() => evaluateDependencyAudit(input)).toThrow()
+    const audit = { status: 1, stdout: JSON.stringify(findings), stderr: '' }
+    expect(() => evaluateDependencyAudit({ ...fixture(), audit })).toThrow('Unapproved dependency vulnerabilities remain')
   }
 })
 
-test('blocks missing, malformed, broadened, future and expired exception records', () => {
-  for (const mutate of [
-    (f) => { f.policy = {} },
-    (f) => { f.policy.exceptions = [] },
-    (f) => { f.policy.exceptions.push(structuredClone(f.policy.exceptions[0])) },
-    (f) => { f.policy.exceptions[0].unknown = true },
-    (f) => { f.policy.exceptions[0].owner = '' },
-    (f) => { f.policy.exceptions[0].rationale = '' },
-    (f) => { f.policy.exceptions[0].version = '3.0.4' },
-    (f) => { f.policy.exceptions[0].advisory = 'GHSA-aaaa-bbbb-cccc' },
-    (f) => { f.policy.exceptions[0].expiresAt = '2026-11-01T00:00:00Z' },
-    (f) => { f.policy.exceptions[0].expiresAt = 'invalid' },
-    (f) => { f.policy.exceptions[0].paths = [paths[0]] },
-    (f) => { f.now = new Date('2026-10-31T00:00:00Z') },
-    (f) => { f.now = new Date('2026-10-30T23:59:59Z') },
-    (f) => { f.now = new Date('2026-10-15T23:59:59Z') },
-  ]) {
-    const input = fixture(); mutate(input)
-    expect(() => evaluateDependencyAudit(input)).toThrow()
+test('rejects missing, malformed and nonempty policy records even when the raw audit is clean', () => {
+  for (const policy of [undefined, {}, { exceptions: null }, { exceptions: [], unknown: true }]) {
+    expect(() => evaluateDependencyAudit({ ...fixture(), policy })).toThrow()
+  }
+  for (const exceptions of [[retiredException], [{ ...retiredException, expiresAt: '2099-01-01T00:00:00Z' }], [{}]]) {
+    expect(() => evaluateDependencyAudit({ ...fixture(), policy: { exceptions } })).toThrow('No dependency exceptions are approved')
   }
 })
 
-test('blocks version drift, aliases, duplicate instances and new graph ingress', () => {
-  for (const mutate of [
-    (f) => { f.lock.packages.braces[0] = 'braces@3.0.4' },
-    (f) => { f.lock.packages['alias'] = ['braces@3.0.3', '', {}] },
-    (f) => { f.lock.packages['other/braces'] = ['braces@3.0.3', '', {}] },
-    (f) => { f.lock.packages.other = ['other@1.0.0', '', { dependencies: { braces: '^3.0.3' } }] },
-    (f) => { f.lock.packages.other = ['other@1.0.0', '', { optionalDependencies: { micromatch: '^4.0.8' } }] },
-    (f) => { f.lock.packages.other = ['other@1.0.0', '', { peerDependencies: { shadcn: '*' } }] },
-    (f) => { f.lock.packages.shadcn[2].dependencies['fast-glob'] = '*' },
-    (f) => { delete f.lock.packages['ts-morph'] },
-    (f) => { f.lock.lockfileVersion = 2 },
-    (f) => { f.lock.packages.alias = ['alias@workspace:unknown'] },
+test('rejects a retired CLI manifest entry, npm alias, or override on an otherwise clean audit', () => {
+  for (const [section, name, specifier] of [
+    ['dependencies', 'shadcn', '4.7.0'],
+    ['devDependencies', 'shadcn', '4.7.0'],
+    ['optionalDependencies', 'ui-cli', 'npm:shadcn'],
+    ['peerDependencies', 'ui-cli', 'npm:shadcn@^4.7.0'],
   ]) {
-    const input = fixture(); mutate(input)
-    expect(() => evaluateDependencyAudit(input)).toThrow()
+    const input = fixture()
+    input.manifests.webapp[section] = { ...input.manifests.webapp[section], [name]: specifier }
+    input.lock.workspaces.webapp[section] = { ...input.manifests.webapp[section] }
+    expect(() => evaluateDependencyAudit(input)).toThrow('Retired shadcn package referenced in dependency graph')
+  }
+  for (const overrides of [{ shadcn: '4.7.0' }, { 'shadcn@4': '4.7.0' }, { 'ui-cli': 'npm:shadcn@4.7.0' }]) {
+    const input = fixture()
+    input.manifests[''].overrides = overrides
+    input.lock.overrides = overrides
+    expect(() => evaluateDependencyAudit(input)).toThrow('Retired shadcn package referenced in dependency graph')
   }
 })
 
-test('blocks production dependency reachability and unstored manifest changes', () => {
+test('rejects a locked CLI instance, alias and transitive reference', () => {
+  for (const [key, entry] of [
+    ['shadcn', ['shadcn@4.7.0', '', {}]],
+    ['ui-cli', ['shadcn@4.7.0', '', {}]],
+    ['other/shadcn', ['shadcn@4.7.0', '', {}]],
+    ['other', ['other@1.0.0', '', { optionalDependencies: { shadcn: '*' } }]],
+    ['other', ['other@1.0.0', '', { peerDependencies: { 'ui-cli': 'npm:shadcn@4.7.0' } }]],
+  ]) {
+    const input = fixture(); input.lock.packages[key] = entry
+    expect(() => evaluateDependencyAudit(input)).toThrow('Retired shadcn package referenced in dependency graph')
+  }
+})
+
+test('retains workspace and lock schema consistency checks', () => {
   for (const mutate of [
     (f) => { f.manifests.backend.dependencies = { braces: '3.0.3' } },
-    (f) => { f.manifests.backend.dependencies = { shadcn: '4.7.0' }; f.lock.workspaces.backend.dependencies = { shadcn: '4.7.0' } },
-    (f) => { f.manifests.webapp.dependencies = { shadcn: '4.7.0' }; f.lock.workspaces.webapp.dependencies = { shadcn: '4.7.0' } },
     (f) => { f.manifests.extra = { dependencies: { braces: '3.0.3' } } },
+    (f) => { f.manifests[''].overrides = { braces: '3.0.3' } },
+    (f) => { f.lock.lockfileVersion = 2 },
+    (f) => { f.lock.packages.alias = ['alias@workspace:unknown'] },
+    (f) => { f.lock.packages.braces[2] = { dependencies: { 'fill-range': null } } },
   ]) {
     const input = fixture(); mutate(input)
     expect(() => evaluateDependencyAudit(input)).toThrow()
   }
 })
 
-test('blocks literal source references to CLI packages while preserving only the CSS import', () => {
+test('rejects package source literals and the former CSS import', () => {
   for (const [path, content] of [
-    ['backend/src/main.ts', 'import braces from "braces"'],
-    ['webapp/src/main.ts', 'import("micromatch")'],
-    ['website/src/page.astro', 'const x = require("fast-glob")'],
-    ['packages/contracts/src/main.ts', 'export * from "@ts-morph/common"'],
-    ['adminapp/src/main.ts', 'import "shadcn/tailwind.css"'],
-    ['webapp/src/index.css', '@import "shadcn";'],
+    ['backend/src/main.ts', 'import "shadcn"'],
+    ['webapp/src/main.ts', 'import("npm:shadcn@4.7.0")'],
+    ['webapp/src/index.css', '@import "shadcn/tailwind.css";'],
+    ['webapp/src/index.css', '@import url(shadcn/tailwind.css);'],
   ]) {
     const input = fixture(); input.sources.push({ path, content })
-    expect(() => evaluateDependencyAudit(input)).toThrow()
+    expect(() => evaluateDependencyAudit(input)).toThrow('Retired shadcn package literal in production source')
   }
 })
 

@@ -1,7 +1,10 @@
+import type { GameMode } from '@anomaly-detector/contracts'
+import { createPlacementByPlayer } from '../domain/final-results'
 import { TenderFailure } from '../domain/errors'
 import type { StoredTender, StoredTenderAuditEvent, TenderStore } from './tender-store'
 
 export type CompletedTenderSummaryPlayer = {
+  placement?: number
   budget: number
   correctTheses: number
   forfeitedAt?: string
@@ -10,6 +13,7 @@ export type CompletedTenderSummaryPlayer = {
 }
 
 export type CompletedTenderSummary = {
+  mode?: GameMode
   excludeFromPerformanceAverages: boolean
   players: CompletedTenderSummaryPlayer[]
   playerResult: {
@@ -64,12 +68,17 @@ function toCompletedTenderSummary(
   requestedPlayerId: string,
 ): CompletedTenderSummary {
   const playerIds = new Set(tender.players.map((player) => player.id))
+  const legitimateAbandonment = tender.completionReason === 'all_players_left'
+    && tender.players.every((player) => tender.departedPlayerIds.includes(player.id))
   if (
     tender.phase !== 'complete'
     || playerIds.size !== tender.players.length
     || !playerIds.has(requestedPlayerId)
     || !tender.players.every((player) => tender.budgetByPlayer[player.id] !== undefined)
-    || (tender.winnerPlayerIds.length === 0 && tender.completionReason !== 'all_players_forfeited')
+    || (tender.winnerPlayerIds.length === 0
+      && tender.completionReason !== 'all_players_forfeited'
+      && !legitimateAbandonment
+      && !(tender.game?.mode === 'simple' && tender.completionReason === undefined && Object.keys(tender.finalScientificModelsByPlayer).length === 0))
     || !tender.winnerPlayerIds.every((playerId) => playerIds.has(playerId))
     || !tender.publicTheses.every((thesis) => playerIds.has(thesis.playerId))
   ) {
@@ -94,10 +103,13 @@ function toCompletedTenderSummary(
     }
   }
 
+  const placementByPlayer = tender.game?.mode === 'simple' ? createPlacementByPlayer(tender) : undefined
   return {
+    mode: tender.game?.mode ?? 'standard',
     excludeFromPerformanceAverages: tender.completionReason === 'last_active_player'
       || tender.completionReason === 'all_players_forfeited',
     players: tender.players.map((player) => ({
+      ...(placementByPlayer ? { placement: placementByPlayer[player.id] } : {}),
       budget: tender.budgetByPlayer[player.id] ?? 0,
       correctTheses: tender.ruleset === 'tender-v2'
         ? (tender.certifiedSignalsByPlayer[player.id] ?? []).length

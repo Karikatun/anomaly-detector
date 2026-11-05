@@ -32,6 +32,17 @@ test('returns to the completed tutorial after a same-tab OAuth round trip', () =
   expect(consumePostAuthContinuation(storage)).toBeNull()
 })
 
+test('unavailable storage never blocks login or fabricates a persisted continuation', () => {
+  const blocked = {
+    getItem() { throw new DOMException('blocked', 'SecurityError') },
+    setItem() { throw new DOMException('blocked', 'SecurityError') },
+    removeItem() { throw new DOMException('blocked', 'SecurityError') },
+  } as unknown as Storage
+  expect(capturePostAuthContinuation(blocked, new URL('https://app.example/?continue=tutorial-complete'))).toBeNull()
+  expect(peekPostAuthContinuation(blocked)).toBeNull()
+  expect(consumePostAuthContinuation(blocked)).toBeNull()
+})
+
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>()
   get length() { return this.values.size }
@@ -41,3 +52,12 @@ class MemoryStorage implements Storage {
   removeItem(key: string) { this.values.delete(key) }
   setItem(key: string, value: string) { this.values.set(key, value) }
 }
+
+
+test('additional completion returns only to its bounded lesson after OAuth', () => {
+  const storage = new MemoryStorage()
+  expect(capturePostAuthContinuation(storage, new URL('https://app.example/?continue=tutorial-additional-complete'))).toBe('tutorial-additional-complete')
+  expect(capturePostAuthContinuation(storage, new URL('https://app.example/?auth_error=oauth_registration_consent_required'))).toBe('tutorial-additional-complete')
+  expect(consumePostAuthContinuation(storage)).toBe('/tutorial?lesson=additional')
+  expect(consumePostAuthContinuation(storage)).toBeNull()
+})

@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router'
 
 import { RootLayout } from './root-layout'
+import { tutorialLessonIdSchema } from '@anomaly-detector/contracts'
 import { NotFoundPage } from './not-found-page'
 
 const rootRoute = createRootRoute({
@@ -82,12 +83,14 @@ const tenderRoute = createRoute({
 const tutorialRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tutorial',
+  validateSearch: (search: Record<string, unknown>) => search.lesson === undefined ? {} : { lesson: tutorialLessonIdSchema.parse(search.lesson) },
   component: lazyRouteComponent(() => import('./features/tutorial/public/tutorial'), 'TutorialRoute'),
 })
 
 const guestTutorialRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/learn',
+  validateSearch: (search: Record<string, unknown>) => search.lesson === undefined ? {} : { lesson: tutorialLessonIdSchema.parse(search.lesson) },
   component: lazyRouteComponent(() => import('./features/tutorial/public/tutorial'), 'GuestTutorialRoute'),
 })
 

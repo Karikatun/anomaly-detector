@@ -1,0 +1,9 @@
+.intro, .guidanceContent { display: grid; gap: var(--space-4); min-width: 0; }
+.guidance { margin: var(--space-4); min-width: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.actions > * { max-width: 100%; white-space: normal; }
+@media (max-width: 47.999rem) {
+  .guidance { margin: var(--space-3); }
+  .actions { display: grid; }
+  .actions > * { width: 100%; }
+}

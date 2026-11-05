@@ -18,6 +18,7 @@ import { runTenderAction } from './run-tender-action'
 import { tenderRulesetPolicy } from './ruleset-policy'
 
 type LaboratoryPanelProps = {
+  privateResults?: boolean
   journal: TenderView['publicScientificJournal']
   mySamples: SignalId[]
   playerId: string
@@ -37,6 +38,7 @@ const signalStyle = (signal?: SignalId) => ({
 } as CSSProperties)
 
 export function LaboratoryPanel({
+  privateResults = false,
   journal,
   mySamples,
   playerId,
@@ -172,7 +174,7 @@ export function LaboratoryPanel({
                   <Typography as="span" variant="bodySmMedium" className={styles.laboratoryModeBenefit}>
                     {t('tender.lab.mode.deepBenefit')}
                   </Typography>
-                  <Typography as="span" variant="caption">{t('tender.lab.mode.deepOutcome')}</Typography>
+                  <Typography as="span" variant="caption">{t(privateResults ? 'rooms.simple.labDeep' : 'tender.lab.mode.deepOutcome')}</Typography>
                 </button>
                 <button
                   type="button"
@@ -188,7 +190,7 @@ export function LaboratoryPanel({
                   <Typography as="span" variant="bodySmMedium" className={styles.laboratoryModeBenefit}>
                     {t('tender.lab.mode.broadBenefit')}
                   </Typography>
-                  <Typography as="span" variant="caption">{t('tender.lab.mode.broadOutcome')}</Typography>
+                  <Typography as="span" variant="caption">{t(privateResults ? 'rooms.simple.labBroad' : 'tender.lab.mode.broadOutcome')}</Typography>
                 </button>
               </div>
             </div>
@@ -309,7 +311,7 @@ export function LaboratoryPanel({
               <Typography as="strong" variant="bodySmMedium">
                 {mode === null
                   ? t('tender.lab.mode.choose')
-                  : t(`tender.lab.protocol.${mode === 'deep' ? 'continuous' : 'impulse'}`)}
+                  : privateResults && mode !== 'deep' ? t('rooms.simple.labImpulse') : t(`tender.lab.protocol.${mode === 'deep' ? 'continuous' : 'impulse'}`)}
               </Typography>
             </span>
           </div>

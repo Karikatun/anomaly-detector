@@ -152,6 +152,16 @@ The integration and Docker smoke runners refuse database names that do not end w
 
 The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created. The image remains under `anomaly-detector-backend:smoke` long enough for the following Trivy image scan.
 
+Обе команды Trivy хранят общий кэш вне репозитория: в
+`~/Library/Caches/anomaly-detector/trivy` на macOS и
+`~/.cache/anomaly-detector/trivy` в остальных окружениях. `--dry-run` показывает
+Docker-команду без создания каталога. Если кэша нет, Trivy скачает необходимые
+базы при следующей проверке. При переносе сохраняйте весь каталог, включая
+`db/trivy.db` и `db/metadata.json`, и не объединяйте разные версии кэша. Для
+отката к прежнему расположению остановите сканирование, верните предыдущую
+версию скрипта и перенесите каталог обратно в `.scratch/security/trivy-cache`,
+только если этот путь свободен.
+
 Operational metrics use focused unit tests for Prometheus formatting, bounded
 labels, `5xx` observation through the error handler, worker staleness, reconnect
 classification and mail transitions. Tender aggregate counts are also exercised
@@ -339,3 +349,38 @@ For testing questions, consult the current upstream documentation linked here fi
 Воспроизводимые измерения стратегий и ограниченный PostgreSQL worker-стенд
 описаны в [приёмке ботов](BOTS_BENCHMARK.md). Это отдельные локальные измерения;
 они не подменяют человеческую приёмку и проверку реальных устройств.
+
+## Прогресс обучения и совместимость сценариев
+
+Новая граница `GET/PUT /api/profile/tutorial/progress` проверяется вместе со
+старыми строгими legacy-маршрутами в `profile.integration.test.ts` и общими
+контрактами в `packages/contracts/src/profile.test.ts`. PostgreSQL-сценарии
+включают неизвестную дату legacy-зачёта, отдельное фактическое завершение,
+прямое завершение дополнительного урока без базового зачёта, повтор и конкурентную запись обоих уроков через разные
+экземпляры приложения. Проверяются actor из сессии, отклонение неподдерживаемой
+версии и лишних полей, общий бюджет мутаций и доступность чтения после его
+исчерпания.
+
+`auth.integration.test.ts` проверяет гонку нового прогресса с удалением аккаунта
+и восстановительную очистку ранее анонимизированной записи. Гонка синхронизируется
+по фактическому ожиданию PostgreSQL advisory lock для каждого урока. Состояние после удаления
+проверяется и на уровне хранилища: ответ `401` сам по себе не доказывает удаление
+приватных записей. Эти файлы уже входят в штатный
+`bun run test:backend:integration`; отдельный ручной список не заменяет runner.
+
+`scripts/tutorial-additional-compatibility.test.ts` входит в обычный
+`bun run test:tooling`. Корневой тест сравнивает локальный дополнительный сценарий
+с действующими правилами и настоящими командами Tender на явно подготовленных
+одинаковых контрольных точках: Deep/Broad, новая сертификация, цена Corporate
+Review, резервирование и повтор подачи после отказа, расход доказательств и
+сертификаций, допуск к Финальному контракту и отдельная оценка модели до 21.
+Это проверка совместимости контрольных точек; она не означает прохождение пяти
+реальных серверных раундов или человеческую приёмку. Приложения не импортируют
+код друг друга: сравнение находится на корневой тестовой границе.
+
+Клиентские проверки #78 отдельно доказывают самостоятельный цикл, гостевой
+перенос, восстановление и переход к первому принятому сервером simple-раунду.
+Сохранённый прогресс и автоматизированный сценарий не подтверждают понимание
+человеком или длительность урока; человеческое наблюдение остаётся отдельной
+проверкой. Новое обучение и legacy-зачёт не должны отправлять
+`tutorial_complete` за новый урок или добавлять события аналитики.

@@ -28,9 +28,9 @@ async function registerWithAccessToken(page: Page) {
     response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/auth/register')
   await registerBrowserUser(page, 'Хост бота E2E', 'room-bot-host')
   const response = await registered
-  const payload = await response.json() as { accessToken?: unknown }
-  if (!response.ok() || typeof payload.accessToken !== 'string') throw new Error('Registration did not return an access token')
-  return { accessToken: payload.accessToken, apiOrigin: new URL(response.url()).origin }
+  const payload = await response.json() as { accessToken?: unknown; user?: { id?: unknown } }
+  if (!response.ok() || typeof payload.accessToken !== 'string' || typeof payload.user?.id !== 'string') throw new Error('Registration did not return an access token and user id')
+  return { accessToken: payload.accessToken, apiOrigin: new URL(response.url()).origin, id: payload.user.id }
 }
 
 async function sendHumanCommand(request: APIRequestContext, apiOrigin: string, accessToken: string, tenderId: string, command: Record<string, unknown>) {
@@ -50,9 +50,11 @@ async function sendHumanCommand(request: APIRequestContext, apiOrigin: string, a
 }
 
 for (const scenario of [
-  { difficulty: 'easy' as const, label: 'Бот · лёгкий', screenshot: 'easy' },
-  { difficulty: 'hard' as const, label: 'Бот · сложный', screenshot: 'hard' },
-]) test(`host completes five real-worker rounds with a ${scenario.difficulty} server bot`, async ({ page }) => {
+  { mode: 'standard', rounds: 5, difficulty: 'easy' as const, label: 'Бот · лёгкий', screenshot: 'easy' },
+  { mode: 'simple', rounds: 3, difficulty: 'easy' as const, label: 'Бот · лёгкий', screenshot: 'simple-easy' },
+  { mode: 'simple', rounds: 3, difficulty: 'hard' as const, label: 'Бот · сложный', screenshot: 'simple-hard' },
+  { mode: 'standard', rounds: 5, difficulty: 'hard' as const, label: 'Бот · сложный', screenshot: 'hard' },
+]) test(`host completes ${scenario.rounds} real-worker rounds in ${scenario.mode} with a ${scenario.difficulty} server bot`, async ({ page }) => {
   test.setTimeout(180_000)
   const initialBotLabel = 'Бот · лёгкий'
   await page.setViewportSize({ width: 1440, height: 900 })
@@ -64,6 +66,8 @@ for (const scenario of [
   const allowBots = dialog.getByRole('checkbox', { name: 'Возможность добавить ботов' })
   await expect(allowBots).not.toBeChecked()
   await allowBots.check()
+  await dialog.getByLabel('Режим игры').selectOption(scenario.mode)
+  await expect(allowBots).toBeChecked()
   await page.getByRole('button', { name: 'Создать команду' }).click()
   await expect(page).toHaveURL(/\/rooms\/[0-9a-f-]{36}$/)
   await expect(page.getByRole('heading', { name: 'Лобби' })).toBeVisible()
@@ -160,6 +164,8 @@ for (const scenario of [
   const humanPlayerId = initialView.players.find((player) => !player.bot)?.playerId
   if (!humanPlayerId) throw new Error('Tender view has no human participant')
   await expect(page.getByText(scenario.label, { exact: true }).filter({ visible: true }).first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: '1. Выбор слота доступа' })).toBeVisible()
+  await expect(page.getByText('На связи', { exact: true })).toBeVisible()
 
   if (scenario.difficulty === 'easy') {
     await page.context().setOffline(true)
@@ -223,12 +229,12 @@ for (const scenario of [
     if (view.phase === 'final-scientific-model' && !human.finalScientificModelSubmitted) {
       await sendHumanCommand(page.request, session.apiOrigin, session.accessToken, tenderId, {
         ...base, type: 'submit-scientific-model',
-        scientificModel: { signals: { [view.knownSignals[0]!]: { fieldType: 'inertial' } } },
+        scientificModel: { signals: { [view.knownSignals[0]!]: scenario.mode === 'simple' ? { fieldType: 'inertial', polarity: 'positive' } : { fieldType: 'inertial' } } },
       })
     }
     return false
   }, { timeout: 120_000, intervals: [1_000] }).toBe(true)
-  expect([...observedRounds].sort()).toEqual([1, 2, 3, 4, 5])
+  expect([...observedRounds].sort()).toEqual(Array.from({ length: scenario.rounds }, (_, index) => index + 1))
   await expect(page.locator('#completed-tender-heading')).toBeVisible()
   await capture(page, `completed-bot-${scenario.screenshot}-390x844`)
   await page.goto('/')
@@ -237,6 +243,68 @@ for (const scenario of [
   await page.getByRole('button', { name: 'Назад', exact: true }).click()
   await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
+})
+
+test('два игрока и бот завершают простую партию', async ({ browser, page }) => {
+  test.setTimeout(180_000)
+  const host = await registerWithAccessToken(page)
+  const guestContext = await browser.newContext({ baseURL: new URL(page.url()).origin })
+  const guestPage = await guestContext.newPage()
+  try {
+    const guest = await registerWithAccessToken(guestPage)
+    await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Режим игры').selectOption('simple')
+    await dialog.getByLabel('Количество игроков').selectOption('3')
+    await dialog.getByRole('checkbox', { name: 'Возможность добавить ботов' }).check()
+    await dialog.getByRole('button', { name: 'Создать команду' }).click()
+    const code = (await page.getByTestId('room-join-code').textContent())?.trim()
+    if (!code) throw new Error('Нет кода комнаты')
+    await guestPage.getByRole('button', { name: 'ВОЙТИ ПО КОДУ' }).click()
+    await guestPage.getByLabel('Код комнаты').fill(code)
+    await guestPage.getByRole('button', { name: 'Войти по коду' }).click()
+    await expect(page.getByRole('button', { name: 'Добавить лёгкого бота' })).toHaveCount(1)
+    await page.getByRole('button', { name: 'Добавить лёгкого бота' }).click()
+    await guestPage.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Готов', exact: true }).click()
+    await page.getByRole('button', { name: 'Начать игру' }).click()
+    await expect(page).toHaveURL(/\/tenders\/[0-9a-f-]{36}$/)
+    const tenderId = page.url().split('/').at(-1)!
+    const read = async (session: typeof host) => {
+      const response = await page.request.get(`${session.apiOrigin}/api/tenders/${tenderId}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      })
+      expect(response.ok()).toBe(true)
+      return tenderViewSchema.parse(await response.json())
+    }
+    const initial = await read(host)
+    expect(initial.players.filter((player) => !player.bot)).toHaveLength(2)
+    expect(initial.players.filter((player) => player.bot)).toHaveLength(1)
+    const rounds = new Set<number>()
+    await expect.poll(async () => {
+      const view = await read(host)
+      rounds.add(view.round)
+      if (view.phase === 'complete') return true
+      for (const session of [host, guest]) {
+        const current = await read(session)
+        const human = current.players.find((player) => player.playerId === session.id)!
+        let command: Record<string, unknown> | undefined
+        if (current.phase === 'access-slot-selection' && human.requestedAccessSlot === undefined)
+          command = { type: 'request-access-slot', slot: 6 }
+        if (current.phase === 'power-allocation' && !human.powerAllocationConfirmed)
+          command = { type: 'allocate-power', allocation: { reconnaissance: 0, laboratory: 0, modelAnalysis: 0, contracts: 0, reserve: 4 } }
+        if (current.phase === 'final-scientific-model' && !human.finalScientificModelSubmitted)
+          command = { type: 'submit-scientific-model', scientificModel: { signals: { [current.knownSignals[0]!]: { fieldType: 'inertial', polarity: 'positive' } } } }
+        if (command) await sendHumanCommand(page.request, session.apiOrigin, session.accessToken, tenderId, { ...command, actorId: session.id })
+      }
+      return false
+    }, { timeout: 120_000, intervals: [1_000] }).toBe(true)
+    expect([...rounds].sort()).toEqual([1, 2, 3])
+    await expect(page.locator('#completed-tender-heading')).toBeVisible()
+    await expect(guestPage.locator('#completed-tender-heading')).toBeVisible()
+  } finally {
+    await guestContext.close()
+  }
 })
 
 test('host can manage three bots without losing mobile selector access', async ({ page }) => {

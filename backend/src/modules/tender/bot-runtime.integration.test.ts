@@ -53,7 +53,7 @@ async function runWorker(input: { mode: 'none' | 'exitbeforecommit' | 'exitafter
   }
 }
 
-maybeDescribe('Tender bot runtime PostgreSQL recovery', () => {
+for (const mode of ['standard', 'simple'] as const) maybeDescribe(`Tender bot runtime PostgreSQL recovery: ${mode}`, () => {
   if (!databaseUrl) return
   const prisma = createPrisma(databaseUrl)
 
@@ -75,10 +75,11 @@ maybeDescribe('Tender bot runtime PostgreSQL recovery', () => {
     const human = await createHuman(`runtime-human-${crypto.randomUUID()}`)
     const tender = createTenderModule({ store: createPrismaTenderStore(prisma, accountLifecycleSecret) })
     const created = await tender.createTender({
+      mode,
       players: [
         { id: human.id, tiePriority: 1 },
         ...Array.from({ length: botCount }, (_, index) => ({
-          bot: { difficulty: 'easy' as const, strategyVersion: 'bot-v2' as const },
+          bot: { difficulty: 'easy' as const, strategyVersion: mode === 'simple' ? 'bot-simple-v1' as const : 'bot-v2' as const },
           id: `bot-${index + 1}`,
           tiePriority: index + 2,
         })),
@@ -200,10 +201,11 @@ maybeDescribe('Tender bot runtime PostgreSQL recovery', () => {
     ])
     const tender = createTenderModule({ store: createPrismaTenderStore(prisma, accountLifecycleSecret) })
     const { tenderId } = await tender.createTender({
+      mode,
       players: [
         { id: firstHuman.id, tiePriority: 1 },
         { id: secondHuman.id, tiePriority: 2 },
-        { bot: { difficulty: 'easy', strategyVersion: 'bot-v2' }, id: 'bot-1', tiePriority: 3 },
+        { bot: { difficulty: 'easy', strategyVersion: mode === 'simple' ? 'bot-simple-v1' : 'bot-v2' }, id: 'bot-1', tiePriority: 3 },
       ],
     })
     await tender.execute({ actorId: firstHuman.id, commandId: 'forfeit-one-human', tenderId, type: 'forfeit-tender' })
@@ -261,9 +263,9 @@ maybeDescribe('Tender bot runtime PostgreSQL recovery', () => {
   test('keeps a mixed Tender active after pseudonymizing only one of two humans', async () => {
     const [first, second] = await Promise.all([createHuman('deleted-one-a'), createHuman('deleted-one-b')])
     const tender = createTenderModule({ store: createPrismaTenderStore(prisma, accountLifecycleSecret) })
-    const { tenderId } = await tender.createTender({ players: [
+    const { tenderId } = await tender.createTender({ mode, players: [
       { id: first.id, tiePriority: 1 }, { id: second.id, tiePriority: 2 },
-      { bot: { difficulty: 'easy', strategyVersion: 'bot-v2' }, id: 'bot-1', tiePriority: 3 },
+      { bot: { difficulty: 'easy', strategyVersion: mode === 'simple' ? 'bot-simple-v1' : 'bot-v2' }, id: 'bot-1', tiePriority: 3 },
     ] })
     await prisma.$transaction((transaction) => anonymizePrismaTenderParticipant(transaction, first.id))
 

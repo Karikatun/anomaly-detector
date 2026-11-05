@@ -45,3 +45,15 @@
     margin-top: calc(3rem + var(--space-2));
   }
 }
+
+
+/* Additional practice uses a normal document, without the base lesson's guided overlay.
+   Keep the complete workspace reachable when enlarged text makes the header tall. */
+.board[data-tutorial-document-flow] > header,
+.board[data-tutorial-document-flow] [data-tutorial-action-container],
+.board[data-tutorial-document-flow] footer:has([data-tutorial-final-submit]) {
+  position: static;
+}
+.board[data-tutorial-document-flow] {
+  padding-bottom: var(--space-4) !important;
+}

@@ -3,9 +3,13 @@ import {
   recoveryCodeSetResponseSchema,
   startRecoveryCodeReissueResponseSchema,
   profileStatisticsSchema,
+  profileStatisticsByModeSchema,
   recoveryEmailReplacementCommandResponseSchema,
   tutorialProgressSchema,
+  tutorialLessonsProgressSchema,
+  tutorialProgressCommandSchema,
   type ProfileStatistics,
+  type ProfileStatisticsByMode,
   type AccountProtectionResponse,
   type ConfirmRecoveryCodeReissueRequest,
   type ConfirmRecoveryEmailReplacementRequest,
@@ -18,6 +22,8 @@ import {
   type StartRecoveryCodeReissueRequest,
   type StartRecoveryCodeReissueResponse,
   type TutorialProgress,
+  type TutorialLessonsProgress,
+  type TutorialProgressCommand,
 } from '@anomaly-detector/contracts'
 
 import type { AuthenticatedTransport } from '@/platform/api'
@@ -31,6 +37,10 @@ export class ProfileApi {
 
   getStatistics(): Promise<ProfileStatistics> {
     return this.transport.request('/api/profile/statistics', profileStatisticsSchema)
+  }
+
+  getStatisticsByMode(): Promise<ProfileStatisticsByMode> {
+    return this.transport.request('/api/profile/statistics/by-mode', profileStatisticsByModeSchema)
   }
 
   getAccountProtection(): Promise<AccountProtectionResponse> {
@@ -140,6 +150,16 @@ export class ProfileApi {
 
   getTutorialProgress(): Promise<TutorialProgress> {
     return this.transport.request('/api/profile/tutorial', tutorialProgressSchema)
+  }
+
+  getLessonsProgress(): Promise<TutorialLessonsProgress> {
+    return this.transport.request('/api/profile/tutorial/progress', tutorialLessonsProgressSchema)
+  }
+
+  recordTutorialProgress(command: TutorialProgressCommand): Promise<TutorialLessonsProgress> {
+    return this.transport.request('/api/profile/tutorial/progress', tutorialLessonsProgressSchema, {
+      method: 'PUT', body: tutorialProgressCommandSchema.parse(command),
+    })
   }
 
   completeTutorial(): Promise<TutorialProgress> {

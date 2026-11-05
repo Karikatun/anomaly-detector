@@ -50,7 +50,15 @@
   color: color-mix(in srgb, var(--warning) 82%, var(--foreground));
 }
 .accountProtectionAction { width: fit-content; white-space: normal; }
-.completeActions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.completeActions { display: flex; min-width: 0; flex-wrap: wrap; gap: .75rem; }
+.completeActions > * {
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 2.75rem;
+  padding-block: .75rem;
+  white-space: normal;
+}
 .saveError { display: grid; gap: .75rem; padding: .9rem; border: 1px solid rgba(248, 113, 113, .5); border-radius: .6rem; }
 
 /* Required confirmations cover the phase header; reading workspaces keep
@@ -157,6 +165,13 @@
   :global(body:has([data-testid='tutorial-contracts-trigger'][aria-expanded='true']) [data-testid='tutorial-contracts-dialog']),
   :global(body:has([data-tutorial-step='interpretation-open']) [data-tutorial-journal]) {
     right: 22rem !important;
+  }
+}
+
+@media (min-width: 64rem) and (max-width: 68rem) {
+  /* Keep the sticky Journal entry above the coach when Thesis feedback grows. */
+  .coachCard:is([data-tutorial-step='round-1-thesis'], [data-tutorial-step='round-2-thesis']) {
+    max-height: 40dvh;
   }
 }
 

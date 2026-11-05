@@ -1,4 +1,4 @@
-import type { TutorialProgress } from '@anomaly-detector/contracts'
+import type { TutorialLessonsProgress, TutorialProgress, TutorialProgressCommand } from '@anomaly-detector/contracts'
 
 import type { TutorialProgressRepository } from './ports'
 
@@ -13,6 +13,18 @@ export class TutorialProgressService {
     const completedAt = await this.repository.complete(userId, new Date())
     if (!completedAt) throw new TutorialProgressFailure('account_unavailable')
     return serialize(completedAt)
+  }
+
+  async readLessons(userId: string): Promise<TutorialLessonsProgress> {
+    const progress = await this.repository.readLessons(userId)
+    if (!progress) throw new TutorialProgressFailure('account_unavailable')
+    return progress
+  }
+
+  async recordLesson(userId: string, command: TutorialProgressCommand): Promise<TutorialLessonsProgress> {
+    const progress = await this.repository.recordLesson(userId, command, new Date())
+    if (!progress) throw new TutorialProgressFailure('account_unavailable')
+    return progress
   }
 }
 

@@ -8,6 +8,8 @@ import { TutorialProgressService } from './application/tutorial-progress-service
 import { createPrismaTutorialProgressRepository } from './infrastructure/prisma-tutorial-progress-repository'
 import { createProfileRoutes } from './transport/routes'
 
+export { eraseTutorialProgressInTransaction } from './infrastructure/prisma-tutorial-progress-repository'
+
 export function createProfileModule(input: {
   accountLifecycleSecret: string
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>

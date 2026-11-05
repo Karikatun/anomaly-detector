@@ -3,6 +3,7 @@ import type { FieldType, Polarity, SignalId, TenderCommand, TenderView } from '@
 import { candidateConsensus, candidatesFromView, chooseLaboratoryObservation, type LaboratoryObservation } from './candidates'
 import { chooseHardFinalModel, chooseHardLaboratoryPair, chooseHardThesis } from './hard'
 import { signalIds } from '../../domain/anomaly-configuration'
+import { chooseSimpleBotCommand } from './simple'
 
 export type BotDifficulty = 'easy' | 'hard'
 
@@ -11,7 +12,7 @@ export type ChooseBotCommandOptions = {
   difficulty: BotDifficulty
   playerId: string
   seed: string
-  strategyVersion?: 'bot-v1' | 'bot-v2'
+  strategyVersion?: 'bot-v1' | 'bot-v2' | 'bot-simple-v1'
 }
 
 const fieldTypes: FieldType[] = ['inertial', 'electromagnetic', 'phase']
@@ -384,7 +385,10 @@ const chooseBotHardCommand = (view: TenderView, options: ChooseBotCommandOptions
 }
 
 export const chooseBotCommand = (view: TenderView, options: ChooseBotCommandOptions): TenderCommand | null =>
-  options.strategyVersion === 'bot-v2' && options.difficulty === 'hard'
+  options.strategyVersion === 'bot-simple-v1'
+    ? chooseSimpleBotCommand(view, options)
+    : view.game?.mode === 'simple' ? null
+    : options.strategyVersion === 'bot-v2' && options.difficulty === 'hard'
     ? chooseBotHardCommand(view, options)
     : options.strategyVersion === 'bot-v2'
     ? chooseBotV2Command(view, options)

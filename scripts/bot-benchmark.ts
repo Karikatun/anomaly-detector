@@ -86,6 +86,7 @@ const mean = (values: number[]) => values.reduce((total, value) => total + value
 const studentTCritical95 = (degreesOfFreedom: number) => ({
   1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447,
   7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179,
+  15: 2.131,
 }[degreesOfFreedom] ?? 1.96)
 
 export const ci95 = (values: number[]) => {
@@ -375,4 +376,11 @@ async function main() {
   if (qualityGate && !qualityGate.accepted) process.exitCode = 1
 }
 
-if (import.meta.main) await main()
+if (import.meta.main) {
+  const modeAt = process.argv.indexOf('--mode')
+  if (modeAt !== -1 && process.argv[modeAt + 1] === 'simple') await (await import('./simple-bot-benchmark')).runSimpleBenchmark()
+  else {
+    if (modeAt !== -1 && process.argv[modeAt + 1] !== 'standard') throw new Error('Use --mode standard or simple')
+    await main()
+  }
+}

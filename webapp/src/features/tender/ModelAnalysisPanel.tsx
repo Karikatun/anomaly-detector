@@ -41,6 +41,8 @@ import type { WorkingModelDraft } from './use-working-model-draft'
 import { tenderRulesetPolicy } from './ruleset-policy'
 
 type ModelAnalysisPanelProps = {
+  simpleScoring?: boolean
+  budget?: number
   knownSignals: SignalId[]
   maxTheses: number
   model: WorkingModel
@@ -67,6 +69,8 @@ type ModelAnalysisPanelProps = {
 }
 
 export function ModelAnalysisPanel({
+  simpleScoring = false,
+  budget,
   knownSignals,
   maxTheses,
   model,
@@ -104,6 +108,9 @@ export function ModelAnalysisPanel({
 
   return (
     <section className={`${styles.panel} ${styles.analysisPanel}`} aria-labelledby="analysis-heading">
+      {simpleScoring && budget === 0 && disabled && currentRoundPrivateTheses.length === 1 && !currentRoundPrivateTheses[0].fullyCorrect && (
+        <Typography role="status" variant="bodySm">{t('rooms.simple.analysisBurned')}</Typography>
+      )}
       <div className={styles.analysisSplit}>
         <section className={`${styles.surface} ${styles.analysisModel}`}>
           <div className={styles.sectionHeader}>
@@ -184,7 +191,7 @@ export function ModelAnalysisPanel({
             <HugeiconsIcon icon={Alert01Icon} strokeWidth={1.7} aria-hidden="true" />
             <Typography variant="bodySm">
               {isPrivateAnalysis
-                ? t('tender.analysis.privateWarning')
+                ? t(simpleScoring ? 'rooms.simple.analysisWarning' : 'tender.analysis.privateWarning')
                 : t('tender.analysis.publicWarning')}
             </Typography>
           </div>
