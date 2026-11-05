@@ -1480,6 +1480,7 @@ for (const layout of [
   await expect(page.getByTestId('floater').getByRole('alert')).toContainText('Полярность неверна.')
   const entry = page.getByTestId('tutorial-research-trigger')
   // A real click must reveal the scientific feedback even after the coach grows.
+  if (layout.width === 1024) await expectTutorialActionAvailable(page, entry)
   await entry.click()
   await journal.getByRole('tab', { name: 'Данные исследований', exact: true }).click()
   await expect(journal.locator('[data-private-thesis]')).toHaveCount(1)

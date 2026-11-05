@@ -168,6 +168,13 @@
   }
 }
 
+@media (min-width: 64rem) and (max-width: 68rem) {
+  /* Keep the sticky Journal entry above the coach when Thesis feedback grows. */
+  .coachCard:is([data-tutorial-step='round-1-thesis'], [data-tutorial-step='round-2-thesis']) {
+    max-height: 40dvh;
+  }
+}
+
 @media (min-width: 68.001rem) and (max-width: 90rem) {
   :global(body:has([data-tutorial-step='final-model']) [data-tutorial-final-submit]) {
     width: calc(100% - 2rem);

@@ -38,7 +38,7 @@ test('main-menu lesson chooser closes to its opener without starting a lesson or
 })
 
 
-test('additional lesson opens its prepared standard contract plan directly', async ({ page }) => {
+test('additional lesson opens its prepared standard contract plan directly', async ({ page }, testInfo) => {
   page.setDefaultTimeout(15_000)
   await page.goto('/learn?lesson=additional')
   await expect(page.getByRole('heading', { name: 'Дополнительное обучение: ресурсы и контракты', exact: true })).toBeVisible()
@@ -49,18 +49,18 @@ test('additional lesson opens its prepared standard contract plan directly', asy
   await expect(plan).toBeVisible()
   await expect(plan).toContainText('Aster')
   await expect(plan).toContainText('научный')
-  await page.screenshot({ path: '/private/tmp/codex-issue79-frontend-20261103/additional-plan-first.png', fullPage: true })
+  await page.screenshot({ path: testInfo.outputPath('additional-plan-first.png'), fullPage: true })
   await page.keyboard.press('Escape')
   await expect(plan).toBeHidden()
   await expect(page.getByRole('button', { name: /^Контракты этого раунда/ })).toBeFocused()
 })
 
 
-test('additional prepared resources lead through review to one accepted contract', async ({ page }) => {
+test('additional prepared resources lead through review to one accepted contract', async ({ page }, testInfo) => {
   page.setDefaultTimeout(15_000)
   await reachAdditionalContracts(page, async (step) => {
     if (step === 'main-power') await expect(page.getByText('3 M', { exact: false }).first()).toBeVisible()
-    if (step === 'main-contracts') await page.screenshot({ path: '/private/tmp/codex-issue79-frontend-20261103/additional-contracts-first.png', fullPage: true })
+    if (step === 'main-contracts') await page.screenshot({ path: testInfo.outputPath('additional-contracts-first.png'), fullPage: true })
   })
   await confirmAdditionalContract(page, 'lesson-light')
   await expect(page.locator('[data-additional-step="contract-result"]')).toBeVisible()
