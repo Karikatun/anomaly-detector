@@ -549,6 +549,57 @@ maybeDescribe('auth API integration', () => {
     })).toBe(1)
   })
 
+  test('bounds the Recovery Email resend delay when request timestamps are out of transaction order', async () => {
+    const startAt = new Date('2026-11-03T08:00:00.000Z')
+    const user = await prisma.user.create({
+      data: { login: 'recovery-resend-order', passwordHash: 'stored-password-hash' },
+    })
+    const session = await prisma.authSession.create({
+      data: {
+        createdAt: startAt,
+        expiresAt: new Date(startAt.getTime() + 3_600_000),
+        refreshTokenFamilyHash: 'resend-order-family-hash',
+        refreshTokenHash: 'resend-order-refresh-hash',
+        userId: user.id,
+      },
+    })
+    const firstRepository = createPrismaAuthRepository(prisma, env.JWT_SECRET)
+    const secondRepository = createPrismaAuthRepository(prisma, env.JWT_SECRET)
+    const resendInput = (now: Date) => ({
+      expiresAt: new Date(now.getTime() + 15 * 60_000),
+      now,
+      userId: user.id,
+    })
+    await firstRepository.startRecoveryEmail({
+      ...resendInput(startAt),
+      canonicalKey: 'resend-order@mail.ru',
+      expectedPasswordHash: 'stored-password-hash',
+      policyVersion: 1,
+      policyBudgetReserved: true,
+      providerValue: 'resend-order@mail.ru',
+      sessionId: session.id,
+    })
+    const challenge = { where: { userId: user.id }, select: { messageId: true } } as const
+    const initial = await prisma.recoveryEmailChallenge.findUniqueOrThrow(challenge)
+    const earlier = resendInput(new Date(startAt.getTime() + 60_000))
+    const later = resendInput(new Date(earlier.now.getTime() + 1))
+
+    // Replay the serial order where the later timestamp acquires the lock first.
+    await secondRepository.resendRecoveryEmail(later)
+    const accepted = await prisma.recoveryEmailChallenge.findUniqueOrThrow(challenge)
+    expect(accepted.messageId).not.toBe(initial.messageId)
+    const failure = await firstRepository.resendRecoveryEmail(earlier).catch((error: unknown) => error)
+    expect(failure).toHaveProperty('kind', 'recovery_email_limited')
+    expect(failure).toHaveProperty('retryAfterSeconds', 60)
+
+    expect(await prisma.recoveryEmailChallenge.findUniqueOrThrow(challenge)).toEqual(accepted)
+    expect(await prisma.mailOutboxMessage.count()).toBe(2)
+    expect(await prisma.mailOutboxMessage.findMany({
+      where: { state: 'queued' },
+      select: { messageId: true },
+    })).toEqual([accepted])
+  })
+
   test('invalidates the old code on resend and confirms one cooling-off Recovery Email', async () => {
     await seedApprovedMailService(prisma, 'mail.ru')
     const register = await app.request('/api/auth/token/register', {

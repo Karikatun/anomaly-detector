@@ -2691,10 +2691,12 @@ async function consumeRecoveryEmailQuota(
   const windowStartedAt = windowExpired ? input.now : existing.windowStartedAt
   const expiresAt = new Date(windowStartedAt.getTime() + input.windowMs)
   if (count > input.limit) {
+    // Another transaction may have opened this window after input.now was sampled.
+    const retryFrom = input.now < windowStartedAt ? windowStartedAt : input.now
     throw new AuthFailure(
       'recovery_email_limited',
       'Recovery Email request is temporarily unavailable',
-      retryAfterSeconds(expiresAt, input.now),
+      retryAfterSeconds(expiresAt, retryFrom),
     )
   }
   await tx.authAbuseBucket.upsert({
