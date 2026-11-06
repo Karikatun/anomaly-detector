@@ -76,14 +76,14 @@ const taskKeys: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, Translati
   'round-2-contracts-intro': 'tutorial.step.contractsIntro',
   'round-2-contract-reserve': 'tutorial.step.contractReserve',
   'round-2-contract-bid': 'tutorial.step.contractBid',
-  'final-model-intro': 'tutorial.step.finalModelIntro',
-  'final-model': 'tutorial.step.finalModel',
   'round-2-thesis-result': 'tutorial.base.round2Checked',
   'round-3-access': 'tutorial.base.round3Access',
   'round-3-power': 'tutorial.base.round3Power',
   'round-3-recon': 'tutorial.base.round3Recon',
   'round-3-lab': 'tutorial.base.round3Lab',
   'round-3-thesis': 'tutorial.base.round3Thesis',
+  'final-model-intro': 'tutorial.step.finalModelIntro',
+  'final-model': 'tutorial.step.finalModel',
 }
 
 const mobileTaskKeys: Partial<Record<Exclude<TutorialStep, 'complete' | 'prologue'>, TranslationKey>> = {
