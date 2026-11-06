@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -6,12 +6,14 @@ import { Typography } from '@/components/ui/typography'
 import { TutorialTenderBoard } from '@/features/tender/public/tutorial-board'
 import { useI18n, type TranslationKey } from '@/platform/i18n'
 import { advanceAdditionalTutorial, additionalTutorialView, createAdditionalTutorialState, type AdditionalAction, type AdditionalError, type AdditionalTutorialState } from './additional-scenario'
-import { clearTutorialSession, getTutorialStorage, saveTutorialSession } from './session'
+import { clearTutorialSession, type TutorialTimeline } from './session'
+import { useTutorialTimeline } from './use-tutorial-timeline'
 import { TutorialStateCard } from './TutorialStateCard'
 import styles from './AdditionalTutorialExperience.module.css'
 
-export function AdditionalTutorialExperience({ initialState, onExit, onComplete, renderCompletion, storageNotice, exitLabel = 'tutorial.complete.home' }: {
+export function AdditionalTutorialExperience({ initialState, initialTimeline, onExit, onComplete, renderCompletion, storageNotice, exitLabel = 'tutorial.complete.home' }: {
   initialState: AdditionalTutorialState
+  initialTimeline: TutorialTimeline<AdditionalTutorialState> | null
   onExit: () => void
   onComplete?: (state: AdditionalTutorialState, signal: AbortSignal) => Promise<void>
   renderCompletion: (restart: () => void, state: AdditionalTutorialState) => ReactNode
@@ -19,41 +21,53 @@ export function AdditionalTutorialExperience({ initialState, onExit, onComplete,
   exitLabel?: TranslationKey
 }) {
   const { t } = useI18n()
-  const [state, setState] = useState(initialState)
-  const current = useRef(initialState)
-  const mounted = useRef(true)
+  const timeline = useTutorialTimeline(initialState, initialTimeline)
+  const { state, storage, storageUnavailable } = timeline
   const [lesson, setLesson] = useState(() => new AbortController())
-  const [storage] = useState(getTutorialStorage)
-  const [storageUnavailable, setStorageUnavailable] = useState(false)
   const [error, setError] = useState<AdditionalError | null>(null)
   const [exitOpen, setExitOpen] = useState(false)
   const [boardEpoch, setBoardEpoch] = useState(0)
+  const [focusEpoch, setFocusEpoch] = useState(0)
   const [laboratoryMode, setLaboratoryMode] = useState<'broad' | 'deep'>('deep')
   const exitButton = useRef<HTMLButtonElement | null>(null)
-  useLayoutEffect(() => { current.current = state }, [state])
-  useEffect(() => {
-    mounted.current = true
-    return () => { mounted.current = false }
-  }, [])
+  const guidance = useRef<HTMLDivElement>(null)
+  const callbacksActive = () => timeline.isMounted() && !lesson.signal.aborted
+  useLayoutEffect(() => {
+    if (!focusEpoch) return
+    const frame = requestAnimationFrame(() => {
+      const target = guidance.current?.querySelector<HTMLElement>('[data-tutorial-back]:enabled') ?? guidance.current
+      target?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [focusEpoch])
+
+  const resetBoard = () => {
+    lesson.abort()
+    setLesson(new AbortController())
+    setBoardEpoch((epoch) => epoch + 1)
+    setLaboratoryMode('deep')
+    setError(null)
+  }
   const apply = async (action: AdditionalAction) => {
-    if (!mounted.current || lesson.signal.aborted) return
-    const previous = current.current
+    if (!callbacksActive()) return
+    const previous = timeline.currentState()
+    if (previous.step === 'complete') return
     const result = advanceAdditionalTutorial(previous, action)
-    current.current = result.state
-    setState(result.state)
-    if (result.state !== previous && !saveTutorialSession(storage, result.state)) setStorageUnavailable(true)
+    const reset = action.type === 'restart-checkpoint' && result.state !== previous
+    if (reset || previous.checkpointKind !== result.state.checkpointKind) resetBoard()
+    timeline.commit(result.state, reset ? 'reset' : 'advance')
     setError(result.error ?? null)
-    if (action.type === 'restart-checkpoint') {
-      lesson.abort(); setLesson(new AbortController()); setBoardEpoch((epoch) => epoch + 1)
-    }
-    if (result.state.step === 'complete' && previous.step !== 'complete') await onComplete?.(result.state, lesson.signal)
+    if (result.state.step === 'complete') await onComplete?.(result.state, lesson.signal)
     return result.error
   }
+  const back = () => {
+    if (!callbacksActive() || !timeline.back(resetBoard)) return
+    setFocusEpoch((epoch) => epoch + 1)
+  }
   const restart = () => {
-    lesson.abort(); setLesson(new AbortController())
+    resetBoard()
     clearTutorialSession(storage, state.playerId, 'additional')
-    const next = createAdditionalTutorialState(state.playerId)
-    saveTutorialSession(storage, next); setState(next); setError(null); setBoardEpoch((epoch) => epoch + 1)
+    timeline.restart(createAdditionalTutorialState(state.playerId))
   }
   if (state.step === 'complete') return renderCompletion(restart, state)
   if (state.step === 'intro') return <TutorialStateCard>
@@ -75,7 +89,7 @@ export function AdditionalTutorialExperience({ initialState, onExit, onComplete,
       || ['contracts', 'recovery-contracts', 'final-contract'].includes(state.step)
   ))
   return <>
-    <Card className={styles.guidance} data-additional-step={state.step}>
+    <Card ref={guidance} tabIndex={-1} className={styles.guidance} data-additional-step={state.step}>
       <CardHeader><CardTitle><Typography as="h1" variant="h5">{t(`tutorial.additional.scene.${state.step}.title`)}</Typography></CardTitle></CardHeader>
       <CardContent className={styles.guidanceContent}>
         <Typography>{t(state.step === 'review-thesis' && state.privateTheses.length > 0 ? 'tutorial.additional.reviewCorrection' : `tutorial.additional.scene.${state.step}.body`)}</Typography>
@@ -91,17 +105,18 @@ export function AdditionalTutorialExperience({ initialState, onExit, onComplete,
           {state.step === 'final-intro' && <Button onClick={() => void apply({ type: 'prepare-final' })}>{t('tutorial.additional.prepareFinal')}</Button>}
           {state.step === 'final-contract-result' && <Button onClick={() => void apply({ type: 'continue-additional' })}>{t('tutorial.additional.beginFinalModel')}</Button>}
           {resetAvailable && <Button variant="outline" onClick={() => void apply({ type: 'restart-checkpoint' })}>{t('tutorial.additional.resetCheckpoint')}</Button>}
+          <Button variant="outline" data-tutorial-back disabled={!timeline.canGoBack} onClick={back}>{t('tutorial.back')}</Button>
           <Button variant="ghost" ref={exitButton} onClick={() => setExitOpen(true)}>{t('tutorial.exit')}</Button>
         </div>
       </CardContent>
     </Card>
     {!information && <TutorialTenderBoard key={`${boardEpoch}:${state.checkpointKind}`} view={additionalTutorialView(state)}
       documentFlow lessonLabel="tutorial.additional.boardLabel" actionPanelPinned={false} commandError={error ? t(`tutorial.additional.error.${error}`) : null} highlight="none" interpretationRequired={state.step === 'plan'}
-      laboratoryInitialMode={laboratoryMode} onLaboratoryModeSelected={setLaboratoryMode}
+      laboratoryInitialMode={laboratoryMode} onLaboratoryModeSelected={(mode) => { if (callbacksActive()) setLaboratoryMode(mode) }}
       onCommand={async (command) => { const rejected = await apply(command); if (rejected) throw new Error(rejected) }}
       onSaveWorkingModel={async (workingModel) => (await apply({ type: 'update-working-model', workingModel })) === undefined}
       onJournalClosed={(workingModel) => void apply({ type: 'update-working-model', workingModel })}
-      onExitRequest={() => setExitOpen(true)} onContractsClosed={() => undefined} onContractsOpened={() => undefined}
+      onExitRequest={() => { if (callbacksActive()) setExitOpen(true) }} onContractsClosed={() => undefined} onContractsOpened={() => undefined}
       onDirectInterpretationOpened={() => undefined} onHelpMenuOpened={() => undefined} onInterpretationOpened={() => undefined}
       onJournalOpenChange={() => undefined} onWorkingModelOpened={() => undefined} onResearchOpened={() => undefined} onRequiredModalOpenChange={() => undefined}
     />}

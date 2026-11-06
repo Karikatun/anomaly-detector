@@ -121,3 +121,17 @@ for (const viewport of [{ width: 1440, height: 900, scale: 1 }, { width: 1024, h
     await expect(page.getByRole('link', { name: 'Создать аккаунт', exact: true })).toBeEnabled()
   })
 }
+
+
+test('additional lesson rolls back an awarded contract across reload and allows replay', async ({ page }) => {
+  page.setDefaultTimeout(15_000)
+  await reachAdditionalContracts(page)
+  await confirmAdditionalContract(page, 'lesson-light')
+  await expect(page.locator('[data-additional-step="contract-result"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  await expect(page.locator('[data-additional-step="contracts"]')).toBeVisible()
+  await page.reload()
+  await expect(page.locator('[data-additional-step="contracts"]')).toBeVisible()
+  await confirmAdditionalContract(page, 'lesson-light')
+  await expect(page.locator('[data-additional-step="contract-result"]')).toBeVisible()
+})

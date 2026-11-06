@@ -922,10 +922,10 @@ async function submitTutorialThesis(page: Page, signal: string, fieldType: strin
   await submit.click({ delay: pressDuration })
 }
 
-async function playBaseLesson(page: Page, guest: boolean, checkpoint: (expected?: string) => Promise<void> = async () => undefined, heldThesis?: 'aster' | 'cinder') {
+async function playBaseLesson(page: Page, guest: boolean, checkpoint: (expected?: string) => Promise<void> = async () => undefined, heldThesis?: 'aster') {
   let reloadedResearch = false
   const read = new Set<string>()
-  await playBaseTutorial(page, guest, false, async (expected) => {
+  await playBaseTutorial(page, guest, async (expected) => {
     const step = await page.locator('[data-tutorial-step]').count() ? await page.locator('[data-tutorial-step]').first().getAttribute('data-tutorial-step') : null
     await expect(page.getByTestId('tutorial-contracts-trigger')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Увеличить мощность: Контракты', exact: true })).toHaveCount(0)
@@ -951,27 +951,17 @@ async function playBaseLesson(page: Page, guest: boolean, checkpoint: (expected?
       await expect(journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true })).toHaveAttribute('aria-pressed', 'true')
       await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
     }
-    if (step === 'round-2-research-open' && !read.has(step)) {
-      await expect(journal).toContainText('Нестабильный срыв')
-      await expect(journal).toContainText('Личные тезисы')
-      await expect(journal).toContainText('Тип верен')
-      read.add(step)
-    }
-    if (step === 'round-2-working-model' && !read.has(step)) {
-      await expectWorkingModelLabelsReadable(journal.locator('[data-tutorial-working-model-row="cinder"]'))
-      read.add(step)
-    }
     await checkpoint(expected)
   }, heldThesis)
 }
-for (const [round, signal] of [[1, 'aster'], [2, 'cinder']] as const) {
+for (const [round, signal] of [[1, 'aster']] as const) {
   test(`tutorial accepts a held Thesis press through automatic positioning in round ${round}`, async ({ page }) => {
     test.setTimeout(120_000)
     await page.setViewportSize({ width: 390, height: 520 })
     await page.emulateMedia({ reducedMotion: 'reduce' })
     const { errors, windowErrors } = await captureRuntimeErrors(page)
     await playBaseLesson(page, true, async (expected) => {
-      if (expected === 'round-1-thesis-result' || expected === 'round-2-thesis-result') {
+      if (expected === 'round-1-thesis-result') {
         await expect(page.locator(`[data-tutorial-step="${expected}"]`)).toBeVisible()
       }
     }, signal)
@@ -1011,17 +1001,6 @@ for (const viewport of [
       'round-1-working-model': '[data-tender-journal] [data-tutorial-working-model-row="aster"] [role="group"]:not([data-options]) button:first-child',
       'round-1-thesis': thesisTarget,
       'round-1-thesis-result': '[data-testid="floater"] button:last-child',
-      'round-2-access': '[data-tutorial-access-slot="5"]',
-      'round-2-power': `[data-tutorial-power-category="laboratory"]${viewport.textScale === '200%' ? ' [role="group"]' : ''}`,
-      'round-2-lab': '[data-tutorial-lab-sample="boreal"]',
-      'round-2-research': '[data-testid="tutorial-research-trigger"]',
-      'round-2-research-open': resultTarget,
-      'round-2-working-model': '[data-tender-journal] [data-tutorial-working-model-row="cinder"] [role="group"]:not([data-options]) button:nth-child(3)',
-      'round-2-thesis': thesisTarget,
-      'round-2-thesis-result': '[data-testid="floater"] button:last-child',
-      'round-3-access': '[data-tutorial-access-slot="3"]',
-      'round-3-power': '[data-tutorial-power-category="laboratory"] [role="group"]',
-      'round-3-lab': '[data-tutorial-lab-sample="aster"]',
       'final-model': '[data-tutorial-final-submit]',
     }
     await playBaseLesson(page, true, async (expected) => {
@@ -1038,25 +1017,23 @@ for (const viewport of [
       await settleTutorialCapture(page)
       const step = await page.locator('[data-tutorial-step]').first().getAttribute('data-tutorial-step')
       if (!step || seen.has(step) || !targets[step]) return
-      if (['round-1-thesis-result', 'round-2-thesis-result'].includes(step)) {
+      if (['round-1-thesis-result'].includes(step)) {
         // These new feedback cards are reading tasks, not automatic game targets.
         // Reach Continue through the card's actual scroll before interacting.
         await scrollIntroductionTo(page, page.locator(`[data-tutorial-step="${step}"]`), page.locator(targets[step]!))
       }
-      if (step.startsWith('round-3-') || step === 'final-model') {
+      if (step === 'final-model') {
         // The independent cycle exposes all legal choices. Reach our chosen
         // action by native scrolling; it must not be positioned as an answer.
         await revealTutorialControl(page, page.locator(targets[step]!))
       }
       await expectTutorialActionAvailable(page, page.locator(targets[step]!))
-      if (['research-results-open', 'interpretation-open', 'round-1-working-model', 'round-2-research-open', 'round-2-working-model'].includes(step)) {
+      if (['research-results-open', 'interpretation-open', 'round-1-working-model'].includes(step)) {
         await expect(page.getByRole('dialog', { name: 'Журнал исследований', exact: true })).toBeVisible()
         await expect(page.locator('[data-tutorial-overlay]')).toHaveCount(0)
-      } else if (!['round-1-thesis-result', 'round-2-thesis-result'].includes(step)) {
-        // Free third-round choices and the editable final model expose a whole
-        // workspace, whereas the first two rounds spotlight one guided action.
-        const workspace = step === 'round-3-access' ? '[data-tutorial-access-options]'
-          : ['round-3-power', 'round-3-lab', 'final-model'].includes(step) ? '[data-tutorial-primary]' : targets[step]!
+      } else if (!['round-1-thesis-result'].includes(step)) {
+        // The editable final model exposes a whole workspace; guided steps spotlight one action.
+        const workspace = step === 'final-model' ? '[data-tutorial-primary]' : targets[step]!
         await expectTutorialSpotlightOnTarget(page, page.locator(workspace))
       }
       seen.add(step)
@@ -1079,33 +1056,44 @@ for (const viewport of [
   })
 }
 
+async function recoverBaseThesisAttempt(page: Page) {
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
+  await expect(journal).toBeVisible()
+  await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
+  await journal.getByRole('button', { name: 'Aster: гипотеза, полярность Положительная', exact: true }).click()
+  await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+  await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
+}
+
 test('tutorial retains wrong Thesis feedback after a completed same-step working-model save', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
   const { errors, windowErrors } = await captureRuntimeErrors(page)
   let checkedFeedback = false
   await playBaseLesson(page, true, async (expected) => {
-    if (expected !== 'round-2-thesis' || checkedFeedback) return
+    if (expected !== 'round-1-thesis' || checkedFeedback) return
     checkedFeedback = true
-    const step = page.locator('[data-tutorial-step="round-2-thesis"]')
+    const step = page.locator('[data-tutorial-step="round-1-thesis"]')
     const feedback = page.getByTestId('floater').getByRole('alert')
-    await submitTutorialThesis(page, 'cinder', 'inertial', 'positive')
+    await submitTutorialThesis(page, 'aster', 'phase', 'positive')
     await expect(feedback).toContainText('Тип поля неверен.')
     await page.getByTestId('tutorial-research-trigger').click()
     const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
     await journal.getByRole('tab', { name: 'Рабочая модель', exact: true }).click()
     const persistedFieldType = () => page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? '{}')
-      .workingModel?.signals?.cinder?.hypothesis?.fieldType, baseGuestSessionKey)
-    await expect.poll(persistedFieldType).toBe('phase')
-    await journal.getByRole('button', { name: 'Cinder: гипотеза, тип поля Инерционное', exact: true }).click()
-    // Wait for the real debounce while Journal remains open: this is a neutral draft save.
+      .state?.workingModel?.signals?.aster?.hypothesis?.fieldType, baseGuestSessionKey)
     await expect.poll(persistedFieldType).toBe('inertial')
-    await journal.getByRole('button', { name: 'Cinder: гипотеза, тип поля Фазовое', exact: true }).click()
+    await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Фазовое', exact: true }).click()
+    // Wait for the real debounce while Journal remains open: this is a neutral draft save.
     await expect.poll(persistedFieldType).toBe('phase')
+    await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
+    await expect.poll(persistedFieldType).toBe('inertial')
     await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
     await expect(journal).toBeHidden()
     await expect(step).toBeVisible()
     await expect(feedback).toContainText('Тип поля неверен.')
+    await recoverBaseThesisAttempt(page)
   })
   expect(checkedFeedback).toBe(true)
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
@@ -1121,10 +1109,10 @@ test('200% tutorial keeps the secondary Journal accessible after a wrong Thesis'
   await setTutorialTextScaleBeforeNavigation(page, '200%')
   const { errors, windowErrors } = await captureRuntimeErrors(page)
   let checkedJournal = false
-  await playBaseLesson(page, true, async (expected) => {
-    if (expected !== 'round-2-thesis' || checkedJournal) return
+  await playBaseTutorial(page, true, async (expected) => {
+    if (expected !== 'round-1-thesis' || checkedJournal) return
     checkedJournal = true
-    await submitTutorialThesis(page, 'cinder', 'inertial', 'positive')
+    await submitTutorialThesis(page, 'aster', 'phase', 'positive')
     await expect(page.getByTestId('floater').getByRole('alert')).toBeAttached()
     await page.getByTestId('tutorial-research-trigger').click()
     const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
@@ -1133,15 +1121,9 @@ test('200% tutorial keeps the secondary Journal accessible after a wrong Thesis'
     await expect(journal).toContainText('Тип неверен')
     await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
     await expect(journal).toBeHidden()
-    await expect(page.locator('[data-tutorial-step="round-2-thesis"]')).toBeVisible()
+    await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
     await expect(page.getByTestId('floater').getByRole('alert')).toBeAttached()
-    // Return the editable choices through the same native path as the 200% correction test.
-    for (const name of ['Сигнал для тезиса', 'Тип поля для тезиса', 'Полярность для тезиса']) {
-      const field = page.getByLabel(name, { exact: true })
-      await revisitTutorialField(page, field)
-      await field.selectOption('')
-    }
-    await revisitTutorialField(page, page.getByLabel('Сигнал для тезиса', { exact: true }))
+    await recoverBaseThesisAttempt(page)
   })
   expect(checkedJournal).toBe(true)
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
@@ -1164,17 +1146,15 @@ test('200% tutorial restores keyboard focus to the remounted Exit after cancella
   }
   let checkedCancellation = false
   await playBaseLesson(page, true, async (expected) => {
-    if (expected !== 'round-2-thesis' || checkedCancellation) return
+    if (expected !== 'round-1-thesis' || checkedCancellation) return
     checkedCancellation = true
-    await submitTutorialThesis(page, 'cinder', 'inertial', 'positive')
-    const coach = page.locator('[data-tutorial-step="round-2-thesis"]')
-    await expect(coach.getByRole('alert')).toBeAttached()
+    const coach = page.locator('[data-tutorial-step="round-1-thesis"]')
     const fieldType = page.getByLabel('Тип поля для тезиса', { exact: true })
     await revisitTutorialField(page, fieldType)
     await expect.poll(() => fieldType.evaluate(tutorialControlGeometry))
       .toMatchObject({ unclipped: true, available: true })
-    await fieldType.selectOption('phase')
-    await expect(fieldType).toHaveValue('phase')
+    await fieldType.selectOption('inertial')
+    await expect(fieldType).toHaveValue('inertial')
     // Read the long coach through its native inner scroll before opening Exit.
     await coach.hover()
     for (let readingPage = 0; readingPage < 12; readingPage++) {
@@ -1222,8 +1202,7 @@ test('200% tutorial restores keyboard focus to the remounted Exit after cancella
       const rounding = .5 / devicePixelRatio
       return rect.top >= Math.max(0, reading.top) - rounding && rect.bottom <= Math.min(innerHeight, reading.bottom) + rounding
     })).toBe(true)
-    await expect(fieldType).toHaveValue('phase')
-    await expect(coach.getByRole('alert')).toBeAttached()
+    await expect(fieldType).toHaveValue('inertial')
     expect(await page.evaluate(() => scrollY)).toBe(documentPosition)
     await expect.poll(() => coach.evaluate((node) => node.scrollTop)).toBe(readingPosition)
     await expect.poll(() => coach.evaluate((element) => {
@@ -1271,14 +1250,13 @@ test('200% tutorial allows native correction of Thesis and own final-model field
   let correctedThesis = false
   let correctedFinal = false
   await playBaseLesson(page, true, async (expected) => {
-    if (expected === 'round-2-thesis' && !correctedThesis) {
+    if (expected === 'round-1-thesis' && !correctedThesis) {
       correctedThesis = true
-      await submitTutorialThesis(page, 'cinder', 'inertial', 'positive')
-      await expect(page.getByTestId('floater').getByRole('alert')).toContainText('Тип поля неверен.')
+      await settleTutorialCapture(page)
       const fieldType = page.getByLabel('Тип поля для тезиса', { exact: true })
       await revisitTutorialField(page, fieldType)
-      await fieldType.selectOption('phase')
-      await expect(fieldType).toHaveValue('phase')
+      await fieldType.selectOption('inertial')
+      await expect(fieldType).toHaveValue('inertial')
       await page.screenshot({ path: testInfo.outputPath('thesis-earlier-field-corrected-200.png') })
       await page.getByTestId('floater').getByRole('button', { name: 'Выйти из обучения', exact: true }).click()
       const exit = page.getByRole('dialog', { name: 'Выйти из обучения?', exact: true })
@@ -1306,7 +1284,7 @@ test('200% tutorial allows native correction of Thesis and own final-model field
     }
   })
   expect(correctedThesis && correctedFinal).toBe(true)
-  await expect(page.getByText(/Ваш учебный результат: 4 из 12/)).toBeVisible()
+  await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
   // Contract field correction belongs to the separate standard lesson in #79.
 })
 
@@ -1567,7 +1545,8 @@ async function restartFirstExerciseWithCorrectModel(page: Page) {
   await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
   await submitBaseThesis(page, 'aster', 'inertial', 'positive')
   await page.getByTestId('floater').getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ', exact: true }).click()
-  await expect(page.getByRole('button', { name: /^Слот доступа 5:/ })).toBeEnabled()
+  await expect(page.locator('[data-tutorial-step="final-model"]')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Отправить финальную модель', exact: true })).toBeEnabled()
 }
 
 test('Journal retains real Research scroll through tabs, early close and manual reopening on a short screen', async ({ page }, testInfo) => {
@@ -1611,6 +1590,18 @@ test('reflows at a 200% desktop zoom equivalent and honors reduced motion', asyn
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
 
+test('Back restores the working-model Journal step and its active tab', async ({ page }) => {
+  await reachFirstResearch(page)
+  const journal = await openFirstModel(page)
+  await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
+  await journal.getByRole('button', { name: 'Aster: гипотеза, полярность Положительная', exact: true }).click()
+  await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
+  await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  await expect(journal).toBeVisible()
+  await expect(journal.getByRole('tab', { name: 'Рабочая модель', exact: true })).toHaveAttribute('aria-selected', 'true')
+})
+
 test('guest Journal remains available after cancelling Exit on a short mobile screen', async ({ page }) => {
   page.setDefaultTimeout(10_000)
   await page.setViewportSize({ width: 390, height: 844 })
@@ -1619,12 +1610,7 @@ test('guest Journal remains available after cancelling Exit on a short mobile sc
   await firstModel.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
   await firstModel.getByRole('button', { name: 'Aster: гипотеза, полярность Положительная', exact: true }).click()
   await firstModel.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
-  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('aster')
-  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('inertial')
-  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
-  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
-  await page.getByTestId('floater').getByRole('button', { name: 'ПОНЯТНО, ДАЛЬШЕ', exact: true }).click()
-  await chooseAccessSlot(page, 5)
+  await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
   await expect(page.getByTestId('tutorial-contracts-trigger')).toHaveCount(0)
   for (const layout of [{ height: 430, textScale: '100%' }, { height: 844, textScale: '200%' }]) {
     await page.setViewportSize({ width: 390, height: layout.height })
@@ -1757,16 +1743,16 @@ test('logged-in mobile lesson retains its draft after completion save fails and 
 
   // Every research, draft, thesis and final submission is a real learner action.
   // Only the failed persistence response is injected, never accepted completion.
-  await playBaseTutorial(page, false, false, async () => undefined, undefined, false)
+  await playBaseTutorial(page, false, async () => undefined, undefined, false)
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeHidden()
-  await expect(page.getByRole('alert')).toContainText('отметку об обучении пока не удалось сохранить')
+  await expect(page.getByRole('alert')).toContainText('Пока не удалось сохранить отметку в профиле')
   const retry = page.getByRole('button', { name: 'Сохранить отметку', exact: true })
   await expect(retry).toBeEnabled()
   expect(completionAttempts).toBe(1)
   const retained = await accountBaseSession(page)
   expect(JSON.parse(retained.serialized)).toMatchObject({ lessonId: 'base', scenarioVersion: 'base-simple-v1',
-    step: 'complete', round: 3, independentCycle: true,
-    finalSubmission: { signals: { aster: { fieldType: 'inertial', polarity: 'positive' }, cinder: { fieldType: 'phase', polarity: 'negative' } } } })
+    step: 'complete', round: 1, independentCycle: true,
+    finalSubmission: { signals: { aster: { fieldType: 'inertial', polarity: 'positive' } } } })
 
   await page.unroute('**/api/profile/tutorial/progress')
   const saved = page.waitForResponse((response) => response.request().method() === 'PUT'
@@ -1776,7 +1762,7 @@ test('logged-in mobile lesson retains its draft after completion save fails and 
   expect(accepted.base.completion).toEqual({ origin: 'scenario', scenarioVersion: 'base-simple-v1', completedAt: expect.any(String) })
   expect(accepted.base.legacyCredit).toBeNull()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
-  await expect(page.getByText(/Ваш учебный результат: 4 из 12/)).toBeVisible()
+  await expect(page.getByText(/Ваш учебный результат: 2 из 12/)).toBeVisible()
   expect(completionAttempts).toBe(2)
   expect(await accountBaseSession(page)).toEqual(retained)
   await expect(page.getByRole('button', { name: 'СОЗДАТЬ НАСТОЯЩИЙ ТЕНДЕР', exact: true })).toBeEnabled()

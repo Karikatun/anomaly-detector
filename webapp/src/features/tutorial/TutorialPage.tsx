@@ -19,9 +19,6 @@ import { TutorialStateCard } from './TutorialStateCard'
 import styles from './TutorialPage.module.css'
 
 type LessonState = TutorialState | AdditionalTutorialState
-function createLessonState(playerId: string, lessonId: TutorialLessonId): LessonState {
-  return lessonId === 'base' ? createTutorialState(playerId) : createAdditionalTutorialState(playerId)
-}
 function completionCommand(lessonId: TutorialLessonId): TutorialProgressCommand {
   return lessonId === 'base' ? { kind: 'scenario-completed', lessonId, scenarioVersion: baseScenarioVersion } : { kind: 'scenario-completed', lessonId, scenarioVersion: additionalScenarioVersion }
 }
@@ -57,7 +54,9 @@ function AccountTutorial({ playerId, entry, lessonId }: { playerId: string; entr
     const command = handoff?.command ?? loaded.completionCommand ?? (lessonId === 'base' && loaded.legacyCompleted ? { kind: 'legacy-credit' as const } : null)
     return { ...loaded, handoff, command }
   })
-  const [initialRun, setInitialRun] = useState<LessonState>(entryState.state)
+  const [initialRun, setInitialRun] = useState(() => entryState.lessonId === 'base'
+    ? { lessonId: entryState.lessonId, state: entryState.state, timeline: entryState.timeline }
+    : { lessonId: entryState.lessonId, state: entryState.state, timeline: entryState.timeline })
   const [entryCompletion, setEntryCompletion] = useState(Boolean(entryState.command))
   const [saveStatus, setSaveStatus] = useState<'idle' | 'pending' | 'saved' | 'error'>(entryState.command ? 'pending' : 'idle')
   const [completionKind, setCompletionKind] = useState(entryState.command?.kind ?? 'scenario-completed')
@@ -105,7 +104,7 @@ function AccountTutorial({ playerId, entry, lessonId }: { playerId: string; entr
     saveAttempt.current?.abort(); saveAttempt.current = null; saveState.current = 'idle'
     setSaveStatus('idle'); setCompletionKind('scenario-completed')
     if (restart) restart()
-    else { clearTutorialSession(storage, playerId, lessonId); setInitialRun(createLessonState(playerId, lessonId)); setEntryCompletion(false) }
+    else { clearTutorialSession(storage, playerId, lessonId); setInitialRun(lessonId === 'base' ? { lessonId, state: createTutorialState(playerId), timeline: null } : { lessonId, state: createAdditionalTutorialState(playerId), timeline: null }); setEntryCompletion(false) }
   }
   const retrySave = useCallback(() => {
     setSaveStatus('pending')
@@ -142,7 +141,7 @@ function AccountTutorial({ playerId, entry, lessonId }: { playerId: string; entr
   if (currentMatch.data) return <TutorialStateCard><CardHeader><CardTitle>{t('tutorial.blocked.title')}</CardTitle></CardHeader><CardContent className={styles.stateContent}><Typography>{t('tutorial.blocked.description')}</Typography><Button onClick={returnToMatch}>{t('tutorial.blocked.return')}</Button></CardContent></TutorialStateCard>
   if (entryCompletion) return renderCompletion(undefined, entryState.state)
   const common = { onComplete, onExit: exitTutorial, storageNotice: entryState.notice === 'storage-unavailable' ? t('tutorial.base.storage') : entryState.notice === 'legacy-restart' ? t('tutorial.base.updated') : null, renderCompletion: (restart: () => void, state: LessonState) => renderCompletion(() => repeat(restart), state) }
-  return initialRun.lessonId === 'base' ? <TutorialExperience initialState={initialRun} {...common} exitLabel={entry === 'public' ? 'tutorial.guest.website' : 'tutorial.prologue.home'} /> : <AdditionalTutorialExperience initialState={initialRun} {...common} exitLabel={entry === 'public' ? 'tutorial.guest.website' : 'tutorial.complete.home'} />
+  return initialRun.lessonId === 'base' ? <TutorialExperience initialState={initialRun.state} initialTimeline={initialRun.timeline} {...common} exitLabel={entry === 'public' ? 'tutorial.guest.website' : 'tutorial.prologue.home'} /> : <AdditionalTutorialExperience initialState={initialRun.state} initialTimeline={initialRun.timeline} {...common} exitLabel={entry === 'public' ? 'tutorial.guest.website' : 'tutorial.complete.home'} />
 }
 function GuestTutorial({ lessonId }: { lessonId: TutorialLessonId }) {
   const { t } = useI18n()
@@ -163,7 +162,7 @@ function GuestTutorial({ lessonId }: { lessonId: TutorialLessonId }) {
     </CardContent>
   </TutorialStateCard>
   const common = { onExit: () => window.location.assign(getPublicWebsiteUrl()), storageNotice: loaded.notice === 'storage-unavailable' ? t('tutorial.base.storage') : loaded.notice === 'legacy-restart' ? t('tutorial.base.updated') : null, renderCompletion }
-  return loaded.state.lessonId === 'base' ? <TutorialExperience initialState={loaded.state} {...common} exitLabel="tutorial.guest.website" /> : <AdditionalTutorialExperience initialState={loaded.state} {...common} exitLabel="tutorial.guest.website" />
+  return loaded.lessonId === 'base' ? <TutorialExperience initialState={loaded.state} initialTimeline={loaded.timeline} {...common} exitLabel="tutorial.guest.website" /> : <AdditionalTutorialExperience initialState={loaded.state} initialTimeline={loaded.timeline} {...common} exitLabel="tutorial.guest.website" />
 }
 function GuestAuthButtons({ storage, lessonId }: { storage: Storage | undefined; lessonId: TutorialLessonId }) {
   const { t } = useI18n()

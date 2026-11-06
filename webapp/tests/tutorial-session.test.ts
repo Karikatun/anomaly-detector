@@ -18,6 +18,109 @@ function legacy(playerId = guestTutorialPlayerId, step = 'complete') {
   return { budget: 2, corporateTrust: 0, hintLevel: 0, playerId, privateTheses: [], rating: 0, round: 2, step, thesisAttempts: 0, workingModel: { signals: {} } }
 }
 
+test('a reloaded draft retains its current step entry and exact earlier snapshots', () => {
+  const storage = new MemoryStorage()
+  const intro = createTutorialState('player-a')
+  const access = { ...intro, step: 'round-1-access' as const }
+  const power = { ...access, step: 'round-1-power' as const, budget: 3, accessSlot: 6, samples: ['boreal' as const] }
+  saveTutorialSession(storage, power, { entry: power, history: [intro, access] })
+  expect(loadTutorialSessionResult(storage, 'player-a')).toMatchObject({
+    state: power, timeline: { entry: power, history: [intro, access] },
+  })
+})
+
+test('reloading research closes the Journal and makes its previous entry current for Back', () => {
+  const storage = new MemoryStorage()
+  const intro = createTutorialState('player-a')
+  const lab = { ...intro, step: 'round-1-lab-pair' as const }
+  const research = { ...lab, step: 'research-results' as const }
+  const open = { ...research, step: 'research-results-open' as const }
+  const edited = { ...open, workingModel: { signals: { aster: { hypothesis: { fieldType: 'inertial' as const } } } } }
+  saveTutorialSession(storage, edited, { entry: open, history: [lab, research] })
+
+  expect(loadTutorialSessionResult(storage, 'player-a')).toMatchObject({
+    state: { ...edited, step: 'research-results' },
+    timeline: { entry: research, history: [lab] },
+  })
+})
+
+test('reloading interpretation closes the Journal without changing the tab Back will restore', () => {
+  const storage = new MemoryStorage()
+  const intro = createTutorialState('player-a')
+  const research = { ...intro, step: 'research-results' as const }
+  const openResearch = { ...research, step: 'research-results-open' as const }
+  const openInterpretation = { ...openResearch, step: 'interpretation-open' as const }
+  saveTutorialSession(storage, openInterpretation, { entry: openInterpretation, history: [research, openResearch] })
+
+  expect(loadTutorialSessionResult(storage, 'player-a')).toMatchObject({
+    state: { ...openInterpretation, step: 'interpretation' },
+    timeline: { entry: { ...openInterpretation, step: 'interpretation' }, history: [research, openResearch] },
+  })
+})
+
+test('an invalid or excessive history is discarded independently of the current draft', () => {
+  const storage = new MemoryStorage()
+  const intro = createTutorialState('player-a')
+  const access = { ...intro, step: 'round-1-access' as const }
+  const key = 'anomaly-detector:tutorial:base:base-simple-v1:player-a'
+  for (const history of [
+    [{ ...intro, playerId: 'player-b' }],
+    [{ ...intro, lessonId: 'additional' }],
+    [access],
+    [completed('player-a')],
+    Array(100).fill(intro),
+  ]) {
+    storage.setItem(key, JSON.stringify({ schemaVersion: 2, state: access, timeline: { entry: access, history } }))
+    expect(loadTutorialSessionResult(storage, 'player-a')).toMatchObject({ state: access, timeline: null, notice: null })
+  }
+})
+
+test('incomplete drafts from removed rounds restart with notice and cannot transfer', () => {
+  const storage = new MemoryStorage()
+  const intro = createTutorialState(guestTutorialPlayerId)
+  const key = `anomaly-detector:tutorial:base:base-simple-v1:${guestTutorialPlayerId}`
+  for (const draft of [
+    { ...intro, round: 2, step: 'round-2-access' },
+    { ...intro, round: 3, step: 'final-model', independentCycle: true },
+  ]) {
+    storage.setItem(key, JSON.stringify(draft))
+    expect(loadTutorialSessionResult(storage, guestTutorialPlayerId)).toMatchObject({
+      state: intro, timeline: null, notice: 'legacy-restart', completionCommand: null,
+    })
+    expect(beginGuestTutorialHandoff(storage)).toBe(false)
+  }
+})
+
+test('a pre-envelope terminal draft transfers as the same credit and its stale bytes cannot be claimed again', () => {
+  const storage = new MemoryStorage()
+  const key = `anomaly-detector:tutorial:base:base-simple-v1:${guestTutorialPlayerId}`
+  storage.setItem(key, JSON.stringify({ ...completed(), round: 3 }))
+  expect(beginGuestTutorialHandoff(storage)).toBe(true)
+  const claim = claimGuestTutorialHandoff(storage, 'player-a')!
+  expect(claim.command).toEqual({ kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' })
+  const removeItem = storage.removeItem.bind(storage)
+  storage.removeItem = (candidate) => {
+    if (candidate === key) throw new DOMException('blocked', 'SecurityError')
+    removeItem(candidate)
+  }
+  finishGuestTutorialHandoff(storage, 'player-a', claim.handoffId)
+  const reloaded = new MemoryStorage()
+  for (const [name, value] of storage.values) reloaded.setItem(name, value)
+  expect(reloaded.getItem(key)).not.toBeNull()
+  expect(beginGuestTutorialHandoff(reloaded)).toBe(false)
+  expect(claimGuestTutorialHandoff(reloaded, 'player-b')).toBeNull()
+})
+
+test('a new terminal draft stays readable by pre-envelope clients and drops undo snapshots', () => {
+  const storage = new MemoryStorage()
+  const state = completed()
+  const intro = createTutorialState(guestTutorialPlayerId)
+  saveTutorialSession(storage, state, { entry: state, history: [intro] })
+  const key = `anomaly-detector:tutorial:base:base-simple-v1:${guestTutorialPlayerId}`
+  expect(JSON.parse(storage.getItem(key)!)).toEqual(state)
+  expect(loadTutorialSessionResult(storage, guestTutorialPlayerId).timeline).toBeNull()
+})
+
 test('unavailable tab storage keeps an in-memory base draft but never pretends a handoff persisted', () => {
   const storage = { getItem() { throw new DOMException('blocked', 'SecurityError') }, setItem() { throw new DOMException('blocked', 'SecurityError') }, removeItem() { throw new DOMException('blocked', 'SecurityError') } } as unknown as Storage
   const initial = loadTutorialSession(storage, guestTutorialPlayerId)
@@ -41,7 +144,7 @@ test('reading the sessionStorage property itself is optional', () => {
 
 test('tutorial restores only the matching account and clears only the explicitly selected draft', () => {
   const storage = new MemoryStorage()
-  const a = { ...createTutorialState('player-a'), step: 'round-2-access' as const, round: 2 as const }
+  const a = { ...createTutorialState('player-a'), step: 'round-1-power' as const }
   const b = { ...createTutorialState('player-b'), step: 'round-1-access' as const }
   saveTutorialSession(storage, a); saveTutorialSession(storage, b)
   expect(loadTutorialSession(storage, 'player-a')).toEqual(a)
@@ -53,7 +156,7 @@ test('tutorial restores only the matching account and clears only the explicitly
 
 test('malformed, unknown-version and actor-mismatched drafts restart instead of reinterpreting steps', () => {
   for (const mutation of [(s: Record<string, unknown>) => { s.scenarioVersion = 'base-future' }, (s: Record<string, unknown>) => { s.playerId = 'another' }, (s: Record<string, unknown>) => { s.step = 'unknown' }, (s: Record<string, unknown>) => { s.lessonId = 'additional' }]) {
-    const storage = new MemoryStorage(); saveTutorialSession(storage, createTutorialState('player-a'))
+    const storage = new MemoryStorage(); saveTutorialSession(storage, { ...createTutorialState('player-a'), step: 'round-1-access' })
     const key = storage.key(0)!, data = JSON.parse(storage.getItem(key)!)
     mutation(data); storage.setItem(key, JSON.stringify(data))
     expect(loadTutorialSession(storage, 'player-a')).toEqual(createTutorialState('player-a'))
@@ -70,12 +173,12 @@ test('an incomplete legacy named step explicitly restarts and cannot create cred
   expect(beginGuestTutorialHandoff(storage)).toBe(false)
 })
 
-test('restoring a closed Journal returns transient open steps to their real entry and retains evidence', () => {
-  for (const [open, entry] of [['research-results-open', 'research-results'], ['interpretation-open', 'interpretation'], ['round-2-research-open', 'round-2-research']] as const) {
+test('pre-envelope first-round drafts resume with a closed Journal and retain evidence', () => {
+  for (const [open, entry] of [['research-results-open', 'research-results'], ['interpretation-open', 'interpretation']] as const) {
     const storage = new MemoryStorage()
     const state = { ...createTutorialState('player-a'), step: open, workingModel: { signals: { aster: { hypothesis: { fieldType: 'inertial' as const } } } } }
-    saveTutorialSession(storage, state)
-    expect(loadTutorialSession(storage, 'player-a')).toEqual({ ...state, step: entry })
+    storage.setItem('anomaly-detector:tutorial:base:base-simple-v1:player-a', JSON.stringify(state))
+    expect(loadTutorialSessionResult(storage, 'player-a')).toMatchObject({ state: { ...state, step: entry }, timeline: null })
   }
 })
 
@@ -102,8 +205,8 @@ test('an already claimed old handoff never changes its first account when upgrad
 
 test('guest progress survives reload independently of an account draft and cannot transfer unfinished work', () => {
   const storage = new MemoryStorage()
-  const account = { ...createTutorialState('player-a'), step: 'round-2-access' as const, round: 2 as const }
-  const guest = { ...createTutorialState(guestTutorialPlayerId), step: 'round-2-research' as const, round: 2 as const }
+  const account = { ...createTutorialState('player-a'), step: 'round-1-power' as const }
+  const guest = { ...createTutorialState(guestTutorialPlayerId), step: 'research-results' as const }
   saveTutorialSession(storage, account); saveTutorialSession(storage, guest)
   expect(loadTutorialSession(storage, guestTutorialPlayerId)).toEqual(guest)
   expect(loadTutorialSession(storage, 'player-a')).toEqual(account)

@@ -241,10 +241,6 @@
     display: block;
   }
 
-  :global(body:has([data-tutorial-step='final-model'])) .confirmAction {
-    display: block;
-  }
-
   .coachActions button {
     padding-inline: .5rem;
   }

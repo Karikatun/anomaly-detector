@@ -19,14 +19,15 @@ async function openGuestCompletion(page: Page) {
   await page.evaluate((key) => {
     const serialized = sessionStorage.getItem(key)
     if (!serialized) throw new Error('Guest tutorial draft is missing')
-    const state = JSON.parse(serialized)
+    const envelope = JSON.parse(serialized)
+    const state = envelope.state
     state.step = 'complete'
-    state.round = 3
+    state.round = 1
     state.independentCycle = true
     state.finalSubmission = { signals: { aster: { fieldType: 'inertial', polarity: 'positive' }, cinder: { fieldType: 'phase', polarity: 'negative' } } }
     state.finalDraft = state.finalSubmission
     state.rating = 4
-    sessionStorage.setItem(key, JSON.stringify(state))
+    sessionStorage.setItem(key, JSON.stringify(envelope))
   }, guestSessionKey)
   await page.reload()
   await expect(page.getByText('Обучение завершено', { exact: true })).toBeVisible()
@@ -238,7 +239,7 @@ test('blocked sessionStorage permits real base practice and ordinary registratio
   page.on('request', (request) => {
     if (request.method() === 'PUT' && request.url().endsWith('/api/profile/tutorial/progress')) completionWrites += 1
   })
-  await playBaseTutorial(page, true, false)
+  await playBaseTutorial(page, true)
   await expect(page.getByText(/Хранилище вкладки недоступно/)).toBeVisible()
   await page.getByRole('link', { name: 'Создать аккаунт', exact: true }).click()
   await expect(page).toHaveURL('/?auth=register')
