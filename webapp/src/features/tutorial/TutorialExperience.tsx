@@ -31,66 +31,34 @@ import {
   type TutorialStep,
   type TutorialState,
 } from './scenario'
-import {
-  clearTutorialSession,
-  saveTutorialSession,
-  getTutorialStorage,
-} from './session'
+import { clearTutorialSession, type TutorialTimeline } from './session'
+import { baseTutorialStepNumbers, isActiveBaseStep } from './base-steps'
+import { useTutorialTimeline } from './use-tutorial-timeline'
 import { resolveTutorialPresentation, tutorialSafeVerticalBounds, tutorialScrollDelta } from './tutorial-layout'
 import styles from './TutorialPage.module.css'
 
-const taskKeys: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, TranslationKey> = {
-  'interaction-guide': 'tutorial.step.interactionGuide',
-  'round-1-header': 'tutorial.step.round1Header',
-  'round-1-sidebar': 'tutorial.step.round1Sidebar',
-  'round-1-contracts': 'tutorial.step.round1Contracts',
-  'round-1-access-intro': 'tutorial.step.round1AccessIntro',
+type ActiveStep = keyof typeof baseTutorialStepNumbers
+type GuidedStep = Exclude<ActiveStep, 'prologue'>
+const taskKeys: Record<GuidedStep, TranslationKey> = {
   'round-1-access': 'tutorial.step.round1Access',
-  'round-1-power-intro': 'tutorial.step.round1PowerIntro',
   'round-1-power': 'tutorial.step.round1Power',
-  'round-1-recon-intro': 'tutorial.step.round1ReconIntro',
   'round-1-recon': 'tutorial.step.round1Recon',
-  'round-1-lab-intro': 'tutorial.step.round1LabIntro',
   'round-1-lab-mode': 'tutorial.step.round1LabMode',
   'round-1-lab-pair': 'tutorial.step.round1LabPair',
   'research-results': 'tutorial.step.researchResults',
   'research-results-open': 'tutorial.step.researchResultsOpen',
-  'help-menu': 'tutorial.step.help',
   interpretation: 'tutorial.step.interpretation',
   'interpretation-open': 'tutorial.step.interpretationOpen',
-  'round-1-model-intro': 'tutorial.step.round1ModelIntro',
   'round-1-working-model': 'tutorial.step.round1Model',
   'round-1-thesis': 'tutorial.step.round1Thesis',
   'round-1-thesis-result': 'tutorial.step.round1ThesisResult',
-  'round-1-thesis-result-open': 'tutorial.step.round1ThesisResultOpen',
-  'round-2-access': 'tutorial.step.round2Access',
-  'round-2-contracts-review': 'tutorial.step.round2ContractsReview',
-  'round-2-contracts-review-open': 'tutorial.step.round2ContractsReviewOpen',
-  'round-2-power': 'tutorial.step.round2Power',
-  'round-2-recon': 'tutorial.step.round2Recon',
-  'round-2-lab': 'tutorial.step.round2Lab',
-  'round-2-research': 'tutorial.step.round2Research',
-  'round-2-research-open': 'tutorial.step.round2ResearchOpen',
-  'round-2-working-model': 'tutorial.step.round2Model',
-  'round-2-thesis': 'tutorial.step.round2Thesis',
-  'round-2-contracts-intro': 'tutorial.step.contractsIntro',
-  'round-2-contract-reserve': 'tutorial.step.contractReserve',
-  'round-2-contract-bid': 'tutorial.step.contractBid',
-  'round-2-thesis-result': 'tutorial.base.round2Checked',
-  'round-3-access': 'tutorial.base.round3Access',
-  'round-3-power': 'tutorial.base.round3Power',
-  'round-3-recon': 'tutorial.base.round3Recon',
-  'round-3-lab': 'tutorial.base.round3Lab',
-  'round-3-thesis': 'tutorial.base.round3Thesis',
-  'final-model-intro': 'tutorial.step.finalModelIntro',
   'final-model': 'tutorial.step.finalModel',
 }
 
-const mobileTaskKeys: Partial<Record<Exclude<TutorialStep, 'complete' | 'prologue'>, TranslationKey>> = {
-  'round-1-header': 'tutorial.step.round1HeaderMobile',
-  'round-1-sidebar': 'tutorial.step.round1SidebarMobile',
-  'round-1-contracts': 'tutorial.step.round1ContractsMobile',
-  'research-results': 'tutorial.step.researchResultsMobile',
+function restoredJournalTab(step: TutorialStep) {
+  if (step === 'research-results-open') return 'research'
+  if (step === 'interpretation-open') return 'interpretation'
+  if (step === 'round-1-working-model') return 'working-model'
 }
 
 // Only this first research cycle uses the pilot presentation; lesson policy stays in scenario.ts.
@@ -104,38 +72,13 @@ const pilotCopy: Partial<Record<TutorialStep, { action: TranslationKey; why: Tra
   'research-results-open': { action: 'tutorial.pilot.read.action', why: 'tutorial.pilot.read.why' },
 }
 
-const orderedSteps = Object.keys(taskKeys) as Array<Exclude<TutorialStep, 'complete' | 'prologue'>>
-const informationalSteps = new Set<TutorialStep>([
-  'interaction-guide',
-  'round-1-header',
-  'round-1-sidebar',
-  'round-1-contracts',
-  'round-1-access-intro',
-  'round-1-power-intro',
-  'round-1-recon-intro',
-  'round-1-lab-intro',
-  'round-1-model-intro',
-  'round-2-contracts-intro',
-  'final-model-intro',
-  'round-1-thesis-result',
-  'round-2-thesis-result',
-])
 const mobileActionPinnedSteps = new Set<TutorialStep>([
-  'round-1-access-intro',
-  'round-1-access',
-  'round-1-power',
-  'round-1-recon',
-  'round-1-lab-pair',
-  'round-1-thesis',
-  'round-2-access',
-  'round-2-power',
-  'round-2-recon',
-  'round-2-lab',
-  'round-2-thesis',
+  'round-1-access', 'round-1-power', 'round-1-recon', 'round-1-lab-pair', 'round-1-thesis',
 ])
 
 export function TutorialExperience({
   initialState,
+  initialTimeline,
   onComplete,
   onExit,
   exitLabel,
@@ -143,6 +86,7 @@ export function TutorialExperience({
   storageNotice,
 }: {
   initialState: TutorialState
+  initialTimeline: TutorialTimeline<TutorialState> | null
   onComplete?: (state: TutorialState, signal: AbortSignal) => Promise<void>
   onExit: () => void
   exitLabel: TranslationKey
@@ -150,15 +94,12 @@ export function TutorialExperience({
   storageNotice?: string | null
 }) {
   const { t } = useI18n()
-  const [state, setState] = useState(initialState)
-  const stateRef = useRef(initialState)
-  const [storage] = useState(getTutorialStorage)
-  const [storageUnavailable, setStorageUnavailable] = useState(false)
+  const timeline = useTutorialTimeline(initialState, initialTimeline)
+  const { state, storage, storageUnavailable } = timeline
   const [lesson, setLesson] = useState(() => new AbortController())
   const [runEpoch, setRunEpoch] = useState(0)
-  const lessonMounted = useRef(false)
-  useLayoutEffect(() => { lessonMounted.current = true; return () => { lessonMounted.current = false } }, [])
-  useLayoutEffect(() => { stateRef.current = state }, [state])
+  const [focusEpoch, setFocusEpoch] = useState(0)
+  const callbacksActive = () => timeline.isMounted() && !lesson.signal.aborted
   const playerId = initialState.playerId
   const [commandError, setCommandError] = useState<string | null>(null)
   const [thesisFeedback, setThesisFeedback] = useState<NonNullable<TutorialAdvanceResult['thesisFeedback']> | null>(null)
@@ -237,56 +178,71 @@ export function TutorialExperience({
 
 
 
+  useLayoutEffect(() => {
+    if (!focusEpoch) return
+    const frame = requestAnimationFrame(() => {
+      const coach = document.querySelector<HTMLElement>('[data-tutorial-step]')
+      const target = coach?.querySelector<HTMLElement>('[data-tutorial-back]:enabled') ?? coach
+      target?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [focusEpoch])
+
+  const resetBoard = (journalTab?: ReturnType<typeof restoredJournalTab>) => {
+    // Abort before remounting. An old journal or draft controller can flush
+    // during disposal, after the active step has already moved.
+    lesson.abort()
+    setLesson(new AbortController())
+    setRunEpoch((epoch) => epoch + 1)
+    setJournal({ open: journalTab !== undefined, activityKey: null })
+    setRequiredModalOpen(false)
+    setResolvedTarget(null)
+    setCommandError(null)
+    setThesisFeedback(null)
+    setExplanationStep(null)
+  }
+
   const applyAction = async (action: TutorialAction) => {
-    // Disposal may flush a draft through an old callback after Exit or Repeat.
-    // Only callbacks belonging to the active lesson may persist or progress it.
-    if (!lessonMounted.current || lesson.signal.aborted) return false
-    if (action.type === 'restart-exercise') { lesson.abort(); setLesson(new AbortController()); setRunEpoch((epoch) => epoch + 1) }
-    const before = stateRef.current
+    if (!callbacksActive()) return false
+    const before = timeline.currentState()
+    if (before.step === 'complete') return false
     const result = advanceTutorial(before, action)
-    if (action.type === 'submit-thesis') {
-      setThesisFeedback(result.thesisFeedback ?? null)
-    } else if (result.state.step !== state.step) {
-      setThesisFeedback(null)
+    const stepChanged = result.state.step !== before.step
+    if (action.type === 'submit-thesis') setThesisFeedback(result.thesisFeedback ?? null)
+    else if (stepChanged) setThesisFeedback(null)
+    if (stepChanged) setExplanationStep(null)
+
+    if (action.type === 'restart-exercise' && result.progressed) {
+      resetBoard()
+      timeline.commit(result.state, 'reset')
+      return true
     }
-    const stateChanged = result.state !== state
-    if (stateChanged) {
-      if (result.state.step !== state.step) setExplanationStep(null)
-      stateRef.current = result.state
-      setState(result.state)
-      if (!saveTutorialSession(storage, result.state)) setStorageUnavailable(true)
-    }
+    const journalReopen = before.step === 'interpretation' && result.state.step === 'interpretation-open'
+    const journalClose = action.type === 'close-journal' || action.type === 'close-interpretation' || action.type === 'close-research-results'
+    const journalRetreat = journalClose && result.state.step === 'research-results'
+    const interpretationClosed = journalClose && result.state.step === 'interpretation'
+    timeline.commit(result.state, journalRetreat ? 'retreat' : journalReopen || interpretationClosed ? 'edit' : 'advance')
     const isDraftSave = action.type === 'update-scientific-model-draft' || action.type === 'update-working-model'
     const isNavigation = action.type.startsWith('open-') || action.type.startsWith('close-')
     const isThesisAttempt = action.type === 'submit-thesis' && result.thesisFeedback !== undefined
     setCommandError(result.progressed || isDraftSave || isThesisAttempt || isNavigation
       ? null
-      : t(state.step === 'round-1-power'
-        ? 'tutorial.coach.powerRound1Invalid'
-        : state.step === 'round-2-power'
-          ? 'tutorial.coach.powerRound2Invalid'
-          : state.step === 'round-2-working-model'
-            ? 'tutorial.coach.modelCheck'
-            : 'tutorial.coach.invalid'))
+      : t(before.step === 'round-1-power' ? 'tutorial.coach.powerRound1Invalid' : 'tutorial.coach.invalid'))
 
-    if (result.state.step === 'complete' && state.step !== 'complete') {
-      await onComplete?.(result.state, lesson.signal)
-    }
-
+    if (result.state.step === 'complete') await onComplete?.(result.state, lesson.signal)
     return result.progressed
   }
 
+  const back = () => {
+    if (!callbacksActive() || !timeline.back((previous) => resetBoard(restoredJournalTab(previous.step)))) return
+    setFocusEpoch((epoch) => epoch + 1)
+  }
+
   const restart = () => {
-    lesson.abort()
-    setLesson(new AbortController())
-    setRunEpoch((epoch) => epoch + 1)
-    clearTutorialSession(storage, playerId)
     const fresh = createTutorialState(playerId)
-    saveTutorialSession(storage, fresh)
-    setCommandError(null)
-    setThesisFeedback(null)
-    setExplanationStep(null)
-    setState(fresh)
+    resetBoard()
+    clearTutorialSession(storage, playerId)
+    timeline.restart(fresh)
   }
 
   const exit = () => {
@@ -339,48 +295,21 @@ export function TutorialExperience({
 
   if (state.step === 'complete') return renderCompletion(restart, state)
 
-  const retiredSteps = new Set<TutorialStep>([
-    'interaction-guide', 'round-1-header', 'round-1-sidebar', 'round-1-contracts',
-    'round-1-access-intro', 'round-1-power-intro', 'round-1-recon-intro', 'round-1-lab-intro',
-    'help-menu', 'round-1-model-intro',
-    'round-1-thesis-result-open', 'round-2-contracts-intro', 'final-model-intro',
-    'round-2-contracts-review', 'round-2-contracts-review-open', 'round-2-recon', 'round-2-contract-reserve', 'round-2-contract-bid',
-  ])
-  const visibleSteps = orderedSteps.filter((tutorialStep) => !retiredSteps.has(tutorialStep))
-  const currentTaskKey: TranslationKey = (compactHeader ? mobileTaskKeys[state.step] : undefined) ?? taskKeys[state.step]
-  const phaseTargetConfig: Record<Exclude<TutorialStep, 'complete' | 'prologue'>, {
-    anchor: string
-    fallback?: string
-    spotlight?: string
-    secondary?: string
-  }> = {
-    'interaction-guide': { anchor: '[data-tutorial-access-intro]' },
-    'round-1-header': { anchor: '[data-tutorial-highlight="header"] > header' },
-    'round-1-sidebar': { anchor: '[data-tutorial-sidebar]' },
-    'round-1-contracts': { anchor: '[data-tutorial-contracts]' },
-    'round-1-access-intro': {
-      anchor: '[data-tutorial-access-slot="1"]',
-      spotlight: '[data-tutorial-access-options]',
-    },
-    'round-1-access': {
-      anchor: '[data-tutorial-access-slot="6"]',
-    },
-    'round-1-power-intro': {
-      anchor: compactGuidance ? '[data-tutorial-power-intro]' : '[data-tutorial-primary]',
-    },
+  if (!isActiveBaseStep(state.step)) return null
+
+  const currentTaskKey = compactHeader && state.step === 'research-results'
+    ? 'tutorial.step.researchResultsMobile' : taskKeys[state.step]
+  const phaseTargetConfig: Record<GuidedStep, { anchor: string; fallback?: string; spotlight?: string; secondary?: string }> = {
+    'round-1-access': { anchor: '[data-tutorial-access-slot="6"]' },
     'round-1-power': {
       anchor: '[data-tutorial-power-category="reconnaissance"]',
       spotlight: '[data-tutorial-power-options]',
     },
-    'round-1-recon-intro': { anchor: '[data-tutorial-primary]' },
     'round-1-recon': {
       anchor: '[data-tutorial-recon-target="aster"]',
       spotlight: '[data-tutorial-recon-options]',
     },
-    'round-1-lab-intro': { anchor: '[data-tutorial-primary]' },
-    'round-1-lab-mode': {
-      anchor: '[data-tutorial-lab-modes]',
-    },
+    'round-1-lab-mode': { anchor: '[data-tutorial-lab-modes]' },
     'round-1-lab-pair': {
       anchor: '[data-tutorial-lab-sample="aster"]',
       spotlight: '[data-tutorial-lab-pair]',
@@ -390,14 +319,8 @@ export function TutorialExperience({
       anchor: '[data-tender-journal] [data-research-experiment]:first-child > p:first-of-type',
       secondary: '[data-tutorial-journal-tab="interpretation"]',
     },
-    'help-menu': {
-      anchor: compactHeader ? '[data-tutorial-help]' : '[data-tutorial-interpretation-direct]',
-    },
     interpretation: { anchor: '[data-testid="tutorial-research-trigger"]' },
-    'interpretation-open': {
-      anchor: '[data-tutorial-journal-tab="working-model"]',
-    },
-    'round-1-model-intro': { anchor: '[data-tutorial-primary]' },
+    'interpretation-open': { anchor: '[data-tutorial-journal-tab="working-model"]' },
     'round-1-working-model': {
       anchor: journalOpen
         ? '[data-tender-journal] [data-tutorial-working-model-row="aster"]'
@@ -410,58 +333,7 @@ export function TutorialExperience({
       spotlight: '[data-tutorial-thesis]',
     },
     'round-1-thesis-result': { anchor: '[data-testid="tutorial-research-trigger"]' },
-    'round-1-thesis-result-open': { anchor: '[data-tender-journal]' },
-    'round-2-access': {
-      anchor: '[data-tutorial-access-slot="5"]',
-      spotlight: '[data-tutorial-access-options]',
-    },
-    'round-2-contracts-review': { anchor: '[data-testid="tutorial-contracts-trigger"]' },
-    'round-2-contracts-review-open': { anchor: '[data-testid="tutorial-contracts-dialog"]' },
-    'round-2-power': {
-      anchor: '[data-tutorial-power-category="reconnaissance"]',
-      spotlight: '[data-tutorial-power-options]',
-    },
-    'round-2-recon': {
-      anchor: '[data-tutorial-recon-anchor]',
-      spotlight: '[data-tutorial-recon-options]',
-    },
-    'round-2-lab': {
-      anchor: '[data-tutorial-lab-sample="boreal"]',
-      spotlight: '[data-tutorial-lab-options]',
-    },
-    'round-2-research': { anchor: '[data-testid="tutorial-research-trigger"]' },
-    'round-2-research-open': {
-      anchor: '[data-tender-journal] [data-research-experiment]:first-child > p:first-of-type',
-      secondary: '[data-tutorial-journal-tab="working-model"]',
-    },
-    'round-2-working-model': {
-      anchor: journalOpen
-        ? '[data-tender-journal] [data-tutorial-working-model-row="cinder"]'
-        : '[data-testid="tutorial-research-trigger"]',
-      fallback: journalOpen ? '[data-tender-journal] [data-tutorial-working-model-row="cinder"] [role="group"]:not([data-options])' : undefined,
-    },
-    'round-2-thesis': {
-      anchor: '[data-tutorial-thesis]',
-      fallback: '[data-tutorial-thesis] select',
-      spotlight: '[data-tutorial-thesis]',
-    },
-    'round-2-contracts-intro': { anchor: '[data-tutorial-primary]' },
-    'round-2-contract-reserve': {
-      anchor: '[data-contract-id="tutorial-light-contract"]',
-      fallback: '[data-contract-id="tutorial-light-contract"] select',
-    },
-    'round-2-contract-bid': {
-      anchor: '[data-contract-id="tutorial-light-contract"]',
-      fallback: '[data-contract-id="tutorial-light-contract"] button',
-    },
-    'final-model-intro': { anchor: '[data-tutorial-primary]' },
     'final-model': { anchor: '[data-tutorial-primary]' },
-    'round-2-thesis-result': { anchor: '[data-tutorial-primary]' },
-    'round-3-access': { anchor: '[data-tutorial-access-options]' },
-    'round-3-power': { anchor: '[data-tutorial-primary]' },
-    'round-3-recon': { anchor: '[data-tutorial-recon-anchor]' },
-    'round-3-lab': { anchor: '[data-tutorial-primary]' },
-    'round-3-thesis': { anchor: '[data-tutorial-thesis]' },
   }
   const pilot = pilotCopy[state.step]
   const requestedTarget = nearest?.selector ? { anchor: nearest.selector } : phaseTargetConfig[state.step]
@@ -469,7 +341,6 @@ export function TutorialExperience({
   const targetConfig = resolvedTarget?.requested === requestedTarget.anchor
     && resolvedTarget.selector !== requestedTarget.anchor
     ? { anchor: resolvedTarget.selector } : requestedTarget
-  const readingDialogOpen = journalOpen || state.step === 'round-2-contracts-review-open'
   const presentation = resolveTutorialPresentation({
     anchor: targetConfig.anchor,
     compactGuidance,
@@ -477,41 +348,19 @@ export function TutorialExperience({
     spotlight: targetConfig.spotlight,
     step: state.step,
   })
-  const highlight = state.step === 'round-1-header'
-    ? 'header' as const
-    : state.step === 'round-1-sidebar'
-      ? 'sidebar' as const
-      : state.step === 'round-1-contracts'
-        ? 'contracts' as const
-        : state.step === 'round-2-contracts-review' || state.step === 'round-2-contracts-review-open'
-          ? 'contracts' as const
-          : state.step === 'research-results'
-              || state.step === 'research-results-open'
-              || state.step === 'round-1-thesis-result'
-              || state.step === 'round-1-thesis-result-open'
-              || state.step === 'round-2-research' || state.step === 'round-2-research-open'
-          ? 'research' as const
-          : state.step === 'help-menu'
-    ? 'help' as const
+  const highlight = state.step.startsWith('research-results') || state.step === 'round-1-thesis-result'
+    ? 'research'
     : state.step === 'interpretation' || state.step === 'interpretation-open'
-      ? 'interpretation' as const
-      : state.step === 'round-1-working-model' || state.step === 'round-2-working-model'
-        ? 'working-model' as const
-        : 'primary' as const
+      ? 'interpretation'
+      : state.step === 'round-1-working-model' ? 'working-model' : 'primary'
+  const informational = state.step === 'round-1-thesis-result'
   const coachContent = (
     <CoachContent
-      progress={state.step === 'interaction-guide'
-        ? t('tutorial.coach.beforeStart')
-        : t('tutorial.coach.progress', {
-          current: visibleSteps.indexOf(state.step) + 1,
-          total: visibleSteps.length,
-        })}
-      hint={state.hintLevel > 0 ? t(state.hintLevel === 1 ? 'tutorial.base.hint1' : 'tutorial.base.hint2') : undefined}
-      onHint={state.round === 2 && !state.independentCycle ? () => void applyAction({ type: 'request-hint' }) : undefined}
-      onReset={state.step.endsWith('thesis') && state.round < 3 && (state.thesisAttempts >= (state.allocation?.modelAnalysis ?? 0) || (state.corporateReviewActive && state.budget < 1)) ? () => void applyAction({ type: 'restart-exercise' }) : undefined}
-      onContinue={informationalSteps.has(state.step)
-        ? () => void applyAction({ type: 'continue' })
-        : undefined}
+      progress={t('tutorial.coach.progress', { current: baseTutorialStepNumbers[state.step], total: baseTutorialStepNumbers['final-model'] })}
+      onReset={state.step === 'round-1-thesis' && state.thesisAttempts >= (state.allocation?.modelAnalysis ?? 0) ? () => void applyAction({ type: 'restart-exercise' }) : undefined}
+      onContinue={informational ? () => void applyAction({ type: 'continue' }) : undefined}
+      onBack={back}
+      canGoBack={timeline.canGoBack}
       onExit={requestExit}
       exitButtonRef={setCoachExitButton}
       pilot={pilot ? {
@@ -532,7 +381,7 @@ export function TutorialExperience({
       {(storageUnavailable || storageNotice) && <Typography role="status" variant="bodySm">{storageUnavailable ? t('tutorial.base.storage') : storageNotice}</Typography>}
       {!exitOpen && !requiredModalOpen && (
         <TutorialViewportAnchor
-          taskKey={state.step}
+          tutorialStep={state.step}
           activityKey={activityKey}
           restoreJournalFocus={!journalOpen && journal.activityKey === activityKey}
           manualReadingTasks={manualReadingTasks}
@@ -541,12 +390,12 @@ export function TutorialExperience({
           fallbackSelector={nearest?.fallbackSelector ?? phaseTargetConfig[state.step].fallback}
           onTargetResolved={resolveTarget}
           compactLayout={compactHeader}
-          journalEntryAllowed={!informationalSteps.has(state.step)}
+          journalEntryAllowed={!informational}
           spotlightSelector={presentation.spotlightTarget}
-          blockTargetInteraction={informationalSteps.has(state.step)}
-          showSpotlightStroke={!readingDialogOpen}
+          blockTargetInteraction={informational}
+          showSpotlightStroke={!journalOpen}
           children={!journalGuidanceOpen ? (
-            <Card role="alertdialog" aria-modal="true" aria-labelledby="tutorial-coach-title"
+            <Card role="alertdialog" tabIndex={-1} aria-modal="true" aria-labelledby="tutorial-coach-title"
               className={styles.coachCard} data-tutorial-step={state.step}
               data-tutorial-pilot={Boolean(pilot) || undefined} size="sm">
               <CardContent>{coachContent}</CardContent>
@@ -558,7 +407,7 @@ export function TutorialExperience({
       <TutorialTenderBoard
         key={`${state.playerId}:${runEpoch}`}
         journalGuidance={journalGuidanceOpen && !exitOpen && !requiredModalOpen ? (
-          <Card className={`${styles.coachCard} ${styles.journalCoach}`} data-testid="floater"
+          <Card tabIndex={-1} className={`${styles.coachCard} ${styles.journalCoach}`} data-testid="floater"
             data-tutorial-step={state.step} data-tutorial-pilot={Boolean(pilot) || undefined} size="sm" aria-labelledby="tutorial-coach-title">
             <CardContent>{coachContent}</CardContent>
           </Card>
@@ -566,18 +415,14 @@ export function TutorialExperience({
         actionPanelPinned={mobileActionPinnedSteps.has(state.step)}
         commandError={commandError}
         highlight={exitOpen ? 'none' : highlight}
-        interpretationRequired={state.step === 'help-menu'
-          || state.step === 'interpretation'
-          || state.step === 'interpretation-open'
-          || state.step === 'round-1-thesis-result'
-          || state.step === 'round-1-thesis-result-open'
-          || state.step === 'round-2-contracts-review'
-          || state.step === 'round-2-contracts-review-open'}
+        interpretationRequired={informational}
+        initialJournalTab={journalOpen ? restoredJournalTab(state.step) : undefined}
+        roundCount={1}
         laboratoryInitialMode={state.step === 'round-1-lab-pair' ? 'deep' : undefined}
         onCommand={async (command: TenderCommandInput) => {
           await applyAction(command)
         }}
-        onExitRequest={requestExit}
+        onExitRequest={(event?: MouseEvent<HTMLButtonElement>) => { if (callbacksActive()) requestExit(event) }}
         onHelpMenuOpened={() => void applyAction({ type: 'open-help-menu' })}
         onDirectInterpretationOpened={() => void applyAction({ type: 'open-interpretation-direct' })}
         onContractsClosed={() => void applyAction({ type: 'close-contracts-review' })}
@@ -585,10 +430,10 @@ export function TutorialExperience({
         onInterpretationOpened={() => void applyAction({ type: 'open-interpretation' })}
         onLaboratoryModeSelected={(mode) => void applyAction({ type: 'select-laboratory-mode', mode })}
         onJournalClosed={(workingModel) => void applyAction({ type: 'close-journal', workingModel })}
-        onJournalOpenChange={(open) => setJournal((current) => ({ open, activityKey: open ? activityKey : current.activityKey }))}
+        onJournalOpenChange={(open) => { if (callbacksActive()) setJournal((current) => ({ open, activityKey: open ? activityKey : current.activityKey })) }}
         onWorkingModelOpened={() => void applyAction({ type: 'open-working-model' })}
         onResearchOpened={() => void applyAction({ type: 'open-research-results' })}
-        onRequiredModalOpenChange={setRequiredModalOpen}
+        onRequiredModalOpenChange={(open) => { if (callbacksActive()) setRequiredModalOpen(open) }}
         onSaveWorkingModel={(workingModel) => applyAction({ type: 'update-working-model', workingModel })}
         view={tutorialView(state)}
       />
@@ -624,13 +469,13 @@ function useTutorialNearestAction(step: TutorialStep) {
     if (!board) return
     const confirm = '[data-tutorial-action-container] button[data-tutorial-confirm-ready="true"]'
     const resolve = (): NearestAction | null => {
-      if (step === 'round-1-access' || step === 'round-2-access') {
-        const slot = step === 'round-1-access' ? 6 : 5
+      if (step === 'round-1-access') {
+        const slot = 6
         return board.querySelector(`[data-tutorial-access-slot="${slot}"][aria-pressed="true"]`)
           ? { selector: confirm, action: 'tutorial.pilot.access.confirm' }
           : { selector: `[data-tutorial-access-slot="${slot}"]` }
       }
-      if (step === 'round-1-power' || step === 'round-2-power') {
+      if (step === 'round-1-power') {
         const categories = ['reconnaissance', 'laboratory', 'modelAnalysis'] as const
         for (const [index, category] of categories.entries()) {
           const card = board.querySelector<HTMLElement>(`[data-tutorial-power-category="${category}"]`)
@@ -647,12 +492,11 @@ function useTutorialNearestAction(step: TutorialStep) {
         // marker means every power was spent and is absent before its warning.
         return { selector: '[data-tutorial-action-container] button', action: 'tutorial.pilot.power.confirm' }
       }
-      if (step === 'round-1-recon' || step === 'round-2-recon') {
+      if (step === 'round-1-recon') {
         return board.querySelector(confirm)
           ? { selector: confirm, action: 'tutorial.pilot.recon.confirm' }
           : { selector: '[data-tutorial-recon-target="aster"]' }
       }
-      if (step === 'round-3-access' || step === 'round-3-power' || step === 'round-3-lab' || step === 'round-3-thesis') return null
       if (step === 'round-1-lab-mode') return { selector: '[data-tutorial-lab-modes] button:first-child' }
       if (step === 'round-1-lab-pair') {
         const source = board.querySelector('[data-tutorial-lab-sample="aster"][data-role="source"]')
@@ -661,12 +505,7 @@ function useTutorialNearestAction(step: TutorialStep) {
         if (!receiver) return { selector: '[data-tutorial-lab-sample="boreal"]', action: 'tutorial.pilot.pair.receiver' }
         return { selector: confirm, action: 'tutorial.pilot.pair.confirm' }
       }
-      if (step === 'round-2-lab') {
-        if (!board.querySelector('[data-tutorial-lab-sample="boreal"][data-role="source"]')) return { selector: '[data-tutorial-lab-sample="boreal"]' }
-        if (!board.querySelector('[data-tutorial-lab-sample="cinder"][data-role="receiver"]')) return { selector: '[data-tutorial-lab-sample="cinder"]' }
-        return { selector: confirm }
-      }
-      if (step === 'round-1-thesis' || step === 'round-2-thesis') {
+      if (step === 'round-1-thesis') {
         const selector = '[data-tutorial-thesis]'
         const fields = [...board.querySelectorAll<HTMLSelectElement>(`${selector} select`)]
         const nextField = fields.findIndex((field) => !field.value)
@@ -676,11 +515,6 @@ function useTutorialNearestAction(step: TutorialStep) {
             ? '[data-tutorial-action-container] button'
             : `${selector} > label:nth-child(${nextField + 1}) select`,
         }
-      }
-      if (step === 'round-2-contract-reserve') {
-        const selector = '[data-contract-id="tutorial-light-contract"]'
-        const field = board.querySelector<HTMLSelectElement>(`${selector} select`)
-        return { selector, fallbackSelector: `${selector} ${field?.value ? 'button' : 'select'}` }
       }
       return null
     }
@@ -699,8 +533,8 @@ function useTutorialNearestAction(step: TutorialStep) {
   return selection?.step === step ? selection.action : null
 }
 
-function TutorialViewportAnchor({ taskKey, activityKey, restoreJournalFocus, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, blockTargetInteraction, showSpotlightStroke, children }: {
-  taskKey: TutorialStep
+function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, blockTargetInteraction, showSpotlightStroke, children }: {
+  tutorialStep: TutorialStep
   activityKey: string
   restoreJournalFocus: boolean
   manualReadingTasks: RefObject<Set<string>>
@@ -716,7 +550,7 @@ function TutorialViewportAnchor({ taskKey, activityKey, restoreJournalFocus, man
   children?: ReactElement
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const identity = `${taskKey}:${anchorSelector}:${fallbackSelector}:${spotlightSelector}:${Boolean(children)}`
+  const identity = `${tutorialStep}:${anchorSelector}:${fallbackSelector}:${spotlightSelector}:${Boolean(children)}`
   const [mask, setMask] = useState<{ identity: string; width: number; height: number; frame: string; spotlight: string; secondary: string } | null>(null)
   const visibleMask = mask?.identity === identity ? mask : null
   useLayoutEffect(() => {
@@ -737,7 +571,7 @@ function TutorialViewportAnchor({ taskKey, activityKey, restoreJournalFocus, man
     // A different selected control is a new action, even when an older control
     // is revisited. Geometry resolving the same fallback is still one task.
     for (const previous of manualReadingTasks.current) {
-      if (previous.startsWith(`${taskKey}:`) && previous !== readingTask) manualReadingTasks.current.delete(previous)
+      if (previous.startsWith(`${tutorialStep}:`) && previous !== readingTask) manualReadingTasks.current.delete(previous)
     }
     let preserveReading = manualReadingTasks.current.has(readingTask)
     let userScrolled = false
@@ -773,11 +607,8 @@ function TutorialViewportAnchor({ taskKey, activityKey, restoreJournalFocus, man
         const entry = query('[data-testid="tutorial-research-trigger"]')
         if (entry) controls.push(entry)
       }
-      if (taskKey === 'round-1-thesis' || taskKey === 'round-2-thesis') {
+      if (tutorialStep === 'round-1-thesis') {
         controls.push(...document.querySelectorAll<HTMLElement>('[data-tutorial-board] [data-tutorial-thesis] select, [data-tutorial-board] [data-tutorial-action-container] button'))
-      }
-      if (taskKey === 'round-2-contract-reserve' || taskKey === 'round-2-contract-bid') {
-        controls.push(...document.querySelectorAll<HTMLElement>('[data-tutorial-board] [data-contract-id="tutorial-light-contract"] select, [data-tutorial-board] [data-contract-id="tutorial-light-contract"] button'))
       }
       const rectangle = (rect: { left: number; top: number; right: number; bottom: number }) => {
         const points = [[rect.left, rect.top], [rect.right, rect.top], [rect.right, rect.bottom], [rect.left, rect.bottom]]
@@ -987,7 +818,7 @@ function TutorialViewportAnchor({ taskKey, activityKey, restoreJournalFocus, man
       root.removeAttribute('data-tutorial-pilot-constrained')
       delete root.dataset.tutorialAutoscrolling
     }
-  }, [taskKey, activityKey, restoreJournalFocus, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, identity])
+  }, [tutorialStep, activityKey, restoreJournalFocus, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, identity])
   return children ? createPortal(<>
     <div data-testid="overlay" data-tutorial-overlay="" className={styles.coachOverlay}
       style={{ height: visibleMask?.height ?? 0, visibility: visibleMask ? 'visible' : 'hidden' }} aria-hidden="true">
@@ -1011,22 +842,22 @@ function TutorialViewportAnchor({ taskKey, activityKey, restoreJournalFocus, man
 }
 
 function CoachContent({
-  hint,
   onExit,
   exitButtonRef,
   onContinue,
-  onHint,
+  onBack,
+  canGoBack,
   onReset,
   task,
   pilot,
   thesisFeedback,
   progress,
 }: {
-  hint?: string
   onExit: (event: MouseEvent<HTMLButtonElement>) => void
   exitButtonRef: (button: HTMLButtonElement | null) => void
   onContinue?: () => void
-  onHint?: () => void
+  onBack: () => void
+  canGoBack: boolean
   onReset?: () => void
   task: string
   pilot?: { action: string; why: string; expanded: boolean; onToggle: () => void }
@@ -1066,7 +897,6 @@ function CoachContent({
         </Typography>
       )}
       {onReset && <Typography role="status" variant="bodySm">{t('tutorial.base.exhausted')}</Typography>}
-      {hint && <Typography variant="bodySm" className={styles.hint}>{hint}</Typography>}
       {!pilot && <Typography as="strong" variant="bodySmMedium" className={styles.confirmAction}>
         {t('tutorial.coach.confirmAction')}
       </Typography>}
@@ -1075,6 +905,7 @@ function CoachContent({
           aria-expanded={pilot.expanded} aria-controls="tutorial-coach-explanation" onClick={pilot.onToggle}>
           {t('tutorial.pilot.more')}
         </Button>}
+        <Button type="button" size="sm" variant="outline" data-tutorial-back disabled={!canGoBack} onClick={onBack}>{t('tutorial.back')}</Button>
         <Button
           type="button"
           variant="ghost"
@@ -1085,7 +916,6 @@ function CoachContent({
         >
           {t('tutorial.exit.short')}
         </Button>
-        {onHint && <Button type="button" size="sm" variant="outline" onClick={onHint}>{t('tutorial.base.hint')}</Button>}
         {onReset && <Button type="button" size="sm" onClick={onReset}>{t('tutorial.base.retry')}</Button>}
         {onContinue && <Button type="button" size="sm" onClick={onContinue}>{t('tutorial.coach.continue')}</Button>}
       </div>

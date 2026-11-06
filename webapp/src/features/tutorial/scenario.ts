@@ -4,15 +4,12 @@ import type { TenderCommandInput } from '@/features/tender/public/tutorial-board
 import { translate } from '@/platform/i18n'
 
 export const baseScenarioVersion = 'base-simple-v1' as const
-// Kept for bounded decoding of the former lesson; the base lesson has no Contracts.
-export const tutorialContractId = 'tutorial-light-contract'
 export const tutorialPowerGoals = {
   'round-1-power': [1, 2, 1, 0],
-  'round-2-power': [0, 1, 2, 0],
-  'round-3-power': [0, 1, 1, 0],
 } as const
 
-export type TutorialStep =| 'prologue'
+export type TutorialStep =
+  | 'prologue'
   | 'interaction-guide'
   | 'round-1-header'
   | 'round-1-sidebar'
@@ -51,7 +48,8 @@ export type TutorialStep =| 'prologue'
   | 'round-2-contract-bid'
   | 'final-model-intro'
   | 'final-model'
-  | 'complete'  | 'round-2-thesis-result'
+  | 'complete'
+  | 'round-2-thesis-result'
   | 'round-3-access'
   | 'round-3-power'
   | 'round-3-recon'
@@ -129,31 +127,33 @@ export function createTutorialState(playerId: string): TutorialState {
 export function resumeTutorialState(state: TutorialState): TutorialState {
   // Dialog visibility is ephemeral; a restored lesson must offer its real entry.
   const step = state.step === 'research-results-open' ? 'research-results'
-    : state.step === 'interpretation-open' ? 'interpretation'
-      : state.step === 'round-2-research-open' ? 'round-2-research' : state.step
-  return step === state.step ? state : { ...state, step }
+    : state.step === 'interpretation-open' ? 'interpretation' : state.step
+  // Before the lesson was shortened, the first-round result did not set this flag.
+  const independentCycle = state.independentCycle || (
+    state.round === 1 && step === 'round-1-thesis-result'
+    && state.privateTheses.some((thesis) => thesis.round === 1 && thesis.signalId === 'aster' && thesis.fullyCorrect)
+  )
+  return step === state.step && independentCycle === state.independentCycle ? state : { ...state, step, independentCycle }
 }
 const unchanged = (state: TutorialState): TutorialAdvanceResult => ({ progressed: false, state })
 const progressed = (state: TutorialState, changes: Partial<TutorialState>): TutorialAdvanceResult => ({ progressed: true, state: { ...state, ...changes } })
 
 export function advanceTutorial(state: TutorialState, action: TutorialAction): TutorialAdvanceResult {
-  if (action.type === 'close-journal' && !['final-model', 'complete'].includes(state.step)) state = { ...state, workingModel: action.workingModel }
-  if (action.type === 'update-working-model' && !['final-model', 'complete'].includes(state.step)) {
+  // Older completed lessons can still be displayed and handed off to an account.
+  if (state.round !== 1 || state.step === 'complete') return unchanged(state)
+  if (action.type === 'close-journal' && state.step !== 'final-model') state = { ...state, workingModel: action.workingModel }
+  if (action.type === 'update-working-model' && state.step !== 'final-model') {
     return { progressed: false, state: { ...state, workingModel: action.workingModel } }
   }
   if (action.type === 'request-hint') return { progressed: false, state: { ...state, hintLevel: Math.min(2, state.hintLevel + 1) } }
-  if (action.type === 'restart-exercise' && state.step.endsWith('thesis') && state.round < 3) {
-    const target = state.round === 1 ? 'aster' : 'cinder'
-    const privateTheses = state.privateTheses.filter((thesis) => thesis.round !== state.round)
-    const spentOnReview = state.privateTheses.filter((thesis) => thesis.round === state.round).slice(1).length
+  if (action.type === 'restart-exercise' && state.step === 'round-1-thesis') {
     const signals = { ...state.workingModel.signals }
-    delete signals[target]
+    delete signals.aster
     return progressed(state, {
-      privateTheses, budget: state.budget + spentOnReview, thesisAttempts: 0, corporateReviewActive: false,
-      hintLevel: 0, workingModel: { signals }, step: state.round === 1 ? 'round-1-working-model' : 'round-2-working-model',
+      privateTheses: [], thesisAttempts: 0, corporateReviewActive: false,
+      hintLevel: 0, workingModel: { signals }, step: 'round-1-working-model',
     })
   }
-  if (action.type === 'finish-model-analysis' && state.step === 'round-3-thesis' && state.allocation?.modelAnalysis === 2 && state.privateTheses.filter((thesis) => thesis.round === 3).length === 1) return enterFinal(state)
   if (action.type === 'submit-thesis') return resolveThesis(state, action)
   if (action.type === 'update-scientific-model-draft' && state.step === 'final-model') {
     return { progressed: false, state: { ...state, finalDraft: action.scientificModelDraft } }
@@ -167,43 +167,31 @@ export function advanceTutorial(state: TutorialState, action: TutorialAction): T
     }, 0)
     return progressed(state, { step: 'complete', rating, finalSubmission: parsed.data })
   }
-  if (action.type === 'request-access-slot' && state.step.endsWith('access')) {
-    const required = state.round === 1 ? 6 : state.round === 2 ? 5 : null
-    const delta = action.slot === 1 ? -2 : action.slot === 2 ? -1 : [4, 6].includes(action.slot) ? 1 : 0
-    if ((required !== null && action.slot !== required) || state.budget + delta < 0) return unchanged(state)
-    const samples = [...state.samples]
-    if ([5, 6].includes(action.slot)) {
-      const next = state.round === 1 ? 'boreal' : state.round === 2 ? 'cinder' : signalIds.find((id) => !samples.includes(id))
-      if (next && !samples.includes(next)) samples.push(next)
-    }
-    return progressed(state, { step: `round-${state.round}-power`, accessSlot: action.slot, budget: state.budget + delta, samples })
+  if (action.type === 'request-access-slot' && state.step === 'round-1-access') {
+    if (action.slot !== 6) return unchanged(state)
+    const samples = state.samples.includes('boreal') ? state.samples : [...state.samples, 'boreal' as const]
+    return progressed(state, { step: 'round-1-power', accessSlot: action.slot, budget: state.budget + 1, samples })
   }
-  if (action.type === 'allocate-power' && state.step.endsWith('power')) {
+  if (action.type === 'allocate-power' && state.step === 'round-1-power') {
     const parsed = powerAllocationSchema.safeParse(action.allocation)
-    if (!parsed.success || parsed.data.contracts !== 0 || parsed.data.reconnaissance > 6 - state.samples.length) return unchanged(state)
+    if (!parsed.success) return unchanged(state)
     const allocation = parsed.data
-    if (allocation.laboratory > 0 && state.samples.length + allocation.reconnaissance < 2) return unchanged(state)
-    if (state.round === 1 && !(allocation.reconnaissance === 1 && allocation.laboratory === 2 && allocation.modelAnalysis === 1)) return unchanged(state)
-    if (state.round === 2 && !(allocation.reconnaissance === 0 && allocation.laboratory === 1 && allocation.modelAnalysis === 2 && allocation.reserve === 1)) return unchanged(state)
-    const next = { ...state, allocation }
-    if (allocation.reconnaissance) return progressed(next, { step: state.round === 1 ? 'round-1-recon' : 'round-3-recon' })
-    return afterReconnaissance(next)
+    const [reconnaissance, laboratory, modelAnalysis, contracts] = tutorialPowerGoals['round-1-power']
+    if (allocation.reconnaissance !== reconnaissance || allocation.laboratory !== laboratory
+      || allocation.modelAnalysis !== modelAnalysis || allocation.contracts !== contracts) return unchanged(state)
+    return progressed(state, { step: 'round-1-recon', allocation })
   }
-  if (action.type === 'conduct-reconnaissance' && state.step.endsWith('recon')) {
+  if (action.type === 'conduct-reconnaissance' && state.step === 'round-1-recon') {
     const targets = action.targets ?? action.signals ?? []
-    if (targets.length !== state.allocation?.reconnaissance) return unchanged(state)
-    if (state.round === 1 && !(targets.length === 1 && targets[0] === 'aster')) return unchanged(state)
-    const samples = [...state.samples]
-    let samplePool = [...state.samplePool]
-    for (const target of targets) {
-      const id = target === 'unknown-sector' ? signalIds.find((candidate) => !samples.includes(candidate)) : target
-      if (!id || samples.includes(id) || (target !== 'unknown-sector' && !samplePool.includes(id))) return unchanged(state)
-      samples.push(id)
-      if (target !== 'unknown-sector') samplePool = samplePool.filter((candidate) => candidate !== id)
-    }
-    return afterReconnaissance({ ...state, samples, samplePool })
+    if (targets.length !== 1 || targets[0] !== 'aster' || targets.length !== state.allocation?.reconnaissance
+      || state.samples.includes('aster') || !state.samplePool.includes('aster')) return unchanged(state)
+    return progressed(state, {
+      step: 'round-1-lab-mode',
+      samples: [...state.samples, 'aster'],
+      samplePool: state.samplePool.filter((signal) => signal !== 'aster'),
+    })
   }
-  if (action.type === 'run-laboratory-test' && ['round-1-lab-pair', 'round-2-lab', 'round-3-lab'].includes(state.step)) return runTest(state, action)
+  if (action.type === 'run-laboratory-test' && state.step === 'round-1-lab-pair') return runTest(state, action)
   switch (state.step) {
     case 'prologue': return action.type === 'start-tutorial' ? progressed(state, { step: 'round-1-access' }) : unchanged(state)
     case 'round-1-lab-mode': return action.type === 'select-laboratory-mode' && action.mode === 'deep' ? progressed(state, { step: 'round-1-lab-pair' }) : unchanged(state)
@@ -211,12 +199,8 @@ export function advanceTutorial(state: TutorialState, action: TutorialAction): T
     case 'research-results-open': return action.type === 'open-interpretation' ? progressed(state, { step: 'interpretation-open' }) : closeTo(state, action, 'research-results')
     case 'interpretation': return action.type === 'open-interpretation' || action.type === 'open-interpretation-direct' ? progressed(state, { step: 'interpretation-open' }) : unchanged(state)
     case 'interpretation-open': return action.type === 'open-working-model' ? progressed(state, { step: 'round-1-working-model' }) : closeTo(state, action, 'interpretation')
-    case 'round-1-working-model': return closeHypothesis(state, action, 'aster', 'round-1-thesis')
-    case 'round-2-working-model': return closeHypothesis(state, action, 'cinder', 'round-2-thesis')
-    case 'round-2-research': return action.type === 'open-research-results' ? progressed(state, { step: 'round-2-research-open' }) : unchanged(state)
-    case 'round-2-research-open': return action.type === 'open-working-model' ? progressed(state, { step: 'round-2-working-model' }) : closeTo(state, action, 'round-2-research')
-    case 'round-1-thesis-result': return action.type === 'continue' ? nextRound(state, 2) : unchanged(state)
-    case 'round-2-thesis-result': return action.type === 'continue' || action.type === 'finish-model-analysis' ? nextRound(state, 3) : unchanged(state)
+    case 'round-1-working-model': return closeHypothesis(state, action)
+    case 'round-1-thesis-result': return action.type === 'continue' && state.independentCycle ? enterFinal(state) : unchanged(state)
     default: return unchanged(state)
   }
 }
@@ -224,41 +208,32 @@ export function advanceTutorial(state: TutorialState, action: TutorialAction): T
 function closeTo(state: TutorialState, action: TutorialAction, step: TutorialStep) {
   return ['close-journal', 'close-research-results', 'close-interpretation'].includes(action.type) ? progressed(state, { step }) : unchanged(state)
 }
-function closeHypothesis(state: TutorialState, action: TutorialAction, signal: SignalId, step: TutorialStep) {
-  const model = action.type === 'close-journal' ? action.workingModel : state.workingModel
-  const hypothesis = model.signals[signal]?.hypothesis
+function closeHypothesis(state: TutorialState, action: TutorialAction) {
+  const hypothesis = state.workingModel.signals.aster?.hypothesis
   return ['close-journal', 'close-research-results'].includes(action.type) && hypothesis?.fieldType && hypothesis.polarity
-    ? progressed(state, { step, workingModel: model }) : unchanged(state)
-}
-function nextRound(state: TutorialState, round: 2 | 3) {
-  return progressed(state, { round, step: `round-${round}-access`, budget: state.budget + 1, accessSlot: null, allocation: null, corporateReviewActive: false, thesisAttempts: 0, hintLevel: 0, samplePool: [...signalIds] })
-}
-function afterReconnaissance(state: TutorialState): TutorialAdvanceResult {
-  if (state.allocation?.laboratory) return progressed(state, { step: state.round === 1 ? 'round-1-lab-mode' : state.round === 2 ? 'round-2-lab' : 'round-3-lab' })
-  return afterLaboratory(state)
+    ? progressed(state, { step: 'round-1-thesis' }) : unchanged(state)
 }
 function enterFinal(state: TutorialState): TutorialAdvanceResult {
   const signals = Object.fromEntries(Object.entries(state.workingModel.signals).flatMap(([id, model]) => model.hypothesis && (model.hypothesis.fieldType || model.hypothesis.polarity) ? [[id, { ...model.hypothesis }]] : []))
   return progressed(state, { step: 'final-model', budget: state.budget + 1, finalDraft: { signals } })
 }
-function afterLaboratory(state: TutorialState): TutorialAdvanceResult {
-  if (state.round === 1) return progressed(state, { step: 'research-results' })
-  if (state.round === 2) return progressed(state, { step: 'round-2-research' })
-  return state.allocation?.modelAnalysis ? progressed(state, { step: 'round-3-thesis' }) : enterFinal(state)
-}
 function runTest(state: TutorialState, action: Extract<TutorialAction, { type: 'run-laboratory-test' }>): TutorialAdvanceResult {
-  if (!('laboratory' in action)) return unchanged(state)
-  const lab = action.laboratory
-  const pairs = lab.mode === 'broad' ? lab.pairs : [lab.pair]
-  if ((lab.mode === 'impulse' ? 1 : 2) !== state.allocation?.laboratory) return unchanged(state)
-  if (pairs.some((pair) => pair.sourceSignal === pair.receiverSignal || !state.samples.includes(pair.sourceSignal) || !state.samples.includes(pair.receiverSignal))) return unchanged(state)
-  if (new Set(pairs.map((pair) => `${pair.sourceSignal}:${pair.receiverSignal}`)).size !== pairs.length) return unchanged(state)
-  if (state.round === 1 && !(lab.mode === 'deep' && pairs[0]?.sourceSignal === 'aster' && pairs[0].receiverSignal === 'boreal')) return unchanged(state)
-  if (state.round === 2 && !(lab.mode === 'impulse' && pairs[0]?.sourceSignal === 'boreal' && pairs[0].receiverSignal === 'cinder')) return unchanged(state)
-  if (pairs.some((pair) => state.journal.some((entry) => entry.sourceSignal === pair.sourceSignal && entry.receiverSignal === pair.receiverSignal && entry.protocol === (lab.mode === 'deep' ? 'continuous' : 'impulse')))) return unchanged(state)
-  const journal = pairs.map((pair, index) => ({ ...pair, playerId: state.playerId, protocol: lab.mode === 'deep' ? 'continuous' as const : 'impulse' as const, publicResult: fixtureResult(pair.sourceSignal, pair.receiverSignal), testId: `base-r${state.round}-${state.journal.length + index + 1}` }))
-  const privateMeasurements = lab.mode === 'deep' ? [...state.privateMeasurements, ...pairs.map((pair) => ({ ...pair, polarityRelation: signalProperties[pair.sourceSignal].polarity === signalProperties[pair.receiverSignal].polarity ? 'same' as const : 'different' as const }))] : state.privateMeasurements
-  return afterLaboratory({ ...state, journal: [...state.journal, ...journal], privateMeasurements })
+  if (!('laboratory' in action) || action.laboratory.mode !== 'deep' || state.allocation?.laboratory !== 2) return unchanged(state)
+  const pair = action.laboratory.pair
+  const { sourceSignal, receiverSignal } = pair
+  if (sourceSignal !== 'aster' || receiverSignal !== 'boreal'
+    || !state.samples.includes(sourceSignal) || !state.samples.includes(receiverSignal)) return unchanged(state)
+  if (state.journal.some((entry) => entry.sourceSignal === sourceSignal && entry.receiverSignal === receiverSignal && entry.protocol === 'continuous')) return unchanged(state)
+  const entry: ScientificJournalEntry = {
+    ...pair, playerId: state.playerId, protocol: 'continuous',
+    publicResult: fixtureResult(sourceSignal, receiverSignal), testId: `base-r1-${state.journal.length + 1}`,
+  }
+  const polarityRelation = signalProperties[sourceSignal].polarity === signalProperties[receiverSignal].polarity ? 'same' : 'different'
+  return progressed(state, {
+    step: 'research-results',
+    journal: [...state.journal, entry],
+    privateMeasurements: [...state.privateMeasurements, { ...pair, polarityRelation }],
+  })
 }
 function fixtureResult(source: SignalId, receiver: SignalId): ScientificJournalEntry['publicResult'] {
   const a = signalProperties[source], b = signalProperties[receiver]
@@ -269,17 +244,15 @@ function fixtureResult(source: SignalId, receiver: SignalId): ScientificJournalE
   return forward ? same ? 'reflection' : 'unstable_collapse' : same ? 'attenuation' : 'transmission_gain'
 }
 function resolveThesis(state: TutorialState, action: Extract<TutorialAction, { type: 'submit-thesis' }>): TutorialAdvanceResult {
-  if (!state.step.endsWith('thesis') || !state.samples.includes(action.signalId)) return unchanged(state)
-  const target = state.round === 1 ? 'aster' : state.round === 2 ? 'cinder' : action.signalId
-  const attempts = state.privateTheses.filter((thesis) => thesis.round === state.round).length
-  if (action.signalId !== target || attempts >= (state.allocation?.modelAnalysis ?? 0) || (state.corporateReviewActive && state.budget < 1)) return unchanged(state)
+  if (state.step !== 'round-1-thesis' || action.signalId !== 'aster' || !state.samples.includes(action.signalId)) return unchanged(state)
+  const attempts = state.privateTheses.length
+  if (attempts >= (state.allocation?.modelAnalysis ?? 0) || (state.corporateReviewActive && state.budget < 1)) return unchanged(state)
   const actual = signalProperties[action.signalId]
   const thesisFeedback = { fieldTypeCorrect: action.fieldType === actual.fieldType, polarityCorrect: action.polarity === actual.polarity }
   const fullyCorrect = thesisFeedback.fieldTypeCorrect && thesisFeedback.polarityCorrect
-  const thesis: PrivateThesis = { id: `base-r${state.round}-thesis-${attempts + 1}`, signalId: action.signalId, fieldType: action.fieldType, polarity: action.polarity, ...thesisFeedback, fullyCorrect, round: state.round }
+  const thesis: PrivateThesis = { id: `base-r1-thesis-${attempts + 1}`, signalId: action.signalId, fieldType: action.fieldType, polarity: action.polarity, ...thesisFeedback, fullyCorrect, round: 1 }
   const next = { ...state, budget: state.budget - Number(state.corporateReviewActive), corporateReviewActive: state.corporateReviewActive || !fullyCorrect, thesisAttempts: attempts + 1, privateTheses: [...state.privateTheses, thesis] }
-  if (state.round === 3) return attempts + 1 < (state.allocation?.modelAnalysis ?? 0) && (!next.corporateReviewActive || next.budget >= 1) ? { progressed: false, state: next, thesisFeedback } : { ...enterFinal(next), thesisFeedback }
-  if (fullyCorrect) return { ...progressed(next, { step: state.round === 1 ? 'round-1-thesis-result' : 'round-2-thesis-result', independentCycle: state.independentCycle || (state.round === 2 && Boolean(state.workingModel.signals.cinder?.hypothesis) && state.journal.some((entry) => entry.sourceSignal === 'boreal' && entry.receiverSignal === 'cinder')) }), thesisFeedback }
+  if (fullyCorrect) return { ...progressed(next, { step: 'round-1-thesis-result', independentCycle: true }), thesisFeedback }
   return { progressed: false, state: next, thesisFeedback }
 }
 

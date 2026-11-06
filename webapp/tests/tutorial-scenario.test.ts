@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { tenderViewSchema } from '@anomaly-detector/contracts'
-import { advanceTutorial, createTutorialState, tutorialView, type TutorialAction, type TutorialState } from '../src/features/tutorial/scenario'
+import { advanceTutorial, createTutorialState, resumeTutorialState, tutorialView, type TutorialAction, type TutorialState } from '../src/features/tutorial/scenario'
 
 function run(state: TutorialState, actions: TutorialAction[]) {
   for (const action of actions) state = advanceTutorial(state, action).state
@@ -21,16 +21,8 @@ function firstThesis() {
     { type: 'close-research-results' },
   ])
 }
-function independentThesis() {
-  return run(firstThesis(), [
-    { type: 'submit-thesis', signalId: 'aster', fieldType: 'inertial', polarity: 'positive' }, { type: 'continue' },
-    { type: 'request-access-slot', slot: 5 },
-    { type: 'allocate-power', allocation: { reconnaissance: 0, laboratory: 1, modelAnalysis: 2, contracts: 0, reserve: 1 } },
-    { type: 'run-laboratory-test', laboratory: { mode: 'impulse', pair: { sourceSignal: 'boreal', receiverSignal: 'cinder' } } },
-    { type: 'open-research-results' }, { type: 'open-working-model' },
-    { type: 'update-working-model', workingModel: { signals: { aster: { hypothesis: { fieldType: 'inertial', polarity: 'positive' } }, cinder: { hypothesis: { fieldType: 'inertial', polarity: 'positive' } } } } },
-    { type: 'close-research-results' },
-  ])
+function checkedThesis() {
+  return run(firstThesis(), [{ type: 'submit-thesis', signalId: 'aster', fieldType: 'inertial', polarity: 'positive' }])
 }
 
 test('base orientation is attached to actual actions with no Next-only introductions', () => {
@@ -99,44 +91,27 @@ test('wrong Thesis checks field and polarity separately, consumes the allocated 
   expect(reset.budget).toBe(3)
 })
 
-test('independent hints explain method without preselecting Cinder or checking its draft', () => {
-  const state = independentThesis()
+test('requesting a hint during Aster analysis neither fills the hypothesis nor checks it', () => {
+  const state = run(firstResearch(), [{ type: 'open-research-results' }, { type: 'open-interpretation' }, { type: 'open-working-model' }])
   const hint = advanceTutorial(state, { type: 'request-hint' })
+  expect(hint.state.hintLevel).toBe(1)
   expect(hint.state.workingModel).toEqual(state.workingModel)
   expect(hint.state.privateTheses).toEqual(state.privateTheses)
   expect(hint.thesisFeedback).toBeUndefined()
   expect(hint.state.independentCycle).toBe(false)
-  expect(tutorialView(hint.state).privateMeasurements).toHaveLength(1)
-  expect(tutorialView(hint.state).publicScientificJournal?.at(-1)).toMatchObject({ sourceSignal: 'boreal', receiverSignal: 'cinder', protocol: 'impulse', publicResult: 'unstable_collapse' })
-})
-
-test('two wrong independent Theses charge the second Budget, exhaust the round and reset only this exercise', () => {
-  const original = independentThesis()
-  const wrong = { type: 'submit-thesis', signalId: 'cinder', fieldType: 'inertial', polarity: 'positive' } as const
-  const first = advanceTutorial(original, wrong).state
-  const second = advanceTutorial(first, wrong).state
-  expect(second.budget).toBe(3)
-  expect(second.privateTheses).toHaveLength(3)
-  expect(second.independentCycle).toBe(false)
-  expect(advanceTutorial(second, wrong).thesisFeedback).toBeUndefined()
-  const reset = advanceTutorial(second, { type: 'restart-exercise' }).state
-  expect(reset.budget).toBe(4)
-  expect(reset.privateTheses).toHaveLength(1)
-  expect(reset.workingModel.signals.aster?.hypothesis).toBeDefined()
-  expect(reset.workingModel.signals.cinder).toBeUndefined()
 })
 
 test('closing a correction Journal flushes the actual draft even when its Thesis step did not change', () => {
-  const state = independentThesis()
-  const corrected = { signals: { cinder: { hypothesis: { fieldType: 'phase' as const, polarity: 'negative' as const } } } }
+  const state = firstThesis()
+  const corrected = { signals: { aster: { hypothesis: { fieldType: 'phase' as const, polarity: 'negative' as const } } } }
   const closed = advanceTutorial(state, { type: 'close-journal', workingModel: corrected })
-  expect(closed.state.step).toBe('round-2-thesis')
+  expect(closed.state.step).toBe('round-1-thesis')
   expect(closed.state.workingModel).toEqual(corrected)
   expect(closed.thesisFeedback).toBeUndefined()
 })
 
 test('final draft remains independent, permits wrong partial claims and rejects empty submissions or missing independent practice', () => {
-  const independent = run(independentThesis(), [{ type: 'submit-thesis', signalId: 'cinder', fieldType: 'phase', polarity: 'negative' }, { type: 'continue' }, { type: 'request-access-slot', slot: 3 }, { type: 'allocate-power', allocation: { reconnaissance: 0, laboratory: 0, modelAnalysis: 0, contracts: 0, reserve: 4 } }])
+  const independent = run(checkedThesis(), [{ type: 'continue' }])
   expect(independent.step).toBe('final-model')
   expect(advanceTutorial(independent, { type: 'submit-scientific-model', scientificModel: { signals: {} } }).progressed).toBe(false)
   const wrong = { signals: { aster: { fieldType: 'phase' as const } } }
@@ -147,4 +122,12 @@ test('final draft remains independent, permits wrong partial claims and rejects 
   expect(submitted.state.step).toBe('complete')
   expect(submitted.state.rating).toBe(0)
   expect(advanceTutorial({ ...edited, independentCycle: false }, { type: 'submit-scientific-model', scientificModel: wrong }).progressed).toBe(false)
+})
+
+test('a restored first-round result can continue using an already recorded correct Aster Thesis', () => {
+  const formerResult = { ...checkedThesis(), independentCycle: false }
+  const restored = resumeTutorialState(formerResult)
+  expect(advanceTutorial(restored, { type: 'continue' }).state.step).toBe('final-model')
+  const withoutThesis = resumeTutorialState({ ...formerResult, privateTheses: [] })
+  expect(advanceTutorial(withoutThesis, { type: 'continue' }).progressed).toBe(false)
 })

@@ -3,7 +3,16 @@ import { getSessionStorage } from '@/platform/session-storage'
 import { powerAllocationSchema, privateThesisSchema, scientificJournalEntrySchema, privateMeasurementSchema, scientificModelDraftSchema, scientificModelSchema, signalIdSchema, workingModelSchema, tutorialProgressCommandSchema, type TutorialLessonId, type TutorialProgressCommand } from '@anomaly-detector/contracts'
 import { baseScenarioVersion, createTutorialState, resumeTutorialState, type TutorialState } from './scenario'
 import { additionalScenarioVersion, createAdditionalTutorialState, type AdditionalTutorialState } from './additional-scenario'
-import { additionalTutorialStateSchema } from './additional-session-codec'
+import { additionalTutorialStateSchema, additionalTutorialStepSchema } from './additional-session-codec'
+
+import { baseTutorialStepNumbers, isActiveBaseStep } from './base-steps'
+
+type LessonState = TutorialState | AdditionalTutorialState
+export type TutorialTimeline<T extends LessonState> = { entry: T; history: T[] }
+export const tutorialHistoryLimit = 24
+const sessionSizeLimit = 131_072
+const draftEnvelopeSchema = z.object({ schemaVersion: z.literal(2), state: z.unknown(), timeline: z.unknown().optional() }).strict()
+const timelineSchema = z.object({ entry: z.unknown(), history: z.array(z.unknown()).max(tutorialHistoryLimit) }).strict()
 
 export const guestTutorialPlayerId = 'tutorial-guest'
 const legacyAccountKey = 'anomaly-detector:tutorial-session'
@@ -71,7 +80,7 @@ function remove(storage: Storage | undefined, key: string): boolean {
   try { if (!storage) return false; storage.removeItem(key); return true } catch { if (storage) failedStorage.add(storage); return false }
 }
 function decode<T>(serialized: string | null, schema: z.ZodType<T>): T | null {
-  if (!serialized || serialized.length > 131_072) return null
+  if (!serialized || serialized.length > sessionSizeLimit) return null
   try { const parsed = schema.safeParse(JSON.parse(serialized)); return parsed.success ? parsed.data : null } catch { return null }
 }
 function oldKey(playerId: string) { return playerId === guestTutorialPlayerId ? legacyGuestKey : legacyAccountKey }
@@ -91,41 +100,110 @@ function legacyCompleted(storage: Storage | undefined, playerId: string) {
   const parsed = decode(read(storage, oldKey(playerId)), legacyStateSchema)
   return parsed?.playerId === playerId
 }
-type LessonSessionResult<TState> = { state: TState; notice: Notice; legacyCompleted: boolean; completionCommand: TutorialProgressCommand | null }
+function baseDraft(state: TutorialState) {
+  return state.step === 'complete' ? state.independentCycle && state.finalSubmission !== null
+    : state.round === 1 && isActiveBaseStep(state.step) && state.finalSubmission === null
+      && (state.step !== 'final-model' || state.independentCycle)
+}
+function stepNumber(state: LessonState) {
+  if (state.lessonId === 'additional') return additionalTutorialStepSchema.options.indexOf(state.step)
+  return isActiveBaseStep(state.step) ? baseTutorialStepNumbers[state.step] : -1
+}
+
+function readDraft<T extends LessonState>(raw: string | null, schema: z.ZodType<T>, playerId: string, validState: (state: T) => boolean = () => true) {
+  if (!raw || raw.length > sessionSizeLimit) return null
+  let value: unknown
+  try { value = JSON.parse(raw) } catch { return null }
+  const envelope = draftEnvelopeSchema.safeParse(value)
+  const parseState = (input: unknown) => {
+    const parsed = schema.safeParse(input)
+    return parsed.success && parsed.data.playerId === playerId && validState(parsed.data) ? parsed.data : null
+  }
+  const state = parseState(envelope.success ? envelope.data.state : value)
+  if (!state) return null
+  if (!envelope.success || state.step === 'complete') return { state, timeline: null }
+
+  // An invalid entry or snapshot invalidates only the undo branch, never the current draft.
+  const timeline = timelineSchema.safeParse(envelope.data.timeline)
+  if (timeline.success) {
+    const entry = parseState(timeline.data.entry)
+    const history: T[] = []
+    let previousStep = -1
+    for (const snapshot of timeline.data.history) {
+      const prior = parseState(snapshot)
+      if (!prior || prior.step === 'complete' || prior.finalSubmission !== null) break
+      const number = stepNumber(prior)
+      if (number <= previousStep || number >= stepNumber(state)) break
+      history.push(prior)
+      previousStep = number
+    }
+    if (entry?.step === state.step && entry.finalSubmission === null && history.length === timeline.data.history.length) {
+      return { state, timeline: { entry, history } }
+    }
+  }
+  return { state, timeline: null }
+}
+
+type LessonSessionResult<T extends LessonState> = {
+  lessonId: T['lessonId']; state: T; timeline: TutorialTimeline<T> | null; notice: Notice; legacyCompleted: boolean; completionCommand: TutorialProgressCommand | null
+}
+type SelectedLessonSession = LessonSessionResult<TutorialState> | LessonSessionResult<AdditionalTutorialState>
 export function loadTutorialSessionResult(storage: Storage | undefined, playerId: string, lessonId: 'additional'): LessonSessionResult<AdditionalTutorialState>
 export function loadTutorialSessionResult(storage: Storage | undefined, playerId: string, lessonId?: 'base'): LessonSessionResult<TutorialState>
-export function loadTutorialSessionResult(storage: Storage | undefined, playerId: string, lessonId: TutorialLessonId): LessonSessionResult<TutorialState | AdditionalTutorialState>
-export function loadTutorialSessionResult(storage: Storage | undefined, playerId: string, lessonId: TutorialLessonId = 'base'): LessonSessionResult<TutorialState | AdditionalTutorialState> {
+export function loadTutorialSessionResult(storage: Storage | undefined, playerId: string, lessonId: TutorialLessonId): SelectedLessonSession
+export function loadTutorialSessionResult(storage: Storage | undefined, playerId: string, lessonId: TutorialLessonId = 'base'): SelectedLessonSession {
   const raw = read(storage, sessionKey(playerId, lessonId))
   if (lessonId === 'additional') {
-    const parsed = decode(raw, additionalTutorialStateSchema)
+    const parsed = readDraft(raw, additionalTutorialStateSchema, playerId)
     const receipt = decode(read(storage, receiptKey(playerId, lessonId)), receiptSchema)
-    const state = parsed?.playerId === playerId ? parsed : createAdditionalTutorialState(playerId)
+    const state = parsed?.state ?? createAdditionalTutorialState(playerId)
     return {
-      state, legacyCompleted: false,
+      lessonId, state, timeline: parsed?.timeline ?? null, legacyCompleted: false,
       completionCommand: state.step === 'complete' ? { kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: additionalScenarioVersion }
         : receipt?.playerId === playerId && receipt.command.kind === 'scenario-completed' && receipt.command.lessonId === 'additional' ? receipt.command : null,
       notice: !storage || failedStorage.has(storage) ? 'storage-unavailable' : !parsed && raw ? 'legacy-restart' : null,
     }
   }
-  const parsed = decode(raw, stateSchema)
-  const state = parsed && (parsed.step !== 'complete' || (parsed.independentCycle && parsed.finalSubmission !== null)) ? resumeTutorialState(parsed) : null
+  const parsed = readDraft(raw, stateSchema, playerId, baseDraft)
+  const state = parsed ? resumeTutorialState(parsed.state) : createTutorialState(playerId)
+  const savedTimeline = parsed?.timeline
+  let timeline: TutorialTimeline<TutorialState> | null = null
+  if (savedTimeline) {
+    const previous = savedTimeline.history.at(-1)
+    // A closed research Journal resumes at its entry. Its snapshot has
+    // become current, so Back must skip it and reopening must not duplicate it.
+    timeline = previous?.step === state.step
+      ? { entry: previous, history: savedTimeline.history.slice(0, -1) }
+      : { entry: resumeTutorialState(savedTimeline.entry), history: savedTimeline.history }
+  }
   const legacy = legacyCompleted(storage, playerId)
-  const unavailable = !storage || failedStorage.has(storage)
   const receipt = decode(read(storage, receiptKey(playerId)), receiptSchema)
   return {
-    state: state?.playerId === playerId ? state : createTutorialState(playerId),
+    lessonId, state, timeline,
     legacyCompleted: legacy,
-    completionCommand: state?.playerId === playerId && state.step === 'complete'
+    completionCommand: state.step === 'complete'
       ? { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: baseScenarioVersion }
       : receipt?.playerId === playerId && (receipt.command.kind === 'legacy-credit' || receipt.command.lessonId === 'base') ? receipt.command : null,
-    notice: unavailable ? 'storage-unavailable' : legacy ? 'legacy-complete' : !state && (raw || read(storage, oldKey(playerId))) ? 'legacy-restart' : null,
+    notice: !storage || failedStorage.has(storage) ? 'storage-unavailable' : legacy ? 'legacy-complete' : !parsed && (raw || read(storage, oldKey(playerId))) ? 'legacy-restart' : null,
   }
 }
 export function loadTutorialSession(storage: Storage | undefined, playerId: string): TutorialState { return loadTutorialSessionResult(storage, playerId).state }
-export function saveTutorialSession(storage: Storage | undefined, state: TutorialState | AdditionalTutorialState): boolean {
+export function saveTutorialSession<T extends LessonState>(storage: Storage | undefined, state: T, timeline?: TutorialTimeline<T>): boolean {
   const parsed = state.lessonId === 'base' ? stateSchema.parse(state) : additionalTutorialStateSchema.parse(state)
-  const saved = write(storage, sessionKey(state.playerId, state.lessonId), JSON.stringify(parsed))
+  // An earlier client must still recognize a terminal run for retry and for
+  // durable handoff cleanup after a rollback. Only in-flight undo uses v2.
+  let serialized = JSON.stringify(parsed)
+  if (timeline && state.step !== 'complete') {
+    const history = timeline.history.slice(-tutorialHistoryLimit)
+    const envelope = { schemaVersion: 2, state: parsed, timeline: { entry: timeline.entry, history } }
+    serialized = JSON.stringify(envelope)
+    while (serialized.length > sessionSizeLimit && history.length) {
+      history.shift()
+      serialized = JSON.stringify(envelope)
+    }
+    if (serialized.length > sessionSizeLimit) serialized = JSON.stringify({ schemaVersion: 2, state: parsed })
+  }
+  const saved = write(storage, sessionKey(state.playerId, state.lessonId), serialized)
   // A durably saved fresh exercise supersedes a consumed old guest draft. A failed
   // reset/save keeps its tombstone, so stale terminal bytes cannot transfer again.
   if (saved && state.playerId === guestTutorialPlayerId && state.step !== 'complete') {
@@ -184,12 +262,11 @@ function durableGuestCompletionRemains(storage: Storage | undefined, lessonId: T
     legacy = lessonId === 'base' ? storage.getItem(legacyGuestKey) : null
   } catch { failedStorage.add(storage); return null }
   if (lessonId === 'additional') {
-    const draft = decode(modern, additionalTutorialStateSchema)
-    return draft?.playerId === guestTutorialPlayerId && draft.step === 'complete'
+    return readDraft(modern, additionalTutorialStateSchema, guestTutorialPlayerId)?.state.step === 'complete'
   }
-  const draft = decode(modern, stateSchema)
+  const draft = readDraft(modern, stateSchema, guestTutorialPlayerId, baseDraft)
   const old = decode(legacy, legacyStateSchema)
-  return Boolean((draft?.playerId === guestTutorialPlayerId && draft.step === 'complete' && draft.independentCycle && draft.finalSubmission !== null)
+  return Boolean(draft?.state.step === 'complete'
     || old?.playerId === guestTutorialPlayerId)
 }
 function clearGuestHandoff(storage: Storage | undefined, lessonId: TutorialLessonId) {

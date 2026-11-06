@@ -43,7 +43,7 @@ async function logout(page: Page) {
 }
 async function playCurrentLesson(page: Page, lessonId: TutorialLessonId, awaitCompletion = true) {
   if (lessonId === 'additional') await playAdditionalTutorial(page, undefined, true, awaitCompletion)
-  else await playBaseTutorial(page, 'current', false, undefined, undefined, awaitCompletion)
+  else await playBaseTutorial(page, 'current', undefined, undefined, awaitCompletion)
 }
 
 test('additional Broad collects two impulse proofs for one Complex contract', async ({ page }) => {

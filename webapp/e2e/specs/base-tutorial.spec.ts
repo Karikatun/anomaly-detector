@@ -18,18 +18,18 @@ test('guest completes base, saves through registration and finishes the first ac
     if (path === '/api/analytics/events' && /tutorial_complete|base.*complete|additional.*complete/.test(request.postData() ?? '')) completionEvents.push(request.postData() ?? '')
   })
   let previous = 0
-  await playBaseTutorial(page, true, true, async (step) => {
+  await playBaseTutorial(page, true, async (step) => {
     if (!step) return
-    const indicator = page.getByText(/^Шаг \d+ из 26$/, { exact: true })
+    const indicator = page.getByText(/^Шаг \d+ из 12$/, { exact: true })
     await expect(indicator.first()).toBeVisible()
     const text = await indicator.first().innerText()
-    const current = Number(text.match(/^Шаг (\d+) из 26$/)?.[1])
+    const current = Number(text.match(/^Шаг (\d+) из 12$/)?.[1])
     expect(current).toBeGreaterThanOrEqual(previous)
     previous = current
-    if (step === 'round-2-thesis-result') expect(current).toBe(20)
-    if (step === 'round-3-access') expect(current).toBe(21)
-    if (step === 'final-model') expect(current).toBe(26)
+    if (step === 'round-1-thesis-result') expect(current).toBe(11)
+    if (step === 'final-model') expect(current).toBe(12)
   })
+  await expect(page.getByText(/Ваш учебный результат: 2 из 12/)).toBeVisible()
   expect(guestProtected).toEqual([])
   expect(completionEvents).toEqual([])
   guest = false
@@ -94,4 +94,22 @@ test('guest completes base, saves through registration and finishes the first ac
   await expect(page.getByText('Раунд 2 / 3', { exact: true })).toBeVisible()
   expect(acceptedTypes).toEqual(expect.arrayContaining(['request-access-slot', 'allocate-power', 'conduct-reconnaissance', 'run-laboratory-test', 'submit-thesis']))
   expect(completionEvents).toEqual([])
+})
+
+
+test('base lesson rolls back an access choice across reload and allows replay', async ({ page }) => {
+  page.setDefaultTimeout(15_000)
+  await page.goto('/learn')
+  await page.getByRole('button', { name: 'Начать обучение', exact: true }).click()
+  await chooseBaseSlot(page, 6)
+  await expect(page.locator('[data-tutorial-step="round-1-power"]')).toBeVisible()
+  const back = page.getByRole('button', { name: 'Назад', exact: true })
+  await back.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('[data-tutorial-step="round-1-access"]')).toBeVisible()
+  await expect(back).toBeFocused()
+  await page.reload()
+  await expect(page.locator('[data-tutorial-step="round-1-access"]')).toBeVisible()
+  await chooseBaseSlot(page, 6)
+  await expect(page.locator('[data-tutorial-step="round-1-power"]')).toBeVisible()
 })

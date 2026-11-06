@@ -1,6 +1,6 @@
 import { FlaskConicalIcon, InformationCircleIcon, Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 import type { TenderView, WorkingModel } from '@anomaly-detector/contracts'
 
@@ -49,6 +49,8 @@ export function TutorialTenderBoard({
   highlight,
   interpretationRequired,
   laboratoryInitialMode,
+  initialJournalTab,
+  roundCount,
   lessonLabel = 'tutorial.title',
   journalGuidance,
   onCommand,
@@ -72,6 +74,8 @@ export function TutorialTenderBoard({
   documentFlow?: boolean
   highlight: 'contracts' | 'header' | 'help' | 'interpretation' | 'none' | 'primary' | 'research' | 'sidebar' | 'working-model'
   interpretationRequired: boolean
+  initialJournalTab?: TenderJournalTab
+  roundCount?: number
   laboratoryInitialMode?: 'broad' | 'deep'
   lessonLabel?: TranslationKey
   journalGuidance?: ReactNode
@@ -93,10 +97,12 @@ export function TutorialTenderBoard({
 }) {
   const { t } = useI18n()
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
-  const [journalOpen, setJournalOpen] = useState(false)
-  const [journalTab, setJournalTab] = useState<TenderJournalTab>('working-model')
+  const [journalOpen, setJournalOpen] = useState(initialJournalTab !== undefined)
+  const [journalTab, setJournalTab] = useState<TenderJournalTab>(initialJournalTab ?? 'working-model')
   const [contractsOpen, setContractsOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
+  const journalOpenTimer = useRef<number | undefined>(undefined)
+  useLayoutEffect(() => () => window.clearTimeout(journalOpenTimer.current), [])
 
   const openHelp = (open: boolean) => {
     setHelpMenuOpen(open)
@@ -109,7 +115,8 @@ export function TutorialTenderBoard({
     setContractsOpen(false)
     setJournalTab('interpretation')
     // Let the previous Help focus scope close before Journal captures the opener.
-    window.setTimeout(() => { setJournalOpen(true); onJournalOpenChange(true) }, 0)
+    window.clearTimeout(journalOpenTimer.current)
+    journalOpenTimer.current = window.setTimeout(() => { setJournalOpen(true); onJournalOpenChange(true) }, 0)
     if (direct) onDirectInterpretationOpened()
     else onInterpretationOpened()
   }
@@ -177,7 +184,7 @@ export function TutorialTenderBoard({
         info={(
           <>
             <Typography variant="shortcut" tone="muted" className="uppercase">
-              {t('rooms.simple.round', { round: view.round, total: view.game?.rounds ?? 3 })}
+              {t('rooms.simple.round', { round: view.round, total: roundCount ?? view.game?.rounds ?? 3 })}
             </Typography>
             <Typography as="h3" variant="bodySmMedium" className="truncate">
               {t(phaseLabelKeys[view.phase])}
