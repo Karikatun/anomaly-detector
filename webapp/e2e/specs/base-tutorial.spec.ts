@@ -17,7 +17,19 @@ test('guest completes base, saves through registration and finishes the first ac
     if (guest && /^\/api\/(?:rooms|profile|tenders)(?:\/|$)/.test(path)) guestProtected.push(path)
     if (path === '/api/analytics/events' && /tutorial_complete|base.*complete|additional.*complete/.test(request.postData() ?? '')) completionEvents.push(request.postData() ?? '')
   })
-  await playBaseTutorial(page, true, true)
+  let previous = 0
+  await playBaseTutorial(page, true, true, async (step) => {
+    if (!step) return
+    const indicator = page.getByText(/^Шаг \d+ из 26$/, { exact: true })
+    await expect(indicator.first()).toBeVisible()
+    const text = await indicator.first().innerText()
+    const current = Number(text.match(/^Шаг (\d+) из 26$/)?.[1])
+    expect(current).toBeGreaterThanOrEqual(previous)
+    previous = current
+    if (step === 'round-2-thesis-result') expect(current).toBe(20)
+    if (step === 'round-3-access') expect(current).toBe(21)
+    if (step === 'final-model') expect(current).toBe(26)
+  })
   expect(guestProtected).toEqual([])
   expect(completionEvents).toEqual([])
   guest = false
