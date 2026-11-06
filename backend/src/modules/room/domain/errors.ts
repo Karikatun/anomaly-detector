@@ -5,6 +5,8 @@ export type RoomFailureKind =
   | 'room_bot_creation_disabled'
   | 'room_bot_not_found'
   | 'room_current_match_exists'
+  | 'room_client_update_required'
+  | 'room_format_writes_disabled'
   | 'room_full'
   | 'room_not_found'
   | 'room_not_host'
@@ -18,5 +20,11 @@ export class RoomFailure extends Error {
     message: string,
   ) {
     super(message)
+  }
+}
+
+export function requireSupportedRoomMode(mode: string | null | undefined, standardOnly?: boolean) {
+  if (standardOnly && mode === 'simple') {
+    throw new RoomFailure('room_client_update_required', 'Client update required for Simple mode')
   }
 }

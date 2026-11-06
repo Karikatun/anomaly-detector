@@ -25,6 +25,7 @@ test('returns authenticated player statistics from compatible completed matches'
     await next()
   })
   const profile = createProfileModule({
+    formatWritesEnabled: true,
     accountLifecycleSecret: 'test-account-lifecycle-secret',
     authenticatedMutationBudget,
     completedTenderSummaryReader: {
@@ -70,6 +71,7 @@ test('returns authenticated player statistics from compatible completed matches'
 
 test('requires authentication before reading per-mode statistics', async () => {
   const profile = createProfileModule({
+    formatWritesEnabled: true,
     accountLifecycleSecret: 'test-account-lifecycle-secret',
     authenticatedMutationBudget,
     completedTenderSummaryReader: { listCompletedMatches: async () => { throw new Error('Unauthorized reader reached') } },
@@ -107,6 +109,7 @@ test('reads and idempotently records the authenticated player tutorial completio
     await next()
   })
   const profile = createProfileModule({
+    formatWritesEnabled: true,
     accountLifecycleSecret: 'test-account-lifecycle-secret',
     authenticatedMutationBudget,
     completedTenderSummaryReader: { listCompletedMatches: async () => [] },
@@ -149,6 +152,7 @@ test('rejects tutorial completion when account deletion already won the lifecycl
     await next()
   })
   const profile = createProfileModule({
+    formatWritesEnabled: true,
     accountLifecycleSecret: 'test-account-lifecycle-secret',
     authenticatedMutationBudget,
     completedTenderSummaryReader: { listCompletedMatches: async () => [] },

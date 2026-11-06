@@ -26,9 +26,11 @@ test('identifies only ambiguous command responses for authoritative reconciliati
 
 test('retries an ambiguous command later with the same idempotency envelope', async () => {
   const submittedBodies: unknown[] = []
+  const versions: Array<string | null> = []
   const transport = {
     async request(_path, _schema, options?: HttpRequestOptions) {
       submittedBodies.push(options?.body)
+      versions.push(new Headers(options?.headers).get('X-Anomaly-Contract-Version'))
       if (submittedBodies.length === 1) throw new TypeError('Failed to fetch')
       return { tenderId, version: 2 }
     },
@@ -43,6 +45,7 @@ test('retries an ambiguous command later with the same idempotency envelope', as
     version: 2,
   })
   expect(submittedBodies).toHaveLength(2)
+  expect(versions).toEqual(['2', '2'])
   expect(submittedBodies[0]).toEqual(submittedBodies[1])
   expect(submittedBodies[0]).toMatchObject({ actorId, commandId, tenderId })
 })

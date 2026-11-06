@@ -1,3 +1,4 @@
+import { gameContractVersionHeader } from '@anomaly-detector/contracts'
 import { e2ePassword, expect, nextE2eClientIp, test, uniqueLogin } from '../helpers/test'
 import { chooseBaseSlot, confirmAllocation, playBaseTutorial } from '../helpers/base-tutorial'
 
@@ -85,7 +86,7 @@ test('guest completes base, saves through registration and finishes the first ac
   await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('positive')
   await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
   await expect.poll(async () => {
-    const response = await page.request.get(`${apiOrigin}/api/tenders/${tenderId}`, { headers: { Authorization: `Bearer ${session.accessToken}` } })
+    const response = await page.request.get(`${apiOrigin}/api/tenders/${tenderId}`, { headers: { Authorization: `Bearer ${session.accessToken}`, [gameContractVersionHeader]: '2' } })
     expect(response.ok()).toBe(true)
     const view = await response.json()
     expect(view.game).toMatchObject({ mode: 'simple', rounds: 3, powerPerRound: 4, contracts: false })

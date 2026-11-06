@@ -19,6 +19,7 @@ export function createRoomModule(input: {
   botCreationDisabled: boolean
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   db: DbClient
+  formatWritesEnabled: boolean
   joinBudgetPolicy: RequestBudgetPolicy<'room_join'>
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   requestBudgetSecret: string
@@ -29,6 +30,7 @@ export function createRoomModule(input: {
   const service = new TenderRoomService({
     botCreationDisabled: input.botCreationDisabled,
     clock,
+    formatWritesEnabled: input.formatWritesEnabled,
     matchPlacementReader: {
       readPlacement: (query) => input.tender.readTenderPlacement(query),
     },

@@ -1,6 +1,7 @@
+import { randomBytes } from 'node:crypto'
 import { describe, expect, test } from 'bun:test'
 
-import { loadEnv } from './env'
+import { loadEnv, newGameFormatWritesEnabled } from './env'
 
 describe('loadEnv', () => {
   test('parses defaults and comma-separated origins', () => {
@@ -43,6 +44,27 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...base, ROOM_BOT_CREATION_DISABLED: 'true' }).ROOM_BOT_CREATION_DISABLED).toBe(true)
     expect(loadEnv({ ...base, ROOM_BOT_CREATION_DISABLED: 'false' }).ROOM_BOT_CREATION_DISABLED).toBe(false)
     expect(() => loadEnv({ ...base, ROOM_BOT_CREATION_DISABLED: '1' })).toThrow('ROOM_BOT_CREATION_DISABLED')
+  })
+
+  test('requires explicit opt-in for new format writes in production', () => {
+    const local = {
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+    const production = {
+      ...local,
+      NODE_ENV: 'production',
+      COOKIE_SECURE: 'true',
+      CORS_ORIGINS: 'https://game.example.com',
+      WEBAPP_ORIGIN: 'https://game.example.com',
+      JWT_SECRET: randomBytes(32).toString('hex'),
+    }
+
+    expect(newGameFormatWritesEnabled(loadEnv(production))).toBe(false)
+    expect(newGameFormatWritesEnabled(loadEnv({ ...production, NEW_GAME_FORMAT_WRITES_ENABLED: 'true' }))).toBe(true)
+    expect(newGameFormatWritesEnabled(loadEnv({ ...local, NODE_ENV: 'test' }))).toBe(true)
+    expect(newGameFormatWritesEnabled(loadEnv({ ...local, NEW_GAME_FORMAT_WRITES_ENABLED: 'false' }))).toBe(false)
+    expect(() => loadEnv({ ...production, NEW_GAME_FORMAT_WRITES_ENABLED: '1' })).toThrow('NEW_GAME_FORMAT_WRITES_ENABLED')
   })
 
   test('parses bounded anti-abuse policy overrides without changing defaults implicitly', () => {

@@ -144,6 +144,24 @@ test('parses only the bounded reconnect marker into upgraded socket telemetry da
   expect(upgradedData.map((data) => data.reconnect)).toEqual([true, false])
 })
 
+test('rejects an unsupported contract version before consuming a ticket', async () => {
+  let consumed = false
+  const response = await upgradeRealtimeWebSocket({
+    hub: {} as RealtimeHub,
+    request: new Request(`${upgradeRequest('ticket').url}&contractVersion=3`),
+    server: asRealtimeServer(() => true),
+    ticketStore: {
+      consume: async () => {
+        consumed = true
+        return { kind: 'consumed', sessionId: 'session-a', userId: 'player-a' }
+      },
+    },
+  })
+
+  expect(response.status).toBe(400)
+  expect(consumed).toBe(false)
+})
+
 test.each([
   {
     name: 'ticket lookup',

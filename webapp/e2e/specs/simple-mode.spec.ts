@@ -1,3 +1,4 @@
+import { gameContractVersionHeader } from '@anomaly-detector/contracts'
 import { expect, registerBrowserUser, test } from '../helpers/test'
 import { randomUUID } from 'node:crypto'
 import type { WebSocketRoute } from '@playwright/test'
@@ -144,7 +145,7 @@ test('двое игроков завершают три раунда и видя
       const data = { ...payload, actorId: actor.id, commandId: randomUUID(), tenderId }
       for (let attempt = 0; attempt < 4; attempt++) {
         const response = await page.request.post(`${actor.origin}/api/tenders/${tenderId}/commands`, {
-          headers: { Authorization: `Bearer ${actor.token}` }, data,
+          headers: { Authorization: `Bearer ${actor.token}`, [gameContractVersionHeader]: '2' }, data,
         })
         if (response.ok()) return
         const body = await response.json() as { error?: { code?: string } }
@@ -153,7 +154,7 @@ test('двое игроков завершают три раунда и видя
       }
     }
     const read = async () => {
-      const response = await page.request.get(`${host.origin}/api/tenders/${tenderId}`, { headers: { Authorization: `Bearer ${host.token}` } })
+      const response = await page.request.get(`${host.origin}/api/tenders/${tenderId}`, { headers: { Authorization: `Bearer ${host.token}`, [gameContractVersionHeader]: '2' } })
       expect(response.ok()).toBe(true)
       return response.json() as Promise<{ phase: string; round: number; game: { mode: string }; privateSamples: string[]; audit?: { rounds: unknown[] } }>
     }

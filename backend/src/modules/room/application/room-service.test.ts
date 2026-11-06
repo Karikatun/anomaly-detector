@@ -11,7 +11,7 @@ const unusedRepositoryOperations: RoomRepository = {
   cancelStart: unused,
   create: unused,
   join: unused,
-  joinByCode: unused,
+  readJoinTarget: unused,
   leave: unused,
   listStartedForMember: async () => [],
   readCurrentForMember: async () => null,
@@ -23,6 +23,7 @@ const unusedRepositoryOperations: RoomRepository = {
   start: unused,
 }
 const serviceDefaults = {
+  formatWritesEnabled: true,
   clock: { now: () => fixedNow },
   matchPlacementReader: { readPlacement: async () => undefined },
   memberIdentityReader: { readDisplayNames: async () => new Map<string, string>() },
@@ -276,15 +277,19 @@ test('releases a forfeited current match using the Tender lifecycle port', async
 })
 
 test('joins a waiting room through its public join code', async () => {
-  const joinedByCode: Array<{ actorId: string; code: string }> = []
+  const codes: string[] = []
+  const joined: Array<{ actorId: string; roomId: string }> = []
   const service = new TenderRoomService({
     ...serviceDefaults,
     repository: {
       ...unusedRepositoryOperations,
       create: async () => { throw new Error('not used') },
-      join: async () => { throw new Error('UUID join must not be used') },
-      joinByCode: async (input) => {
-        joinedByCode.push(input)
+      readJoinTarget: async (code) => {
+        codes.push(code)
+        return { id: 'room-1', mode: 'standard' }
+      },
+      join: async (input) => {
+        joined.push(input)
         return {
           capacity: 2,
           hostId: 'user-1',
@@ -311,7 +316,8 @@ test('joins a waiting room through its public join code', async () => {
     joinCode: '7K9M2NP4RX',
     roomId: 'room-1',
   })
-  expect(joinedByCode).toEqual([{ actorId: 'user-2', code: '7K9M2NP4RX' }])
+  expect(codes).toEqual(['7K9M2NP4RX'])
+  expect(joined).toEqual([{ actorId: 'user-2', roomId: 'room-1' }])
 })
 
 test('reads room state for an existing member without joining again', async () => {

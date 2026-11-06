@@ -243,6 +243,50 @@ maybeDescribe('profile statistics API integration', () => {
     expect(await stored.json()).toEqual(firstMarker)
   })
 
+  test('rejects repeated and parallel new-format writes while keeping legacy completion and standard rooms', async () => {
+    const closedEnv = { ...env, NEW_GAME_FORMAT_WRITES_ENABLED: false }
+    const closed = createApp({ env: closedEnv, prisma })
+    const player = await registerTutorialPlayer('bridge-conservative', closed)
+    const headers = {
+      Authorization: `Bearer ${player.accessToken}`,
+      'Content-Type': 'application/json',
+      'X-Anomaly-Contract-Version': '2',
+    }
+    const simple = () => closed.request('/api/rooms', {
+      method: 'POST', headers, body: JSON.stringify({ capacity: 2, mode: 'simple' }),
+    })
+    const lesson = (command: object) => closed.request('/api/profile/tutorial/progress', {
+      method: 'PUT', headers, body: JSON.stringify(command),
+    })
+    const base = { kind: 'scenario-completed', lessonId: 'base', scenarioVersion: 'base-simple-v1' }
+    const writes = await Promise.all([
+      simple(), simple(), lesson(base),
+      lesson({ kind: 'legacy-credit' }),
+      lesson({ kind: 'scenario-completed', lessonId: 'additional', scenarioVersion: 'additional-standard-v1' }),
+    ])
+    for (const response of [...writes, await simple(), await lesson(base)]) {
+      expect(response.status).toBe(409)
+      expect(await response.json()).toMatchObject({ error: { code: 'CONFLICT' } })
+    }
+
+    expect(await prisma.tenderRoom.count({ where: { hostId: player.user.id } })).toBe(0)
+    expect(await prisma.currentMatch.count({ where: { userId: player.user.id } })).toBe(0)
+    expect(await prisma.tutorialCompletionRecord.count({ where: { userId: player.user.id } })).toBe(0)
+    expect((await closed.request('/api/profile/tutorial/completion', { method: 'PUT', headers })).status).toBe(200)
+    const progress = await closed.request('/api/profile/tutorial/progress', { headers })
+    expect(await progress.json()).toEqual({
+      schemaVersion: 1,
+      base: { legacyCredit: { origin: 'legacy', completedAt: expect.any(String) }, completion: null },
+      additional: { completion: null },
+    })
+    expect(await prisma.tutorialCompletionRecord.count({ where: { userId: player.user.id } })).toBe(0)
+    const standard = await closed.request('/api/rooms', {
+      method: 'POST', headers, body: JSON.stringify({ capacity: 2 }),
+    })
+    expect(standard.status).toBe(201)
+    expect(await standard.json()).toMatchObject({ mode: 'standard' })
+  })
+
   test('keeps actual base completion separate from a late legacy completion', async () => {
     const registration = await app.request('/api/auth/token/register', {
       method: 'POST',

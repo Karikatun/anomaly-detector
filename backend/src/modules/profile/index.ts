@@ -15,6 +15,7 @@ export function createProfileModule(input: {
   authenticatedMutationBudget: MiddlewareHandler<AuthHttpEnv>
   completedTenderSummaryReader: CompletedTenderSummaryReader
   db: DbClient
+  formatWritesEnabled: boolean
   requireAuth: MiddlewareHandler<AuthHttpEnv>
 }) {
   const service = new ProfileStatisticsService({
@@ -22,6 +23,7 @@ export function createProfileModule(input: {
   })
   const tutorial = new TutorialProgressService(
     createPrismaTutorialProgressRepository(input.db, input.accountLifecycleSecret),
+    input.formatWritesEnabled,
   )
   return {
     routes: createProfileRoutes({

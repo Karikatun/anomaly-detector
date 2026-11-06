@@ -288,6 +288,76 @@ describe('realtime websocket integration', () => {
     expect(replay.status).toBe(401)
   }, 15_000)
 
+  test('negotiates the same authorised contract for Tender reads, commands, and realtime', async () => {
+    const host = await register('bridge-ws-host')
+    const outsider = await register('bridge-ws-outsider')
+    const players = [{ id: host.user.id, tiePriority: 1 }, { id: crypto.randomUUID(), tiePriority: 2 }]
+    const standard = await tender.createTender({ players })
+    const simple = await tender.createTender({ players, mode: 'simple' })
+    const legacyHeaders = { Authorization: `Bearer ${host.accessToken}`, 'Content-Type': 'application/json' }
+    const modernHeaders = { ...legacyHeaders, 'X-Anomaly-Contract-Version': '2' }
+
+    const standardLegacy = await fetch(`${baseUrl}/api/tenders/${standard.tenderId}`, { headers: legacyHeaders })
+    expect(standardLegacy.status).toBe(200)
+    expect(standardLegacy.headers.get('vary')).toContain('X-Anomaly-Contract-Version')
+    const legacyView = await standardLegacy.json()
+    expect(legacyView).not.toHaveProperty('game')
+    const standardModern = await fetch(`${baseUrl}/api/tenders/${standard.tenderId}`, { headers: modernHeaders })
+    expect(await standardModern.json()).toMatchObject({ game: { mode: 'standard' } })
+    const legacyTicket = await issueTicket(host.accessToken)
+    const legacySocket = await connect(`${wsUrl}?ticket=${legacyTicket.ticket}&tenderId=${standard.tenderId}`)
+    try {
+      expect(await nextMessage(legacySocket.messages, 0)).toEqual({
+        type: 'tender-view',
+        view: { ...legacyView, serverTime: expect.any(String) },
+      })
+    } finally {
+      legacySocket.socket.close()
+    }
+
+    const path = `${baseUrl}/api/tenders/${simple.tenderId}`
+    const legacy = await fetch(path, { headers: legacyHeaders })
+    expect(legacy.status).toBe(409)
+    expect(await legacy.json()).toMatchObject({ error: { code: 'CONFLICT' } })
+    const foreign = await fetch(path, { headers: { Authorization: `Bearer ${outsider.accessToken}` } })
+    expect(foreign.status).toBe(404)
+    const incompatibleTicket = await issueTicket(host.accessToken)
+    expect(await observeRejectedConnection(`${wsUrl}?ticket=${incompatibleTicket.ticket}&tenderId=${simple.tenderId}`))
+      .toEqual({ code: 4404, messages: [], reason: 'Unavailable' })
+
+    const command = (headers: HeadersInit) => fetch(`${path}/commands`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        actorId: host.user.id,
+        commandId: 'bridge-first-slot',
+        slot: 4,
+        tenderId: simple.tenderId,
+        type: 'request-access-slot',
+      }),
+    })
+    expect((await command(legacyHeaders)).status).toBe(409)
+    const modernView = await fetch(path, { headers: modernHeaders })
+    expect(await modernView.json()).toMatchObject({
+      game: { mode: 'simple' },
+      players: expect.arrayContaining([expect.objectContaining({ playerId: host.user.id, requestedAccessSlotConfirmed: false })]),
+    })
+    const modernTicket = await issueTicket(host.accessToken)
+    const modernSocket = await connect(`${wsUrl}?ticket=${modernTicket.ticket}&tenderId=${simple.tenderId}&contractVersion=2`)
+    try {
+      expect(await nextMessage(modernSocket.messages, 0)).toMatchObject({ type: 'tender-view', view: { game: { mode: 'simple' } } })
+      expect((await command(modernHeaders)).status).toBe(200)
+      expect(await nextMessage(modernSocket.messages, 1)).toMatchObject({
+        type: 'tender-view',
+        view: { players: expect.arrayContaining([expect.objectContaining({
+          playerId: host.user.id, requestedAccessSlotConfirmed: true,
+        })]) },
+      })
+    } finally {
+      modernSocket.socket.close()
+    }
+  }, 15_000)
+
   test('rejects unknown tickets at the upgrade boundary', async () => {
     const response = await fetch(`${baseUrl}${wsPath}?ticket=${'x'.repeat(64)}&tenderId=00000000-0000-0000-0000-000000000000`)
     expect(response.status).toBe(401)

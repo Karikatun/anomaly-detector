@@ -1,9 +1,10 @@
-import { OpenAPIHono } from '@hono/zod-openapi'
+import { gameCapabilitiesSchema, gameContractVersionHeader } from '@anomaly-detector/contracts'
+import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 
 import type { DbClient } from './db'
-import type { AppEnv } from './env'
+import { newGameFormatWritesEnabled, type AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { clientAddress, createApiBodyLimit, createAuthSecurity } from './http/security'
 import type { OperationalMetrics } from './operational-metrics'
@@ -41,6 +42,17 @@ import {
   createSecurityRequestContext,
   type SecurityEventLogger,
 } from './security/events'
+
+const gameCapabilitiesRoute = createRoute({
+  method: 'get',
+  path: '/api/capabilities',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: gameCapabilitiesSchema } },
+      description: 'Current availability of writes in new game formats',
+    },
+  },
+})
 
 type CreateAppOptions = {
   env: AppEnv
@@ -100,7 +112,9 @@ export function createApp({
     ...(logoutCleanup ? { logoutCleanup } : {}),
     requestBudgetPolicies,
   })
+  const formatWritesEnabled = newGameFormatWritesEnabled(env)
   const rooms = createRoomModule({
+    formatWritesEnabled,
     botCreationDisabled: env.ROOM_BOT_CREATION_DISABLED,
     authenticatedMutationBudget: auth.authenticatedMutationBudget,
     db: prisma,
@@ -111,6 +125,7 @@ export function createApp({
     tenderLifecycleReader: createPersistentTenderLifecycleReader(prisma),
   })
   const profile = createProfileModule({
+    formatWritesEnabled,
     accountLifecycleSecret: env.JWT_SECRET,
     authenticatedMutationBudget: auth.authenticatedMutationBudget,
     completedTenderSummaryReader: createPersistentCompletedTenderSummaryReader(prisma),
@@ -180,6 +195,7 @@ export function createApp({
       allowHeaders: [
         'Content-Type',
         'Authorization',
+        gameContractVersionHeader,
         ...(env.NODE_ENV === 'test' && env.TRUSTED_PROXY_CLIENT_IP_HEADER
           ? [env.TRUSTED_PROXY_CLIENT_IP_HEADER]
           : []),
@@ -225,6 +241,11 @@ export function createApp({
     } catch {
       return c.json({ status: 'unavailable' }, 503)
     }
+  })
+
+  app.openapi(gameCapabilitiesRoute, (c) => {
+    c.header('Cache-Control', 'no-store')
+    return c.json({ newGameFormatWritesEnabled: formatWritesEnabled }, 200)
   })
 
   app.route('/api/auth', auth.routes)

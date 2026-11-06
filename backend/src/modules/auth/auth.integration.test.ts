@@ -4223,6 +4223,7 @@ maybeDescribe('auth API integration', () => {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        'X-Anomaly-Contract-Version': '2',
       },
       body: JSON.stringify({ capacity: 2 }),
     })
@@ -4260,12 +4261,14 @@ maybeDescribe('auth API integration', () => {
       headers: {
         Authorization: `Bearer ${joiner.accessToken}`,
         'Content-Type': 'application/json',
+        'X-Anomaly-Contract-Version': '2',
       },
       body: JSON.stringify({ code: ` ${room.joinCode.toLowerCase()} ` }),
     })
 
     expect(join.status).toBe(200)
     expect(await join.json()).toMatchObject({
+      mode: 'standard',
       members: [
         { ready: false, seat: 1, userId: user.id },
         { ready: false, seat: 2, userId: joiner.user.id },
@@ -4277,7 +4280,9 @@ maybeDescribe('auth API integration', () => {
       headers: { Authorization: `Bearer ${joiner.accessToken}` },
     })
     expect(readRoom.status).toBe(200)
-    expect(await readRoom.json()).toMatchObject({
+    const legacyRoom = await readRoom.json()
+    expect(legacyRoom).not.toHaveProperty('mode')
+    expect(legacyRoom).toMatchObject({
       members: [
         { userId: user.id },
         { userId: joiner.user.id },

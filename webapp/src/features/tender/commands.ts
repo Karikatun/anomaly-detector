@@ -1,6 +1,7 @@
 import type { CommandReceipt, TenderCommand } from '@anomaly-detector/contracts'
 import {
   commandReceiptSchema,
+  gameContractVersionHeader,
   tenderCommandSchema,
 } from '@anomaly-detector/contracts'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -148,7 +149,7 @@ function createTenderCommandController(
   const request = (transport: AuthenticatedTransport, envelope: TenderCommand) => transport.request(
     `/api/tenders/${tenderId}/commands`,
     commandReceiptSchema,
-    { method: 'POST', body: envelope },
+    { method: 'POST', body: envelope, headers: { [gameContractVersionHeader]: '2' } },
   )
 
   const writePending = (command: TenderCommand | null) => {
