@@ -10,11 +10,13 @@ import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'
 
 import { AppError, validationErrorHook } from '../../../http/errors'
+import { withGameContractVersion, type GameContractHttpEnv } from '../../../http/game-contract'
 import type { RequestBudget } from '../../../security/request-budget'
 import type { RequestBudgetPolicy } from '../../../security/request-budget-policy'
 import type { AuthHttpEnv } from '../../auth'
 import type { TenderModule } from '../application/tender-module'
 import { executeTender, executeTenderRead } from './errors'
+import { tenderViewForClient } from './game-contract'
 
 const tenderParamsSchema = z.object({ tenderId: tenderResourceIdSchema })
 
@@ -24,6 +26,7 @@ const readTenderRoute = createRoute({
   request: { params: tenderParamsSchema },
   responses: {
     200: { content: { 'application/json': { schema: tenderViewSchema } }, description: 'Participant Tender view' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Client update required' },
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
     404: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Tender not found' },
   },
@@ -54,23 +57,28 @@ export function createTenderRoutes(input: {
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   tender: TenderModule
 }) {
-  const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
+  const routes = new OpenAPIHono<AuthHttpEnv & GameContractHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
+  routes.use('*', withGameContractVersion)
   routes.use('*', input.authenticatedMutationBudget)
-  routes.openapi(readTenderRoute, async (c) => c.json(
-    await executeTenderRead(() => input.tender.readTenderView({
-      playerId: c.var.user.id,
-      tenderId: c.req.valid('param').tenderId,
-    })),
-    200,
-  ))
+  routes.openapi(readTenderRoute, async (c) => {
+    const view = await executeTenderRead(async () => tenderViewForClient(
+      await input.tender.readTenderView({
+        playerId: c.var.user.id,
+        tenderId: c.req.valid('param').tenderId,
+      }),
+      c.var.gameContractVersion,
+    ))
+    return c.json(view, 200)
+  })
   routes.openapi(executeTenderCommandRoute, async (c) => {
     const command = c.req.valid('json')
     const tenderId = c.req.valid('param').tenderId
     if (command.actorId !== c.var.user.id || command.tenderId !== tenderId) {
       throw new AppError(403, 'FORBIDDEN', 'Tender command identity does not match this request')
     }
-    const replayedReceipt = await executeTender(() => input.tender.findCommandReceipt(command))
+    const access = { standardOnly: c.var.gameContractVersion === '1' }
+    const replayedReceipt = await executeTender(() => input.tender.findCommandReceipt(command, access))
     if (replayedReceipt) return c.json(replayedReceipt, 200)
     const budget = await input.commandBudget.consume({
       key: `${c.var.user.id}:${tenderId}`,
@@ -87,7 +95,7 @@ export function createTenderRoutes(input: {
         'tender_command_budget',
       )
     }
-    return c.json(await executeTender(() => input.tender.execute(command)), 200)
+    return c.json(await executeTender(() => input.tender.execute(command, access)), 200)
   })
   return routes
 }

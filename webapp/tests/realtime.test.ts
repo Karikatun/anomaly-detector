@@ -158,6 +158,7 @@ test('marks only a socket attempt after the first one as reconnect telemetry', a
   await flushMicrotasks()
 
   expect(openedUrls).toHaveLength(2)
+  expect(openedUrls.map((url) => new URL(url).searchParams.get('contractVersion'))).toEqual(['2', '2'])
   expect(new URL(openedUrls[0]!).searchParams.has('reconnect')).toBeFalse()
   expect(new URL(openedUrls[1]!).searchParams.get('reconnect')).toBe('1')
 })

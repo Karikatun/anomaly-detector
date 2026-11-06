@@ -4,7 +4,7 @@ import { gameModeSchema, roomBotSchema, type RoomBot } from '@anomaly-detector/c
 import type { Prisma } from '../../../generated/prisma/client'
 import { lockActiveAccountLifecycleTransaction } from '../../../security/account-lifecycle-lock'
 import type { Clock, RoomRecord, RoomRepository } from '../application/ports'
-import { RoomFailure } from '../domain/errors'
+import { requireSupportedRoomMode, RoomFailure } from '../domain/errors'
 
 const JOIN_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 const roomMembersInclude = { members: { orderBy: { seat: 'asc' as const } } }
@@ -52,6 +52,7 @@ export function createPrismaRoomRepository(
           include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        requireSupportedRoomMode(room.mode, input.standardOnly)
         if (room.status !== 'starting') throw new RoomFailure('room_not_joinable', 'Room is not starting')
 
         const waitingRoom = await tx.tenderRoom.update({
@@ -157,6 +158,7 @@ export function createPrismaRoomRepository(
               include: roomMembersInclude,
             })
             if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+            requireSupportedRoomMode(room.mode, input.standardOnly)
             if (room.members.some((member) => member.userId === input.actorId)) {
               if (!currentMatch) {
                 await tx.currentMatch.create({
@@ -212,13 +214,13 @@ export function createPrismaRoomRepository(
       throw new Error('Unreachable room join transaction retry state')
     },
 
-    async joinByCode(input) {
+    async readJoinTarget(code) {
       const room = await db.tenderRoom.findUnique({
-        where: { joinCode: input.code },
-        select: { id: true },
+        where: { joinCode: code },
+        select: { id: true, mode: true },
       })
       if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
-      return repository.join({ actorId: input.actorId, roomId: room.id })
+      return { id: room.id, mode: gameModeSchema.parse(room.mode ?? 'standard') }
     },
 
     async addBot(input) {
@@ -229,6 +231,7 @@ export function createPrismaRoomRepository(
           include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        requireSupportedRoomMode(room.mode, input.standardOnly)
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
         if (!room.allowBots) throw new RoomFailure('room_bots_not_allowed', 'Room does not allow bots')
         const bots = roomBotSchema.array().parse(room.bots ?? [])
@@ -264,6 +267,7 @@ export function createPrismaRoomRepository(
           include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        requireSupportedRoomMode(room.mode, input.standardOnly)
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
         const bots = roomBotSchema.array().parse(room.bots ?? [])
         const nextBots = bots.filter((bot) => bot.id !== input.botId)
@@ -288,6 +292,7 @@ export function createPrismaRoomRepository(
           include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        requireSupportedRoomMode(room.mode, input.standardOnly)
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
         const bots = roomBotSchema.array().parse(room.bots ?? [])
         const bot = bots.find((candidate) => candidate.id === input.botId)
@@ -319,6 +324,7 @@ export function createPrismaRoomRepository(
           include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        requireSupportedRoomMode(room.mode, input.standardOnly)
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
 
         const remainingMembers = room.members.filter((member) => member.userId !== input.actorId)
@@ -357,6 +363,7 @@ export function createPrismaRoomRepository(
           include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        requireSupportedRoomMode(room.mode, input.standardOnly)
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room is no longer waiting for players')
 
         const updatedMember = await tx.tenderRoomMember.update({
@@ -384,6 +391,7 @@ export function createPrismaRoomRepository(
           include: roomMembersInclude,
         })
         if (!room) throw new RoomFailure('room_not_found', 'Room does not exist')
+        requireSupportedRoomMode(room.mode, input.standardOnly)
         if (room.status !== 'waiting') throw new RoomFailure('room_not_joinable', 'Room has already started')
         if (room.members.length + roomBotSchema.array().parse(room.bots ?? []).length !== room.capacity) {
           throw new RoomFailure('room_full', 'Room needs every seat filled before starting')

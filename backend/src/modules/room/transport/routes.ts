@@ -9,12 +9,15 @@ import {
   roomViewSchema,
   setRoomReadyRequestSchema,
   updateRoomBotDifficultyRequestSchema,
+  type GameContractVersion,
+  type RoomView,
 } from '@anomaly-detector/contracts'
 import { createRoute, OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'
 
 import { AppError, validationErrorHook } from '../../../http/errors'
+import { gameClientUpdateMessage, withGameContractVersion, type GameContractHttpEnv } from '../../../http/game-contract'
 import type { RequestBudget } from '../../../security/request-budget'
 import type { RequestBudgetPolicy } from '../../../security/request-budget-policy'
 import type { TenderRoomService } from '../application/room-service'
@@ -27,6 +30,7 @@ const createRoomRoute = createRoute({
   request: { body: { content: { 'application/json': { schema: createRoomRequestSchema } } } },
   responses: {
     201: { content: { 'application/json': { schema: roomViewSchema } }, description: 'Created private room' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Room creation unavailable' },
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
     429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
   },
@@ -184,8 +188,9 @@ export function createRoomRoutes(input: {
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   service: TenderRoomService
 }) {
-  const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
+  const routes = new OpenAPIHono<AuthHttpEnv & GameContractHttpEnv>({ defaultHook: validationErrorHook })
   routes.use('*', input.requireAuth)
+  routes.use('*', withGameContractVersion)
   routes.use('*', input.authenticatedMutationBudget)
   routes.use('/join', async (c, next) => {
     const budget = await input.joinBudget.consume({
@@ -205,72 +210,106 @@ export function createRoomRoutes(input: {
     }
     await next()
   })
-  routes.openapi(listMatchesRoute, async (c) => c.json({ matches: await executeRoom(() => input.service.listMatches(c.var.user.id)) }, 200))
-  routes.openapi(currentMatchRoute, async (c) => c.json({
-    match: await executeRoom(() => input.service.getCurrentMatch(c.var.user.id)),
-  }, 200))
-  routes.openapi(createRoomRoute, async (c) => c.json(
-    await executeRoom(() => input.service.createRoom({ ...c.req.valid('json'), hostId: c.var.user.id })),
-    201,
-  ))
+  routes.openapi(listMatchesRoute, async (c) => {
+    const version = c.var.gameContractVersion
+    const matches = await executeRoom(() => input.service.listMatches(c.var.user.id, version === '1'))
+    return c.json({ matches: matches.map((match) => roomViewForClient(match, version)) }, 200)
+  })
+  routes.openapi(currentMatchRoute, async (c) => {
+    const match = await executeRoom(() => input.service.getCurrentMatch(c.var.user.id))
+    return c.json({ match: match && roomViewForClient(match, c.var.gameContractVersion) }, 200)
+  })
+  routes.openapi(createRoomRoute, async (c) => {
+    const room = await executeRoom(() => input.service.createRoom({
+      ...c.req.valid('json'),
+      hostId: c.var.user.id,
+      standardOnly: c.var.gameContractVersion === '1',
+    }))
+    return c.json(roomViewForClient(room, c.var.gameContractVersion), 201)
+  })
   routes.openapi(joinRoomByCodeRoute, async (c) => {
-    return c.json(await executeRoom(() => input.service.joinRoomByCode({
+    const room = await executeRoom(() => input.service.joinRoomByCode({
       actorId: c.var.user.id,
       code: c.req.valid('json').code,
-    })), 200)
+      standardOnly: c.var.gameContractVersion === '1',
+    }))
+    return c.json(roomViewForClient(room, c.var.gameContractVersion), 200)
   })
-  routes.openapi(getRoomRoute, async (c) => c.json(
-    await executeRoom(() => input.service.getRoom({
+  routes.openapi(getRoomRoute, async (c) => {
+    const room = await executeRoom(() => input.service.getRoom({
       actorId: c.var.user.id,
       roomId: c.req.valid('param').roomId,
-    })),
-    200,
-  ))
+    }))
+    return c.json(roomViewForClient(room, c.var.gameContractVersion), 200)
+  })
   routes.openapi(leaveRoomRoute, async (c) => {
-    await executeRoom(() => input.service.leaveRoom({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId }))
+    await executeRoom(() => input.service.leaveRoom({
+      actorId: c.var.user.id,
+      roomId: c.req.valid('param').roomId,
+      standardOnly: c.var.gameContractVersion === '1',
+    }))
     return c.body(null, 204)
   })
-  routes.openapi(addRoomBotRoute, async (c) => c.json(
-    await executeRoom(() => input.service.addBot({
+  routes.openapi(addRoomBotRoute, async (c) => {
+    const room = await executeRoom(() => input.service.addBot({
       actorId: c.var.user.id,
-      difficulty: c.req.valid('json').difficulty,
       roomId: c.req.valid('param').roomId,
+      difficulty: c.req.valid('json').difficulty,
       seat: c.req.valid('json').seat,
-    })),
-    200,
-  ))
-  routes.openapi(removeRoomBotRoute, async (c) => c.json(
-    await executeRoom(() => input.service.removeBot({
+      standardOnly: c.var.gameContractVersion === '1',
+    }))
+    return c.json(roomViewForClient(room, c.var.gameContractVersion), 200)
+  })
+  routes.openapi(removeRoomBotRoute, async (c) => {
+    const room = await executeRoom(() => input.service.removeBot({
       actorId: c.var.user.id,
-      botId: c.req.valid('param').botId,
       roomId: c.req.valid('param').roomId,
-    })),
-    200,
-  ))
-  routes.openapi(updateRoomBotDifficultyRoute, async (c) => c.json(
-    await executeRoom(() => input.service.updateBotDifficulty({
+      botId: c.req.valid('param').botId,
+      standardOnly: c.var.gameContractVersion === '1',
+    }))
+    return c.json(roomViewForClient(room, c.var.gameContractVersion), 200)
+  })
+  routes.openapi(updateRoomBotDifficultyRoute, async (c) => {
+    const room = await executeRoom(() => input.service.updateBotDifficulty({
       actorId: c.var.user.id,
+      roomId: c.req.valid('param').roomId,
       botId: c.req.valid('param').botId,
       difficulty: c.req.valid('json').difficulty,
-      roomId: c.req.valid('param').roomId,
-    })),
-    200,
-  ))
-  routes.openapi(setRoomReadyRoute, async (c) => c.json(
-    await executeRoom(() => input.service.setReady({
+      standardOnly: c.var.gameContractVersion === '1',
+    }))
+    return c.json(roomViewForClient(room, c.var.gameContractVersion), 200)
+  })
+  routes.openapi(setRoomReadyRoute, async (c) => {
+    const room = await executeRoom(() => input.service.setReady({
       actorId: c.var.user.id,
-      ready: c.req.valid('json').ready,
       roomId: c.req.valid('param').roomId,
-    })),
-    200,
-  ))
-  routes.openapi(startRoomRoute, async (c) => c.json(
-    await executeRoom(() => input.service.startRoom({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId })),
-    200,
-  ))
-  routes.openapi(cancelRoomStartRoute, async (c) => c.json(
-    await executeRoom(() => input.service.cancelRoomStart({ actorId: c.var.user.id, roomId: c.req.valid('param').roomId })),
-    200,
-  ))
+      ready: c.req.valid('json').ready,
+      standardOnly: c.var.gameContractVersion === '1',
+    }))
+    return c.json(roomViewForClient(room, c.var.gameContractVersion), 200)
+  })
+  routes.openapi(startRoomRoute, async (c) => {
+    const room = await executeRoom(() => input.service.startRoom({
+      actorId: c.var.user.id,
+      roomId: c.req.valid('param').roomId,
+      standardOnly: c.var.gameContractVersion === '1',
+    }))
+    return c.json(roomViewForClient(room, c.var.gameContractVersion), 200)
+  })
+  routes.openapi(cancelRoomStartRoute, async (c) => {
+    const room = await executeRoom(() => input.service.cancelRoomStart({
+      actorId: c.var.user.id,
+      roomId: c.req.valid('param').roomId,
+      standardOnly: c.var.gameContractVersion === '1',
+    }))
+    return c.json(roomViewForClient(room, c.var.gameContractVersion), 200)
+  })
   return routes
+}
+
+function roomViewForClient(room: RoomView, version: GameContractVersion): RoomView {
+  if (version === '2') return room
+  const { mode, ...legacyRoom } = room
+  if (mode === 'simple') throw new AppError(409, 'CONFLICT', gameClientUpdateMessage)
+  return legacyRoom
 }

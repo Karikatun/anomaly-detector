@@ -1,5 +1,6 @@
 export type TenderFailureKind =
   | 'account_unavailable'
+  | 'client_update_required'
   | 'contract_evidence_stale'
   | 'duplicate_command_conflict'
   | 'invalid_create_tender'
@@ -19,5 +20,11 @@ export class TenderFailure extends Error {
     message: string,
   ) {
     super(message)
+  }
+}
+
+export function requireSupportedTenderMode(mode: 'simple' | 'standard' | undefined, standardOnly?: boolean) {
+  if (standardOnly && mode === 'simple') {
+    throw new TenderFailure('client_update_required', 'Client update required for Simple mode')
   }
 }

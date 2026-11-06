@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import { randomUUID } from 'node:crypto'
-import { tenderViewSchema } from '@anomaly-detector/contracts'
+import { gameContractVersionHeader, tenderViewSchema } from '@anomaly-detector/contracts'
 import type { APIRequestContext, Page } from '@playwright/test'
 
 import { expect, registerBrowserUser, test } from '../helpers/test'
@@ -38,7 +38,7 @@ async function sendHumanCommand(request: APIRequestContext, apiOrigin: string, a
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const response = await request.post(`${apiOrigin}/api/tenders/${tenderId}/commands`, {
       data,
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}`, [gameContractVersionHeader]: '2' },
     })
     if (response.ok()) return
     const body = await response.json() as { error?: { code?: string } }
@@ -157,7 +157,7 @@ for (const scenario of [
   const tenderId = page.url().match(/\/tenders\/([0-9a-f-]{36})$/)?.[1]
   if (!tenderId) throw new Error('Tender id is missing from the started room URL')
   const initialViewResponse = await page.request.get(`${session.apiOrigin}/api/tenders/${tenderId}`, {
-    headers: { Authorization: `Bearer ${session.accessToken}` },
+    headers: { Authorization: `Bearer ${session.accessToken}`, [gameContractVersionHeader]: '2' },
   })
   expect(initialViewResponse.ok()).toBe(true)
   const initialView = await initialViewResponse.json() as { players: Array<{ bot?: unknown; playerId: string }>; version: number }
@@ -176,7 +176,7 @@ for (const scenario of [
     })
     await expect.poll(async () => {
       const response = await page.request.get(`${session.apiOrigin}/api/tenders/${tenderId}`, {
-        headers: { Authorization: `Bearer ${session.accessToken}` },
+        headers: { Authorization: `Bearer ${session.accessToken}`, [gameContractVersionHeader]: '2' },
       })
       expect(response.ok()).toBe(true)
       return tenderViewSchema.parse(await response.json()).version
@@ -206,7 +206,7 @@ for (const scenario of [
   const observedRounds = new Set<number>()
   await expect.poll(async () => {
     const response = await page.request.get(`${session.apiOrigin}/api/tenders/${tenderId}`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` },
+      headers: { Authorization: `Bearer ${session.accessToken}`, [gameContractVersionHeader]: '2' },
     })
     expect(response.status()).toBe(200)
     const view = tenderViewSchema.parse(await response.json())
@@ -272,7 +272,7 @@ test('два игрока и бот завершают простую парти
     const tenderId = page.url().split('/').at(-1)!
     const read = async (session: typeof host) => {
       const response = await page.request.get(`${session.apiOrigin}/api/tenders/${tenderId}`, {
-        headers: { Authorization: `Bearer ${session.accessToken}` },
+        headers: { Authorization: `Bearer ${session.accessToken}`, [gameContractVersionHeader]: '2' },
       })
       expect(response.ok()).toBe(true)
       return tenderViewSchema.parse(await response.json())

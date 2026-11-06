@@ -71,6 +71,9 @@ const envSchema = z.object({
   ANALYTICS_ENABLED: booleanStringSchema,
   ANALYTICS_MODE: z.enum(['aggregate', 'consented']).default('aggregate'),
   ROOM_BOT_CREATION_DISABLED: booleanStringSchema,
+  NEW_GAME_FORMAT_WRITES_ENABLED: z.enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
   ANALYTICS_ORIGINS: originListSchema,
   ANALYTICS_CAMPAIGN_ALLOWLIST: analyticsCampaignListSchema,
   CORS_ORIGINS: z
@@ -160,6 +163,10 @@ export type AppEnv = z.infer<typeof envSchema>
 
 export function loadEnv(source: Record<string, string | undefined>) {
   return envSchema.parse(source)
+}
+
+export function newGameFormatWritesEnabled(env: AppEnv): boolean {
+  return env.NEW_GAME_FORMAT_WRITES_ENABLED ?? !isProductionLikeRuntime(env)
 }
 
 function validateSessionTtls(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {

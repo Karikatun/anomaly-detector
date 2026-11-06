@@ -1,6 +1,6 @@
 import type { BotDifficulty, GameMode, RoomView } from '@anomaly-detector/contracts'
 
-import { RoomFailure } from '../domain/errors'
+import { requireSupportedRoomMode, RoomFailure } from '../domain/errors'
 import type {
   Clock,
   MatchPlacementReader,
@@ -13,6 +13,7 @@ import type {
 type TenderRoomServiceDependencies = {
   botCreationDisabled?: boolean
   clock: Clock
+  formatWritesEnabled: boolean
   matchPlacementReader: MatchPlacementReader
   memberIdentityReader: RoomMemberIdentityReader
   repository: RoomRepository
@@ -22,15 +23,25 @@ type TenderRoomServiceDependencies = {
 export class TenderRoomService {
   constructor(private readonly dependencies: TenderRoomServiceDependencies) {}
 
-  async createRoom(input: { mode?: GameMode; allowBots?: boolean; capacity: 2 | 3 | 4; hostId: string }): Promise<RoomView> {
+  async createRoom(input: { mode?: GameMode; allowBots?: boolean; capacity: 2 | 3 | 4; hostId: string; standardOnly?: boolean }): Promise<RoomView> {
+    if (input.mode === 'simple' && this.dependencies.formatWritesEnabled === false) {
+      throw new RoomFailure('room_format_writes_disabled', 'Создание комнат в простом режиме временно недоступно.')
+    }
+    requireSupportedRoomMode(input.mode, input.standardOnly)
     await this.releaseCompletedCurrentMatch(input.hostId)
     const room = await this.dependencies.repository.create(input)
     return this.toRoomView(room, input.hostId)
   }
 
-  async joinRoomByCode(input: { actorId: string; code: string }): Promise<RoomView> {
+  async joinRoomByCode(input: { actorId: string; code: string; standardOnly?: boolean }): Promise<RoomView> {
+    const target = await this.dependencies.repository.readJoinTarget(input.code)
+    requireSupportedRoomMode(target.mode, input.standardOnly)
     await this.releaseCompletedCurrentMatch(input.actorId)
-    const room = await this.dependencies.repository.joinByCode(input)
+    const room = await this.dependencies.repository.join({
+      actorId: input.actorId,
+      roomId: target.id,
+      ...(input.standardOnly ? { standardOnly: true } : {}),
+    })
     return this.toRoomView(room, input.actorId)
   }
 
@@ -38,8 +49,9 @@ export class TenderRoomService {
     return this.toRoomView(await this.dependencies.repository.readForMember(input), input.actorId)
   }
 
-  async listMatches(actorId: string): Promise<RoomView[]> {
-    const rooms = await this.dependencies.repository.listStartedForMember(actorId)
+  async listMatches(actorId: string, standardOnly = false): Promise<RoomView[]> {
+    const started = await this.dependencies.repository.listStartedForMember(actorId)
+    const rooms = standardOnly ? started.filter((room) => room.mode !== 'simple') : started
     return Promise.all(rooms.map(async (room) => {
       const lifecycle = await this.readTenderLifecycle(room, actorId)
       const view = await this.toRoomView(room, actorId, lifecycle)
@@ -66,34 +78,34 @@ export class TenderRoomService {
     return this.toRoomView(room, actorId, lifecycle)
   }
 
-  async leaveRoom(input: { actorId: string; roomId: string }) {
+  async leaveRoom(input: { actorId: string; roomId: string; standardOnly?: boolean }) {
     await this.dependencies.repository.leave(input)
   }
 
-  async addBot(input: { actorId: string; difficulty: 'easy'; roomId: string; seat: number }): Promise<RoomView> {
+  async addBot(input: { actorId: string; difficulty: 'easy'; roomId: string; standardOnly?: boolean; seat: number }): Promise<RoomView> {
     if (this.dependencies.botCreationDisabled) {
       throw new RoomFailure('room_bot_creation_disabled', 'Добавление ботов временно недоступно.')
     }
     return this.toRoomView(await this.dependencies.repository.addBot(input), input.actorId)
   }
 
-  async removeBot(input: { actorId: string; botId: string; roomId: string }): Promise<RoomView> {
+  async removeBot(input: { actorId: string; botId: string; roomId: string; standardOnly?: boolean }): Promise<RoomView> {
     return this.toRoomView(await this.dependencies.repository.removeBot(input), input.actorId)
   }
 
-  async updateBotDifficulty(input: { actorId: string; botId: string; difficulty: BotDifficulty; roomId: string }): Promise<RoomView> {
+  async updateBotDifficulty(input: { actorId: string; botId: string; difficulty: BotDifficulty; roomId: string; standardOnly?: boolean }): Promise<RoomView> {
     return this.toRoomView(await this.dependencies.repository.updateBotDifficulty(input), input.actorId)
   }
 
-  async setReady(input: { actorId: string; ready: boolean; roomId: string }): Promise<RoomView> {
+  async setReady(input: { actorId: string; ready: boolean; roomId: string; standardOnly?: boolean }): Promise<RoomView> {
     return this.toRoomView(await this.dependencies.repository.setReady(input), input.actorId)
   }
 
-  async startRoom(input: { actorId: string; roomId: string }): Promise<RoomView> {
+  async startRoom(input: { actorId: string; roomId: string; standardOnly?: boolean }): Promise<RoomView> {
     return this.toRoomView(await this.dependencies.repository.start(input), input.actorId)
   }
 
-  async cancelRoomStart(input: { actorId: string; roomId: string }): Promise<RoomView> {
+  async cancelRoomStart(input: { actorId: string; roomId: string; standardOnly?: boolean }): Promise<RoomView> {
     return this.toRoomView(await this.dependencies.repository.cancelStart(input), input.actorId)
   }
 

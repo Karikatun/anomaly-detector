@@ -30,6 +30,22 @@ test('liveness is process-only while readiness checks the database', async () =>
   expect((await app.request('/health/ready')).status).toBe(503)
 })
 
+test('publishes the active write capability without authentication or caching', async () => {
+  const app = createApp({
+    env: loadEnv({
+      DATABASE_URL: 'postgresql://localhost/test',
+      JWT_SECRET: '12345678901234567890123456789012',
+      NEW_GAME_FORMAT_WRITES_ENABLED: 'false',
+    }),
+    prisma: {} as DbClient,
+  })
+  const response = await app.request('/api/capabilities')
+
+  expect(response.status).toBe(200)
+  expect(response.headers.get('cache-control')).toBe('no-store')
+  expect(await response.json()).toEqual({ newGameFormatWritesEnabled: false })
+})
+
 test('keeps metrics off the public API while the private collector observes API outcomes', async () => {
   const times = [1_000, 1_125, 1_250]
   const operationalMetrics = createOperationalMetrics({ now: () => times.shift() ?? 1_250 })
@@ -59,11 +75,13 @@ test('CORS preflight allows the standard mutation methods exposed by the client 
     headers: {
       Origin: 'http://localhost:5173',
       'Access-Control-Request-Method': 'PATCH',
+      'Access-Control-Request-Headers': 'X-Anomaly-Contract-Version',
     },
   })
 
   expect(response.status).toBe(204)
   expect(response.headers.get('access-control-allow-methods')).toContain('PATCH')
+  expect(response.headers.get('access-control-allow-headers')).toContain('X-Anomaly-Contract-Version')
   expect(response.headers.get('cross-origin-resource-policy')).toBe('cross-origin')
 })
 

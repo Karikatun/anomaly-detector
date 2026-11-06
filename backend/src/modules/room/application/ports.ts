@@ -49,19 +49,21 @@ export type Clock = {
   now(): Date
 }
 
+type RoomActorCommand = { actorId: string; roomId: string; standardOnly?: boolean }
+
 export type RoomRepository = {
-  addBot(input: { actorId: string; difficulty: 'easy'; roomId: string; seat: number }): Promise<RoomRecord>
+  addBot(input: RoomActorCommand & { difficulty: 'easy'; seat: number }): Promise<RoomRecord>
   create(input: { mode?: GameMode; allowBots?: boolean; capacity: 2 | 3 | 4; hostId: string }): Promise<RoomRecord>
-  cancelStart(input: { actorId: string; roomId: string }): Promise<RoomRecord>
+  cancelStart(input: RoomActorCommand): Promise<RoomRecord>
   readCurrentForMember(userId: string): Promise<RoomRecord | null>
   listStartedForMember(userId: string): Promise<RoomRecord[]>
-  readForMember(input: { actorId: string; roomId: string }): Promise<RoomRecord>
-  removeBot(input: { actorId: string; botId: string; roomId: string }): Promise<RoomRecord>
-  updateBotDifficulty(input: { actorId: string; botId: string; difficulty: BotDifficulty; roomId: string }): Promise<RoomRecord>
-  join(input: { actorId: string; roomId: string }): Promise<RoomRecord>
-  joinByCode(input: { actorId: string; code: string }): Promise<RoomRecord>
-  leave(input: { actorId: string; roomId: string }): Promise<void>
+  readForMember(input: RoomActorCommand): Promise<RoomRecord>
+  removeBot(input: RoomActorCommand & { botId: string }): Promise<RoomRecord>
+  updateBotDifficulty(input: RoomActorCommand & { botId: string; difficulty: BotDifficulty }): Promise<RoomRecord>
+  join(input: RoomActorCommand): Promise<RoomRecord>
+  readJoinTarget(code: string): Promise<{ id: string; mode?: GameMode }>
+  leave(input: RoomActorCommand): Promise<void>
   releaseCurrentForMember(input: { roomId: string; userId: string }): Promise<void>
-  setReady(input: { actorId: string; ready: boolean; roomId: string }): Promise<RoomRecord>
-  start(input: { actorId: string; roomId: string }): Promise<RoomRecord>
+  setReady(input: RoomActorCommand & { ready: boolean }): Promise<RoomRecord>
+  start(input: RoomActorCommand): Promise<RoomRecord>
 }
