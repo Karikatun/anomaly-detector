@@ -567,8 +567,8 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
   const boardCoach = Boolean(children)
   const identity = `${tutorialStep}:${anchorSelector}:${fallbackSelector}:${spotlightSelector}:${boardCoach}`
   const [mask, setMask] = useState<{ identity: string; width: number; height: number; frame: string; spotlight: string; secondary: string } | null>(null)
-  // Keep the last board shade painted while the next target is measured.
-  // Only geometry for the current target can authorize board interactions.
+  // Old coordinates can outline an unrelated control after the board changes.
+  // Keep the surface dim and shield input until the current mask is available.
   const activeMask = mask?.identity === identity ? mask : null
   const shade = 'rgba(0, 5, 12, .38)'
   useLayoutEffect(() => {
@@ -690,7 +690,7 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
       setMask((current) => current && JSON.stringify(current) === JSON.stringify(next) ? current : next)
     }
 
-    const position = () => {
+    const position = (beforePaint = false) => {
       frame = 0
       layoutWritten = false
       let target = query(anchorSelector)
@@ -737,8 +737,8 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
       // A coach resize can move the fixed command without resizing it. Read
       // that new position only after the CSS variable update has committed.
       if (layoutWritten) {
-        schedule()
-        return
+        if (!beforePaint) schedule()
+        return true
       }
       onTargetResolved(anchorSelector, useFallback ? fallbackSelector! : anchorSelector)
       if (!userScrolled && getComputedStyle(target).position !== 'fixed') {
@@ -776,8 +776,9 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
       }
       updateAllowedInteractions()
       delete root.dataset.tutorialAutoscrolling
+      return false
     }
-    const schedule = () => { if (!frame) frame = requestAnimationFrame(position) }
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(() => position()) }
     const focusChanged = (event: FocusEvent) => {
       if (restoreJournalFocus && event.target instanceof Element && event.target.matches('[data-testid="tutorial-research-trigger"]')) schedule()
     }
@@ -833,6 +834,9 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
     window.visualViewport?.addEventListener('resize', layoutChanged)
     window.visualViewport?.addEventListener('scroll', schedule)
     window.addEventListener('scroll', updateAllowedInteractions, { passive: true, capture: true })
+    // Let the new board and its highlight paint together. One extra layout
+    // read can settle changed clearances; remaining work stays in the RAF path.
+    if (boardCoach && position(true)) position(true)
     observe()
     settleTimer = window.setTimeout(schedule, 160)
     return () => {
@@ -848,28 +852,27 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
       window.removeEventListener('scroll', updateAllowedInteractions, true)
       delete root.dataset.tutorialAutoscrolling
     }
-  }, [tutorialStep, activityKey, restoreJournalFocus, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, identity])
+  }, [tutorialStep, activityKey, restoreJournalFocus, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, identity, boardCoach])
   return children ? createPortal(<>
     <div data-testid="overlay" data-tutorial-overlay="" className={styles.coachOverlay}
       style={{ height: mask?.height ?? 0 }} aria-hidden="true">
-      {!mask && <div data-tutorial-shade="" className="fixed inset-0" style={{ backgroundColor: shade }} />}
+      {!activeMask && <div data-tutorial-shade="" className="pointer-events-auto fixed inset-0" style={{ backgroundColor: shade }} />}
       <svg ref={svgRef} width={mask?.width ?? window.innerWidth} height={mask?.height ?? window.innerHeight}>
         <defs>
           <clipPath id="tutorial-allowed-controls" clipPathUnits="userSpaceOnUse">
-            <path d={mask?.secondary ?? ''} clipRule="evenodd" />
+            <path d={activeMask?.secondary ?? ''} clipRule="evenodd" />
           </clipPath>
         </defs>
         <g clipPath="url(#tutorial-allowed-controls)">
-          <path data-tutorial-shade="" d={(mask?.frame ?? '') + (mask?.spotlight ?? '')} fill={shade} fillRule="evenodd" pointerEvents="none" />
+          <path data-tutorial-shade="" d={(activeMask?.frame ?? '') + (activeMask?.spotlight ?? '')} fill={shade} fillRule="evenodd" pointerEvents="none" />
           {activeMask && (
             <path d={activeMask.frame + (blockTargetInteraction ? '' : activeMask.spotlight)} fill="transparent" fillRule="evenodd" pointerEvents="fill" />
           )}
         </g>
         <g data-tutorial-spotlight="" pointerEvents="none">
-          <path d={mask?.spotlight ?? ''} fill="none" stroke={showSpotlightStroke ? '#38bdf8' : 'none'} strokeWidth={3} />
+          <path d={activeMask?.spotlight ?? ''} fill="none" stroke={showSpotlightStroke ? '#38bdf8' : 'none'} strokeWidth={3} />
         </g>
       </svg>
-      {!activeMask && <div className="pointer-events-auto fixed inset-0" />}
     </div>
     <div data-testid="floater">{children}</div>
   </>, document.body) : null
