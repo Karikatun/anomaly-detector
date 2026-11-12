@@ -247,7 +247,7 @@
   }
 
   :global(body:has([data-tutorial-action-pinned]) [data-testid='floater']) {
-    inset: auto .75rem calc(var(--tutorial-mobile-action-height, 5rem) + 1.5rem) !important;
+    inset: auto .75rem calc(var(--tutorial-mobile-action-height, 0px) + 1.5rem) !important;
   }
 
   :global(body:has([data-tutorial-confirm-ready='true'])) .confirmAction {
@@ -375,6 +375,9 @@
 :global(html:has([data-tutorial-board])) {
   scroll-padding-top: calc(var(--tutorial-pilot-header-height, 9rem) + .75rem);
   scroll-padding-bottom: calc(var(--tutorial-pilot-coach-height, 14rem) + var(--tutorial-pilot-action-height, 0px) + 2.25rem);
+}
+:global(html[data-tutorial-pilot-constrained]:has([data-tutorial-board])) {
+  scroll-padding-top: .75rem;
 }
 
 /* Leave native scrolling room for secondary controls behind a growing coach. */

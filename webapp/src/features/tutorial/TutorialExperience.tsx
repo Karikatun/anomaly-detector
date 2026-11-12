@@ -359,6 +359,9 @@ export function TutorialExperience({
       ? 'interpretation'
       : state.step === 'round-1-working-model' ? 'working-model' : 'primary'
   const informational = state.step === 'round-1-thesis-result'
+  const thesisEntry = state.step === 'round-1-thesis' || state.step === 'round-1-thesis-review'
+  const journalEntry = thesisEntry ? 'header' : baseTutorialStepNumbers[state.step] >= baseTutorialStepNumbers['research-results']
+    && baseTutorialStepNumbers[state.step] <= baseTutorialStepNumbers['round-1-working-model'] ? 'floating' : 'inline'
   const coachContent = (
     <CoachContent
       progress={t('tutorial.coach.progress', { current: baseTutorialStepNumbers[state.step], total: baseTutorialStepNumbers['final-model'] })}
@@ -419,14 +422,13 @@ export function TutorialExperience({
         ) : undefined}
         actionPanelPinned={mobileActionPinnedSteps.has(state.step)}
         commandError={commandError}
-        floatingJournalEntry={baseTutorialStepNumbers[state.step] >= baseTutorialStepNumbers['research-results']
-          && baseTutorialStepNumbers[state.step] <= baseTutorialStepNumbers['round-1-working-model']}
+        journalEntry={journalEntry}
         highlight={exitOpen ? 'none' : highlight}
         interpretationRequired={informational}
         initialJournalTab={journalOpen ? restoredJournalTab(state.step) : undefined}
         roundCount={1}
         laboratoryInitialMode={state.step === 'round-1-lab-pair' ? 'deep' : undefined}
-        trainingThesis={state.step === 'round-1-thesis' || state.step === 'round-1-thesis-review' || informational ? {
+        trainingThesis={thesisEntry || informational ? {
           initialDraft: state.thesisDraft ?? thesisFeedback ?? undefined,
           onDraftChange: state.step === 'round-1-thesis-review' ? (draft) => void applyAction({ type: 'update-thesis-draft', draft }) : undefined,
           submitLabel: state.step === 'round-1-thesis' ? 'tutorial.step.prepareThesis' : undefined,
