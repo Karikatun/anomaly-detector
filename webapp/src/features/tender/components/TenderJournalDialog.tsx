@@ -127,6 +127,12 @@ export function TenderJournalDialog({
       <DialogContent
         className={styles.dialog} placement="viewport" closeLabel={t('tender.journal.close')}
         data-tender-journal="" data-journal-guidance={guidance ? true : undefined} data-tutorial-journal={triggerTestId ? '' : undefined}
+        onPointerDownOutside={(event) => {
+          const target = event.detail.originalEvent.target
+          // The trigger owns reopening while the previous close animation
+          // still has an outside-pointer listener mounted.
+          if (triggerContainer && target instanceof Node && trigger.current?.contains(target)) event.preventDefault()
+        }}
         onOpenAutoFocus={() => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null }}
         onCloseAutoFocus={(event) => {
           const target = opener.current?.isConnected ? opener.current : getCloseFocusFallback?.() ?? trigger.current
