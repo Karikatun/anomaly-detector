@@ -716,6 +716,92 @@ async function reachFirstResearch(page: Page, guest = true, textScale?: string) 
   await expectTutorialActionAvailable(page, page.getByTestId('tutorial-research-trigger'))
 }
 
+test('the coach and dimming stay visible when the next highlighted action changes', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await startTutorial(page, true)
+
+  const clickWithoutFlash = async (control: Locator, obsoleteAfterClick = false) => {
+    await expectTutorialActionAvailable(page, control)
+    await control.evaluate((element, obsolete) => {
+      const state = window as Window & { tutorialFrames?: { hidden: number; obsoleteHit: number } }
+      delete state.tutorialFrames
+      element.addEventListener('click', () => {
+        const previousPrompt = document.querySelector('#tutorial-coach-title')?.textContent
+        const result = { hidden: 0, obsoleteHit: 0 }
+        let frames = 0
+        const sample = () => {
+          const coach = document.querySelector('[data-testid="floater"]')
+          const shade = document.querySelector('[data-tutorial-shade]')
+          const shadeBounds = shade?.getBoundingClientRect()
+          if (!coach || getComputedStyle(coach).opacity === '0'
+            || !shade || getComputedStyle(shade).visibility === 'hidden'
+            || !shadeBounds?.width || !shadeBounds.height) result.hidden++
+          if (obsolete && document.querySelector('#tutorial-coach-title')?.textContent !== previousPrompt) {
+            const bounds = element.getBoundingClientRect()
+            if (element.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2))) {
+              result.obsoleteHit++
+            }
+          }
+          if (++frames < 8) requestAnimationFrame(sample)
+          else state.tutorialFrames = result
+        }
+        requestAnimationFrame(sample)
+      }, { capture: true, once: true })
+    }, obsoleteAfterClick)
+    await control.click()
+    const result = await page.waitForFunction(() => (
+      window as Window & { tutorialFrames?: { hidden: number; obsoleteHit: number } }
+    ).tutorialFrames)
+    expect(await result.jsonValue()).toEqual({ hidden: 0, obsoleteHit: 0 })
+  }
+
+  await clickWithoutFlash(page.locator('[data-tutorial-access-slot="6"]'))
+  await clickWithoutFlash(page.getByRole('button', { name: 'Подтвердить выбор', exact: true }))
+  await clickWithoutFlash(page.getByRole('button', { name: 'Увеличить мощность: Разведка', exact: true }), true)
+  const addLaboratory = page.getByRole('button', { name: 'Увеличить мощность: Лаборатория', exact: true })
+  await addLaboratory.click()
+  await addLaboratory.click()
+  await page.getByRole('button', { name: 'Увеличить мощность: Анализ модели', exact: true }).click()
+  await page.getByRole('button', { name: 'Подтвердить распределение', exact: true }).click()
+  await page.getByRole('button', { name: /^Сигнал для разведки: Aster/ }).click()
+  await page.getByRole('button', { name: 'Исследовать', exact: true }).click()
+  await page.getByRole('button', { name: /^Глубокое/ }).click()
+  await page.getByRole('button', { name: 'Образец: Aster', exact: true }).click()
+  await clickWithoutFlash(page.getByRole('button', { name: 'Образец: Boreal', exact: true }))
+  await expectTutorialActionAvailable(page, page.getByRole('button', { name: 'Провести опыт: Aster → Boreal', exact: true }))
+})
+
+test('the mobile coach stays in place while the player selects the Thesis signal', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  let observedSelection = false
+  await playBaseTutorial(page, true, async (step) => {
+    if (step !== 'round-1-thesis') return
+    observedSelection = true
+    const signal = page.getByLabel('Сигнал для тезиса', { exact: true })
+    await expectTutorialActionAvailable(page, signal)
+    await signal.evaluate((select) => {
+      const coach = () => document.querySelector('[data-testid="floater"]')!.getBoundingClientRect().top
+      const before = coach()
+      const positions: number[] = []
+      select.addEventListener('change', () => {
+        const sample = () => {
+          positions.push(coach())
+          if (positions.length < 8) requestAnimationFrame(sample)
+          else (window as Window & { tutorialCoachPositions?: number[] }).tutorialCoachPositions = [before, ...positions]
+        }
+        requestAnimationFrame(sample)
+      }, { capture: true, once: true })
+    })
+    await signal.selectOption('aster')
+    const frames = await page.waitForFunction(() => (
+      window as Window & { tutorialCoachPositions?: number[] }
+    ).tutorialCoachPositions)
+    const positions = (await frames.jsonValue())!
+    expect(Math.max(...positions) - Math.min(...positions)).toBeLessThan(2)
+  })
+  expect(observedSelection).toBe(true)
+})
+
 for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
  test(`first result explanation stays inside Journal keyboard navigation at ${viewport.width}`, async ({ page }, testInfo) => {
   await page.setViewportSize(viewport)

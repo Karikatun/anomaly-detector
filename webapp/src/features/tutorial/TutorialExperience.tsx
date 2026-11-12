@@ -564,9 +564,13 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
   children?: ReactElement
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const identity = `${tutorialStep}:${anchorSelector}:${fallbackSelector}:${spotlightSelector}:${Boolean(children)}`
+  const boardCoach = Boolean(children)
+  const identity = `${tutorialStep}:${anchorSelector}:${fallbackSelector}:${spotlightSelector}:${boardCoach}`
   const [mask, setMask] = useState<{ identity: string; width: number; height: number; frame: string; spotlight: string; secondary: string } | null>(null)
-  const visibleMask = mask?.identity === identity ? mask : null
+  // Keep the last board shade painted while the next target is measured.
+  // Only geometry for the current target can authorize board interactions.
+  const activeMask = mask?.identity === identity ? mask : null
+  const shade = 'rgba(0, 5, 12, .38)'
   useLayoutEffect(() => {
     const root = document.documentElement
     // Keep measured document clearances while the selected control changes.
@@ -577,6 +581,15 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
       root.style.removeProperty('--tutorial-pilot-header-height')
     }
   }, [])
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    // Re-anchoring on the same surface keeps the last measured clearance.
+    // Changing hosts or leaving compact layout releases the old geometry.
+    return () => {
+      for (const name of ['--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom', '--journal-tutorial-clearance']) root.style.removeProperty(name)
+      root.removeAttribute('data-tutorial-pilot-constrained')
+    }
+  }, [boardCoach, compactLayout])
   useLayoutEffect(() => {
     const root = document.documentElement
     let frame = 0
@@ -833,30 +846,32 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
       window.visualViewport?.removeEventListener('resize', layoutChanged)
       window.visualViewport?.removeEventListener('scroll', schedule)
       window.removeEventListener('scroll', updateAllowedInteractions, true)
-      for (const name of ['--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom', '--journal-tutorial-clearance']) root.style.removeProperty(name)
-      root.removeAttribute('data-tutorial-pilot-constrained')
       delete root.dataset.tutorialAutoscrolling
     }
   }, [tutorialStep, activityKey, restoreJournalFocus, manualReadingTasks, anchorSelector, secondarySelector, fallbackSelector, onTargetResolved, compactLayout, journalEntryAllowed, spotlightSelector, identity])
   return children ? createPortal(<>
     <div data-testid="overlay" data-tutorial-overlay="" className={styles.coachOverlay}
-      style={{ height: visibleMask?.height ?? 0, visibility: visibleMask ? 'visible' : 'hidden' }} aria-hidden="true">
-      <svg ref={svgRef} width={visibleMask?.width ?? window.innerWidth} height={visibleMask?.height ?? window.innerHeight}>
+      style={{ height: mask?.height ?? 0 }} aria-hidden="true">
+      {!mask && <div data-tutorial-shade="" className="fixed inset-0" style={{ backgroundColor: shade }} />}
+      <svg ref={svgRef} width={mask?.width ?? window.innerWidth} height={mask?.height ?? window.innerHeight}>
         <defs>
           <clipPath id="tutorial-allowed-controls" clipPathUnits="userSpaceOnUse">
-            <path d={visibleMask?.secondary ?? ''} clipRule="evenodd" />
+            <path d={mask?.secondary ?? ''} clipRule="evenodd" />
           </clipPath>
         </defs>
         <g clipPath="url(#tutorial-allowed-controls)">
-          <path d={(visibleMask?.frame ?? '') + (visibleMask?.spotlight ?? '')} fill="rgba(0, 5, 12, .38)" fillRule="evenodd" pointerEvents="none" />
-          <path d={(visibleMask?.frame ?? '') + (blockTargetInteraction ? '' : visibleMask?.spotlight ?? '')} fill="transparent" fillRule="evenodd" pointerEvents="fill" />
+          <path data-tutorial-shade="" d={(mask?.frame ?? '') + (mask?.spotlight ?? '')} fill={shade} fillRule="evenodd" pointerEvents="none" />
+          {activeMask && (
+            <path d={activeMask.frame + (blockTargetInteraction ? '' : activeMask.spotlight)} fill="transparent" fillRule="evenodd" pointerEvents="fill" />
+          )}
         </g>
         <g data-tutorial-spotlight="" pointerEvents="none">
-          <path d={visibleMask?.spotlight ?? ''} fill="none" stroke={showSpotlightStroke ? '#38bdf8' : 'none'} strokeWidth={3} />
+          <path d={mask?.spotlight ?? ''} fill="none" stroke={showSpotlightStroke ? '#38bdf8' : 'none'} strokeWidth={3} />
         </g>
       </svg>
+      {!activeMask && <div className="pointer-events-auto fixed inset-0" />}
     </div>
-    <div data-testid="floater" style={{ opacity: visibleMask ? 1 : 0, pointerEvents: visibleMask ? 'auto' : 'none' }}>{children}</div>
+    <div data-testid="floater">{children}</div>
   </>, document.body) : null
 }
 
