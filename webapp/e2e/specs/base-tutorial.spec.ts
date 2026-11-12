@@ -1,5 +1,5 @@
 import { e2ePassword, expect, nextE2eClientIp, test, uniqueLogin } from '../helpers/test'
-import { chooseBaseSlot, confirmAllocation, playBaseTutorial } from '../helpers/base-tutorial'
+import { baseGuestSessionKey, chooseBaseSlot, confirmAllocation, playBaseTutorial } from '../helpers/base-tutorial'
 
 test.use({ trace: 'off', video: 'off' })
 
@@ -26,7 +26,29 @@ test('guest completes base, saves through registration and finishes the first ac
     const current = Number(text.match(/^Шаг (\d+) из 12$/)?.[1])
     expect(current).toBeGreaterThanOrEqual(previous)
     previous = current
-    if (step === 'round-1-thesis-result') expect(current).toBe(11)
+    if (step === 'round-1-thesis') {
+      const signal = page.getByLabel('Сигнал для тезиса', { exact: true })
+      await signal.press('a')
+      await expect(signal).toHaveValue('aster')
+    }
+    if (step === 'round-1-thesis-review') {
+      expect(current).toBe(11)
+      const attempts = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? '{}').state?.thesisAttempts, baseGuestSessionKey)
+      expect(attempts).toBe(0)
+      await page.reload()
+      const field = page.getByLabel('Тип поля для тезиса', { exact: true })
+      await expect(field).toHaveValue('inertial')
+      await field.selectOption('phase')
+      await expect(field).toHaveValue('phase')
+      await page.reload()
+      await expect(field).toHaveValue('phase')
+      await field.selectOption('inertial')
+      await expect(field).toHaveValue('inertial')
+    }
+    if (step === 'round-1-thesis-result') {
+      expect(current).toBe(11)
+      await expect(page.getByTestId('floater').getByRole('status')).toHaveText('Тип поля верен. Полярность верна.')
+    }
     if (step === 'final-model') expect(current).toBe(12)
   })
   await expect(page.getByText(/Ваш учебный результат: 2 из 12/)).toBeVisible()

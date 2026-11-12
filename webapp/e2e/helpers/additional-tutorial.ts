@@ -1,8 +1,13 @@
 import { expect, type Page } from '@playwright/test'
-import { chooseBaseSlot, confirmAllocation, submitBaseThesis } from './base-tutorial'
+import { chooseBaseSlot, confirmAllocation, selectTutorialThesis } from './base-tutorial'
 
 export type AdditionalCheckpoint = (name: string) => Promise<void>
 const noCheckpoint: AdditionalCheckpoint = async () => undefined
+
+async function submitAdditionalThesis(page: Page, signal: string, fieldType: string, polarity: string) {
+  await selectTutorialThesis(page, signal, fieldType, polarity)
+  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+}
 
 // Actions use the documented prepared fixture, never hidden scenario state or stored answers.
 export async function reachAdditionalContracts(page: Page, checkpoint: AdditionalCheckpoint = noCheckpoint, current = false, researchMode: 'deep' | 'broad' = 'deep') {
@@ -23,14 +28,14 @@ export async function reachAdditionalContracts(page: Page, checkpoint: Additiona
     await page.getByRole('button', { name: 'Образец: Eclipse', exact: true }).click()
     await page.getByRole('button', { name: 'Провести два опыта', exact: true }).click()
   }
-  await submitBaseThesis(page, 'cinder', 'phase', 'negative')
+  await submitAdditionalThesis(page, 'cinder', 'phase', 'negative')
   await expect(page.locator('[data-additional-step="review-intro"]')).toBeVisible()
   await checkpoint('first-certification')
   await page.getByRole('button', { name: 'Разобрать цену ошибки', exact: true }).click()
   await confirmAllocation(page, [['Лаборатория', 1], ['Анализ модели', 2], ['Контракты', 1]])
-  await submitBaseThesis(page, 'aster', 'phase', 'positive')
+  await submitAdditionalThesis(page, 'aster', 'phase', 'positive')
   await checkpoint('controlled-wrong')
-  await submitBaseThesis(page, 'aster', 'inertial', 'positive')
+  await submitAdditionalThesis(page, 'aster', 'inertial', 'positive')
   await expect(page.locator('[data-additional-step="review-result"]')).toBeVisible()
   await page.getByRole('button', { name: 'Вернуться к основной сцене', exact: true }).click()
   await expect(page.locator('[data-additional-step="contracts"]')).toBeVisible()

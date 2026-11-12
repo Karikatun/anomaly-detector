@@ -18,6 +18,7 @@ import { Typography } from '@/components/ui/typography'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n, type TranslationKey } from '@/platform/i18n'
 import { PhasePanel } from './TenderPage'
+import type { TrainingThesis } from './ModelAnalysisPanel'
 import type { TenderCommandInput } from './commands'
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import { TenderPhaseLayout } from './components/TenderPhaseLayout'
@@ -46,6 +47,7 @@ export function TutorialTenderBoard({
   actionPanelPinned,
   commandError,
   documentFlow = false,
+  floatingJournalEntry = false,
   highlight,
   interpretationRequired,
   laboratoryInitialMode,
@@ -53,6 +55,7 @@ export function TutorialTenderBoard({
   roundCount,
   lessonLabel = 'tutorial.title',
   journalGuidance,
+  trainingThesis,
   onCommand,
   onContractsClosed,
   onContractsOpened,
@@ -72,6 +75,7 @@ export function TutorialTenderBoard({
   actionPanelPinned: boolean
   commandError: string | null
   documentFlow?: boolean
+  floatingJournalEntry?: boolean
   highlight: 'contracts' | 'header' | 'help' | 'interpretation' | 'none' | 'primary' | 'research' | 'sidebar' | 'working-model'
   interpretationRequired: boolean
   initialJournalTab?: TenderJournalTab
@@ -79,6 +83,7 @@ export function TutorialTenderBoard({
   laboratoryInitialMode?: 'broad' | 'deep'
   lessonLabel?: TranslationKey
   journalGuidance?: ReactNode
+  trainingThesis?: TrainingThesis
   onCommand: (command: TenderCommandInput) => Promise<void>
   onContractsClosed: () => void
   onContractsOpened: () => void
@@ -330,6 +335,7 @@ export function TutorialTenderBoard({
                   onRequiredModalOpenChange,
                   onLaboratoryModeSelect: onLaboratoryModeSelected,
                   separateContractReservation: false,
+                  thesis: trainingThesis,
                   untimed: true,
                 }}
               />
@@ -349,6 +355,7 @@ export function TutorialTenderBoard({
               <div data-tutorial-working-model={view.phase !== 'model-analysis' ? '' : undefined}>
                 <TenderJournalDialog
                   guidance={journalGuidance}
+                  inlineTrigger={!floatingJournalEntry}
                   actionError={journalOpen ? commandError : null}
                   view={view} owner={workingModelOwner} tab={journalTab} currentPlayerId={myPlayer?.playerId}
                   onTabChange={changeJournalTab} open={journalOpen} onOpenChange={openJournal}

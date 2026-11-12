@@ -34,7 +34,7 @@ import { AccessSlotPanel } from './AccessSlotPanel'
 import { ContractsPanel } from './ContractsPanel'
 import { FinalScientificModelPanel } from './FinalScientificModelPanel'
 import { LaboratoryPanel } from './LaboratoryPanel'
-import { ModelAnalysisPanel } from './ModelAnalysisPanel'
+import { ModelAnalysisPanel, type TrainingThesis } from './ModelAnalysisPanel'
 import { PowerAllocationPanel } from './PowerAllocationPanel'
 import { ReconnaissancePanel, ReconnaissanceUnavailable } from './ReconnaissancePanel'
 import { TenderTimer } from './TenderTimer'
@@ -157,6 +157,7 @@ export function PhasePanel({
     onLaboratoryModeSelect?: (mode: 'broad' | 'deep') => void
     onRequiredModalOpenChange?: (open: boolean) => void
     separateContractReservation?: boolean
+    thesis?: TrainingThesis
     untimed?: boolean
   }
 }) {
@@ -296,6 +297,7 @@ export function PhasePanel({
           workingModelDialog={workingModelDialog}
           workingModelSignals={mySamples}
           error={error}
+          trainingThesis={training?.thesis}
           onConfirmThesis={(input) => onCommand({ type: 'submit-thesis', ...input })}
           onFinish={() => onCommand({ type: 'finish-model-analysis' })}
           onSaveWorkingModel={onSaveWorkingModel}

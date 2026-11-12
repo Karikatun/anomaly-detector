@@ -42,9 +42,10 @@ function JournalPanel({ active, children, onElementChange, onPositionChange, get
 export function TenderJournalDialog({
   actionError, disabled, modelTabDisabled, interpretationDisabled, onOpenChange, onTabChange,
   open, openDisabled, owner, tab, view, highlightResult, triggerTestId, showTimerWarning = true,
-  currentPlayerId, urgent = false, guidance,
+  currentPlayerId, urgent = false, guidance, inlineTrigger = false,
 }: {
   guidance?: ReactNode
+  inlineTrigger?: boolean
   actionError?: string | null
   disabled?: boolean
   modelTabDisabled?: boolean
@@ -110,7 +111,7 @@ export function TenderJournalDialog({
           ref={trigger} variant="outline" type="button" className={styles.trigger}
           disabled={openDisabled} aria-label={t('tender.journal.open')}
           title={t('tender.journal.open')} data-testid={triggerTestId}
-          data-tutorial-journal-entry={triggerTestId ? '' : undefined}
+          data-tutorial-journal-entry={triggerTestId ? inlineTrigger ? 'inline' : 'floating' : undefined}
         >
           <HugeiconsIcon icon={BookOpen01Icon} strokeWidth={1.7} aria-hidden="true" />
           <Typography as="span" variant="bodySmMedium" className={styles.triggerText}>{t('tender.journal.title')}</Typography>

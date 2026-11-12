@@ -110,6 +110,13 @@
 }
 .coach { display: grid; min-width: 0; max-width: 24rem; gap: .55rem; text-align: left; overflow-wrap: anywhere; }
 .coach button { width: fit-content; }
+.coachHeading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+}
+.coachHeadingText { display: grid; gap: var(--space-1); }
 .coachActions {
   display: flex;
   flex-wrap: wrap;
@@ -118,8 +125,14 @@
   gap: .5rem;
   margin-top: .25rem;
 }
+.coachBack { margin-inline-start: auto; }
 .hint { padding: .65rem; border-left: 2px solid #38bdf8; background: rgba(56, 189, 248, .08); }
 .thesisFeedback { padding: .65rem; border-left: 2px solid #f87171; color: #fecaca; background: rgba(248, 113, 113, .09); }
+.thesisFeedback[data-correct='true'] {
+  border-color: var(--success);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
 .confirmAction { display: none; color: #7dd3fc; }
 
 :global([data-testid='floater']) {
@@ -241,6 +254,7 @@
     display: block;
   }
 
+  .coachHeading button,
   .coachActions button {
     padding-inline: .5rem;
   }

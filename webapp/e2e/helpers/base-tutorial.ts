@@ -25,13 +25,24 @@ export async function chooseBaseSlot(page: Page, slot: number, checkpoint: BaseT
   await page.getByRole('button', { name: 'Подтвердить выбор', exact: true }).click()
   await checkpoint()
 }
+export async function selectTutorialThesis(page: Page, signal: string, fieldType: string, polarity: string, checkpoint: BaseTutorialCheckpoint = noCheckpoint) {
+  for (const [label, value] of [
+    ['Сигнал для тезиса', signal],
+    ['Тип поля для тезиса', fieldType],
+    ['Полярность для тезиса', polarity],
+  ] as const) {
+    const field = page.getByLabel(label, { exact: true })
+    await field.selectOption(value)
+    await expect(field).toHaveValue(value)
+    await checkpoint()
+  }
+}
 export async function submitBaseThesis(page: Page, signal: string, fieldType: string, polarity: string, pressDuration = 0, checkpoint: BaseTutorialCheckpoint = noCheckpoint) {
-  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption(signal)
-  await checkpoint()
-  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption(fieldType)
-  await checkpoint()
-  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption(polarity)
-  await checkpoint()
+  const prepare = page.getByRole('button', { name: 'К проверке тезиса', exact: true })
+  await expect(prepare).toBeVisible()
+  await selectTutorialThesis(page, signal, fieldType, polarity, checkpoint)
+  await prepare.click()
+  await checkpoint('round-1-thesis-review')
   await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click({ delay: pressDuration })
   await checkpoint()
 }

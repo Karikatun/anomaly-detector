@@ -22,7 +22,8 @@ function firstThesis() {
   ])
 }
 function checkedThesis() {
-  return run(firstThesis(), [{ type: 'submit-thesis', signalId: 'aster', fieldType: 'inertial', polarity: 'positive' }])
+  const choice = { signalId: 'aster', fieldType: 'inertial', polarity: 'positive' } as const
+  return run(firstThesis(), [{ type: 'prepare-thesis', ...choice }, { type: 'submit-thesis', ...choice }])
 }
 
 test('base orientation is attached to actual actions with no Next-only introductions', () => {
@@ -78,7 +79,9 @@ test('reading results enters Analysis; closing or reloading a Journal never subm
 test('wrong Thesis checks field and polarity separately, consumes the allocated attempt and needs an explicit checkpoint reset', () => {
   const state = firstThesis()
   const wrong = { type: 'submit-thesis', signalId: 'aster', fieldType: 'phase', polarity: 'positive' } as const
-  const first = advanceTutorial(state, wrong)
+  const prepared = advanceTutorial(state, { ...wrong, type: 'prepare-thesis' })
+  expect(prepared.state.privateTheses).toHaveLength(0)
+  const first = advanceTutorial(prepared.state, wrong)
   expect(first.thesisFeedback).toEqual({ fieldTypeCorrect: false, polarityCorrect: true })
   expect(first.state.thesisAttempts).toBe(1)
   expect(first.state.budget).toBe(3)

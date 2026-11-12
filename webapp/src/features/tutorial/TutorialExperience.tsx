@@ -51,6 +51,7 @@ const taskKeys: Record<GuidedStep, TranslationKey> = {
   'interpretation-open': 'tutorial.step.interpretationOpen',
   'round-1-working-model': 'tutorial.step.round1Model',
   'round-1-thesis': 'tutorial.step.round1Thesis',
+  'round-1-thesis-review': 'tutorial.step.round1ThesisReview',
   'round-1-thesis-result': 'tutorial.step.round1ThesisResult',
   'final-model': 'tutorial.step.finalModel',
 }
@@ -73,7 +74,7 @@ const pilotCopy: Partial<Record<TutorialStep, { action: TranslationKey; why: Tra
 }
 
 const mobileActionPinnedSteps = new Set<TutorialStep>([
-  'round-1-access', 'round-1-power', 'round-1-recon', 'round-1-lab-pair', 'round-1-thesis',
+  'round-1-access', 'round-1-power', 'round-1-recon', 'round-1-lab-pair', 'round-1-thesis', 'round-1-thesis-review',
 ])
 
 export function TutorialExperience({
@@ -102,7 +103,7 @@ export function TutorialExperience({
   const callbacksActive = () => timeline.isMounted() && !lesson.signal.aborted
   const playerId = initialState.playerId
   const [commandError, setCommandError] = useState<string | null>(null)
-  const [thesisFeedback, setThesisFeedback] = useState<NonNullable<TutorialAdvanceResult['thesisFeedback']> | null>(null)
+  const thesisFeedback = state.step.startsWith('round-1-thesis') ? state.privateTheses.at(-1) ?? null : null
   const [exitOpen, setExitOpen] = useState(false)
   const [explanationStep, setExplanationStep] = useState<TutorialStep | null>(null)
   const [requiredModalOpen, setRequiredModalOpen] = useState(false)
@@ -198,7 +199,6 @@ export function TutorialExperience({
     setRequiredModalOpen(false)
     setResolvedTarget(null)
     setCommandError(null)
-    setThesisFeedback(null)
     setExplanationStep(null)
   }
 
@@ -208,8 +208,6 @@ export function TutorialExperience({
     if (before.step === 'complete') return false
     const result = advanceTutorial(before, action)
     const stepChanged = result.state.step !== before.step
-    if (action.type === 'submit-thesis') setThesisFeedback(result.thesisFeedback ?? null)
-    else if (stepChanged) setThesisFeedback(null)
     if (stepChanged) setExplanationStep(null)
 
     if (action.type === 'restart-exercise' && result.progressed) {
@@ -221,8 +219,9 @@ export function TutorialExperience({
     const journalClose = action.type === 'close-journal' || action.type === 'close-interpretation' || action.type === 'close-research-results'
     const journalRetreat = journalClose && result.state.step === 'research-results'
     const interpretationClosed = journalClose && result.state.step === 'interpretation'
-    timeline.commit(result.state, journalRetreat ? 'retreat' : journalReopen || interpretationClosed ? 'edit' : 'advance')
-    const isDraftSave = action.type === 'update-scientific-model-draft' || action.type === 'update-working-model'
+    const thesisVerdict = before.step === 'round-1-thesis-review' && result.state.step === 'round-1-thesis-result'
+    timeline.commit(result.state, journalRetreat ? 'retreat' : journalReopen || interpretationClosed || thesisVerdict ? 'edit' : 'advance')
+    const isDraftSave = action.type === 'update-scientific-model-draft' || action.type === 'update-working-model' || action.type === 'update-thesis-draft'
     const isNavigation = action.type.startsWith('open-') || action.type.startsWith('close-')
     const isThesisAttempt = action.type === 'submit-thesis' && result.thesisFeedback !== undefined
     setCommandError(result.progressed || isDraftSave || isThesisAttempt || isNavigation
@@ -275,6 +274,7 @@ export function TutorialExperience({
             </DialogHeader>
             <div className={styles.stateContent}>
               <Typography>{t('tutorial.prologue.mission')}</Typography>
+              <Typography>{t('tutorial.prologue.practice')}</Typography>
               {storageNotice && <Typography role="status">{storageNotice}</Typography>}
               <Typography tone="muted">{t('tutorial.prologue.goal')}</Typography>
               <MetrikaConsent inline />
@@ -332,6 +332,11 @@ export function TutorialExperience({
       fallback: '[data-tutorial-thesis] select',
       spotlight: '[data-tutorial-thesis]',
     },
+    'round-1-thesis-review': {
+      anchor: '[data-tutorial-thesis]',
+      fallback: '[data-tutorial-action-container] button',
+      spotlight: '[data-tutorial-thesis]',
+    },
     'round-1-thesis-result': { anchor: '[data-testid="tutorial-research-trigger"]' },
     'final-model': { anchor: '[data-tutorial-primary]' },
   }
@@ -357,7 +362,7 @@ export function TutorialExperience({
   const coachContent = (
     <CoachContent
       progress={t('tutorial.coach.progress', { current: baseTutorialStepNumbers[state.step], total: baseTutorialStepNumbers['final-model'] })}
-      onReset={state.step === 'round-1-thesis' && state.thesisAttempts >= (state.allocation?.modelAnalysis ?? 0) ? () => void applyAction({ type: 'restart-exercise' }) : undefined}
+      onReset={thesisFeedback && !thesisFeedback.fullyCorrect ? () => void applyAction({ type: 'restart-exercise' }) : undefined}
       onContinue={informational ? () => void applyAction({ type: 'continue' }) : undefined}
       onBack={back}
       canGoBack={timeline.canGoBack}
@@ -414,13 +419,21 @@ export function TutorialExperience({
         ) : undefined}
         actionPanelPinned={mobileActionPinnedSteps.has(state.step)}
         commandError={commandError}
+        floatingJournalEntry={baseTutorialStepNumbers[state.step] >= baseTutorialStepNumbers['research-results']
+          && baseTutorialStepNumbers[state.step] <= baseTutorialStepNumbers['round-1-working-model']}
         highlight={exitOpen ? 'none' : highlight}
         interpretationRequired={informational}
         initialJournalTab={journalOpen ? restoredJournalTab(state.step) : undefined}
         roundCount={1}
         laboratoryInitialMode={state.step === 'round-1-lab-pair' ? 'deep' : undefined}
+        trainingThesis={state.step === 'round-1-thesis' || state.step === 'round-1-thesis-review' || informational ? {
+          initialDraft: state.thesisDraft ?? thesisFeedback ?? undefined,
+          onDraftChange: state.step === 'round-1-thesis-review' ? (draft) => void applyAction({ type: 'update-thesis-draft', draft }) : undefined,
+          submitLabel: state.step === 'round-1-thesis' ? 'tutorial.step.prepareThesis' : undefined,
+        } : undefined}
         onCommand={async (command: TenderCommandInput) => {
-          await applyAction(command)
+          const prepareThesis = command.type === 'submit-thesis' && state.step === 'round-1-thesis'
+          await applyAction(prepareThesis ? { ...command, type: 'prepare-thesis' } : command)
         }}
         onExitRequest={(event?: MouseEvent<HTMLButtonElement>) => { if (callbacksActive()) requestExit(event) }}
         onHelpMenuOpened={() => void applyAction({ type: 'open-help-menu' })}
@@ -505,7 +518,7 @@ function useTutorialNearestAction(step: TutorialStep) {
         if (!receiver) return { selector: '[data-tutorial-lab-sample="boreal"]', action: 'tutorial.pilot.pair.receiver' }
         return { selector: confirm, action: 'tutorial.pilot.pair.confirm' }
       }
-      if (step === 'round-1-thesis') {
+      if (step === 'round-1-thesis' || step === 'round-1-thesis-review') {
         const selector = '[data-tutorial-thesis]'
         const fields = [...board.querySelectorAll<HTMLSelectElement>(`${selector} select`)]
         const nextField = fields.findIndex((field) => !field.value)
@@ -525,10 +538,9 @@ function useTutorialNearestAction(step: TutorialStep) {
     }
     const observer = new MutationObserver(sync)
     observer.observe(board, { subtree: true, childList: true, attributes: true,
-      attributeFilter: ['aria-pressed', 'data-tutorial-power-value', 'data-role', 'data-tutorial-confirm-ready'] })
-    board.addEventListener('change', sync)
+      attributeFilter: ['aria-pressed', 'data-tutorial-power-value', 'data-role', 'data-tutorial-confirm-ready', 'data-tutorial-thesis-selection'] })
     sync()
-    return () => { observer.disconnect(); board.removeEventListener('change', sync) }
+    return () => { observer.disconnect() }
   }, [step])
   return selection?.step === step ? selection.action : null
 }
@@ -607,7 +619,7 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
         const entry = query('[data-testid="tutorial-research-trigger"]')
         if (entry) controls.push(entry)
       }
-      if (tutorialStep === 'round-1-thesis') {
+      if (tutorialStep === 'round-1-thesis' || tutorialStep === 'round-1-thesis-review') {
         controls.push(...document.querySelectorAll<HTMLElement>('[data-tutorial-board] [data-tutorial-thesis] select, [data-tutorial-board] [data-tutorial-action-container] button'))
       }
       const rectangle = (rect: { left: number; top: number; right: number; bottom: number }) => {
@@ -702,7 +714,10 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
         setStyle('--tutorial-pilot-action-position', actionInFlow ? 'static' : 'fixed')
         setStyle('--tutorial-mobile-action-height', `${actionInFlow ? 0 : actionHeight}px`)
         setStyle('--tutorial-mobile-action-position', actionInFlow ? 'static' : 'fixed')
-        setStyle('--tutorial-mobile-coach-bottom', `${coach.getBoundingClientRect().bottom}px`)
+        const coachBounds = coach.getBoundingClientRect()
+        setStyle('--tutorial-mobile-coach-bottom', `${coachBounds.bottom}px`)
+        const lowerCoach = !coach.closest('[role="dialog"]') && coachBounds.bottom > (vp.top + vp.bottom) / 2
+        setStyle('--journal-tutorial-clearance', `${lowerCoach ? Math.max(0, vp.bottom - coachBounds.top) : 0}px`)
       }
       // A coach resize can move the fixed command without resizing it. Read
       // that new position only after the CSS variable update has committed.
@@ -778,7 +793,9 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
         const size = `${entry.contentRect.width}:${entry.contentRect.height}`
         if (sizes.get(entry.target) !== size) { sizes.set(entry.target, size); changed = true }
       }
-      if (changed && !userScrolled) schedule()
+      // A manual scroll stops target scrolling, while fixed controls still
+      // need to follow the coach when its explanation opens or closes.
+      if (changed) schedule()
     })
     const observe = () => {
       for (const node of [query(anchorSelector), query('[data-testid="floater"]'), query('[data-tutorial-board] > header'), query('[data-tutorial-action-container]')]) if (node) observer.observe(node)
@@ -814,7 +831,7 @@ function TutorialViewportAnchor({ tutorialStep, activityKey, restoreJournalFocus
       window.visualViewport?.removeEventListener('resize', layoutChanged)
       window.visualViewport?.removeEventListener('scroll', schedule)
       window.removeEventListener('scroll', updateAllowedInteractions, true)
-      for (const name of ['--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom']) root.style.removeProperty(name)
+      for (const name of ['--tutorial-pilot-action-height', '--tutorial-pilot-action-position', '--tutorial-mobile-action-height', '--tutorial-mobile-action-position', '--tutorial-mobile-coach-bottom', '--journal-tutorial-clearance']) root.style.removeProperty(name)
       root.removeAttribute('data-tutorial-pilot-constrained')
       delete root.dataset.tutorialAutoscrolling
     }
@@ -861,7 +878,7 @@ function CoachContent({
   onReset?: () => void
   task: string
   pilot?: { action: string; why: string; expanded: boolean; onToggle: () => void }
-  thesisFeedback: NonNullable<TutorialAdvanceResult['thesisFeedback']> | null
+  thesisFeedback: (NonNullable<TutorialAdvanceResult['thesisFeedback']> & { fullyCorrect: boolean }) | null
   progress: string
 }) {
   const { t } = useI18n()
@@ -880,19 +897,32 @@ function CoachContent({
       if (target.top < top) reading.scrollTop += target.top - top
       else if (target.bottom > bottom) reading.scrollTop += target.bottom - bottom
     }}>
-      <Typography variant="caption" tone="muted">{progress}</Typography>
+      <div className={styles.coachHeading}>
+        <div className={styles.coachHeadingText}>
+          <Typography variant="caption" tone="muted">{progress}</Typography>
+          <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">
+            {pilot ? pilot.action : t('tutorial.coach.task')}
+          </Typography>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={t('tutorial.exit')}
+          ref={exitButtonRef}
+          onClick={onExit}
+        >
+          {t('tutorial.exit.short')}
+        </Button>
+      </div>
       {pilot ? <>
-        <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{pilot.action}</Typography>
         <Typography variant="bodySm" tone="muted">{pilot.why}</Typography>
         <div id="tutorial-coach-explanation" role="region" hidden={!pilot.expanded} aria-label={t('tutorial.pilot.explanation')}>
           <Typography variant="bodySm">{task}</Typography>
         </div>
-      </> : <>
-        <Typography id="tutorial-coach-title" as="strong" variant="bodySmMedium">{t('tutorial.coach.task')}</Typography>
-        <Typography variant="bodySm">{task}</Typography>
-      </>}
+      </> : <Typography variant="bodySm">{task}</Typography>}
       {thesisFeedback && (
-        <Typography role="alert" variant="bodySm" className={styles.thesisFeedback}>
+        <Typography role={thesisFeedback.fullyCorrect ? 'status' : 'alert'} variant="bodySm" className={styles.thesisFeedback} data-correct={thesisFeedback.fullyCorrect}>
           {t(thesisFeedback.fieldTypeCorrect ? 'tutorial.base.fieldCorrect' : 'tutorial.coach.thesisFieldIncorrect')} {t(thesisFeedback.polarityCorrect ? 'tutorial.base.polarityCorrect' : 'tutorial.coach.thesisPolarityIncorrect')}
         </Typography>
       )}
@@ -905,19 +935,9 @@ function CoachContent({
           aria-expanded={pilot.expanded} aria-controls="tutorial-coach-explanation" onClick={pilot.onToggle}>
           {t('tutorial.pilot.more')}
         </Button>}
-        <Button type="button" size="sm" variant="outline" data-tutorial-back disabled={!canGoBack} onClick={onBack}>{t('tutorial.back')}</Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={t('tutorial.exit')}
-          ref={exitButtonRef}
-          onClick={onExit}
-        >
-          {t('tutorial.exit.short')}
-        </Button>
         {onReset && <Button type="button" size="sm" onClick={onReset}>{t('tutorial.base.retry')}</Button>}
         {onContinue && <Button type="button" size="sm" onClick={onContinue}>{t('tutorial.coach.continue')}</Button>}
+        <Button type="button" size="sm" variant="outline" className={styles.coachBack} data-tutorial-back disabled={!canGoBack} onClick={onBack}>{t('tutorial.back')}</Button>
       </div>
     </div>
   )

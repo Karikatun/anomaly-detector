@@ -26,6 +26,7 @@ import {
 import { NativeSelect } from '@/components/ui/native-select'
 import { Typography } from '@/components/ui/typography'
 import { useI18n } from '@/platform/i18n'
+import type { TranslationKey } from '@/platform/i18n/translations'
 import {
   fieldTypeLabelKeys,
   fieldTypes,
@@ -39,6 +40,18 @@ import { runTenderAction } from './run-tender-action'
 import type { WorkingModelSaveStatus } from './working-model-draft'
 import type { WorkingModelDraft } from './use-working-model-draft'
 import { tenderRulesetPolicy } from './ruleset-policy'
+
+export type TrainingThesisDraft = {
+  signalId: SignalId | ''
+  fieldType: FieldType | ''
+  polarity: Polarity | ''
+}
+
+export type TrainingThesis = {
+  initialDraft?: TrainingThesisDraft
+  onDraftChange?: (draft: TrainingThesisDraft) => void
+  submitLabel?: TranslationKey
+}
 
 type ModelAnalysisPanelProps = {
   simpleScoring?: boolean
@@ -63,6 +76,7 @@ type ModelAnalysisPanelProps = {
   }
   workingModelSignals?: SignalId[]
   error?: string | null
+  trainingThesis?: TrainingThesis
   onConfirmThesis: (input: { signalId: SignalId; fieldType: FieldType; polarity: Polarity }) => Promise<void>
   onFinish: () => Promise<void>
   onSaveWorkingModel: (model: WorkingModel) => Promise<void>
@@ -83,13 +97,20 @@ export function ModelAnalysisPanel({
   workingModelDialog,
   workingModelSignals = knownSignals,
   error,
+  trainingThesis,
   onConfirmThesis,
   onFinish,
   onSaveWorkingModel,
 }: ModelAnalysisPanelProps) {
-  const [signalId, setSignalId] = useState<SignalId | ''>('')
-  const [fieldType, setFieldType] = useState<FieldType | ''>('')
-  const [polarity, setPolarity] = useState<Polarity | ''>('')
+  const [selection, setSelection] = useState<TrainingThesisDraft>(() => trainingThesis?.initialDraft ?? {
+    signalId: '', fieldType: '', polarity: '',
+  })
+  const { signalId, fieldType, polarity } = selection
+  const updateSelection = (change: Partial<TrainingThesisDraft>) => {
+    const draft = { ...selection, ...change }
+    setSelection(draft)
+    trainingThesis?.onDraftChange?.(draft)
+  }
   const { t } = useI18n()
   const isValid = signalId !== '' && fieldType !== '' && polarity !== ''
   const isPrivateAnalysis = tenderRulesetPolicy(ruleset).sharedModelAnalysis
@@ -100,9 +121,8 @@ export function ModelAnalysisPanel({
     const succeeded = await runTenderAction(
       () => onConfirmThesis({ signalId, fieldType, polarity }),
     )
-    if (succeeded) {
-      setFieldType('')
-      setPolarity('')
+    if (succeeded && !trainingThesis) {
+      setSelection((current) => ({ ...current, fieldType: '', polarity: '' }))
     }
   }
 
@@ -140,14 +160,14 @@ export function ModelAnalysisPanel({
             </Typography>
           </div>
 
-          <div className={styles.analysisFormGrid} data-tutorial-thesis="">
+          <div className={styles.analysisFormGrid} data-tutorial-thesis="" data-tutorial-thesis-selection={trainingThesis ? `${signalId}:${fieldType}:${polarity}` : undefined}>
             <label className={styles.field}>
               <Typography as="span" variant="caption" tone="muted">{t('tender.analysis.signal')}</Typography>
               <NativeSelect
                 aria-label={t('tender.analysis.signalAria')}
                 disabled={disabled}
                 value={signalId}
-                onChange={(event) => setSignalId(event.target.value as SignalId | '')}
+                onChange={(event) => updateSelection({ signalId: event.target.value as SignalId | '' })}
               >
                 <option value="">{t('tender.analysis.signalPlaceholder')}</option>
                 {knownSignals.map((signal) => (
@@ -162,7 +182,7 @@ export function ModelAnalysisPanel({
                 aria-label={t('tender.analysis.fieldTypeAria')}
                 disabled={disabled}
                 value={fieldType}
-                onChange={(event) => setFieldType(event.target.value as FieldType | '')}
+                onChange={(event) => updateSelection({ fieldType: event.target.value as FieldType | '' })}
               >
                 <option value="">{t('tender.analysis.fieldTypePlaceholder')}</option>
                 {fieldTypes.map((type) => (
@@ -177,7 +197,7 @@ export function ModelAnalysisPanel({
                 aria-label={t('tender.analysis.polarityAria')}
                 disabled={disabled}
                 value={polarity}
-                onChange={(event) => setPolarity(event.target.value as Polarity | '')}
+                onChange={(event) => updateSelection({ polarity: event.target.value as Polarity | '' })}
               >
                 <option value="">{t('tender.analysis.polarityPlaceholder')}</option>
                 {polarities.map((value) => (
@@ -249,7 +269,7 @@ export function ModelAnalysisPanel({
           onClick={() => void handleSubmit()}
         >
           <HugeiconsIcon icon={SignalFullIcon} strokeWidth={1.7} aria-hidden="true" />
-          {t('tender.analysis.submit')}
+          {t(trainingThesis?.submitLabel ?? 'tender.analysis.submit')}
         </Button>
       </footer>
     </section>

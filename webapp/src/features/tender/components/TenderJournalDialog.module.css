@@ -57,8 +57,7 @@
   .panel { max-height: 60dvh; }
 }
 
-/* Training keeps the secondary Journal entry in its own normal-flow row. */
-.trigger[data-tutorial-journal-entry] {
+.trigger[data-tutorial-journal-entry='inline'] {
   position: static;
   width: 100%;
   min-width: 0;
@@ -68,7 +67,7 @@
   border-radius: var(--radius-control);
   box-shadow: none;
 }
-.trigger[data-tutorial-journal-entry] .triggerText {
+.trigger[data-tutorial-journal-entry='inline'] .triggerText {
   display: inline;
   min-width: 0;
   white-space: normal;
