@@ -1,5 +1,6 @@
 import type { RealtimeServerMessage, TenderView } from '@anomaly-detector/contracts'
 import {
+  gameContractVersionQuery,
   realtimeServerMessageSchema,
   realtimeTicketResponseSchema,
 } from '@anomaly-detector/contracts'
@@ -108,6 +109,7 @@ export class TenderRealtimeSession {
       const wsUrl = new URL('/api/realtime/ws', this.options.apiBaseUrl.replace(/^http/, 'ws'))
       wsUrl.searchParams.set('ticket', ticketResponse.ticket)
       wsUrl.searchParams.set('tenderId', this.options.tenderId)
+      wsUrl.searchParams.set(gameContractVersionQuery, '2')
       if (this.socketAttempted) wsUrl.searchParams.set('reconnect', '1')
       this.socketAttempted = true
       const socket = this.options.createSocket(wsUrl.toString())

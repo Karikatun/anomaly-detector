@@ -23,7 +23,9 @@ export const roomRepositoryContract = (
       expect(created.members).toEqual([{ ready: false, seat: 1, userId: fixture.hostId }])
       expect(await fixture.repository.readCurrentForMember(fixture.hostId)).toMatchObject({ id: created.id })
 
-      const joined = await fixture.repository.joinByCode({ actorId: fixture.guestId, code: created.joinCode! })
+      const joinTarget = await fixture.repository.readJoinTarget(created.joinCode!)
+      expect(joinTarget).toMatchObject({ id: created.id })
+      const joined = await fixture.repository.join({ actorId: fixture.guestId, roomId: joinTarget.id })
       await expect(fixture.repository.join({ actorId: fixture.guestId, roomId: created.id }))
         .resolves.toMatchObject({ id: created.id })
       await expect(fixture.repository.readForMember({ actorId: fixture.guestId, roomId: created.id }))
@@ -92,10 +94,10 @@ export function createInMemoryRoomRepository(): RoomRepository {
       currentByUser.set(actorId, roomId)
       return readRoom()
     },
-    async joinByCode({ actorId, code }) {
+    async readJoinTarget(code) {
       const current = readRoom()
       if (current.joinCode !== code) throw new Error('Room does not exist')
-      return repository.join({ actorId, roomId: current.id })
+      return { id: current.id, mode: current.mode ?? 'standard' }
     },
     async leave({ actorId, roomId }) {
       const current = readRoom()

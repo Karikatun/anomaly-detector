@@ -91,6 +91,7 @@ const recordLessonRoute = createRoute({
   responses: {
     200: { content: { 'application/json': { schema: tutorialLessonsProgressSchema } }, description: 'First accepted completion or historical credit, without changing other lessons' },
     400: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Invalid lesson or version' },
+    409: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Lesson progress writes disabled' },
     401: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authentication required' },
     429: { content: { 'application/json': { schema: apiErrorSchema } }, description: 'Authenticated mutation rate limited' },
   },
@@ -125,6 +126,7 @@ async function executeTutorial<T>(operation: () => Promise<T>) {
     return await operation()
   } catch (error) {
     if (error instanceof TutorialProgressFailure) {
+      if (error.kind === 'lesson_writes_disabled') throw new AppError(409, 'CONFLICT', error.message)
       throw new AppError(401, 'UNAUTHORIZED', error.message, undefined, error.kind)
     }
     throw error

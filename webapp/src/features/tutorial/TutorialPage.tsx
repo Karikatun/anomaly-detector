@@ -6,6 +6,7 @@ import { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { Typography } from '@/components/ui/typography'
 import { AuthSessionGate, ProtectedPage, useAuth } from '@/features/auth'
+import { useNewGameFormatWritesEnabled } from '@/features/capabilities'
 import { ProfileApi, useAccountProtectionQuery, useRecordTutorialProgressMutation, useTutorialLessonsProgressQuery } from '@/features/profile'
 import { CreateRoomDialog, RoomsApi, useCurrentMatchQuery } from '@/features/rooms'
 import { useI18n } from '@/platform/i18n'
@@ -46,6 +47,7 @@ function AccountTutorial({ playerId, entry, lessonId }: { playerId: string; entr
   const roomsApi = useMemo(() => new RoomsApi(auth.transport), [auth.transport])
   const profileApi = useMemo(() => new ProfileApi(auth.transport), [auth.transport])
   const currentMatch = useCurrentMatchQuery(roomsApi)
+  const newGameFormatWritesEnabled = useNewGameFormatWritesEnabled()
   const progress = useTutorialLessonsProgressQuery(profileApi)
   const { mutateAsync: recordProgress } = useRecordTutorialProgressMutation(profileApi)
   const [entryState] = useState(() => {
@@ -71,7 +73,7 @@ function AccountTutorial({ playerId, entry, lessonId }: { playerId: string; entr
   const accountProtection = useAccountProtectionQuery(profileApi, saveStatus === 'saved')
   const exitTutorial = () => entry === 'public' ? window.location.assign(getPublicWebsiteUrl()) : void navigate({ to: '/' })
   const persist = useCallback((command: TutorialProgressCommand, signal?: AbortSignal): Promise<void> => {
-    if (signal?.aborted || !mounted.current || saveState.current !== 'idle') return Promise.resolve()
+    if (!newGameFormatWritesEnabled || signal?.aborted || !mounted.current || saveState.current !== 'idle') return Promise.resolve()
     const attempt = new AbortController()
     saveAttempt.current = attempt
     const cancel = () => attempt.abort()
@@ -86,7 +88,7 @@ function AccountTutorial({ playerId, entry, lessonId }: { playerId: string; entr
       if (!isCurrent()) return
       saveState.current = 'idle'; setSaveStatus('error')
     }).finally(() => signal?.removeEventListener('abort', cancel))
-  }, [entryState.handoff, lessonId, playerId, recordProgress, storage])
+  }, [entryState.handoff, lessonId, newGameFormatWritesEnabled, playerId, recordProgress, storage])
   useEffect(() => {
     if (!currentMatch.isPending && !currentMatch.isError && !currentMatch.data && entryCompletion && entryState.command) void persist(entryState.command)
   }, [currentMatch.data, currentMatch.isError, currentMatch.isPending, entryCompletion, entryState.command, persist])
@@ -97,7 +99,7 @@ function AccountTutorial({ playerId, entry, lessonId }: { playerId: string; entr
     else void navigate({ to: '/rooms/$roomId', params: { roomId: match.roomId } })
   }
   const onComplete = (_state: LessonState, signal: AbortSignal) => {
-    setSaveStatus('pending'); setCompletionKind('scenario-completed')
+    setSaveStatus(newGameFormatWritesEnabled ? 'pending' : 'idle'); setCompletionKind('scenario-completed')
     return persist(completionCommand(lessonId), signal)
   }
   const repeat = (restart?: () => void) => {
@@ -113,18 +115,24 @@ function AccountTutorial({ playerId, entry, lessonId }: { playerId: string; entr
   const renderCompletion = (restart: (() => void) | undefined, state: LessonState) => {
     const legacy = lessonId === 'base' && completionKind === 'legacy-credit' && !progress.data?.base.completion
     const saved = saveStatus === 'saved'
+    const savePending = newGameFormatWritesEnabled && saveStatus === 'pending'
+    const saveError = newGameFormatWritesEnabled && saveStatus === 'error'
+    const showMatchFormat = lessonId === 'additional' || newGameFormatWritesEnabled
+    const completeTitle = legacy ? 'tutorial.base.legacy' : lessonId === 'base' ? 'tutorial.complete.title' : 'tutorial.additional.complete.title'
     const actual = progress.data?.[lessonId].completion
     const legacyCredit = lessonId === 'base' ? progress.data?.base.legacyCredit : null
     return <TutorialStateCard alignCardToTop showExpeditionBackground={false}>
-      <CardHeader><CardTitle>{t(saved ? legacy ? 'tutorial.base.legacy' : lessonId === 'base' ? 'tutorial.complete.title' : 'tutorial.additional.complete.title' : saveStatus === 'error' ? 'tutorial.complete.saveErrorTitle' : 'tutorial.complete.savingTitle')}</CardTitle></CardHeader>
+      <CardHeader><CardTitle>{t(savePending ? 'tutorial.complete.savingTitle' : saveError ? 'tutorial.complete.saveErrorTitle' : completeTitle)}</CardTitle></CardHeader>
       <CardContent className={styles.completeContent}>
         <Typography>{t(legacy ? 'tutorial.base.legacyDescription' : lessonId === 'base' ? 'tutorial.complete.description' : 'tutorial.additional.complete.description')}</Typography>
         {!legacy && state.finalSubmission && <><Typography>{state.lessonId === 'base' ? t('tutorial.base.result', { score: state.rating }) : t('tutorial.additional.complete.result', { rating: state.rating, score: state.modelScore })}</Typography><Typography>{t('tutorial.base.resultPartial')}</Typography></>}
         {actual && <Typography>{t(lessonId === 'base' ? 'tutorial.base.actualDate' : 'tutorial.lessonMenu.additionalDate', { date: new Date(actual.completedAt).toLocaleDateString('ru-RU') })}</Typography>}
         {legacyCredit && <Typography>{t('tutorial.base.legacyDate', { date: legacyCredit.completedAt ? new Date(legacyCredit.completedAt).toLocaleDateString('ru-RU') : t('tutorial.base.unknownDate') })}</Typography>}
-        {saveStatus === 'pending' && <Typography role="status">{t('tutorial.complete.savingDescription')}</Typography>}
-        {saveStatus === 'error' && <div className={styles.saveError} role="alert"><Typography>{t('tutorial.complete.saveError')}</Typography><Button onClick={retrySave}>{t('tutorial.complete.retrySave')}</Button></div>}
-        <Typography>{t(lessonId === 'base' ? 'tutorial.complete.realMatch' : 'tutorial.additional.complete.realMatch')}</Typography>
+        {savePending && <Typography role="status">{t('tutorial.complete.savingDescription')}</Typography>}
+        {saveError && <div className={styles.saveError} role="alert"><Typography>{t('tutorial.complete.saveError')}</Typography><Button onClick={retrySave}>{t('tutorial.complete.retrySave')}</Button></div>}
+        {!saved && !newGameFormatWritesEnabled && <Typography role="status">{t('tutorial.complete.saveUnavailable')}</Typography>}
+        {newGameFormatWritesEnabled && saveStatus === 'idle' && <Button onClick={retrySave}>{t('tutorial.complete.retrySave')}</Button>}
+        {showMatchFormat && <Typography>{t(lessonId === 'base' ? 'tutorial.complete.realMatch' : 'tutorial.additional.complete.realMatch')}</Typography>}
         <Typography>{t('tutorial.complete.nextMatch')}</Typography>
         <div className={styles.completeActions}>
           <Button onClick={() => setCreateRoomOpen(true)}>{t('tutorial.complete.create')}</Button>
@@ -145,6 +153,7 @@ function AccountTutorial({ playerId, entry, lessonId }: { playerId: string; entr
 }
 function GuestTutorial({ lessonId }: { lessonId: TutorialLessonId }) {
   const { t } = useI18n()
+  const newGameFormatWritesEnabled = useNewGameFormatWritesEnabled()
   const [storage] = useState(getTutorialStorage)
   const [loaded] = useState(() => loadTutorialSessionResult(storage, guestTutorialPlayerId, lessonId))
   const [legacy, setLegacy] = useState(lessonId === 'base' && loaded.legacyCompleted)
@@ -156,7 +165,7 @@ function GuestTutorial({ lessonId }: { lessonId: TutorialLessonId }) {
       <Typography>{state.lessonId === 'base' ? t('tutorial.base.result', { score: state.rating }) : t('tutorial.additional.complete.result', { rating: state.rating, score: state.modelScore })}</Typography>
       <Typography>{t('tutorial.base.resultPartial')}</Typography>
       <Typography>{t(lessonId === 'base' ? 'tutorial.complete.realMatch' : 'tutorial.additional.complete.realMatch')}</Typography>
-      <Typography>{t('tutorial.guest.next')}</Typography>
+      <Typography>{t(newGameFormatWritesEnabled ? 'tutorial.guest.next' : 'tutorial.complete.saveUnavailable')}</Typography>
       {loaded.notice === 'storage-unavailable' && <Typography role="status">{t('tutorial.base.storage')}</Typography>}
       <div className={styles.completeActions}><GuestAuthButtons storage={storage} lessonId={lessonId} /><Button variant="ghost" onClick={restart}>{t('tutorial.complete.repeat')}</Button></div>
     </CardContent>

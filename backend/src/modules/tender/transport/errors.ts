@@ -1,4 +1,5 @@
 import { AppError } from '../../../http/errors'
+import { gameClientUpdateMessage } from '../../../http/game-contract'
 import { TenderFailure } from '../domain/errors'
 
 export async function executeTender<T>(operation: () => Promise<T>): Promise<T> {
@@ -6,6 +7,9 @@ export async function executeTender<T>(operation: () => Promise<T>): Promise<T> 
     return await operation()
   } catch (error) {
     if (!(error instanceof TenderFailure)) throw error
+    if (error.kind === 'client_update_required') {
+      throw new AppError(409, 'CONFLICT', gameClientUpdateMessage)
+    }
     if (error.kind === 'account_unavailable') {
       throw new AppError(401, 'UNAUTHORIZED', error.message)
     }
@@ -42,6 +46,9 @@ export async function executeTenderRead<T>(operation: () => Promise<T>): Promise
     return await operation()
   } catch (error) {
     if (!(error instanceof TenderFailure)) throw error
+    if (error.kind === 'client_update_required') {
+      throw new AppError(409, 'CONFLICT', gameClientUpdateMessage)
+    }
     if (error.kind === 'tender_not_found' || error.kind === 'player_not_in_tender') {
       throw new AppError(404, 'NOT_FOUND', 'Tender not found')
     }

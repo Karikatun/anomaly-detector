@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { tenderViewSchema } from '@anomaly-detector/contracts'
+import { gameContractVersionHeader, tenderViewSchema } from '@anomaly-detector/contracts'
 
 import { expect, registerBrowserUser, test } from '../helpers/test'
 import { inspectCompletedTender } from '../helpers/completed-tender'
@@ -19,7 +19,7 @@ async function register(page: Parameters<typeof registerBrowserUser>[0], name: s
 async function command(page: Parameters<typeof registerBrowserUser>[0], session: Session, tenderId: string, payload: Record<string, unknown>) {
   const response = await page.request.post(`${session.apiOrigin}/api/tenders/${tenderId}/commands`, {
     data: { ...payload, actorId: session.playerId, commandId: randomUUID(), tenderId },
-    headers: { Authorization: `Bearer ${session.accessToken}` },
+    headers: { Authorization: `Bearer ${session.accessToken}`, [gameContractVersionHeader]: '2' },
   })
   if (!response.ok()) {
     const body = await response.json() as { error?: { code?: string } }
@@ -32,7 +32,7 @@ async function command(page: Parameters<typeof registerBrowserUser>[0], session:
 
 async function readTender(page: Parameters<typeof registerBrowserUser>[0], session: Session, tenderId: string) {
   const response = await page.request.get(`${session.apiOrigin}/api/tenders/${tenderId}`, {
-    headers: { Authorization: `Bearer ${session.accessToken}` },
+    headers: { Authorization: `Bearer ${session.accessToken}`, [gameContractVersionHeader]: '2' },
   })
   expect(response.ok()).toBe(true)
   return response.json() as Promise<{ phase: string; round: number; players: Array<{ bot?: { difficulty: 'easy' | 'hard' }; playerId: string }> }>

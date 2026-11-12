@@ -4,10 +4,10 @@ import type { AuthenticatedTransport } from '../src/platform/api'
 import { RoomsApi } from '../src/features/rooms/api'
 
 test('room refresh reads current state without repeating the join mutation', async () => {
-  const requests: Array<{ method?: string; path: string }> = []
+  const requests: Array<{ contractVersion: string | null; method?: string; path: string }> = []
   const api = new RoomsApi({
     request: async (path, schema, options) => {
-      requests.push({ method: options?.method, path })
+      requests.push({ contractVersion: new Headers(options?.headers).get('X-Anomaly-Contract-Version'), method: options?.method, path })
       return schema.parse({
         allowBots: false,
         capacity: 2,
@@ -29,6 +29,7 @@ test('room refresh reads current state without repeating the join mutation', asy
   await api.get('019be000-0000-7000-8000-000000000001')
 
   expect(requests).toEqual([{
+    contractVersion: '2',
     method: undefined,
     path: '/api/rooms/019be000-0000-7000-8000-000000000001',
   }])
@@ -43,6 +44,7 @@ test('leaving a waiting room accepts the successful no-content response', async 
     requestNoContent: async (path, options) => {
       expect(path).toBe(`/api/rooms/${roomId}/leave`)
       expect(options?.method).toBe('POST')
+      expect(new Headers(options?.headers).get('X-Anomaly-Contract-Version')).toBe('2')
     },
   } as AuthenticatedTransport)
 

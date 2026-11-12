@@ -17,6 +17,7 @@ import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Typography } from '@/components/ui/typography'
 import { useAuth } from '@/features/auth'
+import { useNewGameFormatWritesEnabled } from '@/features/capabilities'
 import { useI18n } from '@/platform/i18n'
 import { RoomsApi } from '../api'
 import { useCreateRoomMutation } from '../queries'
@@ -34,16 +35,18 @@ export function CreateRoomDialog({
   const { t } = useI18n()
   const auth = useAuth()
   const navigate = useNavigate()
+  const newGameFormatWritesEnabled = useNewGameFormatWritesEnabled()
   const [capacity, setCapacity] = useState<2 | 3 | 4>(2)
   const [mode, setMode] = useState<'standard' | 'simple'>(initialMode)
   const [allowBots, setAllowBots] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const selectedMode = newGameFormatWritesEnabled ? mode : 'standard'
   const api = new RoomsApi(auth.transport)
   const { mutateAsync: createRoom, isPending } = useCreateRoomMutation({ api })
 
   const handleCreate = async () => {
     setError(null)
-    const result = createRoomRequestSchema.safeParse({ allowBots, capacity, mode })
+    const result = createRoomRequestSchema.safeParse({ allowBots, capacity, mode: selectedMode })
     if (!result.success) {
       setError(t('rooms.create.error.invalid'))
       return
@@ -69,15 +72,15 @@ export function CreateRoomDialog({
         <div className={styles.form}>
           <Field className={styles.field}>
             <FieldLabel className={styles.label} htmlFor="create-room-mode">{t('rooms.create.mode')}</FieldLabel>
-            <NativeSelect id="create-room-mode" value={mode} onChange={(event) => {
+            <NativeSelect id="create-room-mode" value={selectedMode} onChange={(event) => {
               const next = event.target.value as 'standard' | 'simple'
               setMode(next)
             }}>
               <option value="standard">{t('rooms.create.mode.standard')}</option>
-              <option value="simple">{t('rooms.create.mode.simple')}</option>
+              {newGameFormatWritesEnabled && <option value="simple">{t('rooms.create.mode.simple')}</option>}
             </NativeSelect>
-            <Typography variant="bodySm">{t(mode === 'simple' ? 'rooms.create.mode.simpleDescription' : 'rooms.create.mode.standardDescription')}</Typography>
-            <details><summary><Typography as="span" variant="bodySm">{t('rooms.create.mode.details')}</Typography></summary><Typography variant="bodySm">{t(mode === 'simple' ? 'rooms.create.mode.simpleDetails' : 'rooms.create.mode.standardDetails')}</Typography></details>
+            <Typography variant="bodySm">{t(selectedMode === 'simple' ? 'rooms.create.mode.simpleDescription' : 'rooms.create.mode.standardDescription')}</Typography>
+            <details><summary><Typography as="span" variant="bodySm">{t('rooms.create.mode.details')}</Typography></summary><Typography variant="bodySm">{t(selectedMode === 'simple' ? 'rooms.create.mode.simpleDetails' : 'rooms.create.mode.standardDetails')}</Typography></details>
           </Field>
           <Field className={styles.field}>
             <FieldLabel className={styles.label} htmlFor="create-room-capacity">{t('rooms.create.capacity')}</FieldLabel>

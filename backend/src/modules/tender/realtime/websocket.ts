@@ -1,5 +1,10 @@
 import type { Server, ServerWebSocket } from 'bun'
-import { tenderResourceIdSchema } from '@anomaly-detector/contracts'
+import {
+  gameContractVersionQuery,
+  gameContractVersionSchema,
+  tenderResourceIdSchema,
+  type GameContractVersion,
+} from '@anomaly-detector/contracts'
 
 import {
   resolveRealtimeFailureClose,
@@ -9,6 +14,7 @@ import { RealtimeFailure, type RealtimePrincipal } from './errors'
 import { consumeRealtimeTicket, type RealtimeTicketStore } from './tickets'
 
 export type RealtimeSocketData = {
+  contractVersion: GameContractVersion
   closed: boolean
   metricsConnected: boolean
   playerId: string
@@ -48,6 +54,7 @@ export function createRealtimeWebSocketHandlers(input: {
       const { playerId, sessionId, tenderId } = pending
       try {
         const subscription = await input.hub.subscribe({
+          contractVersion: pending.contractVersion,
           playerId,
           sessionId,
           socket: {
@@ -118,6 +125,17 @@ export async function upgradeRealtimeWebSocket(input: {
       { status: 400 },
     )
   }
+  const requestedVersions = url.searchParams.getAll(gameContractVersionQuery)
+  const contractVersion = gameContractVersionSchema.safeParse(
+    requestedVersions.length === 0 ? undefined : requestedVersions.join(','),
+  )
+  if (!contractVersion.success) {
+    return Response.json(
+      { error: { code: 'BAD_REQUEST', message: 'Unsupported game contract version' } },
+      { status: 400 },
+    )
+  }
+
   let principal: RealtimePrincipal
   try {
     principal = await consumeRealtimeTicket({ store: input.ticketStore, ticket })
@@ -135,6 +153,7 @@ export async function upgradeRealtimeWebSocket(input: {
     const upgraded = input.server.upgrade(input.request, {
       data: {
         closed: false,
+        contractVersion: contractVersion.data,
         metricsConnected: false,
         playerId: principal.userId,
         reconnect: url.searchParams.get('reconnect') === '1',

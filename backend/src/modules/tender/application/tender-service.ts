@@ -26,7 +26,7 @@ import {
   createFinalScientificModelAuditByPlayer,
   createRatingBreakdownByPlayer,
 } from './final-audit'
-import type { TenderModule } from './tender-module'
+import type { TenderCommandAccess, TenderModule } from './tender-module'
 import type {
   PendingTenderAuditEvent,
   StoredTender,
@@ -47,7 +47,7 @@ import {
   isContractEligible,
   isContractEvidenceSelectionEligible,
 } from '../domain/contract-eligibility'
-import { TenderFailure } from '../domain/errors'
+import { requireSupportedTenderMode, TenderFailure } from '../domain/errors'
 import { createPlacementByPlayer, resolveWinnerPlayerIds } from '../domain/final-results'
 import { deadlineForPhase } from '../domain/phase-timing'
 
@@ -117,10 +117,11 @@ export function createTenderService({
     }
     return parsedCommand.data
   }
-  const findCommandReceipt = async (commandInput: TenderCommand) => {
+  const findCommandReceipt = async (commandInput: TenderCommand, access?: TenderCommandAccess) => {
     const command = parseCommand(commandInput)
     const tender = await readTender(command.tenderId)
     readPlayer(tender, command.actorId)
+    requireSupportedTenderMode(tender.game?.mode, access?.standardOnly)
     const previousCommand = await store.findCommand({
       commandId: command.commandId,
       tenderId: command.tenderId,
@@ -574,10 +575,11 @@ export function createTenderService({
       return { tenderId: tender.id }
     },
 
-    async execute(commandInput: TenderCommand, options?: { expectedVersion: number }): Promise<CommandReceipt> {
+    async execute(commandInput: TenderCommand, options?: TenderCommandAccess & { expectedVersion?: number }): Promise<CommandReceipt> {
       const command = parseCommand(commandInput)
       const tender = await readTender(command.tenderId)
       const player = readPlayer(tender, command.actorId)
+      requireSupportedTenderMode(tender.game?.mode, options?.standardOnly)
       const commandFingerprint = tenderCommandFingerprint(command)
       const previousCommand = await store.findCommand({
         commandId: command.commandId,
@@ -589,7 +591,7 @@ export function createTenderService({
         }
         return previousCommand.receipt
       }
-      if (options && tender.version !== options.expectedVersion) {
+      if (options?.expectedVersion !== undefined && tender.version !== options.expectedVersion) {
         throw new TenderFailure('tender_version_conflict', 'Tender changed after decision projection')
       }
       if (!isActivePlayer(tender, player.id) && command.type !== 'forfeit-tender') {

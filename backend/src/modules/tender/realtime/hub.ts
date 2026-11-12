@@ -1,7 +1,8 @@
-import type { RealtimeServerMessage } from '@anomaly-detector/contracts'
+import type { GameContractVersion, RealtimeServerMessage } from '@anomaly-detector/contracts'
 
 import type { TenderModule } from '../application/tender-module'
 import { TenderFailure } from '../domain/errors'
+import { tenderViewForClient } from '../transport/game-contract'
 import { RealtimeFailure, type RealtimePrincipal } from './errors'
 
 type RealtimeFailureClose = {
@@ -18,7 +19,9 @@ export function resolveRealtimeFailureClose(failure: unknown): RealtimeFailureCl
     return { code: 4429, reason: 'Try again later', reportAsError: false }
   }
   if (failure instanceof TenderFailure && (
-    failure.kind === 'tender_not_found'
+    // Legacy clients stop retrying only on the existing terminal unavailable code.
+    failure.kind === 'client_update_required'
+    || failure.kind === 'tender_not_found'
     || failure.kind === 'player_not_in_tender'
     || failure.kind === 'player_forfeited'
   )) {
@@ -37,6 +40,7 @@ export type RealtimeSubscription = {
 }
 
 type Subscription = {
+  contractVersion: GameContractVersion
   playerId: string
   ready: boolean
   sessionId: string
@@ -70,8 +74,9 @@ export function createRealtimeHub({ onTenderChanged, sessionGuard, tender }: Rea
     view: Extract<RealtimeServerMessage, { type: 'tender-view' }>['view'],
   ) => {
     if (!subscriptions.has(subscription) || view.version <= subscription.version) return
+    const projectedView = tenderViewForClient(view, subscription.contractVersion)
     subscription.version = view.version
-    deliver(subscription.socket, { type: 'tender-view', view })
+    deliver(subscription.socket, { type: 'tender-view', view: projectedView })
   }
 
   const closeFailedSubscription = (
@@ -157,6 +162,7 @@ export function createRealtimeHub({ onTenderChanged, sessionGuard, tender }: Rea
       await publish(tenderId)
     },
     async subscribe(input: {
+      contractVersion?: GameContractVersion
       playerId: string
       sessionId: string
       socket: RealtimeSocket
@@ -173,6 +179,7 @@ export function createRealtimeHub({ onTenderChanged, sessionGuard, tender }: Rea
       }
       const principal = { sessionId: input.sessionId, userId: input.playerId }
       const subscription: Subscription = {
+        contractVersion: input.contractVersion ?? '1',
         playerId: input.playerId,
         ready: false,
         sessionId: input.sessionId,
