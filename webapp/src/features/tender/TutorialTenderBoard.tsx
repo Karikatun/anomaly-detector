@@ -18,12 +18,13 @@ import { Typography } from '@/components/ui/typography'
 import { RulesReferenceDialog } from '@/features/rules'
 import { useI18n, type TranslationKey } from '@/platform/i18n'
 import { PhasePanel } from './TenderPage'
+import type { TrainingThesis } from './ModelAnalysisPanel'
 import type { TenderCommandInput } from './commands'
 import { TenderPhaseProgress } from './components/TenderPhaseProgress'
 import { TenderPhaseLayout } from './components/TenderPhaseLayout'
 import { TenderHeaderFrame } from './components/TenderHeaderFrame'
 import { TenderPlayers } from './components/TenderOverview'
-import { TenderJournalDialog, type TenderJournalTab } from './components/TenderJournalDialog'
+import { TenderJournalDialog, type TenderJournalTab, type TenderJournalTriggerPlacement } from './components/TenderJournalDialog'
 import { useWorkingModelDraft } from './use-working-model-draft'
 import { ContractPlanningPanel } from './components/ContractPlanningPanel'
 import styles from './TenderPage.module.css'
@@ -46,6 +47,7 @@ export function TutorialTenderBoard({
   actionPanelPinned,
   commandError,
   documentFlow = false,
+  journalEntry = 'inline',
   highlight,
   interpretationRequired,
   laboratoryInitialMode,
@@ -53,6 +55,7 @@ export function TutorialTenderBoard({
   roundCount,
   lessonLabel = 'tutorial.title',
   journalGuidance,
+  trainingThesis,
   onCommand,
   onContractsClosed,
   onContractsOpened,
@@ -72,6 +75,7 @@ export function TutorialTenderBoard({
   actionPanelPinned: boolean
   commandError: string | null
   documentFlow?: boolean
+  journalEntry?: TenderJournalTriggerPlacement
   highlight: 'contracts' | 'header' | 'help' | 'interpretation' | 'none' | 'primary' | 'research' | 'sidebar' | 'working-model'
   interpretationRequired: boolean
   initialJournalTab?: TenderJournalTab
@@ -79,6 +83,7 @@ export function TutorialTenderBoard({
   laboratoryInitialMode?: 'broad' | 'deep'
   lessonLabel?: TranslationKey
   journalGuidance?: ReactNode
+  trainingThesis?: TrainingThesis
   onCommand: (command: TenderCommandInput) => Promise<void>
   onContractsClosed: () => void
   onContractsOpened: () => void
@@ -99,6 +104,8 @@ export function TutorialTenderBoard({
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(initialJournalTab !== undefined)
   const [journalTab, setJournalTab] = useState<TenderJournalTab>(initialJournalTab ?? 'working-model')
+  const [journalHeaderAnchor, setJournalHeaderAnchor] = useState<HTMLSpanElement | null>(null)
+  const primaryRef = useRef<HTMLDivElement>(null)
   const [contractsOpen, setContractsOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
   const journalOpenTimer = useRef<number | undefined>(undefined)
@@ -284,6 +291,7 @@ export function TutorialTenderBoard({
               <Typography as="span" variant="control">{t('rules.laboratory.open')}</Typography>
             </Button>
           </div>
+          {journalEntry === 'header' && <span ref={setJournalHeaderAnchor} />}
           <Button
             type="button"
             variant="outline"
@@ -305,6 +313,7 @@ export function TutorialTenderBoard({
           progress={<TenderPhaseProgress phase={view.phase} contractsAvailable={view.game?.contracts !== false} />}
           primary={(
             <div
+              ref={primaryRef}
               data-tutorial-primary=""
               data-tutorial-working-model={view.phase === 'model-analysis' ? '' : undefined}
               className="grid min-w-0 self-start gap-4"
@@ -330,6 +339,7 @@ export function TutorialTenderBoard({
                   onRequiredModalOpenChange,
                   onLaboratoryModeSelect: onLaboratoryModeSelected,
                   separateContractReservation: false,
+                  thesis: trainingThesis,
                   untimed: true,
                 }}
               />
@@ -346,9 +356,13 @@ export function TutorialTenderBoard({
                 phase={view.phase}
                 players={view.players}
               />
-              <div data-tutorial-working-model={view.phase !== 'model-analysis' ? '' : undefined}>
+              <div hidden={journalEntry === 'header'} data-tutorial-working-model={view.phase !== 'model-analysis' ? '' : undefined}>
                 <TenderJournalDialog
-                  guidance={journalGuidance}
+                  guidance={journalGuidance} triggerPlacement={journalEntry}
+                  triggerContainer={journalEntry === 'header' ? journalHeaderAnchor : null}
+                  getCloseFocusFallback={journalEntry === 'header'
+                    ? () => primaryRef.current?.querySelector<HTMLElement>('[data-tutorial-thesis] select') ?? null
+                    : undefined}
                   actionError={journalOpen ? commandError : null}
                   view={view} owner={workingModelOwner} tab={journalTab} currentPlayerId={myPlayer?.playerId}
                   onTabChange={changeJournalTab} open={journalOpen} onOpenChange={openJournal}

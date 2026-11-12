@@ -29,6 +29,22 @@ test('a reloaded draft retains its current step entry and exact earlier snapshot
   })
 })
 
+test('reloading the Thesis review retains the prepared answer without scoring it or changing Back', () => {
+  const storage = new MemoryStorage()
+  const stepTen = { ...createTutorialState('player-a'), step: 'round-1-thesis' as const }
+  const review = {
+    ...stepTen,
+    step: 'round-1-thesis-review' as const,
+    thesisDraft: { signalId: 'aster', fieldType: 'phase', polarity: 'positive' } as const,
+  }
+  const edited = { ...review, thesisDraft: { ...review.thesisDraft, polarity: '' as const } }
+  saveTutorialSession(storage, edited, { entry: review, history: [stepTen] })
+  expect(loadTutorialSessionResult(storage, 'player-a')).toMatchObject({
+    state: { ...edited, thesisAttempts: 0, privateTheses: [] },
+    timeline: { entry: review, history: [stepTen] },
+  })
+})
+
 test('reloading research closes the Journal and makes its previous entry current for Back', () => {
   const storage = new MemoryStorage()
   const intro = createTutorialState('player-a')

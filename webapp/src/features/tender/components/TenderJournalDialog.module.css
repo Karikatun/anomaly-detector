@@ -57,8 +57,7 @@
   .panel { max-height: 60dvh; }
 }
 
-/* Training keeps the secondary Journal entry in its own normal-flow row. */
-.trigger[data-tutorial-journal-entry] {
+.trigger:is([data-tutorial-journal-entry='inline'], [data-tutorial-journal-entry='header']) {
   position: static;
   width: 100%;
   min-width: 0;
@@ -68,12 +67,21 @@
   border-radius: var(--radius-control);
   box-shadow: none;
 }
-.trigger[data-tutorial-journal-entry] .triggerText {
+.trigger[data-tutorial-journal-entry='inline'] .triggerText {
   display: inline;
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+.trigger[data-tutorial-journal-entry='header'] {
+  width: 44px;
+  min-height: 44px;
+  justify-content: center;
+  padding: 0;
+}
+
+.trigger[data-tutorial-journal-entry='header'] .triggerText { display: none; }
 
 @media (max-width: 47.999rem) {
   .dialog[data-tutorial-journal] .header { min-height: 2.75rem; }

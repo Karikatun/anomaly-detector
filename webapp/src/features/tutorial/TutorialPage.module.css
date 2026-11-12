@@ -110,6 +110,13 @@
 }
 .coach { display: grid; min-width: 0; max-width: 24rem; gap: .55rem; text-align: left; overflow-wrap: anywhere; }
 .coach button { width: fit-content; }
+.coachHeading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+}
+.coachHeadingText { display: grid; gap: var(--space-1); }
 .coachActions {
   display: flex;
   flex-wrap: wrap;
@@ -118,8 +125,14 @@
   gap: .5rem;
   margin-top: .25rem;
 }
+.coachBack { margin-inline-start: auto; }
 .hint { padding: .65rem; border-left: 2px solid #38bdf8; background: rgba(56, 189, 248, .08); }
 .thesisFeedback { padding: .65rem; border-left: 2px solid #f87171; color: #fecaca; background: rgba(248, 113, 113, .09); }
+.thesisFeedback[data-correct='true'] {
+  border-color: var(--success);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
 .confirmAction { display: none; color: #7dd3fc; }
 
 :global([data-testid='floater']) {
@@ -234,13 +247,14 @@
   }
 
   :global(body:has([data-tutorial-action-pinned]) [data-testid='floater']) {
-    inset: auto .75rem calc(var(--tutorial-mobile-action-height, 5rem) + 1.5rem) !important;
+    inset: auto .75rem calc(var(--tutorial-mobile-action-height, 0px) + 1.5rem) !important;
   }
 
   :global(body:has([data-tutorial-confirm-ready='true'])) .confirmAction {
     display: block;
   }
 
+  .coachHeading button,
   .coachActions button {
     padding-inline: .5rem;
   }
@@ -361,6 +375,9 @@
 :global(html:has([data-tutorial-board])) {
   scroll-padding-top: calc(var(--tutorial-pilot-header-height, 9rem) + .75rem);
   scroll-padding-bottom: calc(var(--tutorial-pilot-coach-height, 14rem) + var(--tutorial-pilot-action-height, 0px) + 2.25rem);
+}
+:global(html[data-tutorial-pilot-constrained]:has([data-tutorial-board])) {
+  scroll-padding-top: .75rem;
 }
 
 /* Leave native scrolling room for secondary controls behind a growing coach. */

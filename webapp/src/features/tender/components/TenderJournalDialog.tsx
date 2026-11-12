@@ -2,6 +2,7 @@ import { BookOpen01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Tabs } from 'radix-ui'
 import { useCallback, useLayoutEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { TenderView } from '@anomaly-detector/contracts'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -14,6 +15,7 @@ import { TenderEvidence } from './TenderOverview'
 import styles from './TenderJournalDialog.module.css'
 
 export type TenderJournalTab = 'working-model' | 'research' | 'interpretation'
+export type TenderJournalTriggerPlacement = 'inline' | 'floating' | 'header'
 
 function JournalPanel({ active, children, onElementChange, onPositionChange, getPosition, value, visible }: {
   active: boolean
@@ -42,9 +44,12 @@ function JournalPanel({ active, children, onElementChange, onPositionChange, get
 export function TenderJournalDialog({
   actionError, disabled, modelTabDisabled, interpretationDisabled, onOpenChange, onTabChange,
   open, openDisabled, owner, tab, view, highlightResult, triggerTestId, showTimerWarning = true,
-  currentPlayerId, urgent = false, guidance,
+  currentPlayerId, urgent = false, guidance, triggerPlacement = 'floating', triggerContainer, getCloseFocusFallback,
 }: {
   guidance?: ReactNode
+  triggerPlacement?: TenderJournalTriggerPlacement
+  triggerContainer?: HTMLElement | null
+  getCloseFocusFallback?: () => HTMLElement | null
   actionError?: string | null
   disabled?: boolean
   modelTabDisabled?: boolean
@@ -103,27 +108,37 @@ export function TenderJournalDialog({
       onPositionChange={(position) => { scroll.current[value] = position }}
       onElementChange={(element) => { panelElements.current[value] = element }}>{content}</JournalPanel>
   )
+  const triggerButton = (
+    <DialogTrigger asChild>
+      <Button
+        ref={trigger} variant="outline" type="button" className={styles.trigger}
+        disabled={openDisabled} aria-label={t('tender.journal.open')}
+        title={t('tender.journal.open')} data-testid={triggerTestId}
+        data-tutorial-journal-entry={triggerTestId ? triggerPlacement : undefined}
+      >
+        <HugeiconsIcon icon={BookOpen01Icon} strokeWidth={1.7} aria-hidden="true" />
+        <Typography as="span" variant="bodySmMedium" className={styles.triggerText}>{t('tender.journal.title')}</Typography>
+      </Button>
+    </DialogTrigger>
+  )
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { rememberPosition(); onOpenChange(nextOpen) }}>
-      <DialogTrigger asChild>
-        <Button
-          ref={trigger} variant="outline" type="button" className={styles.trigger}
-          disabled={openDisabled} aria-label={t('tender.journal.open')}
-          title={t('tender.journal.open')} data-testid={triggerTestId}
-          data-tutorial-journal-entry={triggerTestId ? '' : undefined}
-        >
-          <HugeiconsIcon icon={BookOpen01Icon} strokeWidth={1.7} aria-hidden="true" />
-          <Typography as="span" variant="bodySmMedium" className={styles.triggerText}>{t('tender.journal.title')}</Typography>
-        </Button>
-      </DialogTrigger>
+      {triggerContainer ? createPortal(triggerButton, triggerContainer) : triggerButton}
       <DialogContent
         className={styles.dialog} placement="viewport" closeLabel={t('tender.journal.close')}
         data-tender-journal="" data-journal-guidance={guidance ? true : undefined} data-tutorial-journal={triggerTestId ? '' : undefined}
+        onPointerDownOutside={(event) => {
+          const target = event.detail.originalEvent.target
+          // The trigger owns reopening while the previous close animation
+          // still has an outside-pointer listener mounted.
+          if (triggerContainer && target instanceof Node && trigger.current?.contains(target)) event.preventDefault()
+        }}
         onOpenAutoFocus={() => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null }}
         onCloseAutoFocus={(event) => {
-          if (opener.current?.isConnected && !opener.current.hasAttribute('disabled')) {
+          const target = opener.current?.isConnected ? opener.current : getCloseFocusFallback?.() ?? trigger.current
+          if (target?.isConnected && !target.hasAttribute('disabled')) {
             event.preventDefault()
-            opener.current.focus({ preventScroll: true })
+            target.focus({ preventScroll: true })
           }
         }}
       >

@@ -377,13 +377,13 @@ export function LaboratoryInterpretation({
           <thead>
             <tr>
               <Typography asChild variant="bodyXs">
-                <th scope="col">{t('rules.laboratory.table.relation')}</th>
+                <th scope="col">{t('rules.laboratory.table.result')}</th>
               </Typography>
               <Typography asChild variant="bodyXs">
                 <th scope="col">{t('rules.laboratory.table.polarity')}</th>
               </Typography>
               <Typography asChild variant="bodyXs">
-                <th scope="col">{t('rules.laboratory.table.result')}</th>
+                <th scope="col">{t('rules.laboratory.table.relation')}</th>
               </Typography>
             </tr>
           </thead>
@@ -398,14 +398,14 @@ export function LaboratoryInterpretation({
                   aria-current={isHighlighted ? 'true' : undefined}
                   className={isHighlighted ? styles.highlightedResultRow : undefined}
                 >
-                  <Typography asChild variant="bodyXs">
-                    <td>{t(relationKey)}</td>
+                  <Typography asChild variant="bodySmMedium">
+                    <td>{t(resultKey)}</td>
                   </Typography>
                   <Typography asChild variant="bodyXs">
                     <td>{t(polarityKey)}</td>
                   </Typography>
-                  <Typography asChild variant="bodySmMedium">
-                    <td>{t(resultKey)}</td>
+                  <Typography asChild variant="bodyXs">
+                    <td>{t(relationKey)}</td>
                   </Typography>
                 </tr>
               )

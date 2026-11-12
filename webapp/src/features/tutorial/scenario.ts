@@ -1,6 +1,6 @@
 import { powerAllocationSchema, scientificModelSchema } from '@anomaly-detector/contracts'
 import type { FieldType, Polarity, PowerAllocation, PrivateThesis, ScientificJournalEntry, ScientificModel, ScientificModelDraft, SignalId, TenderPhase, TenderView, WorkingModel } from '@anomaly-detector/contracts'
-import type { TenderCommandInput } from '@/features/tender/public/tutorial-board'
+import type { TenderCommandInput, TrainingThesisDraft } from '@/features/tender/public/tutorial-board'
 import { translate } from '@/platform/i18n'
 
 export const baseScenarioVersion = 'base-simple-v1' as const
@@ -31,6 +31,7 @@ export type TutorialStep =
   | 'round-1-model-intro'
   | 'round-1-working-model'
   | 'round-1-thesis'
+  | 'round-1-thesis-review'
   | 'round-1-thesis-result'
   | 'round-1-thesis-result-open'
   | 'round-2-access'
@@ -67,6 +68,7 @@ export type TutorialState = {
   rating: number
   hintLevel: number
   thesisAttempts: number
+  thesisDraft?: TrainingThesisDraft
   corporateReviewActive: boolean
   independentCycle: boolean
   accessSlot: number | null
@@ -81,11 +83,15 @@ export type TutorialState = {
   finalSubmission: ScientificModel | null
 }
 
+type TutorialThesis = Pick<PrivateThesis, 'signalId' | 'fieldType' | 'polarity'>
+
 export type TutorialUiAction =
   | { type: 'start-tutorial' }
   | { type: 'continue' }
   | { type: 'restart-exercise' }
   | { type: 'request-hint' }
+  | ({ type: 'prepare-thesis' } & TutorialThesis)
+  | { type: 'update-thesis-draft'; draft: TrainingThesisDraft }
   | { type: 'select-laboratory-mode'; mode: 'broad' | 'deep' }
   | { type: 'open-help-menu' }
   | { type: 'open-interpretation' }
@@ -146,13 +152,20 @@ export function advanceTutorial(state: TutorialState, action: TutorialAction): T
     return { progressed: false, state: { ...state, workingModel: action.workingModel } }
   }
   if (action.type === 'request-hint') return { progressed: false, state: { ...state, hintLevel: Math.min(2, state.hintLevel + 1) } }
-  if (action.type === 'restart-exercise' && state.step === 'round-1-thesis') {
+  if (action.type === 'restart-exercise' && (state.step === 'round-1-thesis' || state.step === 'round-1-thesis-review')) {
     const signals = { ...state.workingModel.signals }
     delete signals.aster
     return progressed(state, {
-      privateTheses: [], thesisAttempts: 0, corporateReviewActive: false,
+      privateTheses: [], thesisAttempts: 0, thesisDraft: undefined, corporateReviewActive: false,
       hintLevel: 0, workingModel: { signals }, step: 'round-1-working-model',
     })
+  }
+  if (action.type === 'prepare-thesis' && state.step === 'round-1-thesis') {
+    const { signalId, fieldType, polarity } = action
+    return progressed(state, { step: 'round-1-thesis-review', thesisDraft: { signalId, fieldType, polarity } })
+  }
+  if (action.type === 'update-thesis-draft' && state.step === 'round-1-thesis-review' && !state.thesisAttempts) {
+    return { progressed: false, state: { ...state, thesisDraft: action.draft } }
   }
   if (action.type === 'submit-thesis') return resolveThesis(state, action)
   if (action.type === 'update-scientific-model-draft' && state.step === 'final-model') {
@@ -215,7 +228,9 @@ function closeHypothesis(state: TutorialState, action: TutorialAction) {
 }
 function enterFinal(state: TutorialState): TutorialAdvanceResult {
   const signals = Object.fromEntries(Object.entries(state.workingModel.signals).flatMap(([id, model]) => model.hypothesis && (model.hypothesis.fieldType || model.hypothesis.polarity) ? [[id, { ...model.hypothesis }]] : []))
-  return progressed(state, { step: 'final-model', budget: state.budget + 1, finalDraft: { signals } })
+  const checked = state.privateTheses.findLast((thesis) => thesis.round === state.round && thesis.signalId === 'aster' && thesis.fullyCorrect)
+  if (checked) signals[checked.signalId] = { fieldType: checked.fieldType, polarity: checked.polarity }
+  return progressed(state, { step: 'final-model', budget: state.budget + 1, finalDraft: { signals }, thesisDraft: undefined })
 }
 function runTest(state: TutorialState, action: Extract<TutorialAction, { type: 'run-laboratory-test' }>): TutorialAdvanceResult {
   if (!('laboratory' in action) || action.laboratory.mode !== 'deep' || state.allocation?.laboratory !== 2) return unchanged(state)
@@ -244,14 +259,15 @@ function fixtureResult(source: SignalId, receiver: SignalId): ScientificJournalE
   return forward ? same ? 'reflection' : 'unstable_collapse' : same ? 'attenuation' : 'transmission_gain'
 }
 function resolveThesis(state: TutorialState, action: Extract<TutorialAction, { type: 'submit-thesis' }>): TutorialAdvanceResult {
-  if (state.step !== 'round-1-thesis' || action.signalId !== 'aster' || !state.samples.includes(action.signalId)) return unchanged(state)
+  if (state.step !== 'round-1-thesis-review' || action.signalId !== 'aster' || !state.samples.includes(action.signalId)) return unchanged(state)
   const attempts = state.privateTheses.length
   if (attempts >= (state.allocation?.modelAnalysis ?? 0) || (state.corporateReviewActive && state.budget < 1)) return unchanged(state)
   const actual = signalProperties[action.signalId]
   const thesisFeedback = { fieldTypeCorrect: action.fieldType === actual.fieldType, polarityCorrect: action.polarity === actual.polarity }
   const fullyCorrect = thesisFeedback.fieldTypeCorrect && thesisFeedback.polarityCorrect
   const thesis: PrivateThesis = { id: `base-r1-thesis-${attempts + 1}`, signalId: action.signalId, fieldType: action.fieldType, polarity: action.polarity, ...thesisFeedback, fullyCorrect, round: 1 }
-  const next = { ...state, budget: state.budget - Number(state.corporateReviewActive), corporateReviewActive: state.corporateReviewActive || !fullyCorrect, thesisAttempts: attempts + 1, privateTheses: [...state.privateTheses, thesis] }
+  const { signalId, fieldType, polarity } = action
+  const next = { ...state, budget: state.budget - Number(state.corporateReviewActive), corporateReviewActive: state.corporateReviewActive || !fullyCorrect, thesisAttempts: attempts + 1, thesisDraft: { signalId, fieldType, polarity }, privateTheses: [...state.privateTheses, thesis] }
   if (fullyCorrect) return { ...progressed(next, { step: 'round-1-thesis-result', independentCycle: true }), thesisFeedback }
   return { progressed: false, state: next, thesisFeedback }
 }

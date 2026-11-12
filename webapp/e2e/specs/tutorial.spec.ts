@@ -539,7 +539,10 @@ async function expectTutorialActionAvailable(page: Page, target: Locator) {
     const left = viewport?.offsetLeft ?? 0
     if (rect.top < top || rect.bottom > top + (viewport?.height ?? innerHeight)
       || rect.left < left || rect.right > left + (viewport?.width ?? innerWidth)) return false
-    return [[.1, .1], [.9, .1], [.5, .5], [.1, .9], [.9, .9]].every(([x, y]) => {
+    const samples = element.matches('[data-tutorial-journal-entry="floating"]') && getComputedStyle(element).position === 'fixed'
+      ? [[.1, .5], [.9, .5], [.5, .5], [.5, .1], [.5, .9]]
+      : [[.1, .1], [.9, .1], [.5, .5], [.1, .9], [.9, .9]]
+    return samples.every(([x, y]) => {
       const hit = document.elementFromPoint(rect.left + rect.width * x!, rect.top + rect.height * y!)
       return hit !== null && element.contains(hit)
     })
@@ -748,7 +751,22 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 
   await capture('power')
   await allocateFirstPower(page)
   await page.getByRole('button', { name: /^Сигнал для разведки: Aster/ }).click()
-  await page.getByRole('button', { name: 'Исследовать', exact: true }).click()
+  const reconConfirm = page.getByRole('button', { name: 'Исследовать', exact: true })
+  if (viewport.width === 390) {
+    await expectTutorialActionAvailable(page, reconConfirm)
+    const coach = page.getByTestId('floater')
+    const details = coach.getByRole('button', { name: 'Подробнее', exact: true })
+    const originalPosition = (await reconConfirm.boundingBox())!.y
+    await details.click()
+    await expect.poll(async () => (await reconConfirm.boundingBox())!.y).toBeLessThan(originalPosition)
+    const readingArea = (await coach.boundingBox())!
+    await page.mouse.move(readingArea.x + readingArea.width / 2, readingArea.y + readingArea.height / 2)
+    await page.mouse.wheel(0, 60)
+    await details.click()
+    await expect.poll(async () => Math.abs((await reconConfirm.boundingBox())!.y - originalPosition)).toBeLessThan(2)
+    await expectTutorialActionAvailable(page, reconConfirm)
+  }
+  await reconConfirm.click()
   await page.getByRole('button', { name: /^Глубокое/ }).click()
   await capture('first-experiment')
   await page.getByRole('button', { name: 'Образец: Aster', exact: true }).click()
@@ -908,6 +926,8 @@ async function openFirstModel(page: Page) {
 }
 
 async function submitTutorialThesis(page: Page, signal: string, fieldType: string, polarity: string, pressDuration = 0) {
+  const prepare = page.getByRole('button', { name: 'К проверке тезиса', exact: true })
+  await expect(prepare).toBeVisible()
   for (const [name, value] of [
     ['Сигнал для тезиса', signal],
     ['Тип поля для тезиса', fieldType],
@@ -916,7 +936,9 @@ async function submitTutorialThesis(page: Page, signal: string, fieldType: strin
     const field = page.getByLabel(name!, { exact: true })
     await expectTutorialActionAvailable(page, field)
     await field.selectOption(value!)
+    await expect(field).toHaveValue(value!)
   }
+  await prepare.click()
   const submit = page.getByRole('button', { name: 'Выдвинуть тезис', exact: true })
   await expectTutorialActionAvailable(page, submit)
   await submit.click({ delay: pressDuration })
@@ -1000,7 +1022,10 @@ for (const viewport of [
       'interpretation-open': '[data-tutorial-journal-tab="working-model"]',
       'round-1-working-model': '[data-tender-journal] [data-tutorial-working-model-row="aster"] [role="group"]:not([data-options]) button:first-child',
       'round-1-thesis': thesisTarget,
-      'round-1-thesis-result': '[data-testid="floater"] button:last-child',
+      'round-1-thesis-review': viewport.textScale === '200%'
+        ? '[data-tutorial-action-container] button[data-tutorial-confirm-ready]'
+        : '[data-tutorial-thesis]',
+      'round-1-thesis-result': '[data-testid="floater"] button:text-is("ПОНЯТНО, ДАЛЬШЕ")',
       'final-model': '[data-tutorial-final-submit]',
     }
     await playBaseLesson(page, true, async (expected) => {
@@ -1058,6 +1083,8 @@ for (const viewport of [
 
 async function recoverBaseThesisAttempt(page: Page) {
   await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
   const journal = page.getByRole('dialog', { name: 'Журнал исследований', exact: true })
   await expect(journal).toBeVisible()
   await journal.getByRole('button', { name: 'Aster: гипотеза, тип поля Инерционное', exact: true }).click()
@@ -1074,7 +1101,7 @@ test('tutorial retains wrong Thesis feedback after a completed same-step working
   await playBaseLesson(page, true, async (expected) => {
     if (expected !== 'round-1-thesis' || checkedFeedback) return
     checkedFeedback = true
-    const step = page.locator('[data-tutorial-step="round-1-thesis"]')
+    const step = page.locator('[data-tutorial-step="round-1-thesis-review"]')
     const feedback = page.getByTestId('floater').getByRole('alert')
     await submitTutorialThesis(page, 'aster', 'phase', 'positive')
     await expect(feedback).toContainText('Тип поля неверен.')
@@ -1121,7 +1148,7 @@ test('200% tutorial keeps the secondary Journal accessible after a wrong Thesis'
     await expect(journal).toContainText('Тип неверен')
     await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
     await expect(journal).toBeHidden()
-    await expect(page.locator('[data-tutorial-step="round-1-thesis"]')).toBeVisible()
+    await expect(page.locator('[data-tutorial-step="round-1-thesis-review"]')).toBeVisible()
     await expect(page.getByTestId('floater').getByRole('alert')).toBeAttached()
     await recoverBaseThesisAttempt(page)
   })
@@ -1450,10 +1477,7 @@ for (const layout of [
   await expect(wrong).toHaveAttribute('aria-pressed', 'true')
   await expect(journal.getByRole('alert')).toHaveCount(0)
   await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
-  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('aster')
-  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('phase')
-  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('negative')
-  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+  await submitTutorialThesis(page, 'aster', 'phase', 'negative')
   await expect(page.getByTestId('floater').getByRole('alert')).toContainText('Тип поля неверен.')
   await expect(page.getByTestId('floater').getByRole('alert')).toContainText('Полярность неверна.')
   const entry = page.getByTestId('tutorial-research-trigger')
@@ -1492,10 +1516,7 @@ test('submits a corrected Thesis after Journal cycles and viewport/text-size cha
   await expect(wrong).toHaveAttribute('aria-pressed', 'true')
   await expect(journal.getByRole('alert')).toHaveCount(0)
   await journal.getByRole('button', { name: 'Закрыть журнал', exact: true }).click()
-  await page.getByLabel('Сигнал для тезиса', { exact: true }).selectOption('aster')
-  await page.getByLabel('Тип поля для тезиса', { exact: true }).selectOption('phase')
-  await page.getByLabel('Полярность для тезиса', { exact: true }).selectOption('negative')
-  await page.getByRole('button', { name: 'Выдвинуть тезис', exact: true }).click()
+  await submitTutorialThesis(page, 'aster', 'phase', 'negative')
   await expect(page.getByTestId('floater').getByRole('alert')).toContainText('Тип поля неверен.')
   await expect(page.getByTestId('floater').getByRole('alert')).toContainText('Полярность неверна.')
   const entry = page.getByTestId('tutorial-research-trigger')

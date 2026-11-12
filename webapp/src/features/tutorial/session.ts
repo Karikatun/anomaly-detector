@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { getSessionStorage } from '@/platform/session-storage'
-import { powerAllocationSchema, privateThesisSchema, scientificJournalEntrySchema, privateMeasurementSchema, scientificModelDraftSchema, scientificModelSchema, signalIdSchema, workingModelSchema, tutorialProgressCommandSchema, type TutorialLessonId, type TutorialProgressCommand } from '@anomaly-detector/contracts'
+import { fieldTypeSchema, polaritySchema, powerAllocationSchema, privateThesisSchema, scientificJournalEntrySchema, privateMeasurementSchema, scientificModelDraftSchema, scientificModelSchema, signalIdSchema, workingModelSchema, tutorialProgressCommandSchema, type TutorialLessonId, type TutorialProgressCommand } from '@anomaly-detector/contracts'
 import { baseScenarioVersion, createTutorialState, resumeTutorialState, type TutorialState } from './scenario'
 import { additionalScenarioVersion, createAdditionalTutorialState, type AdditionalTutorialState } from './additional-scenario'
 import { additionalTutorialStateSchema, additionalTutorialStepSchema } from './additional-session-codec'
@@ -23,12 +23,17 @@ const handoffEnvelopeKey = 'anomaly-detector:tutorial:handoffs:v1'
 function lessonHandoffKey(lessonId: TutorialLessonId) { return lessonId === 'base' ? handoffKey : 'anomaly-detector:tutorial:additional:handoff:v1' }
 const receiptSchema = z.object({ playerId: z.string().min(1).max(128), command: tutorialProgressCommandSchema }).strict()
 function receiptKey(playerId: string, lessonId: TutorialLessonId = 'base') { return `anomaly-detector:tutorial:${lessonId}:completion:${playerId}` }
-const steps = ['prologue', 'round-1-access', 'round-1-power', 'round-1-recon', 'round-1-lab-mode', 'round-1-lab-pair', 'research-results', 'research-results-open', 'interpretation', 'interpretation-open', 'round-1-working-model', 'round-1-thesis', 'round-1-thesis-result', 'round-2-access', 'round-2-power', 'round-2-lab', 'round-2-research', 'round-2-research-open', 'round-2-working-model', 'round-2-thesis', 'round-2-thesis-result', 'round-3-access', 'round-3-power', 'round-3-recon', 'round-3-lab', 'round-3-thesis', 'final-model', 'complete'] as const
+const steps = ['prologue', 'round-1-access', 'round-1-power', 'round-1-recon', 'round-1-lab-mode', 'round-1-lab-pair', 'research-results', 'research-results-open', 'interpretation', 'interpretation-open', 'round-1-working-model', 'round-1-thesis', 'round-1-thesis-review', 'round-1-thesis-result', 'round-2-access', 'round-2-power', 'round-2-lab', 'round-2-research', 'round-2-research-open', 'round-2-working-model', 'round-2-thesis', 'round-2-thesis-result', 'round-3-access', 'round-3-power', 'round-3-recon', 'round-3-lab', 'round-3-thesis', 'final-model', 'complete'] as const
 const stateSchema = z.object({
   lessonId: z.literal('base'), scenarioVersion: z.literal(baseScenarioVersion), playerId: z.string().min(1).max(128),
   round: z.union([z.literal(1), z.literal(2), z.literal(3)]), step: z.enum(steps),
   budget: z.number().int().min(0).max(100), corporateTrust: z.number().int().nonnegative(), rating: z.number().int().min(0).max(12),
   hintLevel: z.number().int().min(0).max(2), thesisAttempts: z.number().int().min(0).max(2),
+  thesisDraft: z.object({
+    signalId: signalIdSchema.or(z.literal('')),
+    fieldType: fieldTypeSchema.or(z.literal('')),
+    polarity: polaritySchema.or(z.literal('')),
+  }).strict().optional(),
   corporateReviewActive: z.boolean(), independentCycle: z.boolean(), accessSlot: z.number().int().min(1).max(6).nullable(), allocation: powerAllocationSchema.nullable(),
   samples: z.array(signalIdSchema).max(6), samplePool: z.array(signalIdSchema).max(6),
   journal: z.array(scientificJournalEntrySchema).max(6), privateMeasurements: z.array(privateMeasurementSchema).max(3), privateTheses: z.array(privateThesisSchema).max(6),
@@ -104,6 +109,7 @@ function baseDraft(state: TutorialState) {
   return state.step === 'complete' ? state.independentCycle && state.finalSubmission !== null
     : state.round === 1 && isActiveBaseStep(state.step) && state.finalSubmission === null
       && (state.step !== 'final-model' || state.independentCycle)
+      && (state.step !== 'round-1-thesis-review' || state.thesisDraft !== undefined)
 }
 function stepNumber(state: LessonState) {
   if (state.lessonId === 'additional') return additionalTutorialStepSchema.options.indexOf(state.step)

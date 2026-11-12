@@ -14,6 +14,7 @@ export const baseTutorialStepNumbers = {
   'interpretation-open': 8,
   'round-1-working-model': 9,
   'round-1-thesis': 10,
+  'round-1-thesis-review': 11,
   'round-1-thesis-result': 11,
   'final-model': 12,
 } as const satisfies Partial<Record<TutorialStep, number>>
